@@ -23,6 +23,7 @@ flowchart TD
   C --> G[STIG/SRG validation worklist]
   G --> H[Deployment-hardening assessment]
   T2 & O & H --> L[Candidate ledger]
+  S & N --> L
   L --> R[07 red team]
   R --> U[08 blue-team refutation]
   U --> V[09 independent verification]
@@ -94,12 +95,22 @@ contracts, citations and ordering, and retains dissent. Evidence-qualified quoru
 and independence thresholds. Red team proposes attacks; blue team refutes or narrows them;
 independent verification alone can verify a claim. Scoring consumes verified claims only.
 
+The candidate ledger has three sources ([ADR-0015](decisions/ADR-0015-tool-leads-are-ledger-candidates.md)):
+threat-model STRIDE hypotheses, OWASP candidate routes, and every accepted tool lead (source and
+native SAST, secrets, SCA matches, IaC and mobile rule hits). Leads at one path and line merge across
+tools, carry a P1/P2/P3 review tier, and stay `candidate_only` until the 07 → 08 → 09 chain decides
+them. Each 07/08/09/12 reviewer also receives a hash-bound supporting-evidence menu (component map,
+build and compile databases, IR, code property graph, debug symbols, binary, SBOM and test evidence)
+with every listed file pinned as a readable input, and a task guide for the `input_jq` and
+`evidence_*` lookup tools.
+
 ## Reporting and remaining gates
 
 The synthesis publication worker is executable and fixture-qualified. It produces a hash-bound
 `DRAFT_EVIDENCE_BACKED` package plus LaTeX and HTML presentation inputs. The retained
 qualification report is honest about unresolved coverage and sets `final=false` and
-`human_signoff=false`.
+`human_signoff=false`. Its appendix lists the tool-lead claims that were not independently
+verified, by tier, so the static-tool coverage stays visible.
 
 Three integration gaps remain:
 

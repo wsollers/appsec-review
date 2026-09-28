@@ -6,7 +6,7 @@
   "budget_default": "standard",
   "model": {"model": "claude-sonnet-5", "effort": "high"},
   "composition": {"persona_id": "claim-reviewer", "role_id": "claim-reviewer", "domain_id": "claim-review-lifecycle", "tooling_profile_id": "claim-review-static", "output_contract_id": "claim-review-pool-candidates"},
-  "inputs": {"required": ["newest accepted upstream claim artifact", "runtime-supplied stage and invocation identity"], "optional": []},
+  "inputs": {"required": ["newest accepted upstream claim artifact", "runtime-supplied stage and invocation identity"], "optional": ["supporting-evidence menu of accepted non-finding evidence and the files it pins"]},
   "outputs": {"directory": "private persona instance output", "files": ["candidates.json"]},
   "permissions": ["read-run-data"],
   "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "task", "output_contract"],

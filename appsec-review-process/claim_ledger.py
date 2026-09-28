@@ -149,6 +149,275 @@ def owasp_candidates(source: dict[str, Any]) -> list[dict[str, Any]]:
     return candidates
 
 
+# --- Tool leads: the third candidate source (every accepted static-tool lead is a candidate) -------
+# (job_id, output contract, attempt-relative artifact, schema). A producer whose accepted pointer is
+# absent or SKIPPED contributes no candidates and is recorded as lead coverage, never a failure.
+LEAD_PRODUCERS = (
+    ("02-source-sast", "source-sast", "source-sast.json", "source-sast.schema.json"),
+    ("02-native-sast", "native-sast", "native-sast.json", "native-sast.schema.json"),
+    ("02-secrets-inventory", "secrets-inventory", "outputs/secrets-inventory.redacted.json",
+     "secrets-inventory.schema.json"),
+    ("02-sca-vulnerability-match", "sca-vulnerability-match", "outputs/sca-vulnerability-match.json",
+     "sca-vulnerability-match.schema.json"),
+    ("02-iac-config-scan", "iac-config-evidence", "outputs/iac-config-evidence.json",
+     "iac-config-evidence.schema.json"),
+    ("02-mobile-sast", "mobile-sast", "outputs/mobile-sast.json", "mobile-sast.schema.json"),
+)
+LEAD_CONTRACTS = frozenset(row[1] for row in LEAD_PRODUCERS)
+LEAD_ORDER = {row[0]: index for index, row in enumerate(LEAD_PRODUCERS)}
+LEAD_ROUTE_PREFIX = "tool-lead:"
+LEAD_HYPOTHESIS_PREFIX = "Tool lead ("
+TIERS = ("P1", "P2", "P3")
+# P1: security-relevant sink/weakness categories. P3: code-quality/style checks (kept, ordered last).
+# Everything unlisted is P2: reviewable, but not a named security sink.
+P1_CATEGORIES = frozenset({"unsafe-copy", "memory-copy", "command-execution", "buffer-safety",
+    "null-dereference", "undefined-behavior", "format-string", "injection", "sql-injection",
+    "path-traversal", "deserialization", "weak-crypto", "insecure-random", "api-misuse",
+    "network-exposure", "public-access-grant", "access-control", "encryption-at-rest",
+    "encryption-in-transit", "privilege-escalation", "workload-isolation", "embedded-credential-material",
+    "improper-credential-usage", "insecure-authentication-authorization", "insufficient-input-output-validation",
+    "insecure-communication", "insecure-data-storage", "insufficient-cryptography", "inadequate-privacy-controls",
+    "security-misconfiguration"})
+P1_TOOLS = frozenset({"gosec"})
+P1_RULE_PREFIXES = ("security.", "unix.", "core.", "cplusplus.", "alpha.security.", "cert-", "bugprone-",
+                    "clang-analyzer-security.", "clang-analyzer-core.", "clang-analyzer-unix.")
+P2_RULES = frozenset({"security.insecureAPI.DeprecatedOrUnsafeBufferHandling", "noCopyConstructor",
+                      "noOperatorEq", "PossiblyInvalidOperand", "PossiblyInvalidArgument",
+                      "PossiblyInvalidCast", "UnresolvableInclude"})
+P3_RULES = frozenset({"variableScope", "constVariablePointer", "constParameterPointer", "constVariable",
+    "constParameter", "constParameterReference", "funcArgNamesDifferent", "funcArgNamesDifferentUnnamed",
+    "unreadVariable", "unusedVariable", "unusedFunction", "knownConditionTrueFalse",
+    "preprocessorErrorDirective", "missingInclude", "missingIncludeSystem", "passedByValue",
+    "useStlAlgorithm", "shadowVariable", "shadowFunction", "cstyleCast", "MissingPropertyType",
+    "unmatchedSuppression", "checkersReport", "normalCheckLevelMaxBranches"})
+P3_RULE_PREFIXES = ("PSR1.", "PSR2.", "PSR12.", "Generic.", "Squiz.", "PEAR.", "readability-", "modernize-",
+                    "cppcoreguidelines-", "llvm-", "google-", "hicpp-", "performance-", "deadcode.", "style")
+P3_CATEGORIES = frozenset({"maintainability", "portability", "style"})
+
+
+def lead_tier(lead: dict[str, Any]) -> str:
+    """Deterministic review priority from a lead's kind, tool, rule and category (no model)."""
+    kind, rule, category = lead["kind"], lead["rule_id"], lead["category"]
+    if kind in {"secret", "dependency"}:
+        return "P1"
+    if kind == "config":
+        return "P1" if category in P1_CATEGORIES or lead.get("exposure") else "P2"
+    if rule in P3_RULES or rule.startswith(P3_RULE_PREFIXES) or category in P3_CATEGORIES:
+        return "P3"
+    if rule in P2_RULES:
+        return "P2"
+    if (lead["tool_id"] in P1_TOOLS or rule.startswith(P1_RULE_PREFIXES) or category in P1_CATEGORIES):
+        return "P1"
+    return "P2"
+
+
+def _clean(value: Any, limit: int = 160) -> str:
+    return " ".join(str(value).split())[:limit]
+
+
+def normalize_leads(job_id: str, document: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project one accepted tool artifact onto the closed lead shape the ledger consumes."""
+    rows: list[dict[str, Any]] = []
+    def code(item: dict[str, Any], **extra: Any) -> dict[str, Any]:
+        return {"kind": "code", "lead_ref": item["lead_id"], "tool_id": item["tool_id"],
+            "rule_id": _clean(item["rule_id"]), "category": item["category"], "path": item["path"],
+            "start_line": item["start_line"], "end_line": item.get("end_line", item["start_line"]),
+            "source_sha256": item.get("source_sha256"), **extra}
+    if job_id == "02-source-sast":
+        rows = [code(item) for item in document.get("leads", [])]
+    elif job_id == "02-native-sast":
+        rows = [code(item, unit_id=item.get("unit_id"), start_column=item.get("start_column"))
+                for unit in document.get("units", []) for item in unit.get("leads", [])]
+    elif job_id == "02-secrets-inventory":
+        rows = [{"kind": "secret", "lead_ref": item["entry_id"], "tool_id": item["tool_id"],
+                 "rule_id": item["rule_id"], "category": item["data_class"],
+                 "path": item["location"]["path"], "start_line": item["location"]["start_line"],
+                 "end_line": item["location"]["end_line"], "source_sha256": None,
+                 "assertion": item["assertion"]} for item in document.get("entries", [])]
+    elif job_id == "02-sca-vulnerability-match":
+        rows = [{"kind": "dependency", "lead_ref": item["match_id"], "tool_id": item["tool_id"],
+                 "rule_id": item["advisory_id"], "category": "known-advisory-match", "path": None,
+                 "start_line": None, "end_line": None, "source_sha256": None,
+                 "component_ref": item["component_ref"], "aliases": sorted(item.get("aliases", []))}
+                for item in document.get("matches", [])]
+    elif job_id == "02-iac-config-scan":
+        rows = [{"kind": "config", "lead_ref": item["hit_id"], "tool_id": item["tool_id"],
+                 "rule_id": item["rule"]["rule_id"], "category": item["category"],
+                 "path": item["location"]["path"], "start_line": item["location"]["start_line"],
+                 "end_line": item["location"]["end_line"], "source_sha256": None,
+                 "exposure": item.get("exposure")} for item in document.get("rule_hits", [])]
+    elif job_id == "02-mobile-sast":
+        rows = [{"kind": "code", "lead_ref": item["hit_id"], "tool_id": item["tool_id"],
+                 "rule_id": item["rule_id"], "category": item["category"], "path": item["file_path"],
+                 "start_line": item["line"], "end_line": item["line"], "source_sha256": item["file_sha256"]}
+                for item in document.get("rule_hits", [])]
+    else:
+        raise Blocked(f"{JOB}: unsupported tool-lead producer {job_id}")
+    _reject_promotions(rows)
+    return sorted(rows, key=lambda row: (str(row["path"]), row["start_line"] or 0, row["tool_id"],
+                                         row["rule_id"], row["lead_ref"]))
+
+
+def _glob_regex(pattern: str) -> re.Pattern[str]:
+    out, index = [], 0
+    while index < len(pattern):
+        if pattern.startswith("**", index):
+            out.append(".*"); index += 2
+        elif pattern[index] == "*":
+            out.append("[^/]*"); index += 1
+        elif pattern[index] == "?":
+            out.append("[^/]"); index += 1
+        else:
+            out.append(re.escape(pattern[index])); index += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def lead_components(component_map: dict[str, Any]) -> list[dict[str, Any]]:
+    return sorted(({"component_id": item["component_id"],
+                    "path_patterns": sorted(item.get("path_patterns", [])),
+                    "aliases": sorted(item.get("aliases", []))}
+                   for item in component_map.get("functional_components", [])),
+                  key=lambda row: row["component_id"])
+
+
+def _components_for(path: str | None, components: list[dict[str, Any]]) -> list[str]:
+    if not path:
+        return ["component-unmapped"]
+    matched = {row["component_id"] for row in components
+               if any(_glob_regex(pattern).match(path) for pattern in row["path_patterns"])}
+    if not matched:
+        matched = {row["component_id"] for row in components
+                   if any(path == alias or path.startswith(alias.rstrip("/") + "/") for alias in row["aliases"])}
+    return sorted(matched) or ["component-unmapped"]
+
+
+def _lead_location(lead: dict[str, Any]) -> tuple[str, int | None]:
+    if lead["kind"] == "dependency":
+        return "sbom-component:" + lead["component_ref"], None
+    if lead["path"] is None:
+        return "withheld-path:" + lead["lead_ref"], None
+    return lead["path"], lead["start_line"]
+
+
+def _lead_citation(source: dict[str, Any], lead: dict[str, Any]) -> dict[str, Any]:
+    locator = {key: lead[key] for key in ("lead_ref", "tool_id", "rule_id", "category", "path", "start_line",
+               "end_line", "start_column", "unit_id", "source_sha256", "component_ref", "aliases", "exposure")
+               if lead.get(key) is not None}
+    where = (f"{lead['path']}:{lead['start_line']}" if lead["path"] and lead["start_line"] else
+             lead["path"] or _lead_location(lead)[0])
+    fact = f"{lead['tool_id']} rule {lead['rule_id']} ({lead['category']}) flagged {where}"
+    identity = {"job": source["producer_job_id"], "attempt": source["producer_attempt_id"], "lead": locator}
+    return _citation(source, {"artifact_path": source["lead_artifact"], "artifact_sha256": source["artifact_sha256"],
+        "locator": locator, "observed_fact": fact}, "citation-" + digest(identity)[:24])
+
+
+OBLIGATIONS = {
+    "code": ("Show the flagged construct at {where} is present in the reviewed source revision.",
+             "Show attacker-influenced data or an untrusted caller can reach the flagged construct.",
+             "Show the construct violates a security property in its calling context, not only a coding rule."),
+    "config": ("Show the flagged declaration at {where} is deployed or built by an in-scope path.",
+               "Show the declaration weakens an in-scope security control or exposure boundary."),
+    "secret": ("Show the location {where} holds credential or key material rather than a placeholder or test fixture.",
+               "Show the material grants access to an in-scope asset or trust boundary."),
+    "dependency": ("Show {where} is shipped or linked by an in-scope component at the matched version.",
+                   "Show the advisory's affected code path is reachable from the component's use."),
+}
+
+
+def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
+                    components: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Admit every accepted tool lead as a candidate claim (no model; deterministic text and ids).
+
+    Leads at the same (path, start_line) are merged across tools into one claim listing every tool
+    and rule. A location whose best tier is P3 (code quality) is grouped per file into one claim so
+    reviewers get a manageable menu; nothing is ever dropped.
+    """
+    sources = [sources] if isinstance(sources, dict) else list(sources)
+    components = components or []
+    groups: dict[tuple[str, int | None], list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+    for source in sorted(sources, key=lambda row: LEAD_ORDER.get(row["producer_job_id"], len(LEAD_ORDER))):
+        for lead in source["leads"]:
+            groups.setdefault(_lead_location(lead), []).append((source, lead))
+    menu: dict[tuple, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+    for (where, line), members in groups.items():
+        tier = min((lead_tier(lead) for _source, lead in members), key=TIERS.index)
+        key = ("P3", where, None) if tier == "P3" else (tier, where, line)
+        menu.setdefault(key, []).extend(members)
+    candidates = []
+    for (tier, where, line), members in menu.items():
+        primary = members[0][0]
+        lines = sorted({lead["start_line"] for _source, lead in members if lead["start_line"]})
+        location = (f"{where}:{line}" if line else
+                    (f"{where} lines {', '.join(map(str, lines))}" if lines else where))
+        kinds = sorted({lead["kind"] for _source, lead in members})
+        tools = sorted({lead["tool_id"] for _source, lead in members})
+        rules = sorted({f"{lead['tool_id']} {lead['rule_id']}" for _source, lead in members})
+        categories = sorted({lead["category"] for _source, lead in members})
+        route_id = LEAD_ROUTE_PREFIX + tier + ":" + digest({"where": where, "line": line, "tier": tier})[:20]
+        shown = rules if len(rules) <= 8 else rules[:8] + [f"and {len(rules) - 8} more"]
+        hypothesis = (f"{LEAD_HYPOTHESIS_PREFIX}{tier}, {', '.join(categories)}): {len(members)} static "
+            f"analysis lead(s) from {len(tools)} tool(s) at {location} [{'; '.join(shown)}]. Candidate: the "
+            "flagged code or configuration is reachable from an attacker-influenced input or trust boundary "
+            "and weakens a security property; unreviewed until adversarial review and independent verification.")
+        citations, seen = [], set()
+        for source, lead in members:
+            citation = _lead_citation(source, lead)
+            if citation["citation_id"] not in seen:
+                seen.add(citation["citation_id"]); citations.append(citation)
+        statements = [text.format(where=location) for kind in kinds for text in OBLIGATIONS[kind]]
+        obligations = [{"obligation_id": "obligation-" + digest({"route": route_id, "text": text})[:24],
+                        "statement": text} for text in statements]
+        paths = {lead["path"] for _source, lead in members}
+        component_ids = sorted({cid for path in paths for cid in _components_for(path, components)})
+        candidates.append({"route_id": route_id, "hypothesis": hypothesis,
+            "confidence": "medium" if len(tools) > 1 else "low", "component_ids": component_ids,
+            "citations": citations, "proof_obligations": obligations, "dissent_ids": [],
+            "causal_route_ids": [], "source": primary,
+            "order": (1, TIERS.index(tier), where, line or 0)})
+    _reject_promotions([{key: value for key, value in item.items() if key != "source"} for item in candidates])
+    return sorted(candidates, key=lambda item: item["order"])
+
+
+def _lead_pointer(run_id: str, job_id: str) -> Path | None:
+    for parts in ((job_id, "accepted.json"), (job_id, "whole", "accepted.json")):
+        path = data_path(run_id, "jobs", *parts)
+        if path.is_file():
+            return path
+    return None
+
+
+def lead_sources(run_id: str, source_generation: str,
+                 component_generation: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Load every accepted lead producer; absent or SKIPPED upstreams become coverage rows."""
+    from execution_state import run_path
+    manifest = run_path(run_id) / "inputs" / "artifact-manifest.json"
+    snapshot = "sha256:" + file_hash(manifest) if manifest.is_file() else None
+    sources, coverage = [], []
+    for job_id, contract, artifact, schema in LEAD_PRODUCERS:
+        pointer_path = _lead_pointer(run_id, job_id)
+        if pointer_path is None:
+            coverage.append({"job_id": job_id, "status": "ABSENT", "leads": 0}); continue
+        status = read_json(pointer_path).get("status")
+        if status not in {"OK", "OK_WITH_GAPS"}:
+            coverage.append({"job_id": job_id, "status": str(status), "leads": 0}); continue
+        document, binding = bounded_analysis_workers.load_accepted(pointer_path, run_id=run_id,
+            job_id=job_id, contract=contract, artifact=artifact, schema=schema)
+        if document.get("run_id") != run_id or (snapshot is not None and
+                document.get("source_snapshot_sha256") != snapshot):
+            raise Blocked(f"{JOB}: {job_id} lead artifact is stale for this run's source snapshot")
+        leads = normalize_leads(job_id, document)
+        owner = pointer_path.parent.relative_to(data_path(run_id)).as_posix()
+        sources.append({"contract_id": contract, "producer_job_id": job_id,
+            "producer_attempt_id": binding["attempt_id"],
+            "artifact_path": f"{owner}/attempts/{binding['attempt_id']}/{artifact}",
+            "lead_artifact": artifact, "artifact_sha256": binding["artifact_sha256"],
+            "accepted_pointer_sha256": binding["accepted_pointer_sha256"],
+            "source_generation": source_generation, "component_generation": component_generation,
+            "tool_snapshot_sha256": document.get("source_snapshot_sha256"), "leads": leads})
+        coverage.append({"job_id": job_id, "status": str(status), "leads": len(leads)})
+    return sources, coverage
+
+
 def _entry_hash(entry: dict[str, Any]) -> str:
     copy = {key: value for key, value in entry.items() if key != "entry_hash"}
     return _sha(copy)
@@ -397,7 +666,8 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
         "producer": candidate["source"]["producer_job_id"], "attempt": candidate["source"]["producer_attempt_id"],
         "artifact": candidate["source"]["artifact_sha256"], "source_generation": source_generation,
         "component_generation": component_generation})[:24] for candidate in candidates}
-    for candidate in sorted(candidates, key=lambda item: (item["source"]["producer_job_id"], item["route_id"])):
+    for candidate in sorted(candidates, key=lambda item: (item.get("order", ()),
+                                                        item["source"]["producer_job_id"], item["route_id"])):
         if candidate["route_id"] in route_ids: raise Blocked(f"{JOB}: duplicate/conflicting route id")
         if not set(candidate["causal_route_ids"]) <= set(candidate_claim_ids):
             raise Blocked(f"{JOB}: candidate causal route does not resolve in this generation")
@@ -465,11 +735,30 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
     return ledger
 
 
+def route_kind(route_id: str, contract_id: str) -> tuple[str, str | None]:
+    """(source_kind, review_priority) of one admitted route, derived from its admission identity."""
+    if route_id.startswith(LEAD_ROUTE_PREFIX):
+        tier = route_id[len(LEAD_ROUTE_PREFIX):].split(":", 1)[0]
+        return "tool-lead", tier if tier in TIERS else None
+    return ("owasp-route" if contract_id == "owasp-join-report" else "threat-model"), None
+
+
 def work_routing(ledger: dict[str, Any]) -> dict[str, Any]:
-    routes = [{"claim_id": item["claim_id"], "status": item["status"],
-        "stages": ["07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification"],
-        "current_stage": "07-red-team-adversarial", "authorization": "not_authorized", "execution": "not_executed"}
-        for item in ledger["claim_states"] if item["status"] in {"candidate", "unresolved", "narrowed"}]
+    admitted = {entry["claim_id"]: entry for entry in ledger["entries"]
+                if entry["event_type"] == "candidate_admitted"}
+    routes = []
+    for item in ledger["claim_states"]:
+        if item["status"] not in {"candidate", "unresolved", "narrowed"}:
+            continue
+        entry = admitted[item["claim_id"]]
+        kind, priority = route_kind(entry["route_id"], entry["producer"]["contract_id"])
+        routes.append({"claim_id": item["claim_id"], "status": item["status"],
+            "stages": ["07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification"],
+            "current_stage": "07-red-team-adversarial", "authorization": "not_authorized",
+            "execution": "not_executed", "source_kind": kind, "review_priority": priority})
+    rank = {"threat-model": 0, "owasp-route": 0, "tool-lead": 1}
+    routes.sort(key=lambda row: (rank[row["source_kind"]], TIERS.index(row["review_priority"])
+                                 if row["review_priority"] in TIERS else -1))
     value = {"schema": "appsec-review/claim-ledger-work-routing/1.0", "run_id": ledger["run_id"],
         "ledger_head_hash": ledger["head_hash"], "routes": routes}
     errors = validate_document(value, "claim-ledger-work-routing.schema.json")
@@ -503,7 +792,18 @@ def current_inputs(run_id: str) -> dict[str, Any]:
             "accepted_pointer_sha256": binding["accepted_pointer_sha256"],
             "source_generation": artifact["source_snapshot"],
             "component_generation": artifact["component_map_attempt_id"], "artifact": routes})
-    return {"run_id": run_id, "sources": sources, "code": _code_hashes()}
+    leads, coverage = lead_sources(run_id, artifact["source_snapshot"], artifact["component_map_attempt_id"])
+    components: list[dict[str, Any]] = []
+    component_pointer = data_path(run_id, "jobs", "01-component-characterization", "accepted.json")
+    if leads and component_pointer.is_file():
+        component_map, component_binding = bounded_analysis_workers.load_accepted(component_pointer,
+            run_id=run_id, job_id="01-component-characterization", contract="component-map",
+            artifact="component-purpose-map.json", schema="component-purpose-map.schema.json")
+        if component_binding["attempt_id"] == artifact["component_map_attempt_id"]:
+            components = lead_components(component_map)
+    sources.extend(leads)
+    return {"run_id": run_id, "sources": sources, "lead_components": components,
+            "lead_coverage": coverage, "code": _code_hashes()}
 
 
 def _receipts(inputs: dict[str, Any], ledger: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -529,12 +829,34 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any]) -> None:
 
 
 def _candidates(inputs: dict[str, Any]) -> list[dict[str, Any]]:
-    values = []
+    values, leads = [], []
     for source in inputs["sources"]:
         if source["contract_id"] == "threat-model-core": values.extend(threat_candidates(source))
         elif source["contract_id"] == "owasp-join-report": values.extend(owasp_candidates(source))
+        elif source["contract_id"] in LEAD_CONTRACTS: leads.append(source)
         else: raise Blocked(f"{JOB}: unsupported candidate-route contract {source['contract_id']}")
+    if leads: values.extend(lead_candidates(leads, inputs.get("lead_components", [])))
     return values
+
+
+def _summary(ledger: dict[str, Any], inputs: dict[str, Any]) -> str:
+    admitted = [entry for entry in ledger["entries"] if entry["event_type"] == "candidate_admitted"]
+    kinds: dict[str, int] = {}
+    for entry in admitted:
+        kind, priority = route_kind(entry["route_id"], entry["producer"]["contract_id"])
+        label = kind if priority is None else f"{kind} {priority}"
+        kinds[label] = kinds.get(label, 0) + 1
+    lines = ["# Candidate claim ledger", "",
+             f"{len(ledger['claim_states'])} candidate claims; head `{ledger['head_hash']}`.", "",
+             "| Source | Claims |", "|---|---:|"] + [f"| {key} | {kinds[key]} |" for key in sorted(kinds)]
+    coverage = inputs.get("lead_coverage", [])
+    if coverage:
+        lines += ["", "## Tool-lead coverage", "", "| Producer | Accepted status | Leads |", "|---|---|---:|"]
+        lines += [f"| {row['job_id']} | {row['status']} | {row['leads']} |" for row in coverage]
+    lines += ["", "Every tool lead is a candidate for review (P3 code-quality leads are grouped per file and "
+              "ordered last, never dropped); reviewers remain free to look beyond this menu.", "",
+              "Ledger admission does not create a finding, severity, runtime, or compliance claim.", ""]
+    return "\n".join(lines)
 
 
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
@@ -545,12 +867,12 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         candidates = _candidates(inputs)
         ledger = build_ledger(run_id, attempt.name, candidates); routing = work_routing(ledger)
         atomic_json(attempt / LEDGER, ledger); atomic_json(attempt / ROUTING, routing)
-        atomic_bytes(attempt / SUMMARY, ("# Candidate claim ledger\n\n"
-            f"{len(ledger['claim_states'])} candidate claims; head `{ledger['head_hash']}`.\n\n"
-            "Ledger admission does not create a finding, severity, runtime, or compliance claim.\n").encode())
+        atomic_bytes(attempt / SUMMARY, _summary(ledger, inputs).encode())
         permission, lineage = _receipts(inputs, ledger)
         atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
         status = {"process": JOB, "status": "OK", "claims": len(ledger["claim_states"]),
+            "tool_lead_claims": sum(entry["route_id"].startswith(LEAD_ROUTE_PREFIX) for entry in ledger["entries"]
+                                    if entry["event_type"] == "candidate_admitted"),
             "ledger_head_hash": ledger["head_hash"], "claim_limit": "candidate-only"}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
             worker_kind="deterministic_python", output_contract=CONTRACT, input_fingerprint=fingerprint,

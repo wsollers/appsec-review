@@ -1851,7 +1851,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
 | Declared inputs (registry/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-debug-symbol-index/` |
-| Output files (registry/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
+| Output files (registry/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json<br>debug-symbol-index.records.jsonl |
 | Consumed by | [`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |

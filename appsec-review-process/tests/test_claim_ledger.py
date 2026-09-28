@@ -19,6 +19,10 @@ import validate_job_output
 from publish_job_output import ACCEPTED_SCHEMA, artifact_records, terminal_envelope
 
 
+REPLAY_RUNS = ROOT.parent.parent / "appsec-review" / "appsec-review-process" / "runs"
+REPLAY_RUN = "20260928T034921Z-be3585"
+
+
 class ClaimLedgerTests(unittest.TestCase):
     def setUp(self):
         component = json.loads((ROOT / "tests/fixtures/component-characterization/hello-autotools.json").read_text())
@@ -277,6 +281,135 @@ class ClaimLedgerTests(unittest.TestCase):
         source = deepcopy(self.owasp_source); source["artifact"]["routes"][0]["finding_created"] = True
         with self.assertRaisesRegex(execution_state.Blocked, "promotes|invalid OWASP route source"):
             ledger.owasp_candidates(source)
+
+    def lead_source(self, job_id, contract, artifact, leads, digit):
+        return {"contract_id": contract, "producer_job_id": job_id, "producer_attempt_id": job_id + "-attempt",
+            "artifact_path": f"jobs/{job_id}/attempts/{job_id}-attempt/{artifact}", "lead_artifact": artifact,
+            "artifact_sha256": "sha256:" + digit * 64, "accepted_pointer_sha256": "sha256:" + digit * 64,
+            "source_generation": self.threat_source["source_generation"],
+            "component_generation": self.threat_source["component_generation"],
+            "tool_snapshot_sha256": "sha256:" + "a" * 64, "leads": leads}
+
+    def lead_sources(self):
+        src = "sha256:" + "b" * 64
+        source = ledger.normalize_leads("02-source-sast", {"leads": [
+            {"lead_id": "lead_0000000000000001", "tool_id": "semgrep-repository-rules-v1", "rule_id": "appsec.c.strcpy",
+             "category": "unsafe-copy", "path": "src/main.c", "start_line": 7, "end_line": 7, "source_sha256": src},
+            {"lead_id": "lead_0000000000000002", "tool_id": "phpcs", "rule_id": "PSR12.Files.FileHeader.SpacingAfterTagBlock",
+             "category": "language-security-static-analysis", "path": "web/index.php", "start_line": 1, "end_line": 1,
+             "source_sha256": src}]})
+        native = ledger.normalize_leads("02-native-sast", {"units": [{"leads": [
+            {"lead_id": "lead_0000000000000003", "tool_id": "clang-static-analyzer", "unit_id": "dir:src",
+             "rule_id": "security.insecureAPI.strcpy", "path": "src/main.c", "start_line": 7, "start_column": 5,
+             "source_sha256": src, "category": "buffer-safety"},
+            {"lead_id": "lead_0000000000000004", "tool_id": "cppcheck", "unit_id": "dir:src", "rule_id": "variableScope",
+             "path": "src/util.c", "start_line": 20, "start_column": 3, "source_sha256": src,
+             "category": "other-static-analysis"},
+            {"lead_id": "lead_0000000000000005", "tool_id": "cppcheck", "unit_id": "dir:src",
+             "rule_id": "constVariablePointer", "path": "src/util.c", "start_line": 30, "start_column": 3,
+             "source_sha256": src, "category": "other-static-analysis"},
+            {"lead_id": "lead_0000000000000006", "tool_id": "clang-static-analyzer", "unit_id": "dir:src",
+             "rule_id": "security.insecureAPI.DeprecatedOrUnsafeBufferHandling", "path": "src/util.c",
+             "start_line": 40, "start_column": 3, "source_sha256": src, "category": "buffer-safety"}]}]})
+        secrets = ledger.normalize_leads("02-secrets-inventory", {"entries": [
+            {"entry_id": "SI-000001", "assertion": "private-key-header-present", "tool_id": "key-material-file-inventory",
+             "rule_id": "pem-private-key-header", "data_class": "private-key", "confidence": "high",
+             "location": {"path": None, "path_disposition": "withheld-unsafe-path", "start_line": None,
+                          "end_line": None}, "citation": {}}]})
+        return [self.lead_source("02-native-sast", "native-sast", "native-sast.json", native, "c"),
+                self.lead_source("02-source-sast", "source-sast", "source-sast.json", source, "d"),
+                self.lead_source("02-secrets-inventory", "secrets-inventory",
+                                 "outputs/secrets-inventory.redacted.json", secrets, "e")]
+
+    def test_tool_leads_merge_across_tools_tier_and_order_last(self):
+        components = [{"component_id": "native", "path_patterns": ["src/**"], "aliases": []}]
+        leads = ledger.lead_candidates(self.lead_sources(), components)
+        self.assertEqual(leads, ledger.lead_candidates(list(reversed(self.lead_sources())), components))
+        tiers = [item["route_id"].split(":")[1] for item in leads]
+        self.assertEqual(tiers, sorted(tiers))  # P1 before P2 before P3
+        self.assertEqual({tier: tiers.count(tier) for tier in set(tiers)}, {"P1": 2, "P2": 1, "P3": 2})
+        merged = next(item for item in leads if "src/main.c:7" in item["hypothesis"])
+        self.assertEqual({c["producer_job_id"] for c in merged["citations"]}, {"02-source-sast", "02-native-sast"})
+        self.assertIn("semgrep-repository-rules-v1 appsec.c.strcpy", merged["hypothesis"])
+        self.assertIn("clang-static-analyzer security.insecureAPI.strcpy", merged["hypothesis"])
+        self.assertEqual(merged["confidence"], "medium"); self.assertEqual(merged["component_ids"], ["native"])
+        self.assertEqual(merged["source"]["producer_job_id"], "02-source-sast")  # stable primary producer
+        locator = json.loads(merged["citations"][0]["locator_json"])
+        self.assertEqual((locator["path"], locator["start_line"], locator["source_sha256"]),
+                         ("src/main.c", 7, "sha256:" + "b" * 64))
+        self.assertEqual(merged["citations"][0]["artifact_path"], "source-sast.json")
+        quality = next(item for item in leads if item["route_id"].startswith("tool-lead:P3:")
+                       and "src/util.c" in item["hypothesis"])
+        self.assertEqual(len(quality["citations"]), 2)  # variableScope + constVariablePointer, one file claim
+        secret = next(item for item in leads if "withheld-path:SI-000001" in item["hypothesis"])
+        self.assertEqual(secret["component_ids"], ["component-unmapped"])
+        value = ledger.build_ledger("run1", "attempt-1", self.candidates() + leads)
+        self.assertEqual(ledger.validate_ledger(value), [])
+        admitted = [entry for entry in value["entries"] if entry["event_type"] == "candidate_admitted"]
+        first_lead = next(index for index, entry in enumerate(admitted) if entry["route_id"].startswith("tool-lead:"))
+        self.assertTrue(all(entry["route_id"].startswith("tool-lead:") for entry in admitted[first_lead:]))
+        self.assertTrue(all(entry["claim_class"] == "candidate_only" for entry in admitted))
+        routing = ledger.work_routing(value)
+        kinds = [(row["source_kind"], row["review_priority"]) for row in routing["routes"]]
+        self.assertEqual(len(routing["routes"]), len(value["claim_states"]))  # nothing dropped
+        self.assertEqual(sum(kind == "tool-lead" for kind, _ in kinds), len(leads))
+        self.assertEqual(kinds[-1], ("tool-lead", "P3"))
+        import claim_lifecycle_core
+        view = claim_lifecycle_core._ledger_view(value)
+        self.assertEqual(len(view["candidates"]), len(value["claim_states"]))
+        # The OWASP fixture's obligation ids ("V1.1.1:1") predate the 07 input pattern; check the lead rows.
+        view["candidates"] = [row for row in view["candidates"] if row["route_id"].startswith("tool-lead:")]
+        self.assertEqual(validate_document(view, claim_lifecycle_core.LEDGER_SCHEMA), [])
+        summary = ledger._summary(value, {"lead_coverage": [{"job_id": "02-mobile-sast", "status": "SKIPPED", "leads": 0}]})
+        self.assertIn("| tool-lead P3 | 2 |", summary); self.assertIn("| 02-mobile-sast | SKIPPED | 0 |", summary)
+
+    def test_tier_map_keeps_quality_low_and_security_high(self):
+        def tier(tool, rule, category, kind="code"):
+            return ledger.lead_tier({"kind": kind, "tool_id": tool, "rule_id": rule, "category": category})
+        self.assertEqual(tier("cppcheck", "variableScope", "other-static-analysis"), "P3")
+        self.assertEqual(tier("cppcheck", "funcArgNamesDifferent", "other-static-analysis"), "P3")
+        self.assertEqual(tier("semgrep-repository-rules-v1", "appsec.c.system", "command-execution"), "P1")
+        self.assertEqual(tier("gosec", "G204", "language-security-static-analysis"), "P1")
+        self.assertEqual(tier("cppcheck", "uninitvar", "undefined-behavior"), "P1")
+        self.assertEqual(tier("psalm", "PossiblyInvalidCast", "language-security-static-analysis"), "P2")
+        self.assertEqual(tier("key-material-file-inventory", "pem-private-key-header", "private-key", "secret"), "P1")
+
+    def test_absent_and_skipped_lead_producers_are_coverage_not_failure(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(execution_state, "RUNS", Path(directory)):
+            jobs = Path(directory) / "run1" / "data" / "jobs"
+            (jobs / "02-source-sast").mkdir(parents=True)
+            execution_state.atomic_json(jobs / "02-source-sast" / "accepted.json", {"status": "SKIPPED"})
+            (jobs / "02-mobile-sast" / "whole").mkdir(parents=True)
+            execution_state.atomic_json(jobs / "02-mobile-sast" / "whole" / "accepted.json", {"status": "SKIPPED"})
+            sources, coverage = ledger.lead_sources("run1", "sha256:" + "1" * 64, "component-1")
+        self.assertEqual(sources, [])
+        self.assertEqual({row["job_id"]: row["status"] for row in coverage},
+            {"02-source-sast": "SKIPPED", "02-native-sast": "ABSENT", "02-secrets-inventory": "ABSENT",
+             "02-sca-vulnerability-match": "ABSENT", "02-iac-config-scan": "ABSENT", "02-mobile-sast": "SKIPPED"})
+        self.assertEqual(ledger.lead_candidates([]), [])
+
+    @unittest.skipUnless((REPLAY_RUNS / REPLAY_RUN / "data" / "jobs" / "02-source-sast" / "accepted.json").is_file(),
+                         "multi-vuln replay run be3585 is not present")
+    def test_replay_be3585_accepted_tool_leads_become_candidates(self):
+        """Read-only replay over the real accepted SAST/secrets/SCA/IaC outputs of run be3585."""
+        with mock.patch.object(execution_state, "RUNS", REPLAY_RUNS):
+            inputs = ledger.current_inputs(REPLAY_RUN)
+            candidates = ledger._candidates(inputs)
+            value = ledger.build_ledger(REPLAY_RUN, "replay", candidates)
+        coverage = {row["job_id"]: (row["status"], row["leads"]) for row in inputs["lead_coverage"]}
+        self.assertEqual(coverage["02-source-sast"][1], 41); self.assertEqual(coverage["02-native-sast"][1], 119)
+        self.assertEqual(coverage["02-mobile-sast"], ("SKIPPED", 0))
+        leads = [item for item in candidates if item["route_id"].startswith(ledger.LEAD_ROUTE_PREFIX)]
+        tiers = {tier: sum(item["route_id"].split(":")[1] == tier for item in leads) for tier in ledger.TIERS}
+        self.assertEqual((len(leads), tiers), (90, {"P1": 27, "P2": 48, "P3": 15}))
+        cited = sum(len(item["citations"]) for item in leads)
+        self.assertEqual(cited, sum(row[1] for row in coverage.values()))  # every lead is cited, none dropped
+        strcpy = next(item for item in leads if "projects/cpp/case-001/main.cpp:7 " in item["hypothesis"])
+        self.assertTrue(strcpy["route_id"].startswith("tool-lead:P1:"))
+        self.assertEqual({c["producer_job_id"] for c in strcpy["citations"]}, {"02-source-sast", "02-native-sast"})
+        self.assertEqual(ledger.validate_ledger(value), [])
+        self.assertEqual(len(value["claim_states"]), 60 + 90)
 
     def test_contract_policy_receipts_and_owned_records(self):
         contract = json.loads((ROOT / "registry/output-contracts/claim-ledger-core.json").read_text())

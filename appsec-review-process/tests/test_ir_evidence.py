@@ -291,6 +291,13 @@ class IrEvidenceTests(unittest.TestCase):
                 ir.facts(self.run_id, self.owner / "unused",toolchain=self.toolchain)
 
 
+class ProhibitedKeysTest(unittest.TestCase):
+    def test_words_in_data_are_not_verdicts(self):
+        import ir_evidence
+        self.assertFalse(ir_evidence._prohibited_keys({"facts": [{"function": "pf_finding_severity_cb", "source_path": "src/vulnerability.c"}]}))
+        self.assertTrue(ir_evidence._prohibited_keys({"facts": [{"severity": "high"}]}))
+
+
 if __name__ == "__main__": unittest.main()
 
 

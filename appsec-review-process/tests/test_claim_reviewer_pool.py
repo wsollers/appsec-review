@@ -106,9 +106,13 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                 value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
             pool_parent = base / "pools"
             pool_parent.mkdir()
+            menu = value["evidence_menu"]
+            menu_root = reviewer_pool.evidence_menu.write(base / "evidence-menu", menu)
+            roots = {reviewer_pool.ROOT_ID: accepted,
+                     **reviewer_pool.evidence_menu.readable_roots(RUN_ID, menu, menu_root)}
             context = reviewer_pool.pool_specification.PoolContext(pool_parent=pool_parent,
                 registry_dir=reviewer_pool.persona_invocation.REGISTRY_DIR,
-                prompt_root=ROOT, readable_roots={reviewer_pool.ROOT_ID: accepted},
+                prompt_root=ROOT, readable_roots=roots,
                 allowed_models=(model,), invoker_id="claude-cli",
                 images_dir=reviewer_pool.container_execution.IMAGES_DIR,
                 host_flavor="windows" if sys.platform == "win32" else "posix",
@@ -116,7 +120,54 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                 source_snapshot_sha256=SOURCE, registry_ceiling=None)
             plan = reviewer_pool.pool_specification.plan_expansion(value["spec"], context=context)
             self.assertEqual(len(plan.instances), 1)
-            self.assertEqual(plan.instances[0].request.request["readable_inputs"][0]["path"], artifact.name)
+            readable = plan.instances[0].request.request["readable_inputs"]
+            self.assertEqual(readable[0]["path"], artifact.name)
+            self.assertEqual((readable[1]["root"], readable[1]["path"]),
+                             (reviewer_pool.evidence_menu.MENU_ROOT_ID, reviewer_pool.evidence_menu.MENU_FILE))
+
+    def test_prepared_spec_pins_supporting_evidence_the_persona_may_read(self):
+        from tests.test_supporting_evidence_menu import publish
+        import execution_state
+        upstream = fixture("claim-ledger.json")
+        model = {"provider": "anthropic", "family": "claude-sonnet-5",
+                 "model_id": "claude-sonnet-5-20260927", "snapshot": "claude-sonnet-5-20260927"}
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder).resolve()
+            publish(base / RUN_ID / "data" / "jobs", "02-ir-facts",
+                    {"ir-facts.json": b'{"facts": [], "debug_locations": []}'}, run=RUN_ID)
+            accepted = base / "accepted-attempt"
+            accepted.mkdir()
+            artifact = accepted / "claim-decision-ledger.json"
+            artifact.write_text(json.dumps(upstream), encoding="utf-8")
+            with mock.patch.object(execution_state, "RUNS", base), \
+                    mock.patch.object(reviewer_pool.lifecycle, "_load_upstream",
+                    return_value=(upstream, binding(), SOURCE)), \
+                    mock.patch.object(reviewer_pool, "_upstream_location",
+                    return_value=(accepted, artifact.name)), \
+                    mock.patch.object(reviewer_pool, "read_json",
+                    return_value={"accepted_at": "2026-09-27T12:00:00.123456+00:00"}), \
+                    mock.patch.object(reviewer_pool.model_versions, "model_identity_for",
+                    return_value=model):
+                value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
+                pool_parent = base / "pools"
+                pool_parent.mkdir()
+                menu_root = reviewer_pool.evidence_menu.write(base / "evidence-menu", value["evidence_menu"])
+                roots = {reviewer_pool.ROOT_ID: accepted,
+                         **reviewer_pool.evidence_menu.readable_roots(RUN_ID, value["evidence_menu"], menu_root)}
+                context = reviewer_pool.pool_specification.PoolContext(pool_parent=pool_parent,
+                    registry_dir=reviewer_pool.persona_invocation.REGISTRY_DIR,
+                    prompt_root=ROOT, readable_roots=roots,
+                    allowed_models=(model,), invoker_id="claude-cli",
+                    images_dir=reviewer_pool.container_execution.IMAGES_DIR,
+                    host_flavor="windows" if sys.platform == "win32" else "posix",
+                    docker_host=None, docker_executable=None, container_user=None, mount_roots={},
+                    source_snapshot_sha256=SOURCE, registry_ceiling=None)
+                plan = reviewer_pool.pool_specification.plan_expansion(value["spec"], context=context)
+            readable = plan.instances[0].request.request["readable_inputs"]
+            self.assertEqual([row["root"] for row in readable],
+                             [reviewer_pool.ROOT_ID, "evidence-menu", "supporting-evidence"])
+            self.assertEqual(readable[2]["path"], "02-ir-facts/attempts/a1/ir-facts.json")
+            self.assertIn("supporting_evidence_menu.py", value["code"])
 
     def _runtime_patches(self, base, value, result):
         launched = reviewer_pool.pool_launcher.LaunchedPool(
@@ -196,7 +247,10 @@ class ClaimReviewerPoolTests(unittest.TestCase):
         instructions = reviewer_pool._runtime_instructions(package)
         self.assertIn("independent-verifier", instructions)
         self.assertIn("never emit VERIFIED", instructions)
-        self.assertIn("persona-attempt", instructions)
+        # identity, hashes and the candidate wrapper are derived (claim_review_derive), not copied
+        self.assertNotIn("persona-attempt", instructions)
+        self.assertNotIn("sha256:" + "a" * 64, instructions)
+        self.assertIn(reviewer_pool.derive.PERSONA_SCHEMA, instructions)
         for path, schema in ((ROOT / "registry/job-templates/claim-review-pool-cell.json",
                               "job-template.schema.json"),
                              (ROOT / "registry/output-contracts/claim-review-pool-candidates.json",

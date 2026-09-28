@@ -134,6 +134,25 @@ class SynthesisReportTests(unittest.TestCase):
         report, _ = synthesis.build_report(inputs)
         self.assertEqual(report["verified_findings"], []); self.assertEqual(len(report["unresolved_candidates"]), 2)
 
+    def test_unverified_tool_leads_are_listed_in_the_draft(self):
+        inputs = self.inputs(); report, _ = synthesis.build_report(inputs)
+        report_md, appendix = synthesis.render_markdown(report)
+        self.assertNotIn("static-tool leads", report_md)
+        report = deepcopy(report)
+        report["unresolved_candidates"][0]["hypothesis"] = ("Tool lead (P1, unsafe-copy): 2 static analysis "
+            "lead(s) from 2 tool(s) at src/main.c:7 [cppcheck bufferAccessOutOfBounds]. Candidate: unreviewed.")
+        report_md, appendix = synthesis.render_markdown(report)
+        self.assertIn("1 of them are static-tool leads not independently verified (P1 1, P2 0, P3 0)", report_md)
+        self.assertIn("## Tool leads not independently verified", appendix)
+        self.assertIn("| P1 | `" + report["unresolved_candidates"][0]["claim_id"] + "` |", appendix)
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "data" / "jobs" / "02-secrets-inventory" / "whole" / "attempts" / "a1"
+            jobs.mkdir(parents=True); (jobs / "x.json").write_text("{}")
+            import report_input_assembly
+            row = report_input_assembly._verify_citation(Path(directory) / "data" / "jobs",
+                ("02-secrets-inventory", "a1", "x.json", "sha256:" + execution_state.file_hash(jobs / "x.json")))
+            self.assertEqual(row["artifact_path"], "x.json")
+
     def test_render_and_publication_are_draft_only_and_hash_bound(self):
         inputs = self.inputs(); report, trace = synthesis.build_report(inputs)
         report_md, appendix = synthesis.render_markdown(report)
