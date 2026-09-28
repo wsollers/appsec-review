@@ -61,6 +61,16 @@ class WorkerBlocked(RuntimeError):
     pass
 
 
+class ToolGap(Exception):
+    """A re-verified B13 terminal that is a tool-level failure (ADR-0013): carries the gap text
+    and the gap record derived from the verified attempt. Raised by ``_tool`` only for callers
+    that allow it; everyone else still sees WorkerBlocked."""
+
+    def __init__(self, gap: str, record: dict[str, Any]):
+        super().__init__(gap)
+        self.gap, self.record = gap, record
+
+
 def _canonical(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
@@ -146,8 +156,12 @@ def _base(request: dict[str, Any], job: str) -> dict[str, Any]:
             "source_snapshot_sha256": request["source_snapshot_sha256"]}
 
 
-def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tuple[dict[str, Any], dict[str, Any], Path]:
-    """Consume a verified immutable B13 attempt, never a caller-authored receipt bundle."""
+def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "", *,
+          allow_gap: bool = False) -> tuple[dict[str, Any], dict[str, Any], Path]:
+    """Consume a verified immutable B13 attempt, never a caller-authored receipt bundle.
+
+    With ``allow_gap`` a verified tool-level failure (``dependency_b13_adapters.tool_gap``) raises
+    :class:`ToolGap` instead of blocking; the binding must then carry no output hash."""
     spec = dependency_adapters.SPECS.get(kind)
     if spec is None or spec["job"] != job:
         raise WorkerBlocked(f"{job}: dependency adapter kind is not valid for this worker")
@@ -161,7 +175,8 @@ def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tup
     if (not attempt_root.is_absolute() or not attempt_root.is_dir() or attempt_root.is_symlink() or
             not images_dir.is_absolute() or not images_dir.is_dir() or images_dir.is_symlink() or
             not docker_executable.is_absolute() or not SHA.fullmatch(str(binding["expected_result_sha256"])) or
-            not SHA.fullmatch(str(binding["expected_output_sha256"]))):
+            not (SHA.fullmatch(str(binding["expected_output_sha256"])) or
+                 (allow_gap and binding["expected_output_sha256"] is None))):
         raise WorkerBlocked(f"{job}: immutable B13 attempt binding is invalid")
     expected_request = binding["request"]
     if not isinstance(expected_request, dict):
@@ -213,7 +228,18 @@ def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tup
     from dependency_b13_adapters import exit_accepted
     finding_exit = exit_accepted(kind, verified, attempt_root)
     if verified["execution_status"] != "OK" and not finding_exit:
-        raise WorkerBlocked(f"{job}: immutable B13 attempt did not complete successfully")
+        gap = dependency_adapters.tool_gap(kind, verified, attempt_root) if allow_gap else None
+        if gap is None or binding["expected_output_sha256"] is not None:
+            raise WorkerBlocked(f"{job}: immutable B13 attempt did not complete successfully")
+        raise ToolGap(gap, {"schema": dependency_adapters.TOOL_GAP_SCHEMA, "run_id": request["run_id"],
+            "job_id": job, "attempt_id": attempt_id, "tool_id": spec["tool"], "image_id": image["image_id"],
+            "image_digest": image["digest"], "execution_status": verified["execution_status"],
+            "cause": verified["cause"], "exit_code": verified.get("exit_code"),
+            "b13_result_sha256": binding["expected_result_sha256"],
+            "source_snapshot_sha256": request["source_snapshot_sha256"], "completed_at": verified["finished_at"],
+            "boundary_sha256": ce.boundary_sha256(), "network_mode": "none", "gap": gap})
+    if binding["expected_output_sha256"] is None:
+        raise WorkerBlocked(f"{job}: completed B13 attempt has no retained output hash")
     output = attempt_root / "scratch" / spec["output"]
     if not output.is_file() or output.is_symlink():
         raise WorkerBlocked(f"{job}: verified B13 attempt lacks its fixed tool output")
@@ -674,7 +700,18 @@ def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, b
     sbom, binding, _ = _upstream(request, "sbom", JOBS["sbom"][0], JOBS["sbom"][2])
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
-    tool, receipt, output = _tool(request, job, "scancode"); component_ids = {row["component_id"] for row in sbom["components"]}
+    try:
+        tool, receipt, output = _tool(request, job, "scancode", allow_gap=True)
+    except ToolGap as gap:
+        # ADR-0013: scancode TIMEOUT/OOM/failed exit -> no license records, one recorded gap; the
+        # gap record is derived from the re-verified B13 attempt (doom3-bfg, freeciv21).
+        result = {"schema": "appsec-review/license-inventory/1.0", **base, "attempt_id": attempt_id,
+                  "redactor": REDACTOR, "sbom_binding": binding, "records": []}
+        if validate_document(result, "license-inventory.schema.json"):
+            raise WorkerBlocked(f"{job}: normalized result violates schema")
+        return {"outputs/license-inventory.json": _canonical(result),
+                "outputs/pinned-tool-gap.json": _canonical(gap.record)}, [gap.gap]
+    component_ids = {row["component_id"] for row in sbom["components"]}
     raw_records = tool.get("records")
     if not isinstance(raw_records, list) and isinstance(tool.get("files"), list):
         source_files = _source_files(request, job); raw_records = []

@@ -196,6 +196,99 @@ class AdapterTests(unittest.TestCase):
         license_path = self.root / "worker-output/02-license-scan/attempts" / license_result["attempt_id"] / "outputs/license-inventory.json"
         self.assertEqual(json.loads(license_path.read_text())["records"][0]["license_expression"], "MIT")
 
+    def _accepted_sbom(self, common):
+        """Build index + SBOM through the real workers; returns the accepted SBOM binding."""
+        syft_raw = {"bomFormat": "CycloneDX", "specVersion": "1.6", "components": [{
+            "name": "lodash", "version": "4.17.20", "purl": "pkg:npm/lodash@4.17.20",
+            "properties": [{"name": "syft:location:0:path", "value": "package-lock.json"}]}]}
+        syft, _ = self.execute("syft", ScriptedDocker(), (json.dumps(syft_raw) + "\n").encode())
+        build_root = self.root / "worker-output" / "02-build-index"
+        build_attempt = build_root / "attempts" / "build-one"; build_attempt.mkdir(parents=True)
+        build_index_path = build_attempt / "build-index.json"
+        build_index_path.write_text('{"schema": "appsec-review/build-index/1", "units": []}\n')
+        build_envelope = terminal_envelope(run_id="run-dependency", job_id="02-build-index", attempt_id="build-one",
+            worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+            input_fingerprint="sha256:" + "8" * 64, output_contract="build-index",
+            started_at=support.NOW, finished_at=support.NOW, summary="fixture",
+            artifacts=artifact_records(build_attempt, ["build-index.json"]))
+        (build_attempt / "result.json").write_text(json.dumps(build_envelope, sort_keys=True) + "\n")
+        build_pointer = build_root / "accepted.json"
+        build_pointer.write_text(json.dumps({"schema": "appsec-review/accepted-worker-result/1.0",
+            "run_id": "run-dependency", "job": "02-build-index", "attempt_id": "build-one", "status": "OK",
+            "fingerprint": build_envelope["input_fingerprint"], "envelope_path": "result.json",
+            "envelope_sha256": workers._hash_file(build_attempt / "result.json").split(":", 1)[1]}) + "\n")
+        build_binding = {"attempt_id": "build-one", "path": str(build_index_path),
+            "sha256": workers._hash_file(build_index_path), "accepted_path": str(build_pointer)}
+        sbom_request = self.write_json("sbom-request.json", {**common, "b13_attempt": syft["b13_attempt"],
+            "source_files": {"package-lock.json": "sha256:" + "c" * 64}, "build_index": build_binding})
+        sbom = workers.run("sbom", sbom_request)
+        sbom_path = self.root / "worker-output/02-sbom-inventory/attempts" / sbom["attempt_id"] / "outputs/sbom-manifest.json"
+        return {"attempt_id": sbom["attempt_id"], "path": str(sbom_path), "sha256": workers._hash_file(sbom_path),
+                "accepted_path": str(self.root / "worker-output/02-sbom-inventory/accepted.json")}
+
+    def test_scancode_timeout_and_failed_exit_publish_a_license_gap_not_a_block(self):
+        """doom3-bfg/freeciv21: scancode TIMEOUT blocked 02-license-scan; ADR-0013 makes it a gap."""
+        common = {"run_id": "run-dependency", "source_snapshot_sha256": self.source,
+                  "generated_at": support.NOW, "output_root": str(self.root / "worker-output")}
+        sbom_binding = self._accepted_sbom(common)
+        cases = (("timeout", ScriptedDocker(client_exit=-9, metadata={"timed_out": True, "error": "TimeoutError: bounded"}),
+                  "ended TIMEOUT"),
+                 ("exit-2", ScriptedDocker(client_exit=2), "ended CONTAINER_EXIT_NONZERO exit 2"))
+        for label, scripted, text in cases:
+            with self.subTest(label=label):
+                scan, attempt = self.execute("scancode", scripted, b'{"files": [')  # truncated output
+                self.assertIsNone(scan["tool_output"]); self.assertIn(text, scan["tool_gap"])
+                self.assertIsNone(scan["b13_attempt"]["expected_output_sha256"])
+                self.assertFalse((attempt / "pinned-tool-evidence.json").exists())
+                request = self.write_json(f"license-{label}.json", {**common, "sbom": sbom_binding,
+                    "b13_attempt": scan["b13_attempt"], "source_files": {"LICENSE": "sha256:" + "c" * 64}})
+                envelope = workers.run("license", request)
+                self.assertEqual(envelope["execution_status"], "OK_WITH_GAPS")
+                self.assertEqual(len(envelope["gaps"]), 1); self.assertIn(text, envelope["gaps"][0])
+                self.assertTrue(envelope["gaps"][0].startswith("LICENSE_SCAN_TOOL_GAP: scancode-toolkit"))
+                out = self.root / "worker-output/02-license-scan/attempts" / envelope["attempt_id"] / "outputs"
+                self.assertEqual(json.loads((out / "license-inventory.json").read_text())["records"], [])
+                gap = json.loads((out / "pinned-tool-gap.json").read_text())
+                self.assertEqual((gap["schema"], gap["tool_id"], gap["b13_result_sha256"]),
+                                 (adapters.TOOL_GAP_SCHEMA, "scancode-toolkit", scan["expected_result_sha256"]))
+                self.assertFalse((out / "pinned-tool-evidence.json").exists())
+                pointer = json.loads((self.root / "worker-output/02-license-scan/accepted.json").read_text())
+                self.assertEqual(pointer["status"], "OK_WITH_GAPS")
+                shutil.rmtree(attempt)
+
+    def test_scancode_gap_keeps_integrity_checks(self):
+        common = {"run_id": "run-dependency", "source_snapshot_sha256": self.source,
+                  "generated_at": support.NOW, "output_root": str(self.root / "worker-output")}
+        sbom_binding = self._accepted_sbom(common)
+        scan, attempt = self.execute("scancode", ScriptedDocker(client_exit=-9,
+            metadata={"timed_out": True, "error": "TimeoutError: bounded"}), b"")
+        # A caller cannot claim an output hash for a failed attempt ...
+        forged = {**scan["b13_attempt"], "expected_output_sha256": "sha256:" + "f" * 64}
+        request = self.write_json("license-forged.json", {**common, "sbom": sbom_binding, "b13_attempt": forged,
+                                                          "source_files": {}})
+        with self.assertRaisesRegex(workers.WorkerBlocked, "did not complete successfully"):
+            workers.run("license", request)
+        # ... nor present a tampered B13 log as a gap.
+        (attempt / "logs/container/stdout.log").write_bytes(b"tampered\n")
+        request = self.write_json("license-tampered.json", {**common, "sbom": sbom_binding,
+            "b13_attempt": scan["b13_attempt"], "source_files": {}})
+        with self.assertRaisesRegex(workers.WorkerBlocked, "re-verification"):
+            workers.run("license", request)
+        # Other dependency tools still block on the same terminal.
+        shutil.rmtree(self.root / "attempt-syft", ignore_errors=True)
+        with self.assertRaisesRegex(adapters.AdapterBlocked, "pinned tool ended"):
+            self.execute("syft", ScriptedDocker(client_exit=-9, metadata={"timed_out": True, "error": "x"}), b"{}\n")
+
+    def test_scancode_documented_partial_exit_is_still_accepted_output(self):
+        verified = {"execution_status": "FAILED", "cause": "CONTAINER_EXIT_NONZERO", "exit_code": 1}
+        (self.root / "logs/container").mkdir(parents=True); (self.root / "scratch").mkdir()
+        (self.root / "logs/container/stderr.log").write_text("Some files failed to scan properly\n")
+        (self.root / "scratch/scancode.json").write_text("{}\n")
+        self.assertIsNone(adapters.tool_gap("scancode", verified, self.root))
+        self.assertIsNone(adapters.tool_gap("scancode", {"execution_status": "CANCELED", "cause": "CANCELED"}, self.root))
+        self.assertIsNone(adapters.tool_gap("syft", {"execution_status": "FAILED", "cause": "TIMEOUT"}, self.root))
+        self.assertIn("OOM_KILLED", adapters.tool_gap("scancode", {"execution_status": "FAILED", "cause": "OOM_KILLED"}, self.root))
+
     def test_live_syft_root_relative_location_resolves_to_accepted_source(self):
         source = {"package-lock.json": "sha256:" + "c" * 64}
         properties = [{"name": "syft:location:0:path", "value": "/package-lock.json"}]

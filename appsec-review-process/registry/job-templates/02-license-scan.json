@@ -30,7 +30,8 @@
       "outputs/redaction-receipt.json",
       "outputs/tool-results.json",
       "outputs/coverage.json",
-      "outputs/pinned-tool-evidence.json"
+      "outputs/pinned-tool-evidence.json",
+      "outputs/pinned-tool-gap.json"
     ]
   },
   "prompt_sections": [
@@ -66,7 +67,7 @@
       "value": 3600,
       "unit": "seconds",
       "kind": "resource",
-      "description": "Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode is single-process here and scales with file count.",
+      "description": "Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode scales with file count. A TIMEOUT (or OOM / failed exit) publishes OK_WITH_GAPS with a LICENSE_SCAN_TOOL_GAP and outputs/pinned-tool-gap.json instead of pinned-tool-evidence.json (ADR-0013).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_memory_bytes": {
