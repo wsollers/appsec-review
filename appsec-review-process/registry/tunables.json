@@ -400,6 +400,13 @@
       "unit": "count",
       "value": 64
     },
+    "pool_docker_slots": {
+      "description": "Dagster `docker` pool slots: pinned-container and target-execution ops that may run at once across all runs. Applied by the resource_pool_guard sensor.",
+      "kind": "resource",
+      "unit": "count",
+      "value": 2,
+      "scale": "At 1, one long scan (doom3-bfg scancode, up to an hour) held every other run's container work; each slot can take up to 4 GiB / 2 CPUs (30 GB / 16 cores on zarathustra)."
+    },
     "pool_document_max_bytes": {
       "description": "Largest pool specification or pool input document.",
       "kind": "safety",

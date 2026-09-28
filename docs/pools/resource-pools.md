@@ -22,7 +22,7 @@ live service qualification below was run on 2026-09-21 except its worker-loss st
 |---|---|---|---|
 | `cpu` | 3 | deterministic Python work: intake, preparation branches, build discovery, gates | equals workflow-plan.json max_concurrent_steps, the fan-out one run is already allowed; 1 would serialize the qualified parallel preparation branches; today two runs may use 6 |
 | `memory` | 1 | memory-heavy deterministic work: the evidence index | no memory measurement exists; today two engagements may index at once, so 1 is tighter |
-| `docker` | 1 | pinned-container and target-execution work: the sandboxed configure | no Docker load measurement exists; today two engagements may configure at once |
+| `docker` | 2 | pinned-container and target-execution work: the sandboxed configure | tunable pool_docker_slots; at 1 one long scan held every other run's container work |
 | `network` | 1 | fixed-destination network work: Scorecard ingestion, the NVD feed sync | no provider rate measurement exists; today a Scorecard step and the NVD sync may overlap |
 | `persona_llm` | 3 | persona / model invocations | ADR-0008 Decision 6 deep class needs 3 concurrent cells; 3 does not exceed the executor cap of 3 steps per run and is half of today's aggregate of 6; no persona op exists yet |
 | `dynamic_analysis` | 1 | dynamic testing and debugger/ptrace work | no dynamic worker exists and nothing is measured; 1 |
