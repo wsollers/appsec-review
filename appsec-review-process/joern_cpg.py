@@ -104,7 +104,7 @@ def _request(run_id: str, attempt_id: str, inputs: dict[str, Any]) -> dict[str, 
         "image": {"image_id": IMAGE_ID, "digest": image["digest"]},
         "argv": ["/opt/joern-cli/joern", "--script", "/inputs/joern/joern_export_records.sc",
                  "--param", "inputPath=/workspace", "--param", "outputPath=/scratch/records.jsonl",
-                 "--param", f"maxRecords={core.LIMITS['max_records']}"],
+                 "--param", "maxRecords=2147483647"],  # uncapped (ADR-0013); counts go to size_log
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
                         {"name": "NO_COLOR", "value": "1"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"},

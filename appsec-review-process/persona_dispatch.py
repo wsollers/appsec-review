@@ -43,6 +43,7 @@ reasonable follow-up once more than one unpooled job template exists, not assume
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -123,21 +124,28 @@ def _walk_target(target_root: Path, root_id: str) -> list[dict[str, Any]]:
     if not target_root.is_dir():
         raise RequestBuildError(f"target checkout is not a directory: {target_root}")
     entries: list[dict[str, Any]] = []
+    linked: list[str] = []
     for path in sorted(target_root.rglob("*")):
         relative = path.relative_to(target_root)
         if relative.parts and relative.parts[0] == ".git":
+            continue
+        if path.is_symlink():
+            linked.append(relative.as_posix())   # links are not followed; logged, not fatal
             continue
         if not path.is_file():
             continue
         try:
             checked = beneath(target_root, path)
-        except ValueError as exc:
-            raise RequestBuildError(f"target checkout: {exc}") from None
+        except ValueError:
+            linked.append(relative.as_posix())
+            continue
         data = checked.read_bytes()
         entries.append({
             "root": root_id, "path": relative.as_posix(), "sha256": pi._bytes_sha(data),
             "bytes": len(data), "role": "evidence", "producer_request_sha256": None,
         })
+    if linked:
+        print(f"persona_dispatch: skipped {len(linked)} symlinked path(s) under {root_id}", file=sys.stderr)
     if not entries:
         raise RequestBuildError(f"target checkout at {target_root} has no readable files")
     return entries
