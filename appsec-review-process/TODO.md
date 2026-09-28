@@ -53,6 +53,11 @@ When a run stops: read the failing op's status/result in `runs/$RUN_ID/data/jobs
 cause, `code-location.sh reload`, and re-launch the same run (accepted upstream attempts are reused).
 Start a fresh run only when the fix changes what an upstream job would have produced.
 
+Build units install into disposable copy-on-write layers over our sealed buildenv images
+(`cow_install.py`). When a run is finished, remove its layers with
+`python3 -B appsec-review-process/cow_install.py "$RUN_ID"` (`--all` for every run, `--dry-run` to
+list). Sealed images carry no disposable label and are never removed.
+
 For `hello-autotools`, the test step needs `python3 -B appsec-review-process/test_evidence.py
 stage-control "$RUN_ID"` once the native build is accepted (see the operator guide).
 

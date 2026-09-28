@@ -25,6 +25,7 @@ import container_execution as ce
 from execution_state import (Blocked, Lock, ROOT, atomic_json, data_path, digest, file_hash, now,
                              read_json, run_path)
 import permission_capabilities as pc
+import cow_install as cow
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 
@@ -105,7 +106,7 @@ def stage_control(run_id: str, mode: str = "success", reuse: str = "auto",
         "capabilities": capabilities,
     }
     value = {
-        "schema": CONTROL_SCHEMA, "mode": mode, "build_resolution_attempts": 3,
+        "schema": CONTROL_SCHEMA, "mode": mode, "build_resolution_attempts": 6,
         "build_image_reuse": reuse, "build_command_timeout_seconds": 1800,
         "image_build_timeout_seconds": 1800, "apt_mirror": APT_MIRROR,
         "permission": {"requirement": {
@@ -377,7 +378,8 @@ def _compile_db(path: Path, allowed: list[str]) -> list[dict[str, Any]]:
 
 
 def _publish_catalog(image_id: str, record: dict[str, Any], fingerprint: str, dockerfile: str,
-                     inputs: dict[str, Any], plan: dict[str, Any], unit_attempt: Path) -> None:
+                     inputs: dict[str, Any], plan: dict[str, Any], unit_attempt: Path,
+                     packages: list[str] | None = None) -> None:
     catalog_path, container_path = _catalog(image_id)
     catalog = {"schema": "appsec-review/build-image/1", "image_id": image_id,
         "tag": "appsec-build/" + image_id.replace("_", "-") + ":local",
@@ -386,7 +388,7 @@ def _publish_catalog(image_id: str, record: dict[str, Any], fingerprint: str, do
         "dockerfile": dockerfile, "dockerfile_sha256": record["dockerfile_sha256"],
         "base": plan["image"]["base"],
         "base_digest": inputs["base_images"][plan["image"]["base"]]["digest"],
-        "apt_packages": sorted(p["name"] for p in plan["image"]["apt_packages"]),
+        "apt_packages": sorted(packages if packages is not None else (p["name"] for p in plan["image"]["apt_packages"])),
         "apt_mirror": APT_MIRROR,
         "validated_builds": [{"run_id": inputs.get("run_id"), "source_revision": inputs["source_revision"],
             "plan_sha256": "sha256:" + inputs["plan"]["sha256"], "attempt_id": unit_attempt.name,
@@ -401,6 +403,124 @@ def _publish_catalog(image_id: str, record: dict[str, Any], fingerprint: str, do
                 raise Blocked(f"{JOB}: refusing to replace an immutable build-image catalog entry")
             return
         atomic_json(catalog_path, catalog); atomic_json(container_path, record)
+
+
+def _cow_record(image_id: str, image: str, dockerfile: str, fingerprint: str, unit_attempt: Path) -> dict[str, Any]:
+    record = {
+        "schema": "appsec-review/container-image/1.0", "image_id": image_id,
+        "repository": "appsec-build/" + image_id.replace("_", "-"),
+        "digest": image, "digest_kind": "image-id",
+        "dockerfile_sha256": "sha256:" + digest(dockerfile),
+        "build_fingerprint_sha256": fingerprint, "build_attempt_id": unit_attempt.name,
+        "purpose": "Disposable copy-on-write build layer over a sealed buildenv; target content is mounted only at trial time.",
+        "provenance": "02-build-resolution copy-on-write install session under an apt package-restore grant.",
+    }
+    errors = validate_document(record, "container-image.schema.json")
+    if errors:
+        raise RuntimeError(f"{JOB}: copy-on-write image record is invalid ({len(errors)} errors)")
+    return record
+
+
+def _trial_text(trial: Path) -> str:
+    parts = []
+    for path in sorted((trial / "logs").rglob("*.log")) if (trial / "logs").is_dir() else []:
+        try:
+            parts.append(path.read_text(encoding="utf-8", errors="replace")[-400000:])
+        except OSError:
+            pass
+    return "\n".join(parts)
+
+
+def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps):
+    """Build one unit in copy-on-write install rounds over its sealed base (see cow_install).
+
+    Round 0 installs the plan's apt names that exist. Each trial failure is read for missing
+    CMake package configs, pkg-config modules, headers and programs; apt-file maps them to
+    packages, which go into another thin layer over the last one. Stops on success, when a round
+    finds nothing new, or after build_resolution_attempts rounds (all logged). Returns the success
+    tuple, or None after recording a gap."""
+    unit_root = attempt / "units" / unit_key
+    unit_root.mkdir(parents=True, exist_ok=True)
+    log = unit_root / "install.log"
+    base_info = inputs["base_images"][plan["image"]["base"]]
+    planned = sorted({p["name"] for p in plan["image"]["apt_packages"]})
+    installs = {"base": plan["image"]["base"], "base_digest": base_info["digest"], "planned": planned,
+                "dropped_unknown": [], "rounds": [], "packages": [], "unresolved": []}
+    try:
+        resolver = cow.resolver_image(base_info["digest"], log=log)
+        known, unknown = cow.check_names(resolver, planned, log=log)
+        installs["dropped_unknown"] = unknown
+        image = base_info["digest"]
+        if known:
+            image = cow.install_layer(image, known, repository="appsec-build/cow-" + unit_key, run_id=run_id,
+                                      unit=unit_key, round_no=0, log=log)
+        installs["packages"] = list(known)
+        installs["rounds"].append({"round": 0, "installed": known, "from": "plan", "image": image})
+    except (cow.InstallFailed, subprocess.TimeoutExpired) as exc:
+        gaps.append(f"{plan['unit_id']}: copy-on-write install failed before the first trial ({exc}); "
+                    f"see {log.relative_to(attempt).as_posix()}")
+        return None
+    rounds = max(1, int(control.get("build_resolution_attempts") or 3))
+    last_failure = "no trial ran"
+    for round_no in range(1, rounds + 1):
+        unit_attempt = unit_root / "resolution-attempts" / f"{number:03d}-r{round_no}"
+        unit_attempt.mkdir(parents=True)
+        packages = sorted(installs["packages"])
+        dockerfile = _render({"image": {"apt_packages": [{"name": p} for p in packages]}},
+                             base_info["build_reference"], control["apt_mirror"])
+        fingerprint = "sha256:" + digest({"renderer": RENDERER_VERSION, "base": base_info, "packages": packages,
+                                          "run_id": run_id, "unit": unit_key, "round": round_no, "image": image})
+        image_id = "image_build_" + fingerprint.split(":", 1)[1][:12]
+        record = _cow_record(image_id, image, dockerfile, fingerprint, unit_attempt)
+        registry = unit_attempt / "image-registry"; registry.mkdir()
+        atomic_json(registry / f"{image_id}.json", record)
+        trial = unit_attempt / "trial"; trial.mkdir()
+        adapter_id = "u" + unit_key + f"r{round_no}"
+        runtime = _runtime(inputs["source_snapshot_sha256"], registry)
+        request = _request(run_id, adapter_id, unit_attempt, record, plan, inputs)
+        terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
+                                    attempt_root=trial, request=request)
+        expected = terminal["result_sha256"]
+        ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
+                                request=request, images_dir=registry,
+                                expected_result_sha256=expected, **_host(runtime))
+        result_path = trial / "scratch" / "trial-result.json"
+        commands = read_json(result_path).get("commands", []) if result_path.is_file() else []
+        failed = next((c for c in commands if c.get("exit_code") != 0), None)
+        db_source = trial / "scratch" / "src" / "compile_commands.json"
+        if terminal["execution_status"] == "OK" and commands and failed is None and db_source.is_file():
+            installs["rounds"].append({"round": round_no, "trial": "OK"})
+            return (unit_attempt, record, image_id, fingerprint, dockerfile, trial, registry, adapter_id,
+                    expected, commands, db_source, installs)
+        last_failure = (f"{' '.join(map(str, (failed or {}).get('argv') or [])) or terminal['execution_status']} "
+                        f"(exit {(failed or {}).get('exit_code')}); see {trial.relative_to(attempt).as_posix()}")
+        if failed is None and commands and not db_source.is_file():
+            last_failure = "build succeeded but produced no compile_commands.json"
+            break
+        needs = cow.missing_from_logs(_trial_text(trial))
+        mapped = cow.packages_for(resolver, needs, log=log, prefer=set(planned)) if needs else {}
+        new = sorted({pkg for pkg in mapped.values() if pkg} - set(installs["packages"]))
+        installs["unresolved"] = sorted(key for key, pkg in mapped.items() if not pkg)
+        installs["rounds"].append({"round": round_no, "trial": "FAILED", "failure": last_failure,
+                                   "needs": [f"{n['kind']}:{n['name']}" for n in needs],
+                                   "resolved": {k: v for k, v in mapped.items() if v}, "installing": new})
+        if not new:
+            break
+        try:
+            image = cow.install_layer(image, new, repository="appsec-build/cow-" + unit_key, run_id=run_id,
+                                      unit=unit_key, round_no=round_no, log=log)
+        except (cow.InstallFailed, subprocess.TimeoutExpired) as exc:
+            last_failure = f"install round {round_no} failed ({exc})"
+            break
+        installs["packages"] = sorted(set(installs["packages"]) | set(new))
+        installs["rounds"][-1]["image"] = image
+    atomic_json(unit_root / "installs.json", installs)
+    gaps.append(f"{plan['unit_id']}: build did not succeed after {len(installs['rounds']) - 1} trial round(s): "
+                f"{last_failure}"
+                + (f"; dropped unknown apt names: {', '.join(installs['dropped_unknown'])}" if installs["dropped_unknown"] else "")
+                + (f"; unresolved: {', '.join(installs['unresolved'])}" if installs["unresolved"] else "")
+                + f"; installs: {(unit_root / 'installs.json').relative_to(attempt).as_posix()}")
+    return None
 
 
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
@@ -444,7 +564,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         attempt = allocation["attempt"]; control = inputs["control"]["value"]
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
-        units=[]; locks=[]; receipts=[]; gaps=[]
+        units=[]; locks=[]; receipts=[]; gaps=[]; install_files=[]
         plans = inputs["plan"]["value"]["plans"]
         if not plans:
             gaps.append("no-build-units-planned")
@@ -456,49 +576,16 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 gaps.append(f"{plan['unit_id']}: not buildable in this environment (tier {feasibility.get('tier')}): {reason}")
                 continue
             unit_key = digest(plan["unit_id"])[:12]
-            unit_attempt = attempt / "units" / unit_key / "resolution-attempts" / f"{number:03d}"
-            unit_attempt.mkdir(parents=True)
-            base_info = inputs["base_images"][plan["image"]["base"]]
-            image_id, spec_fingerprint = _spec(plan, base_info, control["apt_mirror"])
-            dockerfile = _render(plan, base_info["build_reference"], control["apt_mirror"])
-            try:
-                record, reused = _build_image(unit_attempt, image_id, spec_fingerprint, dockerfile,
-                                              control, force or control["build_image_reuse"] == "rebuild")
-            except RuntimeError as exc:
-                logs = unit_attempt / "image-build-logs" / "stderr.log"
-                missing = sorted(set(re.findall(r"Unable to locate package (\S+)",
-                                                logs.read_text(errors="replace") if logs.is_file() else "")))
-                gaps.append(f"{plan['unit_id']}: build image failed ({exc})"
-                            + (f"; apt packages not found: {', '.join(missing)}" if missing else "")
-                            + f"; see {logs.relative_to(attempt).as_posix()}")
+            outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps)
+            if outcome is None:
                 continue
-            registry = unit_attempt / "image-registry"; registry.mkdir()
-            atomic_json(registry / f"{image_id}.json", record)
-            trial = unit_attempt / "trial"; trial.mkdir()
-            adapter_id = "u" + unit_key
-            runtime = _runtime(inputs["source_snapshot_sha256"], registry)
-            request = _request(run_id, adapter_id, unit_attempt, record, plan, inputs)
-            terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
-                                        attempt_root=trial, request=request)
-            expected = terminal["result_sha256"]
-            ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
-                                    request=request, images_dir=registry,
-                                    expected_result_sha256=expected, **_host(runtime))
-            if terminal["execution_status"] != "OK":
-                gaps.append(f"{plan['unit_id']}: build trial ended {terminal['execution_status']}")
-                continue
-            trial_result = read_json(trial / "scratch" / "trial-result.json")
-            commands = trial_result.get("commands", [])
-            failed = next((c for c in commands if c.get("exit_code") != 0), None)
-            if not commands or failed is not None:
-                gaps.append(f"{plan['unit_id']}: build trial command failed: "
-                            f"{' '.join(map(str, (failed or {}).get('argv') or [])) or 'no commands ran'} "
-                            f"(exit {(failed or {}).get('exit_code')}); see {trial.relative_to(attempt).as_posix()}")
-                continue
-            db_source = trial / "scratch" / "src" / "compile_commands.json"
-            if not db_source.is_file():
-                gaps.append(f"{plan['unit_id']}: build succeeded but produced no compile_commands.json")
-                continue
+            (unit_attempt, record, image_id, spec_fingerprint, dockerfile, trial, registry, adapter_id,
+             expected, commands, db_source, installs) = outcome
+            reused = False
+            installs_path = attempt / "outputs" / unit_key / "installs.json"
+            installs_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json(installs_path, installs)
+            install_files.append(installs_path.relative_to(attempt).as_posix())
             entries = _compile_db(db_source, inputs["plan"]["value"]["toolchain"]["compile_database_compilers"])
             db_target = attempt / "outputs" / unit_key / "compile_commands.json"
             db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
@@ -522,7 +609,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             units.append({"unit_id": plan["unit_id"], "status": "OK", "image_id": image_id,
                 "image_digest": record["digest"], "attempt_id": unit_attempt.name,
                 "lock_sha256": digest(lock), "compile_commands": len(entries), "commands": commands})
-            _publish_catalog(image_id, record, spec_fingerprint, dockerfile, inputs, plan, unit_attempt)
+            _publish_catalog(image_id, record, spec_fingerprint, dockerfile, inputs, plan, unit_attempt,
+                             packages=installs["packages"])
         lock_set = {"schema": "appsec-review/buildenv-lock-set/1",
                     "source_revision": inputs["source_revision"],
                     "plan": {"attempt_id": inputs["plan"]["attempt_id"], "sha256": inputs["plan"]["sha256"]},
@@ -543,7 +631,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                   "network": "image-build-only; trial=none", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         artifacts = [RESULT, LOCK_FILE, RECEIPTS, SUMMARY, "status.json"] + [
-            r["compile_commands_path"] for r in receipts]
+            r["compile_commands_path"] for r in receipts] + install_files
         pointer = record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=result["status"],
