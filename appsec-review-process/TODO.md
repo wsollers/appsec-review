@@ -172,6 +172,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | hello-autotools | ff976ec6 | 02-binary-cfg | accepted pointer input fingerprint mismatch: build_replay.py (native-build code) was merged at 12:15 while the run was past native build, so re-derived upstream inputs changed. Third time today | Process: merge job code only when no run is past that job (or accept a hello relaunch, ~3 min); shared-runtime merges are safe |
 | 2026-09-28 | appsec-multi-vuln | 49e3637e | 02-build-configure | (milestone) 9 C/C++ units built after the cwd and -cc1 fixes; configure replay then failed on a unit with no configure step (empty locked phase read as a failed sequence) | Replay compares against the locked command count; configured-build `commands` may be empty |
 | 2026-09-28 | hello-autotools, doom3-bfg | 928c1b47, d9704dea | 02-full-review-input-assembly (then 05-native-memory) | "dependency accepted pointer is invalid": the dependency jobs now publish the common pointer (hashes, accepted_at) and the assembly accepted only the older key set; native memory then found no assembly | Both pointer dialects accepted |
 | 2026-09-28 | appsec-multi-vuln | d3c7cb66 | 02-build-resolution | With bear always on, clang's internal `clang-21 -cc1` re-exec was recorded as a compile command ("compiler is not the fixed clang path"), and one unit's bad DB failed the whole job | -cc1 entries dropped (resolution and replay); an unusable DB is that unit's gap |
