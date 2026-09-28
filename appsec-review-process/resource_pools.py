@@ -86,9 +86,9 @@ POOLS = (
          "tunable pool_docker_slots; at 1 one long scan held every other run's container work"),
     Pool(NETWORK, 1, "fixed-destination network work: Scorecard ingestion, the NVD feed sync",
          "no provider rate measurement exists; today a Scorecard step and the NVD sync may overlap"),
-    Pool(PERSONA_LLM, 3, "persona / model invocations",
-         "ADR-0008 Decision 6 deep class needs 3 concurrent cells; 3 does not exceed the executor "
-         "cap of 3 steps per run and is half of today's aggregate of 6; no persona op exists yet"),
+    Pool(PERSONA_LLM, tunables.shared("pool_persona_llm_slots"), "persona / model invocations",
+         "tunable pool_persona_llm_slots; a cross-run limit: two runs may together run 5 model "
+         "steps, one less than their combined executor cap of 6"),
     Pool(DYNAMIC_ANALYSIS, 1, "dynamic testing and debugger/ptrace work",
          "no dynamic worker exists and nothing is measured; 1"),
 )

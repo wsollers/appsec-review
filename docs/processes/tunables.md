@@ -72,6 +72,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `pool_group_count_max` | 32 count | safety | Largest count in one worker group. | Grows with target size; see docs/scale-audit-unreal-engine.md D. |
 | `pool_groups_max` | 32 count | safety | Most worker groups in one pool specification. | Grows with target size; see docs/scale-audit-unreal-engine.md D. |
 | `pool_instances_max` | 64 count | safety | Most instances in one pool. | Grows with target size; see docs/scale-audit-unreal-engine.md D: hundreds of engine modules. |
+| `pool_persona_llm_slots` | 5 count | resource | Dagster `persona_llm` pool slots: model invocations that may run at once across all runs. Applied by the resource_pool_guard sensor. | Cross-run limit: must stay below runs_concurrent_max x executor_step_ceiling (6) or it constrains nothing. Model calls are remote; local cost is one claude CLI + MCP input server per slot. |
 | `pool_total_timeout_max_seconds` | 604800 s (10080 min) | safety | Largest total timeout of a pool. |  |
 | `redaction_max_file_bytes` | 16 MiB | safety | Largest single file the evidence redactor processes; larger files are withheld. | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
 | `redaction_max_files` | 2000 count | safety | Most files in one published tree; more refuses publication. | Grows with target size; see docs/scale-audit-unreal-engine.md B (tool output trees). |

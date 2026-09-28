@@ -117,7 +117,8 @@ class Declaration(unittest.TestCase):
         self.assertEqual(rp.AGGREGATE_STEP_CEILING, 6)
         for pool in rp.POOLS:
             self.assertGreaterEqual(pool.limit, 1, pool.pool_id)
-            self.assertLessEqual(pool.limit, rp.EXECUTOR_STEP_CEILING, pool.pool_id)
+            # A pool is a cross-run limit: it may exceed one run's executor cap, but it must stay
+            # below the aggregate of all runs or it constrains nothing.
             self.assertLess(pool.limit, rp.AGGREGATE_STEP_CEILING, pool.pool_id)
             self.assertTrue(pool.justification.strip(), pool.pool_id)
         self.assertLessEqual(rp.DEFAULT_POOL_LIMIT, min(rp.LIMITS.values()))

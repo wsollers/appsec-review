@@ -121,6 +121,26 @@ Slice 1 (branch `adr14-slice1`):
   candidates and skips `not-applicable-no-matching-inputs` (branch `slice2`).
 - [ ] Records JSONL + index for per-invocation IR/SAST outputs (ADR-0014 item 5).
 
+## Relaunch tax
+
+Measured 2026-09-28: pure reuse is cheap (hello-autotools relaunch: 46 steps in 2.4 min). The tax is
+re-execution after a fingerprint change: multi-vuln spent 41 min re-planning 53 units (the plan
+contract text changed) and 12.6 min re-assembling evidence; freeciv21 60 min in scancode.
+
+- [ ] Persona result cache (shared runtime): an OK persona result is keyed by the request identity
+  (outer-prompt sha, pinned readable-input hashes, model, output contract) minus attempt ids; an
+  identical request in the same run reuses it with provenance instead of a new model call. A code-only
+  change to a model job then costs no model calls.
+- [ ] Per-item memo in loops (ADR-0014 item 6): build-plan units, build-resolution units (image +
+  plan commands + trial inputs), IR/SAST invocations, keyed by content, reused across attempts.
+- [ ] Tool output cache: pinned-tool runs (scancode, syft, grype, semgrep...) keyed by image digest +
+  argv + source snapshot; a job re-execution with the same key reuses the verified B13 result.
+- [ ] Fingerprint scope: prompt/contract text is part of a model job's identity (correct), but
+  docs-only edits to other files must not be; audit `_code_hashes` lists for files that are not
+  semantics (READMEs, comments-only registries).
+- [ ] Tail iteration: launch single jobs (`launch_job.py --job <name>`) instead of full_review while
+  fixing the model tail; batch fixes and merge between runs.
+
 ## Scale: engine-sized targets
 
 [`docs/scale-audit-unreal-engine.md`](../docs/scale-audit-unreal-engine.md) lists every static limit

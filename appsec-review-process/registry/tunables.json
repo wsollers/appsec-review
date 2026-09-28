@@ -435,6 +435,13 @@
       "unit": "count",
       "value": 64
     },
+    "pool_persona_llm_slots": {
+      "description": "Dagster `persona_llm` pool slots: model invocations that may run at once across all runs. Applied by the resource_pool_guard sensor.",
+      "kind": "resource",
+      "unit": "count",
+      "value": 5,
+      "scale": "Cross-run limit: must stay below runs_concurrent_max x executor_step_ceiling (6) or it constrains nothing. Model calls are remote; local cost is one claude CLI + MCP input server per slot."
+    },
     "pool_total_timeout_max_seconds": {
       "description": "Largest total timeout of a pool.",
       "kind": "safety",
