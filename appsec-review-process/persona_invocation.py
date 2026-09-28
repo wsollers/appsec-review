@@ -253,6 +253,18 @@ def _segments_ok(path: str) -> bool:
     return all(segment == segment.strip() and not segment.endswith(".") for segment in path.split("/"))
 
 
+_INPUT_PATH_RE = re.compile(r"[^\x00-\x1f\x7f\\]{1,4096}\Z")
+
+
+def _input_path_ok(path: str) -> bool:
+    """Readable inputs are files that exist in the target, named however the target names them
+    ('+', '@', spaces, non-ASCII). Only require one relative spelling: no control characters or
+    backslashes, no empty, '.' or '..' segment, no leading slash."""
+    return (isinstance(path, str) and bool(_INPUT_PATH_RE.match(path)) and
+            all(segment not in ("", ".", "..") and segment == segment.strip() and not segment.endswith(".")
+                for segment in path.split("/")))
+
+
 # ---- registry: composition, tool ids and the claim-class ceiling ----------------------------------
 
 def tool_ids(profile: Mapping[str, Any]) -> dict[str, str]:
@@ -599,7 +611,7 @@ def request_errors(request: Any, *, run_id: str, job_id: str, attempt_id: str,
     if total < 1:
         errors.append("outer_prompt.bytes must be at least 1")
     for index, entry in enumerate(inputs):
-        if not _segments_ok(entry["path"]):
+        if not _input_path_ok(entry["path"]):
             errors.append(f"readable_inputs[{index}].path is not one normalized relative path")
         key = (entry["root"], entry["path"].lower())
         if key in seen:

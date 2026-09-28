@@ -409,6 +409,14 @@ def _parse_envelope(result_text: str) -> dict[str, Any]:
     fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
+    elif not text.startswith("{"):
+        # With lookup tools the model often narrates before its answer: take the last fenced JSON
+        # block, else the outermost object.
+        fences = re.findall(r"```(?:json)?\s*\n(\{.*?\})\s*\n```", text, re.DOTALL)
+        if fences:
+            text = fences[-1].strip()
+        elif "{" in text and text.rstrip().endswith("}"):
+            text = text[text.index("{"):].strip()
     try:
         envelope = json.loads(text)
     except ValueError as exc:

@@ -321,7 +321,9 @@ class Session:
                 if digest(live) != self.fingerprint:
                     raise Blocked('source/config/code changed during execution; reject mixed-revision output')
                 result = read_json(self.attempt / 'outputs/intake.json')
-                validate_intake(result, self.inputs['source'], self.inputs['config'])
+                # Validate against the recorded snapshot the worker consumed (JSON round-trip), not the
+                # in-memory identity: tuples etc. differ after round-trip (doom3-bfg).
+                validate_intake(result, read_json(self.attempt / 'evidence/source.json'), self.inputs['config'])
                 for file in ('intake.json','build-discovery.md'):
                     if not (self.attempt / 'outputs' / file).is_file():
                         raise ValueError('missing output ' + file)

@@ -192,7 +192,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+            "pattern": "^[^\\u0000-\\u001f\\u007f\\\\]{1,4096}\\Z"
           },
           "sha256": {
             "type": "string",

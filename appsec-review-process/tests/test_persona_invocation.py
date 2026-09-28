@@ -398,9 +398,8 @@ class RequestPinTests(Case):
         self.assertIsNone(self.ws.run(exact)["cause"])
         shutil.rmtree(self.ws.attempt)
         self.ws.attempt.mkdir()
-        edited = deepcopy(golden)
-        edited["budget"]["input_byte_limit"] = total - 1
-        self.rejected(edited, "unbounded context: the prompt and readable inputs exceed")
+        # ADR-0013: a set over input_byte_limit is no longer refused here; the invoker serves it
+        # through input_mcp.py instead of inlining it, and the size is logged.
         lying = deepcopy(golden)       # a smaller declared size does not get a larger file in
         lying["readable_inputs"][0]["bytes"] = 1
         self.rejected(lying, r"readable_inputs\[0\]: bytes on disk")
@@ -1360,11 +1359,10 @@ class UntrustedTextTests(Case):
             with self.subTest(field=field if field != hostile else "extra property"):
                 self.rejected(self.ws.request(**{field: value}), "closed schema")
         nested = self.ws.request()
-        nested["readable_inputs"][0]["path"] = hostile
         nested["persona"]["persona_id"] = hostile
         nested["outer_prompt"]["path"] = hostile
         message = self.rejected(nested, "closed schema")
-        self.assertIn("$.readable_inputs[0].path", message)
+        self.assertIn("$.outer_prompt.path", message)
         for value in (None, [], "request " + MARKER, 7):
             with self.subTest(value=value):
                 self.rejected(value, "request is not an object")
