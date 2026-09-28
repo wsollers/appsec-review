@@ -1124,6 +1124,21 @@ class OwnDocumentsTests(unittest.TestCase):
         self.assertTrue(er._wordy("source_snapshot_sha256"))
         self.assertTrue(er._wordy("semgrep-security-audit-attempt-0001"))
 
+    def test_versioned_build_output_names_are_identifiers_not_secrets(self):
+        """freeciv21 run 20260928T005228Z-5b0fac: `freeciv21-modpack-qt` in a binary-hardening
+        `path` was rewritten to a marker and the result failed its schema pattern."""
+        for name in ("freeciv21-modpack-qt", "unit-bb1dd96e77f4/build/freeciv21-modpack-qt",
+                     "python3-module-loader-test", "libqt5-network-helper"):
+            with self.subTest(name=name):
+                self.assertFalse(self.flagged(name))
+        secret = stream("own-docs-versioned", ALNUM, 40)
+        for value in ("alpha_bravo_" + secret[:26] + "7",          # mixed-case random piece
+                      "alpha_bravo_" + secret[:28].lower() + "12",  # letters piece over 16
+                      "freeciv21_" + secret[:28]):                 # only one plain word
+            with self.subTest(value=value):
+                self.assertTrue(self.flagged(value), value)
+        self.assertFalse(er._wordy("python3-qt5-gtk3"))           # no plain words at all
+
     def test_own_evidence_documents_pass_through_unchanged(self):
         fixtures = ROOT / "tests" / "fixtures"
         # Evidence documents a producer publishes. Permission fixtures are run INPUTS whose
@@ -1329,11 +1344,11 @@ class VerificationProbeTests(unittest.TestCase):
 
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "52d00d9dd8c79462f5c84a4defff57248d5e24f6af5a23ac94f52239add699a6",
+    "ruleset_sha256": "9b4d268559e33cb90ae7429e4dc7e24e52c68c1faaf23fb227b171257423f97d",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "25580736aee557e5ea21f48752903978aa785932b66feeb1b14ea9dbe36f9518",
+    "sarif_receipt_sha256": "adf15430520b6248fd85e12b5fa5a93883c1e68154fa4f9b2582df8d069b349e",
 }
 
 

@@ -154,6 +154,12 @@ RULESET: dict[str, Any] = {
                                    "rsa2048", "rsa4096", "sha1", "sha224", "sha256", "sha384", "sha512", "sha3",
                                    "utf8", "utf16", "x509"],
         "wordy_min_plain_words": 2,
+        # `freeciv21-modpack-qt`: a build-output name whose one non-word piece is a lowercase word
+        # with a short version/counter suffix (`freeciv21`, `python3`, `qt5`). Before this, such a
+        # binary name inside a pattern-validated `path` field was rewritten to a marker and the
+        # binary-hardening result failed its schema. The piece is still never counted as one of the
+        # required plain words, and a mixed-case or long random piece stays "odd".
+        "wordy_versioned_piece": r"[a-z]{2,16}[0-9]{1,3}\Z",
         "wordy_counter_max_length": 8,
         # `20260919T123919Z-0b9e70`: this repository's run-id shape (UTC stamp plus a short
         # suffix). About a third of real run ids were being flagged, which mangled the header of
@@ -212,6 +218,7 @@ _PRIORITY = {kind: index for index, kind in enumerate(KINDS)}
 _LITERALS = frozenset(RULESET["unquoted_literals"])
 _ENTROPY = RULESET["entropy"]
 _TECHNICAL_PIECES = frozenset(RULESET["entropy"]["wordy_technical_pieces"])
+_VERSIONED_PIECE_RE = re.compile(RULESET["entropy"]["wordy_versioned_piece"])
 _EXEMPT_PATTERN_RES = tuple(re.compile(pattern) for _, pattern in sorted(RULESET["entropy"]["exempt_patterns"].items()))
 
 
@@ -410,6 +417,7 @@ def _wordy(run: str) -> bool:
         return False
     odd = [piece for piece in pieces if piece not in words
            and piece.lower() not in _TECHNICAL_PIECES
+           and not _VERSIONED_PIECE_RE.match(piece)
            and not (piece.isdigit() and len(piece) <= _ENTROPY["wordy_counter_max_length"])]
     return all(len(piece) <= 4 for piece in odd) and len(odd) * 3 <= len(pieces)
 
