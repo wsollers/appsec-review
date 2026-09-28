@@ -613,6 +613,30 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
     return value, summary, facts
 
 
+def _normalize_component_ids(value: dict[str, Any]) -> None:
+    """The id must be the slug of the name; the model sometimes edits one and not the other
+    (hello-autotools: 'fixed-buffer-store' named 'Fixed Buffer Store Macro'). Re-derive the id
+    from the name and rewrite every reference, so the map stays internally consistent."""
+    components = value.get("functional_components") or []
+    rename = {c["component_id"]: _slug(c["name"]) for c in components
+              if isinstance(c.get("name"), str) and c.get("component_id") != _slug(c["name"])}
+    taken = {c.get("component_id") for c in components} - set(rename)
+    if not rename or len(set(rename.values())) != len(rename) or set(rename.values()) & taken:
+        return  # a collision stays a validation error
+    fix = lambda cid: rename.get(cid, cid)
+    for c in components:
+        c["component_id"] = fix(c["component_id"])
+    for r in value.get("component_relationships") or []:
+        r["from_component_id"], r["to_component_id"] = fix(r["from_component_id"]), fix(r["to_component_id"])
+        r["relationship_id"] = f"{r['from_component_id']}--{r['relationship_type']}--{r['to_component_id']}"
+    for key in ("parallel_review_groups", "tag_cloud"):
+        for item in value.get(key) or []:
+            item["component_ids"] = sorted({fix(c) for c in item.get("component_ids") or []})
+    for key in ("rescope_triggers", "unknowns"):
+        for item in value.get(key) or []:
+            item["affected_component_ids"] = [fix(c) for c in item.get("affected_component_ids") or []]
+
+
 def _record_untagged_gaps(value: dict[str, Any]) -> None:
     """ADR-0013: a component the model left out of the tag cloud is a routing gap, not a failed map."""
     tagged = {c for item in value.get("tag_cloud") or [] for c in item.get("component_ids") or []}
@@ -657,6 +681,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
+        _normalize_component_ids(value)
         _record_untagged_gaps(value)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
