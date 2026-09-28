@@ -485,9 +485,9 @@
       "value": 8388608
     },
     "runs_concurrent_max": {
-      "description": "Outer limit on concurrent runs (resource_pools).",
+      "description": "Concurrent Dagster runs. Enforced by orchestrator/dagster/dagster.yaml (QueuedRunCoordinator max_concurrent_runs); keep the two equal. Extra launches queue.",
       "kind": "resource",
-      "scale": "Three ran at once on 2026-09-28; confirm what enforces this.",
+      "scale": "Host-bound: 30 GB RAM / 16 cores on zarathustra; Joern alone takes up to 8 GB per run.",
       "unit": "count",
       "value": 2
     },

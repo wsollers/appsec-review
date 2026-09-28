@@ -79,7 +79,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `redaction_max_path_length` | 512 chars | safety | Longest relative path the redactor accepts. | Deep engine trees may need more. |
 | `redaction_max_total_bytes` | 128 MiB | safety | Total bytes redacted per tree; the rest is withheld. | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
 | `result_artifact_max_bytes` | 8 MiB | safety | Largest declared result JSON validate_job_output will load and schema-check (loaded whole into memory). | Grows with target size; see docs/scale-audit-unreal-engine.md B: large producers publish a summary plus a records file instead. |
-| `runs_concurrent_max` | 2 count | resource | Outer limit on concurrent runs (resource_pools). | Three ran at once on 2026-09-28; confirm what enforces this. |
+| `runs_concurrent_max` | 2 count | resource | Concurrent Dagster runs. Enforced by orchestrator/dagster/dagster.yaml (QueuedRunCoordinator max_concurrent_runs); keep the two equal. Extra launches queue. | Host-bound: 30 GB RAM / 16 cores on zarathustra; Joern alone takes up to 8 GB per run. |
 | `runs_per_engagement_max` | 1 count | resource | Concurrent runs per engagement. |  |
 | `snapshot_archive_max_bytes` | 4 GiB | safety | Largest Grype/OSV snapshot archive accepted. |  |
 | `snapshot_extracted_max_bytes` | 16 GiB | safety | Largest extracted snapshot. |  |
