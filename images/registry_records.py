@@ -38,9 +38,13 @@ TOOL_IMAGE_IDS = (
     "tool-microsoft-sbom-tool", "tool-mobsfscan", "tool-phpcs", "tool-phpstan", "tool-psalm", "tool-semgrep",
     "tool-sbomasm", "tool-spotbugs", "tool-syft", "tool-trivy", "tool-osv-scanner",
 )
+BUILDENV_IMAGE_IDS = (
+    "audit-buildenv-cpp", "audit-buildenv-dotnet", "audit-buildenv-go", "audit-buildenv-java",
+    "audit-buildenv-php", "audit-buildenv-python", "audit-buildenv-rust", "audit-buildenv-typescript",
+)
 STEP4_IMAGE_IDS = (
-    "audit-native", "audit-binary-analysis", "audit-buildenv-cpp", "audit-container", "audit-iac",
-    "audit-report", "scancode-toolkit", *TOOL_IMAGE_IDS,
+    "audit-native", "audit-binary-analysis", "audit-container", "audit-iac",
+    "audit-report", "scancode-toolkit", *BUILDENV_IMAGE_IDS, *TOOL_IMAGE_IDS,
 )
 
 
