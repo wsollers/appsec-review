@@ -9,7 +9,7 @@
 #   orchestrator/prepare-host.sh --no-claude  skip the Claude CLI login probe
 #
 # Steps (host layouts: docs/processes/host-layouts.md):
-#   0. host packages: python3.12 + venv, git, libfuzzy2, docker group (reported; install needs sudo)
+#   0. host packages: python3.12 + venv, git, libfuzzy2, jq, docker group (reported; install needs sudo)
 #   1. offline Grype/OSV snapshots resolve within the 14-day ceiling (sync is separate; see TODO.md)
 #   2. Dagster stack (compose project appsec-review) is up
 #   3. every image the B13 registry needs has a successful build on this host (builds the missing ones)
@@ -49,6 +49,8 @@ command -v python3.12 >/dev/null && python3.12 -c 'import ensurepip' 2>/dev/null
 command -v git >/dev/null && ok "$(git --version)" || bad "git" "git missing: sudo apt install git"
 ldconfig -p 2>/dev/null | grep -q 'libfuzzy.so.2' && ok "libfuzzy2" \
     || bad "libfuzzy" "libfuzzy.so.2 missing (evidence index needs it): sudo apt install libfuzzy2"
+command -v jq >/dev/null && ok "jq $(jq --version)" \
+    || bad "jq" "jq missing (model jobs query JSON inputs through input_jq): sudo apt install jq"
 id -nG | tr ' ' '\n' | grep -qx docker && ok "$(id -un) in docker group" \
     || bad "docker-group" "$(id -un) not in the docker group: sudo usermod -aG docker $(id -un), then log in again"
 
