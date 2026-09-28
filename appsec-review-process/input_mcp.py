@@ -37,10 +37,13 @@ TOOLS = [
     {"name": "input_list", "description": "List this job's pinned readable inputs (root:path, bytes, sha256). Filter by ref prefix.",
      "inputSchema": {"type": "object", "properties": {"prefix": {"type": "string"}, "offset": _INT,
                      "limit": {"type": "integer", "minimum": 1, "maximum": 1000}}, "required": [], "additionalProperties": False}},
-    {"name": "input_read", "description": "Read numbered lines of one pinned input by its ref (root:path exactly as listed). Max 400 lines per call.",
+    {"name": "input_read", "description": "Read numbered lines of one specific pinned input by its ref (root:path exactly as listed), up to 400 per call. "
+     "Use it to read a file you already located with evidence_search/input_jq/input_list, not to page through large files.",
      "inputSchema": {"type": "object", "properties": {"ref": {"type": "string"}, "start": {"type": "integer", "minimum": 1},
                      "lines": {"type": "integer", "minimum": 1, "maximum": READ_LINES_MAX}}, "required": ["ref"], "additionalProperties": False}},
-    {"name": "input_grep", "description": "Search pinned inputs for a regular expression (Python syntax, case-insensitive). Returns ref, line number and line text.",
+    {"name": "input_grep", "description": "Regex scan of pinned inputs (Python syntax, case-insensitive): reads every matching file on each call, so "
+     "always pass a narrow `prefix`. For repository-wide text search use evidence_search (indexed); for upstream tool findings use "
+     "evidence_derived; for JSON use input_jq. Returns ref, line number and line text.",
      "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string", "maxLength": 500}, "prefix": {"type": "string"},
                      "limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "required": ["pattern"], "additionalProperties": False}},
     {"name": "input_jq", "description": "Run a jq filter over one pinned JSON input (ref exactly as listed) and return the result. "

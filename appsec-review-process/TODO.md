@@ -87,6 +87,13 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 - [ ] `tests.test_persona_invocation.RegistryTests.test_tracked_registry_passes_as_is_and_the_default_denied_set_is_pinned` fails on `main` (registry validation reports a problem with `job-templates/02-native-sast`); also `test_vendor_prepass_graph` (16 failures). Pre-existing, not blocking runs.
 
+## Scale: engine-sized targets
+
+[`docs/scale-audit-unreal-engine.md`](../docs/scale-audit-unreal-engine.md) lists every static limit
+we would exceed on an Unreal Engine-sized target, with priorities. Index-first is the rule: anything
+that grows with the target is stored as records, indexed, and queried. First items: lazy
+hash-verified input serving for model jobs, then the records-file pattern for every large producer.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).
