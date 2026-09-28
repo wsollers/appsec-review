@@ -503,7 +503,7 @@
       "kind": "safety",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md B: large producers publish a summary plus a records file instead.",
       "unit": "bytes",
-      "value": 8388608
+      "value": 33554432
     },
     "runs_concurrent_max": {
       "description": "Concurrent Dagster runs. Enforced by orchestrator/dagster/dagster.yaml (QueuedRunCoordinator max_concurrent_runs); keep the two equal. Extra launches queue.",

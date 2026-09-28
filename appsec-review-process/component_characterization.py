@@ -637,6 +637,29 @@ def _normalize_component_ids(value: dict[str, Any]) -> None:
             item["affected_component_ids"] = [fix(c) for c in item.get("affected_component_ids") or []]
 
 
+def _drop_unresolved_relationships(value: dict[str, Any]) -> None:
+    """ADR-0013: a relationship whose endpoint is not a characterised component (hello-autotools:
+    'writes-to' a /tmp log file) is a classification gap, not a failed map. Drop the edge, keep the map."""
+    components = {c.get("component_id") for c in value.get("functional_components") or []}
+    kept, gaps = [], value.setdefault("classification_gaps", [])
+    have = {g.get("gap_id") for g in gaps}
+    for r in value.get("component_relationships") or []:
+        if r.get("from_component_id") in components and r.get("to_component_id") in components:
+            kept.append(r)
+            continue
+        gap_id = f"gap-unresolved-relationship-{r.get('relationship_id')}"
+        if gap_id not in have:
+            have.add(gap_id)
+            gaps.append({
+                "gap_id": gap_id,
+                "subject": f"component_relationships:{r.get('relationship_id')}",
+                "reason": "The model named a relationship endpoint that is not a characterised component.",
+                "routing_impact": "This edge is not available to relationship-driven routing.",
+                "resolution_action": "Characterise the endpoint as a component or restate the relationship.",
+            })
+    value["component_relationships"] = kept
+
+
 def _record_untagged_gaps(value: dict[str, Any]) -> None:
     """ADR-0013: a component the model left out of the tag cloud is a routing gap, not a failed map."""
     tagged = {c for item in value.get("tag_cloud") or [] for c in item.get("component_ids") or []}
@@ -682,6 +705,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             raise Blocked(f"{JOB}: implementation changed before execution")
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
         _normalize_component_ids(value)
+        _drop_unresolved_relationships(value)
         _record_untagged_gaps(value)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
