@@ -89,6 +89,9 @@ def _native(run_id: str) -> tuple[Path, dict[str, Any]]:
             "commands": unit["commands"], "compile_database": unit["compile_database"],
         })
         for item in unit["binaries"]:
+            # A byte-identical binary from another unit is the same evidence (the id is its hash).
+            if any(b["sha256"] == item["sha256"] for b in binaries):
+                continue
             rel = _safe_rel(item["artifact_path"], "native-build binary")
             path = attempt / rel
             if (not path.is_file() or path.is_symlink() or

@@ -180,7 +180,8 @@ def load_native_build(native_build_root: Path, *, run_id: str,
         if len(raw) != db_record["entries"]:
             raise Blocked(f"{JOB}: native-build compile database entry count changed")
         try:
-            adapted, unsupported = adapters.adapt_compile_database(raw)
+            adapted, unsupported = adapters.adapt_compile_database(
+                raw, directory_exists=lambda rel: (target / rel).is_dir())
         except adapters.AdapterError as exc:
             raise Blocked(f"{JOB}: native-build compile database rejected ({exc})") from exc
         sources = {}

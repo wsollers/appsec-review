@@ -245,6 +245,7 @@ shutil.copytree('/workspace',src,symlinks=False,ignore_dangling_symlinks=True)
 def executables():
  out={}
  for p in src.rglob('*'):
+  if 'CMakeFiles' in p.relative_to(src).parts: continue  # CMake compiler probes, not target binaries
   try:
    if p.is_file() and p.stat().st_mode & 0o111 and p.read_bytes()[:4]==b'\x7fELF':
     out[p.relative_to(src).as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()

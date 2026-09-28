@@ -102,6 +102,15 @@ def trial_tree(attempt: Path):
 class NativeSastTests(unittest.TestCase):
     IMAGE = {"image_id": "audit-native", "digest": "sha256:" + "7" * 64}
 
+    def test_missing_build_directory_rebases_to_nearest_existing_ancestor(self):
+        raw = json.loads((FIXTURE / "compile_commands.json").read_text())
+        for entry in raw:
+            entry["directory"] = "/scratch/src/projects/x/build"
+        adapted, _ = adapters.adapt_compile_database(raw, directory_exists=lambda rel: rel in ("projects", "projects/x"))
+        self.assertEqual({e["directory"] for e in adapted}, {"/workspace/projects/x"})
+        adapted, _ = adapters.adapt_compile_database(raw, directory_exists=lambda rel: False)
+        self.assertEqual({e["directory"] for e in adapted}, {"/workspace"})
+
     def test_compile_database_adapter_is_deterministic_and_names_unsupported_units(self):
         raw = json.loads((FIXTURE / "compile_commands.json").read_text())
         first, unsupported = adapters.adapt_compile_database(raw)

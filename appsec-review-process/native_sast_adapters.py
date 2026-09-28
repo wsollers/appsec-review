@@ -35,7 +35,7 @@ def _replace_root(value: str) -> str:
     return value.replace("/scratch/src", "/workspace")
 
 
-def adapt_compile_database(value: Any) -> tuple[list[dict[str, Any]], list[str]]:
+def adapt_compile_database(value: Any, directory_exists: Any = None) -> tuple[list[dict[str, Any]], list[str]]:
     """Validate E02's database and deterministically retarget its private build-copy root."""
     if not isinstance(value, list) or not value:
         raise AdapterError("compile database must be a non-empty array")
@@ -64,6 +64,13 @@ def adapt_compile_database(value: Any) -> tuple[list[dict[str, Any]], list[str]]
         if not isinstance(directory, str) or not directory.startswith("/scratch/src"):
             raise AdapterError(f"compile database entry {index} has an invalid directory")
         entry["directory"] = _replace_root(directory)
+        # The build directory (projects/x/build) exists only in the build copy, not in the pristine
+        # checkout mounted at /workspace; run from its nearest existing ancestor (file is absolute).
+        if directory_exists is not None:
+            rel = PurePosixPath(entry["directory"][len("/workspace"):].lstrip("/"))
+            while str(rel) not in ("", ".") and not directory_exists(rel.as_posix()):
+                rel = rel.parent
+            entry["directory"] = "/workspace" + ("" if str(rel) in ("", ".") else "/" + rel.as_posix())
         if (not isinstance(entry.get("arguments"), list) or
                 not all(isinstance(word, str) for word in entry["arguments"])):
             raise AdapterError(f"compile database entry {index} requires an argv array")
