@@ -137,6 +137,8 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | appsec-multi-vuln | 17b564af | 06-cve-reachability | IR facts SKIPPED (nothing linked); re-validating the SKIPPED pointer without a consumer edge failed, and a skipped facts result would have been read as facts | IR/test/native-SAST validate() and lifecycles name their consumer edge; cve reachability treats SKIPPED facts as absent |
+| 2026-09-28 | freeciv21 | abae7f4b | 02-license-scan | scancode TIMEOUT at 3600 s (single process) | scancode -n 4 merged (795a99f9); OPEN: timeout as a license gap |
 | 2026-09-28 | doom3-bfg | 22d32a79 | 02-license-scan | scancode TIMEOUT again at 3600 s (single process) | `scancode -n` from tunable `scancode_processes` = 4, CPU 4000 millicpu. OPEN: a tool timeout should publish a license gap, not block |
 | 2026-09-28 | freeciv21 | abae7f4b | 02-ir-link, 02-test-result-ingest, 02-test-coverage-ingest | Upstream skips published (IR capture, test execution SKIPPED), but consumers rejected the SKIPPED pointer: it carries `reason`, their key sets did not allow it | Pointer key set allows `reason` when status is SKIPPED (as evidence assembly already did) |
 | 2026-09-28 | freeciv21 | abae7f4b | 02-build-plan | The re-plan ignored the new offline rule (no `FREECIV_DOWNLOAD_FONTS=OFF`) and went back to the noble base | Build resolution backstop: on an offline download failure, find the CMake download switches (`if()`/`option()` names containing DOWNLOAD) and retry once with `-D<name>=OFF`; the lock records the adapted commands |

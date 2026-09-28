@@ -134,6 +134,8 @@ def _optional_ir(run_id: str, source: str) -> dict[str, Any] | None:
     try: attempt = ir_evidence.validate(run_id, "02-ir-facts")
     except Exception as exc: raise Blocked("06-cve-reachability: present IR facts are not current accepted evidence") from exc
     result = read_json(attempt / "ir-facts.json")
+    if result["status"] == "SKIPPED":
+        return None   # ADR-0014: nothing was built, so there are no IR facts to use
     if result["source_snapshot_sha256"] != source:
         raise Blocked("06-cve-reachability: IR facts and SCA have mixed source lineage")
     return {"job_id":"02-ir-facts","attempt_id":attempt.name,"artifact_path":"ir-facts.json",

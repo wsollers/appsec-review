@@ -510,6 +510,7 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB,
         dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=CONTRACT,
+        consumer_job_id="02-evidence-assembly",
         resume_command=resume, derive_inputs=derive,
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
@@ -527,7 +528,7 @@ def validate(run_id: str, *, native_build_root: Path, native_build_fingerprint: 
                             native_build_fingerprint=native_build_fingerprint)
     pointer = pointer or read_json(base / "accepted.json")
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
-        expected_run_id=run_id, expected_job_id=JOB)
+        expected_run_id=run_id, expected_job_id=JOB, consumer_job_id="02-evidence-assembly")
     _validate_attempt(run_id, attempt, inputs)
     return attempt
 

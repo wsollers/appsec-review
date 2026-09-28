@@ -706,6 +706,7 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job,
         dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
+        consumer_job_id=CONSUMER[job],
         resume_command=f"integration required for {job}", derive_inputs=lambda: current_inputs(run_id, job),
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
@@ -745,7 +746,8 @@ def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None) -> Pa
     base = data_path(run_id, "jobs", job); inputs = current_inputs(run_id, job)
     pointer = pointer or read_json(base / "accepted.json")
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
-                                    expected_run_id=run_id, expected_job_id=job)
+                                    expected_run_id=run_id, expected_job_id=job,
+                                    consumer_job_id=CONSUMER[job])
     _validate_attempt(job, attempt, inputs, require_b13=True); return attempt
 
 

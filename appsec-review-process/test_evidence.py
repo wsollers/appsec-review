@@ -513,6 +513,7 @@ def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
           pre_envelope_validate=lambda path,_status:validate_attempt(run_id,job,path,inputs))
     return coordinate_worker_lifecycle(base,run_id=run_id,job_id=job,dagster_run_id=dagster_id,
       worker_kind="pinned_container" if job==EXECUTION_JOB else "deterministic_python",output_contract=contract,
+      consumer_job_id=RESULT_JOB if job==EXECUTION_JOB else "02-evidence-assembly",
       resume_command=f"integration required for {job}",derive_inputs=lambda:current_inputs(run_id,job),
       fingerprint_inputs=lambda x:"sha256:"+digest(x),execute_attempt=execute,
       preflight_failure_inputs=lambda exc:{"run_id":run_id,"job":job,"preflight_error":f"{type(exc).__name__}: {exc}","code":code_hashes(job)},
@@ -521,7 +522,8 @@ def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
 
 def validate_job(run_id:str,job:str,pointer:dict|None=None)->Path:
     base=data_path(run_id,"jobs",job); inputs=current_inputs(run_id,job); pointer=pointer or read_json(base/"accepted.json")
-    attempt,_=validate_published(base,pointer,"sha256:"+digest(inputs),expected_run_id=run_id,expected_job_id=job)
+    attempt,_=validate_published(base,pointer,"sha256:"+digest(inputs),expected_run_id=run_id,expected_job_id=job,
+                                 consumer_job_id=RESULT_JOB if job==EXECUTION_JOB else "02-evidence-assembly")
     validate_attempt(run_id,job,attempt,inputs); return attempt
 
 if __name__=="__main__":
