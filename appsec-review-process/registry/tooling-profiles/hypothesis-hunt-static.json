@@ -1,0 +1,40 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "hypothesis-hunt-static",
+  "display_name": "Static Code-reading Hypothesis Hunt",
+  "mode": "evidence-only",
+  "required_inputs": [
+    "hunt brief",
+    "pinned shard target files"
+  ],
+  "optional_inputs": [
+    "supporting-evidence menu and the files it pins",
+    "known-issue catalog and retrieval guide",
+    "run evidence index lookups"
+  ],
+  "allowed_actions": [
+    "read pinned inputs",
+    "query the run evidence index",
+    "emit candidate hypotheses"
+  ],
+  "disallowed_actions": [
+    "execute target content",
+    "network access other than the configured model invocation",
+    "mutate target content",
+    "invent evidence"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "candidate_only",
+      "candidate_hypothesis",
+      "coverage_gap"
+    ],
+    "forbidden": [
+      "finding",
+      "verified_security_finding",
+      "severity",
+      "runtime_state",
+      "compliance_verdict"
+    ]
+  }
+}

@@ -432,6 +432,20 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
 
+### `07-hypothesis-discovery`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `file_bytes_max` | 512 KiB | window | Largest single target file pinned for code reading; larger or binary files are listed as unpinned. |  |
+| `lead_menu_max` | 200 count | window | Most P1/P2 tool leads listed in one hunter brief (the total is always stated). |  |
+| `max_hypotheses_per_instance` | 20 count | safety | Most hypotheses one hunter instance may propose; excess items are recorded as dropped gaps. |  |
+| `max_line_span` | 80 lines | safety | Widest line range one hypothesis may name; wider ranges are dropped as gaps. |  |
+| `max_parallel` | 2 count | resource | Hunter instances dispatched concurrently (the persona_llm resource pool bounds it too). |  |
+| `modes_per_group` | 1 count | resource | 1: groups alternate general / known-list hunters; 2: every group gets both hunters (doubles instances and cost). |  |
+| `rendezvous_timeout_seconds` | 5400 s (90 min) | resource | Wall-clock wait for every hunter instance of the pool. |  |
+| `shard_groups` | 3 count | resource | Hunter shard groups: component shards are packed into this many groups by size, P1/P2-lead-heavy components first. | Pool size = shard_groups x modes_per_group; each instance is one claude -p call capped at budget_max_usd_per_call[standard] (2.0 USD today). |
+| `target_pin_bytes_max` | 8 MiB | window | Target bytes pinned per instance (also capped at half the cell's persona input byte budget); files beyond it stay reachable through evidence_search / evidence_read. | Grows with component size; large repositories need more shard_groups rather than a larger window. |
+
 ### `10-critical-findings-sarif`
 
 | Tunable | Value | Kind | What it does | Scale |

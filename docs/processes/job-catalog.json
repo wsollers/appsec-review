@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 67,
+  "lifecycle_jobs": 68,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2134,13 +2134,33 @@
      "name": "7. Refutation, verification, scoring, synthesis, report",
      "entries": [
       {
+       "ref": "job:07-hypothesis-discovery",
+       "id": "07-hypothesis-discovery",
+       "name": "Code-reading Vulnerability Hypothesis Discovery",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:01-component-characterization",
+        "job:02-evidence-assembly",
+        "job:02-source-sast",
+        "job:02-native-sast"
+       ],
+       "produces": [
+        "job:07-hypothesis-discovery"
+       ],
+       "declared_inputs": [
+        "accepted component map",
+        "target checkout matching its source snapshot"
+       ]
+      },
+      {
        "ref": "job:claim-ledger-routing",
        "id": "claim-ledger-routing",
        "name": "Append-Only Candidate Claim Ledger",
        "kind": "lifecycle",
        "consumes": [
         "job:03-threat-model-reconciliation",
-        "job:04-asvs-masvs"
+        "job:04-asvs-masvs",
+        "job:07-hypothesis-discovery"
        ],
        "produces": [
         "job:claim-ledger-routing"
@@ -2401,9 +2421,12 @@
      ],
      "rollup": {
       "enters": [
+       "job:01-component-characterization",
+       "job:02-evidence-assembly",
+       "job:02-source-sast",
+       "job:02-native-sast",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
-       "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
        "job:05-native-memory",
        "job:06-cve-reachability",
@@ -2417,6 +2440,7 @@
        "job:final-publication-gate"
       ],
       "passes": [
+       "job:07-hypothesis-discovery",
        "job:claim-ledger-routing",
        "job:07-red-team-adversarial",
        "job:persona-tool-pool-dispatch",
@@ -2432,6 +2456,8 @@
        "job:synthetic-hypothesis-resynthesis"
       ],
       "declared_inputs": [
+       "accepted component map",
+       "target checkout matching its source snapshot",
        "current accepted S02 and/or OWASP candidate-route artifacts",
        "accepted claim-ledger routing",
        "accepted complete red-team persona/tool-pool merge when candidates exist",
@@ -2560,6 +2586,7 @@
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
      "job:15-stig-srg-validation-worklist",
+     "job:07-hypothesis-discovery",
      "job:claim-ledger-routing",
      "job:07-red-team-adversarial",
      "job:persona-tool-pool-dispatch",
@@ -2673,6 +2700,8 @@
      "accepted STIG/SRG worklist",
      "accepted STIG/SRG source records",
      "accepted platform inventory",
+     "accepted component map",
+     "target checkout matching its source snapshot",
      "current accepted S02 and/or OWASP candidate-route artifacts",
      "accepted claim-ledger routing",
      "accepted complete red-team persona/tool-pool merge when candidates exist",
@@ -4730,13 +4759,33 @@
      "name": "07-red-team-adversarial",
      "entries": [
       {
+       "ref": "job:07-hypothesis-discovery",
+       "id": "07-hypothesis-discovery",
+       "name": "Code-reading Vulnerability Hypothesis Discovery",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:01-component-characterization",
+        "job:02-evidence-assembly",
+        "job:02-source-sast",
+        "job:02-native-sast"
+       ],
+       "produces": [
+        "job:07-hypothesis-discovery"
+       ],
+       "declared_inputs": [
+        "accepted component map",
+        "target checkout matching its source snapshot"
+       ]
+      },
+      {
        "ref": "job:claim-ledger-routing",
        "id": "claim-ledger-routing",
        "name": "Append-Only Candidate Claim Ledger",
        "kind": "lifecycle",
        "consumes": [
         "job:03-threat-model-reconciliation",
-        "job:04-asvs-masvs"
+        "job:04-asvs-masvs",
+        "job:07-hypothesis-discovery"
        ],
        "produces": [
         "job:claim-ledger-routing"
@@ -4801,9 +4850,12 @@
      ],
      "rollup": {
       "enters": [
+       "job:01-component-characterization",
+       "job:02-evidence-assembly",
+       "job:02-source-sast",
+       "job:02-native-sast",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
-       "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
        "job:05-native-memory",
        "job:06-cve-reachability",
@@ -4816,10 +4868,13 @@
        "job:deterministic-pool-merge"
       ],
       "passes": [
+       "job:07-hypothesis-discovery",
        "job:claim-ledger-routing",
        "job:persona-tool-pool-dispatch"
       ],
       "declared_inputs": [
+       "accepted component map",
+       "target checkout matching its source snapshot",
        "current accepted S02 and/or OWASP candidate-route artifacts",
        "accepted claim-ledger routing",
        "accepted complete red-team persona/tool-pool merge when candidates exist",
@@ -5201,6 +5256,7 @@
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
      "job:15-stig-srg-validation-worklist",
+     "job:07-hypothesis-discovery",
      "job:claim-ledger-routing",
      "job:07-red-team-adversarial",
      "job:persona-tool-pool-dispatch",
@@ -5318,6 +5374,8 @@
      "accepted STIG/SRG worklist",
      "accepted STIG/SRG source records",
      "accepted platform inventory",
+     "accepted component map",
+     "target checkout matching its source snapshot",
      "current accepted S02 and/or OWASP candidate-route artifacts",
      "accepted claim-ledger routing",
      "accepted complete red-team persona/tool-pool merge when candidates exist",
@@ -8102,6 +8160,92 @@
    ]
   },
   {
+   "id": "07-hypothesis-discovery",
+   "lane": "07-red-team-adversarial",
+   "name": "Code-reading Vulnerability Hypothesis Discovery",
+   "contract": "hypothesis-discovery",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/hypothesis_discovery.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "general-red-team-hunter",
+    "role_id": "hypothesis-hunt-coordinator",
+    "domain_id": "vulnerability-hypothesis-discovery",
+    "tooling_profile_id": "hypothesis-hunt-static",
+    "output_contract_id": "hypothesis-discovery"
+   },
+   "depends_on": [
+    {
+     "job": "01-component-characterization",
+     "kind": "required",
+     "contract": "component-map"
+    },
+    {
+     "job": "02-evidence-assembly",
+     "kind": "required",
+     "contract": "pregather"
+    },
+    {
+     "job": "02-source-sast",
+     "kind": "required",
+     "contract": "source-sast"
+    },
+    {
+     "job": "02-native-sast",
+     "kind": "required",
+     "contract": "native-sast"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted component map"
+    },
+    {
+     "need": "required",
+     "input": "target checkout matching its source snapshot"
+    },
+    {
+     "need": "optional",
+     "input": "accepted tool-lead producers (source/native SAST, secrets, IaC, mobile)"
+    },
+    {
+     "need": "optional",
+     "input": "supporting-evidence menu"
+    }
+   ],
+   "inputs_source": "registry/job-templates/07-hypothesis-discovery.json",
+   "output_dir": "runs/<run_id>/data/jobs/07-hypothesis-discovery/",
+   "output_files": [
+    "hypothesis-discovery.json",
+    "hypothesis-discovery.md",
+    "hunt-pool-merge.json",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/hypothesis-discovery.json",
+   "claim_class": "candidate_hypothesis",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:01-component-characterization",
+    "job:02-evidence-assembly",
+    "job:02-source-sast",
+    "job:02-native-sast"
+   ],
+   "produces": [
+    "job:07-hypothesis-discovery"
+   ]
+  },
+  {
    "id": "claim-ledger-routing",
    "lane": "07-red-team-adversarial",
    "name": "Append-Only Candidate Claim Ledger",
@@ -8130,6 +8274,11 @@
      "job": "04-asvs-masvs",
      "kind": "required",
      "contract": "owasp-join-report"
+    },
+    {
+     "job": "07-hypothesis-discovery",
+     "kind": "required",
+     "contract": "hypothesis-discovery"
     }
    ],
    "declared_inputs": [
@@ -8164,7 +8313,8 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:03-threat-model-reconciliation",
-    "job:04-asvs-masvs"
+    "job:04-asvs-masvs",
+    "job:07-hypothesis-discovery"
    ],
    "produces": [
     "job:claim-ledger-routing"
@@ -12316,7 +12466,8 @@
    ],
    "consumed_by": [
     "job:01-component-characterization",
-    "job:03-threat-model-reconciliation"
+    "job:03-threat-model-reconciliation",
+    "job:07-hypothesis-discovery"
    ]
   },
   "job:01-component-characterization": {
@@ -12341,6 +12492,7 @@
     "job:05-native-memory",
     "job:13-fuzz-target-triage",
     "job:15-deployment-hardening",
+    "job:07-hypothesis-discovery",
     "job:07-red-team-adversarial",
     "job:08-blue-team-refutation",
     "job:10-synthesis-report",
@@ -12460,6 +12612,18 @@
    "consumed_by": [
     "job:07-red-team-adversarial",
     "job:12-scoring-prioritization"
+   ]
+  },
+  "job:07-hypothesis-discovery": {
+   "id": "job:07-hypothesis-discovery",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/07-hypothesis-discovery/",
+   "about": "Accepted hypothesis-discovery output of 07-hypothesis-discovery.",
+   "produced_by": [
+    "job:07-hypothesis-discovery"
+   ],
+   "consumed_by": [
+    "job:claim-ledger-routing"
    ]
   },
   "job:claim-ledger-routing": {
@@ -12687,7 +12851,8 @@
     "job:02-source-sast"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:07-hypothesis-discovery"
    ]
   },
   "job:02-code-property-graph": {
@@ -12712,7 +12877,8 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:05-native-memory"
+    "job:05-native-memory",
+    "job:07-hypothesis-discovery"
    ]
   },
   "job:02-ir-capture": {

@@ -3,7 +3,7 @@
   "type": "object", "additionalProperties": false, "required": ["schema", "run_id", "ledger_head_hash", "routes"],
   "properties": {"schema": {"const": "appsec-review/claim-ledger-work-routing/1.0"}, "run_id": {"type": "string"}, "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "routes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["claim_id", "status", "stages", "current_stage", "authorization", "execution"], "properties": {"claim_id": {"type": "string"}, "status": {"type": "string"}, "stages": {"const": ["07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification"]}, "current_stage": {"const": "07-red-team-adversarial"}, "authorization": {"const": "not_authorized"}, "execution": {"const": "not_executed"},
-      "source_kind": {"enum": ["threat-model", "owasp-route", "tool-lead"], "description": "Which candidate source admitted the claim."},
-      "review_priority": {"enum": ["P1", "P2", "P3", null], "description": "Tool-lead review tier from the deterministic rule-category map (P1 security sink, P3 code quality); null for non-lead routes. Ordering only: no route is dropped."}}}}
+      "source_kind": {"enum": ["threat-model", "owasp-route", "tool-lead", "hunter"], "description": "Which candidate source admitted the claim (hunter: 07-hypothesis-discovery code-reading hypotheses)."},
+      "review_priority": {"enum": ["P1", "P2", "P3", null], "description": "Tool-lead review tier from the deterministic rule-category map (P1 security sink, P3 code quality), or the hunter tier (P1 medium/high confidence, P2 low); null for threat-model and OWASP routes. Ordering only: no route is dropped."}}}}
   }
 }

@@ -375,16 +375,19 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
 
 
 TOOL_LEAD_PREFIX = "Tool lead ("  # claim_ledger.LEAD_HYPOTHESIS_PREFIX (deterministic, not model text)
+HUNTER_PREFIX = "Code-reading hypothesis ("  # claim_ledger.HUNTER_HYPOTHESIS_PREFIX (deterministic prefix)
 
 
 def tool_lead_candidates(unresolved: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Unverified ledger claims admitted from static-tool leads, P1 first (visibility, not promotion)."""
+    """Unverified ledger claims admitted from static-tool leads or code-reading hunters, P1 first
+    (visibility, not promotion). ``source`` is ``tool-lead`` or ``hunter``."""
     rows = []
     for item in unresolved:
         text = item["hypothesis"]
-        if text.startswith(TOOL_LEAD_PREFIX) and text[len(TOOL_LEAD_PREFIX):len(TOOL_LEAD_PREFIX) + 2] in {"P1", "P2", "P3"}:
-            rows.append({**item, "tier": text[len(TOOL_LEAD_PREFIX):len(TOOL_LEAD_PREFIX) + 2]})
-    return sorted(rows, key=lambda row: (row["tier"], row["claim_id"]))
+        for prefix, source in ((TOOL_LEAD_PREFIX, "tool-lead"), (HUNTER_PREFIX, "hunter")):
+            if text.startswith(prefix) and text[len(prefix):len(prefix) + 2] in {"P1", "P2", "P3"}:
+                rows.append({**item, "tier": text[len(prefix):len(prefix) + 2], "source": source})
+    return sorted(rows, key=lambda row: (row["tier"], row["source"] != "tool-lead", row["claim_id"]))
 
 
 def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
@@ -408,7 +411,9 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
               f"{len(report['unresolved_candidates'])} candidate(s) remain unresolved or unverified.", ""]
     if tool_leads:
         tiers = {tier: sum(item["tier"] == tier for item in tool_leads) for tier in ("P1", "P2", "P3")}
-        lines += [f"{len(tool_leads)} of them are static-tool leads not independently verified "
+        hunted = sum(item["source"] == "hunter" for item in tool_leads)
+        what = "static-tool leads" + (f" or code-reading hypotheses ({hunted} from hunters)" if hunted else "")
+        lines += [f"{len(tool_leads)} of them are {what} not independently verified "
                   f"(P1 {tiers['P1']}, P2 {tiers['P2']}, P3 {tiers['P3']}); see the appendix.", ""]
     lines += ["## Major limitations", ""]
     lines += [f"- {value}" for value in report["limitations"]] or ["- No additional limitation was supplied."]
@@ -417,9 +422,9 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
         "## Unresolved candidates", ""]
     appendix += [f"- `{item['claim_id']}` ({item['status']}): {item['hypothesis']}" for item in report["unresolved_candidates"]]
     if tool_leads:
-        appendix += ["", "## Tool leads not independently verified", "",
-                     "| Tier | Claim | Status | Lead |", "|---|---|---|---|"]
-        appendix += [f"| {item['tier']} | `{item['claim_id']}` | {item['status']} | "
+        appendix += ["", "## Tool leads and code-reading hypotheses not independently verified", "",
+                     "| Tier | Source | Claim | Status | Lead |", "|---|---|---|---|---|"]
+        appendix += [f"| {item['tier']} | {item['source']} | `{item['claim_id']}` | {item['status']} | "
                      f"{item['hypothesis'].replace('|', '/')} |" for item in tool_leads]
     appendix += ["", "## Dissent", ""] + ([f"- {item}" for item in report["dissent_ids"]] or ["- None recorded."])
     appendix += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]

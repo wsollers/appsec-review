@@ -2123,6 +2123,73 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "07-hypothesis-discovery",
+      "design_refs": [
+        "docs/decisions/ADR-0018-code-reading-hypothesis-discovery.md",
+        "docs/architecture/design-v3.md#82-append-only-review-event-ledger"
+      ],
+      "graph": {
+        "node": "07-hypothesis-discovery",
+        "implemented": true,
+        "dependencies": [
+          "01-component-characterization",
+          "02-evidence-assembly",
+          "02-source-sast",
+          "02-native-sast"
+        ]
+      },
+      "registry": {
+        "template": "07-hypothesis-discovery",
+        "persona": "general-red-team-hunter",
+        "role": "hypothesis-hunt-coordinator",
+        "domain": "vulnerability-hypothesis-discovery",
+        "tooling_profile": "hypothesis-hunt-static",
+        "output_contract": "hypothesis-discovery"
+      },
+      "execution": {
+        "mode": "pool_coordinator",
+        "worker": "appsec-review-process/hypothesis_discovery.py:run",
+        "validator": "appsec-review-process/hypothesis_discovery.py:_validate_attempt"
+      },
+      "output": {
+        "contract": "hypothesis-discovery",
+        "contract_file": "appsec-review-process/registry/output-contracts/hypothesis-discovery.json",
+        "schema_file": "schemas/hypothesis-discovery.schema.json",
+        "claim_class": "candidate_hypothesis"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_hypothesis_discovery.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
       "id": "claim-ledger-routing",
       "design_refs": [
         "docs/architecture/design-v3.md#82-append-only-review-event-ledger",
@@ -2133,7 +2200,8 @@
         "implemented": true,
         "dependencies": [
           "03-threat-model-reconciliation",
-          "04-asvs-masvs"
+          "04-asvs-masvs",
+          "07-hypothesis-discovery"
         ]
       },
       "registry": {

@@ -663,6 +663,53 @@
         "status.json"
       ]
     },
+    "07-hypothesis-discovery": {
+      "lane": "07-red-team-adversarial",
+      "contract": "hypothesis-discovery",
+      "template": "07-hypothesis-discovery",
+      "implemented": true,
+      "namespace": "07-hypothesis-discovery",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-evidence-assembly",
+          "kind": "required",
+          "contract": "pregather",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-source-sast",
+          "kind": "required",
+          "contract": "source-sast",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-sast",
+          "kind": "required",
+          "contract": "native-sast",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        }
+      ],
+      "planned_scope": "Code-reading hunter pool (general and known-list red-team personas) over component shards and P1/P2 tool-lead clusters; publishes checkout-resolved candidate vulnerability hypotheses for the claim ledger (ADR-0018).",
+      "required_artifacts": [
+        "hypothesis-discovery.json",
+        "hypothesis-discovery.md",
+        "hunt-pool-merge.json",
+        "permission.json",
+        "lineage.json",
+        "pool-receipt.json",
+        "status.json"
+      ]
+    },
     "claim-ledger-routing": {
       "lane": "07-red-team-adversarial",
       "contract": "claim-ledger-core",
@@ -683,9 +730,15 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
+        },
+        {
+          "job": "07-hypothesis-discovery",
+          "kind": "required",
+          "contract": "hypothesis-discovery",
+          "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Admit accepted threat-model and OWASP candidate routes into the append-only, hash-linked claim ledger before adversarial review.",
+      "planned_scope": "Admit accepted threat-model, OWASP, static-tool-lead and code-reading hunter candidate routes into the append-only, hash-linked claim ledger before adversarial review.",
       "required_artifacts": [
         "claim-decision-ledger.json",
         "claim-ledger-work-routing.json",

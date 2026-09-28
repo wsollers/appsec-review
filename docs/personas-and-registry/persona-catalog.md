@@ -296,6 +296,18 @@ Looks for:
 - unsafe output handling
 - data leakage through model/tool traces
 
+### general-red-team-hunter / known-list-red-team-hunter (registry records)
+
+Code-reading hunters of `07-hypothesis-discovery` (ADR-0018): read one component shard of the target
+with its P1/P2 tool-lead menu (a menu, not a limit) and propose candidate-only vulnerability hypotheses
+(path, line range, class/CWE, attacker preconditions, evidence read, confidence). The general hunter
+uses `07-red-team-adversarial/task-hypothesis-hunt-general.md`; the known-list hunter walks
+`known-issue-catalog.md` with `task-hypothesis-hunt-known-list.md`. Role
+`vulnerability-hypothesis-hunter`, domain `vulnerability-hypothesis-discovery`, tooling profile
+`hypothesis-hunt-static`.
+
+Must not cite a file or line it did not read, rate severity, or claim a confirmed finding.
+
 ## Domain Specialist Personas
 
 ### nginx-rest-api-specialist

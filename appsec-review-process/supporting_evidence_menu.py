@@ -45,6 +45,8 @@ MENU = (
     ("02-native-sast", "tool-leads", "Native SAST leads per build unit (artifact cited by tool-lead claims)", ["native-sast.json"]),
     ("02-secrets-inventory", "tool-leads", "Redacted secret and key-material locations", ["outputs/secrets-inventory.redacted.json"]),
     ("02-mobile-sast", "tool-leads", "Mobile SAST rule hits", ["outputs/mobile-sast.json"]),
+    ("07-hypothesis-discovery", "tool-leads", "Code-reading hunter hypotheses (artifact cited by hunter claims)",
+     ["hypothesis-discovery.json"]),
     ("01-component-characterization", "architecture", "Component purpose map: components, path patterns, relationships",
      ["component-purpose-map.json"]),
     ("03-threat-model-dfd-stride", "architecture", "Integrated threat model: elements, flows, trust boundaries, STRIDE hypotheses",
@@ -94,7 +96,7 @@ PROFILES = {
 }
 PRODUCER_PROFILE = {"02-source-sast": "code", "02-native-sast": "code", "02-mobile-sast": "code",
                     "02-secrets-inventory": "secret", "02-sca-vulnerability-match": "dependency",
-                    "02-iac-config-scan": "config"}
+                    "02-iac-config-scan": "config", "07-hypothesis-discovery": "code"}
 _POINTER_KEYS = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint", "envelope_path",
                  "envelope_sha256", "hashes", "accepted_at"}
 

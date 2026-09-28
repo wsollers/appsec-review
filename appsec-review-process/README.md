@@ -195,8 +195,13 @@ catalog item to a candidate scenario.
 
 `07-red-team-adversarial/` supports separate red-team modes:
 
-- `general-red-team.md`: open-ended adversarial inference beyond the catalog
-- `known-list-red-team.md`: systematic known-issue catalog walkthrough
+- `task-hypothesis-hunt-general.md` (formerly `general-red-team.md`): open-ended adversarial inference
+  beyond the catalog
+- `task-hypothesis-hunt-known-list.md` (formerly `known-list-red-team.md`): systematic known-issue
+  catalog walkthrough
+
+Both are loaded as the task prompts of the `07-hypothesis-discovery` hunter pool (ADR-0018), which
+reads target code per component shard and feeds candidate hypotheses to the claim ledger.
 
 `08-blue-team-refutation/` mirrors those modes:
 
