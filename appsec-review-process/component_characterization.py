@@ -355,6 +355,23 @@ def _citations(value: Any):
             yield from _citations(item)
 
 
+def _retype_citations(value: dict[str, Any], target_root: Path, evidence_root: Path) -> None:
+    """The model sometimes labels a citation with another schema source type (tool_output,
+    reference_data, ...). The map accepts only source_file and upstream_lane, and the label is
+    derivable: it is whichever root the cited file actually exists beneath. Relabel only when the file
+    resolves, and recompute its hash; a citation that resolves nowhere is left for the validator."""
+    for citation in _citations(value):
+        if not isinstance(citation, dict) or citation.get("source_type") in ("source_file", "upstream_lane"):
+            continue
+        evidence_first = citation.get("source_type") in ("tool_output", "reference_data", "manual_diagnostic")
+        roots = [("upstream_lane", evidence_root), ("source_file", target_root)]
+        for source_type, root in (roots if evidence_first else roots[::-1]):
+            path = _beneath(root, citation.get("path"))
+            if path is not None and path.is_file() and not path.is_symlink():
+                citation["source_type"], citation["content_hash"] = source_type, file_hash(path)
+                break
+
+
 def _backfill_citations(value: Any, target_hashes: dict[str, str], evidence_hashes: dict[str, str]) -> None:
     for citation in _citations(value):
         if not isinstance(citation, dict):
@@ -562,7 +579,8 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
         owner = target_root if source_type == "source_file" else (
             evidence_root if source_type == "upstream_lane" else None)
         if owner is None:
-            errors.append("component map citations must be source_file or upstream_lane evidence")
+            errors.append("component map citations must be source_file or upstream_lane evidence "
+                          f"(got source_type={source_type!r} path={citation_path!r})")
             continue
         path = _beneath(owner, citation_path)
         if path is None or not path.is_file() or path.is_symlink():
@@ -777,6 +795,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
         _normalize_component_ids(value)
         _normalize_tag_cloud(value)
+        _retype_citations(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
         _drop_unresolved_relationships(value)
         _repair_against_target(value, Path(inputs["target_root"]))
         _record_untagged_gaps(value)

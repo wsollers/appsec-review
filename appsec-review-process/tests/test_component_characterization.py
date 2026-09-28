@@ -470,5 +470,24 @@ class NormalizeTagCloudTest(unittest.TestCase):
         self.assertEqual(parser["evidence_citations"], [cite])
 
 
+class RetypeCitationsTest(unittest.TestCase):
+    def test_wrong_source_type_is_relabelled_by_where_the_file_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            target, evidence = Path(folder) / "t", Path(folder) / "e"
+            (target / "src").mkdir(parents=True); (evidence / "scan").mkdir(parents=True)
+            (target / "src/a.c").write_text("int a;"); (evidence / "scan/out.json").write_text("{}")
+            value = {"x": {"evidence_citations": [
+                {"source_type": "tool_output", "path": "scan/out.json"},
+                {"source_type": "tool_output", "path": "src/a.c"},
+                {"source_type": "source_file", "path": "src/a.c"},
+                {"source_type": "tool_output", "path": "missing.txt"}]}}
+            cc._retype_citations(value, target, evidence)
+            got = value["x"]["evidence_citations"]
+            expected = cc.file_hash(evidence / "scan/out.json")
+        self.assertEqual([c["source_type"] for c in got], ["upstream_lane", "source_file", "source_file", "tool_output"])
+        self.assertEqual(got[0]["content_hash"], expected)
+        self.assertNotIn("content_hash", got[3])
+
+
 if __name__ == "__main__":
     unittest.main()
