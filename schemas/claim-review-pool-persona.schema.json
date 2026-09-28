@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claim-review-pool-persona.schema.json",
+  "description": "Model-facing reply for the stage claim-review pool (07/08/09/12). The reviewer supplies judgment only: one decision per upstream claim_id, the upstream citation ids and proof-obligation ids it relies on, and its verdict text. The orchestrator derives candidate ids, reviewer/verifier identity, canonical citation objects, obligation statements and the serialized assertion, then validates claim-review-pool-candidates.schema.json and claim-review-decision.schema.json. Which optional fields a stage requires is stated by the trusted runtime block.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decisions"],
+  "properties": {
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim_id"],
+        "properties": {
+          "claim_id": {"type": "string", "minLength": 1},
+          "attacker_case": {"type": "string", "minLength": 1},
+          "disposition": {"enum": ["REFUTED", "SURVIVING", "VERIFIED", "UNRESOLVED", "BLOCKED"]},
+          "rationale": {"type": "string", "minLength": 1},
+          "method": {"type": "string", "minLength": 1},
+          "citation_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "proof_obligations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["obligation_id", "status"],
+              "properties": {
+                "obligation_id": {"type": "string", "minLength": 1},
+                "status": {"enum": ["OPEN", "SATISFIED", "FAILED", "UNRESOLVED"]},
+                "citation_ids": {"type": "array", "items": {"type": "string", "minLength": 1}}
+              }
+            }
+          },
+          "dissent_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "factors": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["impact", "exploitability", "exposure", "confidence"],
+            "properties": {
+              "impact": {"enum": [0, 1, 2, 3, 4]},
+              "exploitability": {"enum": [0, 1, 2, 3, 4]},
+              "exposure": {"enum": [0, 1, 2, 3, 4]},
+              "confidence": {"enum": [0, 1, 2, 3, 4]}
+            }
+          }
+        }
+      }
+    }
+  }
+}

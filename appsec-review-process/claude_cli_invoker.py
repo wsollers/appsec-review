@@ -337,7 +337,7 @@ def _render_readable_inputs(inputs: tuple) -> str:
 
 
 def build_prompt_text(package: Any, output_contract: dict[str, Any], store: SchemaStore,
-                      indexed: bool = False) -> str:
+                      indexed: bool = False, persona_schema: str | None = None) -> str:
     """The assembled outer prompt (governing rules, persona, role, domain, tooling profile,
     buildenv catalog, task, output contract -- already rendered by
     ``persona_prompt_assembly.assemble_outer_prompt`` and pinned by
@@ -346,7 +346,12 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
     (``_render_json_schema`` -- the outer prompt's own ``output_contract`` section only carries the
     contract's registry metadata, not the schema's field names/enums/required-properties; see that
     function's docstring for the live bug this closes), plus this invoker's own strict
-    response-envelope instructions."""
+    response-envelope instructions.
+
+    ``persona_schema`` (default None: unchanged behaviour) names a reduced, model-facing schema to
+    render in place of the contract's final schema. Only a caller that also passes a
+    ``fill_result`` derive step turning that reply into the final document should set it; the
+    final schema is still what the accepted envelope is validated against."""
     outer = package.prompt.decode("utf-8")
     fields = _envelope_fields(output_contract)
     envelope_keys = "\n".join(
@@ -366,7 +371,8 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
                 f"{filename!r}, which is not its declared result_schema.artifact "
                 f"{output_contract['result_schema']['artifact']!r} -- this invoker only knows how "
                 f"to find a schema for the declared result artifact")
-        schema_sections.append(_render_json_schema(output_contract["result_schema"]["schema_file"], store))
+        schema_sections.append(_render_json_schema(
+            persona_schema or output_contract["result_schema"]["schema_file"], store))
     parts = [outer, (_render_input_inventory if indexed else _render_readable_inputs)(package.inputs)]
     if schema_sections:
         parts.append("## Required Output Schema(s)\n\n" + "\n".join(schema_sections))
@@ -1082,7 +1088,7 @@ class ClaudeCliInvoker:
 
     def __init__(self, *, effort: str, budget_usd: float | None = None,
                 timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS, dispatch_fn=None,
-                fill_result=None) -> None:
+                fill_result=None, persona_schema: str | None = None) -> None:
         self.effort = effort
         self.budget_usd = budget_usd
         self.timeout_seconds = timeout_seconds
@@ -1091,6 +1097,13 @@ class ClaudeCliInvoker:
         # result (for example canonical pool candidates) supplies it, so the job does not depend
         # on the model reproducing fixed values or formatting (ADR-0013).
         self._fill_result = fill_result
+        # Optional persona_schema: a reduced model-facing schema rendered instead of the final
+        # one (default None = the final schema, as before). Requires fill_result, which derives the
+        # final document from the reply before the unchanged final-schema validation. fill_result
+        # may return a list of strings; they are recorded as invoker limitations (derive notes).
+        if persona_schema is not None and fill_result is None:
+            raise ValueError("persona_schema requires a fill_result derive step")
+        self._persona_schema = persona_schema
 
     def invoke(self, package: Any, *, output_root: Path, cancel: threading.Event) -> None:
         if cancel.is_set():
@@ -1101,7 +1114,8 @@ class ClaudeCliInvoker:
         cfg = rc.load_model_config()
         inline_bytes = sum(len(item.data) for item in package.inputs)
         indexed = inline_bytes > _inline_input_limit(cfg)
-        prompt_text = build_prompt_text(package, output_contract, store, indexed=indexed)
+        prompt_text = build_prompt_text(package, output_contract, store, indexed=indexed,
+                                        persona_schema=self._persona_schema)
         model_alias = package.request["model"]["family"]
         # Reuses the run's already-pinned binary path when the run's first job (normally
         # model_version_registry.resolve_run_model_versions) already resolved one; resolves and
@@ -1136,6 +1150,7 @@ class ClaudeCliInvoker:
         # Only target-repository inputs are citable evidence; an upstream artifact (D02's
         # accepted partition map) is scope, so it never enters claim citation resolution.
         target_inputs = tuple(item for item in package.inputs if item.root != pd.UPSTREAM_ROOT_ID)
+        fill_notes: list[str] = []   # limitations returned by the last fill_result call
 
         def accept(dispatch: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             """Parse, validate and build claims; raises InvokerOutputError with its details."""
@@ -1161,7 +1176,8 @@ class ClaudeCliInvoker:
                 for _filename, key, kind in fields:
                     if kind == "md" and not (isinstance(envelope.get(key), str) and envelope[key].strip()):
                         envelope[key] = result_text.strip() or "Result supplied by the orchestrator."
-                self._fill_result(envelope, result_field)
+                notes = self._fill_result(envelope, result_field)
+                fill_notes[:] = [n for n in notes if isinstance(n, str) and n] if isinstance(notes, list) else []
                 envelope = {key: envelope[key] for _filename, key, _kind in fields if key in envelope}
             _fill_pinned_values(envelope, result_field, output_contract, target_inputs)
             _validate_envelope(envelope, fields, output_contract, store)
@@ -1233,6 +1249,7 @@ class ClaudeCliInvoker:
                 limitations = [f"reused the accepted {model_alias} response to the identical request "
                                f"(persona cache {cache_key[:16]}, first answered in attempt "
                                f"{reused.get('cached_from')} at {reused.get('cached_at')}); no model call"]
+            limitations.extend(fill_notes)
             if rounds["rejected"]:
                 limitations.append(f"schema repair retry: {rounds['rejected']} rejected response(s) before "
                                    f"this one; the rejected responses and reasons are kept in the run's "
