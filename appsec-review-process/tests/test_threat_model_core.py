@@ -116,8 +116,11 @@ class ThreatModelCoreTests(unittest.TestCase):
         with mock.patch.object(tm.cc, "validate", return_value=component_attempt), \
              mock.patch.object(tm.cc, "root", return_value=component_base), \
              mock.patch.object(tm, "data_path", side_effect=fake_data), \
-             mock.patch.object(tm, "run_path", return_value=run_root):
+             mock.patch.object(tm, "run_path", return_value=run_root), \
+             mock.patch.object(tm.tw, "current_inputs", return_value={"workbench": "fixture"}) as workbench:
             inputs = tm.current_inputs("run1")
+            self.assertEqual(inputs["workbench"], {"workbench": "fixture"})
+            self.assertEqual(workbench.call_args.args[1]["evidence_attempt_id"], "evidence-1")
             self.assertEqual(inputs["evidence_sha256"], state.file_hash(evidence))
             evidence.write_text("tampered\n", encoding="utf-8")
             with self.assertRaisesRegex(tm.Blocked, "evidence artifact changed"):

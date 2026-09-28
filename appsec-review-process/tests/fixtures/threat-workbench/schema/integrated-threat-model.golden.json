@@ -310,6 +310,7 @@
       "originating_workcell_id": "abuse-scenario-analyst"
     }
   ],
+  "privacy_threats": [],
   "attack_trees": [
     {
       "tree_id": "tree-account-takeover",

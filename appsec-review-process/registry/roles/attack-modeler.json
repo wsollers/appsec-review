@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "attack-modeler",
+  "display_name": "Threat Workbench Attack-Tree Modeler",
+  "category": "discovery",
+  "summary": "Adds AND/OR attack trees whose leaves are evidence, assumption or unresolved.",
+  "allowed_outputs": [
+    "candidate_only"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict",
+    "remediation_status",
+    "malicious_intent"
+  ],
+  "required_behavior": [
+    "give every leaf a support value",
+    "cite evidence refs for every evidence leaf",
+    "keep prerequisites explicit"
+  ],
+  "must_not": [
+    "promote a candidate to a finding",
+    "assign severity",
+    "claim compliance",
+    "invent evidence"
+  ]
+}

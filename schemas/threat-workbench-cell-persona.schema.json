@@ -1,0 +1,522 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-workbench-cell-persona.schema.json",
+  "title": "Threat-workbench cell reply (persona-facing)",
+  "description": "What a threat-workbench cell model returns: judgment only. Record ids, citations, evidence classes, exposure labels and DFD reference resolution are derived by threat_workbench.py (ADR-0019); unresolvable references become gaps, never failures. Every array is optional; return only what your cell brief asks for.",
+  "type": "object",
+  "required": [
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "data_classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "category"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Short stable name, e.g. 'user-email'."
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "pii",
+              "credential",
+              "secret",
+              "user_content",
+              "telemetry",
+              "log",
+              "regulated",
+              "payment",
+              "location",
+              "device_id",
+              "other"
+            ]
+          },
+          "sensitivity": {
+            "type": "string",
+            "enum": [
+              "public",
+              "internal",
+              "confidential",
+              "restricted"
+            ]
+          },
+          "personal_data": {
+            "type": "boolean"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "store_element_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "flow_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "retention_hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "export_hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delete_hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        }
+      }
+    },
+    "privacy_threats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "linddun_category",
+          "statement"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "linddun_category": {
+            "type": "string",
+            "enum": [
+              "linking",
+              "identifying",
+              "non_repudiation",
+              "detecting",
+              "data_disclosure",
+              "unawareness",
+              "non_compliance"
+            ]
+          },
+          "statement": {
+            "type": "string"
+          },
+          "target_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "data_class_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "proof_obligations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "regulatory_candidate_notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Candidate regulatory mappings only (e.g. 'GDPR Art. 17 erasure may apply'); never a compliance verdict."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        }
+      }
+    },
+    "deployment_zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "public_ingress",
+              "private_service",
+              "admin_control_plane",
+              "build_release",
+              "client_device",
+              "third_party"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "element_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        }
+      }
+    },
+    "trust_boundaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "network",
+              "process",
+              "privilege",
+              "tenant",
+              "organization",
+              "device",
+              "build_release",
+              "third_party",
+              "model_tool"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "flow_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        }
+      }
+    },
+    "abuse_scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "attacker_objective",
+          "actor",
+          "harm"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "attacker_objective": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "target_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "data_class_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "harm": {
+            "type": "string"
+          },
+          "preconditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing_controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        }
+      }
+    },
+    "attack_trees": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "objective",
+          "root",
+          "nodes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "target_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "root": {
+            "type": "string",
+            "description": "key of the root node"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "kind",
+                "label"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR",
+                    "leaf"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "children": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "prerequisites": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "support": {
+                  "type": "string",
+                  "enum": [
+                    "evidence",
+                    "assumption",
+                    "unresolved"
+                  ],
+                  "description": "Leaves only."
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "record_type",
+          "statement"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "record_type": {
+            "type": "string",
+            "enum": [
+              "question",
+              "assumption",
+              "coverage_gap",
+              "proposed_threat"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "description": "A workcell id, or 'integrator'."
+          },
+          "topic": {
+            "type": "string"
+          },
+          "subject_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "statement": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "statement"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "subject_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "statement": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

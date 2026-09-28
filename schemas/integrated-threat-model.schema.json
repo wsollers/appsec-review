@@ -19,6 +19,7 @@
     "deployment_zones",
     "abuse_scenarios",
     "attack_trees",
+    "privacy_threats",
     "stride_hypotheses",
     "stride_coverage",
     "assumptions",
@@ -410,6 +411,13 @@
             ]
           }
         }
+      }
+    },
+    "privacy_threats": {
+      "type": "array",
+      "description": "L13 LINDDUN privacy overlay (ADR-0019).",
+      "items": {
+        "$ref": "threat-model-privacy-threat.schema.json"
       }
     }
   }
