@@ -1,6 +1,6 @@
 # Lessons learned: D02-D04 live persona dispatch (2026-09-25)
 
-Status: **current, generalizable.** Written after D02 (`02-dev-project-discovery`), D03
+Status: **current, generalizable.** Continued by [`lessons-learned-2026-09-28-multi-target-runs.md`](lessons-learned-2026-09-28-multi-target-runs.md). Written after D02 (`02-dev-project-discovery`), D03
 (`02-devops-project-discovery`) and D04 (`02-sre-operations-topology`) went live, ending with the
 first SAT in which every discovery stage is a real model call (fresh SAT `20260925T170552Z`, run
 `20260925T170620Z-c6a12e`, stages 1-9 PASS). Complements
