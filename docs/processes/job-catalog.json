@@ -1180,6 +1180,7 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
+        "job:02-codeql-sast",
         "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
@@ -1307,6 +1308,24 @@
         "staged target checkout",
         "B16 tool-semgrep record",
         "repository-owned hashed ruleset"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-sast",
+       "id": "02-codeql-sast",
+       "name": "CodeQL SAST",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-sast"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
        ]
       },
       {
@@ -1690,6 +1709,7 @@
        "job:02-standards-source-ingest",
        "job:02-test-intelligence-ingest",
        "job:02-source-sast",
+       "job:02-codeql-sast",
        "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
@@ -1748,6 +1768,8 @@
        "test type or auto",
        "B16 tool-semgrep record",
        "repository-owned hashed ruleset",
+       "B16 audit-codeql record",
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)",
        "accepted source snapshot",
        "pinned audit-native image",
        "hash-bound Joern exporter",
@@ -2553,6 +2575,7 @@
      "job:02-standards-source-ingest",
      "job:02-test-intelligence-ingest",
      "job:02-source-sast",
+     "job:02-codeql-sast",
      "job:02-code-property-graph",
      "job:02-native-sast",
      "job:02-ir-capture",
@@ -2643,6 +2666,8 @@
      "test type or auto",
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
+     "B16 audit-codeql record",
+     "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)",
      "accepted source snapshot",
      "pinned audit-native image",
      "hash-bound Joern exporter",
@@ -3728,6 +3753,7 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
+        "job:02-codeql-sast",
         "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
@@ -3892,6 +3918,24 @@
         "staged target checkout",
         "B16 tool-semgrep record",
         "repository-owned hashed ruleset"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-sast",
+       "id": "02-codeql-sast",
+       "name": "CodeQL SAST",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-sast"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
        ]
       },
       {
@@ -4289,6 +4333,7 @@
        "job:02-build-configure",
        "job:02-native-build",
        "job:02-source-sast",
+       "job:02-codeql-sast",
        "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
@@ -4354,6 +4399,8 @@
        "accepted configured build",
        "B16 tool-semgrep record",
        "repository-owned hashed ruleset",
+       "B16 audit-codeql record",
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)",
        "accepted source snapshot",
        "pinned audit-native image",
        "hash-bound Joern exporter",
@@ -5223,6 +5270,7 @@
      "job:02-build-configure",
      "job:02-native-build",
      "job:02-source-sast",
+     "job:02-codeql-sast",
      "job:02-code-property-graph",
      "job:02-native-sast",
      "job:02-ir-capture",
@@ -5317,6 +5365,8 @@
      "accepted configured build",
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
+     "B16 audit-codeql record",
+     "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)",
      "accepted source snapshot",
      "pinned audit-native image",
      "hash-bound Joern exporter",
@@ -7377,6 +7427,11 @@
      "contract": "source-sast"
     },
     {
+     "job": "02-codeql-sast",
+     "kind": "required",
+     "contract": "codeql-sast"
+    },
+    {
      "job": "02-code-property-graph",
      "kind": "required",
      "contract": "code-property-graph"
@@ -7498,6 +7553,7 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
+    "job:02-codeql-sast",
     "job:02-code-property-graph",
     "job:02-native-sast",
     "job:02-ir-facts",
@@ -9500,6 +9556,75 @@
    ],
    "produces": [
     "job:02-source-sast"
+   ]
+  },
+  {
+   "id": "02-codeql-sast",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL SAST",
+   "contract": "codeql-sast",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-sast"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-sast.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-sast/",
+   "output_files": [
+    "codeql-sast.json",
+    "b13-receipts.json",
+    "codeql-sast-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-sast.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-sast"
    ]
   },
   {
@@ -12309,6 +12434,7 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
+    "job:02-codeql-sast",
     "job:02-code-property-graph",
     "job:02-operations-doc-ingest",
     "job:02-evidence-index",
@@ -12854,6 +12980,18 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:07-hypothesis-discovery"
+   ]
+  },
+  "job:02-codeql-sast": {
+   "id": "job:02-codeql-sast",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-sast/",
+   "about": "Accepted codeql-sast output of 02-codeql-sast.",
+   "produced_by": [
+    "job:02-codeql-sast"
+   ],
+   "consumed_by": [
+    "job:02-evidence-assembly"
    ]
   },
   "job:02-code-property-graph": {

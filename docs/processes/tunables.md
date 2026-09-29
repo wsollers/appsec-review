@@ -204,6 +204,20 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `query_results_max` | 100 count | window | Most results per structural query. |  |
 | `search_chars_max` | 1000 chars | window | Longest search text per CPG record and query. |  |
 
+### `02-codeql-sast`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `codeql_ram_bytes` | 6 GiB | resource | codeql --ram (JVM and evaluator budget, passed in MiB); must stay below container_memory_bytes (CodeQL otherwise sizes itself from host memory and is OOM-killed). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `codeql_threads` | 4 count | resource | codeql --threads for database create and analyze; keep at or below container_cpu_millis / 1000. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (CodeQL, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (CodeQL, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 1024 count | resource | Process/thread limit (CodeQL, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (CodeQL, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (CodeQL, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for one CodeQL language container (database create + analyze). A TIMEOUT is a coverage gap for that language (ADR-0013). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (CodeQL, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+
 ### `02-container-image-inventory`
 
 | Tunable | Value | Kind | What it does | Scale |
@@ -312,7 +326,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_pids` | 256 count | resource | Process/thread limit (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode is single-process here and scales with file count. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode scales with file count. A TIMEOUT (or OOM / failed exit) publishes OK_WITH_GAPS with a LICENSE_SCAN_TOOL_GAP and outputs/pinned-tool-gap.json instead of pinned-tool-evidence.json (ADR-0013). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `scancode_processes` | 4 count | resource | scancode -n: parallel scan processes. Keep container_cpu_millis at 1000 per process. | Scan time falls roughly with processes; doom3-bfg did not finish in 3600 s with one. |
 

@@ -100,6 +100,10 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "source_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
     },
+    "codeql-sast": {
+        "claim_class_id": "source_static_evidence",
+        "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
+    },
     "native-memory-analysis": {
         "claim_class_id": "candidate_only",
         "allowed_assertions": {

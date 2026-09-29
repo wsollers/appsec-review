@@ -243,6 +243,12 @@
           "allowed_skip_reasons": []
         },
         {
+          "job": "02-codeql-sast",
+          "kind": "required",
+          "contract": "codeql-sast",
+          "allowed_skip_reasons": []
+        },
+        {
           "job": "02-code-property-graph",
           "kind": "required",
           "contract": "code-property-graph",
@@ -1182,6 +1188,26 @@
       "planned_scope": "Pinned offline Semgrep plus Go, Java and PHP language adapters publish normalized evidence leads; unavailable tools remain explicit coverage gaps and no build, binary or IR result is promoted.",
       "required_artifacts": [
         "source-sast.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-sast": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-sast",
+      "template": "02-codeql-sast",
+      "implemented": true,
+      "namespace": "02-codeql-sast",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Pinned offline CodeQL bundle (audit-codeql) creates one --build-mode none database per detected language (cpp, csharp, java, javascript/typescript, python, ruby) and runs the bundled security-extended suite; SARIF results become normalized evidence leads; tool timeouts and failures are per-language coverage gaps.",
+      "required_artifacts": [
+        "codeql-sast.json",
         "b13-receipts.json"
       ]
     },

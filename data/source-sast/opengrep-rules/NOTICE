@@ -1,0 +1,20 @@
+Vendored third-party rules
+==========================
+
+The rule files below this directory (c/lang/**/*.yaml) are copied verbatim, unmodified, from
+
+  https://github.com/opengrep/opengrep-rules
+  commit f1d2b562b414783763fd02a6ed2736eaed622efa
+
+They are the 16 C rules of that repository (c/lang/correctness and c/lang/security). The upstream
+test sources (*.c) are not vendored.
+
+License: GNU Lesser General Public License v2.1 with the "Commons Clause" License Condition v1.0,
+as stated in ./LICENSE (copied verbatim from the same commit). Licensor per that file: Semgrep, Inc.
+The Commons Clause withholds the right to Sell the Software; this project uses the rules only to
+scan targets offline inside its own review pipeline and does not sell them or a service whose
+value derives from them. Decision: William, 2026-09-27 (appsec-review-process/TODO.md, "Source
+SAST Semgrep rules").
+
+Integrity: ../opengrep-rules.lock.json pins the commit and the sha256 of every vendored file;
+02-source-sast refuses to run when any file differs from the lock.

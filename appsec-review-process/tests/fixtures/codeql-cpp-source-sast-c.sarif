@@ -1,0 +1,1424 @@
+{
+ "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+ "runs": [
+  {
+   "artifacts": [
+    {
+     "location": {
+      "index": 0,
+      "uri": "vuln.c",
+      "uriBaseId": "%SRCROOT%"
+     }
+    }
+   ],
+   "columnKind": "utf16CodeUnits",
+   "properties": {
+    "metricResults": [
+     {
+      "rule": {
+       "id": "cpp/summary/lines-of-code",
+       "index": 87
+      },
+      "ruleId": "cpp/summary/lines-of-code",
+      "ruleIndex": 87,
+      "value": 6432
+     },
+     {
+      "baseline": 45,
+      "rule": {
+       "id": "cpp/summary/lines-of-user-code",
+       "index": 88
+      },
+      "ruleId": "cpp/summary/lines-of-user-code",
+      "ruleIndex": 88,
+      "value": 45
+     },
+     {
+      "message": {
+       "text": "<unistd.h>"
+      },
+      "rule": {
+       "id": "cpp/telemetry/succeeded-includes",
+       "index": 89
+      },
+      "ruleId": "cpp/telemetry/succeeded-includes",
+      "ruleIndex": 89,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "<string.h>"
+      },
+      "rule": {
+       "id": "cpp/telemetry/succeeded-includes",
+       "index": 89
+      },
+      "ruleId": "cpp/telemetry/succeeded-includes",
+      "ruleIndex": 89,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "<stdlib.h>"
+      },
+      "rule": {
+       "id": "cpp/telemetry/succeeded-includes",
+       "index": 89
+      },
+      "ruleId": "cpp/telemetry/succeeded-includes",
+      "ruleIndex": 89,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "<stdio.h>"
+      },
+      "rule": {
+       "id": "cpp/telemetry/succeeded-includes",
+       "index": 89
+      },
+      "ruleId": "cpp/telemetry/succeeded-includes",
+      "ruleIndex": 89,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "<fcntl.h>"
+      },
+      "rule": {
+       "id": "cpp/telemetry/succeeded-includes",
+       "index": 89
+      },
+      "ruleId": "cpp/telemetry/succeeded-includes",
+      "ruleIndex": 89,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "calls"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 20
+     },
+     {
+      "message": {
+       "text": "functions"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 385
+     },
+     {
+      "message": {
+       "text": "variables"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 891
+     },
+     {
+      "message": {
+       "text": "expressions"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 793
+     },
+     {
+      "message": {
+       "text": "compilations"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "syntax errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 0
+     },
+     {
+      "message": {
+       "text": "compiler errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 0
+     },
+     {
+      "message": {
+       "text": "source/header files"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 71
+     },
+     {
+      "message": {
+       "text": "lines of code"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 6432
+     },
+     {
+      "message": {
+       "text": "lines of text"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 11177
+     },
+     {
+      "message": {
+       "text": "functions without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 385
+     },
+     {
+      "message": {
+       "text": "compilations without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 1
+     },
+     {
+      "message": {
+       "text": "variables with a known type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 891
+     },
+     {
+      "message": {
+       "text": "calls with an explicit target"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 19
+     },
+     {
+      "message": {
+       "text": "expressions with a known type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 793
+     },
+     {
+      "message": {
+       "text": "source/header files without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 71
+     },
+     {
+      "message": {
+       "text": "successfully resolved #include directives"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 121
+     },
+     {
+      "message": {
+       "text": "#include directives"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 121
+     },
+     {
+      "message": {
+       "text": "non-error expressions"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 793
+     },
+     {
+      "message": {
+       "text": "lines of code without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-metrics",
+       "index": 91
+      },
+      "ruleId": "cpp/telemetry/extraction-metrics",
+      "ruleIndex": 91,
+      "value": 6432
+     },
+     {
+      "message": {
+       "text": "Percentage of calls with call target"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-information",
+       "index": 92
+      },
+      "ruleId": "cpp/telemetry/extraction-information",
+      "ruleIndex": 92,
+      "value": 94.11764705882354
+     },
+     {
+      "message": {
+       "text": "Number of calls with call target"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-information",
+       "index": 92
+      },
+      "ruleId": "cpp/telemetry/extraction-information",
+      "ruleIndex": 92,
+      "value": 16.0
+     },
+     {
+      "message": {
+       "text": "Percentage of expressions with known type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-information",
+       "index": 92
+      },
+      "ruleId": "cpp/telemetry/extraction-information",
+      "ruleIndex": 92,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Number of expressions with known type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-information",
+       "index": 92
+      },
+      "ruleId": "cpp/telemetry/extraction-information",
+      "ruleIndex": 92,
+      "value": 74.0
+     },
+     {
+      "message": {
+       "text": "Number of expressions with unknown type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-information",
+       "index": 92
+      },
+      "ruleId": "cpp/telemetry/extraction-information",
+      "ruleIndex": 92,
+      "value": 0.0
+     },
+     {
+      "message": {
+       "text": "Number of calls with missing call target"
+      },
+      "rule": {
+       "id": "cpp/telemetry/extraction-information",
+       "index": 92
+      },
+      "ruleId": "cpp/telemetry/extraction-information",
+      "ruleIndex": 92,
+      "value": 1.0
+     },
+     {
+      "message": {
+       "text": "Percentage of functions without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of compilations without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of variables with a known type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of calls with an explicit target"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 95.0
+     },
+     {
+      "message": {
+       "text": "Percentage of expressions with a known type"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of source/header files without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of successfully resolved #include directives"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of non-error expressions"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     },
+     {
+      "message": {
+       "text": "Percentage of lines of code without errors"
+      },
+      "rule": {
+       "id": "cpp/telemetry/database-quality",
+       "index": 94
+      },
+      "ruleId": "cpp/telemetry/database-quality",
+      "ruleIndex": 94,
+      "value": 100.0
+     }
+    ],
+    "semmle.formatSpecifier": "sarif-latest"
+   },
+   "results": [
+    {
+     "codeFlows": [
+      {
+       "threadFlows": [
+        {
+         "locations": [
+          {
+           "location": {
+            "message": {
+             "text": "pointer to free output argument"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 14,
+              "startColumn": 10,
+              "startLine": 45
+             }
+            }
+           }
+          },
+          {
+           "location": {
+            "message": {
+             "text": "item"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 14,
+              "startColumn": 10,
+              "startLine": 47
+             }
+            }
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 14,
+         "startColumn": 10,
+         "startLine": 47
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Memory pointed to by [item](1) may already have been freed by [call to free](2)."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "1fbe7693d6916dd8:1",
+      "primaryLocationStartColumnFingerprint": "5"
+     },
+     "relatedLocations": [
+      {
+       "id": 1,
+       "message": {
+        "text": "item"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 14,
+         "startColumn": 10,
+         "startLine": 47
+        }
+       }
+      },
+      {
+       "id": 2,
+       "message": {
+        "text": "call to free"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 9,
+         "startColumn": 5,
+         "startLine": 45
+        }
+       }
+      },
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 14,
+         "startColumn": 10,
+         "startLine": 45
+        }
+       }
+      }
+     ],
+     "rule": {
+      "id": "cpp/double-free",
+      "index": 0
+     },
+     "ruleId": "cpp/double-free",
+     "ruleIndex": 0
+    },
+    {
+     "codeFlows": [
+      {
+       "threadFlows": [
+        {
+         "locations": [
+          {
+           "location": {
+            "message": {
+             "text": "pointer to free output argument"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 14,
+              "startColumn": 10,
+              "startLine": 45
+             }
+            }
+           }
+          },
+          {
+           "location": {
+            "message": {
+             "text": "item"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 9,
+              "startColumn": 5,
+              "startLine": 46
+             }
+            }
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 9,
+         "startColumn": 5,
+         "startLine": 46
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Memory may have been previously freed by [call to free](1)."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "366254f66d2bf8a9:1",
+      "primaryLocationStartColumnFingerprint": "0"
+     },
+     "relatedLocations": [
+      {
+       "id": 1,
+       "message": {
+        "text": "call to free"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 9,
+         "startColumn": 5,
+         "startLine": 45
+        }
+       }
+      },
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 14,
+         "startColumn": 10,
+         "startLine": 45
+        }
+       }
+      }
+     ],
+     "rule": {
+      "id": "cpp/use-after-free",
+      "index": 3
+     },
+     "ruleId": "cpp/use-after-free",
+     "ruleIndex": 3
+    },
+    {
+     "codeFlows": [
+      {
+       "threadFlows": [
+        {
+         "locations": [
+          {
+           "location": {
+            "message": {
+             "text": "*fmt"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 39,
+              "startColumn": 36,
+              "startLine": 25
+             }
+            }
+           }
+          },
+          {
+           "location": {
+            "message": {
+             "text": "*fmt"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 15,
+              "startColumn": 12,
+              "startLine": 26
+             }
+            }
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 15,
+         "startColumn": 12,
+         "startLine": 26
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "The format string argument to [printf](1) has a source which cannot be verified to originate from a string literal."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "6e76e852621cd6c6:1",
+      "primaryLocationStartColumnFingerprint": "7"
+     },
+     "relatedLocations": [
+      {
+       "id": 1,
+       "message": {
+        "text": "printf"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 11,
+         "startColumn": 5,
+         "startLine": 26
+        }
+       }
+      },
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 39,
+         "startColumn": 36,
+         "startLine": 25
+        }
+       }
+      }
+     ],
+     "rule": {
+      "id": "cpp/non-constant-format",
+      "index": 8
+     },
+     "ruleId": "cpp/non-constant-format",
+     "ruleIndex": 8
+    },
+    {
+     "codeFlows": [
+      {
+       "threadFlows": [
+        {
+         "locations": [
+          {
+           "location": {
+            "message": {
+             "text": "*argv"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 52,
+              "startColumn": 48,
+              "startLine": 20
+             }
+            }
+           }
+          },
+          {
+           "location": {
+            "message": {
+             "text": "*access to array"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 28,
+              "startColumn": 21,
+              "startLine": 21
+             }
+            }
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 28,
+         "startColumn": 21,
+         "startLine": 21
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "The format string argument to [sprintf](1) has a source which cannot be verified to originate from a string literal."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "f67eef781407cbae:1",
+      "primaryLocationStartColumnFingerprint": "16"
+     },
+     "relatedLocations": [
+      {
+       "id": 1,
+       "message": {
+        "text": "sprintf"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 12,
+         "startColumn": 5,
+         "startLine": 21
+        }
+       }
+      },
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 52,
+         "startColumn": 48,
+         "startLine": 20
+        }
+       }
+      }
+     ],
+     "rule": {
+      "id": "cpp/non-constant-format",
+      "index": 8
+     },
+     "ruleId": "cpp/non-constant-format",
+     "ruleIndex": 8
+    },
+    {
+     "codeFlows": [
+      {
+       "threadFlows": [
+        {
+         "locations": [
+          {
+           "location": {
+            "message": {
+             "text": "*argv"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 52,
+              "startColumn": 48,
+              "startLine": 20
+             }
+            }
+           }
+          },
+          {
+           "location": {
+            "message": {
+             "text": "*access to array"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 19,
+              "startColumn": 12,
+              "startLine": 22
+             }
+            }
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 19,
+         "startColumn": 12,
+         "startLine": 22
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "The format string argument to [printf](1) has a source which cannot be verified to originate from a string literal."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "3a3eb64cca1561b6:1",
+      "primaryLocationStartColumnFingerprint": "7"
+     },
+     "relatedLocations": [
+      {
+       "id": 1,
+       "message": {
+        "text": "printf"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 11,
+         "startColumn": 5,
+         "startLine": 22
+        }
+       }
+      },
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 52,
+         "startColumn": 48,
+         "startLine": 20
+        }
+       }
+      }
+     ],
+     "rule": {
+      "id": "cpp/non-constant-format",
+      "index": 8
+     },
+     "ruleId": "cpp/non-constant-format",
+     "ruleIndex": 8
+    },
+    {
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 11,
+         "startColumn": 5,
+         "startLine": 12
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Always check the size of the source buffer when using strcat."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "374386d99d9125a0:1",
+      "primaryLocationStartColumnFingerprint": "0"
+     },
+     "rule": {
+      "id": "cpp/unsafe-strcat",
+      "index": 56
+     },
+     "ruleId": "cpp/unsafe-strcat",
+     "ruleIndex": 56
+    },
+    {
+     "codeFlows": [
+      {
+       "threadFlows": [
+        {
+         "locations": [
+          {
+           "location": {
+            "message": {
+             "text": "gets output argument"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 14,
+              "startColumn": 10,
+              "startLine": 34
+             }
+            }
+           }
+          },
+          {
+           "location": {
+            "message": {
+             "text": "*line"
+            },
+            "physicalLocation": {
+             "artifactLocation": {
+              "index": 0,
+              "uri": "vuln.c",
+              "uriBaseId": "%SRCROOT%"
+             },
+             "region": {
+              "endColumn": 21,
+              "startColumn": 17,
+              "startLine": 35
+             }
+            }
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 21,
+         "startColumn": 17,
+         "startLine": 35
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "This 'scanf string argument' with input from [string read by gets](1) may overflow the destination.\nThis 'scanf string argument' with input from [value read by scanf](2) may overflow the destination."
+     },
+     "partialFingerprints": {
+      "primaryLocationLineHash": "878a765e5df04816:1",
+      "primaryLocationStartColumnFingerprint": "12"
+     },
+     "relatedLocations": [
+      {
+       "id": 1,
+       "message": {
+        "text": "string read by gets"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 14,
+         "startColumn": 10,
+         "startLine": 34
+        }
+       }
+      },
+      {
+       "id": 2,
+       "message": {
+        "text": "value read by scanf"
+       },
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 21,
+         "startColumn": 17,
+         "startLine": 35
+        }
+       }
+      },
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "index": 0,
+         "uri": "vuln.c",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 14,
+         "startColumn": 10,
+         "startLine": 34
+        }
+       }
+      }
+     ],
+     "rule": {
+      "id": "cpp/unbounded-write",
+      "index": 72
+     },
+     "ruleId": "cpp/unbounded-write",
+     "ruleIndex": 72
+    }
+   ],
+   "tool": {
+    "driver": {
+     "name": "CodeQL",
+     "organization": "GitHub",
+     "rules": [
+      {
+       "defaultConfiguration": {
+        "enabled": true,
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Freeing a resource more than once can lead to undefined behavior and cause memory corruption."
+       },
+       "id": "cpp/double-free",
+       "name": "cpp/double-free",
+       "properties": {
+        "description": "Freeing a resource more than once can lead to undefined behavior and cause memory corruption.",
+        "id": "cpp/double-free",
+        "kind": "path-problem",
+        "name": "Potential double free",
+        "precision": "high",
+        "problem.severity": "warning",
+        "security-severity": "9.3",
+        "tags": [
+         "reliability",
+         "security",
+         "external/cwe/cwe-415"
+        ]
+       },
+       "shortDescription": {
+        "text": "Potential double free"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "enabled": true,
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "An allocated memory block is used after it has been freed. Behavior in such cases is undefined and can cause memory corruption."
+       },
+       "id": "cpp/use-after-free",
+       "name": "cpp/use-after-free",
+       "properties": {
+        "description": "An allocated memory block is used after it has been freed. Behavior in such cases is undefined and can cause memory corruption.",
+        "id": "cpp/use-after-free",
+        "kind": "path-problem",
+        "name": "Potential use after free",
+        "precision": "high",
+        "problem.severity": "warning",
+        "security-severity": "9.3",
+        "tags": [
+         "reliability",
+         "security",
+         "external/cwe/cwe-416"
+        ]
+       },
+       "shortDescription": {
+        "text": "Potential use after free"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "enabled": true,
+        "level": "note"
+       },
+       "fullDescription": {
+        "text": "Passing a value that is not a string literal 'format' string to a printf-like function can lead to a mismatch between the number of arguments defined by the 'format' and the number of arguments actually passed to the function. If the format string ultimately stems from an untrusted source, this can be used for exploits. This query finds format strings coming from non-literal sources. Note that format strings of type `const char*` it is still considered non-constant if the value is not coming from a string literal. For example, for a parameter with type `const char*` of an exported function that is used as a format string, there is no way to ensure the originating value was a string literal."
+       },
+       "id": "cpp/non-constant-format",
+       "name": "cpp/non-constant-format",
+       "properties": {
+        "description": "Passing a value that is not a string literal 'format' string to a printf-like function can lead\n              to a mismatch between the number of arguments defined by the 'format' and the number\n              of arguments actually passed to the function. If the format string ultimately stems\n              from an untrusted source, this can be used for exploits.\n              This query finds format strings coming from non-literal sources. Note that format strings of\n              type `const char*` it is still considered non-constant if the value is not coming from a string\n              literal. For example, for a parameter with type `const char*` of an exported function that is\n              used as a format string, there is no way to ensure the originating value was a string literal.",
+        "id": "cpp/non-constant-format",
+        "kind": "path-problem",
+        "name": "Non-constant format string",
+        "precision": "high",
+        "problem.severity": "recommendation",
+        "security-severity": "9.3",
+        "tags": [
+         "maintainability",
+         "correctness",
+         "security",
+         "external/cwe/cwe-134"
+        ]
+       },
+       "shortDescription": {
+        "text": "Non-constant format string"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "enabled": true,
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Using 'strcat' without checking the size of the source string may result in a buffer overflow"
+       },
+       "id": "cpp/unsafe-strcat",
+       "name": "cpp/unsafe-strcat",
+       "properties": {
+        "description": "Using 'strcat' without checking the size of the source string\n              may result in a buffer overflow",
+        "id": "cpp/unsafe-strcat",
+        "kind": "problem",
+        "name": "Potentially unsafe use of strcat",
+        "precision": "medium",
+        "problem.severity": "warning",
+        "security-severity": "9.8",
+        "tags": [
+         "reliability",
+         "correctness",
+         "security",
+         "external/cwe/cwe-676",
+         "external/cwe/cwe-120",
+         "external/cwe/cwe-251"
+        ]
+       },
+       "shortDescription": {
+        "text": "Potentially unsafe use of strcat"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "enabled": true,
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "Buffer write operations that do not control the length of data written may overflow."
+       },
+       "id": "cpp/unbounded-write",
+       "name": "cpp/unbounded-write",
+       "properties": {
+        "description": "Buffer write operations that do not control the length\n              of data written may overflow.",
+        "id": "cpp/unbounded-write",
+        "kind": "path-problem",
+        "name": "Unbounded write",
+        "precision": "medium",
+        "problem.severity": "error",
+        "security-severity": "9.3",
+        "tags": [
+         "reliability",
+         "security",
+         "external/cwe/cwe-120",
+         "external/cwe/cwe-787",
+         "external/cwe/cwe-805"
+        ]
+       },
+       "shortDescription": {
+        "text": "Unbounded write"
+       }
+      }
+     ],
+     "semanticVersion": "2.27.0"
+    }
+   }
+  }
+ ],
+ "version": "2.1.0"
+}

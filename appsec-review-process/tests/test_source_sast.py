@@ -67,6 +67,120 @@ class SourceSastTests(unittest.TestCase):
                 self.assertEqual(ce.verify_container_result(attempt,run_id="run",job_id=worker.JOB,attempt_id=plan["tool_id"],
                   request=request,images_dir=runtime.images_dir,expected_result_sha256=terminal["result_sha256"],**worker._host(runtime)),[])
 
+    FIXTURE = ROOT / "tests" / "fixtures" / "source-sast-c"
+    RECORDED = ROOT / "tests" / "fixtures" / "source-sast-c-semgrep.json"
+
+    def test_request_runs_the_vendored_opengrep_rules_as_a_second_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            inputs = {"target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64, "image": self.IMAGE}
+            with mock.patch.object(worker, "_permission", return_value={"requirement": {}, "grants": [], "decision": {}}):
+                argv = worker._request("run", "adapter", inputs)["argv"]
+        configs = [argv[index + 1] for index, item in enumerate(argv) if item == "--config"]
+        self.assertEqual(configs, ["/inputs/source-sast-rules/rules-v1.yml", "/inputs/source-sast-rules/opengrep-rules"])
+
+    def test_vendored_rules_are_the_16_locked_c_rules_with_license_and_notice(self):
+        lock = worker._vendored_lock()
+        self.assertEqual(lock["commit"], "f1d2b562b414783763fd02a6ed2736eaed622efa")
+        rules = worker.vendored_rules()
+        self.assertEqual(len(rules), 16)
+        self.assertTrue(all(rule_id.startswith("c.lang.") for rule_id in rules))
+        self.assertTrue((worker.VENDORED_RULES_DIR / "LICENSE").is_file())
+        self.assertIn(lock["commit"], (worker.VENDORED_RULES_DIR / "NOTICE").read_text())
+        enum = json.loads((ROOT.parent / "schemas" / "source-sast.schema.json").read_text())[
+            "properties"]["leads"]["items"]["properties"]["category"]["enum"]
+        self.assertLessEqual({row["category"] for row in rules.values()} | set(worker.RULE_CATEGORIES.values()), set(enum))
+        self.assertEqual(rules["c.lang.security.insecure-use-printf-fn"], {"category": "format-string", "cwe": ["CWE-134"]})
+
+    def test_vendored_rule_drift_blocks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            copy = Path(folder, "opengrep-rules")
+            import shutil
+            shutil.copytree(worker.VENDORED_RULES_DIR, copy)
+            with mock.patch.object(worker, "VENDORED_RULES_DIR", copy):
+                worker._vendored_lock()
+                rule = copy / "c/lang/security/insecure-use-gets-fn.yaml"
+                rule.write_text(rule.read_text() + "# edited\n")
+                with self.assertRaisesRegex(worker.Blocked, "differs from its locked hash"):
+                    worker._vendored_lock()
+                rule.unlink()
+                with self.assertRaisesRegex(worker.Blocked, "differ from the lock"):
+                    worker._vendored_lock()
+                (copy / "c/lang/security/insecure-use-gets-fn.yaml").write_text("rules: []\n")
+                (copy / "c/lang/security/extra.yaml").write_text("rules: []\n")
+                with self.assertRaisesRegex(worker.Blocked, "differ from the lock"):
+                    worker._vendored_lock()
+
+    def test_recorded_semgrep_output_normalizes_both_rulesets(self):
+        """Replay of a live tool-semgrep 1.178.0 run on tests/fixtures/source-sast-c (both configs)."""
+        raw = json.loads(self.RECORDED.read_text())
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder).resolve()
+            (target / "vuln.c").write_bytes((self.FIXTURE / "vuln.c").read_bytes())
+            result = worker.normalize_semgrep(raw, target=target, run_id="run", attempt_id="attempt",
+                source_snapshot_sha256="sha256:" + "b" * 64, image=self.IMAGE)
+        self.assertEqual(validate_document(result, "source-sast.schema.json"), [])
+        by_rule = {}
+        for lead in result["leads"]:
+            by_rule.setdefault(lead["rule_id"], []).append(lead)
+        # repository rules: strcpy, memcpy, system, non-literal printf
+        self.assertEqual({(row["rule_id"], row["start_line"]) for row in result["leads"] if row["tool_id"] == worker.TOOL_ID},
+                         {("appsec.c.strcpy", 11), ("appsec.c.memcpy", 17), ("appsec.c.printf-nonliteral", 22),
+                          ("appsec.c.printf-nonliteral", 26), ("appsec.c.system", 30)})
+        expected_vendored = {
+            "c.lang.security.insecure-use-string-copy-fn": ("unsafe-copy", [11]),
+            "c.lang.security.insecure-use-strcat-fn": ("unsafe-copy", [12]),
+            "c.lang.security.insecure-use-printf-fn": ("format-string", [21, 22]),  # sprintf/printf(argv[1])
+            "c.lang.security.info-leak-on-non-formated-string": ("format-string", [22]),
+            "c.lang.security.insecure-use-gets-fn": ("unsafe-input", [34]),
+            "c.lang.security.insecure-use-scanf-fn": ("unsafe-input", [35]),
+            "c.lang.security.insecure-use-strtok-fn": ("unsafe-api", [39]),
+            "c.lang.correctness.incorrect-use-ato-fn": ("unchecked-conversion", [40]),
+            "c.lang.security.use-after-free": ("memory-lifetime", [46]),
+            "c.lang.security.double-free": ("memory-lifetime", [47]),
+            "c.lang.security.insecure-use-memset": ("sensitive-memory-clear", [51]),
+            "c.lang.security.random-fd-exhaustion": ("resource-exhaustion", [55]),
+        }
+        for rule_id, (category, lines) in expected_vendored.items():
+            rows = by_rule[rule_id]
+            self.assertEqual(([row["category"] for row in rows][0], [row["start_line"] for row in rows]), (category, lines))
+            self.assertEqual({row["tool_id"] for row in rows}, {worker.VENDORED_TOOL_ID})
+        self.assertEqual(by_rule["c.lang.security.insecure-use-gets-fn"][0]["cwe"], ["CWE-676"])
+        self.assertNotIn("cwe", by_rule["c.lang.correctness.incorrect-use-ato-fn"][0])
+        tools = {row["tool_id"]: row["records"] for row in result["tools"]}
+        self.assertEqual(tools, {worker.TOOL_ID: 5, worker.VENDORED_TOOL_ID: 13})
+        self.assertTrue(all(row["source_sha256"] == "sha256:" + worker.file_hash(self.FIXTURE / "vuln.c")
+                            for row in result["leads"]))
+        self.assertEqual(result["coverage_gaps"], [worker.RULES_GAP])
+
+    def test_undeclared_vendored_rule_id_fails_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder).resolve(); (target / "a.c").write_text("x\n")
+            raw = {"results": [{"check_id": worker.VENDORED_RULE_PREFIX + "c.lang.security.not-vendored",
+                                "path": "/workspace/a.c", "start": {"line": 1}, "end": {"line": 1}}]}
+            with self.assertRaisesRegex(RuntimeError, "undeclared vendored rule id"):
+                worker.normalize_semgrep(raw, target=target, run_id="run", attempt_id="attempt",
+                    source_snapshot_sha256="sha256:" + "b" * 64, image=self.IMAGE)
+
+    def test_live_semgrep_matches_the_recorded_fixture_when_image_and_docker_exist(self):
+        registry = ce.load_image_registry(ce.IMAGES_DIR)
+        if "tool-semgrep" not in registry: self.skipTest("tool-semgrep has no B16 record here")
+        if ce.host_defaults()["docker_executable"] is None: self.skipTest("Docker is unavailable")
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder, "target"); target.mkdir()
+            (target / "vuln.c").write_bytes((self.FIXTURE / "vuln.c").read_bytes())
+            inputs = {"target_path": str(target), "source_snapshot_sha256": "sha256:" + "b" * 64,
+                      "image": registry["tool-semgrep"]}
+            runtime = worker._runtime(inputs["source_snapshot_sha256"])
+            request = worker._request("run", "semgrep-live", inputs)
+            attempt = Path(folder, "attempt"); attempt.mkdir()
+            terminal = ce.run_container(runtime, run_id="run", job_id=worker.JOB, attempt_id="semgrep-live",
+                                        attempt_root=attempt, request=request)
+            self.assertEqual(terminal["execution_status"], "OK")
+            raw = json.loads((attempt / "scratch" / "semgrep.json").read_text())
+        recorded = json.loads(self.RECORDED.read_text())
+        key = lambda rows: sorted((row["check_id"], row["start"]["line"], row["end"]["line"]) for row in rows)
+        self.assertEqual(key(raw["results"]), key(recorded["results"]))
+
     def test_normalization_discards_message_snippet_and_severity(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder).resolve()

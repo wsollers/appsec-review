@@ -73,6 +73,31 @@ def exit_accepted(kind: str, verified: dict, attempt_root: Path) -> bool:
     return False
 
 
+# ADR-0013: a pinned tool that ends TIMEOUT, OOM_KILLED or with a non-zero exit that is not a
+# documented finding/partial exit leaves no complete output. For these kinds that is a recorded
+# coverage gap (the job publishes OK_WITH_GAPS with the verified B13 terminal as its evidence),
+# not a blocked job. Integrity problems (re-verification, image, permission) still block, and a
+# canceled or blocked container never becomes a gap.
+TOOL_GAP_KINDS = frozenset({"scancode"})
+TOOL_GAP_CAUSES = ("TIMEOUT", "OOM_KILLED", "CONTAINER_EXIT_NONZERO")
+TOOL_GAP_SCHEMA = "appsec-review/pinned-tool-gap/1.0"
+
+
+def tool_gap(kind: str, verified: dict, attempt_root: Path) -> str | None:
+    """The gap text for a verified B13 terminal that is a tool-level failure, else None. Shared by
+    the adapter and the worker's independent re-verification so both sides agree."""
+    if kind not in TOOL_GAP_KINDS or verified.get("execution_status") == "OK":
+        return None
+    if exit_accepted(kind, verified, attempt_root):
+        return None
+    cause = verified.get("cause")
+    if verified.get("execution_status") != "FAILED" or cause not in TOOL_GAP_CAUSES:
+        return None
+    detail = f"{cause} exit {verified.get('exit_code')}" if cause == "CONTAINER_EXIT_NONZERO" else cause
+    return (f"LICENSE_SCAN_TOOL_GAP: {SPECS[kind]['tool']} ended {detail}; "
+            "no license records for this source snapshot")
+
+
 def osv_exit_accepted(verified: dict, attempt_root: Path) -> bool:
     """OSV exit 1 means findings; exit 127 with missing local ecosystem databases is a coverage
     gap (the scanned ecosystems still produced output), not a failed tool. Shared with the
@@ -177,8 +202,21 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
     except ce.ContainerRequestError as exc:
         raise AdapterBlocked(f"{spec['job']}: B13 result failed independent re-verification") from exc
     finding_exit = exit_accepted(kind, verified, attempt_root)
+    host_binding = {"images_dir": str(rt.images_dir), "host_flavor": rt.host_flavor,
+        "docker_host": rt.docker_host, "docker_executable": str(rt.docker_executable),
+        "container_user": rt.container_user}
     if verified["execution_status"] != "OK" and not finding_exit:
-        raise AdapterBlocked(f"{spec['job']}: pinned tool ended {verified['execution_status']} ({verified['cause']})")
+        gap = tool_gap(kind, verified, attempt_root)
+        if gap is None:
+            raise AdapterBlocked(f"{spec['job']}: pinned tool ended {verified['execution_status']} ({verified['cause']})")
+        # No output is trusted: the binding carries no output hash and no receipt is minted. The
+        # worker re-verifies the same B13 attempt and re-derives the same gap.
+        binding = {"attempt_root": str(attempt_root), "expected_result_sha256": expected_result_sha256,
+            "expected_output_sha256": None, "request": req, **host_binding}
+        return {"tool_output": None, "tool_receipt": None, "tool_gap": gap,
+                "expected_tool": {"tool_id": spec["tool"], "image_id": image["image_id"],
+                                  "image_digest": image["digest"], "boundary_sha256": ce.boundary_sha256()},
+                "expected_result_sha256": expected_result_sha256, "request": req, "b13_attempt": binding}
     output = attempt_root / "scratch" / spec["output"]
     if not output.is_file() or output.is_symlink():
         raise AdapterBlocked(f"{spec['job']}: pinned tool did not emit its required output")
