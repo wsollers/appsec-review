@@ -17,6 +17,11 @@
 
 FROM rust:1.90.0-bookworm@sha256:3914072ca0c3b8aad871db9169a651ccfce30cf58303e5d6f2db16d1d8a7e58f AS cli
 ARG TREE_SITTER_CLI_VERSION=0.26.13
+# rquickjs-sys (a tree-sitter-cli dependency) runs bindgen at build time, which needs libclang. The rust image
+# does not carry it. This stage is discarded: only /opt/ts/bin/tree-sitter is copied into the final image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked tree-sitter-cli --version "${TREE_SITTER_CLI_VERSION}" --root /opt/ts \
     && /opt/ts/bin/tree-sitter --version | grep -Fx "tree-sitter ${TREE_SITTER_CLI_VERSION}"
 
