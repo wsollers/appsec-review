@@ -1,0 +1,3 @@
+You are the Registry-move agent on the appsec-review project. Clone https://github.com/wsollers/appsec-review, read `docs/agent-briefs/00-common.md` completely, then `docs/agent-briefs/K-registry-into-pipeline.md` and `appsec-review-process/registry/README.md`. Confirm briefs I (`dev-executor`) and J (`personas-folder`) are merged into `main` (`git merge-base --is-ancestor origin/dev-executor origin/main` and the same for `personas-folder`); if either is not, stop and report. Work on a new branch `registry-move` from the latest `main`. Push only your branch, never `main`. Print one status line every 10-15 minutes: `[MOVE] <what you are doing>`.
+
+Three commits exactly as the brief says. Show the before/after fingerprint comparison for every job in the report.
