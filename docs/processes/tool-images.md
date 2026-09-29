@@ -105,6 +105,12 @@ in `src/greet.cpp`, trivy reports Dockerfile misconfigurations, hadolint reports
 To update a tool: change `version` in its `tool.json`, `pin`, `check`, `image_build.py build`, `smoke`,
 commit the folder. Nothing else changes.
 
+A Dependabot (or other reviewed) bump of a pip lock changes the lock but not `pin-record.json`, so
+`check` fails. Re-record it without re-resolving: `python -B images/tool_pins.py pin <image_id>
+--keep-lock` reads the committed lock as-is (fails if there is none), downloads and hash-checks the
+wheels it names, and records the lock's hash. Used for `tool-checkov` and `tool-mobsfscan` on
+2026-09-29 (`1661f48`).
+
 ## Host-local B13 registry (B16)
 
 Docker image ids differ between hosts, so the 16 tool records and seven shared step-4 image records
@@ -138,7 +144,14 @@ id, Dockerfile hash, build fingerprint and attempt id at startup.
   `/opt/scripts/codeql-sast-lane.sh` with `--build-mode none` and the bundled security-extended suite.
   `images/audit-codeql/tool.json` is the authenticated metadata (bundle sha256 must match image.json and
   the Dockerfile). The image needs a rebuild (lane script) and a B16 record before the job executes;
-  C# additionally needs a .NET SDK in the image.
+  until then every language is a per-language `UNAVAILABLE` gap. The image now carries a .NET SDK
+  for C# (branch `lang-servers`). `audit-codeql-native` holds the traced C/C++ lane
+  (`codeql-cpp-traced`, graph queries in `queries/appsec-graph-cpp`); it is not yet wired into
+  `full_review` (see [`docs/language-servers.md`](../language-servers.md)).
+- **Language servers and tree-sitter** are pinned on every `audit-buildenv-*` image, with the
+  tree-sitter grammars vendored in `audit-lsp-vendor`; `lsp_driver.py` and `treesitter_ast.py` drive
+  them and `images/test/run-lsp-smoke.sh` / `scripts/smoke_lang_servers.sh` smoke-test them. None of
+  these images has been built yet; details and WSL commands: [`docs/language-servers.md`](../language-servers.md).
 - **grype has no database** until the V16 mirror publisher exists; the smoke run only proves it refuses
   to run without one.
 - **syft finds no component in hello-autotools**: the vendored cJSON has no manifest. Phase 7 expects one

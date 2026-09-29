@@ -9,6 +9,7 @@
     <bpmn:laneSet id="LaneSet_ReportPath">
       <bpmn:lane id="Lane_Evidence" name="Accepted evidence trust boundary">
         <bpmn:flowNodeRef>Start_Run</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CodeqlSast</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_EvidenceSplit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Component</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_ThreatInitial</bpmn:flowNodeRef>
@@ -24,9 +25,17 @@
         <bpmn:flowNodeRef>Task_Blue</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Verify</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Append</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ChainSplit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Score</bpmn:flowNodeRef>
       </bpmn:lane>
+      <bpmn:lane id="Lane_Chains" name="Attack-chain candidates (lane 14, ADR-0016)">
+        <bpmn:flowNodeRef>Task_ChainCompose</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ChainSeeds</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ChainRefute</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ChainMerge</bpmn:flowNodeRef>
+      </bpmn:lane>
       <bpmn:lane id="Lane_Publication" name="Draft publication trust boundary">
+        <bpmn:flowNodeRef>Gateway_ReportJoin</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_ReportInput</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Synthesis</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Draft</bpmn:flowNodeRef>
@@ -35,24 +44,32 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="Start_Run" name="Exact run generation ready"/>
     <bpmn:parallelGateway id="Gateway_EvidenceSplit" name="Run independent evidence branches"/>
+    <bpmn:task id="Task_CodeqlSast" name="02-codeql-sast: CodeQL per language (build-mode none); leads to evidence assembly and claim ledger"/>
     <bpmn:task id="Task_Component" name="Validate accepted F03 component map"/>
-    <bpmn:task id="Task_ThreatInitial" name="L6A generate initial DFD and STRIDE candidates"/>
+    <bpmn:task id="Task_ThreatInitial" name="L6A deterministic DFD/STRIDE core plus threat workbench persona cells (waves 1-2)"/>
     <bpmn:task id="Task_ThreatReconcile" name="L6B reconcile threat model, conflicts and coverage"/>
     <bpmn:task id="Task_Owasp" name="Run OWASP worklist and publish ASVS/MASVS matrix"/>
     <bpmn:task id="Task_Stig" name="Run separate STIG/SRG validation worklist"/>
     <bpmn:task id="Task_Deployment" name="Assess deployment hardening from accepted worklist"/>
     <bpmn:parallelGateway id="Gateway_EvidenceJoin" name="Wait for exact accepted sources"/>
-    <bpmn:task id="Task_Admission" name="L01 admit reconciled threat and control candidates; record origin head"/>
+    <bpmn:task id="Task_Admission" name="L01 admit threat, control, tool-lead and hunter candidates; record origin head"/>
     <bpmn:task id="Task_Red" name="07 record adversarial hypotheses"/>
     <bpmn:task id="Task_Blue" name="08 refute or narrow each hypothesis"/>
     <bpmn:task id="Task_Verify" name="09 independently verify, refute or block"/>
     <bpmn:task id="Task_Append" name="L01 append exact accepted decisions; record current head"/>
     <bpmn:task id="Task_Score" name="12 score independently verified claims only"/>
+    <bpmn:parallelGateway id="Gateway_ChainSplit" name="Score and compose chains in parallel"/>
+    <bpmn:task id="Task_ChainCompose" name="14-attack-chain-composition: seed from 09 claims, entry points and threat-model actors; composer pool; derive chains"/>
+    <bpmn:exclusiveGateway id="Gateway_ChainSeeds" name="Any chain seeds?"/>
+    <bpmn:task id="Task_ChainRefute" name="14-attack-chain-refutation: refuter pool; publish attack-chain ledger"/>
+    <bpmn:exclusiveGateway id="Gateway_ChainMerge"/>
+    <bpmn:parallelGateway id="Gateway_ReportJoin" name="Wait for 12 and lane 14 (optional input)"/>
     <bpmn:task id="Task_ReportInput" name="Revalidate exact accepted synthesis inputs"/>
     <bpmn:task id="Task_Synthesis" name="10 publish hash-bound evidence-backed draft"/>
     <bpmn:task id="Task_Draft" name="Hash immutable DRAFT_EVIDENCE_BACKED package"/>
     <bpmn:endEvent id="End_Draft" name="Draft ready for human review; not final"/>
-    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Run" targetRef="Task_Component"/>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Run" targetRef="Task_CodeqlSast"/>
+    <bpmn:sequenceFlow id="Flow_Codeql" sourceRef="Task_CodeqlSast" targetRef="Task_Component"/>
     <bpmn:sequenceFlow id="Flow_02A" sourceRef="Task_Component" targetRef="Gateway_EvidenceSplit"/>
     <bpmn:sequenceFlow id="Flow_02B" sourceRef="Gateway_EvidenceSplit" targetRef="Task_Owasp"/>
     <bpmn:sequenceFlow id="Flow_02C" sourceRef="Gateway_EvidenceSplit" targetRef="Task_Stig"/>
@@ -67,23 +84,45 @@
     <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Red" targetRef="Task_Blue"/>
     <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Blue" targetRef="Task_Verify"/>
     <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Verify" targetRef="Task_Append"/>
-    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Append" targetRef="Task_Score"/>
-    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Score" targetRef="Task_ReportInput"/>
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Append" targetRef="Gateway_ChainSplit"/>
+    <bpmn:sequenceFlow id="Flow_08B" sourceRef="Gateway_ChainSplit" targetRef="Task_Score"/>
+    <bpmn:sequenceFlow id="Flow_Chain1" sourceRef="Gateway_ChainSplit" targetRef="Task_ChainCompose"/>
+    <bpmn:sequenceFlow id="Flow_Chain2" sourceRef="Task_ChainCompose" targetRef="Gateway_ChainSeeds"/>
+    <bpmn:sequenceFlow id="Flow_Chain3" name="chains composed" sourceRef="Gateway_ChainSeeds" targetRef="Task_ChainRefute"/>
+    <bpmn:sequenceFlow id="Flow_Chain4" name="no chain seeds: SKIPPED" sourceRef="Gateway_ChainSeeds" targetRef="Gateway_ChainMerge"/>
+    <bpmn:sequenceFlow id="Flow_Chain5" sourceRef="Task_ChainRefute" targetRef="Gateway_ChainMerge"/>
+    <bpmn:sequenceFlow id="Flow_Chain6" sourceRef="Gateway_ChainMerge" targetRef="Gateway_ReportJoin"/>
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Score" targetRef="Gateway_ReportJoin"/>
+    <bpmn:sequenceFlow id="Flow_09B" sourceRef="Gateway_ReportJoin" targetRef="Task_ReportInput"/>
     <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_ReportInput" targetRef="Task_Synthesis"/>
     <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Synthesis" targetRef="Task_Draft"/>
     <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Draft" targetRef="End_Draft"/>
     <bpmn:textAnnotation id="Note_Standalone"><bpmn:text>L6A and L6B are executable and qualified. OWASP T03-T14 is qualified. OWASP, STIG/SRG and deployment hardening remain distinct processes.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Adapters"><bpmn:text>Component-derived full-review inputs are revalidated and first-wave requests dispatch automatically. SKIPPED_NA is explicit; reinvoke after SBOM, licence and SCA prerequisites for later dependency waves. Automatic OWASP dispatch-fact derivation remains open.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Final"><bpmn:text>The package is DRAFT_EVIDENCE_BACKED only. One real accepted end-to-end run and human final authorization are still required.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Codeql"><bpmn:text>ADR-0017. Go and any language without a registered image are per-language gaps (OK_WITH_GAPS). Traced C/C++ (codeql-cpp-traced) exists in code but is not wired into full_review. Not live-qualified.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Chains"><bpmn:text>Chains are candidates, never findings. 10 reads the refuted ledger as an optional input and states SKIPPED or ABSENT with a reason. Unit-tested only; nothing has run live.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Codeql" sourceRef="Note_Codeql" targetRef="Task_CodeqlSast"/>
+    <bpmn:association id="Assoc_Chains" sourceRef="Note_Chains" targetRef="Task_ChainRefute"/>
     <bpmn:association id="Assoc_Standalone" sourceRef="Note_Standalone" targetRef="Task_Red"/>
     <bpmn:association id="Assoc_Adapters" sourceRef="Note_Adapters" targetRef="Task_Append"/>
     <bpmn:association id="Assoc_Final" sourceRef="Note_Final" targetRef="Task_Draft"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_ReportHappyPath">
     <bpmndi:BPMNPlane id="Plane_ReportHappyPath" bpmnElement="Process_ReportHappyPath">
-      <bpmndi:BPMNShape id="Shape_Lane_Evidence" bpmnElement="Lane_Evidence" isHorizontal="true"><dc:Bounds x="20" y="20" width="3200" height="260"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Claims" bpmnElement="Lane_Claims" isHorizontal="true"><dc:Bounds x="20" y="280" width="3200" height="180"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="460" width="3200" height="240"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Evidence" bpmnElement="Lane_Evidence" isHorizontal="true"><dc:Bounds x="20" y="20" width="3600" height="340"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Claims" bpmnElement="Lane_Claims" isHorizontal="true"><dc:Bounds x="20" y="360" width="3600" height="180"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="720" width="3600" height="240"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Chains" bpmnElement="Lane_Chains" isHorizontal="true"><dc:Bounds x="20" y="540" width="3600" height="180"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_CodeqlSast" bpmnElement="Task_CodeqlSast"><dc:Bounds x="130" y="280" width="200" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainSplit" bpmnElement="Gateway_ChainSplit"><dc:Bounds x="2030" y="425" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainCompose" bpmnElement="Task_ChainCompose"><dc:Bounds x="2120" y="590" width="190" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainSeeds" bpmnElement="Gateway_ChainSeeds" isMarkerVisible="true"><dc:Bounds x="2350" y="605" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainRefute" bpmnElement="Task_ChainRefute"><dc:Bounds x="2440" y="590" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainMerge" bpmnElement="Gateway_ChainMerge" isMarkerVisible="true"><dc:Bounds x="2640" y="605" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReportJoin" bpmnElement="Gateway_ReportJoin"><dc:Bounds x="2730" y="805" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Codeql" bpmnElement="Note_Codeql"><dc:Bounds x="400" y="885" width="440" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Chains" bpmnElement="Note_Chains"><dc:Bounds x="2150" y="885" width="440" height="60"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Start" bpmnElement="Start_Run"><dc:Bounds x="60" y="132" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Component" bpmnElement="Task_Component"><dc:Bounds x="130" y="110" width="160" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_EvidenceSplit" bpmnElement="Gateway_EvidenceSplit"><dc:Bounds x="330" y="125" width="50" height="50"/></bpmndi:BPMNShape>
@@ -93,20 +132,20 @@
       <bpmndi:BPMNShape id="Shape_Stig" bpmnElement="Task_Stig"><dc:Bounds x="430" y="200" width="170" height="65"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Deployment" bpmnElement="Task_Deployment"><dc:Bounds x="650" y="200" width="180" height="65"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_EvidenceJoin" bpmnElement="Gateway_EvidenceJoin"><dc:Bounds x="880" y="125" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Admission" bpmnElement="Task_Admission"><dc:Bounds x="980" y="330" width="190" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Red" bpmnElement="Task_Red"><dc:Bounds x="1210" y="330" width="160" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Blue" bpmnElement="Task_Blue"><dc:Bounds x="1410" y="330" width="160" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Verify" bpmnElement="Task_Verify"><dc:Bounds x="1610" y="330" width="160" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Append" bpmnElement="Task_Append"><dc:Bounds x="1810" y="330" width="180" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Score" bpmnElement="Task_Score"><dc:Bounds x="2030" y="330" width="170" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ReportInput" bpmnElement="Task_ReportInput"><dc:Bounds x="2250" y="510" width="180" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Synthesis" bpmnElement="Task_Synthesis"><dc:Bounds x="2470" y="510" width="170" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_Draft"><dc:Bounds x="2680" y="510" width="180" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_Draft"><dc:Bounds x="2930" y="532" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="1040" y="625" width="400" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Adapters" bpmnElement="Note_Adapters"><dc:Bounds x="1650" y="625" width="420" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Final" bpmnElement="Note_Final"><dc:Bounds x="2490" y="625" width="440" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Edge_01" bpmnElement="Flow_01"><di:waypoint x="96" y="150"/><di:waypoint x="130" y="150"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_Admission" bpmnElement="Task_Admission"><dc:Bounds x="980" y="410" width="190" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Red" bpmnElement="Task_Red"><dc:Bounds x="1210" y="410" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Blue" bpmnElement="Task_Blue"><dc:Bounds x="1410" y="410" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Verify" bpmnElement="Task_Verify"><dc:Bounds x="1610" y="410" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Append" bpmnElement="Task_Append"><dc:Bounds x="1810" y="410" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Score" bpmnElement="Task_Score"><dc:Bounds x="2120" y="410" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReportInput" bpmnElement="Task_ReportInput"><dc:Bounds x="2820" y="770" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Synthesis" bpmnElement="Task_Synthesis"><dc:Bounds x="3040" y="770" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_Draft"><dc:Bounds x="3250" y="770" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_Draft"><dc:Bounds x="3500" y="792" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="1040" y="885" width="400" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Adapters" bpmnElement="Note_Adapters"><dc:Bounds x="1650" y="885" width="420" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Final" bpmnElement="Note_Final"><dc:Bounds x="3060" y="885" width="440" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_01" bpmnElement="Flow_01"><di:waypoint x="78" y="168"/><di:waypoint x="78" y="312"/><di:waypoint x="130" y="312"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_02A" bpmnElement="Flow_02A"><di:waypoint x="290" y="150"/><di:waypoint x="330" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_02B" bpmnElement="Flow_02B"><di:waypoint x="380" y="150"/><di:waypoint x="540" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_02C" bpmnElement="Flow_02C"><di:waypoint x="355" y="175"/><di:waypoint x="355" y="232"/><di:waypoint x="430" y="232"/></bpmndi:BPMNEdge>
@@ -116,19 +155,30 @@
       <bpmndi:BPMNEdge id="Edge_03B" bpmnElement="Flow_03B"><di:waypoint x="720" y="150"/><di:waypoint x="880" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_StigDeploy" bpmnElement="Flow_StigDeploy"><di:waypoint x="600" y="232"/><di:waypoint x="650" y="232"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_03C" bpmnElement="Flow_03C"><di:waypoint x="830" y="232"/><di:waypoint x="905" y="175"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_03" bpmnElement="Flow_03"><di:waypoint x="930" y="150"/><di:waypoint x="950" y="150"/><di:waypoint x="950" y="370"/><di:waypoint x="980" y="370"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_04" bpmnElement="Flow_04"><di:waypoint x="1170" y="370"/><di:waypoint x="1210" y="370"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_05" bpmnElement="Flow_05"><di:waypoint x="1370" y="370"/><di:waypoint x="1410" y="370"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_06" bpmnElement="Flow_06"><di:waypoint x="1570" y="370"/><di:waypoint x="1610" y="370"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_07" bpmnElement="Flow_07"><di:waypoint x="1770" y="370"/><di:waypoint x="1810" y="370"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_08" bpmnElement="Flow_08"><di:waypoint x="1990" y="370"/><di:waypoint x="2030" y="370"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="2200" y="370"/><di:waypoint x="2220" y="370"/><di:waypoint x="2220" y="550"/><di:waypoint x="2250" y="550"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="2430" y="550"/><di:waypoint x="2470" y="550"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="2640" y="550"/><di:waypoint x="2680" y="550"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="2860" y="550"/><di:waypoint x="2930" y="550"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Standalone" bpmnElement="Assoc_Standalone"><di:waypoint x="1240" y="625"/><di:waypoint x="1290" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Adapters" bpmnElement="Assoc_Adapters"><di:waypoint x="1860" y="625"/><di:waypoint x="1900" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Final" bpmnElement="Assoc_Final"><di:waypoint x="2710" y="625"/><di:waypoint x="2770" y="590"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03" bpmnElement="Flow_03"><di:waypoint x="930" y="150"/><di:waypoint x="950" y="150"/><di:waypoint x="950" y="450"/><di:waypoint x="980" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_04" bpmnElement="Flow_04"><di:waypoint x="1170" y="450"/><di:waypoint x="1210" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_05" bpmnElement="Flow_05"><di:waypoint x="1370" y="450"/><di:waypoint x="1410" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_06" bpmnElement="Flow_06"><di:waypoint x="1570" y="450"/><di:waypoint x="1610" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_07" bpmnElement="Flow_07"><di:waypoint x="1770" y="450"/><di:waypoint x="1810" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_08" bpmnElement="Flow_08"><di:waypoint x="1990" y="450"/><di:waypoint x="2030" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="2290" y="450"/><di:waypoint x="2710" y="450"/><di:waypoint x="2710" y="830"/><di:waypoint x="2730" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="3000" y="830"/><di:waypoint x="3040" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="3210" y="830"/><di:waypoint x="3250" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="3430" y="830"/><di:waypoint x="3500" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Standalone" bpmnElement="Assoc_Standalone"><di:waypoint x="1240" y="885"/><di:waypoint x="1290" y="490"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Adapters" bpmnElement="Assoc_Adapters"><di:waypoint x="1860" y="885"/><di:waypoint x="1900" y="490"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Final" bpmnElement="Assoc_Final"><di:waypoint x="3280" y="885"/><di:waypoint x="3340" y="850"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Codeql" bpmnElement="Flow_Codeql"><di:waypoint x="210" y="280"/><di:waypoint x="210" y="190"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_08B" bpmnElement="Flow_08B"><di:waypoint x="2080" y="450"/><di:waypoint x="2120" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain1" bpmnElement="Flow_Chain1"><di:waypoint x="2055" y="475"/><di:waypoint x="2055" y="630"/><di:waypoint x="2120" y="630"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain2" bpmnElement="Flow_Chain2"><di:waypoint x="2310" y="630"/><di:waypoint x="2350" y="630"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain3" bpmnElement="Flow_Chain3"><di:waypoint x="2400" y="630"/><di:waypoint x="2440" y="630"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain4" bpmnElement="Flow_Chain4"><di:waypoint x="2375" y="655"/><di:waypoint x="2375" y="700"/><di:waypoint x="2665" y="700"/><di:waypoint x="2665" y="655"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain5" bpmnElement="Flow_Chain5"><di:waypoint x="2610" y="630"/><di:waypoint x="2640" y="630"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain6" bpmnElement="Flow_Chain6"><di:waypoint x="2690" y="630"/><di:waypoint x="2755" y="630"/><di:waypoint x="2755" y="805"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_09B" bpmnElement="Flow_09B"><di:waypoint x="2780" y="830"/><di:waypoint x="2820" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Codeql" bpmnElement="Assoc_Codeql"><di:waypoint x="500" y="885"/><di:waypoint x="300" y="345"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Chains" bpmnElement="Assoc_Chains"><di:waypoint x="2400" y="885"/><di:waypoint x="2500" y="670"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

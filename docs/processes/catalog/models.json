@@ -24,7 +24,7 @@
        {"name": "5. Evidence index", "members": ["job:02-evidence-index"]},
        {"name": "6. Analysis lanes: characterization, L6A threat model, specialist review", "members": ["step:lane-handoffs", "lane:01-component-characterization", "lane:03-threat-model-dfd-stride", "lane:04-asvs-masvs", "lane:05-native-memory", "lane:06-cve-reachability", "lane:13-fuzz-target-triage", "lane:15-deployment-hardening"]},
        {"name": "6b. L6B evidence-based threat-model reconciliation (active implementation)", "members": ["step:threat-model-reconciliation-active"]},
-       {"name": "7. Refutation, verification, scoring, synthesis, report", "members": ["lane:07-red-team-adversarial", "lane:08-blue-team-refutation", "lane:09-independent-verification", "lane:11-remediation-proposal", "lane:12-scoring-prioritization", "lane:10-synthesis-report", "step:critical_findings_sarif"]}
+       {"name": "7. Refutation, verification, scoring, synthesis, report", "members": ["lane:07-red-team-adversarial", "lane:08-blue-team-refutation", "lane:09-independent-verification", "lane:11-remediation-proposal", "lane:12-scoring-prioritization", "lane:14-attack-chain", "lane:10-synthesis-report", "step:critical_findings_sarif"]}
      ]},
     {"id": "fixture-bringup", "name": "Fixture bring-up (flow-bringup.md)",
      "source": "docs/processes/flow-bringup.md",

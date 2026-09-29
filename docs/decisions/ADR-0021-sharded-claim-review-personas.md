@@ -1,6 +1,7 @@
 # ADR-0021: Claim review is sharded across persona-distinct reviewer instances
 
-Status: **Proposed** (branch `ws-personas`, 2026-09-28; awaiting William)
+Status: **Proposed** (2026-09-28; awaiting William). Implementation: merged to `main` from `ws-personas`
+(`195683f`, 2026-09-28); no live run yet.
 
 ## Context
 
