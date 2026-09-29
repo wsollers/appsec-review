@@ -194,6 +194,20 @@ capped at High. Optional run inputs, all hash-bound:
   where OSV rarely lists symbols) and `inputs/reachability-entry-points.json` (extra roots);
 - `$RUN_ROOT/inputs/dependency-reachability/` with LSP call-hierarchy and tree-sitter output (hints).
   Run-supplied CodeQL tables are no longer read.
+- Vendored dependency sources, one tree per version, inside the checkout (there is no artifact
+  repository yet). The symbol resolver reads each dependency's own manifest there; without it the
+  row carries `dependency-source-absent:<ecosystem>:<package>`.
+
+Every witness has a tier: `direct` (application code calls the vulnerable symbol) or
+`through-dependency` (application -> dependency API -> vulnerable symbol inside the vendored
+source). Without the vendored source only `direct` is possible, and `unreachable` cannot be
+asserted, because the correlator allows `unreachable` only from the IR engine with the vulnerable
+function's definition analysed and no dynamic-dispatch, reflection or serialisation escape on the
+path. Missing inputs are gaps, never failures: a compiled language that could not be built shows
+`language not built: <cause>` on its `02-codeql-<lang>` node (Go always, until the image has a Go
+toolchain; C/C++ without replayable units still runs build-mode none), Rust shows `language not
+supported by the pinned CodeQL metadata`, and an absent language is `SKIPPED`
+(`not-applicable-language-absent`).
 
 ## 4. Characterize components and assemble review requests
 
@@ -302,4 +316,6 @@ operator and design-document HTML publications are self-contained, but this demo
 | Dagster shows old definitions | Run `orchestrator/dagster/code-location.sh reload`. |
 | Every dependency finding is `unknown` reachability | Read the gaps in 06's `outputs/dependency-reachability.json`: `no-advisory-symbols` needs a reviewed map; `engine-input-absent` means an engine table or database was missing (see the 06-reachability-* `languages` states). |
 | A model step seems hung | `orchestrator/tail-run-log.sh "$RUN_ID" --level warn`: `IDLE` lines name the stalled call; set `APPSEC_IDLE_KILL_SECONDS` to stop such calls automatically. |
+| A compiled language shows a build gap | `language not built: <cause>` on `02-codeql-<lang>`. For C/C++, check that `02-native-build` has replayable units (build-mode none still ran); for Go, the image has no Go toolchain yet (TODO section G). The node is `OK_WITH_GAPS`, not failed; its reachability rows are `unknown`. |
+| Conflict between engines | 06's `outputs/dependency-reachability.json` lists the match with each engine's verdict and reason, and `cve-reachability.json` writes it as `unknown` with a `REACHABILITY_CONFLICT:<match>` gap (Critical stays capped). The claim ledger adds a review obligation to resolve the conflicting verdicts; review both witnesses by hand. Never delete an engine table to resolve it. |
 | CodeQL reports every language `UNAVAILABLE` | The `audit-codeql` image has no B16 record yet; build and register it (`images/audit-codeql/README.md`). |
