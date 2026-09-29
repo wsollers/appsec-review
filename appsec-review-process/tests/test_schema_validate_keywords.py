@@ -136,12 +136,9 @@ class KeywordCoverage(unittest.TestCase):
 
 
 class KeywordLint(unittest.TestCase):
-    # Real schema defects the lint found; fixing them edits a top-level schema, which changes every
-    # job's definition hash, so each waits for owner approval (TODO "L formats").
-    KNOWN_PROBLEMS = {
-        "threat-model-reconciliation.schema.json#/$defs/citation/properties/path: "
-        "pattern does not compile",
-    }
+    # Real schema defects the lint found and that still wait for a fix. Empty since the controller fixed
+    # the threat-model-reconciliation citation path pattern (decision log D-17).
+    KNOWN_PROBLEMS = set()
 
     def test_every_used_keyword_is_supported(self):
         result = lint.survey()

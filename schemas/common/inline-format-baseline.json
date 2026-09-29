@@ -33,6 +33,9 @@
     "attack-chain-ledger.schema.json": {
       "sha256_ref": 2
     },
+    "attack-chain-record.schema.json": {
+      "sha256_hex": 1
+    },
     "attack-chain-workspace.schema.json": {
       "confidence_or_unknown": 1,
       "sha256_ref": 1
@@ -388,6 +391,9 @@
       "semver": 1,
       "sha256_hex": 1,
       "sha256_ref": 1
+    },
+    "mitre-refs.schema.json": {
+      "sha256_hex": 1
     },
     "mobile-sast-rule-hit.schema.json": {
       "dotted_id": 1,

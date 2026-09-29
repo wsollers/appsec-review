@@ -1,6 +1,6 @@
 # ADR-0015: Tool leads are ledger candidates; reviewers get the evidence menu
 
-Status: **Proposed** (branch `claim-ledger-leads`, 2026-09-28; awaiting William)
+Status: **Accepted 2026-09-29** (decision log D-19; was Proposed) (branch `claim-ledger-leads`, 2026-09-28; awaiting William)
 
 ## Context
 
