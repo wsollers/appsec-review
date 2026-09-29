@@ -15,6 +15,10 @@ download URL was verified live on 2026-09-11 (see comments in the Dockerfile).
 | cppcheck | 2.21.1 | source |
 | xwin | 0.10.0 | prebuilt binary (never run during image build) |
 | bear | 3.1.3 | Ubuntu 22.04 apt |
+| Ghidra | 12.1.3 | release zip (sha256 pinned), headless via `ghidra-analyzeHeadless`, on its own JDK |
+| Temurin JDK (Ghidra only) | 21.0.12+8 | tarball (sha256 = Adoptium's), `/opt/ghidra-jdk`; Joern keeps apt temurin-21 |
+| x64dbg | snapshot 2026.05.27 | release zip (sha256 pinned); `x64dbg`/`x32dbg`/`x96dbg` wrappers, headless by default |
+| Wine | 9.0~repack-4build3 | Ubuntu noble apt, `wine32:i386` multiarch; prefix built at image build time |
 
 ## Build
 
@@ -31,6 +35,26 @@ tarball), adopting its dependency list, and adding the `libz3.so.4` symlink it c
 Remaining first-build risks, in order: (1) the apt.llvm.org `noble` repo for
 `clang-tidy-21`/`lld-21`, (2) SVF `build.sh` behavior when `LLVM_DIR`/`Z3_DIR` are
 pre-set, (3) the `wpa` binary name/location under `Release-build/bin`.
+
+## Ghidra and x64dbg
+
+x64dbg is a Windows PE debugger that runs here only under Wine and Xvfb. Use it to inspect PE
+files. **Never execute malware with it, and never enable the container network.**
+
+- `x64dbg` and `x32dbg` run `headless.exe`, reading commands from stdin (`exit` ends the session).
+- `x96dbg FILE` picks the arch from the PE header.
+- `--gui` runs the Qt GUI under `xvfb-run`.
+
+Wine will not use a prefix owned by another uid, so on first use the wrapper copies the
+build-time prefix (72 MB) to `/scratch/.x64dbg-runtime`. Ghidra runs headless with
+`ghidra-analyzeHeadless`. Details, pins and limits: `docs/processes/tool-images.md`.
+
+Smoke test, from the repository root:
+
+```
+python3 -B images/image_build.py build audit-native
+scripts/smoke_reverse_tools.sh --docker audit-native
+```
 
 ## ir-facts sections
 

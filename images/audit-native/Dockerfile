@@ -42,6 +42,17 @@
 #   bear 3.1.3          apt (Ubuntu 22.04). compile_commands.json from
 #                       Make/Ninja builds where a .vcxproj converter doesn't
 #                       apply.
+#   Ghidra 12.1.3       release zip (sha256 pinned), headless via
+#                       ghidra-analyzeHeadless. Runs on its own pinned JDK
+#                       (Temurin 21.0.12+8 tarball, sha256 = Adoptium's
+#                       .sha256.txt) through JAVA_HOME_OVERRIDE; Joern keeps
+#                       the apt temurin-21-jdk. Same pins as audit-binary-analysis.
+#   x64dbg              snapshot 2026.05.27 (sha256 pinned), Windows PE
+#                       debugger run under Wine 9.0 (Ubuntu 9.0~repack-4build3,
+#                       wine32:i386 for x32dbg) and Xvfb. Wrappers x96dbg,
+#                       x64dbg, x32dbg default to headless.exe. For inspecting
+#                       PE files only: never run malware, never enable the
+#                       network. The Wine prefix is built here, not at run time.
 #
 # Base is ubuntu:24.04: SVF-3.3's CMakeLists requires CMake >= 3.23 (jammy ships
 # 3.22 and the build fails before compiling anything — first build, 2026-09-11),
@@ -60,6 +71,15 @@ ARG JOERN_VERSION=v4.0.625
 ARG CODECHECKER_VERSION=6.29.0
 ARG CPPCHECK_VERSION=2.21.1
 ARG XWIN_VERSION=0.10.0
+ARG GHIDRA_VERSION=12.1.3
+ARG GHIDRA_BUILD=20260817
+ARG GHIDRA_SHA256=93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+ARG GHIDRA_JDK_URL=https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12%2B8/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12_8.tar.gz
+ARG GHIDRA_JDK_SHA256=e4446ff06a276155697597cc0f1b15da004ff083f4964a35271ecee567177370
+ARG WINE_VERSION=9.0~repack-4build3
+ARG X64DBG_TAG=2026.05.27
+ARG X64DBG_SNAPSHOT=snapshot_2026-05-27_12-11
+ARG X64DBG_SHA256=d41966dfc5b435a372798245300ca0ab7bb8e48bdbf48512c6fb20fcca427697
 
 # --- Base packages -----------------------------------------------------------
 # Package list mirrors SVF-3.3's Dockerfile (lib_deps/build_deps) plus what this
@@ -172,6 +192,151 @@ RUN cd /tmp \
     && tar -xzf xwin.tgz && mv xwin-${XWIN_VERSION}-x86_64-unknown-linux-musl/xwin /usr/local/bin/xwin \
     && rm -rf xwin.tgz xwin-${XWIN_VERSION}-x86_64-unknown-linux-musl && xwin --version
 
+# --- Ghidra 12.1.3 on its own pinned JDK (same pins as audit-binary-analysis) ---
+# The ghidra wrappers put /opt/ghidra-jdk first (launch.sh needs a java before it reads
+# JAVA_HOME_OVERRIDE; Joern's JAVA_HOME above is unchanged) and set user.home from $HOME: the
+# boundary runs as the host uid, which has no passwd entry, and Ghidra saves settings under it.
+RUN cd /tmp \
+    && curl -fsSL -o jdk.tgz "$GHIDRA_JDK_URL" \
+    && echo "$GHIDRA_JDK_SHA256  jdk.tgz" | sha256sum -c - \
+    && mkdir -p /opt/ghidra-jdk && tar -xzf jdk.tgz -C /opt/ghidra-jdk --strip-components=1 && rm jdk.tgz \
+    && /opt/ghidra-jdk/bin/java -version
+RUN cd /tmp \
+    && curl -fsSL -o ghidra.zip \
+       "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${GHIDRA_VERSION}_build/ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD}.zip" \
+    && echo "$GHIDRA_SHA256  ghidra.zip" | sha256sum -c - \
+    && unzip -q ghidra.zip -d /opt && rm ghidra.zip \
+    && ln -sfn "/opt/ghidra_${GHIDRA_VERSION}_PUBLIC" /opt/ghidra \
+    && sed -i 's#^JAVA_HOME_OVERRIDE=$#JAVA_HOME_OVERRIDE=/opt/ghidra-jdk#' /opt/ghidra/support/launch.properties \
+    && grep -qx 'JAVA_HOME_OVERRIDE=/opt/ghidra-jdk' /opt/ghidra/support/launch.properties \
+    && for pair in ghidra:ghidraRun ghidra-analyzeHeadless:support/analyzeHeadless; do \
+         printf '#!/bin/sh\n%s\n%s\nexec /opt/ghidra/%s "$@"\n' \
+           'export PATH=/opt/ghidra-jdk/bin:$PATH JAVA_HOME=/opt/ghidra-jdk' \
+           'export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Duser.home=${HOME:-/tmp}"' \
+           "${pair#*:}" > "/usr/local/bin/${pair%%:*}"; \
+         chmod 0755 "/usr/local/bin/${pair%%:*}"; \
+       done
+ENV GHIDRA_HOME=/opt/ghidra
+
+# --- Wine + Xvfb, then x64dbg (x96dbg launcher, x64dbg, x32dbg) ------------------
+# x64dbg is a Windows debugger; it runs here only under Wine. wine32:i386 (multiarch) is required:
+# x96dbg.exe and x32dbg.exe are PE32. Mono and Gecko are never installed (WINEDLLOVERRIDES), and the
+# MSVC runtime DLLs shipped with x64dbg load before Wine's builtins.
+RUN dpkg --add-architecture i386 \
+    && apt-get update && apt-get install -y --no-install-recommends \
+       "wine=${WINE_VERSION}" "wine64=${WINE_VERSION}" "wine32:i386=${WINE_VERSION}" xvfb xauth \
+    && rm -rf /var/lib/apt/lists/* \
+    && wine --version
+RUN cd /tmp \
+    && curl -fsSL -o x64dbg.zip \
+       "https://github.com/x64dbg/x64dbg/releases/download/${X64DBG_TAG}/${X64DBG_SNAPSHOT}.zip" \
+    && echo "$X64DBG_SHA256  x64dbg.zip" | sha256sum -c - \
+    && mkdir -p /opt/x64dbg && unzip -q x64dbg.zip -d /opt/x64dbg && rm x64dbg.zip \
+    && printf '%s' 'C:\x64dbg-user\x64' > /opt/x64dbg/release/x64/userdir \
+    && printf '%s' 'C:\x64dbg-user\x32' > /opt/x64dbg/release/x32/userdir \
+    && printf 'x64dbg %s (%s.zip sha256 %s, commit %s)\n' "$X64DBG_TAG" "$X64DBG_SNAPSHOT" "$X64DBG_SHA256" \
+       "$(cat /opt/x64dbg/commithash.txt)" > /opt/x64dbg/VERSION \
+    && chmod -R a+rX,go-w /opt/x64dbg
+# Wrapper (tool definition, same text in audit-binary-analysis and audit-native). The userdir files
+# above point the GUI at C:\x64dbg-user in the prefix; headless.exe gets -userdir.
+RUN cat > /usr/local/bin/x64dbg-wine <<'X64DBG_WRAPPER'
+#!/bin/bash
+# x64dbg under Wine: installed as x96dbg, x64dbg and x32dbg (symlinks to this file).
+# A debugger for Windows PE files inspected under Wine inside the no-network audit container.
+# Never run malware with it, and never enable the container network for it.
+#
+#   x64dbg | x32dbg [ARGS]        headless.exe of that arch; debugger commands on stdin, "exit" ends
+#   x96dbg [PE-FILE]              headless of the PE file's arch (x64 when no file is given)
+#   NAME --gui [ARGS]             the Qt GUI (x96dbg: the launcher) under xvfb-run
+#   NAME --which PE-FILE          print x64 or x32 for a PE file and exit
+#   NAME --prepare                create this user's Wine prefix, run wineboot, print its path
+#   NAME --version                print the pinned snapshot and exit
+#
+# Wine refuses a prefix owned by another uid and the image root is read-only, so the prefix built
+# into the image (/opt/wine-prefix) is copied once per uid to X64DBG_RUNTIME_DIR (default
+# /scratch/.x64dbg-runtime when /scratch is writable, else $TMPDIR). The debugger's user directory
+# (settings, databases) is C:\x64dbg-user\<arch> inside that prefix.
+set -euo pipefail
+home=/opt/x64dbg
+base=/opt/wine-prefix
+# Mono and Gecko are disabled; the MSVC runtime DLLs shipped in the x64dbg zip are used instead of
+# Wine's builtins (Wine 9.0's msvcp140 lacks std::_Throw_Cpp_error, which x32dbg calls on exit).
+export WINEDEBUG=${WINEDEBUG:--all} WINEDLLOVERRIDES=${WINEDLLOVERRIDES:-"mscoree,mshtml=;msvcp140,vcruntime140,vcruntime140_1=n,b"}
+
+pe_arch() {
+  python3 - "$1" <<'PY'
+import struct, sys
+data = open(sys.argv[1], "rb").read(4096)
+if data[:2] != b"MZ":
+    sys.exit("not a PE file: " + sys.argv[1])
+offset = struct.unpack_from("<I", data, 0x3C)[0]
+if data[offset:offset + 4] != b"PE\0\0":
+    sys.exit("not a PE file: " + sys.argv[1])
+machine = struct.unpack_from("<H", data, offset + 4)[0]
+print({0x8664: "x64", 0x14C: "x32"}.get(machine) or sys.exit(f"unsupported PE machine 0x{machine:x}"))
+PY
+}
+
+prefix() {
+  local uid runtime
+  uid=$(id -u)
+  if [ "$(stat -c %u "$base")" = "$uid" ] && [ -w "$base" ]; then echo "$base"; return; fi
+  runtime=${X64DBG_RUNTIME_DIR:-}
+  if [ -z "$runtime" ]; then
+    if [ -d /scratch ] && [ -w /scratch ]; then runtime=/scratch/.x64dbg-runtime
+    else runtime=${TMPDIR:-/tmp}/x64dbg-runtime-$uid; fi
+  fi
+  if [ ! -f "$runtime/wine-prefix/system.reg" ]; then
+    mkdir -p "$runtime"
+    rm -rf "$runtime/wine-prefix.part"
+    cp -R --preserve=mode,timestamps,links "$base" "$runtime/wine-prefix.part"
+    mv "$runtime/wine-prefix.part" "$runtime/wine-prefix"
+  fi
+  echo "$runtime/wine-prefix"
+}
+
+name=$(basename "$0")
+case "$name" in
+  x64dbg) arch=x64 ;;
+  x32dbg) arch=x32 ;;
+  *) arch=x96 ;;
+esac
+mode=headless
+case "${1:-}" in
+  --version) cat "$home/VERSION"; exit 0 ;;
+  --which) pe_arch "${2:?usage: $name --which PE-FILE}"; exit 0 ;;
+  --gui) mode=gui; shift ;;
+  --prepare) mode=prepare; shift ;;
+  -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+WINEPREFIX=$(prefix)
+export WINEPREFIX
+case "$mode" in
+  prepare)
+    timeout "${X64DBG_PREPARE_SECONDS:-120}" xvfb-run -a wine wineboot >/dev/null
+    wineserver -w
+    echo "$WINEPREFIX" ;;
+  gui)
+    case "$arch" in
+      x96) exe=$home/release/x96dbg.exe ;;
+      *) exe=$home/release/$arch/${arch}dbg.exe ;;
+    esac
+    exec xvfb-run -a -s "-screen 0 1280x1024x24" wine "$exe" "$@" ;;
+  headless)
+    if [ "$arch" = x96 ]; then
+      arch=x64
+      if [ $# -gt 0 ]; then arch=$(pe_arch "$1"); shift; fi
+    fi
+    exec wine "$home/release/$arch/headless.exe" -userdir "C:\\x64dbg-user\\$arch" "$@" ;;
+esac
+X64DBG_WRAPPER
+RUN chmod 0755 /usr/local/bin/x64dbg-wine \
+    && for name in x96dbg x64dbg x32dbg; do ln -sfn x64dbg-wine "/usr/local/bin/$name"; done
+ENV WINEPREFIX=/opt/wine-prefix \
+    WINEARCH=win64 \
+    WINEDEBUG=-all \
+    WINEDLLOVERRIDES="mscoree,mshtml=;msvcp140,vcruntime140,vcruntime140_1=n,b"
 # --- Python: CodeChecker in its own venv ---------------------------------------
 # A venv, not --break-system-packages: the 2026-09-11 build failed because
 # codechecker pulls pyyaml and pip cannot replace the Debian-installed PyYAML
@@ -192,8 +357,30 @@ RUN python3 -m venv /opt/codechecker-venv \
 # /msvc      : MSVC CRT + Windows SDK (licensed input), read-only  (ADR-0003)
 # /scratch   : the only writable path; orchestrator imports from here
 RUN useradd -m -u 10001 -s /bin/bash worker \
-    && mkdir -p /workspace /msvc /scratch \
-    && chown worker:worker /scratch
+    && mkdir -p /workspace /msvc /scratch /opt/wine-prefix \
+    && chown worker:worker /scratch /opt/wine-prefix
+
+# --- Wine prefix, created at build time by the worker user --------------------------
+# Read-only at run time; the wrapper copies it once per uid to a writable directory. wineboot copies
+# every builtin DLL into the prefix (~1.2 GB for Wine 9); identical files become symlinks to Wine's
+# own copies so neither the layer nor the per-uid copy duplicates them.
+USER worker
+RUN xvfb-run -a wine wineboot --init \
+    && wineserver -w \
+    && mkdir -p /opt/wine-prefix/drive_c/x64dbg-user/x64 /opt/wine-prefix/drive_c/x64dbg-user/x32 \
+    && test -f /opt/wine-prefix/system.reg \
+    && find /opt/wine-prefix/drive_c/windows -type f | while read -r f; do \
+         case "$f" in \
+           */syswow64/*) libs="/usr/lib/i386-linux-gnu/wine/i386-windows /usr/lib/wine/i386-windows" ;; \
+           *) libs="/usr/lib/x86_64-linux-gnu/wine/x86_64-windows /usr/lib/wine/x86_64-windows" ;; \
+         esac; \
+         for lib in $libs; do \
+           if [ -f "$lib/${f##*/}" ] && cmp -s "$f" "$lib/${f##*/}"; then ln -sf "$lib/${f##*/}" "$f"; break; fi; \
+         done; \
+       done \
+    && du -sh /opt/wine-prefix \
+    && chmod -R a+rX /opt/wine-prefix
+USER root
 # --- This image's scripts (edited often: kept LAST so only these layers rebuild) ------------------------------------------------------
 COPY scripts/ /opt/scripts/
 RUN find /opt/scripts -type f \( -name '*.py' -o -name '*.sh' \) -print0 \
