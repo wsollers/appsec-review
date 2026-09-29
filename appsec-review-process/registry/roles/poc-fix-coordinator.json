@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "poc-fix-coordinator",
+  "display_name": "PoC-and-fix Pool Coordinator",
+  "category": "remediation",
+  "summary": "Select verified, Critical, REACHABLE findings, build their request workspaces, dispatch the poc-and-fix cells, derive and re-verify every record and publish them unvalidated.",
+  "allowed_outputs": [
+    "candidate_hypothesis",
+    "coverage_gap"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict"
+  ],
+  "required_behavior": [
+    "bind the accepted 12 result and the reachability inputs the report uses",
+    "record every exclusion, cap, failed cell and denylist rejection as a gap",
+    "never execute a PoC or apply a fix"
+  ],
+  "must_not": [
+    "invent a citation or hash",
+    "publish text the denylist rejects",
+    "promote a PoC to validated"
+  ]
+}

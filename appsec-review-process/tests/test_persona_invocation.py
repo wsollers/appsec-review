@@ -189,10 +189,10 @@ class RegistryTests(Case):
         # Role `evidence-indexer` allows only evidence_index; its profile's claim_limits.allowed
         # list does not carry it, so the intersection is empty: never invocable (reported gap).
         # The deterministic index/assembly jobs (no persona is ever invoked for them) share that gap, as do the
-        # lane-14 coordinators (deterministic-python; the composer/refuter personas run in their own pools).
+        # lane-14 and lane-12b coordinators (deterministic-python; their personas run in their own pools).
         self.assertEqual(pi.not_invocable_templates(pi.REGISTRY_DIR),
                          ["02-evidence-index", "02-full-review-input-assembly", "02-semantic-recall-index",
-                          "14-attack-chain-composition", "14-attack-chain-refutation"])
+                          "12b-poc-and-fix", "14-attack-chain-composition", "14-attack-chain-refutation"])
 
     def test_ceiling_is_the_role_narrowed_by_the_profile_and_the_baseline(self):
         limits = support.ceiling()

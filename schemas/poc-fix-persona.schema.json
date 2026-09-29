@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poc-fix-persona.schema.json",
+  "title": "Lane-12b PoC-and-fix author reply (judgment only)",
+  "description": "What the poc-fix-author persona writes for one verified, Critical, reachable finding: a light static PoC (or why none), the source-to-sink explanation, the lines it relies on (path and line range only) and a proposed fix. Ids, hashes, labels and statuses are derived by poc_fix_derive.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "poc",
+    "explanation",
+    "cited_lines",
+    "fix"
+  ],
+  "properties": {
+    "poc": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "language",
+            "text",
+            "expected_effect",
+            "trigger_condition"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "input",
+                "call",
+                "test"
+              ]
+            },
+            "language": {
+              "type": "string",
+              "pattern": "^[a-z0-9+#.-]{1,24}$"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2400
+            },
+            "expected_effect": {
+              "enum": [
+                "crash",
+                "overflow",
+                "faulty_control_flow"
+              ]
+            },
+            "trigger_condition": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          }
+        }
+      ]
+    },
+    "no_poc_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500
+    },
+    "explanation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "cited_lines": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "start_line",
+          "end_line",
+          "role"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "role": {
+            "enum": [
+              "source",
+              "propagation",
+              "sink",
+              "guard"
+            ]
+          }
+        }
+      }
+    },
+    "fix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "diff",
+        "rationale"
+      ],
+      "properties": {
+        "diff": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6000
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        }
+      }
+    }
+  }
+}
