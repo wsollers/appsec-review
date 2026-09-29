@@ -1,0 +1,3 @@
+interface:
+  display_name: "AppSec Vulnerability Lookup"
+  short_description: "Look up OSV advisories by id, alias, package or affected symbol"
