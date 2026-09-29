@@ -21,7 +21,8 @@ ADR-0020 made reachability the final severity arbiter: **Critical requires REACH
    ecosystem, runs them, joins the results through a fixed lattice and emits (a) the evidence rows
    `dependency_workers.build_reachability` already validates (`assessments`) and (b) the full
    per-match record `outputs/dependency-reachability.json`
-   (`schemas/dependency-reachability.schema.json`). No model call; no network.
+   (`schemas/dependency-reachability.schema.json` + `dependency-reachability-match.schema.json`).
+   No model call; no network. Details and the entry-point table: `docs/dependency-reachability.md`.
 
 2. **Advisory symbols.** Sources, in order, all recorded per symbol (`source`):
    a reviewed advisory→function map (`inputs/cve-reachability-functions.json`, optional, hash-bound);
@@ -42,17 +43,17 @@ ADR-0020 made reachability the final severity arbiter: **Critical requires REACH
    | `nuget` | C# | `codeql`, `lsp` (csharp-ls), `treesitter` |
    | `npm` | JavaScript/TypeScript | `codeql`, `lsp` (typescript-language-server), `treesitter` |
    | `pypi` | Python | `codeql`, `lsp` (basedpyright), `treesitter` |
-   | `cargo` | Rust | `codeql`, `lsp` (rust-analyzer), `treesitter` |
-   | `composer` | PHP | `codeql`, `lsp` (phpactor), `treesitter` |
-   | `gem` | Ruby | `codeql`, `treesitter` |
+   | `cargo` | Rust | `lsp` (rust-analyzer), `treesitter` (no CodeQL pack yet) |
+   | `composer` | PHP | `lsp` (phpactor), `treesitter` (CodeQL has no PHP extractor) |
+   | `gem` | Ruby | `codeql` (no pack yet: always a gap), `treesitter` |
 
    Every engine is an adapter behind one interface (`dep_reachability_engines.Engine.assess`) over
    a language-neutral graph: functions with `file:line` and file sha256, resolved call edges,
    escapes (indirect / ambiguous / dynamic calls) and entry points. Adapter strengths:
    * `cpg`: may return all three states (it is `reachability.py`, unchanged semantics).
-   * `codeql`: `reachable` from a resolved `CallEdges` path; `unreachable` only when the table set
-     is complete for the language (every graph query produced a CSV, no failed TU, no escapes);
-     a `Reachability.ql` row (decision 6) is a direct witness.
+   * `codeql`: `reachable` from a resolved `CallEdges` path or a `Reachability.ql` row (decision
+     6); never `unreachable` (static edges miss virtual/dynamic dispatch and the tables carry no
+     escape rows). `TaintReach.ql` rows are recorded as `taint_paths`, they do not change the state.
    * `lsp`: `reachable` from an `incomingCalls` chain that ends at an entry point; never
      `unreachable` (call hierarchy is best-effort and silent on dynamic dispatch).
    * `treesitter`: never `reachable` or `unreachable`; a name-matched call site is `unknown` with
@@ -60,9 +61,9 @@ ADR-0020 made reachability the final severity arbiter: **Critical requires REACH
 
 4. **Verdict lattice.** Per engine: `reachable | unreachable | unknown`. Joined per match:
    `reachable` if any engine at `cpg`/`codeql`/`lsp` strength proves a path (the shortest witness
-   of the strongest engine wins); else `unreachable` if the strongest engine that ran for the
-   language returned `unreachable` and every other engine that ran returned `unreachable` or
-   `unknown`-without-hint; else `unknown` with every engine's reason and gap. A match whose
+   of the strongest engine wins); else `unreachable` only if the strongest engine that ran is the
+   CPG (the one "complete" engine), it returned `unreachable`, and every other engine that ran
+   returned `unreachable` or `unknown`-without-hint; else `unknown` with every engine's reason and gap. A match whose
    component is out of scope (dev-only, generated) is not decided here; 02 already records it.
    The 06 `classification` is the joined verdict; `reachable` needs `call` evidence and
    `unreachable` needs `call`/`scope` evidence (existing `REQUIRED_EVIDENCE`).

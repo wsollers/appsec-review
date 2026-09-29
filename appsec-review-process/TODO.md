@@ -404,3 +404,23 @@ OPEN:
   fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
 - `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
 - Pre-existing `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (dependabot bumps) are not this branch's.
+
+## E-dep-reachability (brief E, ADR-0022)
+
+Done on the branch (details: `docs/dependency-reachability.md`): `dep_reachability.py` (symbols
+from reviewed map / OSV, engine per ecosystem, lattice, hash-bound witness), adapters `cpg`,
+`codeql` (tables), `lsp` (incomingCalls chain), `treesitter` (hints only), CodeQL packs for
+Go/Java/C#/JS/Python in `data/codeql-reachability/` (pinned to bundle 2.27.0 libraries, symbols via
+generated data extension), and `06-cve-reachability` in `full_review` now derives its evidence
+instead of an empty file (new edges from `02-code-property-graph`, `02-codeql-sast`). This
+supersedes the "not yet wired into full_review" row under Report findings.
+OPEN:
+- WSL: `scripts/smoke_codeql_reachability.sh` (needs `audit-codeql:local`); expect QL compile
+  fixes (packs written, not compiled). Go autobuild needs a Go toolchain in `audit-codeql`
+  (image request for brief C's owner).
+- No job runs the CodeQL packs, the LSP incomingCalls walk or `treesitter_ast.py` in a run yet;
+  06 reads those only from `<run>/inputs/dependency-reachability/`. Needs a reachability mode
+  in the `audit-codeql` lane script or a 06 container step (controller decision).
+- OSV symbols exist mostly for Go; other ecosystems need `inputs/cve-reachability-functions.json`.
+- `codeql-cpp-traced` tables reach 06 only once C's `02-native-build -> 02-codeql-sast` wiring lands.
+- No Ruby or Rust CodeQL pack; PHP has no CodeQL extractor (lsp/treesitter only).
