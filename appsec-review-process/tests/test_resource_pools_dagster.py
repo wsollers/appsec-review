@@ -224,6 +224,7 @@ class Assignments(unittest.TestCase):
                           ("ossf_scorecard", "ossf_scorecard_work"): rp.NETWORK,
                           ("full_review", "job_02_ossf_scorecard"): rp.NETWORK,
                           ("nvd_reference_sync", "nvd_sync_work"): rp.NETWORK,
+                          ("nvd_reference_sync", "osv_sync_work"): rp.NETWORK,
                           ("engagement_workflow", "scope_check"): rp.CPU,
                           ("engagement_workflow", "workflow_intake"): rp.CPU,
                           ("phase1_intake", "intake_work"): rp.CPU,

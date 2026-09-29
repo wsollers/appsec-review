@@ -229,6 +229,20 @@ build index/plan, discovery, standards corpus, review-stage claims).
 - [ ] Per-stage registry roles (red-team-adversary, blue-team-refuter, independent-verifier, scorer)
       instead of the generic `claim-reviewer` role.
 
+## A-osv-feed (branch `osv-feed`)
+
+- [x] `osv_feed.py` / `osv_snapshot.py`, Dagster `osv_sync_work` in `nvd_reference_sync`, SCA registry bridge
+      (`register_osv_feed`), measured SQLite index, `osv_lookup.py`, skills; see `docs/osv-feed.md`.
+- [ ] Operator: run `osv_feed.py sync` once on a networked host and set `APPSEC_DEPENDENCY_REGISTRY_ROOT`
+      for the Dagster stack so the SCA registry follows the feed (unset, the op only publishes).
+- [ ] Image smoke test in WSL (no Docker here): mount a published `db/` read-only at `/inputs/osv-db` and run
+      OSV-Scanner offline against an SBOM with npm, Go and PyPI components; see `scripts/smoke_osv_feed.sh`.
+- [ ] Verify the licence-by-prefix table in `osv_feed.py` against OSV's current documentation.
+- [ ] Wave 3 reachability: only Go advisories carry affected symbols today (`docs/osv-index-measurement.md`).
+- [ ] `APPSEC_OSV_ROOT` is not in `scripts/sat_contract.py` AMBIENT (`data/feeds/nvd/**` is); add `data/feeds/osv/**` there.
+- [ ] Pre-existing, not touched: 4 failures and 1 error in `tests.test_resource_pools_dagster` on baseline
+      (`rp.PERSONA` missing, pinned Dagster version); the `osv_sync_work` pool assertion added there cannot run past it.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).
