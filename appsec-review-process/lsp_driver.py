@@ -59,7 +59,9 @@ LANGUAGE_IDS = {
 SERVERS: dict[str, dict[str, Any]] = {
     "clangd": {"argv": ["clangd", "--background-index=false", "--log=error", "--pch-storage=memory"]},
     "gopls": {"argv": ["gopls", "serve"]},
-    "jdtls": {"argv": ["jdtls", "-data", "{state}/jdtls-workspace"], "settle_seconds": 10.0},
+    # The JVM takes user.home from the password database, not HOME; a host uid has no entry.
+    "jdtls": {"argv": ["jdtls", "-data", "{state}/jdtls-workspace"], "settle_seconds": 10.0,
+              "env": {"JAVA_TOOL_OPTIONS": "-Duser.home={state}/home"}},
     "pylsp": {"argv": ["pylsp"]},
     "basedpyright": {"argv": ["basedpyright-langserver", "--stdio"]},
     "typescript-language-server": {
@@ -644,6 +646,8 @@ def main(argv: list[str] | None = None) -> int:
         env = _environment(args.state_dir)
     except OSError:
         env = dict(os.environ)
+    for key, value in preset.get("env", {}).items():
+        env.setdefault(key, value.replace("{state}", str(args.state_dir)))
     result = drive(command + list(args.extra_arg), args.root, queries, limits=limits,
                    initialization_options=options, server_name=args.server or "custom", env=env)
     text = json.dumps(result, indent=2, sort_keys=True) + "\n"

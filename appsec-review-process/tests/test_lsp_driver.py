@@ -192,6 +192,8 @@ class Framing(unittest.TestCase):
             "vscode-json-language-server", "rust-analyzer", "csharp-ls", "phpactor"})
         for name, preset in lsp_driver.SERVERS.items():
             self.assertTrue(preset["argv"] and all(isinstance(word, str) for word in preset["argv"]), name)
+            self.assertLessEqual(set(preset), {"argv", "initialization_options", "settle_seconds", "env"}, name)
+        self.assertEqual(lsp_driver.SERVERS["jdtls"]["env"], {"JAVA_TOOL_OPTIONS": "-Duser.home={state}/home"})
 
 
 if __name__ == "__main__":
