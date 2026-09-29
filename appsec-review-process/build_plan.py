@@ -562,9 +562,9 @@ def unit_memo_material(run_id, record, classification, index, unit_id):
             'index_unit': index_unit, 'source_snapshot_sha256': record['source_snapshot_sha256'],
             'source_revision': record['source_revision'], 'target_root': record['target_root'],
             'catalog': record['catalog'], 'prompt_sha256': unit_prompt(unit_request(classification, unit_id))['sha256'],
-            'model': model, 'contract': file_hash(ROOT / 'registry' / 'output-contracts' / f'{CONTRACT}.json'),
+            'model': model, 'contract': file_hash(ROOT / registry_paths.contract_rel(CONTRACT)),
             'schema': file_hash(ROOT.parent / 'schemas' / 'build-plan.schema.json'),
-            'template': file_hash(ROOT / 'registry' / 'job-templates' / f'{JOB}.json')}
+            'template': file_hash(ROOT / registry_paths.template_rel(JOB))}
 
 
 def _memo_pointer(base, persona_attempt_id):
