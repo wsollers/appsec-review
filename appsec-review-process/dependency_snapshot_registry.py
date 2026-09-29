@@ -84,7 +84,10 @@ def inventory(source: Path) -> list[dict[str, Any]]:
     return records
 
 
-def register(kind: str, source: Path, metadata_path: Path, registry_root: Path) -> dict[str, Any]:
+def register(kind: str, source: Path, metadata_path: Path, registry_root: Path, *,
+             link_files: bool = False) -> dict[str, Any]:
+    # link_files is only for a staging tree whose files are themselves hard links to already immutable
+    # bytes (register_osv_feed); a caller-supplied mirror is always copied.
     if kind not in KINDS: raise SnapshotInvalid("unknown database kind")
     try: metadata = _metadata(json.loads(Path(metadata_path).read_text()), kind)
     except (OSError, ValueError) as exc: raise SnapshotInvalid("snapshot metadata is unreadable") from exc
@@ -106,7 +109,10 @@ def register(kind: str, source: Path, metadata_path: Path, registry_root: Path) 
             for record in files:
                 source_path = Path(source).joinpath(*PurePosixPath(record["path"]).parts)
                 target = data.joinpath(*PurePosixPath(record["path"]).parts); target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(source_path, target)
+                if link_files:
+                    try: os.link(source_path, target)
+                    except OSError: shutil.copyfile(source_path, target)
+                else: shutil.copyfile(source_path, target)
                 if _hash_file(target) != (record["sha256"], record["bytes"]):
                     raise SnapshotInvalid("supplied mirror changed during registration")
             (staging / "manifest.json").write_bytes(_canonical(manifest)); os.replace(staging, destination)
@@ -119,6 +125,50 @@ def register(kind: str, source: Path, metadata_path: Path, registry_root: Path) 
     temporary = pointer_dir / ("." + kind + ".json.tmp"); temporary.write_bytes(_canonical(pointer))
     os.replace(temporary, pointer_dir / (kind + ".json"))
     return {**manifest, "data_root": str(destination / "data")}
+
+
+def register_osv_feed(feed_root: Path, registry_root: Path, *, max_age_seconds: int, now: datetime) -> dict[str, Any]:
+    """Bind the multi-ecosystem OSV bulk snapshot published by ``osv_feed.py`` into this registry as
+    the ``osv`` database (replacing a hand-supplied single-ecosystem mirror).
+
+    The feed is resolved read-only through ``osv_snapshot`` (hash-verified, age-checked): an over-age or
+    missing feed raises ``SnapshotStale`` / ``SnapshotBlocked`` exactly as ``resolve`` would, so the SCA
+    job fails on it. Ecosystems the publisher could not fetch are recorded as gaps in
+    ``source-provenance.json`` (part of the hashed snapshot); they are absent from the mirror, and OSV-Scanner
+    reports them as a coverage gap (see ``osv_exit_accepted``), never as "no vulnerabilities".
+    """
+    import osv_snapshot
+    from datetime import timedelta
+    resolution = osv_snapshot.resolve_snapshot(feed_root, max_age=timedelta(seconds=max_age_seconds), now=now)
+    if not resolution.usable:
+        if resolution.outcome == osv_snapshot.BLOCKED: raise SnapshotBlocked(f"osv feed: {resolution.reason}")
+        if resolution.reason == "SNAPSHOT_TOO_OLD": raise SnapshotStale("osv snapshot is stale")
+        raise SnapshotInvalid(f"osv feed: {resolution.reason}")
+    identity = resolution.identity
+    root = Path(registry_root).resolve()
+    if root == Path(root.anchor) or len(root.parts) < 3: raise SnapshotInvalid("unsafe registry root")
+    staging_parent = root / "staging"; staging_parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix="osv-feed-", dir=staging_parent))
+    try:
+        mirror = staging / "mirror"
+        for ecosystem in identity["ecosystems"]:
+            target = mirror / "osv-scanner" / ecosystem / "all.zip"; target.parent.mkdir(parents=True)
+            source = Path(resolution.mount_dir) / "osv-scanner" / ecosystem / "all.zip"
+            try: os.link(source, target)
+            except OSError: shutil.copyfile(source, target)
+        provenance = {"schema": "appsec-review/dependency-snapshot-source-provenance/1.0", "database_kind": "osv",
+                      "feed_snapshot_id": identity["snapshot_id"], "feed_manifest_sha256": identity["manifest_sha256"],
+                      "ecosystems": {k: {"sha256": v["sha256"], "fetched_at": v["fetched_at"], "record_count": v["record_count"]}
+                                     for k, v in sorted(identity["ecosystems"].items())},
+                      "gaps": identity["gaps"]}
+        (mirror / "source-provenance.json").write_bytes(_canonical(provenance))
+        metadata = staging / "metadata.json"
+        metadata.write_text(json.dumps({"database_kind": "osv", "vendor_build": "osv-bulk-gcs", "schema_version": "osv-1",
+                                        "snapshot_id": identity["snapshot_id"],
+                                        "data_timestamp": identity["data_timestamp"]}, sort_keys=True) + "\n")
+        return register("osv", mirror, metadata, root, link_files=True)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def resolve(kind: str, registry_root: Path, *, max_age_seconds: int, now: datetime,
@@ -162,12 +212,18 @@ def main() -> int:
     add = sub.add_parser("register"); add.add_argument("--kind", choices=sorted(KINDS), required=True)
     add.add_argument("--source", type=Path, required=True); add.add_argument("--metadata", type=Path, required=True)
     add.add_argument("--registry-root", type=Path, required=True)
+    feed = sub.add_parser("register-osv-feed"); feed.add_argument("--feed-root", type=Path, required=True)
+    feed.add_argument("--registry-root", type=Path, required=True); feed.add_argument("--max-age-seconds", type=int, default=1209600)
+    feed.add_argument("--now", required=True)
     get = sub.add_parser("resolve"); get.add_argument("--kind", choices=sorted(KINDS), required=True)
     get.add_argument("--registry-root", type=Path, required=True); get.add_argument("--max-age-seconds", type=int, required=True)
     get.add_argument("--warn-age-seconds", type=int)
     get.add_argument("--now", required=True)
     args = parser.parse_args()
     try:
+        if args.command == "register-osv-feed":
+            value = register_osv_feed(args.feed_root, args.registry_root, max_age_seconds=args.max_age_seconds,
+                                      now=_time(args.now, "now")); print(json.dumps(value, sort_keys=True)); return 0
         value = (register(args.kind, args.source, args.metadata, args.registry_root) if args.command == "register" else
                  resolve(args.kind, args.registry_root, max_age_seconds=args.max_age_seconds,
                          warn_age_seconds=args.warn_age_seconds, now=_time(args.now, "now")))
