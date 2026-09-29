@@ -66,3 +66,5 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 .claude/worktrees/continuation-prompts
 
 .claude/worktrees/port-scripts
+# Mutable OSV feed state (see docs/osv-feed.md); never committed.
+/data/feeds/osv/
