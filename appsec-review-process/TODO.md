@@ -417,6 +417,21 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [x] Updated `docs/decisions/ADR-0010-vendor-prepass-decomposition.md` and `docs/proposals/vendor-prepass/task-series.md` marking task V14 completed.
 - [ ] Run-owned Dagster jobs (`02-*` nodes) continue providing individual tool evidence for full reviews.
 
+## M: report completion (brief M, branch `report-complete`)
+
+- [x] M1 CVSS v4.0 table diffed against FIRST `cvss-v4-calculator` `c5b0d40`: 270/270 entries, 204,976
+      vectors, 0 mismatches (`data/reference/cvss/`, `cvss4_reference_check.py`, 1,500-vector offline sample).
+- [x] M2 report section 3C "Threat model workbench" (data classes, LINDDUN privacy threats, deployment zones,
+      attack-tree summaries); optional keys in `synthesis-report.schema.json`.
+- [x] M3 job 03: required artifacts = output contract; template model and `worker_kind` `pool_coordinator`.
+- [x] M4 ADR-0023 decision 9 aligned to the claim ledger (conflict = proof obligation, no `review_flags`).
+- [x] M5 design note `docs/reachability-entry-points.md`; `reachability.PROGRAM_ENTRY_NAMES` adds
+      `wmain`/`WinMain`/`wWinMain`/`DllMain` as entries (always on).
+- [ ] M5 open: exported-symbol entries (needs linkage facts: exporter field or binary/IR export join, tunable
+      default off) and CodeQL `EntryPoint` rows into the CPG engine; library functions shipped for other
+      consumers should be UNKNOWN, not UNREACHABLE, once export facts exist.
+- [ ] `docs/report-examples/appsec-review-sample.{html,pdf}` predate sections 3A-3C; re-render in WSL.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).

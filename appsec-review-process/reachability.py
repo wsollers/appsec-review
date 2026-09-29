@@ -12,8 +12,9 @@ Reachability is the final severity arbiter.  Three states, no others:
 * ``UNKNOWN``     -- anything else (no entry point, target not located, bound hit, dynamic-dispatch
   escape, graph coverage gap).  The reason is recorded.
 
-Entry points are ``main`` functions plus exported symbols / network handlers named in a
-hash-bound entry-point list when a run supplies one.  The same analyser writes the
+Entry points are the program entries in ``PROGRAM_ENTRY_NAMES`` (``main`` and the Windows C/C++
+runtime and loader entries) plus exported symbols / network handlers named in a hash-bound
+entry-point list when a run supplies one (docs/reachability-entry-points.md).  The same analyser writes the
 ``06-cve-reachability`` evidence file (vulnerable dependency function -> call path from application
 code) from a reviewer-supplied advisory -> vulnerable-function map; there is no network lookup.
 """
@@ -33,6 +34,11 @@ STATES = (REACHABLE, UNREACHABLE, UNKNOWN)
 MAX_DEPTH = 64
 MAX_NODES = 200_000
 BENIGN_GAPS = {"duplicate"}  # CPG coverage-gap reasons that cannot hide a call edge
+# Functions the C/C++ runtime or OS loader calls: a path from any of them is a path from the
+# program.  More real entries can only turn UNREACHABLE into REACHABLE/UNKNOWN, never the reverse.
+# Fuzz harness entries (LLVMFuzzerTestOneInput) are deliberately absent: a harness path must not
+# produce a REACHABLE witness that lifts the Critical cap.
+PROGRAM_ENTRY_NAMES = ("main", "wmain", "WinMain", "wWinMain", "DllMain")
 _DUPLICATE = re.compile(r"<duplicate>\d+")
 _OPERATOR = ("<operator>", "<operators>")
 # Callees that cannot be named statically (function pointers, "ANY" receivers, lambdas).
@@ -190,7 +196,7 @@ class CallGraph:
     def entry_points(self, extra: Iterable[str] = ()) -> list[str]:
         wanted = set(extra or ())
         return [full for full, method in sorted(self.methods.items())
-                if method["name"] == "main" or full in wanted or method["name"] in wanted]
+                if method["name"] in PROGRAM_ENTRY_NAMES or full in wanted or method["name"] in wanted]
 
     def describe(self, full: str) -> dict[str, Any]:
         method = self.methods[full]
