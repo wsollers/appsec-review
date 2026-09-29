@@ -1,7 +1,8 @@
 """Dagster multiprocessing graph. Each stateful unit owns its lock in one process."""
 from pathlib import Path
 from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, Field, MetadataValue, RetryPolicy, In, failure_hook,
-                     job, multiprocess_executor, op, resource, run_failure_sensor, run_status_sensor)
+                     job, multiprocess_executor, resource, run_failure_sensor, run_status_sensor)
+from pipeline_log_dagster import op
 from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json, run_path
 from phase1 import Session, config_for
 import workflow
