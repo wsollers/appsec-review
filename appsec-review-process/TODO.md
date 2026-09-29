@@ -417,6 +417,16 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [x] Updated `docs/decisions/ADR-0010-vendor-prepass-decomposition.md` and `docs/proposals/vendor-prepass/task-series.md` marking task V14 completed.
 - [ ] Run-owned Dagster jobs (`02-*` nodes) continue providing individual tool evidence for full reviews.
 
+## I: dev-mode restart and generic executor (ADR-0024, brief I, branch `dev-executor`)
+
+- [x] I1 dev-mode restart policy (`dev_restart.py`): `APPSEC_RUN_MODE=dev|prod` (default prod), content +
+  shape hashes, REUSE/RERUN/REWIND, early cutoff, `--force <job>`, `launch_job.py --mode/--explain`,
+  guard rails (dev receipts never evidence; `final_publication.publish` refuses dev). Operator doc
+  `docs/dev-mode-restart.md`. Prod fingerprints unchanged (tests/test_dev_restart.py).
+- [ ] Legacy lifecycles keep their prod fingerprint in dev too (no early cutoff: inputs pin upstream
+  attempt ids). The win arrives per job as jobs are ported to the item executor.
+- [ ] Not run live: needs the code location started with `APPSEC_RUN_MODE=dev` in WSL.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).

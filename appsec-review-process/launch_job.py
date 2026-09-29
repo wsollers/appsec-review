@@ -8,7 +8,8 @@ import time
 import urllib.request
 import uuid
 
-from execution_state import Blocked, Lock, atomic_json, data_path, identifier, now, read_json, run_path
+import dev_restart
+from execution_state import ROOT, Blocked, Lock, atomic_json, data_path, identifier, now, read_json, run_path
 
 ENDPOINT = 'http://127.0.0.1:3000/graphql'
 FIND = '''query($tags:[ExecutionTag!]!) {
@@ -79,9 +80,30 @@ def find_run(request_id, run_id):
     return next(iter(result['results']), None)
 
 
-def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=None,
-           input_path=None, output_root=None, attempt_id=None, attempt_root=None, execution_root=None):
+def explain(run_id, mode='prod', force_jobs=()):
+    """ADR-0024: print what a launch would do per job (REUSE / RERUN / REWIND and why) without
+    submitting anything. Reads run-owned state only."""
     run_id = identifier(run_id)
+    if not run_path(run_id).is_dir():
+        raise Blocked('no such run: '+run_id)
+    try:
+        import job_executor
+        item_explain = job_executor.explain_items
+    except ImportError:
+        item_explain = None
+    return dev_restart.explain_run(run_path(run_id), read_json(ROOT/'job-graph.json'), ROOT, mode=mode,
+                                   forced=force_jobs, item_explain=item_explain)
+
+
+def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=None,
+           input_path=None, output_root=None, attempt_id=None, attempt_root=None, execution_root=None,
+           mode='prod', force_jobs=()):
+    run_id = identifier(run_id)
+    if mode not in dev_restart.MODES:
+        raise Blocked('unknown run mode '+repr(mode))
+    force_jobs = sorted(set(force_jobs))
+    if force_jobs and mode != 'dev':
+        raise Blocked('--force <job> is a dev-mode restart control; in prod use --force for the whole launch')
     manifest = read_json(run_path(run_id)/'inputs/artifact-manifest.json')
     if manifest.get('orchestration_version') != 1 or manifest.get('intake_config',{}).get('executor_platform') != 'posix':
         raise Blocked('Dagster requires a POSIX-staged run (ADR-0011: create and stage on the Linux/WSL host that runs the code location); preserve Windows-staged runs.')
@@ -115,8 +137,12 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         raise Blocked('OWASP join report requires --input-path naming its dispatch facts file')
     if not bounded and not dependency and not vendor and not control and not final_publication and not assembly and not facts_file and any(supplied):
         raise Blocked('explicit lifecycle paths are only valid for config-driven jobs')
+    if mode == 'dev' and job in FINAL_PUBLICATION_JOBS:
+        raise Blocked('dev runs are never review deliverables; launch final publication in prod')
     resume = [sys.executable,'-B',str(Path(__file__).resolve()),
               '--run-id',run_id,'--launch-id',request_id,'--job',job,'--wait'] + (['--force'] if force else [])
+    if mode == 'dev':
+        resume += ['--mode','dev'] + [arg for name in force_jobs for arg in ('--force',name)]
     if bounded:
         resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-id', attempt_id]
     if dependency:
@@ -147,6 +173,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
             record = read_json(path)
             if (record['force'] != force or record['run_id'] != run_id or
                     record.get('job','phase1_intake') != job or
+                    record.get('mode','prod') != mode or record.get('force_jobs',[]) != force_jobs or
                     record.get('lifecycle_config', record.get('transform_config')) != lifecycle_config):
                 raise Blocked('launch request configuration cannot change; use a new launch ID')
         else:
@@ -154,6 +181,8 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                       'created_at':now(),'resume_argv':resume}
             if bounded or dependency or vendor or control or final_publication or (assembly and lifecycle_config) or facts_file:
                 record['lifecycle_config'] = lifecycle_config
+            if mode == 'dev':
+                record.update(mode='dev', evidence_grade=False, force_jobs=force_jobs)
             atomic_json(path,record)
         try:
             remote = find_run(request_id, run_id)
@@ -178,6 +207,11 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                           'runConfigData':run_config,
                           'executionMetadata':{'tags':[{'key':'appsec/request_id','value':request_id},
                                                        {'key':'engagement_run_id','value':run_id}]}}
+                if mode == 'dev':
+                    # The item executor refuses a run whose tag disagrees with its process mode.
+                    params['executionMetadata']['tags'] += [
+                        {'key':'appsec/run_mode','value':'dev'},
+                        {'key':'appsec/force_jobs','value':','.join(force_jobs)}]
                 result = graphql(LAUNCH, {'params':params})['launchRun']
                 if result['__typename'] != 'LaunchRunSuccess':
                     record.update(status='REJECTED',response=result)
@@ -208,7 +242,13 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',required=True)
-    parser.add_argument('--force',action='store_true')
+    parser.add_argument('--force',nargs='?',const=True,default=None,action='append',metavar='JOB',
+                        help='rerun everything this launch touches; with a job id (dev mode, repeatable) '
+                             'rerun only that job regardless of its inputs')
+    parser.add_argument('--mode',choices=dev_restart.MODES,default=None,
+                        help='default: $APPSEC_RUN_MODE, else prod. dev results are never evidence (ADR-0024)')
+    parser.add_argument('--explain',action='store_true',
+                        help='print REUSE/RERUN/REWIND and the cause per job; submit nothing')
     parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','codeql_sast','component_characterization','full_review_input_assembly','threat_model_dfd_stride','threat_model_reconciliation','synthesis_report','code_property_graph','ir_capture','ir_link','ir_facts','native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist','owasp_join_report','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum','dynamic_rescope','completeness_audit','synthetic_hypothesis_resynthesis','remediation_retest_feedback','final_publication_gate','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
     parser.add_argument('--input-path')
     parser.add_argument('--output-root')
@@ -221,8 +261,26 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.timeout <= 0: parser.error('--timeout must be positive')
     try:
-        result = launch(args.run_id,args.force,args.launch_id,args.wait,args.timeout,args.job,
-                        args.input_path,args.output_root,args.attempt_id,args.attempt_root,args.execution_root)
+        mode = args.mode or dev_restart.run_mode()
+    except ValueError as exc:
+        parser.error(str(exc))
+    values = args.force or []
+    force = any(value is True for value in values)
+    force_jobs = [value for value in values if value is not True]
+    if args.explain:
+        try:
+            print('\n'.join(explain(args.run_id, mode, force_jobs)))
+            return 0
+        except (Exception,KeyboardInterrupt) as exc:
+            print(f'DAGSTER_EXPLAIN_FAILED: {exc}',file=sys.stderr)
+            return 1
+    if mode == 'dev':
+        print('DEV MODE: results are not evidence and never reach a deliverable; the code location must '
+              'run with APPSEC_RUN_MODE=dev (docs/dev-mode-restart.md)',file=sys.stderr)
+    try:
+        result = launch(args.run_id,force,args.launch_id,args.wait,args.timeout,args.job,
+                        args.input_path,args.output_root,args.attempt_id,args.attempt_root,args.execution_root,
+                        mode,force_jobs)
         print(json.dumps(result,indent=2))
         return 0 if result['status'] not in {'FAILURE','CANCELED','REJECTED'} else 1
     except (Exception,KeyboardInterrupt) as exc:
