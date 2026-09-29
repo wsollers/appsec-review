@@ -81,6 +81,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `redaction_max_line_length` | 128 KiB | safety | Longest line the redactor scans; longer lines withhold the file. |  |
 | `redaction_max_path_length` | 512 chars | safety | Longest relative path the redactor accepts. | Deep engine trees may need more. |
 | `redaction_max_total_bytes` | 128 MiB | safety | Total bytes redacted per tree; the rest is withheld. | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
+| `reference_snapshot_max_age_seconds` | 1209600 s (20160 min) | safety | Age ceiling for published reference snapshots (OSV bulk data, the OSV SCA registry binding, the MITRE ATT&CK/CAPEC feed), measured from each source's ORIGINAL fetched_at. Over it: OSV fails SCA; MITRE tags are withheld as a recorded gap (ADR-0026). | Policy value (14 days), not a size; William 2026-09-27. |
 | `result_artifact_max_bytes` | 32 MiB | safety | Largest declared result JSON validate_job_output will load and schema-check (loaded whole into memory). | Grows with target size; see docs/scale-audit-unreal-engine.md B: large producers publish a summary plus a records file instead. |
 | `runs_concurrent_max` | 2 count | resource | Concurrent Dagster runs. Enforced by orchestrator/dagster/dagster.yaml (QueuedRunCoordinator max_concurrent_runs); keep the two equal. Extra launches queue. | Host-bound: 30 GB RAM / 16 cores on zarathustra; Joern alone takes up to 8 GB per run. |
 | `runs_per_engagement_max` | 1 count | resource | Concurrent runs per engagement. |  |

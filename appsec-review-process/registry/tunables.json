@@ -498,6 +498,13 @@
       "unit": "bytes",
       "value": 134217728
     },
+    "reference_snapshot_max_age_seconds": {
+      "description": "Age ceiling for published reference snapshots (OSV bulk data, the OSV SCA registry binding, the MITRE ATT&CK/CAPEC feed), measured from each source's ORIGINAL fetched_at. Over it: OSV fails SCA; MITRE tags are withheld as a recorded gap (ADR-0026).",
+      "kind": "safety",
+      "scale": "Policy value (14 days), not a size; William 2026-09-27.",
+      "unit": "seconds",
+      "value": 1209600
+    },
     "result_artifact_max_bytes": {
       "description": "Largest declared result JSON validate_job_output will load and schema-check (loaded whole into memory).",
       "kind": "safety",

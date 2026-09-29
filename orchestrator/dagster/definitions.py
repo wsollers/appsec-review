@@ -146,6 +146,8 @@ from phase1 import Session, sync_state, invalidate
 from execution_state import atomic_json, data_path, digest, event, now, Blocked, emergency
 from nvd_feed import sync as sync_nvd
 from osv_feed import sync as sync_osv, feed_root as osv_feed_root
+from mitre_feed import sync as sync_mitre
+import tunables
 
 
 def transition(context, name, work):
@@ -261,19 +263,34 @@ def osv_sync_work(context):
         from datetime import datetime, timezone
         bound = dependency_registry.register_osv_feed(
             osv_feed_root(), Path(registry_root),
-            max_age_seconds=1209600, now=datetime.now(timezone.utc))['snapshot_id']
+            max_age_seconds=tunables.shared('reference_snapshot_max_age_seconds'),
+            now=datetime.now(timezone.utc))['snapshot_id']
     context.add_output_metadata({"snapshot_id": result["snapshot_id"], "gaps": ",".join(result["gaps"]) or "none",
                                  "registry_snapshot_id": bound or "not-bound"})
     return result["snapshot_id"]
 
 
-# One job, two independent ops: in-process execution continues past a failed step that nothing depends
-# on, so an NVD outage does not stop the OSV refresh and vice versa (the run still ends failed).
-@job(tags={"nvd_feed_id": "nvd", "osv_feed_id": "osv"}, executor_def=in_process_executor,
+@op(pool=resource_pools.derive_pool('deterministic_python', ('fixed-network-destination',), memory_heavy=False))
+def mitre_sync_work(context):
+    """Publish one immutable MITRE ATT&CK/CAPEC reference snapshot outside every engagement run (ADR-0026).
+
+    Release-pinned STIX bundles; a per-source failure keeps that source's last good bundle with its
+    original fetched_at; only a total failure fails the op. Consumers withhold tags as a recorded gap
+    when the snapshot is missing or older than reference_snapshot_max_age_seconds.
+    """
+    result = sync_mitre(coordinator_id=context.run_id)
+    context.add_output_metadata({"snapshot_id": result["snapshot_id"], "gaps": ",".join(result["gaps"]) or "none"})
+    return result["snapshot_id"]
+
+
+# One job, three independent ops: in-process execution continues past a failed step that nothing
+# depends on, so an NVD, OSV or MITRE outage does not stop the others (the run still ends failed).
+@job(tags={"nvd_feed_id": "nvd", "osv_feed_id": "osv", "mitre_feed_id": "mitre"}, executor_def=in_process_executor,
      op_retry_policy=RetryPolicy(max_retries=0))
 def nvd_reference_sync():
     nvd_sync_work()
     osv_sync_work()
+    mitre_sync_work()
 
 
 nvd_reference_schedule = ScheduleDefinition(
