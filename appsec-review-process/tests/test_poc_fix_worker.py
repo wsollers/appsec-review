@@ -40,7 +40,9 @@ def merge_for(records: list[dict]) -> dict:
     return deterministic_merge(RUN, expected, results)
 
 
-class WorkerTests(unittest.TestCase):
+class Harness(unittest.TestCase):
+    """Temporary run root (write_run fixture), pool stubs and canned publications (no tests of its own)."""
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         base = Path(self.folder.name).resolve()
@@ -79,6 +81,7 @@ class WorkerTests(unittest.TestCase):
     def result(self, published) -> dict:
         return json.loads((worker.root(RUN) / "attempts" / published["attempt_id"] / worker.RESULT).read_text())
 
+class WorkerTests(Harness):
     def test_publishes_and_reuses_one_record_per_eligible_finding(self):
         inputs = self.inputs(priority(REACH, line=9), priority(HIGH, line=9, severity="HIGH"))
         record, _ = derive.derive(inputs["requests"][0], good_reply(), author=AUTHOR)

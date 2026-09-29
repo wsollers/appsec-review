@@ -226,6 +226,45 @@ verification (lane 09). Refuted hypotheses are kept for the record with priority
 }
 
 \eyebrow{Remediation}\\ \VAR{f.remediation|tex}
+\BLOCK{if f.poc_fix is defined and f.poc_fix}
+%% set pf = f.poc_fix
+\par\medskip\eyebrow{Light PoC and proposed fix: \VAR{pf.label|tex}}\\
+{\small\color{muted}\VAR{pf.label_text|tex}\par}
+%% if pf.poc.lines
+\begin{codesnippet}{PoC (\VAR{pf.poc.kind|tex}, \VAR{pf.poc.language|tex}); expected effect: \VAR{pf.poc.expected_effect|tex}; UNVALIDATED}{1}{\VAR{pf.poc.lines|length}}
+%% for ln in pf.poc.lines
+\codeline{\VAR{loop.index}}{\VAR{ln|texcode}}
+%% endfor
+\end{codesnippet}
+%% endif
+%% if pf.poc.note
+\VAR{pf.poc.note|tex}\par
+%% endif
+%% if pf.poc.trigger_condition
+\textbf{Trigger condition.} \VAR{pf.poc.trigger_condition|tex}\par
+%% endif
+\textbf{How it happens (source to sink).} \VAR{pf.explanation|tex}\par
+{\small
+%% for c in pf.cited_lines
+\mono{\VAR{c.display|texpath}}\\
+%% endfor
+}
+%% if pf.fix.lines
+\begin{codesnippet}{Proposed fix: \VAR{pf.fix.files|join(', ')|texpath}; PATCH\_PROPOSED\_UNVALIDATED}{1}{\VAR{pf.fix.lines|length}}
+%% for ln in pf.fix.lines
+\codeline{\VAR{loop.index}}{\VAR{ln|texcode}}
+%% endfor
+\end{codesnippet}
+%% endif
+%% if pf.fix.rationale
+\VAR{pf.fix.rationale|tex}\par
+%% endif
+%% if pf.fix.note
+\VAR{pf.fix.note|tex}\par
+%% endif
+\BLOCK{elif f.poc_fix_note is defined}
+\par\medskip\eyebrow{Light PoC and proposed fix}\\ \VAR{f.poc_fix_note|tex}
+\BLOCK{endif}
 \end{tcolorbox}
 \vspace{4pt}
 %% endfor

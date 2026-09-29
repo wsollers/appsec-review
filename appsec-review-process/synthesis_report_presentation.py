@@ -4,7 +4,9 @@
 This adapter is deliberately presentation-only.  It copies verified findings, their authoritative
 lifecycle scores and the deterministic ``finding-enrichment.json`` (CWE, pinned CVSS v4.0 score,
 reachability verdict and witness, reachability-capped severity, EPSS/KEV as of the pinned snapshot,
-verified snippets, remediation objectives/proposals; ADR-0020).  It never computes a CVSS score,
+verified snippets, remediation objectives/proposals; ADR-0020) and, under each Critical REACHABLE
+finding, the lane-12b PoC-and-fix block labelled as unvalidated static text (``poc_fix_report``; an
+absent block is stated as a gap).  It never computes a CVSS score,
 process assurance, final status, or remediation state itself.
 """
 from __future__ import annotations
@@ -132,8 +134,9 @@ def _exploit_text(value: dict[str, Any] | None, identity: dict[str, Any]) -> str
 
 
 def _findings(report: dict[str, Any], evidence_ids: dict[str, str],
-              enrichment: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+              enrichment: dict[str, Any] | None = None, poc_fix: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     result = []
+    poc_blocks = (poc_fix or {}).get("by_claim", {})
     enriched = {row["claim_id"]: row for row in (enrichment or {}).get("findings", [])}
     exploit_identity = (enrichment or {}).get("epss_kev", {})
     for finding in report["verified_findings"]:
@@ -186,6 +189,12 @@ def _findings(report: dict[str, Any], evidence_ids: dict[str, str],
                 trail.append(["12", f"CVSS {cvss['score']} {cvss['severity']} (pinned cvss4.py)"])
             trail.append(["reachability", reach["state"] + (f" ({cap})" if cap else "")])
             row["trail"] = trail + row["trail"]
+            if extra["severity"]["final"] == "CRITICAL":
+                block = poc_blocks.get(finding["claim_id"])
+                row["poc_fix"] = block
+                if block is None:   # brief F: absence is a gap, stated under the finding
+                    row["poc_fix_note"] = ("No light PoC or proposed fix: " +
+                        ((poc_fix or {}).get("reason") or "lane 12b published no record for this finding") + ".")
         result.append(row)
     return result
 
@@ -200,7 +209,8 @@ def _attack_chains(section: dict[str, Any] | None) -> dict[str, Any]:
 
 def build_review(report: dict[str, Any], trace: dict[str, Any],
                  enrichment: dict[str, Any] | None = None,
-                 attack_chains: dict[str, Any] | None = None) -> dict[str, Any]:
+                 attack_chains: dict[str, Any] | None = None,
+                 poc_fix: dict[str, Any] | None = None) -> dict[str, Any]:
     if (report.get("schema") != "appsec-review/synthesis-report/1.0" or
             report.get("status") != "DRAFT_EVIDENCE_BACKED" or
             report.get("claim_limits", {}).get("final") is not False or
@@ -222,6 +232,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         raise Blocked("10-synthesis-report: attack-chain section belongs to another run")
     if attack_chains is not None and attack_chains["gaps"]:
         report = {**report, "limitations": sorted(set(report["limitations"]) | set(attack_chains["gaps"]))}
+    if poc_fix is not None and poc_fix["run_id"] != report["run_id"]:
+        raise Blocked("10-synthesis-report: PoC-and-fix section belongs to another run")
+    if poc_fix is not None and poc_fix["gaps"]:
+        report = {**report, "limitations": sorted(set(report["limitations"]) | set(poc_fix["gaps"]))}
     if report["limitations"]:
         processes.append({"id": "reported-limitations", "family": "limitations",
             "kind": "preserved synthesis limitations", "status": "OK_WITH_GAPS", "coverage": 0.0,
@@ -242,7 +256,7 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         "authors": ["appsec-review pipeline"], "sample": False, "source_root": None},
         "finding_scoring": "authoritative_retained_publication", "process_assurance": "not_asserted",
         "families": families, "processes": processes,
-        "findings": _findings(report, evidence_ids, enrichment), "evidence": evidence,
+        "findings": _findings(report, evidence_ids, enrichment, poc_fix), "evidence": evidence,
         "attack_chains": _attack_chains(attack_chains),
         "target_context": {"source_snapshot_sha256": report["scope"].get("source_snapshot_sha256", "not asserted"),
             "components": report["scope"]["components"],
@@ -271,9 +285,9 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
 
 def render(report: dict[str, Any], trace: dict[str, Any], output_root: Path,
            generator_sha256: str, enrichment: dict[str, Any] | None = None,
-           attack_chains: dict[str, Any] | None = None) -> dict[str, Any]:
+           attack_chains: dict[str, Any] | None = None, poc_fix: dict[str, Any] | None = None) -> dict[str, Any]:
     output_root = Path(output_root)
-    review = build_review(report, trace, enrichment, attack_chains)
+    review = build_review(report, trace, enrichment, attack_chains, poc_fix)
     atomic_json(output_root / RENDER_INPUT, review)
     render_root = output_root / "presentation"
     _renderer().render(output_root / RENDER_INPUT, render_root)

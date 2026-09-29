@@ -13,6 +13,7 @@ from execution_state import Blocked, ROOT, atomic_json, digest, file_hash, read_
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 import attack_chain_report as chain_report
 import finding_enrichment as enrichment_core
+import poc_fix_report as poc_report
 import report_input_assembly as assembly
 from schema_validate import validate_document
 import synthesis_report as synthesis
@@ -24,7 +25,8 @@ STANDALONE_REGISTRY = ROOT / "registry"
 STANDALONE_GRAPH = ROOT / "job-graph.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthesis.APPENDIX,
-    synthesis.TRACE, synthesis.PUBLICATION, enrichment_core.RESULT, chain_report.RESULT, presentation.RENDER_INPUT,
+    synthesis.TRACE, synthesis.PUBLICATION, enrichment_core.RESULT, chain_report.RESULT, poc_report.RESULT,
+    presentation.RENDER_INPUT,
     presentation.RENDER_MANIFEST,
     *(f"presentation/{name}" for name in presentation.RENDERED),
     "permission.json", "lineage.json", "status.json"]
@@ -32,6 +34,7 @@ CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", 
     "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py",
     "cvss4.py", "cwe_catalog.py", "code_snippets.py", "epss_kev_snapshot.py",
     "attack_chain_report.py", "attack_chain_refute.py", "attack_chain_derive.py",
+    "poc_fix_report.py", "poc_fix_denylist.py",
     "registry/output-contracts/synthesis-report-publication.json",
     "registry/job-templates/10-synthesis-report.json", "job-graph.json")
 RENDER_FILES = ("pipeline/report/render.py", "pipeline/report/templates/report.tex.j2",
@@ -64,7 +67,8 @@ def current_inputs(run_id: str, jobs_root: Path) -> dict[str, Any]:
         accepted[name] = loaded["reference"]
     return {"run_id": run_id, "accepted": accepted, "implementation": _code_hashes(),
             "enrichment": enrichment_core.input_bindings(Path(jobs_root).parents[1]),
-            "attack_chains": chain_report.input_binding(Path(jobs_root).parents[1])}
+            "attack_chains": chain_report.input_binding(Path(jobs_root).parents[1]),
+            "poc_fix": poc_report.input_binding(Path(jobs_root).parents[1])}
 
 
 def _generator_sha256() -> str:
@@ -104,7 +108,10 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any], jobs_root: Path) ->
     expected_chains = chain_report.build(report, Path(jobs_root).parents[1])
     if read_json(attempt / chain_report.RESULT) != expected_chains:
         raise Blocked(f"{JOB}: retained attack-chain section differs from the accepted lane-14 ledger")
-    expected_review = presentation.build_review(report, trace, expected_enrichment, expected_chains)
+    expected_poc = poc_report.build(report, expected_enrichment, Path(jobs_root).parents[1])
+    if read_json(attempt / poc_report.RESULT) != expected_poc:
+        raise Blocked(f"{JOB}: retained PoC-and-fix section differs from the accepted lane-12b result")
+    expected_review = presentation.build_review(report, trace, expected_enrichment, expected_chains, expected_poc)
     if read_json(attempt / presentation.RENDER_INPUT) != expected_review:
         raise Blocked(f"{JOB}: retained renderer input differs from deterministic projection")
     render_manifest = read_json(attempt / presentation.RENDER_MANIFEST)
@@ -151,15 +158,18 @@ def run(run_root: Path, run_id: str, dagster_run_id: str, force: bool = False,
         atomic_json(attempt / enrichment_core.RESULT, enrichment)
         chains = chain_report.build(report, run_root)
         atomic_json(attempt / chain_report.RESULT, chains)
-        presentation.render(report, trace, attempt, _generator_sha256(), enrichment, chains)
+        poc = poc_report.build(report, enrichment, run_root)
+        atomic_json(attempt / poc_report.RESULT, poc)
+        presentation.render(report, trace, attempt, _generator_sha256(), enrichment, chains, poc)
         permission, lineage = _receipts(inputs, attempt)
         atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
-        gaps = sorted(set(report["limitations"]) | set(chains["gaps"]))
+        gaps = sorted(set(report["limitations"]) | set(chains["gaps"]) | set(poc["gaps"]))
         status_name = "OK_WITH_GAPS" if gaps or report["unresolved_candidates"] else "OK"
         status = {"process": JOB, "status": status_name,
             "verified_findings": len(report["verified_findings"]),
             "unresolved_candidates": len(report["unresolved_candidates"]),
             "limitations": len(gaps), "attack_chains": len(chains["chains"]) + len(chains["appendix"]),
+            "poc_fix_blocks": len(poc["by_claim"]),
             "final": False, "presentation": "HTML_LATEX_AND_PDF_RENDERED"}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_run_id, worker_kind="deterministic_python", output_contract=CONTRACT,
