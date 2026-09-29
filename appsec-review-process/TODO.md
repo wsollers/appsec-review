@@ -363,3 +363,12 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 - OPEN: build classification makes `ai/` its own build unit (freeciv21 `dir:ai`); belongs to build_index/build_classify.
 - OPEN, pre-existing failures on baseline: `test_validator_vendor_prepass_dispatch` (128F/13E), `test_phase1` A08 x2, `test_owasp_dispatch...prohibited_text_in_the_candidate_itself`, `test_build_discovery` and `test_b13_harmless` (import errors).
 - Reachability has no model judgement field at stages 07/09/12; Python arbitrates it (brief assumed one).
+
+## run-log (branch `run-log`)
+
+| Item | Status |
+|---|---|
+| `pipeline_log` JSON lines, one file per run, banner at intake/resume, context from Dagster ops, `orchestrator/tail-run-log.sh` | DONE (`docs/run-log.md`) |
+| Idle watchdog in `review_cli._dispatch_streaming` (warn default, kill off by default) | DONE |
+| Workers other than `review_cli` / `claim_reviewer_pool` do not yet log their own progress lines; only step start/finish + those two | OPEN |
+| Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | OPEN |

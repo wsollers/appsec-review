@@ -648,12 +648,19 @@ def lane_tools(lane: str) -> list[str]:
     return list(lt.get(lane) or lt.get("default") or ["Read", "Grep", "Glob", "Write"])
 
 
-def _progress(message: str) -> None:
+def _progress(message: str, *, level: str = "info", who: str | None = None) -> None:
     """One timestamped line on stderr (Dagster's step log) so a long model call is visibly alive,
     and on the central pipeline log (pipeline_log.py: buffered, capped, never blocks)."""
     stamp = datetime.now(timezone.utc).strftime("%H:%M:%SZ")
     print(f"[progress {stamp}] {message}", file=sys.stderr, flush=True)
-    pipeline_log.log(message)
+    pipeline_log.log(message, level=level, who=who)
+
+
+def _env_seconds(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.environ.get(name, default) or 0))
+    except ValueError:
+        return default
 
 
 def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcript_path: Path) -> dict[str, Any]:
@@ -677,10 +684,11 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
     started_at = time.time()
     model_flag = argv[argv.index("--model") + 1] if "--model" in argv and argv.index("--model") + 1 < len(argv) else "?"
     _progress(f"claude dispatch started pid={proc.pid} model={model_flag} prompt_chars={len(prompt_text)} "
-              f"timeout={timeout}s transcript={transcript_path}")
+              f"timeout={timeout}s transcript={transcript_path}", who=f"claude:{proc.pid}")
 
     events: list[dict[str, Any]] = []
-    state: dict[str, Any] = {"final_result": None}
+    state: dict[str, Any] = {"final_result": None, "last_event_at": started_at}
+    who = f"claude:{proc.pid}"
 
     def _pump_stdout() -> None:
         transcript_path.parent.mkdir(parents=True, exist_ok=True)
@@ -697,6 +705,7 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
                 except Exception:
                     continue
                 events.append(ev)
+                state["last_event_at"] = time.time()
                 if isinstance(ev, dict) and ev.get("type") == "result":
                     state["final_result"] = ev
 
@@ -718,21 +727,44 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
     writer.start()
 
     timed_out = False
-    heartbeat = max(5, int(os.environ.get("APPSEC_HEARTBEAT_SECONDS", "30") or 30))
+    idle_killed = False
+    heartbeat = max(1, int(os.environ.get("APPSEC_HEARTBEAT_SECONDS", "30") or 30))
+    # Idle watchdog: no stream event for this long is a stall (a model call that is thinking still emits
+    # events; a wedged process does not). Warn by default; kill only when APPSEC_IDLE_KILL_SECONDS is set.
+    idle_warn = _env_seconds("APPSEC_IDLE_WARN_SECONDS", 300)
+    idle_kill = _env_seconds("APPSEC_IDLE_KILL_SECONDS", 0)
+    next_warn = idle_warn
     deadline = started_at + timeout
     while True:
         try:
             proc.wait(timeout=max(0.1, min(heartbeat, deadline - time.time())))
             break
         except subprocess.TimeoutExpired:
-            if time.time() >= deadline:
+            now_ts = time.time()
+            if now_ts >= deadline:
                 timed_out = True
                 proc.kill()
                 proc.wait()
                 break
+            idle = int(now_ts - state["last_event_at"])
             last = events[-1] if events else {}
-            _progress(f"claude dispatch pid={proc.pid} running {int(time.time() - started_at)}s/{timeout}s "
-                      f"events={len(events)} last={last.get('type', '-') if isinstance(last, dict) else '-'}")
+            _progress(f"claude dispatch pid={proc.pid} running {int(now_ts - started_at)}s/{timeout}s "
+                      f"events={len(events)} last={last.get('type', '-') if isinstance(last, dict) else '-'} "
+                      f"idle={idle}s", who=who)
+            if idle_warn and idle >= next_warn:
+                _progress(f"claude dispatch pid={proc.pid} IDLE: no stream event for {idle}s "
+                          f"(warn at {idle_warn}s, kill {'at %ds' % idle_kill if idle_kill else 'off'})",
+                          level="warn", who=who)
+                next_warn = idle + idle_warn
+            if idle_kill and idle >= idle_kill:
+                _progress(f"claude dispatch pid={proc.pid} killed by the idle watchdog after {idle}s without events",
+                          level="error", who=who)
+                idle_killed = True
+                proc.kill()
+                proc.wait()
+                break
+            if idle < idle_warn:
+                next_warn = idle_warn
 
     writer.join(timeout=10)
     reader.join(timeout=10)
@@ -748,12 +780,13 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
     cost = final.get("total_cost_usd") if isinstance(final, dict) else None
     _progress(f"claude dispatch pid={proc.pid} finished after {int(time.time() - started_at)}s "
               f"returncode={proc.returncode} timed_out={timed_out} events={len(events)} "
-              f"has_result={final is not None} cost_usd={cost}")
+              f"has_result={final is not None} cost_usd={cost} idle_killed={idle_killed}", who=who)
     return {
         "final_result": state["final_result"],
         "events": events,
         "returncode": proc.returncode,
         "timed_out": timed_out,
+        "idle_killed": idle_killed,
         "stderr_text": stderr_text,
     }
 

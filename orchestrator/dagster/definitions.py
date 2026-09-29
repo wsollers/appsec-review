@@ -10,7 +10,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-from dagster import (DefaultScheduleStatus, Definitions, Failure, job, op, resource,
+from dagster import (DefaultScheduleStatus, Definitions, Failure, job, resource,
                      in_process_executor, MetadataValue, RetryPolicy, ScheduleDefinition)
 
 # ADR-0011: this file is loaded by a host-owned `dagster api grpc` code location, not a container.
@@ -22,6 +22,7 @@ RUNS_ROOT = Path(os.environ.get('APPSEC_RUNS_ROOT') or PROCESS_ROOT / 'runs')
 
 # B15: pool ids, limits and the explicit unassigned state come from resource_pools.py only.
 sys.path.insert(0, str(PROCESS_ROOT))
+from pipeline_log_dagster import op   # binds the pipeline-log context for every step
 import resource_pools
 
 
