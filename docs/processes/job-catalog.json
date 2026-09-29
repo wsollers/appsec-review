@@ -7063,7 +7063,7 @@
    "produces": [
     "job:06-cve-reachability"
    ],
-   "notes": "Standalone deterministic static reachability transform. A version match alone never establishes reachability and all outputs remain evidence leads. Full-review input assembly remains a gap."
+   "notes": "Standalone deterministic static reachability transform over run-supplied evidence. A version match alone never establishes reachability and all outputs remain evidence leads. In full_review, 06-cve-reachability is instead the ADR-0023 correlator (lifecycle op) over 06-reachability-codeql and 06-reachability-ir; see docs/dependency-reachability.md."
   },
   {
    "id": "b13-harmless-container",
