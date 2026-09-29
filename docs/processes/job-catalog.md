@@ -2437,7 +2437,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Contract | `threat-model-core` (claim class `threat_model_candidate`) |
 | Status | readiness `implemented_not_qualified`; execution `deterministic_python`; job-graph `implemented: true` |
 | Worker | `appsec-review-process/threat_model_core.py:run` |
-| Resource pool | `cpu` |
+| Resource pool | `persona_llm` |
 | Dagster | standalone: `threat_model_dfd_stride`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `threat-model-core`, tooling `threat-model-static-evidence` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |

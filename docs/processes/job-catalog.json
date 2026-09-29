@@ -8313,7 +8313,7 @@
    "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/threat_model_core.py:run",
-   "resource_pool": "cpu",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [
     "threat_model_dfd_stride"
    ],
