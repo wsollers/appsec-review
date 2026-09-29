@@ -1,4 +1,4 @@
-# Brief U: structural query tools and tool guides for model jobs (branch `code-query-tools`) - CLOUD agent
+# Brief U: searchable AST and CPG, structural query tools and tool guides for model jobs (branch `code-query-tools`) - CLOUD agent
 William, 2026-09-29: the model jobs must be able to gain information about the system under test efficiently while
 they infer. Today that is a limit WE imposed, not the model's: `claude_cli_invoker.py` grants the model CLI exactly the
 tools of `input_mcp.TOOLS` (`input_list/read/grep/jq`, `evidence_search/read/similar`, `evidence_derived`), all
@@ -18,10 +18,45 @@ function and escapes; REUSE it, do not write a second resolver), `lsp_driver.py`
 `persona_prompt_assembly.py`, `tooling/llm-retrieval-addendum.md` (stale: it is only referenced from the legacy
 `phase1.py` and points at an archived path), `retrieval-report.py`, `docs/run-log.md`.
 
+## U0. Make the data exist and be searchable (William, 2026-09-29: a properly indexed, searchable AST and CPG gets most of the value; native code matters most)
+Audit result behind this brief (verify each line before building): the FTS derived-records index (`evidence_index_enrichment.PROFILES`)
+covers only 16 producers; no job in `job-graph.json` produces the tree-sitter AST (`treesitter_ast.py` output is supplied by
+hand to `dep_reachability_lifecycle` only); the CPG records file is searchable only as text chunks; source SAST, CodeQL,
+secrets, SCA/SBOM, IaC and license results are readable on the supporting-evidence menu but not in the FTS derived index;
+`06-reachability-codeql`/`-ir` tables are not on the menu.
+1. **New job `02-treesitter-ast`** (deterministic, `pinned_container` like `02-code-property-graph`; run `treesitter_ast.py`
+   from the vendored `/opt/treesitter` in the same compiler images the language jobs already use; register in `job-graph.json`,
+   contract, schema (`treesitter-ast.schema.json` exists), lineage and receipts exactly like sibling jobs; per-language
+   applicability skip when no grammar; gaps for oversized/unreadable files as the script already records). Ship the
+   records-file pattern for large outputs (as CPG does) so the result stays small. It runs beside the CPG job, needs no build.
+   Make `dep_reachability_lifecycle` consume the accepted job output when present instead of only the manual supply
+   (manual supply keeps working).
+2. **A deterministic, hash-bound code index, published by a job, not rebuilt per attempt.** New job `02-code-index`
+   (or extend `02-evidence-index`; decide and justify) that reads the accepted CPG records file, the tree-sitter AST and,
+   when present, IR facts and the debug-symbol index, and publishes one SQLite database (schema below) plus its sha256 in
+   the job result. Every query tool reads THIS artifact (verify the hash, open read-only). Tables (adapt to the real record
+   shapes; do not invent fields the CPG lacks): `methods` (id, name, full_name, signature, file, start/end line, is_external,
+   language), `calls` (caller_id, callee_full_name/callee_id, file, line, resolution, argument_count and argument text
+   where the CPG has it), `types` (name, kind, file, line), `type_edges` (derived_type, base_type: inheritance),
+   `members` (type, member, kind), `identifiers`/`fields` access rows where available, `literals` (string constants
+   with file:line), `imports`, `files` (path, sha256, language), plus FTS5 tables over method names, call targets,
+   identifiers and string literals for fuzzy lookup. Indexes on every join column. Native C/C++ is the priority: memory
+   operations (calls to memcpy/strcpy/sprintf/alloc/free families and their argument expressions), function pointers
+   and address-taken functions, vtables/overrides, and preprocessor-expanded locations must be representable.
+3. **Broaden the FTS derived index and menu:** add `02-source-sast`, `02-codeql-<lang>` (all), `02-secrets-inventory` (the
+   redacted artifact only), `02-sca-vulnerability-match`, `02-sbom-inventory`, `02-iac-config-scan`, `02-license-scan`
+   and `02-treesitter-ast` summaries to `evidence_index_enrichment.PROFILES` with the correct authority label
+   (`derived_evidence` for tool output, never `untrusted_documented_intent` mislabeled); add `06-reachability-codeql`,
+   `06-reachability-ir` and the code index to `supporting_evidence_menu.py`. Respect the existing caps and redaction; keep
+   SARIF message text withheld from model-facing search text (decision D-02 item 6): rule id, category, location and
+   severity are indexed, tool prose is not.
+4. Report in your final message which producers are now searchable, the index sizes and build time on the fixture,
+   and anything that could not be indexed (with the gap it produces).
+
 ## U1. Structural query tools served from published, hash-bound artifacts (no live container, no network)
 Add a tool family to the input server (new module, e.g. `code_query_mcp.py`, imported by `input_mcp.TOOLS`; the job
-only sees the tools its inputs can answer, see U3). Every answer comes from an ACCEPTED, hash-verified upstream artifact
-of the run, never from a fresh tool run and never from target text:
+only sees the tools its inputs can answer, see U3). Every answer comes from the U0 code index (built from ACCEPTED, hash-verified upstream artifacts
+of the run), never from a fresh tool run and never from target text:
 - `code_symbol`: definitions matching a name (exact and qualified), from CPG method records and the tree-sitter AST
   (functions, with file, span, signature). Ambiguity is returned as multiple rows, never silently picked.
 - `code_callers` / `code_callees`: one hop by default, `depth` up to a small cap, from `reachability.CallGraph` over
@@ -32,6 +67,14 @@ of the run, never from a fresh tool run and never from target text:
 - `code_type_info`: base classes, subclasses and member functions of a type (from CPG type-decl records), with a
   `hierarchy_complete` flag.
 - `code_file_outline`: functions, call sites and imports of one file from the tree-sitter AST (bounded rows).
+- `code_search`: FTS over method names, call targets, identifiers and string literals (fuzzy discovery when the exact name is unknown).
+- `code_calls_to`: call sites of a named function or family (for example the unsafe-copy family) with file, line, caller and
+  the argument text/count the CPG records, filterable by component, partition or path prefix (native memory-safety triage).
+- `code_path`: bounded call paths from a function (or program entry) to a target function via `reachability.CallGraph`,
+  returning up to N paths and every escape encountered (`complete=false` when any escape can hide a path).
+- `code_address_taken` / `code_overrides`: functions whose address is taken or stored in tables, and the overrides of a
+  virtual method, with `hierarchy_complete` and the reason codes brief S defines (use them if brief S is merged; otherwise
+  return the existing escape reasons).
 - `code_exports` (if brief Q's export table is present in the run): defined exported symbols of an artifact; else a gap.
 Contract for every tool: bounded rows (default and hard caps), stable ordering, `source` (producer job, attempt id,
 artifact sha256) on every result, `gaps` listing anything unavailable (no CPG for this language, stale generation,
@@ -40,13 +83,14 @@ names are control-stripped and length-capped exactly like `lsp_driver.py`. Load 
 SQLite or in-memory index built deterministically from the records file (fast repeat queries; the index is derived,
 never authoritative, and rebuilt from the hash-verified file).
 
-## U2. Language-server queries (second stage, only if U1 is green and the effort is contained)
-Live LSP needs a language server running in a sealed compiler image against the built checkout, which the persona
-process does not have. Do NOT weaken the sandbox for it. Instead publish, as a deterministic job or a step of an
-existing one, a batch `lsp-query-result` document for a bounded worklist (the symbols the accepted claims and leads
-name: definitions, references, incoming/outgoing calls via `lsp_driver.py`), and serve those through the same tool
-family (`code_lsp_lookup`, read-only, from the published document). If the worklist approach does not fit, write the
-design and gaps into `docs/code-query-tools.md` and stop; do not build a live-container bridge in this brief.
+## U2. DEFERRED: live language-server and CodeQL queries at model time
+William, 2026-09-29: defer both; the indexed AST and CPG (U0/U1) should cover most needs. Do NOT build a live bridge.
+Write `docs/code-query-tools.md` section "Deferred" with: the sealed code-intel sidecar design (read-only checkout mount,
+no network, unprivileged, resource-capped, pinned image, closed query set through `lsp_driver.py`, audited, torn down by
+the owning Dagster job), why build scripts make jdtls/gopls a target-controlled-code risk, the replay rule (record each
+query and answer), and what evidence would justify building it (the usage ledger in U5 showing hunters asking for
+things the code index cannot answer). Same for query-time CodeQL (a bounded set of parameterised, pre-compiled query
+packs, results published as locators). Design only.
 
 ## U3. Tool exposure follows what the job can answer
 A job gets a query tool only when its inputs include the artifact behind it (CPG records for callers/callees/symbol/
