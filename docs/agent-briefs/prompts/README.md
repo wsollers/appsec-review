@@ -20,5 +20,7 @@ Each file here is the exact prompt to paste into a new Claude session. Every pro
 | `K-registry-into-pipeline.md` | cloud | after `dev-executor` and `personas-folder` merge (wave 2) | `registry-move` |
 | `L-formats-finish.md` | cloud | after `personas-folder` merges (wave 2) | `formats-2` |
 | `N-caches-and-memo.md` | cloud | after `dev-executor` merges (wave 2) | `caches` |
+| `P-sample-report-refresh.md` | cloud (HTML) + you render the PDF in WSL | now | `sample-report` |
+| `Q-exported-symbol-entry-points.md` | cloud (code) + you run one WSL smoke | now | `entry-exports` |
 
 Agent A (`osv-feed`) is finished; its branch is waiting for the controller to push and merge. Waves 1 and 2 (2026-09-29) run three agents at once because their file ownership is disjoint; wave 2 starts only after the merges named in its row. Each agent pushes ONLY its own branch; the controller merges.
