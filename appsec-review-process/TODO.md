@@ -416,36 +416,6 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |
 
-## B hardening (agent brief B)
-- B1/B3/B4/B5/B6 done on `hardening-b`; B2 not reproducible (invoker now inlines plan-unit.json; build_plan.check already rejects wrong-unit plans).
-- OPEN: build classification makes `ai/` its own build unit (freeciv21 `dir:ai`); belongs to build_index/build_classify.
-- OPEN, pre-existing failures on baseline: `test_validator_vendor_prepass_dispatch` (128F/13E), `test_phase1` A08 x2, `test_owasp_dispatch...prohibited_text_in_the_candidate_itself`, `test_build_discovery` and `test_b13_harmless` (import errors).
-- Reachability has no model judgement field at stages 07/09/12; Python arbitrates it (brief assumed one).
-
-## run-log (branch `run-log`)
-
-| Item | Status |
-|---|---|
-| `pipeline_log` JSON lines, one file per run, banner at intake/resume, context from Dagster ops, `orchestrator/tail-run-log.sh` | DONE (`docs/run-log.md`) |
-| Idle watchdog in `review_cli._dispatch_streaming` (warn default, kill off by default) | DONE |
-| Workers other than `review_cli` / `claim_reviewer_pool` do not yet log their own progress lines; only step start/finish + those two | OPEN |
-| Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | OPEN |
-
-## C: language servers, tree-sitter, CodeQL traced (branch `lang-servers`)
-
-Done on the branch, not yet built (details and WSL commands: `docs/language-servers.md` §7):
-pinned servers on every `audit-buildenv-*` image, vendored tree-sitter (`audit-lsp-vendor`),
-`lsp_driver.py`, `treesitter_ast.py` (+ schema), `codeql-cpp-traced` in `codeql_sast.py`,
-`queries/appsec-graph-cpp`, .NET SDK in `audit-codeql`, `scripts/smoke_lang_servers.sh`, skills.
-OPEN:
-- Build `audit-lsp-vendor`, then the 9 buildenv images and both CodeQL images; run
-  `images/test/run-lsp-smoke.sh`; regenerate B16 records (now include `audit-codeql`,
-  `audit-codeql-native`). Fix whatever the first build breaks (QL compile, offline servers).
-- Wire `codeql-cpp-traced`: `run_codeql_sast` must pass the accepted `02-native-build` root and
-  fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
-- `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
-- Pre-existing `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (dependabot bumps) are not this branch's.
-
 ## F-poc-fix (agent brief F, branch `poc-fix`)
 
 - [x] Lane `12b-poc-and-fix` after 12: `poc_fix_select.py` (verified + CRITICAL + REACHABLE via the
