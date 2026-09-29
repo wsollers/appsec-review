@@ -431,6 +431,17 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] HOLD with I3: I2b registers item ops in `dagster_workflow.py` (`job_executor.register_item_ops`).
   `workflow.py` hashes `dagster_workflow.py` into the workflow-preparation branch fingerprints, so this
   one-line wiring reruns build discovery (and what follows it) once in prod.
+- [x] I3 fingerprint scope audit (HOLD until the hello-autotools baseline finishes): 502 files are
+  hashed by the per-job code lists; all are semantics (code, schemas, contracts, templates, prompts,
+  rule sets). The only docs were 3 files in `job_graph.definition_hash` (phase-1 implementation
+  spec, `00-intake-recovery/config.md` and `prompt.md`); removed. Only 00-intake's recorded
+  definition hash changes once. ADR-0013 item 8 already keeps it out of intake staleness, so no job
+  reruns.
+- [ ] Controller decision (relaunch tax, not docs): `workflow.py` hashes `dagster_workflow.py` into
+  every workflow-preparation branch, so any op wiring edit reruns build discovery and what follows.
+  Four modules (`analysis_feature_lifecycle`, `control_feature_lifecycle`, `joern_cpg`, `test_evidence`)
+  still hash SHARED_RUNTIME files (`publish_job_output.py` and others) without
+  `drop_shared_runtime` (ADR-0013). Together they cover 15 jobs.
 - [ ] Legacy lifecycles keep their prod fingerprint in dev too (no early cutoff: inputs pin upstream
   attempt ids). The win arrives per job as jobs are ported to the item executor.
 - [ ] Container items: `job_executor.check_item` refuses `grants.container` until an item needs one

@@ -404,5 +404,26 @@ class ProdFingerprintTests(unittest.TestCase):
                 self.assertEqual(snapshot(), base, mode)
 
 
+class FingerprintScopeTests(unittest.TestCase):
+    """Brief I3: documentation is not a fingerprint input."""
+    def test_intake_definition_hash_reads_no_documentation(self):
+        import job_graph
+        hashed = []
+        real = job_graph.file_hash
+        def spy(path):
+            hashed.append(Path(path).resolve())
+            return real(path)
+        template = state.read_json(ROOT / 'registry' / 'job-templates' / '00-intake.json')
+        with patch.object(job_graph, 'file_hash', side_effect=spy):
+            job_graph.definition_hash(template)
+        names = {path.relative_to(ROOT.parent).as_posix() for path in hashed}
+        for doc in ('appsec-review-process/phase-1-implementation-prompt.md',
+                    'appsec-review-process/00-intake-recovery/config.md',
+                    'appsec-review-process/00-intake-recovery/prompt.md'):
+            self.assertNotIn(doc, names)
+        self.assertFalse([name for name in names if name.lower().endswith(('.md', 'readme'))])
+        self.assertIn('appsec-review-process/intake.py', names)
+
+
 if __name__ == '__main__':
     unittest.main()
