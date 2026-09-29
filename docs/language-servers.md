@@ -122,11 +122,37 @@ deterministic (sorted, no timestamps in the hashed body) and carries `content_sh
 canonical body. Files over the size cap, unparseable files and languages without a grammar become
 `gaps`. It is an additional AST source; it does not replace Joern/CPG.
 
-Large-project measurement: see §5.1 (filled from a real run).
+The CLI streams: file records are written (and hashed) one at a time in path order, so memory
+stays flat however large the tree; `build()` returns the same document in memory for small trees
+and tests (`test_streamed_file_equals_the_in_memory_document`). The whole checkout is parsed in one
+pass by one process; the per-file work is independent, so sharding by path prefix across
+processes is the scaling step if wall time matters.
 
-### 5.1 Measurement
+Run inside any compiler image (the repo mounted read-only at `/workspace`, as in §8):
 
-(Filled in by the measurement commit.)
+```
+/opt/treesitter/bin/python /workspace/appsec-review-process/treesitter_ast.py \
+  --root /workspace/<target> --out /scratch/treesitter-ast.json --stats /scratch/treesitter-ast.stats.json
+```
+
+### 5.1 Measurement (2026-09-29)
+
+Measured in the author's Linux container (4 vCPU, CPython 3.11, py-tree-sitter 0.26.0 and the
+pinned grammars from `requirements-treesitter.txt`), default limits (2 MiB per file, 5,000 rows
+of each kind per file), one process:
+
+| Tree | Files parsed | Bytes parsed | Functions | Calls | Wall | Peak RSS | Output |
+|---|---|---|---|---|---|---|---|
+| CPython `main` (shallow clone) | 3,569 (2,367 py, 1,131 c) | 79 MB | 105,229 | 643,887 | 26.5 s | 103 MiB | 66 MB |
+| Linux kernel `master` (shallow clone) | 67,606 (64,460 c) | 1.12 GB | 793,851 | 5,642,328 | 273.5 s | 114 MiB | 468 MB |
+
+Before streaming, CPython peaked at 515 MiB (the whole document in memory); streaming keeps RSS
+roughly constant (the largest single tree plus counters). Gaps on Linux: 238 suffixes without a
+grammar, 102 symlinks skipped, 56 files over 2 MiB, 2 files with a row cap hit. `error_nodes`
+is high on C (417,240 on Linux; 55,826 on CPython): tree-sitter parses C without the
+preprocessor, so macro-heavy code yields ERROR/MISSING nodes. Treat function/call rows in such
+files as navigation hints, and prefer the compile-database-driven sources (clangd, CodeQL
+traced, Joern) for C/C++ claims.
 
 ## 6. CodeQL (step 6)
 
