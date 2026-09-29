@@ -328,6 +328,20 @@ Role `chain-composer`, domain `attack-chain-lifecycle`, tooling profile `claim-r
 Must not cite a claim, fact, file or line outside the workspace, rate severity, call a chain verified, or
 write exploit code or payloads.
 
+### poc-fix-author
+
+Cell of `12b-poc-and-fix` (agent brief F): reads one request workspace for a finding that is verified,
+Critical and REACHABLE (locations, reachability witness, citable windows with pinned hashes, redacted
+snippets) and writes a light static PoC (minimal input, call or short test that triggers the crash or
+overflow, or shows the faulty control flow), a plain-language source-to-sink explanation, the cited line
+ranges and a proposed fix as a unified diff of the cited files. Uses
+`12b-poc-and-fix/task-poc-and-fix-cell.md`. Role `poc-fix-author`, domain `poc-and-fix`, tooling profile
+`claim-review-static`.
+
+Must not write shellcode, payload bytes, process spawning, sockets or callbacks, file writes outside a temp
+name, destructive actions, persistence, credentials or obfuscated text; cite files, lines or hashes outside
+the workspace; or call the PoC validated or the fix verified.
+
 ## Domain Specialist Personas
 
 ### nginx-rest-api-specialist
