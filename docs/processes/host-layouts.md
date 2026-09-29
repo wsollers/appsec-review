@@ -36,6 +36,7 @@ target runs.
   | `fixtures/targets/` | target clones at pinned commits | `fixtures/populate-targets.sh` |
   | `orchestrator/dagster/.env`, `.host/` | instance password, uid/gid, DAGSTER_HOME, compute logs | `orchestrator/dagster/setup.py`, `code-location.sh prepare` |
   | `data/feeds/nvd/` mutable state | NVD feed snapshots | `nvd_reference_schedule` |
+  | `data/feeds/osv/`, `data/feeds/mitre/` | OSV and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `nvd_reference_schedule`, `mitre_feed.py sync` |
 
 - **Runs are not portable.** A run started on one host is resumed on the same host.
 
