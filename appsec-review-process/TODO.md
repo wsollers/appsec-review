@@ -668,3 +668,26 @@ records and report re-render (WSL), image rebuild and smoke, brief N fingerprint
 - OPEN: `render.py` applies the native tier cap only to a family named `native`; the graph has no such lane, so the
   sample's assurance carries no tier cap.
 - OPEN: 3A replays the lane-14 case-001 fixture, so its entry fact names `projects/cpp/case-001/main.cpp`.
+
+## N: tool-output cache and per-item memo (brief N, branch `caches`)
+
+- [x] N1 tool-output cache (`tool_output_cache.py`, call site `dependency_b13_adapters.execute`):
+  syft/grype/osv/scancode keyed by pinned request + adapter-computed content digests + mode; a hit is
+  re-verified end to end (B13, output hash, receipt, permission) and recorded as `reused_from`;
+  TIMEOUT/OOM gaps cached under the same limits only. Tunable `tool_output_cache` = dev (prod off).
+- [x] N2 per-item memo (`item_memo.py`) for 02-build-plan units, today's validation re-run on a hit;
+  unit id and root stated at both ends of the per-unit prompt. Tunable `item_memo` = dev.
+- [x] N3 store `data/caches/` (git-ignored), size caps, pruning, `tool_output_cache.py stats|prune|clear`;
+  docs in `docs/dev-mode-restart.md`.
+- [x] N4 fingerprint scope (D-13): (a) build discovery hashes `dagster_workflow.py:branch_op` only, so
+  the I2b op wiring no longer reruns build discovery; (b) analysis/control feature lifecycles,
+  `joern_cpg`, `test_evidence` drop shared runtime. 14 jobs move once (3 + 7 + 1 + 3), plus the four
+  preparation branches and, in prod, build discovery's consumers.
+- [ ] Memo call sites not done: build-resolution units (image + plan commands + trial inputs; its
+  receipts cite trials relative to the attempt, so a reused trial needs a cross-attempt receipt path)
+  and IR/SAST invocations (ADR-0014 item 6, cross-run).
+- [ ] `control_feature_lifecycle._code` hashes no per-job worker module (`completeness_audit.py`,
+  `dynamic_rescope.py`, ...): an edit there does not rerun that job. Not changed (widening).
+- [ ] Controller: set `tool_output_cache` / `item_memo` to `on` for prod after a live dev loop.
+- [ ] Not run live (no Docker here): first dev relaunch of freeciv21 license-scan should show
+  `tool-output-reuse.json` in the new orchestration attempt.
