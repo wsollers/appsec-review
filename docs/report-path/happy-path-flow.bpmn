@@ -46,7 +46,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="Start_Run" name="Exact run generation ready"/>
     <bpmn:parallelGateway id="Gateway_EvidenceSplit" name="Run independent evidence branches"/>
-    <bpmn:task id="Task_CodeqlSast" name="02-codeql-sast: CodeQL per language (build-mode none); leads to evidence assembly and claim ledger"/>
+    <bpmn:task id="Task_CodeqlSast" name="02-codeql-&lt;lang&gt; (one node per language, ADR-0023): CodeQL leads and retained databases; leads to evidence assembly, claim ledger and 06-reachability-codeql"/>
     <bpmn:task id="Task_Component" name="Validate accepted F03 component map"/>
     <bpmn:task id="Task_ThreatInitial" name="L6A deterministic DFD/STRIDE core plus threat workbench persona cells (waves 1-2)"/>
     <bpmn:task id="Task_ThreatReconcile" name="L6B reconcile threat model, conflicts and coverage"/>

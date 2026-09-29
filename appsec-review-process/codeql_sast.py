@@ -1,35 +1,42 @@
-"""Deterministic worker for ``02-codeql-sast``: CodeQL security suites, offline, per language.
+"""Deterministic worker for the ``02-codeql-<lang>`` nodes: CodeQL security suites, offline, one language per node.
+
+ADR-0023 (brief G) replaced the single ``02-codeql-sast`` job with one graph node per CodeQL
+language (cpp, csharp, go, java, javascript, python, ruby, rust); they share this module and the
+``codeql-language`` contract and run in parallel in the Docker pool. A node whose language is
+absent from the checkout publishes SKIPPED ``not-applicable-language-absent``.
 
 William (2026-09-28): CodeQL always runs; there is no license gate in the pipeline. The pinned
 ``audit-codeql`` image carries the CodeQL bundle (CLI plus the ``codeql/<lang>-queries`` packs at
 matching versions), so database creation and the ``<lang>-security-extended`` suite need no
-network. One B13 container per detected language creates a database with ``--build-mode none``
-and analyzes it to SARIF; Python normalizes SARIF results into leads (rule id, pinned rule name,
-CWE tags, path, lines, fresh source hash). Raw SARIF messages stay in the immutable attempt, as in
+network. One B13 container per plan row creates a database with ``--build-mode none`` and
+analyzes it to SARIF; Python normalizes SARIF results into leads (rule id, pinned rule name, CWE
+tags, path, lines, fresh source hash). Raw SARIF messages stay in the immutable attempt, as in
 02-source-sast and 02-native-sast: result messages quote target code and are not promoted.
 
-C/C++ uses ``--build-mode none`` (decision recorded in ADR-0017): it needs no accepted native
-build (freeciv21 and doom3-bfg had zero built units), runs in the pinned CodeQL image without
-the per-target build image, and never executes a target build. The cost is fidelity (no
-build-driven macro, include or template resolution), recorded as a coverage gap. Go has no
-build-mode none in CodeQL and stays a gap (gosec covers Go in 02-source-sast).
+Gating (ADR-0023 decision 2): javascript, python and ruby need only the intake; java and csharp
+run ``--build-mode none`` (no build). cpp waits for ``02-native-build``: each replayable native
+unit's adapted compile database (the same revalidation and flag screening ``02-native-sast``
+uses) is replayed under CodeQL's tracer in the pinned ``audit-codeql-native`` image as tool
+``codeql-cpp-traced`` (only compiler invocations run; no target build script does), and the lane
+also runs the ``queries/appsec-graph-cpp`` call-graph tables (raw CSV kept in the attempt, hashed
+in the receipt). ``--build-mode none`` always runs for cpp as well; without native units the gap
+``language not built`` is recorded. Go (no build-mode none, no Go build step) and Rust (no pinned
+suite) record a gap and no database. A compiled language that cannot be built is never a failure.
 
-Traced C/C++ (brief C, ADR-0017 decision 4's "second tool id"): when the caller passes an accepted
-``02-native-build`` publication, each native unit's adapted compile database (the same
-revalidation and flag screening ``02-native-sast`` uses) is replayed under CodeQL's tracer in the
-pinned ``audit-codeql-native`` image as tool ``codeql-cpp-traced``. Only compiler invocations run;
-no target build script does. The lane also runs the ``queries/appsec-graph-cpp`` call-graph and
-flow-source tables for brief E (raw CSV kept in the attempt, hashed in the receipt, not promoted).
-Without a native build the plan is unchanged (build-mode none only).
+Databases (ADR-0023 decision 3): a completed lane keeps its finalized database; the worker moves
+it into ``<run>/data/codeql-databases/<job>/<attempt>/<key>/`` (outside the attempt) and publishes
+a hash-bound pointer (tree sha256, file count, bytes, bundle version, build mode, source snapshot)
+so the reachability engines reuse it and never rebuild.
 
-ADR-0013: a language whose container times out, runs out of memory or exits non-zero is a
-coverage gap; the job publishes OK_WITH_GAPS. Integrity failures still block.
+ADR-0013: a lane that times out, runs out of memory or exits non-zero is a coverage gap; the node
+publishes OK_WITH_GAPS. Integrity failures still block.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -44,27 +51,34 @@ import permission_capabilities as pc
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 
-JOB = "02-codeql-sast"
-DAGSTER_JOB = "codeql_sast"
-CONTRACT = "codeql-sast"
-RESULT = "codeql-sast.json"
+# One node per CodeQL language (ADR-0023 decision 1). Order is the graph and catalog order.
+LANGUAGES = ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")
+JOBS = {language: f"02-codeql-{language}" for language in LANGUAGES}
+DAGSTER_JOB = "codeql_sast"   # standalone Dagster job: every language node, in parallel
+CONTRACT = "codeql-language"
+RESULT = "codeql-language.json"
 RECEIPTS = "b13-receipts.json"
-SUMMARY = "codeql-sast-summary.md"
+SUMMARY = "codeql-language-summary.md"
 PERMISSION = "permission.json"
 LINEAGE = "lineage.json"
-SCHEMA = "appsec-review/codeql-sast/1"
+SCHEMA = "appsec-review/codeql-language/1"
+SCHEMA_FILE = "codeql-language.schema.json"
+SKIP_REASON = "not-applicable-language-absent"
+CONSUMER = "06-reachability-codeql"   # an edge that allows the skip reason (SKIPPED validation)
+NATIVE_BUILD_JOB = "02-native-build"
+DATABASE_STORE = "codeql-databases"
 IMAGE_ID = "audit-codeql"
 IMAGE_ROOT = ROOT.parent / "images" / IMAGE_ID
 TOOL_METADATA = IMAGE_ROOT / "tool.json"
-TEMPLATE = ROOT / "registry" / "job-templates" / f"{JOB}.json"
 SARIF = "scratch/codeql.sarif"
+DATABASE = "scratch/db"
 CATEGORY = "codeql-security-query"
 CODE_FILES = (
     "codeql_sast.py", "container_execution.py", "permission_capabilities.py",
     "publish_job_output.py", "validate_job_output.py", "native_sast.py", "native_sast_adapters.py",
-    "registry/output-contracts/codeql-sast.json", "registry/job-templates/02-codeql-sast.json",
+    f"registry/output-contracts/{CONTRACT}.json",
 )
-# Suffixes per CodeQL extractor. Order is the execution order.
+# Suffixes per CodeQL extractor.
 LANGUAGE_SUFFIXES = {
     "cpp": (".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp"),
     "csharp": (".cs",),
@@ -73,11 +87,16 @@ LANGUAGE_SUFFIXES = {
     "javascript": (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"),
     "python": (".py",),
     "ruby": (".rb",),
+    "rust": (".rs",),
 }
 BUILD_MODE_NONE = ("cpp", "csharp", "java", "javascript", "python", "ruby")
+COMPILED = ("cpp", "csharp", "go", "java", "rust")
 OFFLINE_UNSUPPORTED = {
-    "go": ("CodeQL go not run: Go extraction has no build-mode none (autobuild needs the Go toolchain "
-           "and module downloads, which the offline boundary forbids); gosec covers Go in 02-source-sast."),
+    "go": ("CodeQL go not run: language not built: Go extraction has no build-mode none and the pipeline has "
+           "no Go build step (autobuild needs the Go toolchain and module downloads, which the offline boundary "
+           "forbids); gosec covers Go in 02-source-sast."),
+    "rust": ("CodeQL rust not run: language not supported by the pinned CodeQL metadata (images/audit-codeql/"
+             "tool.json pins no rust suite); rust-analyzer and tree-sitter hints cover Rust."),
 }
 FIDELITY_GAPS = {
     "cpp": ("CodeQL cpp ran with --build-mode none: no compiler invocation, so macros, include paths and "
@@ -98,8 +117,29 @@ _CWE = re.compile(r"external/cwe/cwe-0*([1-9][0-9]{0,5})\Z")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
 
 
-def root(run_id: str) -> Path:
-    return data_path(run_id, "jobs", JOB)
+def job_id(language: str) -> str:
+    if language not in JOBS:
+        raise Blocked(f"02-codeql: unsupported CodeQL language {language!r}")
+    return JOBS[language]
+
+
+def language_of(job: str) -> str:
+    for language, name in JOBS.items():
+        if name == job:
+            return language
+    raise Blocked(f"02-codeql: {job!r} is not a CodeQL language node")
+
+
+def template_path(language: str) -> Path:
+    return ROOT / "registry" / "job-templates" / f"{job_id(language)}.json"
+
+
+def root(run_id: str, language: str) -> Path:
+    return data_path(run_id, "jobs", job_id(language))
+
+
+def database_store(run_id: str) -> Path:
+    return data_path(run_id, DATABASE_STORE)
 
 
 def _utc_now() -> str:
@@ -107,13 +147,14 @@ def _utc_now() -> str:
 
 
 def _producer_receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    template = read_json(TEMPLATE)
+    job = inputs["job"]
+    template = read_json(template_path(inputs["language"]))
     permissions = template.get("permissions")
-    if (template.get("job_template_id") != JOB or not isinstance(permissions, list) or
+    if (template.get("job_template_id") != job or not isinstance(permissions, list) or
             not permissions or len(permissions) != len(set(permissions)) or
             not all(isinstance(item, str) and item for item in permissions)):
-        raise Blocked(f"{JOB}: canonical template permissions are invalid")
-    common = {"run_id": inputs["run_id"], "job_id": JOB,
+        raise Blocked(f"{job}: canonical template permissions are invalid")
+    common = {"run_id": inputs["run_id"], "job_id": job,
               "source_snapshot_sha256": inputs["source_snapshot_sha256"]}
     return (
         {"schema": "appsec-review/producer-permission-receipt/1.0", **common, "permissions": permissions},
@@ -122,31 +163,32 @@ def _producer_receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str
     )
 
 
-def _source_snapshot(run_id: str) -> str:
+def _source_snapshot(run_id: str, job: str) -> str:
     path = run_path(run_id) / "inputs" / "artifact-manifest.json"
     if not path.is_file():
-        raise Blocked(f"{JOB}: staged artifact-manifest.json is required")
+        raise Blocked(f"{job}: staged artifact-manifest.json is required")
     return "sha256:" + file_hash(path)
 
 
-def _target(run_id: str) -> Path:
+def _target(run_id: str, job: str) -> Path:
     manifest = read_json(run_path(run_id) / "inputs" / "artifact-manifest.json")
     value = manifest.get("target", {}).get("repo_path")
     path = Path(value) if isinstance(value, str) else Path()
     if not value or not path.is_absolute() or not path.is_dir() or path.is_symlink():
-        raise Blocked(f"{JOB}: target.repo_path must be an absolute real checkout directory")
+        raise Blocked(f"{job}: target.repo_path must be an absolute real checkout directory")
     return path.resolve()
 
 
 def tool_metadata() -> tuple[dict[str, Any], str]:
     """Authenticated CodeQL metadata: tool.json must name the bundle whose sha256 the image build
     pins (image.json prebuild and the Dockerfile's sha256sum line)."""
+    what = "02-codeql"
     try:
         value = json.loads(TOOL_METADATA.read_text(encoding="utf-8"))
         build = json.loads((IMAGE_ROOT / "image.json").read_text(encoding="utf-8"))
         dockerfile = (IMAGE_ROOT / "Dockerfile").read_text(encoding="utf-8")
     except (OSError, json.JSONDecodeError) as exc:
-        raise Blocked(f"{JOB}: authenticated CodeQL tool metadata is unavailable") from exc
+        raise Blocked(f"{what}: authenticated CodeQL tool metadata is unavailable") from exc
     keys = ("image_id", "tool", "version", "executable", "version_argv", "bundle", "query_suites", "lane_script")
     bundle = value.get("bundle") if isinstance(value, dict) else None
     pinned = [step.get("sha256") for row in build.get("builds", []) if row.get("image_id") == IMAGE_ID
@@ -160,20 +202,20 @@ def tool_metadata() -> tuple[dict[str, Any], str]:
             not isinstance(suites, dict) or set(suites) != set(BUILD_MODE_NONE) or
             any(suite != f"codeql/{lang}-queries:codeql-suites/{lang}-security-extended.qls"
                 for lang, suite in suites.items())):
-        raise Blocked(f"{JOB}: CodeQL tool metadata is invalid or differs from the pinned image build")
+        raise Blocked(f"{what}: CodeQL tool metadata is invalid or differs from the pinned image build")
     lane = value["lane_script"]
     script = IMAGE_ROOT / str(lane.get("source", "")) if isinstance(lane, dict) else None
     if (script is None or set(lane) != {"path", "source"} or not str(lane["source"]).startswith("scripts/") or
             lane["path"] != "/opt/scripts/" + PurePosixPath(lane["source"]).name or
             not script.is_file() or script.is_symlink() or "COPY scripts/ /opt/scripts/" not in dockerfile):
-        raise Blocked(f"{JOB}: CodeQL lane script metadata is invalid")
+        raise Blocked(f"{what}: CodeQL lane script metadata is invalid")
     traced = value.get("traced")
     native = IMAGE_ROOT / "Dockerfile.native"
     replay = IMAGE_ROOT / "scripts" / "replay_compile_commands.py"
     try:
         native_text = native.read_text(encoding="utf-8")
     except OSError as exc:
-        raise Blocked(f"{JOB}: traced CodeQL image definition is unavailable") from exc
+        raise Blocked(f"{what}: traced CodeQL image definition is unavailable") from exc
     native_pins = [step.get("sha256") for row in build.get("builds", []) if row.get("image_id") == TRACED_IMAGE_ID
                    for step in row.get("prebuild", [])]
     if (not isinstance(traced, dict) or traced.get("tool_id") != TRACED_TOOL_ID or
@@ -184,7 +226,7 @@ def tool_metadata() -> tuple[dict[str, Any], str]:
             native_pins != [bundle["sha256"]] or
             f'echo "{bundle["sha256"]}  bundle.tar.zst" | sha256sum -c -' not in native_text or
             "COPY scripts/ /opt/scripts/" not in native_text or not replay.is_file() or replay.is_symlink()):
-        raise Blocked(f"{JOB}: traced CodeQL metadata is invalid or differs from the pinned native image build")
+        raise Blocked(f"{what}: traced CodeQL metadata is invalid or differs from the pinned native image build")
     return ({**value, "lane_script_sha256": "sha256:" + file_hash(script),
              "replay_script_sha256": "sha256:" + file_hash(replay)}, "sha256:" + file_hash(TOOL_METADATA))
 
@@ -195,9 +237,9 @@ def graph_pack_sha256() -> str:
     try:
         hashes = {name: file_hash(GRAPH_PACK / name) for name in names}
     except OSError as exc:
-        raise Blocked(f"{JOB}: CodeQL graph query pack is incomplete") from exc
+        raise Blocked("02-codeql-cpp: CodeQL graph query pack is incomplete") from exc
     if any((GRAPH_PACK / name).is_symlink() for name in names):
-        raise Blocked(f"{JOB}: CodeQL graph query pack contains a link")
+        raise Blocked("02-codeql-cpp: CodeQL graph query pack contains a link")
     return "sha256:" + digest(hashes)
 
 
@@ -210,25 +252,31 @@ def detected_languages(paths: list[str]) -> list[str]:
         for language, suffixes in LANGUAGE_SUFFIXES.items():
             if lower.endswith(suffixes):
                 found.add(language)
-    return [language for language in LANGUAGE_SUFFIXES if language in found]
+    return [language for language in LANGUAGES if language in found]
 
 
-def _limits() -> dict[str, int]:
-    return tunables.container_limits(JOB)
+def _limits(language: str) -> dict[str, int]:
+    return tunables.container_limits(job_id(language))
 
 
-def _analysis_tunables() -> dict[str, int]:
-    threads, ram = tunables.value(JOB, "codeql_threads"), tunables.value(JOB, "codeql_ram_bytes")
-    memory = _limits()["memory_bytes"]
+def _analysis_tunables(language: str) -> dict[str, int]:
+    job = job_id(language)
+    threads, ram = tunables.value(job, "codeql_threads"), tunables.value(job, "codeql_ram_bytes")
+    memory = _limits(language)["memory_bytes"]
     if (any(isinstance(item, bool) or not isinstance(item, int) or item < 1 for item in (threads, ram)) or
             ram < 1024 * 1024 or ram >= memory):
-        raise Blocked(f"{JOB}: codeql_ram_bytes must be at least 1 MiB and below container_memory_bytes")
+        raise Blocked(f"{job}: codeql_ram_bytes must be at least 1 MiB and below container_memory_bytes")
     return {"threads": threads, "ram_mb": ram // (1024 * 1024)}
 
 
 def plan_key(row: dict[str, Any]) -> str:
     """Receipt/outcome key: the language for build-mode none, tool id and unit for traced rows."""
     return row.get("plan_key", row["language"])
+
+
+def store_key(row: dict[str, Any]) -> str:
+    """Directory name of a row's retained database (no ':' in paths)."""
+    return plan_key(row).replace(":", "-")
 
 
 def traced_plan(native_units: list[dict[str, Any]], registry: dict[str, dict[str, Any]], metadata: dict[str, Any],
@@ -257,7 +305,7 @@ def traced_plan(native_units: list[dict[str, Any]], registry: dict[str, dict[str
         else:
             row.update(build_mode="traced", query_suite=suite,
                        argv=[metadata["lane_script"]["path"], "cpp", "traced", suite, str(analysis["threads"]),
-                             str(analysis["ram_mb"]), f"{DB_MOUNT}/{key}/compile_commands.json", QUERY_MOUNT])
+                             str(analysis["ram_mb"]), "keep-db", f"{DB_MOUNT}/{key}/compile_commands.json", QUERY_MOUNT])
         rows.append(row)
     return rows
 
@@ -284,20 +332,23 @@ def build_plan(languages: list[str], registry: dict[str, dict[str, Any]], metada
             suite = metadata["query_suites"][language]
             row.update(build_mode="none", query_suite=suite,
                        argv=[metadata["lane_script"]["path"], language, "none", suite,
-                             str(analysis["threads"]), str(analysis["ram_mb"])])
+                             str(analysis["threads"]), str(analysis["ram_mb"]), "keep-db"])
         plan.append(row)
     return plan
 
 
-def _code_hashes() -> dict[str, str]:
+def _code_hashes(language: str) -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
-    values["schemas/codeql-sast.schema.json"] = file_hash(ROOT.parent / "schemas" / "codeql-sast.schema.json")
+    template = f"registry/job-templates/{job_id(language)}.json"
+    values[template] = file_hash(ROOT / template)
+    for name in (SCHEMA_FILE, "codeql-database-pointer.schema.json"):
+        values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values
 
 
-def _permission(run_id: str, source: str, at: str) -> dict[str, Any]:
-    requirement = {"schema": "appsec-review/permission-requirement/1.0", "job_id": JOB, "capabilities": []}
-    context = {"run_id": run_id, "job_id": JOB, "source_snapshot_sha256": source,
+def _permission(run_id: str, job: str, source: str, at: str) -> dict[str, Any]:
+    requirement = {"schema": "appsec-review/permission-requirement/1.0", "job_id": job, "capabilities": []}
+    context = {"run_id": run_id, "job_id": job, "source_snapshot_sha256": source,
                "now": at, "registry_ceiling": []}
     decision = pc.evaluate(requirement, [], context)
     pc.require_granted(decision, requirement=requirement, grants=[], context=context)
@@ -312,51 +363,78 @@ def load_native_units(native_build_root: Path, run_id: str, fingerprint: str,
     try:
         upstream = native_sast.load_native_build(native_build_root, run_id=run_id, expected_fingerprint=fingerprint)
     except native_sast.Blocked as exc:
-        raise Blocked(f"{JOB}: accepted native build failed revalidation ({exc})") from exc
+        raise Blocked(f"{JOBS['cpp']}: accepted native build failed revalidation ({exc})") from exc
     if upstream["target"] != target:
-        raise Blocked(f"{JOB}: accepted native build is for another checkout")
+        raise Blocked(f"{JOBS['cpp']}: accepted native build is for another checkout")
     units = [{"unit_id": unit["unit_id"], "key": digest(unit["unit_id"])[:16],
               "adapted_sha256": unit["compile_database"]["adapted_sha256"], "adapted": unit["adapted"]}
              for unit in upstream["units"]]
     return upstream["binding"], units
 
 
-def current_inputs(run_id: str, *, native_build_root: Path | None = None,
+def native_build_state(run_id: str) -> tuple[Path | None, str | None, str | None]:
+    """(root, fingerprint, None) for an accepted 02-native-build, else (None, None, cause)."""
+    base = data_path(run_id, "jobs", NATIVE_BUILD_JOB)
+    pointer_path = base / "accepted.json"
+    if not pointer_path.is_file() or pointer_path.is_symlink():
+        return None, None, "no accepted 02-native-build publication"
+    pointer = read_json(pointer_path)
+    if pointer.get("status") == "SKIPPED":
+        return None, None, f"02-native-build SKIPPED ({_clean(pointer.get('reason'), 80) or 'no reason'})"
+    fingerprint = pointer.get("fingerprint")
+    if pointer.get("status") not in ("OK", "OK_WITH_GAPS") or not isinstance(fingerprint, str):
+        return None, None, "02-native-build has no current accepted success"
+    return base, fingerprint, None
+
+
+def current_inputs(run_id: str, language: str, *, native_build_root: Path | None = None,
                    native_build_fingerprint: str | None = None) -> dict[str, Any]:
-    source = _source_snapshot(run_id)
-    target = _target(run_id)
+    """``native_build_root``/``native_build_fingerprint`` override the accepted 02-native-build the
+    cpp node otherwise discovers itself (tests, offline replays); other languages ignore them."""
+    job = job_id(language)
+    source = _source_snapshot(run_id, job)
+    target = _target(run_id, job)
     metadata, metadata_sha256 = tool_metadata()
     registry = ce.load_image_registry(ce.IMAGES_DIR)
     paths = [path.relative_to(target).as_posix() for path in target.rglob("*")
              if path.is_file() and not path.is_symlink()]
-    analysis = _analysis_tunables()
-    languages = detected_languages(paths)
+    analysis = _analysis_tunables(language)
+    present = language in detected_languages(paths)
     extra: dict[str, Any] = {}
-    plan = build_plan(languages, registry, metadata, metadata_sha256, analysis)
-    if native_build_root is not None:
-        if not isinstance(native_build_fingerprint, str):
-            raise Blocked(f"{JOB}: a native build root needs its caller-held fingerprint")
-        binding, units = load_native_units(Path(native_build_root), run_id, native_build_fingerprint, target)
-        extra = {"native_build": binding, "native_build_root": str(Path(native_build_root).resolve()),
-                 "native_units": units}
-        if "cpp" in languages:
+    plan = build_plan([language], registry, metadata, metadata_sha256, analysis) if present else []
+    if present and language == "cpp":
+        cause = None
+        if native_build_root is None:
+            native_build_root, native_build_fingerprint, cause = native_build_state(run_id)
+        elif not isinstance(native_build_fingerprint, str):
+            raise Blocked(f"{job}: a native build root needs its caller-held fingerprint")
+        units: list[dict[str, Any]] = []
+        if native_build_root is not None:
+            binding, units = load_native_units(Path(native_build_root), run_id, native_build_fingerprint, target)
+            extra = {"native_build": binding, "native_build_root": str(Path(native_build_root).resolve()),
+                     "native_units": units}
             plan += traced_plan(units, registry, metadata, metadata_sha256, analysis, graph_pack_sha256())
+            if not units:
+                cause = "the accepted 02-native-build has no replayable C/C++ unit"
+        if cause is not None:
+            extra["not_built"] = f"language not built: {cause}; ran --build-mode none only"
     return {**extra,
-        "job": JOB, "run_id": run_id, "source_snapshot_sha256": source, "target_path": str(target),
+        "job": job, "language": language, "present": present,
+        "run_id": run_id, "source_snapshot_sha256": source, "target_path": str(target),
         "tool_metadata_sha256": metadata_sha256,
         "permission_fingerprint_sha256": pc.input_fingerprint_component(
-            _permission(run_id, source, _utc_now())["decision"]),
+            _permission(run_id, job, source, _utc_now())["decision"]),
         "boundary_sha256": ce.boundary_sha256(),
-        "limits": _limits(), "analysis": analysis,
+        "limits": _limits(language), "analysis": analysis,
         "plan": plan,
-        "code": _code_hashes(),
+        "code": _code_hashes(language),
     }
 
 
 def _runtime(source: str) -> ce.ContainerRuntime:
     defaults = ce.host_defaults()
     if defaults["docker_executable"] is None:
-        raise Blocked(f"{JOB}: Docker is unavailable")
+        raise Blocked("02-codeql: Docker is unavailable")
     return ce.ContainerRuntime(
         docker_executable=defaults["docker_executable"], docker_host=None, images_dir=ce.IMAGES_DIR,
         host_flavor=defaults["host_flavor"], container_user=defaults["container_user"],
@@ -370,15 +448,16 @@ def _host(runtime: ce.ContainerRuntime) -> dict[str, Any]:
 
 def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[str, Any],
              database_root: Path | None = None) -> dict[str, Any]:
+    job = inputs["job"]
     if plan.get("status") != "READY":
-        raise Blocked(f"{JOB}: CodeQL {plan.get('language')} is not ready for execution")
+        raise Blocked(f"{job}: CodeQL {plan.get('language')} is not ready for execution")
     mounts = [{"host_path": inputs["target_path"], "container_path": "/workspace"}]
     if plan.get("build_mode") == "traced":
         if database_root is None:
-            raise Blocked(f"{JOB}: traced CodeQL needs the adapted compile databases")
+            raise Blocked(f"{job}: traced CodeQL needs the adapted compile databases")
         mounts += [{"host_path": str(database_root), "container_path": DB_MOUNT},
                    {"host_path": str(GRAPH_PACK), "container_path": QUERY_MOUNT}]
-    return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": adapter_id,
+    return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": job, "attempt_id": adapter_id,
             "image": {"image_id": plan["image_id"], "digest": plan["image_digest"]},
             "argv": list(plan["argv"]),
             "environment": [{"name": "LANG", "value": "C.UTF-8"}, {"name": "LC_ALL", "value": "C.UTF-8"},
@@ -386,11 +465,11 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[st
             "target_mounts": mounts,
             "scratch_path": "scratch", "log_path": "logs/container",
             "network": {"mode": "none", "destinations": []},
-            "permission": _permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
+            "permission": _permission(run_id, job, inputs["source_snapshot_sha256"], _utc_now()),
             "limits": dict(inputs["limits"])}
 
 
-def terminal_gap(language: str, terminal: Any) -> str | None:
+def terminal_gap(language: str, terminal: Any, job: str = "02-codeql") -> str | None:
     """None when the verified terminal is a completed run; the gap text for a tool-level failure;
     Blocked for anything that is not the tool's own failure (canceled, not started, gate refusals)."""
     status, cause = terminal.get("execution_status"), terminal.get("cause")
@@ -399,7 +478,7 @@ def terminal_gap(language: str, terminal: Any) -> str | None:
     if status == "FAILED" and cause in GAP_CAUSES:
         detail = f"{cause} exit {terminal.get('exit_code')}" if cause == "CONTAINER_EXIT_NONZERO" else cause
         return f"CodeQL {language} ended {detail}; no CodeQL leads for {language}."
-    raise Blocked(f"{JOB}: CodeQL {language} container ended {status} ({cause}); not a recordable tool gap")
+    raise Blocked(f"{job}: CodeQL {language} container ended {status} ({cause}); not a recordable tool gap")
 
 
 def _clean(text: Any, limit: int = 256) -> str | None:
@@ -454,20 +533,21 @@ def normalize_sarif(language: str, content: bytes, target: Path,
                     tool_id: str | None = None) -> tuple[list[dict[str, Any]], int]:
     """SARIF -> leads. Results that cite no regular checkout file line are dropped and counted
     (ADR-0013); a document that is not CodeQL SARIF raises."""
+    job = JOBS.get(language, "02-codeql")
     try:
         document = json.loads(content)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise RuntimeError(f"{JOB}: CodeQL {language} SARIF is malformed") from exc
+        raise RuntimeError(f"{job}: CodeQL {language} SARIF is malformed") from exc
     runs = document.get("runs") if isinstance(document, dict) else None
     if not isinstance(runs, list):
-        raise RuntimeError(f"{JOB}: CodeQL {language} SARIF has no runs")
+        raise RuntimeError(f"{job}: CodeQL {language} SARIF has no runs")
     tool_id = tool_id or f"codeql-{language}"
     leads: dict[str, dict[str, Any]] = {}
     dropped = 0
     hashes: dict[Path, tuple[str, int]] = {}
     for run in runs:
         if not isinstance(run, dict) or not isinstance(run.get("results", []), list):
-            raise RuntimeError(f"{JOB}: CodeQL {language} SARIF run is malformed")
+            raise RuntimeError(f"{job}: CodeQL {language} SARIF run is malformed")
         rules = _rules(run)
         for result in run.get("results", []):
             rule_id = result.get("ruleId") if isinstance(result, dict) else None
@@ -510,32 +590,114 @@ def normalize_sarif(language: str, content: bytes, target: Path,
     return ordered, dropped
 
 
+# ---- retained databases (ADR-0023 decision 3) ----------------------------------------------------
+
+def database_tree(folder: Path) -> dict[str, Any] | None:
+    """{tree_sha256, files, bytes} of a database directory, or None when it is absent, empty or
+    contains anything but regular files and directories (links are never followed or kept)."""
+    if not folder.is_dir() or folder.is_symlink():
+        return None
+    rows, total = [], 0
+    for directory, dirs, files in os.walk(folder, followlinks=False):
+        for name in dirs:
+            if (Path(directory) / name).is_symlink():
+                return None
+        for name in files:
+            path = Path(directory) / name
+            if path.is_symlink() or not path.is_file():
+                return None
+            rows.append((path.relative_to(folder).as_posix(), file_hash(path)))
+            total += path.stat().st_size
+    if not rows:
+        return None
+    rows.sort()
+    return {"tree_sha256": "sha256:" + digest(rows), "files": len(rows), "bytes": total}
+
+
+def pointer(inputs: dict[str, Any], attempt_id: str, row: dict[str, Any], database: dict[str, Any]) -> dict[str, Any]:
+    """The published database pointer, derived from the plan row and the receipt's store record."""
+    identity = {"job": inputs["job"], "attempt_id": attempt_id, "plan_key": plan_key(row),
+                "tree_sha256": database["tree_sha256"]}
+    return {"database_id": "codeqldb_" + digest(identity)[:16], "job_id": inputs["job"], "attempt_id": attempt_id,
+            "plan_key": plan_key(row), "language": row["language"], "build_mode": row["build_mode"],
+            "unit_id": row.get("unit_id"), "bundle_version": row["version"],
+            "tool_metadata_sha256": row["tool_metadata_sha256"], "image_digest": row["image_digest"],
+            "source_snapshot_sha256": inputs["source_snapshot_sha256"], "store_path": database["store_path"],
+            "tree_sha256": database["tree_sha256"], "files": database["files"], "bytes": database["bytes"]}
+
+
+def retain_database(run_id: str, inputs: dict[str, Any], attempt_id: str, row: dict[str, Any],
+                    trial: Path) -> tuple[dict[str, Any] | None, str | None]:
+    """Move a completed lane's database into the run's store; (store record, gap)."""
+    source = trial.joinpath(*DATABASE.split("/"))
+    tree = database_tree(source)
+    if tree is None:   # absent, empty or holding a link: not retained (the caller drops the leftover)
+        if source.is_symlink() or source.is_file():
+            source.unlink()
+        return None, f"codeql-database-absent:{plan_key(row)}"
+    relative = PurePosixPath(DATABASE_STORE, inputs["job"], attempt_id, store_key(row))
+    destination = data_path(run_id, *relative.parts)
+    if destination.exists():
+        raise Blocked(f"{inputs['job']}: database store {relative} already exists")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(destination))
+    moved = database_tree(destination)
+    if moved != tree:
+        raise Blocked(f"{inputs['job']}: database changed while it was retained")
+    return {"store_path": relative.as_posix(), **tree}, None
+
+
+def verify_database(run_id: str, record: dict[str, Any]) -> Path | None:
+    """The store directory when it still hashes to the pointer; None otherwise (a consumer gap)."""
+    relative = PurePosixPath(str(record.get("store_path", "")))
+    if (relative.is_absolute() or len(relative.parts) != 4 or relative.parts[0] != DATABASE_STORE or
+            any(part in ("", ".", "..") for part in relative.parts)):
+        return None
+    folder = data_path(run_id, *relative.parts)
+    tree = database_tree(folder)
+    if tree is None or tree != {key: record.get(key) for key in ("tree_sha256", "files", "bytes")}:
+        return None
+    return folder
+
+
 def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
              outcomes: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Pure bookkeeping shared by the worker and the validator. ``outcomes`` maps an executed
-    language to {"gap": str|None, "leads": [...], "dropped": int}."""
-    tools, leads, gaps = [], [], []
-    plan = inputs["plan"]
-    if not plan:
-        gaps.append("No CodeQL-supported source language was detected in the checkout.")
-    for row in plan:
-        language, key = row["language"], plan_key(row)
+    """Pure bookkeeping shared by the worker and the validator. ``outcomes`` maps an executed plan
+    key to {"gap": str|None, "leads": [...], "dropped": int, "database": store record|None}."""
+    job, language = inputs["job"], inputs["language"]
+    tools, leads, gaps, databases = [], [], [], []
+    if not inputs["present"]:
+        return {"schema": SCHEMA, "run_id": run_id, "job_id": job, "attempt_id": attempt_id, "language": language,
+                "source_snapshot_sha256": inputs["source_snapshot_sha256"], "status": "SKIPPED",
+                "skip_reason": SKIP_REASON, "build_modes": [], "tools": [], "leads": [], "databases": [],
+                "coverage_gaps": []}
+    if inputs.get("not_built"):
+        gaps.append(inputs["not_built"])
+    for row in inputs["plan"]:
+        key = plan_key(row)
         if row["status"] != "READY":
             gaps.append(row["gap"])
             continue
         outcome = outcomes.get(key)
         if outcome is None:
-            raise Blocked(f"{JOB}: CodeQL {key} has no receipt")
+            raise Blocked(f"{job}: CodeQL {key} has no receipt")
         if outcome["gap"] is not None:
             gaps.append(outcome["gap"])
             continue
         leads.extend(outcome["leads"])
+        database = outcome.get("database")
+        published = pointer(inputs, attempt_id, row, database) if database else None
+        if published:
+            databases.append(published)
+        elif outcome.get("database_gap"):
+            gaps.append(outcome["database_gap"])
         tool = {"tool_id": row["tool_id"], "tool": "codeql", "version": row["version"],
                 "language": language, "build_mode": row["build_mode"], "query_suite": row["query_suite"],
                 "image_id": row["image_id"], "image_digest": row["image_digest"],
                 "tool_metadata_sha256": row["tool_metadata_sha256"],
                 "lane_script_sha256": row["lane_script_sha256"], "records": len(outcome["leads"]),
-                "dropped_records": outcome["dropped"]}
+                "dropped_records": outcome["dropped"],
+                "database_id": published["database_id"] if published else None}
         if row["build_mode"] == "traced":
             replay = outcome.get("replay")
             tool.update(unit_id=row["unit_id"], replay=replay)
@@ -550,10 +712,11 @@ def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
         if outcome["dropped"]:
             gaps.append(f"codeql-results-outside-checkout:{key}:{outcome['dropped']}")
     leads.sort(key=lambda row: (row["path"], row["start_line"], row["tool_id"], row["rule_id"], row["lead_id"]))
-    return {"schema": SCHEMA, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
+    return {"schema": SCHEMA, "run_id": run_id, "job_id": job, "attempt_id": attempt_id, "language": language,
             "source_snapshot_sha256": inputs["source_snapshot_sha256"],
-            "status": "OK_WITH_GAPS" if gaps else "OK", "tools": tools, "leads": leads,
-            "coverage_gaps": gaps}
+            "status": "OK_WITH_GAPS" if gaps else "OK", "skip_reason": None,
+            "build_modes": sorted({tool["build_mode"] for tool in tools}), "tools": tools, "leads": leads,
+            "databases": databases, "coverage_gaps": list(dict.fromkeys(gaps))}
 
 
 def _label(row: dict[str, Any]) -> str:
@@ -586,9 +749,10 @@ def graph_outputs(trial: Path) -> dict[str, str | None]:
     return found
 
 
-def _outcome(row: dict[str, Any], trial: Path, terminal: Any, target: Path) -> tuple[dict[str, Any], str | None]:
+def _outcome(row: dict[str, Any], trial: Path, terminal: Any, target: Path,
+             job: str = "02-codeql") -> tuple[dict[str, Any], str | None]:
     label = _label(row)
-    gap = terminal_gap(label, terminal)
+    gap = terminal_gap(label, terminal, job)
     if gap is not None:
         return {"gap": gap, "leads": [], "dropped": 0}, None
     raw = trial.joinpath(*SARIF.split("/"))
@@ -603,18 +767,19 @@ def _outcome(row: dict[str, Any], trial: Path, terminal: Any, target: Path) -> t
 
 
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
+    job = inputs["job"]
     if read_json(attempt / "inputs.json") != inputs:
-        raise Blocked(f"{JOB}: immutable attempt inputs changed")
+        raise Blocked(f"{job}: immutable attempt inputs changed")
     result = read_json(attempt / RESULT)
-    if validate_document(result, "codeql-sast.schema.json"):
-        raise Blocked(f"{JOB}: result schema validation failed")
+    if validate_document(result, SCHEMA_FILE):
+        raise Blocked(f"{job}: result schema validation failed")
     receipt = read_json(attempt / RECEIPTS)
     records = receipt.get("tools") if isinstance(receipt, dict) else None
     ready = {plan_key(row): row for row in inputs["plan"] if row["status"] == "READY"}
     if (not isinstance(records, list) or
             sorted(row.get("plan_key", row.get("language")) for row in records) != sorted(ready)):
-        raise Blocked(f"{JOB}: B13 receipt set does not match the READY plan")
-    runtime = _runtime(inputs["source_snapshot_sha256"])
+        raise Blocked(f"{job}: B13 receipt set does not match the READY plan")
+    runtime = _runtime(inputs["source_snapshot_sha256"]) if records else None
     outcomes = {}
     for record in records:
         key = record.get("plan_key", record["language"])
@@ -622,41 +787,45 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         trial = attempt.joinpath(*record["trial_path"].split("/"))
         request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
         if request.get("argv") != row["argv"] or request.get("limits") != inputs["limits"]:
-            raise Blocked(f"{JOB}: CodeQL {key} request differs from the pinned plan")
+            raise Blocked(f"{job}: CodeQL {key} request differs from the pinned plan")
         try:
-            terminal = ce.load_verified_result(trial, run_id=run_id, job_id=JOB,
+            terminal = ce.load_verified_result(trial, run_id=run_id, job_id=job,
                 attempt_id=record["adapter_attempt_id"], request=request, images_dir=runtime.images_dir,
                 expected_result_sha256=record["expected_result_sha256"], **_host(runtime))
         except ce.ContainerRequestError as exc:
-            raise Blocked(f"{JOB}: B13 evidence failed re-verification for {key}") from exc
-        outcome, raw_sha = _outcome(row, trial, terminal, Path(inputs["target_path"]))
+            raise Blocked(f"{job}: B13 evidence failed re-verification for {key}") from exc
+        outcome, raw_sha = _outcome(row, trial, terminal, Path(inputs["target_path"]), job)
         if raw_sha != record["raw_result_sha256"]:
-            raise Blocked(f"{JOB}: CodeQL {key} SARIF differs from its receipt")
+            raise Blocked(f"{job}: CodeQL {key} SARIF differs from its receipt")
         if row["build_mode"] == "traced" and record.get("graph_outputs") != graph_outputs(trial):
-            raise Blocked(f"{JOB}: CodeQL {key} graph tables differ from their receipt")
+            raise Blocked(f"{job}: CodeQL {key} graph tables differ from their receipt")
+        if outcome["gap"] is None:
+            outcome.update(database=record.get("database"), database_gap=record.get("database_gap"))
         outcomes[key] = outcome
     if result != assemble(run_id=run_id, attempt_id=attempt.name, inputs=inputs, outcomes=outcomes):
-        raise Blocked(f"{JOB}: normalized result no longer matches immutable CodeQL evidence")
+        raise Blocked(f"{job}: normalized result no longer matches immutable CodeQL evidence")
     permission, lineage = _producer_receipts(inputs)
     if read_json(attempt / PERMISSION) != permission or read_json(attempt / LINEAGE) != lineage:
-        raise Blocked(f"{JOB}: canonical producer receipts changed")
+        raise Blocked(f"{job}: canonical producer receipts changed")
 
 
-def run(run_id: str, dagster_id: str, force: bool = False, *, native_build_root: Path | None = None,
-        native_build_fingerprint: str | None = None) -> dict[str, Any]:
-    """``native_build_root``/``native_build_fingerprint`` (the accepted 02-native-build) enable the
-    traced C/C++ rows; without them the job is build-mode none only."""
-    base = root(run_id)
+def run(run_id: str, dagster_id: str, language: str, force: bool = False, *,
+        native_build_root: Path | None = None, native_build_fingerprint: str | None = None) -> dict[str, Any]:
+    """One CodeQL language node. ``native_build_root``/``native_build_fingerprint`` override the
+    cpp node's own discovery of the accepted 02-native-build."""
+    job = job_id(language)
+    base = root(run_id, language)
     native = {"native_build_root": native_build_root, "native_build_fingerprint": native_build_fingerprint}
     resume = f"python -B appsec-review-process/launch_job.py --run-id {run_id} --job {DAGSTER_JOB} --wait"
 
     def execute(allocation: dict[str, Any], inputs: dict[str, Any], fingerprint: str) -> dict[str, Any]:
         attempt = allocation["attempt"]
-        if inputs["code"] != _code_hashes():
-            raise Blocked(f"{JOB}: implementation changed before execution")
-        runtime = _runtime(inputs["source_snapshot_sha256"])
+        if inputs["code"] != _code_hashes(language):
+            raise Blocked(f"{job}: implementation changed before execution")
         target = Path(inputs["target_path"])
         receipts, outcomes = [], {}
+        runtime = _runtime(inputs["source_snapshot_sha256"]) if any(
+            row["status"] == "READY" for row in inputs["plan"]) else None
         database_root = None
         if any(row["status"] == "READY" and row["build_mode"] == "traced" for row in inputs["plan"]):
             database_root = attempt / "adapted-inputs"
@@ -673,21 +842,25 @@ def run(run_id: str, dagster_id: str, force: bool = False, *, native_build_root:
             trial = attempt / "tools" / name
             trial.mkdir(parents=True)
             request = _request(run_id, adapter_id, inputs, plan, database_root)
-            terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
+            terminal = ce.run_container(runtime, run_id=run_id, job_id=job, attempt_id=adapter_id,
                                         attempt_root=trial, request=request)
             expected = terminal["result_sha256"]
-            verified = ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
+            verified = ce.load_verified_result(trial, run_id=run_id, job_id=job, attempt_id=adapter_id,
                 request=request, images_dir=runtime.images_dir, expected_result_sha256=expected, **_host(runtime))
-            outcome, raw_sha = _outcome(plan, trial, verified, target)
-            outcomes[key] = outcome
+            outcome, raw_sha = _outcome(plan, trial, verified, target, job)
+            receipt = {"tool_id": plan["tool_id"], "language": plan["language"],
+                       "adapter_attempt_id": adapter_id, "trial_path": trial.relative_to(attempt).as_posix(),
+                       "expected_result_sha256": expected, "raw_path": SARIF, "raw_result_sha256": raw_sha}
+            if outcome["gap"] is None:
+                database, database_gap = retain_database(run_id, inputs, allocation["attempt_id"], plan, trial)
+                outcome.update(database=database, database_gap=database_gap)
+                receipt.update(database=database, database_gap=database_gap)
             # A killed or failed lane leaves its database behind; it is not evidence (the verified
             # B13 logs and terminal are), and it can be gigabytes, so it is not published.
             leftover = trial / "scratch" / "db"
             if leftover.is_dir() and not leftover.is_symlink():
                 shutil.rmtree(leftover)
-            receipt = {"tool_id": plan["tool_id"], "language": plan["language"],
-                       "adapter_attempt_id": adapter_id, "trial_path": trial.relative_to(attempt).as_posix(),
-                       "expected_result_sha256": expected, "raw_path": SARIF, "raw_result_sha256": raw_sha}
+            outcomes[key] = outcome
             if plan["build_mode"] == "traced":
                 receipt.update(plan_key=key, unit_id=plan["unit_id"], graph_outputs=graph_outputs(trial))
             receipts.append(receipt)
@@ -695,56 +868,94 @@ def run(run_id: str, dagster_id: str, force: bool = False, *, native_build_root:
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, {"tools": receipts})
         (attempt / SUMMARY).write_text(
-            "# CodeQL SAST\n\n"
-            f"- Languages planned: {len(inputs['plan'])}; executed with results: {len(result['tools'])}.\n"
-            f"- Normalized CodeQL leads: {len(result['leads'])}.\n"
-            f"- Explicit coverage gaps: {len(result['coverage_gaps'])}.\n", encoding="utf-8")
-        status = {"process": JOB, "status": result["status"], "run_id": run_id, "dagster_run_id": dagster_id,
+            f"# CodeQL {language}\n\n"
+            + (f"- SKIPPED: {SKIP_REASON}.\n" if result["status"] == "SKIPPED" else
+               f"- Plan rows: {len(inputs['plan'])}; executed with results: {len(result['tools'])}.\n"
+               f"- Normalized CodeQL leads: {len(result['leads'])}.\n"
+               f"- Retained databases: {len(result['databases'])}.\n"
+               f"- Explicit coverage gaps: {len(result['coverage_gaps'])}.\n"), encoding="utf-8")
+        status = {"process": job, "status": result["status"], "run_id": run_id, "dagster_run_id": dagster_id,
                   "attempt_id": allocation["attempt_id"], "tools_run": len(result["tools"]),
-                  "leads": len(result["leads"]), "network": "none",
+                  "leads": len(result["leads"]), "databases": len(result["databases"]), "network": "none",
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         permission, lineage = _producer_receipts(inputs)
         atomic_json(attempt / PERMISSION, permission)
         atomic_json(attempt / LINEAGE, lineage)
+        skipped = result["status"] == "SKIPPED"
         return record_terminal_current(
-            base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
+            base, attempt, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
             worker_kind="pinned_container", output_contract=CONTRACT, input_fingerprint=fingerprint,
             started_at=allocation["started_at"], execution_status=result["status"],
-            summary=f"CodeQL produced {len(result['leads'])} normalized lead(s).", status_record=status,
+            summary=(f"SKIPPED {SKIP_REASON}: no {language} source in the checkout." if skipped else
+                     f"CodeQL {language} produced {len(result['leads'])} normalized lead(s)."),
+            status_record=status,
             artifact_paths=[RESULT, RECEIPTS, SUMMARY, "status.json", PERMISSION, LINEAGE],
-            gaps=result["coverage_gaps"],
+            gaps=result["coverage_gaps"], skip_reason=SKIP_REASON if skipped else None,
+            consumer_job_id=CONSUMER if skipped else None,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs))
 
     return coordinate_worker_lifecycle(
-        base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id, worker_kind="pinned_container",
-        output_contract=CONTRACT, resume_command=resume, derive_inputs=lambda: current_inputs(run_id, **native),
+        base, run_id=run_id, job_id=job, dagster_run_id=dagster_id, worker_kind="pinned_container",
+        output_contract=CONTRACT, resume_command=resume,
+        derive_inputs=lambda: current_inputs(run_id, language, **native),
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
-        preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
-            "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes()},
+        preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
+            "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(language)},
         force=force, post_validate=lambda attempt, _envelope, record: _validate_attempt(run_id, attempt, record),
-        blocked_summary="CodeQL SAST preflight did not complete.",
-        failed_summary="CodeQL SAST did not publish; no older success may be used.")
+        consumer_job_id=CONSUMER,
+        blocked_summary=f"CodeQL {language} preflight did not complete.",
+        failed_summary=f"CodeQL {language} did not publish; no older success may be used.")
 
 
-def validate(run_id: str, pointer: dict[str, Any] | None = None, *, native_build_root: Path | None = None,
-             native_build_fingerprint: str | None = None) -> Path:
-    base = root(run_id)
+def validate(run_id: str, language: str, pointer: dict[str, Any] | None = None, *,
+             native_build_root: Path | None = None, native_build_fingerprint: str | None = None) -> Path:
+    base = root(run_id, language)
     pointer = pointer or read_json(base / "accepted.json")
-    inputs = current_inputs(run_id, native_build_root=native_build_root,
+    inputs = current_inputs(run_id, language, native_build_root=native_build_root,
                             native_build_fingerprint=native_build_fingerprint)
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
-                                    expected_run_id=run_id, expected_job_id=JOB)
+                                    expected_run_id=run_id, expected_job_id=job_id(language),
+                                    consumer_job_id=CONSUMER)
     _validate_attempt(run_id, attempt, inputs)
     return attempt
+
+
+def load_accepted(run_id: str, language: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None]:
+    """(result, binding, None) for a node's accepted publication verified by pointer, envelope and
+    attempt tree hashes, else (None, None, gap). Consumers use this; they never re-run CodeQL."""
+    from execution_state import tree_hashes
+    job = job_id(language)
+    base = root(run_id, language)
+    pointer_path = base / "accepted.json"
+    if not pointer_path.is_file() or pointer_path.is_symlink():
+        return None, None, f"engine-input-absent:{job}"
+    try:
+        accepted = read_json(pointer_path)
+        attempt = base / "attempts" / str(accepted.get("attempt_id"))
+        if (accepted.get("run_id") != run_id or accepted.get("job") != job or
+                accepted.get("status") not in ("OK", "OK_WITH_GAPS", "SKIPPED") or attempt.is_symlink() or
+                not attempt.is_dir() or tree_hashes(attempt) != accepted.get("hashes") or
+                file_hash(attempt / accepted.get("envelope_path", "result.json")) != accepted.get("envelope_sha256")):
+            return None, None, f"engine-input-not-current:{job}"
+        document = read_json(attempt / RESULT)
+    except (OSError, ValueError, TypeError):
+        return None, None, f"engine-input-not-current:{job}"
+    if validate_document(document, SCHEMA_FILE) or document.get("job_id") != job:
+        return None, None, f"engine-input-invalid:{job}"
+    return document, {"job_id": job, "attempt_id": accepted["attempt_id"],
+                      "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
+                      "result_sha256": "sha256:" + file_hash(attempt / RESULT),
+                      "status": accepted["status"]}, None
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("run_id")
+    parser.add_argument("language", choices=LANGUAGES)
     args = parser.parse_args()
-    print(validate(args.run_id))
+    print(validate(args.run_id, args.language))
 
 
 # ADR-0013: drop shared runtime modules from this job's code fingerprint.

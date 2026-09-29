@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "dependency-reachability-match.schema.json",
-  "title": "One SCA match's dependency reachability record (ADR-0022)",
+  "title": "One SCA match's dependency reachability record (ADR-0022, ADR-0023)",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -100,6 +100,7 @@
             "enum": [
               "cpg",
               "codeql",
+              "ir",
               "lsp",
               "treesitter"
             ]
@@ -129,6 +130,7 @@
       "enum": [
         "reachable",
         "unreachable",
+        "conflict",
         "unknown"
       ]
     },
@@ -222,6 +224,54 @@
         "type": "string",
         "maxLength": 512
       }
+    },
+    "tier": {
+      "enum": [
+        null,
+        "direct",
+        "through-dependency"
+      ]
+    },
+    "deciding_engines": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "cpg",
+          "codeql",
+          "ir"
+        ]
+      }
+    },
+    "resolved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "package",
+          "symbol",
+          "via"
+        ],
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "resolution": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      }
     }
   },
   "allOf": [
@@ -247,6 +297,7 @@
           "verdict": {
             "enum": [
               "unreachable",
+              "conflict",
               "unknown"
             ]
           }

@@ -41,6 +41,10 @@ readers; C# static `Main`, public `*Controller` actions and remote-input readers
 module top level, `Http::RouteHandler` functions and remote-input readers; Python every module
 body, `main` and remote-input readers.
 
+In a run (ADR-0023) `06-reachability-codeql` runs each pack against the database the
+`02-codeql-<lang>` node retained, through `images/audit-codeql/scripts/codeql-reachability-lane.sh`;
+`scripts/smoke_codeql_per_language.sh` exercises that path end to end.
+
 Status: **written, not compiled here** (no CodeQL in the authoring container). Run
 `scripts/smoke_codeql_reachability.sh` in WSL: it compiles each pack against the bundle and runs
 it on `fixtures/dep-reachability/<lang>`. Expect a round of QL compile fixes, as with

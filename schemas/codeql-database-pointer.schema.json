@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codeql-database-pointer.schema.json",
+  "title": "Hash-bound pointer to a retained CodeQL database (ADR-0023 decision 3)",
+  "description": "The database lives in the run's database store (outside the attempt). tree_sha256 is sha256 over the sorted (relative path, file sha256) list; a consumer re-hashes the store before use and treats a mismatch as a gap, never a rebuild.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "database_id",
+    "job_id",
+    "attempt_id",
+    "plan_key",
+    "language",
+    "build_mode",
+    "unit_id",
+    "bundle_version",
+    "tool_metadata_sha256",
+    "image_digest",
+    "source_snapshot_sha256",
+    "store_path",
+    "tree_sha256",
+    "files",
+    "bytes"
+  ],
+  "properties": {
+    "database_id": {
+      "type": "string",
+      "pattern": "^codeqldb_[0-9a-f]{16}\\Z"
+    },
+    "job_id": {
+      "enum": [
+        "02-codeql-cpp",
+        "02-codeql-csharp",
+        "02-codeql-go",
+        "02-codeql-java",
+        "02-codeql-javascript",
+        "02-codeql-python",
+        "02-codeql-ruby",
+        "02-codeql-rust"
+      ]
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "plan_key": {
+      "type": "string",
+      "pattern": "^([a-z]+|codeql-cpp-traced:[0-9a-f]{16})\\Z"
+    },
+    "language": {
+      "enum": [
+        "cpp",
+        "csharp",
+        "go",
+        "java",
+        "javascript",
+        "python",
+        "ruby",
+        "rust"
+      ]
+    },
+    "build_mode": {
+      "enum": [
+        "none",
+        "traced",
+        "autobuild"
+      ]
+    },
+    "unit_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[^\\x00-\\x1f\\x7f]{1,256}\\Z"
+    },
+    "bundle_version": {
+      "type": "string",
+      "pattern": "^[0-9][0-9A-Za-z.+_-]{0,31}\\Z"
+    },
+    "tool_metadata_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "image_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "store_path": {
+      "type": "string",
+      "pattern": "^codeql-databases/02-codeql-[a-z]+/[0-9A-Za-z][0-9A-Za-z._-]{0,95}/[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "tree_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "files": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

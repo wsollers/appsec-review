@@ -1,12 +1,16 @@
-"""Hash-bound engine inputs and derivation for the ``06-cve-reachability`` lifecycle (ADR-0022 decision 9).
+"""Hash-bound inputs and derivation for the ``06-cve-reachability`` correlator (ADR-0023 decision 8).
 
-``bindings`` names every optional evidence source 06 reads, by hash: the accepted CPG and CodeQL
-publications (verified against their accepted pointer and attempt tree hashes, same source
-generation as the SCA match), the OSV snapshot judged at the SCA completion time, and the
-run-supplied files under ``<run>/inputs/``. ``derive`` rebuilds the engine set from exactly those
-bindings (re-verifying each hash) and runs ``dep_reachability.analyse``. Both are deterministic,
-so ``validate`` re-derives byte-for-byte. A source that is absent, stale or fails verification is
-not used and is named in ``gaps``; it never blocks the job (ADR-0013: run to report).
+``bindings`` names every source 06 reads, by hash: the accepted engine tables of
+``06-reachability-codeql`` and ``06-reachability-ir`` (verified against their accepted pointer and
+attempt tree hashes, same source generation and the same SCA attempt as the match set), the OSV
+snapshot identity judged at the SCA completion time, and the run-supplied files under
+``<run>/inputs/`` (reviewed map, entry points, language-server and tree-sitter hint documents).
+``derive`` re-reads exactly those bindings (re-verifying each hash) and runs
+``dep_reachability_correlator.correlate``. Both are deterministic, so ``validate`` re-derives
+byte-for-byte. A source that is absent, stale or fails verification is not used and is named in
+``gaps``; it never blocks the job (ADR-0013: run to report).
+
+``_cpg``/``_codeql``/``_accepted`` stay the shared verification helpers the engine jobs use.
 """
 from __future__ import annotations
 
@@ -16,19 +20,24 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import dep_reachability
+import dep_reachability_correlator as correlator
 import dep_reachability_engines as engines
 from execution_state import data_path, file_hash, read_json, run_path, tree_hashes
 import reachability
 
 RESULT = "outputs/dependency-reachability.json"
+SUMMARY_JSON = "outputs/dependency-reachability-summary.json"
+SUMMARY_MD = "outputs/dependency-reachability-summary.md"
+ENGINE_RESULT = "engine-reachability.json"
 CPG_JOB, CPG_RESULT = "02-code-property-graph", "code-property-graph.json"
-CODEQL_JOB, CODEQL_RESULT, CODEQL_RECEIPTS = "02-codeql-sast", "codeql-sast.json", "b13-receipts.json"
 REVIEWED_MAP = "cve-reachability-functions.json"
 ENTRY_POINTS = "reachability-entry-points.json"
-SUPPLIED = "dependency-reachability"          # <run>/inputs/dependency-reachability/{codeql,lsp,treesitter-ast.json}
-CODE = ("dep_reachability.py", "dep_reachability_engines.py", "dep_reachability_codeql.py",
+SUPPLIED = "dependency-reachability"          # <run>/inputs/dependency-reachability/{lsp,treesitter-ast.json}
+CODE = ("dep_reachability.py", "dep_reachability_engines.py", "dep_reachability_correlator.py",
         "dep_reachability_lifecycle.py", "reachability.py")
-SCHEMAS = ("dependency-reachability.schema.json", "dependency-reachability-match.schema.json")
+SCHEMAS = ("dependency-reachability.schema.json", "dependency-reachability-match.schema.json",
+           "dependency-reachability-summary.schema.json", "engine-reachability.schema.json",
+           "engine-reachability-row.schema.json")
 
 
 def _sha(path: Path) -> str:
@@ -73,49 +82,36 @@ def _cpg(run_id: str, source: str) -> tuple[dict[str, Any] | None, list[str]]:
     return {**binding, "records_sha256": summary["records_file"].get("sha256")}, []
 
 
-def _codeql(run_id: str, source: str) -> tuple[dict[str, Any] | None, list[str]]:
-    """Traced C/C++ graph tables recorded in the accepted 02-codeql-sast receipts."""
-    binding, gap = _accepted(run_id, CODEQL_JOB, CODEQL_RESULT, source)
-    if binding is None:
-        return None, [gap]
-    attempt = data_path(run_id, "jobs", CODEQL_JOB, "attempts", binding["attempt_id"])
-    receipts = read_json(attempt / CODEQL_RECEIPTS) if _regular(attempt / CODEQL_RECEIPTS) else {"tools": []}
-    tables, gaps = [], []
-    for tool in sorted(receipts.get("tools", []), key=lambda row: str(row.get("trial_path"))):
-        outputs = tool.get("graph_outputs")
-        if not isinstance(outputs, dict):
-            continue
-        for query in ("CallEdges.ql", "EntryPoints.ql"):
-            if outputs.get(query) is None:
-                gaps.append(f"codeql-table-absent:cpp:{query[:-3]}:{tool.get('unit_id')}")
-                continue
-            tables.append({"table": query[:-3], "path": f"{tool['trial_path']}/scratch/graph/{query[:-3]}.csv",
-                           "sha256": outputs[query]})
-    if not tables:
-        gaps.append("engine-input-absent:codeql:cpp")
-    return {**binding, "cpp_tables": tables}, gaps
-
-
 def _supplied(run_id: str) -> dict[str, Any]:
-    """Run-supplied files: reviewed map, entry points, CodeQL CSVs per language, LSP docs, tree-sitter AST."""
+    """Run-supplied files: reviewed map, entry points, LSP call-hierarchy docs, tree-sitter AST (hints)."""
     inputs = run_path(run_id) / "inputs"
     found: dict[str, Any] = {}
     for key, name in (("reviewed_map", REVIEWED_MAP), ("entry_points", ENTRY_POINTS)):
         path = inputs / name
         found[key] = {"path": f"inputs/{name}", "sha256": _sha(path)} if _regular(path) else None
     root = inputs / SUPPLIED
-    codeql: dict[str, dict[str, str]] = {}
-    for folder in sorted((root / "codeql").iterdir()) if (root / "codeql").is_dir() else []:
-        if folder.is_dir() and not folder.is_symlink() and folder.name in engines.ENTRY_POINTS:
-            codeql[folder.name] = {name: _sha(folder / f"{name}.csv") for name in engines.TABLES
-                                   if _regular(folder / f"{name}.csv")}
     lsp = {}
     for path in sorted((root / "lsp").glob("*.json")) if (root / "lsp").is_dir() else []:
         if _regular(path) and path.stem in engines.ENTRY_POINTS:
             lsp[path.stem] = _sha(path)
     ast = root / "treesitter-ast.json"
-    found.update(codeql=codeql, lsp=lsp, treesitter=_sha(ast) if _regular(ast) else None)
+    found.update(lsp=lsp, treesitter=_sha(ast) if _regular(ast) else None)
     return found
+
+
+def _table(run_id: str, engine: str, source: str, sca_attempt: str) -> tuple[dict[str, Any] | None, str | None]:
+    """An engine table's accepted publication, bound by hashes and to the same SCA attempt."""
+    job = correlator.ENGINE_JOBS[engine]
+    binding, gap = _accepted(run_id, job, ENGINE_RESULT, source)
+    if binding is None:
+        return None, gap
+    document = read_json(data_path(run_id, "jobs", job, "attempts", binding["attempt_id"], ENGINE_RESULT))
+    from schema_validate import validate_document
+    if validate_document(document, "engine-reachability.schema.json") or document.get("engine") != engine:
+        return None, f"engine-input-invalid:{job}"
+    if document["sca_binding"]["attempt_id"] != sca_attempt:
+        return None, f"engine-input-stale:{job}"
+    return {**binding, "status": document["status"]}, None
 
 
 def _osv(generated_at: str) -> tuple[Any, dict[str, Any] | None, str | None]:
@@ -126,14 +122,17 @@ def _osv(generated_at: str) -> tuple[Any, dict[str, Any] | None, str | None]:
     return source, (source.identity if source else None), gap
 
 
-def bindings(run_id: str, source: str, generated_at: str) -> dict[str, Any]:
-    cpg, cpg_gaps = _cpg(run_id, source)
-    codeql, codeql_gaps = _codeql(run_id, source)
+def bindings(run_id: str, source: str, generated_at: str, sca_attempt: str) -> dict[str, Any]:
+    tables, gaps = {}, []
+    for engine in correlator.PROOF_ENGINES:
+        tables[engine], gap = _table(run_id, engine, source, sca_attempt)
+        if gap:
+            gaps.append(gap)
     osv, osv_identity, osv_gap = _osv(generated_at)
     if osv is not None:
         osv.connection.close()
-    return {"cpg": cpg, "codeql": codeql, "osv": osv_identity, "osv_gap": osv_gap, "supplied": _supplied(run_id),
-            "gaps": sorted(cpg_gaps + codeql_gaps),
+    return {"tables": tables, "osv": osv_identity, "osv_gap": osv_gap, "supplied": _supplied(run_id),
+            "gaps": sorted(gaps),
             "code": {name: file_hash(Path(__file__).resolve().parent / name) for name in CODE}}
 
 
@@ -150,59 +149,27 @@ def _check(path: Path, expected: str) -> bytes:
 
 def derive(run_id: str, bound: dict[str, Any], *, sca: dict[str, Any], sbom: dict[str, Any],
            files: dict[str, str], generated_at: str) -> dict[str, Any]:
-    """The ``06`` evidence rows and dependency-reachability document from exactly ``bound``."""
-    graph = None
-    if bound["cpg"]:
-        attempt = data_path(run_id, "jobs", CPG_JOB, "attempts", bound["cpg"]["attempt_id"])
-        _check(attempt / CPG_RESULT, bound["cpg"]["result_sha256"])
-        graph = reachability.load_cpg(attempt)
-    tables: dict[str, dict[str, list[dict[str, str]]]] = {}
-    table_gaps: dict[str, list[str]] = {}
-    if bound["codeql"]:
-        attempt = data_path(run_id, "jobs", CODEQL_JOB, "attempts", bound["codeql"]["attempt_id"])
-        for row in bound["codeql"]["cpp_tables"]:
-            data = _check(attempt.joinpath(*PurePosixPath(row["path"]).parts), row["sha256"])
-            try:
-                tables.setdefault("cpp", {}).setdefault(row["table"], []).extend(engines.read_table(data, row["table"]))
-            except ValueError:
-                table_gaps.setdefault("cpp", []).append(f"codeql-table-invalid:cpp:{row['table']}")
+    """The ``06`` evidence rows, the per-match document and the summary from exactly ``bound``."""
+    del files, generated_at   # the engines bound every witness to the projection before publishing
+    tables: dict[str, dict[str, Any] | None] = {}
+    for engine, binding in bound["tables"].items():
+        if binding is None:
+            tables[engine] = None
+            continue
+        path = data_path(run_id, "jobs", correlator.ENGINE_JOBS[engine], "attempts", binding["attempt_id"], ENGINE_RESULT)
+        tables[engine] = json.loads(_check(path, binding["result_sha256"]))
     supplied = bound["supplied"]
     root = run_path(run_id) / "inputs" / SUPPLIED
-    for language, hashes in sorted(supplied["codeql"].items()):
-        for name in engines.TABLES:
-            if name not in hashes:
-                if name in engines.REQUIRED_TABLES:
-                    table_gaps.setdefault(language, []).append(f"codeql-table-absent:{language}:{name}")
-                continue
-            data = _check(root / "codeql" / language / f"{name}.csv", hashes[name])
-            try:
-                tables.setdefault(language, {})[name] = engines.read_table(data, name)
-            except ValueError:
-                table_gaps.setdefault(language, []).append(f"codeql-table-invalid:{language}:{name}")
     lsp = {language: json.loads(_check(root / "lsp" / f"{language}.json", sha))
            for language, sha in sorted(supplied["lsp"].items())}
     ast = json.loads(_check(root / "treesitter-ast.json", supplied["treesitter"])) if supplied["treesitter"] else None
     inputs = run_path(run_id) / "inputs"
-    reviewed = (json.loads(_check(inputs / REVIEWED_MAP, supplied["reviewed_map"]["sha256"]))
-                if supplied["reviewed_map"] else None)
     entries = (json.loads(_check(inputs / ENTRY_POINTS, supplied["entry_points"]["sha256"])).get("entry_points", [])
                if supplied["entry_points"] else [])
-    identity = {"cpg": bound["cpg"], "codeql": bound["codeql"], "supplied": supplied}
-    engine_set = engines.EngineSet(cpg=graph, codeql=tables, codeql_gaps=table_gaps, lsp=lsp, treesitter=ast,
-                                   identity=identity)
-    osv, osv_gap = None, bound["osv_gap"]
-    if bound["osv"] is not None:
-        osv, identity_now, osv_gap = _osv(generated_at)
-        if identity_now != bound["osv"]:
-            if osv is not None:
-                osv.connection.close()
-            raise Stale("OSV snapshot changed after it was bound")
-    try:
-        result = dep_reachability.analyse(sca=sca, sbom=sbom, files=files, engine_set=engine_set, osv=osv,
-                                          osv_gap=osv_gap, reviewed=reviewed, entry_points=entries)
-    finally:
-        if osv is not None:
-            osv.connection.close()
-    document = result["document"]
-    document["coverage_gaps"] = sorted(set(document["coverage_gaps"]) | {"ENGINE_INPUT:" + gap for gap in bound["gaps"]})
+    engine_set = engines.EngineSet(lsp=lsp, treesitter=ast)
+    identity = {"tables": bound["tables"], "supplied": supplied}
+    result = correlator.correlate(sca=sca, sbom=sbom, tables=tables, engine_set=engine_set,
+                                  entry_points=sorted({str(item) for item in entries}), osv=bound["osv"],
+                                  identity=identity, input_gaps=bound["gaps"])
+    result["summary"] = correlator.summary(result["document"], sbom, bound["tables"])
     return result

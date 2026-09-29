@@ -1,11 +1,11 @@
 {
   "schema": "appsec-review/output-contract/0.1",
-  "contract_id": "codeql-sast",
-  "display_name": "Normalized CodeQL SAST Leads",
+  "contract_id": "codeql-language",
+  "display_name": "Normalized CodeQL leads and retained databases for one language",
   "required_files": [
-    "codeql-sast.json",
+    "codeql-language.json",
     "b13-receipts.json",
-    "codeql-sast-summary.md",
+    "codeql-language-summary.md",
     "status.json",
     "permission.json",
     "lineage.json"
@@ -15,12 +15,13 @@
     "status",
     "tools_run",
     "leads",
+    "databases",
     "network",
     "qualification"
   ],
   "result_schema": {
-    "artifact": "codeql-sast.json",
-    "schema_file": "codeql-sast.schema.json"
+    "artifact": "codeql-language.json",
+    "schema_file": "codeql-language.schema.json"
   },
   "claim_class": {
     "claim_class_id": "source_static_evidence",
@@ -35,12 +36,15 @@
     ]
   },
   "validation_rules": [
-    "the pinned audit-codeql image runs one B13 container per detected language with network none, a read-only target and one writable scratch mount",
+    "one node per CodeQL language (ADR-0023); a language absent from the checkout publishes SKIPPED not-applicable-language-absent",
+    "the pinned audit-codeql image runs one B13 container per plan row with network none, a read-only target and one writable scratch mount",
     "CodeQL tool metadata (bundle sha256 pinned by image.json and the Dockerfile, lane script hash, query suites) and the B16 image identity are part of the input fingerprint",
-    "every language database is created with --build-mode none and analyzed with the bundled <lang>-security-extended suite; nothing is downloaded",
+    "databases are created with --build-mode none (cpp additionally traced per accepted native unit) and analyzed with the bundled <lang>-security-extended suite; nothing is downloaded",
+    "a compiled language that cannot be built (Go) or has no pinned suite (Rust) is a coverage gap, never a failure",
+    "every completed lane's database is retained outside the attempt and published as a hash-bound pointer (tree sha256, files, bytes, bundle version, build mode, source snapshot); consumers re-hash before use",
     "the caller-held B13 result sha256 is re-verified on every read and the normalized result is re-derived from the receipts",
     "raw SARIF messages and snippets remain in the immutable tool attempt; leads carry rule id, the pinned rule name, CWE tags, fresh hashed source citations and lines",
-    "a language that times out, runs out of memory or exits non-zero is a coverage gap (ADR-0013); canceled or gate-refused containers block",
+    "a lane that times out, runs out of memory or exits non-zero is a coverage gap (ADR-0013); canceled or gate-refused containers block",
     "results that cite no regular checkout file line are dropped and counted as a gap",
     "records are static-analysis evidence leads, not verified findings, severities or observed runtime state",
     "latest failed attempt blocks older accepted output"

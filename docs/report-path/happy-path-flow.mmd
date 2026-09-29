@@ -5,7 +5,7 @@ flowchart LR
 
   C[Accepted component characterization]:::qualified --> PLAN[Deterministically derived<br/>full-review launch plan]:::qualified
   PLAN --> ASM[02 full-review input assembly<br/>revalidate, bound, dispatch first wave]:::qualified
-  CQ[02-codeql-sast<br/>CodeQL leads, per-language gaps]:::open --> C
+  CQ[02-codeql-* (8 nodes)<br/>CodeQL leads, retained DBs, per-language gaps]:::open --> C
   C --> L6A[L6A DFD/STRIDE core<br/>+ threat workbench cells]:::open --> L6B[L6B threat reconciliation]:::qualified
   C --> OW[OWASP T03-T14<br/>component routing, validation, pagination]:::qualified
   C --> STIG[STIG/SRG worklist]:::qualified --> DEPLOY[Deployment hardening]:::qualified

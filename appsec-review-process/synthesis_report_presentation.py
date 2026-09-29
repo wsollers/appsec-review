@@ -207,10 +207,19 @@ def _attack_chains(section: dict[str, Any] | None) -> dict[str, Any]:
     return {key: section[key] for key in ("status", "reason", "chains", "appendix", "refuted_count", "note")}
 
 
+def _dependency_reachability(section: dict[str, Any] | None) -> dict[str, Any]:
+    """The renderer's dependency-reachability section (ADR-0023); absent input renders as a gap."""
+    if section is None:
+        return {"status": "ABSENT", "reason": "no dependency-reachability section was built",
+                "counts": {"reachable": 0, "conflict": 0, "unknown": 0, "unreachable": 0}, "rows": [], "note": ""}
+    return {key: section[key] for key in ("status", "reason", "counts", "rows", "note")}
+
+
 def build_review(report: dict[str, Any], trace: dict[str, Any],
                  enrichment: dict[str, Any] | None = None,
                  attack_chains: dict[str, Any] | None = None,
-                 poc_fix: dict[str, Any] | None = None) -> dict[str, Any]:
+                 poc_fix: dict[str, Any] | None = None,
+                 dependency_reachability: dict[str, Any] | None = None) -> dict[str, Any]:
     if (report.get("schema") != "appsec-review/synthesis-report/1.0" or
             report.get("status") != "DRAFT_EVIDENCE_BACKED" or
             report.get("claim_limits", {}).get("final") is not False or
@@ -236,6 +245,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         raise Blocked("10-synthesis-report: PoC-and-fix section belongs to another run")
     if poc_fix is not None and poc_fix["gaps"]:
         report = {**report, "limitations": sorted(set(report["limitations"]) | set(poc_fix["gaps"]))}
+    if dependency_reachability is not None and dependency_reachability["run_id"] != report["run_id"]:
+        raise Blocked("10-synthesis-report: dependency-reachability section belongs to another run")
+    if dependency_reachability is not None and dependency_reachability["gaps"]:
+        report = {**report, "limitations": sorted(set(report["limitations"]) | set(dependency_reachability["gaps"]))}
     if report["limitations"]:
         processes.append({"id": "reported-limitations", "family": "limitations",
             "kind": "preserved synthesis limitations", "status": "OK_WITH_GAPS", "coverage": 0.0,
@@ -258,6 +271,7 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         "families": families, "processes": processes,
         "findings": _findings(report, evidence_ids, enrichment, poc_fix), "evidence": evidence,
         "attack_chains": _attack_chains(attack_chains),
+        "dependency_reachability": _dependency_reachability(dependency_reachability),
         "target_context": {"source_snapshot_sha256": report["scope"].get("source_snapshot_sha256", "not asserted"),
             "components": report["scope"]["components"],
             "relationships": report.get("component_relationships", []),
@@ -285,9 +299,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
 
 def render(report: dict[str, Any], trace: dict[str, Any], output_root: Path,
            generator_sha256: str, enrichment: dict[str, Any] | None = None,
-           attack_chains: dict[str, Any] | None = None, poc_fix: dict[str, Any] | None = None) -> dict[str, Any]:
+           attack_chains: dict[str, Any] | None = None, poc_fix: dict[str, Any] | None = None,
+           dependency_reachability: dict[str, Any] | None = None) -> dict[str, Any]:
     output_root = Path(output_root)
-    review = build_review(report, trace, enrichment, attack_chains, poc_fix)
+    review = build_review(report, trace, enrichment, attack_chains, poc_fix, dependency_reachability)
     atomic_json(output_root / RENDER_INPUT, review)
     render_root = output_root / "presentation"
     _renderer().render(output_root / RENDER_INPUT, render_root)

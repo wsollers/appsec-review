@@ -14,6 +14,7 @@ import build_configure as build_configure_worker
 import native_build as native_build_worker
 import source_sast as source_sast_worker
 import codeql_sast as codeql_sast_worker
+import reachability_engine_jobs
 import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
@@ -445,30 +446,44 @@ def source_sast():
     source_sast_standalone_work(build_execution_config())
 
 
-def run_codeql_sast(context, configured):
-    result = codeql_sast_worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
-    path = codeql_sast_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+def run_codeql_language(context, configured, language):
+    # ADR-0023: one graph node per CodeQL language (02-codeql-<lang>), parallel in the Docker pool.
+    result = codeql_sast_worker.run(configured['engagement_run_id'], context.run_id, language, configured['force'])
+    path = codeql_sast_worker.root(configured['engagement_run_id'], language) / 'attempts' / result['attempt_id']
     context.add_output_metadata({'output': MetadataValue.path(str(path / codeql_sast_worker.RESULT)),
                                  'envelope': MetadataValue.path(str(path / 'result.json')),
                                  'attempt_id': result['attempt_id']})
     return result
 
 
-@op(name='job_02_codeql_sast',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
-def codeql_sast_work(context, configured, upstream):
-    return run_codeql_sast(context, configured)
+def codeql_language_op(language):
+    @op(name='job_' + codeql_sast_worker.job_id(language).replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=DOCKER_POOL)
+    def codeql_language_work(context, configured, upstream):
+        return run_codeql_language(context, configured, language)
+    return codeql_language_work
 
 
-@op(pool=DOCKER_POOL)
-def codeql_sast_standalone_work(context, configured):
-    return run_codeql_sast(context, configured)
+def codeql_language_standalone_op(language):
+    @op(name='codeql_' + language + '_standalone_work', ins={'configured': In(dict)}, pool=DOCKER_POOL)
+    def codeql_language_standalone_work(context, configured):
+        return run_codeql_language(context, configured, language)
+    return codeql_language_standalone_work
+
+
+CODEQL_LANGUAGE_OPS = {language: codeql_language_op(language) for language in codeql_sast_worker.LANGUAGES}
+CODEQL_STANDALONE_OPS = {language: codeql_language_standalone_op(language)
+                         for language in codeql_sast_worker.LANGUAGES}
 
 
 @job(resource_defs={'workflow_settings': workflow_settings},
-     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     executor_def=multiprocess_executor.configured({'max_concurrent': 3}),
      op_retry_policy=RetryPolicy(max_retries=0))
 def codeql_sast():
-    codeql_sast_standalone_work(build_execution_config())
+    # Every 02-codeql-<lang> node in parallel (bounded by the executor and the Docker pool).
+    configured = build_execution_config()
+    for language in codeql_sast_worker.LANGUAGES:
+        CODEQL_STANDALONE_OPS[language](configured)
 
 
 def run_common_python_worker(context, configured, worker):
@@ -743,6 +758,23 @@ def analysis_feature_lifecycle_op(job_id):
 
 
 native_memory_lifecycle_work = analysis_feature_lifecycle_op('05-native-memory')
+def reachability_engine_op(engine, pool):
+    # ADR-0023: 06-reachability-codeql / 06-reachability-ir publish the shared engine table.
+    @op(name='job_' + reachability_engine_jobs.job_id(engine).replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def reachability_engine_work(context, configured, upstream):
+        run_id = configured['engagement_run_id']
+        result = reachability_engine_jobs.run(run_id, context.run_id, engine, configured.get('force', False))
+        attempt = reachability_engine_jobs.root(run_id, engine) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({'output': MetadataValue.path(str(attempt / reachability_engine_jobs.RESULT)),
+                                     'envelope': MetadataValue.path(str(attempt / 'result.json')),
+                                     'attempt_id': result['attempt_id']})
+        return result
+    return reachability_engine_work
+
+
+reachability_codeql_lifecycle_work = reachability_engine_op('codeql', DOCKER_POOL)
+reachability_ir_lifecycle_work = reachability_engine_op('ir', CPU_POOL)
 cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
 fuzz_triage_lifecycle_work = analysis_feature_lifecycle_op('13-fuzz-target-triage')
 
@@ -1647,7 +1679,7 @@ def b13_harmless_container():
 from job_graph import load_graph
 LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
-                if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast','02-codeql-sast',
+                if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
                                  '01-component-characterization','02-full-review-input-assembly','03-threat-model-dfd-stride','03-threat-model-reconciliation','04-asvs-masvs','10-synthesis-report',
                                  '02-binary-hardening',
                                  '02-ir-capture','02-ir-link','02-ir-facts',
@@ -1660,7 +1692,14 @@ LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-evidence-assembly']=evidence_assembly_lifecycle_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
-LIFECYCLE_OPS['02-codeql-sast']=codeql_sast_work
+LIFECYCLE_OPS['02-codeql-cpp']=CODEQL_LANGUAGE_OPS['cpp']
+LIFECYCLE_OPS['02-codeql-csharp']=CODEQL_LANGUAGE_OPS['csharp']
+LIFECYCLE_OPS['02-codeql-go']=CODEQL_LANGUAGE_OPS['go']
+LIFECYCLE_OPS['02-codeql-java']=CODEQL_LANGUAGE_OPS['java']
+LIFECYCLE_OPS['02-codeql-javascript']=CODEQL_LANGUAGE_OPS['javascript']
+LIFECYCLE_OPS['02-codeql-python']=CODEQL_LANGUAGE_OPS['python']
+LIFECYCLE_OPS['02-codeql-ruby']=CODEQL_LANGUAGE_OPS['ruby']
+LIFECYCLE_OPS['02-codeql-rust']=CODEQL_LANGUAGE_OPS['rust']
 LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
 LIFECYCLE_OPS['02-full-review-input-assembly']=full_review_input_assembly_work
 LIFECYCLE_OPS['03-threat-model-dfd-stride']=threat_model_dfd_stride_work
@@ -1699,6 +1738,8 @@ LIFECYCLE_OPS['08-blue-team-refutation']=blue_team_lifecycle_work
 LIFECYCLE_OPS['09-independent-verification']=verification_lifecycle_work
 LIFECYCLE_OPS['12-scoring-prioritization']=scoring_lifecycle_work
 LIFECYCLE_OPS['05-native-memory']=native_memory_lifecycle_work
+LIFECYCLE_OPS['06-reachability-codeql']=reachability_codeql_lifecycle_work
+LIFECYCLE_OPS['06-reachability-ir']=reachability_ir_lifecycle_work
 LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
 LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
 LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work

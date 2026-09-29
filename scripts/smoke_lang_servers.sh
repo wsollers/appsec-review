@@ -168,7 +168,7 @@ check_codeql() {
     done
     # The lane writes /scratch/db, /scratch/codeql.sarif, /scratch/replay.json and /scratch/graph.
     if bash /opt/scripts/codeql-sast-lane.sh cpp traced codeql/cpp-queries:codeql-suites/cpp-security-extended.qls \
-         2 2048 "$work/db-input/unit/compile_commands.json" "$work/queries" >"$work/lane.log" 2>&1; then
+         2 2048 drop-db "$work/db-input/unit/compile_commands.json" "$work/queries" >"$work/lane.log" 2>&1; then
       report PASS codeql-traced-lane "replay $(cat /scratch/replay.json 2>/dev/null)"
       for query in CallEdges EntryPoints FlowSources; do
         if [ -s "/scratch/graph/$query.csv" ]; then

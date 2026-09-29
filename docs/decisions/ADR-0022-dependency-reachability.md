@@ -1,6 +1,9 @@
 # ADR-0022: Language-aware dependency reachability for `06-cve-reachability`
 
-Status: **Proposed** (brief E, 2026-09-29). The engine order per language, "model text never
+Status: **Proposed** (brief E, 2026-09-29). Superseded in part by
+[ADR-0023](ADR-0023-per-language-codeql-reachability.md) (brief G): the language server is a hint (decision 3),
+the join adds `conflict` and is done by the 06 correlator over engine tables (decision 4), and 06's wiring
+changes (decision 9). The engine order per language, "model text never
 decides reachability" and "tree-sitter alone is never `reachable`" were decided by William in the
 brief; the rest awaits review.
 

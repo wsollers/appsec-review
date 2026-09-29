@@ -42,7 +42,7 @@ BUILDENV_IMAGE_IDS = (
     "audit-buildenv-cpp", "audit-buildenv-cpp-resolute", "audit-buildenv-dotnet", "audit-buildenv-go", "audit-buildenv-java",
     "audit-buildenv-php", "audit-buildenv-python", "audit-buildenv-rust", "audit-buildenv-typescript",
 )
-# 02-codeql-sast: build-mode none lanes and the traced C/C++ replay (ADR-0017, docs/language-servers.md).
+# 02-codeql-<lang>: build-mode none lanes and the traced C/C++ replay (ADR-0017, ADR-0023, docs/language-servers.md).
 CODEQL_IMAGE_IDS = ("audit-codeql", "audit-codeql-native")
 STEP4_IMAGE_IDS = (
     "audit-native", "audit-binary-analysis", "audit-container", "audit-iac",

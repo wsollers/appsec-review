@@ -59,7 +59,7 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | `docs/` | Design doc, review notes, ADRs, migration notes |
 | `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `docs/architecture/migration.md` |
 | `images/audit-native/` | Pinned native-analysis image for clang-tidy/cppcheck, compile feasibility, IR emit/link, `ir-facts`, and CSA/CTU. Runs only inside the hostile-build boundary. |
-| `images/audit-codeql/` | CodeQL bundle (pinned), offline; security-extended suites per language for the lifecycle job `02-codeql-sast` (ADR-0017) and pre-engagement runs; .NET SDK for C#; license gate (ADR-0006). `audit-codeql-native` adds the traced C/C++ lane (`docs/language-servers.md`) |
+| `images/audit-codeql/` | CodeQL bundle (pinned), offline; security-extended suites per language for the lifecycle nodes `02-codeql-<lang>` (ADR-0017, ADR-0023) and the reachability packs of `06-reachability-codeql` and pre-engagement runs; .NET SDK for C#; license gate (ADR-0006). `audit-codeql-native` adds the traced C/C++ lane (`docs/language-servers.md`) |
 | `images/audit-iac/` | Terraform/Kubernetes/Helm/Kustomize policy scanning (checkov, tfsec, trivy config, kube-linter) — split out of `audit-static` 2026-09-17 |
 | `images/audit-container/` | Dockerfile linting + base-image inventory (Hadolint, docker-base-images) — split out of `audit-static` 2026-09-17 |
 | `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see `appsec-review-process/TODO.md`) |

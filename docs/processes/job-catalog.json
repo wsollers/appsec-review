@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 72,
+  "lifecycle_jobs": 81,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1180,7 +1180,6 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
-        "job:02-codeql-sast",
         "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
@@ -1311,15 +1310,142 @@
        ]
       },
       {
-       "ref": "job:02-codeql-sast",
-       "id": "02-codeql-sast",
-       "name": "CodeQL SAST",
+       "ref": "job:02-codeql-cpp",
+       "id": "02-codeql-cpp",
+       "name": "CodeQL C/C++",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake",
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-codeql-cpp"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-csharp",
+       "id": "02-codeql-csharp",
+       "name": "CodeQL C#",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
        ],
        "produces": [
-        "job:02-codeql-sast"
+        "job:02-codeql-csharp"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-go",
+       "id": "02-codeql-go",
+       "name": "CodeQL Go",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-go"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-java",
+       "id": "02-codeql-java",
+       "name": "CodeQL Java",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-java"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-javascript",
+       "id": "02-codeql-javascript",
+       "name": "CodeQL JavaScript/TypeScript",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-javascript"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-python",
+       "id": "02-codeql-python",
+       "name": "CodeQL Python",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-python"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-ruby",
+       "id": "02-codeql-ruby",
+       "name": "CodeQL Ruby",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-ruby"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-rust",
+       "id": "02-codeql-rust",
+       "name": "CodeQL Rust",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-rust"
        ],
        "declared_inputs": [
         "fresh accepted intake",
@@ -1694,7 +1820,15 @@
       "leaves": [
        "legacy-pregather",
        "job:02-build-resolution",
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -1709,7 +1843,6 @@
        "job:02-standards-source-ingest",
        "job:02-test-intelligence-ingest",
        "job:02-source-sast",
-       "job:02-codeql-sast",
        "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
@@ -1995,22 +2128,71 @@
        ]
       },
       {
+       "ref": "job:06-reachability-codeql",
+       "id": "06-reachability-codeql",
+       "name": "CodeQL dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-codeql-cpp",
+        "job:02-codeql-csharp",
+        "job:02-codeql-go",
+        "job:02-codeql-java",
+        "job:02-codeql-javascript",
+        "job:02-codeql-python",
+        "job:02-codeql-ruby",
+        "job:02-codeql-rust"
+       ],
+       "produces": [
+        "job:06-reachability-codeql"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+       ]
+      },
+      {
+       "ref": "job:06-reachability-ir",
+       "id": "06-reachability-ir",
+       "name": "IR/CPG dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-code-property-graph",
+        "job:02-ir-facts"
+       ],
+       "produces": [
+        "job:06-reachability-ir"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection"
+       ]
+      },
+      {
        "ref": "job:06-cve-reachability",
        "id": "06-cve-reachability",
        "name": "CVE Reachability Evidence",
        "kind": "lifecycle",
        "consumes": [
         "job:02-sca-vulnerability-match",
-        "job:02-ir-facts",
-        "job:02-code-property-graph",
-        "job:02-codeql-sast"
+        "job:06-reachability-codeql",
+        "job:06-reachability-ir"
        ],
        "produces": [
         "job:06-cve-reachability"
        ],
        "declared_inputs": [
         "accepted SCA match evidence",
-        "accepted source projection"
+        "accepted source projection",
+        "accepted 06-reachability-codeql engine table",
+        "accepted 06-reachability-ir engine table"
        ]
       },
       {
@@ -2078,8 +2260,16 @@
        "job:02-native-sast",
        "job:02-ir-facts",
        "job:02-sca-vulnerability-match",
+       "job:02-sbom-inventory",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust",
        "job:02-code-property-graph",
-       "job:02-codeql-sast",
        "job:02-iac-config-scan"
       ],
       "leaves": [
@@ -2096,6 +2286,8 @@
        "job:03-threat-model-reconciliation",
        "job:04-owasp-validation-worklist",
        "job:05-native-memory",
+       "job:06-reachability-codeql",
+       "job:06-reachability-ir",
        "job:06-cve-reachability",
        "job:15-stig-srg-validation-worklist"
       ],
@@ -2116,7 +2308,12 @@
        "accepted native SAST/IR evidence",
        "hash-bound citations",
        "accepted SCA match evidence",
+       "accepted SBOM",
        "accepted source projection",
+       "B16 audit-codeql record",
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+       "accepted 06-reachability-codeql engine table",
+       "accepted 06-reachability-ir engine table",
        "accepted component/native evidence",
        "candidate entrypoints",
        "accepted deployment configuration evidence",
@@ -2186,7 +2383,8 @@
        "consumes": [
         "job:03-threat-model-reconciliation",
         "job:04-asvs-masvs",
-        "job:07-hypothesis-discovery"
+        "job:07-hypothesis-discovery",
+        "job:06-cve-reachability"
        ],
        "produces": [
         "job:claim-ledger-routing"
@@ -2410,6 +2608,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
         "job:12b-poc-and-fix",
         "job:11-remediation-proposal"
@@ -2504,9 +2703,9 @@
        "job:02-native-sast",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
+       "job:06-cve-reachability",
        "job:03-threat-model-dfd-stride",
        "job:05-native-memory",
-       "job:06-cve-reachability",
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
@@ -2637,7 +2836,14 @@
      "job:02-standards-source-ingest",
      "job:02-test-intelligence-ingest",
      "job:02-source-sast",
-     "job:02-codeql-sast",
+     "job:02-codeql-cpp",
+     "job:02-codeql-csharp",
+     "job:02-codeql-go",
+     "job:02-codeql-java",
+     "job:02-codeql-javascript",
+     "job:02-codeql-python",
+     "job:02-codeql-ruby",
+     "job:02-codeql-rust",
      "job:02-code-property-graph",
      "job:02-native-sast",
      "job:02-ir-capture",
@@ -2667,6 +2873,8 @@
      "job:04-asvs-masvs",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
+     "job:06-reachability-codeql",
+     "job:06-reachability-ir",
      "job:06-cve-reachability",
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
@@ -2784,6 +2992,9 @@
      "hash-bound citations",
      "accepted SCA match evidence",
      "accepted source projection",
+     "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+     "accepted 06-reachability-codeql engine table",
+     "accepted 06-reachability-ir engine table",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -3822,7 +4033,6 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
-        "job:02-codeql-sast",
         "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
@@ -3990,15 +4200,142 @@
        ]
       },
       {
-       "ref": "job:02-codeql-sast",
-       "id": "02-codeql-sast",
-       "name": "CodeQL SAST",
+       "ref": "job:02-codeql-cpp",
+       "id": "02-codeql-cpp",
+       "name": "CodeQL C/C++",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake",
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-codeql-cpp"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-csharp",
+       "id": "02-codeql-csharp",
+       "name": "CodeQL C#",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
        ],
        "produces": [
-        "job:02-codeql-sast"
+        "job:02-codeql-csharp"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-go",
+       "id": "02-codeql-go",
+       "name": "CodeQL Go",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-go"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-java",
+       "id": "02-codeql-java",
+       "name": "CodeQL Java",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-java"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-javascript",
+       "id": "02-codeql-javascript",
+       "name": "CodeQL JavaScript/TypeScript",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-javascript"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-python",
+       "id": "02-codeql-python",
+       "name": "CodeQL Python",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-python"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-ruby",
+       "id": "02-codeql-ruby",
+       "name": "CodeQL Ruby",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-ruby"
+       ],
+       "declared_inputs": [
+        "fresh accepted intake",
+        "staged target checkout",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+       ]
+      },
+      {
+       "ref": "job:02-codeql-rust",
+       "id": "02-codeql-rust",
+       "name": "CodeQL Rust",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-codeql-rust"
        ],
        "declared_inputs": [
         "fresh accepted intake",
@@ -4382,7 +4719,15 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -4402,7 +4747,6 @@
        "job:02-build-configure",
        "job:02-native-build",
        "job:02-source-sast",
-       "job:02-codeql-sast",
        "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
@@ -4740,39 +5084,104 @@
      "name": "06-cve-reachability",
      "entries": [
       {
+       "ref": "job:06-reachability-codeql",
+       "id": "06-reachability-codeql",
+       "name": "CodeQL dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-codeql-cpp",
+        "job:02-codeql-csharp",
+        "job:02-codeql-go",
+        "job:02-codeql-java",
+        "job:02-codeql-javascript",
+        "job:02-codeql-python",
+        "job:02-codeql-ruby",
+        "job:02-codeql-rust"
+       ],
+       "produces": [
+        "job:06-reachability-codeql"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+       ]
+      },
+      {
+       "ref": "job:06-reachability-ir",
+       "id": "06-reachability-ir",
+       "name": "IR/CPG dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-code-property-graph",
+        "job:02-ir-facts"
+       ],
+       "produces": [
+        "job:06-reachability-ir"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection"
+       ]
+      },
+      {
        "ref": "job:06-cve-reachability",
        "id": "06-cve-reachability",
        "name": "CVE Reachability Evidence",
        "kind": "lifecycle",
        "consumes": [
         "job:02-sca-vulnerability-match",
-        "job:02-ir-facts",
-        "job:02-code-property-graph",
-        "job:02-codeql-sast"
+        "job:06-reachability-codeql",
+        "job:06-reachability-ir"
        ],
        "produces": [
         "job:06-cve-reachability"
        ],
        "declared_inputs": [
         "accepted SCA match evidence",
-        "accepted source projection"
+        "accepted source projection",
+        "accepted 06-reachability-codeql engine table",
+        "accepted 06-reachability-ir engine table"
        ]
       }
      ],
      "rollup": {
       "enters": [
        "job:02-sca-vulnerability-match",
-       "job:02-ir-facts",
+       "job:02-sbom-inventory",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust",
        "job:02-code-property-graph",
-       "job:02-codeql-sast"
+       "job:02-ir-facts"
       ],
       "leaves": [
        "job:06-cve-reachability"
       ],
-      "passes": [],
+      "passes": [
+       "job:06-reachability-codeql",
+       "job:06-reachability-ir"
+      ],
       "declared_inputs": [
        "accepted SCA match evidence",
-       "accepted source projection"
+       "accepted SBOM",
+       "accepted source projection",
+       "B16 audit-codeql record",
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+       "accepted 06-reachability-codeql engine table",
+       "accepted 06-reachability-ir engine table"
       ]
      }
     },
@@ -4905,7 +5314,8 @@
        "consumes": [
         "job:03-threat-model-reconciliation",
         "job:04-asvs-masvs",
-        "job:07-hypothesis-discovery"
+        "job:07-hypothesis-discovery",
+        "job:06-cve-reachability"
        ],
        "produces": [
         "job:claim-ledger-routing"
@@ -4976,9 +5386,9 @@
        "job:02-native-sast",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
+       "job:06-cve-reachability",
        "job:03-threat-model-dfd-stride",
        "job:05-native-memory",
-       "job:06-cve-reachability",
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake"
@@ -5291,6 +5701,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
         "job:12b-poc-and-fix",
         "job:11-remediation-proposal"
@@ -5374,6 +5785,7 @@
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
        "job:12-scoring-prioritization",
+       "job:06-cve-reachability",
        "job:14-attack-chain-refutation",
        "job:12b-poc-and-fix",
        "job:11-remediation-proposal",
@@ -5437,7 +5849,14 @@
      "job:02-build-configure",
      "job:02-native-build",
      "job:02-source-sast",
-     "job:02-codeql-sast",
+     "job:02-codeql-cpp",
+     "job:02-codeql-csharp",
+     "job:02-codeql-go",
+     "job:02-codeql-java",
+     "job:02-codeql-javascript",
+     "job:02-codeql-python",
+     "job:02-codeql-ruby",
+     "job:02-codeql-rust",
      "job:02-code-property-graph",
      "job:02-native-sast",
      "job:02-ir-capture",
@@ -5467,6 +5886,8 @@
      "job:04-asvs-masvs",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
+     "job:06-reachability-codeql",
+     "job:06-reachability-ir",
      "job:06-cve-reachability",
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
@@ -5588,6 +6009,9 @@
      "hash-bound citations",
      "accepted SCA match evidence",
      "accepted source projection",
+     "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+     "accepted 06-reachability-codeql engine table",
+     "accepted 06-reachability-ir engine table",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -7601,11 +8025,6 @@
      "contract": "source-sast"
     },
     {
-     "job": "02-codeql-sast",
-     "kind": "required",
-     "contract": "codeql-sast"
-    },
-    {
      "job": "02-code-property-graph",
      "kind": "required",
      "contract": "code-property-graph"
@@ -7727,7 +8146,6 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
-    "job:02-codeql-sast",
     "job:02-code-property-graph",
     "job:02-native-sast",
     "job:02-ir-facts",
@@ -8176,6 +8594,242 @@
    ]
   },
   {
+   "id": "06-reachability-codeql",
+   "lane": "06-cve-reachability",
+   "name": "CodeQL dependency reachability",
+   "contract": "engine-reachability",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/reachability_engine_jobs.py:run_codeql",
+   "resource_pool": "docker",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "engine-reachability"
+   },
+   "depends_on": [
+    {
+     "job": "02-sca-vulnerability-match",
+     "kind": "required",
+     "contract": "sca-vulnerability-match"
+    },
+    {
+     "job": "02-sbom-inventory",
+     "kind": "required",
+     "contract": "sbom-inventory"
+    },
+    {
+     "job": "02-codeql-cpp",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-csharp",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-go",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-java",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-javascript",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-python",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-ruby",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-rust",
+     "kind": "required",
+     "contract": "codeql-language"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SCA match evidence"
+    },
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "accepted source projection"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-codeql-<lang> database pointers"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-codeql-cpp traced graph tables"
+    },
+    {
+     "need": "optional",
+     "input": "published OSV snapshot index"
+    },
+    {
+     "need": "optional",
+     "input": "run-supplied reviewed advisory-to-function map and entry points"
+    }
+   ],
+   "inputs_source": "registry/job-templates/06-reachability-codeql.json",
+   "output_dir": "runs/<run_id>/data/jobs/06-reachability-codeql/",
+   "output_files": [
+    "engine-reachability.json",
+    "engine-reachability-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/engine-reachability.json",
+   "claim_class": "cve_reachability_evidence_lead",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-sca-vulnerability-match",
+    "job:02-sbom-inventory",
+    "job:02-codeql-cpp",
+    "job:02-codeql-csharp",
+    "job:02-codeql-go",
+    "job:02-codeql-java",
+    "job:02-codeql-javascript",
+    "job:02-codeql-python",
+    "job:02-codeql-ruby",
+    "job:02-codeql-rust"
+   ],
+   "produces": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  {
+   "id": "06-reachability-ir",
+   "lane": "06-cve-reachability",
+   "name": "IR/CPG dependency reachability",
+   "contract": "engine-reachability",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/reachability_engine_jobs.py:run_ir",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "engine-reachability"
+   },
+   "depends_on": [
+    {
+     "job": "02-sca-vulnerability-match",
+     "kind": "required",
+     "contract": "sca-vulnerability-match"
+    },
+    {
+     "job": "02-sbom-inventory",
+     "kind": "required",
+     "contract": "sbom-inventory"
+    },
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "required",
+     "contract": "ir-facts"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SCA match evidence"
+    },
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "accepted source projection"
+    },
+    {
+     "need": "optional",
+     "input": "accepted code property graph"
+    },
+    {
+     "need": "optional",
+     "input": "accepted LLVM IR facts"
+    },
+    {
+     "need": "optional",
+     "input": "published OSV snapshot index"
+    },
+    {
+     "need": "optional",
+     "input": "run-supplied reviewed advisory-to-function map and entry points"
+    }
+   ],
+   "inputs_source": "registry/job-templates/06-reachability-ir.json",
+   "output_dir": "runs/<run_id>/data/jobs/06-reachability-ir/",
+   "output_files": [
+    "engine-reachability.json",
+    "engine-reachability-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/engine-reachability.json",
+   "claim_class": "cve_reachability_evidence_lead",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-sca-vulnerability-match",
+    "job:02-sbom-inventory",
+    "job:02-code-property-graph",
+    "job:02-ir-facts"
+   ],
+   "produces": [
+    "job:06-reachability-ir"
+   ]
+  },
+  {
    "id": "06-cve-reachability",
    "lane": "06-cve-reachability",
    "name": "CVE Reachability Evidence",
@@ -8203,19 +8857,14 @@
      "contract": "sca-vulnerability-match"
     },
     {
-     "job": "02-ir-facts",
+     "job": "06-reachability-codeql",
      "kind": "required",
-     "contract": "ir-facts"
+     "contract": "engine-reachability"
     },
     {
-     "job": "02-code-property-graph",
+     "job": "06-reachability-ir",
      "kind": "required",
-     "contract": "code-property-graph"
-    },
-    {
-     "job": "02-codeql-sast",
-     "kind": "required",
-     "contract": "codeql-sast"
+     "contract": "engine-reachability"
     }
    ],
    "declared_inputs": [
@@ -8228,24 +8877,20 @@
      "input": "accepted source projection"
     },
     {
-     "need": "optional",
-     "input": "accepted LLVM IR facts"
+     "need": "required",
+     "input": "accepted 06-reachability-codeql engine table"
+    },
+    {
+     "need": "required",
+     "input": "accepted 06-reachability-ir engine table"
     },
     {
      "need": "optional",
-     "input": "accepted code property graph"
+     "input": "published OSV snapshot identity"
     },
     {
      "need": "optional",
-     "input": "accepted CodeQL SAST traced graph tables"
-    },
-    {
-     "need": "optional",
-     "input": "published OSV snapshot index"
-    },
-    {
-     "need": "optional",
-     "input": "run-supplied reviewed advisory-to-function map, entry points, CodeQL/LSP/tree-sitter documents"
+     "input": "run-supplied entry points and language-server / tree-sitter hint documents"
     }
    ],
    "inputs_source": "registry/job-templates/06-cve-reachability.json",
@@ -8264,9 +8909,8 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-sca-vulnerability-match",
-    "job:02-ir-facts",
-    "job:02-code-property-graph",
-    "job:02-codeql-sast"
+    "job:06-reachability-codeql",
+    "job:06-reachability-ir"
    ],
    "produces": [
     "job:06-cve-reachability"
@@ -8541,6 +9185,11 @@
      "job": "07-hypothesis-discovery",
      "kind": "required",
      "contract": "hypothesis-discovery"
+    },
+    {
+     "job": "06-cve-reachability",
+     "kind": "required",
+     "contract": "cve-reachability"
     }
    ],
    "declared_inputs": [
@@ -8576,7 +9225,8 @@
    "consumes": [
     "job:03-threat-model-reconciliation",
     "job:04-asvs-masvs",
-    "job:07-hypothesis-discovery"
+    "job:07-hypothesis-discovery",
+    "job:06-cve-reachability"
    ],
    "produces": [
     "job:claim-ledger-routing"
@@ -9204,6 +9854,11 @@
      "contract": "12-scoring-prioritization"
     },
     {
+     "job": "06-cve-reachability",
+     "kind": "required",
+     "contract": "cve-reachability"
+    },
+    {
      "job": "14-attack-chain-refutation",
      "kind": "optional",
      "contract": "14-attack-chain-refutation"
@@ -9257,6 +9912,7 @@
     "finding-enrichment.json",
     "attack-chains.json",
     "poc-fix-section.json",
+    "dependency-reachability-section.json",
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",
@@ -9285,6 +9941,7 @@
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
     "job:12-scoring-prioritization",
+    "job:06-cve-reachability",
     "job:14-attack-chain-refutation",
     "job:12b-poc-and-fix",
     "job:11-remediation-proposal"
@@ -9988,10 +10645,10 @@
    ]
   },
   {
-   "id": "02-codeql-sast",
+   "id": "02-codeql-cpp",
    "lane": "02-evidence-pregather",
-   "name": "CodeQL SAST",
-   "contract": "codeql-sast",
+   "name": "CodeQL C/C++",
+   "contract": "codeql-language",
    "implemented": true,
    "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
@@ -10006,7 +10663,86 @@
     "role_id": "source-sast-curator",
     "domain_id": "repo-project-discovery",
     "tooling_profile_id": "pinned-source-sast",
-    "output_contract_id": "codeql-sast"
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    },
+    {
+     "job": "02-native-build",
+     "kind": "required",
+     "contract": "native-build"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-native-build (traced replay per unit; B16 audit-codeql-native record)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-cpp.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-cpp/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake",
+    "job:02-native-build"
+   ],
+   "produces": [
+    "job:02-codeql-cpp"
+   ]
+  },
+  {
+   "id": "02-codeql-csharp",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL C#",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
    },
    "depends_on": [
     {
@@ -10033,17 +10769,17 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-sast.json",
-   "output_dir": "runs/<run_id>/data/jobs/02-codeql-sast/",
+   "inputs_source": "registry/job-templates/02-codeql-csharp.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-csharp/",
    "output_files": [
-    "codeql-sast.json",
+    "codeql-language.json",
     "b13-receipts.json",
-    "codeql-sast-summary.md",
+    "codeql-language-summary.md",
     "status.json",
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-sast.json",
+   "outputs_source": "registry/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -10053,7 +10789,421 @@
     "job:00-intake"
    ],
    "produces": [
-    "job:02-codeql-sast"
+    "job:02-codeql-csharp"
+   ]
+  },
+  {
+   "id": "02-codeql-go",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL Go",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-go.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-go/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-go"
+   ]
+  },
+  {
+   "id": "02-codeql-java",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL Java",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-java.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-java/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-java"
+   ]
+  },
+  {
+   "id": "02-codeql-javascript",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL JavaScript/TypeScript",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-javascript.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-javascript/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-javascript"
+   ]
+  },
+  {
+   "id": "02-codeql-python",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL Python",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-python.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-python/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-python"
+   ]
+  },
+  {
+   "id": "02-codeql-ruby",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL Ruby",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-ruby.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-ruby/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-ruby"
+   ]
+  },
+  {
+   "id": "02-codeql-rust",
+   "lane": "02-evidence-pregather",
+   "name": "CodeQL Rust",
+   "contract": "codeql-language",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh accepted intake"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-codeql-rust.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-codeql-rust/",
+   "output_files": [
+    "codeql-language.json",
+    "b13-receipts.json",
+    "codeql-language-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "claim_class": "source_static_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-codeql-rust"
    ]
   },
   {
@@ -12865,7 +14015,14 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
-    "job:02-codeql-sast",
+    "job:02-codeql-cpp",
+    "job:02-codeql-csharp",
+    "job:02-codeql-go",
+    "job:02-codeql-java",
+    "job:02-codeql-javascript",
+    "job:02-codeql-python",
+    "job:02-codeql-ruby",
+    "job:02-codeql-rust",
     "job:02-code-property-graph",
     "job:02-operations-doc-ingest",
     "job:02-evidence-index",
@@ -13132,6 +14289,30 @@
     "job:07-red-team-adversarial"
    ]
   },
+  "job:06-reachability-codeql": {
+   "id": "job:06-reachability-codeql",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/06-reachability-codeql/",
+   "about": "Accepted engine-reachability output of 06-reachability-codeql.",
+   "produced_by": [
+    "job:06-reachability-codeql"
+   ],
+   "consumed_by": [
+    "job:06-cve-reachability"
+   ]
+  },
+  "job:06-reachability-ir": {
+   "id": "job:06-reachability-ir",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/06-reachability-ir/",
+   "about": "Accepted engine-reachability output of 06-reachability-ir.",
+   "produced_by": [
+    "job:06-reachability-ir"
+   ],
+   "consumed_by": [
+    "job:06-cve-reachability"
+   ]
+  },
   "job:06-cve-reachability": {
    "id": "job:06-cve-reachability",
    "kind": "job output",
@@ -13144,7 +14325,9 @@
    "consumed_by": [
     "step:fuzz-target-triage",
     "job:13-fuzz-target-triage",
-    "job:07-red-team-adversarial"
+    "job:claim-ledger-routing",
+    "job:07-red-team-adversarial",
+    "job:10-synthesis-report"
    ]
   },
   "job:13-fuzz-target-triage": {
@@ -13431,6 +14614,7 @@
     "job:02-native-build"
    ],
    "consumed_by": [
+    "job:02-codeql-cpp",
     "job:02-native-sast",
     "job:02-ir-capture",
     "job:02-debug-symbol-index",
@@ -13453,17 +14637,100 @@
     "job:07-hypothesis-discovery"
    ]
   },
-  "job:02-codeql-sast": {
-   "id": "job:02-codeql-sast",
+  "job:02-codeql-cpp": {
+   "id": "job:02-codeql-cpp",
    "kind": "job output",
-   "path": "runs/<run_id>/data/jobs/02-codeql-sast/",
-   "about": "Accepted codeql-sast output of 02-codeql-sast.",
+   "path": "runs/<run_id>/data/jobs/02-codeql-cpp/",
+   "about": "Accepted codeql-language output of 02-codeql-cpp.",
    "produced_by": [
-    "job:02-codeql-sast"
+    "job:02-codeql-cpp"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
-    "job:06-cve-reachability"
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-csharp": {
+   "id": "job:02-codeql-csharp",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-csharp/",
+   "about": "Accepted codeql-language output of 02-codeql-csharp.",
+   "produced_by": [
+    "job:02-codeql-csharp"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-go": {
+   "id": "job:02-codeql-go",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-go/",
+   "about": "Accepted codeql-language output of 02-codeql-go.",
+   "produced_by": [
+    "job:02-codeql-go"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-java": {
+   "id": "job:02-codeql-java",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-java/",
+   "about": "Accepted codeql-language output of 02-codeql-java.",
+   "produced_by": [
+    "job:02-codeql-java"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-javascript": {
+   "id": "job:02-codeql-javascript",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-javascript/",
+   "about": "Accepted codeql-language output of 02-codeql-javascript.",
+   "produced_by": [
+    "job:02-codeql-javascript"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-python": {
+   "id": "job:02-codeql-python",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-python/",
+   "about": "Accepted codeql-language output of 02-codeql-python.",
+   "produced_by": [
+    "job:02-codeql-python"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-ruby": {
+   "id": "job:02-codeql-ruby",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-ruby/",
+   "about": "Accepted codeql-language output of 02-codeql-ruby.",
+   "produced_by": [
+    "job:02-codeql-ruby"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  "job:02-codeql-rust": {
+   "id": "job:02-codeql-rust",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-codeql-rust/",
+   "about": "Accepted codeql-language output of 02-codeql-rust.",
+   "produced_by": [
+    "job:02-codeql-rust"
+   ],
+   "consumed_by": [
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-code-property-graph": {
@@ -13476,7 +14743,7 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:06-cve-reachability"
+    "job:06-reachability-ir"
    ]
   },
   "job:02-native-sast": {
@@ -13528,7 +14795,7 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:05-native-memory",
-    "job:06-cve-reachability"
+    "job:06-reachability-ir"
    ]
   },
   "job:02-debug-symbol-index": {
@@ -13682,6 +14949,8 @@
     "step:license-scan",
     "step:dependency-lifecycle",
     "job:02-evidence-assembly",
+    "job:06-reachability-codeql",
+    "job:06-reachability-ir",
     "job:02-sca-vulnerability-match",
     "job:02-license-scan",
     "job:02-dependency-lifecycle"
@@ -13699,6 +14968,8 @@
    "consumed_by": [
     "step:cve-reachability",
     "job:02-evidence-assembly",
+    "job:06-reachability-codeql",
+    "job:06-reachability-ir",
     "job:06-cve-reachability"
    ]
   },

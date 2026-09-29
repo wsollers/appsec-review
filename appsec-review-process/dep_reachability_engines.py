@@ -10,7 +10,8 @@ disk and hash-bound by the caller. No engine executes anything:
                  C/C++ graph pack). Static edges miss virtual/dynamic dispatch, so a missing path is
                  ``unknown``, never ``unreachable``.
 * ``lsp``        ``lsp-query-result`` documents (``lsp_driver.py``) whose ``incomingCalls`` answers
-                 chain from a tagged sink to an entry point; ``reachable`` or ``unknown`` only.
+                 chain from a tagged sink to an entry point; its ``reachable`` is a hint only
+                 (ADR-0023): the join and the correlator never let it decide a verdict.
 * ``treesitter`` ``treesitter-ast`` call sites matched by name: always ``unknown``, with a
                  ``witness_hint`` when a call site matches (brief E: never ``reachable`` alone).
 
@@ -33,8 +34,9 @@ import reachability
 REACHABLE, UNREACHABLE, UNKNOWN = "reachable", "unreachable", "unknown"
 STATE = {reachability.REACHABLE: REACHABLE, reachability.UNREACHABLE: UNREACHABLE, reachability.UNKNOWN: UNKNOWN}
 # What an engine's answer can prove (dep_reachability.join): "complete" may prove reachable and
-# unreachable; "graph" and "hierarchy" may prove reachable only; "hint" proves nothing.
-STRENGTH = {"cpg": "complete", "codeql": "graph", "lsp": "hierarchy", "treesitter": "hint"}
+# unreachable; "graph" may prove reachable only; "hint" proves nothing. ADR-0023: the language-server
+# call hierarchy is a hint (it can never make a verdict reachable), like tree-sitter.
+STRENGTH = {"cpg": "complete", "codeql": "graph", "lsp": "hint", "treesitter": "hint"}
 MAX_HINTS = 32
 MAX_LSP_NODES = 20_000
 

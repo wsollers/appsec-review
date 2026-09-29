@@ -161,10 +161,15 @@ repository into independently buildable projects and operational surfaces. The i
 runs with no network and imports only allowlisted artifacts. Analysis then publishes:
 
 - source SAST, including Go, Java and PHP;
-- CodeQL (`02-codeql-sast`, [ADR-0017](../decisions/ADR-0017-codeql-sast-job.md)): security-extended
-  queries per detected language in build mode none, one network-less container per language; Go and
-  any language whose image has no B16 record are per-language gaps, and the leads enter the claim
-  ledger as P1 candidates;
+- CodeQL (`02-codeql-<lang>`, one node per language, [ADR-0017](../decisions/ADR-0017-codeql-sast-job.md),
+  [ADR-0023](../decisions/ADR-0023-per-language-codeql-reachability.md)): security-extended queries in
+  build mode none (C/C++ also traced per native unit), network-less, in parallel; an absent language
+  is SKIPPED, Go, Rust and any language whose image has no B16 record are gaps; the leads enter the
+  claim ledger as P1 candidates and the retained databases feed `06-reachability-codeql`;
+- dependency reachability: `06-reachability-codeql` and `06-reachability-ir` publish one engine table
+  each and `06-cve-reachability` correlates them (`reachable` / `unreachable` / `conflict` /
+  `unknown`, [docs/dependency-reachability.md](../dependency-reachability.md)); the report shows it in
+  section 3B;
 - secrets, IaC, image, SBOM, offline SCA, licence and dependency-lifecycle evidence;
 - native SAST, LLVM IR, Joern AST/CPG, test and ELF hardening evidence;
 - literal/full-text and LanceDB semantic search projections; and
@@ -175,18 +180,20 @@ engagement binds exact snapshot bytes and accepts only the configured age window
 network access to make a stale scan pass.
 
 `06-cve-reachability` ([ADR-0022](../decisions/ADR-0022-dependency-reachability.md),
-[`docs/dependency-reachability.md`](../dependency-reachability.md)) now runs in `full_review` after SCA,
-the code property graph and CodeQL: for each SCA match it takes the advisory's vulnerable symbols (a
-reviewed map, else the OSV index) and asks the language's engines whether an entry point reaches
-them. Only a CPG, CodeQL or LSP path makes a match `reachable`; `unreachable` needs a complete CPG
-search; everything else is `unknown` with a gap, and a dependency finding without `reachable` is
-capped at High. Optional run inputs, all hash-bound into the 06 attempt:
+[ADR-0023](../decisions/ADR-0023-per-language-codeql-reachability.md),
+[`docs/dependency-reachability.md`](../dependency-reachability.md)) is the Python correlator over the
+engine tables of `06-reachability-codeql` (packs against the databases the `02-codeql-<lang>` nodes
+retained) and `06-reachability-ir` (CPG + IR facts). Advisory symbols come from a reviewed map, else
+the OSV index, resolved through each dependency's own manifest. Only a CodeQL or CPG witness makes a
+match `reachable`; `unreachable` needs the complete CPG search with the dependency source present;
+engines that disagree give `conflict` (left for review); language-server and tree-sitter results are
+hints only; everything else is `unknown` with a gap, and a dependency finding without `reachable` is
+capped at High. Optional run inputs, all hash-bound:
 
 - `$RUN_ROOT/inputs/cve-reachability-functions.json` (reviewed advisory -> symbols; needed outside Go,
   where OSV rarely lists symbols) and `inputs/reachability-entry-points.json` (extra roots);
-- `$RUN_ROOT/inputs/dependency-reachability/` with CodeQL tables, LSP call-hierarchy and tree-sitter
-  output for Go/Java/C#/JS/Python. No job produces these in a run yet, so without them those
-  languages are `unknown` (`engine-input-absent`).
+- `$RUN_ROOT/inputs/dependency-reachability/` with LSP call-hierarchy and tree-sitter output (hints).
+  Run-supplied CodeQL tables are no longer read.
 
 ## 4. Characterize components and assemble review requests
 
@@ -293,6 +300,6 @@ operator and design-document HTML publications are self-contained, but this demo
 | Rendezvous never closes | Inspect expected members and durable terminal states; preserve blocked/missing members. |
 | Synthesis reports `OK_WITH_GAPS` | Read the limitations and coverage appendix; this is an honest accepted draft state. |
 | Dagster shows old definitions | Run `orchestrator/dagster/code-location.sh reload`. |
-| Every dependency finding is `unknown` reachability | Read the gaps in 06's `outputs/dependency-reachability.json`: `no-advisory-symbols` needs a reviewed map; `engine-input-absent` means no CPG/CodeQL/LSP input for that language. |
+| Every dependency finding is `unknown` reachability | Read the gaps in 06's `outputs/dependency-reachability.json`: `no-advisory-symbols` needs a reviewed map; `engine-input-absent` means an engine table or database was missing (see the 06-reachability-* `languages` states). |
 | A model step seems hung | `orchestrator/tail-run-log.sh "$RUN_ID" --level warn`: `IDLE` lines name the stalled call; set `APPSEC_IDLE_KILL_SECONDS` to stop such calls automatically. |
 | CodeQL reports every language `UNAVAILABLE` | The `audit-codeql` image has no B16 record yet; build and register it (`images/audit-codeql/README.md`). |

@@ -1,6 +1,6 @@
 # appsec/cpp-graph-queries
 
-Table queries run by `02-codeql-sast`'s traced C/C++ lane (`codeql-cpp-traced`) on the traced
+Table queries run by `02-codeql-cpp`'s traced C/C++ lane (`codeql-cpp-traced`) on the traced
 database, for brief E's reachability and taint work. Output is locator tables, never findings:
 `/scratch/graph/<Query>.csv` in each `tools/codeql-cpp-traced-<unit>/` trial. Names and columns
 are the contract with brief E (`docs/language-servers.md` §6):

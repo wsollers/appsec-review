@@ -4,7 +4,7 @@
   "display_name": "Accepted Evidence-backed Draft Report and Presentation",
   "required_files": [
     "synthesis-input.json", "report.json", "report.md", "coverage-unresolved-appendix.md",
-    "evidence-trace-index.json", "publication-manifest.json", "finding-enrichment.json","attack-chains.json", "poc-fix-section.json", "report.review.json",
+    "evidence-trace-index.json", "publication-manifest.json", "finding-enrichment.json","attack-chains.json", "poc-fix-section.json", "dependency-reachability-section.json", "report.review.json",
     "render-publication-manifest.json", "presentation/report.tex", "presentation/report.pdf", "presentation/report.html",
     "presentation/report.fragment.html", "presentation/workbench.html",
     "presentation/workbench.fragment.html", "permission.json", "lineage.json", "status.json"

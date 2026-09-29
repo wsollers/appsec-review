@@ -202,19 +202,22 @@ id, Dockerfile hash, build fingerprint and attempt id at startup.
   verbatim from `opengrep/opengrep-rules` at `f1d2b562` under `data/source-sast/opengrep-rules/`
   (LGPL-2.1 + Commons Clause; LICENSE and NOTICE alongside, every file hash-locked by
   `data/source-sast/opengrep-rules.lock.json`; decision William 2026-09-27).
-- **CodeQL (`audit-codeql`) feeds `02-codeql-sast`** (ADR-0017): one container per language runs
-  `/opt/scripts/codeql-sast-lane.sh` with `--build-mode none` and the bundled security-extended suite.
+- **CodeQL (`audit-codeql`) feeds the `02-codeql-<lang>` nodes and `06-reachability-codeql`** (ADR-0017,
+  ADR-0023): one node per language runs `/opt/scripts/codeql-sast-lane.sh ... keep-db` with
+  `--build-mode none` and the bundled security-extended suite and retains the database;
+  `/opt/scripts/codeql-reachability-lane.sh` runs the `data/codeql-reachability` packs against it.
   `images/audit-codeql/tool.json` is the authenticated metadata (bundle sha256 must match image.json and
   the Dockerfile). The image needs a rebuild (lane script) and a B16 record before the job executes;
   until then every language is a per-language `UNAVAILABLE` gap. The image now carries a .NET SDK
   for C# (branch `lang-servers`). `audit-codeql-native` holds the traced C/C++ lane
-  (`codeql-cpp-traced`, graph queries in `queries/appsec-graph-cpp`); it is not yet wired into
-  `full_review` (see [`docs/language-servers.md`](../language-servers.md)).
+  (`codeql-cpp-traced`, graph queries in `queries/appsec-graph-cpp`), run by `02-codeql-cpp` for each
+  unit of the accepted `02-native-build` (see [`docs/dependency-reachability.md`](../dependency-reachability.md)).
 - **CodeQL reachability packs** for Go, Java, C#, JS/TS and Python live in `data/codeql-reachability/`
   (pinned to the bundle 2.27.0 libraries; advisory symbols arrive as a generated data extension) and
-  serve `06-cve-reachability` ([`docs/dependency-reachability.md`](../dependency-reachability.md)). They
-  are not compiled yet: `scripts/smoke_codeql_reachability.sh` (needs `audit-codeql:local`) is the
-  first check, and Go needs a Go toolchain in `audit-codeql` for autobuild.
+  are run by `06-reachability-codeql` against the databases the `02-codeql-<lang>` nodes retained
+  ([`docs/dependency-reachability.md`](../dependency-reachability.md)). They are not compiled yet:
+  `scripts/smoke_codeql_per_language.sh` (needs the rebuilt `audit-codeql:local`) is the first check,
+  and Go needs a Go toolchain in `audit-codeql`.
 - **Language servers and tree-sitter** are pinned on every `audit-buildenv-*` image, with the
   tree-sitter grammars vendored in `audit-lsp-vendor`; `lsp_driver.py` and `treesitter_ast.py` drive
   them and `images/test/run-lsp-smoke.sh` / `scripts/smoke_lang_servers.sh` smoke-test them. None of

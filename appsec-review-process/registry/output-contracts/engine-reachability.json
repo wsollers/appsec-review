@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "engine-reachability",
+  "display_name": "Dependency reachability engine table (one row per SCA match)",
+  "required_files": [
+    "engine-reachability.json",
+    "engine-reachability-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "rows",
+    "reachable",
+    "network",
+    "qualification"
+  ],
+  "result_schema": {
+    "artifact": "engine-reachability.json",
+    "schema_file": "engine-reachability.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "cve_reachability_evidence_lead",
+    "allowed_assertions": [
+      "cve-reachability-evidence-lead",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "engine-reachability.json must satisfy engine-reachability.schema.json; one row per accepted SCA match",
+    "advisory symbols come only from the hash-bound reviewed map or the OSV index judged at the SCA completion time, and are resolved through the vendored dependency's own manifest (dep_symbol_resolver); every step is recorded in the row",
+    "reachable requires a witness whose every hop is hash-bound to the run's source projection; unreachable only from the ir engine with the vulnerable function's source analysed and a hash-bound target; the codeql engine never reports unreachable",
+    "CodeQL databases are the ones the 02-codeql-<lang> nodes retained, re-hashed before use and mounted read-only; nothing is rebuilt; queries run only in the pinned audit-codeql image with network none",
+    "symbols reach CodeQL only as data-extension rows; no advisory or model text is spliced into QL",
+    "an absent, stale or unverifiable engine input is a coverage gap, never a block; unknown is never 'not vulnerable'",
+    "the table is re-derived from the receipts and bound inputs on every validate",
+    "rows are evidence leads, not findings"
+  ]
+}

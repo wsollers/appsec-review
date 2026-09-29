@@ -1,4 +1,5 @@
-"""02-codeql-sast: plan, request, SARIF normalization, gaps, and a scripted end-to-end publish."""
+"""02-codeql-<lang> nodes (ADR-0023): plan, gating, request, SARIF normalization, gaps, retained databases,
+and scripted end-to-end publishes."""
 from __future__ import annotations
 
 import json
@@ -22,6 +23,11 @@ from schema_validate import validate_document  # noqa: E402
 FIXTURE = ROOT / "tests" / "fixtures"
 SARIF = FIXTURE / "codeql-cpp-source-sast-c.sarif"   # live audit-codeql 2.27.0 cpp run on source-sast-c/
 DIGEST = "sha256:" + "a" * 64
+
+
+def _inputs(plan, language="cpp", present=True, **extra):
+    return {"job": worker.JOBS[language], "language": language, "present": present,
+            "source_snapshot_sha256": "sha256:" + "b" * 64, "plan": plan, **extra}
 
 
 def _plan(languages=("cpp",), registry=None):
@@ -48,10 +54,16 @@ class CodeqlSastUnitTests(unittest.TestCase):
                  ".git/hooks/pre-commit.py", "README.md"]
         self.assertEqual(worker.detected_languages(paths),
                          ["cpp", "csharp", "go", "java", "javascript", "python", "ruby"])
+        self.assertEqual(worker.detected_languages(["src/lib.rs"]), ["rust"])
+        self.assertEqual(sorted(worker.JOBS.values()), sorted(f"02-codeql-{l}" for l in worker.LANGUAGES))
+        rust = _plan(["rust"])[0]
+        self.assertEqual((rust["status"], rust["argv"]), ("UNSUPPORTED_OFFLINE", []))
+        self.assertIn("language not supported", rust["gap"])
         plan = {row["language"]: row for row in _plan(worker.detected_languages(paths))}
         self.assertEqual(plan["go"]["status"], "UNSUPPORTED_OFFLINE")
         self.assertEqual(plan["cpp"]["argv"], ["/opt/scripts/codeql-sast-lane.sh", "cpp", "none",
-            "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls", "2", "2048"])
+            "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls", "2", "2048", "keep-db"])
+        self.assertIn("language not built", plan["go"]["gap"])
         self.assertTrue(all(row["build_mode"] == "none" for row in plan.values() if row["status"] == "READY"))
         missing = _plan(["cpp"], registry={})
         self.assertEqual(missing[0]["status"], "UNAVAILABLE")
@@ -59,21 +71,22 @@ class CodeqlSastUnitTests(unittest.TestCase):
 
     def test_request_is_offline_read_only_and_valid(self):
         with tempfile.TemporaryDirectory() as folder:
-            inputs = {"target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64,
+            inputs = {"job": worker.JOBS["cpp"], "target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64,
                       "limits": {"timeout_seconds": 60, "memory_bytes": 4 << 30, "cpu_millis": 2000, "pids": 256,
                                  "tmpfs_bytes": 1 << 28, "stdout_limit_bytes": 1 << 20, "stderr_limit_bytes": 1 << 20}}
             request = worker._request("run", "codeql-cpp-a", inputs, _plan()[0])
         self.assertEqual(request["network"], {"mode": "none", "destinations": []})
         self.assertEqual(request["target_mounts"], [{"host_path": folder, "container_path": "/workspace"}])
         self.assertEqual(validate_document(request, "pinned-container-request.schema.json"), [])
-        self.assertEqual(ce.request_errors(request, run_id="run", job_id=worker.JOB, attempt_id="codeql-cpp-a"), [])
+        self.assertEqual(ce.request_errors(request, run_id="run", job_id=worker.JOBS["cpp"], attempt_id="codeql-cpp-a"), [])
 
     def test_tunables_bound_ram_below_the_container_memory(self):
-        analysis = worker._analysis_tunables()
-        self.assertLess(analysis["ram_mb"] * 1024 * 1024, worker._limits()["memory_bytes"])
+        for language in worker.LANGUAGES:
+            analysis = worker._analysis_tunables(language)
+            self.assertLess(analysis["ram_mb"] * 1024 * 1024, worker._limits(language)["memory_bytes"])
         with mock.patch.object(worker.tunables, "value", side_effect=lambda job, name: 64 << 30 if name == "codeql_ram_bytes" else 4):
             with self.assertRaisesRegex(worker.Blocked, "below container_memory_bytes"):
-                worker._analysis_tunables()
+                worker._analysis_tunables("python")
 
     def test_recorded_sarif_normalizes_to_cwe_tagged_leads_without_messages(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -91,10 +104,11 @@ class CodeqlSastUnitTests(unittest.TestCase):
         self.assertEqual(by_rule["cpp/double-free"]["rule_name"], "Potential double free")
         self.assertTrue(all(row["path"] == "vuln.c" and row["category"] == "codeql-security-query" for row in leads))
         self.assertNotIn("may already have been freed", json.dumps(leads))
-        inputs = {"source_snapshot_sha256": "sha256:" + "b" * 64, "plan": _plan()}
+        inputs = _inputs(_plan())
         result = worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs,
                                  outcomes={"cpp": {"gap": None, "leads": leads, "dropped": 0}})
-        self.assertEqual(validate_document(result, "codeql-sast.schema.json"), [])
+        self.assertEqual(validate_document(result, "codeql-language.schema.json"), [])
+        self.assertEqual((result["job_id"], result["language"], result["databases"]), ("02-codeql-cpp", "cpp", []))
         self.assertEqual(result["status"], "OK_WITH_GAPS")
         self.assertEqual(result["coverage_gaps"], [worker.FIDELITY_GAPS["cpp"]])
         self.assertEqual(result["tools"][0]["records"], 7)
@@ -114,7 +128,7 @@ class CodeqlSastUnitTests(unittest.TestCase):
                 worker.normalize_sarif("cpp", b"{not json", target)
             with self.assertRaises(RuntimeError):
                 worker.normalize_sarif("cpp", b'{"version": "2.1.0"}', target)
-        inputs = {"source_snapshot_sha256": "sha256:" + "b" * 64, "plan": _plan()}
+        inputs = _inputs(_plan())
         result = worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs,
                                  outcomes={"cpp": {"gap": None, "leads": leads, "dropped": dropped}})
         self.assertIn("codeql-results-outside-checkout:cpp:3", result["coverage_gaps"])
@@ -131,14 +145,48 @@ class CodeqlSastUnitTests(unittest.TestCase):
             with self.assertRaises(worker.Blocked):
                 worker.terminal_gap("cpp", terminal)
 
-    def test_empty_plan_and_all_gaps_still_publish(self):
-        inputs = {"source_snapshot_sha256": "sha256:" + "b" * 64, "plan": []}
-        result = worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes={})
-        self.assertEqual((result["status"], result["tools"], result["leads"]), ("OK_WITH_GAPS", [], []))
-        self.assertEqual(validate_document(result, "codeql-sast.schema.json"), [])
-        inputs["plan"] = _plan(["go", "cpp"])
+    def test_absent_language_skips_and_unbuildable_languages_are_gaps(self):
+        result = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs([], "java", present=False),
+                                 outcomes={})
+        self.assertEqual((result["status"], result["skip_reason"], result["tools"]),
+                         ("SKIPPED", "not-applicable-language-absent", []))
+        self.assertEqual(validate_document(result, "codeql-language.schema.json"), [])
+        go = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs(_plan(["go"]), "go"), outcomes={})
+        self.assertEqual((go["status"], go["databases"]), ("OK_WITH_GAPS", []))
+        self.assertIn("language not built", go["coverage_gaps"][0])
+        not_built = worker.assemble(run_id="run", attempt_id="attempt", outcomes={
+            "cpp": {"gap": None, "leads": [], "dropped": 0}},
+            inputs=_inputs(_plan(), not_built="language not built: no accepted 02-native-build publication; "
+                                              "ran --build-mode none only"))
+        self.assertTrue(not_built["coverage_gaps"][0].startswith("language not built: no accepted 02-native-build"))
+        self.assertEqual(validate_document(go, "codeql-language.schema.json"), [])
         with self.assertRaisesRegex(worker.Blocked, "has no receipt"):
-            worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes={})
+            worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs(_plan()), outcomes={})
+
+    def test_database_tree_and_pointer(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder, "db")
+            self.assertIsNone(worker.database_tree(db))
+            (db / "db-cpp").mkdir(parents=True)
+            self.assertIsNone(worker.database_tree(db))            # empty
+            (db / "codeql-database.yml").write_text("sourceLocationPrefix: /workspace\n")
+            (db / "db-cpp" / "a.trap").write_bytes(b"x" * 10)
+            tree = worker.database_tree(db)
+            self.assertEqual((tree["files"], tree["bytes"]), (2, 10 + len("sourceLocationPrefix: /workspace\n")))
+            (db / "link").symlink_to(db / "codeql-database.yml")
+            self.assertIsNone(worker.database_tree(db))            # links are never kept
+        row = _plan()[0]
+        record = {"store_path": "codeql-databases/02-codeql-cpp/attempt/cpp", **tree}
+        published = worker.pointer(_inputs([row]), "attempt", row, record)
+        self.assertEqual(validate_document(published, "codeql-database-pointer.schema.json"), [])
+        self.assertEqual((published["build_mode"], published["bundle_version"]), ("none", "2.27.0"))
+        result = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs([row]),
+                                 outcomes={"cpp": {"gap": None, "leads": [], "dropped": 0, "database": record}})
+        self.assertEqual(result["databases"], [published])
+        self.assertEqual(result["tools"][0]["database_id"], published["database_id"])
+        absent = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs([row]), outcomes={
+            "cpp": {"gap": None, "leads": [], "dropped": 0, "database": None, "database_gap": "codeql-database-absent:cpp"}})
+        self.assertIn("codeql-database-absent:cpp", absent["coverage_gaps"])
 
 
 UNITS = [{"unit_id": "unit-a", "key": "0123456789abcdef", "adapted_sha256": "sha256:" + "c" * 64,
@@ -172,7 +220,7 @@ class CodeqlTracedUnitTests(unittest.TestCase):
         self.assertEqual((row["status"], row["build_mode"], row["plan_key"]),
                          ("READY", "traced", "codeql-cpp-traced:0123456789abcdef"))
         self.assertEqual(row["argv"], ["/opt/scripts/codeql-sast-lane.sh", "cpp", "traced",
-            "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls", "2", "2048",
+            "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls", "2", "2048", "keep-db",
             "/inputs/codeql-db/0123456789abcdef/compile_commands.json", "/inputs/codeql-queries"])
         self.assertEqual(row["compile_database_entries"], 1)
         self.assertEqual(_traced(units=[])[0]["status"], "NO_UNITS")
@@ -183,7 +231,7 @@ class CodeqlTracedUnitTests(unittest.TestCase):
 
     def test_traced_request_mounts_the_databases_and_the_query_pack_read_only(self):
         with tempfile.TemporaryDirectory() as folder:
-            inputs = {"target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64,
+            inputs = {"job": worker.JOBS["cpp"], "target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64,
                       "limits": {"timeout_seconds": 60, "memory_bytes": 4 << 30, "cpu_millis": 2000, "pids": 256,
                                  "tmpfs_bytes": 1 << 28, "stdout_limit_bytes": 1 << 20, "stderr_limit_bytes": 1 << 20}}
             with self.assertRaisesRegex(worker.Blocked, "adapted compile databases"):
@@ -194,7 +242,7 @@ class CodeqlTracedUnitTests(unittest.TestCase):
         self.assertEqual(request["target_mounts"][2]["host_path"], str(worker.GRAPH_PACK))
         self.assertEqual(request["image"]["image_id"], "audit-codeql-native")
         self.assertEqual(validate_document(request, "pinned-container-request.schema.json"), [])
-        self.assertEqual(ce.request_errors(request, run_id="run", job_id=worker.JOB, attempt_id="codeql-cpp-traced-a"), [])
+        self.assertEqual(ce.request_errors(request, run_id="run", job_id=worker.JOBS["cpp"], attempt_id="codeql-cpp-traced-a"), [])
 
     def test_replay_stats_are_validated(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -214,13 +262,13 @@ class CodeqlTracedUnitTests(unittest.TestCase):
             leads, dropped = worker.normalize_sarif("cpp", SARIF.read_bytes(), target, tool_id="codeql-cpp-traced")
         self.assertTrue(all(row["tool_id"] == "codeql-cpp-traced" for row in leads))
         plan = _plan() + _traced()
-        inputs = {"source_snapshot_sha256": "sha256:" + "b" * 64, "plan": plan}
+        inputs = _inputs(plan)
         replay = {"total": 4, "ok": 3, "failed": 1, "refused": 0}
         outcomes = {"cpp": {"gap": None, "leads": [], "dropped": 0},
                     "codeql-cpp-traced:0123456789abcdef": {"gap": None, "leads": leads, "dropped": dropped,
                                                            "replay": replay}}
         result = worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes=outcomes)
-        self.assertEqual(validate_document(result, "codeql-sast.schema.json"), [])
+        self.assertEqual(validate_document(result, "codeql-language.schema.json"), [])
         traced = [row for row in result["tools"] if row["build_mode"] == "traced"][0]
         self.assertEqual((traced["unit_id"], traced["replay"], traced["image_id"]),
                          ("unit-a", replay, "audit-codeql-native"))
@@ -232,7 +280,8 @@ class CodeqlTracedUnitTests(unittest.TestCase):
 
 
 class CodeqlSastScriptedPublishTests(unittest.TestCase):
-    """run() end to end with scripted docker: cpp returns the recorded SARIF, python times out."""
+    """run() end to end with scripted docker: cpp returns the recorded SARIF and keeps its database,
+    python times out, java is absent (SKIPPED)."""
 
     def setUp(self):
         from test_container_execution import ScriptedDocker
@@ -251,17 +300,23 @@ class CodeqlSastScriptedPublishTests(unittest.TestCase):
         original = scripted.child
 
         def child(spec, **kwargs):
-            language = list(spec.argv)[-5]
+            argv = list(spec.argv)
+            entry = next(i for i, item in enumerate(argv) if item.startswith("--entrypoint="))
+            language = argv[entry + 2]    # --entrypoint=<lane> <image> LANGUAGE MODE ...
+            scratch = Path(spec.owner_root) / "scratch"
             if language == "python":
                 scripted.client_exit, scripted.metadata = -9, {"timed_out": True, "error": "TimeoutError: bounded"}
                 scripted.state = {"Status": "exited", "ExitCode": -9, "OOMKilled": False}
-                (Path(spec.owner_root) / "scratch" / "db").mkdir(parents=True, exist_ok=True)  # left by a killed run
-                (Path(spec.owner_root) / "scratch" / "db" / "trap").write_text("x")
+                (scratch / "db").mkdir(parents=True, exist_ok=True)  # left by a killed run
+                (scratch / "db" / "trap").write_text("x")
             else:
                 scripted.client_exit, scripted.metadata = 0, {}
                 scripted.state = {"Status": "exited", "ExitCode": 0, "OOMKilled": False}
-                scratch = Path(spec.owner_root) / "scratch"; scratch.mkdir(exist_ok=True)
+                scratch.mkdir(exist_ok=True)
                 (scratch / "codeql.sarif").write_bytes(SARIF.read_bytes())
+                (scratch / "db" / "db-cpp").mkdir(parents=True, exist_ok=True)   # keep-db
+                (scratch / "db" / "codeql-database.yml").write_text("primaryLanguage: cpp\n")
+                (scratch / "db" / "db-cpp" / "default.trap").write_text(argv[-1] + "\n")
             return original(spec, **kwargs)
 
         scripted.child = child
@@ -281,24 +336,54 @@ class CodeqlSastScriptedPublishTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_publishes_ok_with_gaps_and_revalidates(self):
-        envelope = worker.run("run-codeql", "dagster-1")
+        envelope = worker.run("run-codeql", "dagster-1", "cpp")
         self.assertEqual(envelope["status"], "OK_WITH_GAPS")
-        attempt = worker.root("run-codeql") / "attempts" / envelope["attempt_id"]
+        attempt = worker.root("run-codeql", "cpp") / "attempts" / envelope["attempt_id"]
         result = json.loads((attempt / worker.RESULT).read_text())
         self.assertEqual([row["tool_id"] for row in result["tools"]], ["codeql-cpp"])
         self.assertEqual(len(result["leads"]), 7)
-        self.assertIn("CodeQL python ended TIMEOUT; no CodeQL leads for python.", result["coverage_gaps"])
         self.assertIn(worker.FIDELITY_GAPS["cpp"], result["coverage_gaps"])
-        receipts = json.loads((attempt / worker.RECEIPTS).read_text())["tools"]
-        self.assertEqual({row["language"]: row["raw_result_sha256"] is None for row in receipts},
-                         {"cpp": False, "python": True})
-        self.assertFalse((attempt / "tools" / "codeql-python" / "scratch" / "db").exists())
-        self.assertEqual(worker.validate("run-codeql"), attempt)
+        self.assertEqual(result["coverage_gaps"][0],
+                         "language not built: no accepted 02-native-build publication; ran --build-mode none only")
+        [database] = result["databases"]
+        self.assertEqual(result["tools"][0]["database_id"], database["database_id"])
+        self.assertEqual(database["store_path"], f"codeql-databases/02-codeql-cpp/{envelope['attempt_id']}/cpp")
+        store = worker.verify_database("run-codeql", database)
+        self.assertEqual(store, worker.database_store("run-codeql") / "02-codeql-cpp" / envelope["attempt_id"] / "cpp")
+        self.assertFalse((attempt / "tools" / "codeql-cpp" / "scratch" / "db").exists())
+        self.assertEqual(worker.validate("run-codeql", "cpp"), attempt)
+        document, binding, gap = worker.load_accepted("run-codeql", "cpp")
+        self.assertEqual((document, binding["attempt_id"], gap), (result, envelope["attempt_id"], None))
+        # A changed database is a consumer-side gap, never a silent reuse.
+        (store / "db-cpp" / "default.trap").write_text("changed\n")
+        self.assertIsNone(worker.verify_database("run-codeql", database))
         # Tampering with the retained SARIF is caught on re-validation.
         sarif = attempt / "tools" / "codeql-cpp" / "scratch" / "codeql.sarif"
         sarif.write_bytes(sarif.read_bytes().replace(b"cpp/double-free", b"cpp/double-freX"))
         with self.assertRaises(worker.Blocked):
-            worker.validate("run-codeql")
+            worker.validate("run-codeql", "cpp")
+
+    def test_timeout_is_a_gap_and_the_killed_database_is_dropped(self):
+        envelope = worker.run("run-codeql", "dagster-1", "python")
+        self.assertEqual(envelope["status"], "OK_WITH_GAPS")
+        attempt = worker.root("run-codeql", "python") / "attempts" / envelope["attempt_id"]
+        result = json.loads((attempt / worker.RESULT).read_text())
+        self.assertEqual((result["tools"], result["databases"]), ([], []))
+        self.assertIn("CodeQL python ended TIMEOUT; no CodeQL leads for python.", result["coverage_gaps"])
+        receipts = json.loads((attempt / worker.RECEIPTS).read_text())["tools"]
+        self.assertIsNone(receipts[0]["raw_result_sha256"])
+        self.assertFalse((attempt / "tools" / "codeql-python" / "scratch" / "db").exists())
+        self.assertEqual(worker.validate("run-codeql", "python"), attempt)
+
+    def test_absent_language_publishes_skipped(self):
+        envelope = worker.run("run-codeql", "dagster-1", "java")
+        self.assertEqual((envelope["status"], envelope["reason"]), ("SKIPPED", "not-applicable-language-absent"))
+        attempt = worker.root("run-codeql", "java") / "attempts" / envelope["attempt_id"]
+        self.assertEqual(json.loads((attempt / worker.RESULT).read_text())["status"], "SKIPPED")
+        self.assertEqual(worker.validate("run-codeql", "java"), attempt)
+        document, binding, gap = worker.load_accepted("run-codeql", "java")
+        self.assertEqual((document["status"], binding["status"], gap), ("SKIPPED", "SKIPPED", None))
+        self.assertEqual(worker.load_accepted("run-codeql", "ruby")[2], "engine-input-absent:02-codeql-ruby")
 
 
 class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
@@ -323,10 +408,22 @@ class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
     def wired(self):
         return {"native_build_root": self.native_root, "native_build_fingerprint": "sha256:" + "e" * 64}
 
+    def test_timeout_is_a_gap_and_the_killed_database_is_dropped(self):
+        self.skipTest("python is absent from the traced fixture")
+
+    def test_native_build_state_reads_the_accepted_pointer(self):
+        self.assertEqual(worker.native_build_state("run-codeql")[2], "no accepted 02-native-build publication")
+        base = execution_state.data_path("run-codeql", "jobs", "02-native-build"); base.mkdir(parents=True)
+        (base / "accepted.json").write_text(json.dumps({"status": "SKIPPED", "reason": "not-applicable-non-native"}))
+        self.assertEqual(worker.native_build_state("run-codeql"),
+                         (None, None, "02-native-build SKIPPED (not-applicable-non-native)"))
+        (base / "accepted.json").write_text(json.dumps({"status": "OK", "fingerprint": "sha256:" + "e" * 64}))
+        self.assertEqual(worker.native_build_state("run-codeql"), (base, "sha256:" + "e" * 64, None))
+
     def test_publishes_ok_with_gaps_and_revalidates(self):
         original_outcome = worker._outcome
 
-        def outcome(row, trial, terminal, target):
+        def outcome(row, trial, terminal, target, job="02-codeql"):
             # Stand in for the traced lane's replay counts and one decoded graph table.
             if row.get("build_mode") == "traced":
                 scratch = trial / "scratch"
@@ -335,17 +432,22 @@ class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
                     (scratch / "replay.json").write_text(json.dumps({"total": 1, "ok": 1, "failed": 0, "refused": 0}))
                     (scratch / "graph").mkdir(exist_ok=True)
                     (scratch / "graph" / "CallEdges.csv").write_text('"caller_name"\n"main"\n')
-            return original_outcome(row, trial, terminal, target)
+            return original_outcome(row, trial, terminal, target, job)
 
         with mock.patch.object(worker, "_outcome", side_effect=outcome):
-            envelope = worker.run("run-codeql", "dagster-1", **self.wired())
+            envelope = worker.run("run-codeql", "dagster-1", "cpp", **self.wired())
         self.assertEqual(envelope["status"], "OK_WITH_GAPS")
-        attempt = worker.root("run-codeql") / "attempts" / envelope["attempt_id"]
+        attempt = worker.root("run-codeql", "cpp") / "attempts" / envelope["attempt_id"]
         result = json.loads((attempt / worker.RESULT).read_text())
         self.assertEqual([row["tool_id"] for row in result["tools"]], ["codeql-cpp", "codeql-cpp-traced"])
+        self.assertEqual(result["build_modes"], ["none", "traced"])
+        self.assertFalse(any(gap.startswith("language not built") for gap in result["coverage_gaps"]))
         traced = result["tools"][1]
         self.assertEqual((traced["unit_id"], traced["replay"]), ("unit-a", {"total": 1, "ok": 1, "failed": 0, "refused": 0}))
         self.assertEqual({row["tool_id"] for row in result["leads"]}, {"codeql-cpp", "codeql-cpp-traced"})
+        self.assertEqual([(row["build_mode"], row["unit_id"]) for row in result["databases"]],
+                         [("none", None), ("traced", "unit-a")])
+        self.assertTrue(result["databases"][1]["store_path"].endswith("/codeql-cpp-traced-0123456789abcdef"))
         adapted = attempt / "adapted-inputs" / "0123456789abcdef" / "compile_commands.json"
         self.assertEqual(json.loads(adapted.read_text()), UNITS[0]["adapted"])
         receipts = {row.get("plan_key", row["language"]): row for row in
@@ -356,13 +458,14 @@ class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
         request = json.loads((attempt / "tools" / "codeql-cpp-traced-0123456789abcdef" / "logs" / "container" /
                               ce.REQUEST_FILE).read_text())
         self.assertEqual(request["image"]["image_id"], "audit-codeql-native")
-        self.assertEqual(worker.validate("run-codeql", **self.wired()), attempt)
+        self.assertEqual(worker.validate("run-codeql", "cpp", **self.wired()), attempt)
         csv = attempt / "tools" / "codeql-cpp-traced-0123456789abcdef" / "scratch" / "graph" / "CallEdges.csv"
         csv.write_text('"caller_name"\n"other"\n')
         with self.assertRaises(worker.Blocked):
-            worker.validate("run-codeql", **self.wired())
+            worker.validate("run-codeql", "cpp", **self.wired())
         with self.assertRaisesRegex(worker.Blocked, "graph tables differ"):
-            worker._validate_attempt("run-codeql", attempt, worker.current_inputs("run-codeql", **self.wired()))
+            worker._validate_attempt("run-codeql", attempt,
+                                     worker.current_inputs("run-codeql", "cpp", **self.wired()))
 
 
 if __name__ == "__main__":

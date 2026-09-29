@@ -100,7 +100,7 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "source_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
     },
-    "codeql-sast": {
+    "codeql-language": {
         "claim_class_id": "source_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
     },
@@ -139,6 +139,10 @@ CLAIM_CLASS_POLICIES = {
     "cve-reachability": {
         "claim_class_id": "cve_reachability_evidence_lead",
         "allowed_assertions": {"cve-reachability-evidence-lead"},
+    },
+    "engine-reachability": {
+        "claim_class_id": "cve_reachability_evidence_lead",
+        "allowed_assertions": {"cve-reachability-evidence-lead", "coverage-gap"},
     },
     "native-sast": {
         "claim_class_id": "native_static_evidence",
