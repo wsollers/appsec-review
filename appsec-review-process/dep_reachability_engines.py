@@ -59,6 +59,7 @@ REACH_COLUMNS = ("entry_name", "entry_file", "entry_line", "caller_name", "call_
 TAINT_COLUMNS = ("source_file", "source_line", "sink_file", "sink_line", "package", "symbol")
 TABLES = {"CallEdges": CALL_EDGE_COLUMNS, "EntryPoints": ENTRY_COLUMNS, "Reachability": REACH_COLUMNS,
           "TaintReach": TAINT_COLUMNS}
+REQUIRED_TABLES = ("CallEdges", "EntryPoints")   # Reachability/TaintReach are optional (packs only)
 
 
 @dataclass(frozen=True)
@@ -351,7 +352,8 @@ def load_codeql_dirs(directories: dict[str, Path]) -> tuple[dict[str, dict[str, 
         for name in TABLES:
             path = Path(directory) / f"{name}.csv"
             if not path.is_file() or path.is_symlink():
-                gaps.setdefault(language, []).append(f"codeql-table-absent:{language}:{name}")
+                if name in REQUIRED_TABLES:
+                    gaps.setdefault(language, []).append(f"codeql-table-absent:{language}:{name}")
                 continue
             try:
                 decoded[name] = read_table(path.read_bytes(), name)

@@ -80,7 +80,7 @@ class CodeqlEngineTests(unittest.TestCase):
             (Path(folder) / "EntryPoints.csv").write_bytes(csv_bytes(e.ENTRY_COLUMNS, ENTRIES))
             decoded, gaps = e.load_codeql_dirs({"go": Path(folder)})
         self.assertIn("codeql-table-invalid:go:CallEdges", gaps["go"])
-        self.assertIn("codeql-table-absent:go:Reachability", gaps["go"])
+        self.assertNotIn("codeql-table-absent:go:Reachability", gaps["go"])  # optional table
         self.assertEqual(set(decoded["go"]), {"EntryPoints"})
 
     def test_joined_through_the_core_with_hash_binding(self):

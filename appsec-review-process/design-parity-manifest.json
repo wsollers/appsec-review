@@ -1937,7 +1937,9 @@
         "implemented": true,
         "dependencies": [
           "02-sca-vulnerability-match",
-          "02-ir-facts"
+          "02-ir-facts",
+          "02-code-property-graph",
+          "02-codeql-sast"
         ]
       },
       "registry": {
@@ -1989,7 +1991,11 @@
         "references": [
           "appsec-review-process/tests/test_dependency_workers.py",
           "appsec-review-process/tests/test_dependency_b13_adapters.py",
-          "appsec-review-process/tests/test_dependency_orchestration.py"
+          "appsec-review-process/tests/test_dependency_orchestration.py",
+          "appsec-review-process/tests/test_dep_reachability.py",
+          "appsec-review-process/tests/test_dep_reachability_engines.py",
+          "appsec-review-process/tests/test_dep_reachability_lifecycle.py",
+          "appsec-review-process/tests/test_analysis_feature_lifecycle.py"
         ]
       },
       "gaps": [

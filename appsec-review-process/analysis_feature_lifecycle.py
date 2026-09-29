@@ -8,6 +8,7 @@ from typing import Any
 import automatic_evidence_inputs as automatic
 import bounded_analysis_workers as bounded
 import dependency_workers
+import dep_reachability_lifecycle
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json, run_path
 import ir_evidence
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
@@ -38,8 +39,13 @@ def _code(job: str) -> dict[str, str]:
              {"05-native-memory":"native_memory_analysis.py","06-cve-reachability":"cve_reachability.py",
               "13-fuzz-target-triage":"fuzz_target_triage.py"}[job],
              f"registry/job-templates/{job}.json", f"registry/output-contracts/{JOBS[job][0]}.json"]
+    if job == "06-cve-reachability":
+        paths += list(dep_reachability_lifecycle.CODE)
     values = {path: file_hash(ROOT / path) for path in paths}
     values["schemas/" + JOBS[job][2]] = file_hash(ROOT.parent / "schemas" / JOBS[job][2])
+    if job == "06-cve-reachability":
+        for name in dep_reachability_lifecycle.SCHEMAS:
+            values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     values["schemas/analysis-applicability-receipt.schema.json"] = file_hash(
         ROOT.parent / "schemas/analysis-applicability-receipt.schema.json")
     return values
@@ -152,9 +158,35 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     manifest = run_path(run_id) / "inputs" / "artifact-manifest.json"
     if source != "sha256:" + file_hash(manifest):
         raise Blocked("06-cve-reachability: accepted SCA source generation is stale")
+    sbom, _ = automatic._accepted_binding(run_id, "02-sbom-inventory")
     return {"run_id":run_id,"job_id":job,"source_generation":source,"sca":binding,
         "sca_matches_sha256":_sha(sca["matches"]),"source_binding":source_binding,
-        "ir":_optional_ir(run_id, source),"generated_at":generated,"code":_code(job)}
+        "ir":_optional_ir(run_id, source),"generated_at":generated,"code":_code(job),
+        "sbom":sbom,"reachability":dep_reachability_lifecycle.bindings(run_id, source, generated)}
+
+
+def _derive_reachability(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    """ADR-0022: the automatic evidence rows and per-match document from exactly the bound inputs."""
+    sca = read_json(Path(inputs["sca"]["path"])); sbom = read_json(Path(inputs["sbom"]["path"]))
+    if _sha(sca["matches"]) != inputs["sca_matches_sha256"] or "sha256:" + file_hash(Path(inputs["sbom"]["path"])) != inputs["sbom"]["sha256"]:
+        raise Blocked("06-cve-reachability: SCA or SBOM changed after binding")
+    _tree, _binding, files = automatic.source_projection(run_id)
+    try:
+        return dep_reachability_lifecycle.derive(run_id, inputs["reachability"], sca=sca, sbom=sbom,
+                                                 files=files, generated_at=inputs["generated_at"])
+    except dep_reachability_lifecycle.Stale as exc:
+        raise Blocked(f"06-cve-reachability: {exc}") from exc
+
+
+def _reachability_document(run_id: str, attempt_id: str, inputs: dict[str, Any], derived: dict[str, Any]) -> dict[str, Any]:
+    result = {"run_id": run_id, "job_id": "06-cve-reachability", "attempt_id": attempt_id,
+              "source_snapshot_sha256": inputs["source_generation"],
+              "sca_binding": {"job_id": "02-sca-vulnerability-match", "attempt_id": inputs["sca"]["attempt_id"],
+                              "path": "outputs/sca-vulnerability-match.json", "sha256": inputs["sca"]["sha256"]},
+              **derived["document"]}
+    if validate_document(result, "dependency-reachability.schema.json"):
+        raise Blocked("06-cve-reachability: dependency-reachability document violates its schema")
+    return result
 
 
 def _receipts(run_id: str, job: str, inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -173,8 +205,11 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
         raise Blocked(f"{job}: retained result is invalid")
     if job=="06-cve-reachability":
         evidence=attempt/"automatic-reachability-evidence.json"
-        if read_json(evidence)!={"assessments":[]}:
+        derived=_derive_reachability(run_id,inputs)
+        if read_json(evidence)!={"assessments":derived["assessments"]}:
             raise Blocked(f"{job}: automatic evidence input changed")
+        if read_json(attempt/dep_reachability_lifecycle.RESULT)!=_reachability_document(run_id,attempt.name,inputs,derived):
+            raise Blocked(f"{job}: dependency-reachability document differs from its inputs")
         request={"run_id":run_id,"source_snapshot_sha256":inputs["source_generation"],
             "generated_at":inputs["generated_at"],"output_root":str(data_path(run_id,"jobs")),
             "sca":inputs["sca"],"reachability_evidence":str(evidence),
@@ -203,7 +238,8 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dic
         elif job_id=="13-fuzz-target-triage":
             result=bounded.fuzz_triage(run_id=run_id,attempt_id=allocation["attempt_id"],source_generation=inputs["source_generation"],bindings=inputs["bindings"],targets=inputs["payload"])
         else:
-            evidence=attempt/"automatic-reachability-evidence.json"; atomic_json(evidence,{"assessments":[]})
+            derived=_derive_reachability(run_id,inputs)
+            evidence=attempt/"automatic-reachability-evidence.json"; atomic_json(evidence,{"assessments":derived["assessments"]})
             request={"run_id":run_id,"source_snapshot_sha256":inputs["source_generation"],
                 "generated_at":inputs["generated_at"],"output_root":str(data_path(run_id,"jobs")),
                 "sca":inputs["sca"],"reachability_evidence":str(evidence),
@@ -212,6 +248,9 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dic
             for relative,payload in artifacts.items():
                 path=attempt.joinpath(*PurePosixPath(relative).parts); path.parent.mkdir(parents=True,exist_ok=True); path.write_bytes(payload)
             result=read_json(attempt/result_name)
+            document=_reachability_document(run_id,allocation["attempt_id"],inputs,derived)
+            (attempt/"outputs").mkdir(parents=True,exist_ok=True); atomic_json(attempt/dep_reachability_lifecycle.RESULT,document)
+            result["coverage_gaps"]=sorted(set(result["coverage_gaps"])|set(document["coverage_gaps"]))
         if job_id!="06-cve-reachability":
             if inputs["mode"]=="SKIPPED_NA":
                 result["status"]="SKIPPED"; result["gaps"]=[SKIPS[job_id]]
@@ -225,7 +264,7 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dic
             "attempt_id":allocation["attempt_id"]}
         atomic_json(attempt/"status.json",status_doc)
         paths=[result_name,"permission-receipt.json","lineage-receipt.json","status.json",APPLICABILITY]
-        if job_id=="06-cve-reachability": paths += ["outputs/reachability-evidence-identity.json","automatic-reachability-evidence.json"]
+        if job_id=="06-cve-reachability": paths += ["outputs/reachability-evidence-identity.json","automatic-reachability-evidence.json",dep_reachability_lifecycle.RESULT]
         if job_id=="06-cve-reachability": paths += ["inputs.json"]
         skip=SKIPS.get(job_id) if status=="SKIPPED" else None
         return record_terminal_current(base,attempt,run_id=run_id,job_id=job_id,dagster_run_id=dagster_run_id,
