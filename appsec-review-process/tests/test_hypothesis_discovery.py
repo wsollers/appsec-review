@@ -138,6 +138,11 @@ class DeriveTests(unittest.TestCase):
         document, _ = self.run_derive({"hypotheses": [], "coverage_notes": "checked copies"})
         self.assertEqual(document, {"candidates": []})
 
+    def test_echoed_drop_reason_is_ignored_and_python_decides_it(self):
+        document, _ = self.run_derive({"hypotheses": [{**STRCPY, "drop_reason": "model says so"}]})
+        row = records(document)[0]
+        self.assertEqual((row["kind"], row["drop_reason"]), ("hypothesis", None))
+
     def test_malformed_replies_go_back_for_repair(self):
         for reply in ("no json here", {"hypotheses": "none"},
                       {"hypotheses": [{"path": "a.c", "start_line": 1}]},

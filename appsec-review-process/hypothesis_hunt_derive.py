@@ -26,6 +26,7 @@ import json
 import re
 from typing import Any, Iterable
 
+import contract_derive
 from claude_cli_invoker import InvokerOutputError
 from execution_state import digest
 from schema_validate import SchemaStore, validate_document
@@ -45,9 +46,13 @@ TEXT_CHARS = 400
 EVIDENCE_MAX = 16
 PRECONDITIONS_MAX = 8
 
-_ORCHESTRATOR_KEYS = {"hypothesis_id", "id", "candidate_id", "subject_id", "claim_class", "sha256",
-                      "file_sha256", "evidence_sha256", "assertion", "hunter", "shard_id", "persona_id",
-                      "mode", "worker_id", "worker_ids", "tier", "status", "location_check", "kind"}
+# Bookkeeping a hunter copies from the brief or the candidate wrapper; no schema position names it.
+_ECHO_KEYS = frozenset({"hypothesis_id", "id", "candidate_id", "subject_id", "claim_class", "sha256",
+                        "evidence_sha256", "assertion", "shard_id", "persona_id", "mode", "worker_id",
+                        "worker_ids", "tier", "status"})
+# Plus every field the record declares where the persona schema does not (ADR-0013: Python derives it).
+_ORCHESTRATOR_KEYS = _ECHO_KEYS | contract_derive.orchestrator_keys(
+    RECORD_SCHEMA, PERSONA_SCHEMA, (("hypotheses", "[]"), ()))
 _PROMOTION_KEYS = {"severity", "cvss", "cvss_score", "finding", "verified", "risk", "risk_rating",
                    "exploitability_score", "priority"}
 _ALIASES = {"file": "path", "file_path": "path", "filename": "path", "location_path": "path",
