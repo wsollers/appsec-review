@@ -1,0 +1,3 @@
+interface:
+  display_name: "AppSec tree-sitter"
+  short_description: "Batch AST summary with tree-sitter"
