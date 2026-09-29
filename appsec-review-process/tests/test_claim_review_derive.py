@@ -191,6 +191,18 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
         core.blue_team(upstream(BLUE), binding(RED, "red-team-adversarial.json"),
                        {"decisions": list(decisions_of(document).values())})
 
+    def test_echoed_derived_fields_give_the_same_decisions_as_a_clean_reply(self):
+        # citations (decision and obligation), reviewer and statement are derived: an echo of the
+        # final shape is not repaired, and only the citation ids it names are read.
+        clean, _ = run(BLUE, self.blue_reply())
+        cited = upstream(BLUE)["hypotheses"][0]["citations"][0]
+        echoed = self.blue_reply()
+        echoed["decisions"][0].update(reviewer={"role_id": "x"}, citations=[dict(cited, observed_fact="made up")])
+        echoed["decisions"][0]["proof_obligations"][0] = {
+            "obligation_id": "po-a", "status": "SATISFIED", "statement": "copied", "citations": [cited]}
+        document, _ = run(BLUE, echoed)
+        self.assertEqual(decisions_of(document), decisions_of(clean))
+
     def test_unknown_or_missing_obligation_and_inconsistent_disposition_are_rejected(self):
         reply = self.blue_reply()
         reply["decisions"][0]["proof_obligations"][0]["obligation_id"] = "po-zzz"

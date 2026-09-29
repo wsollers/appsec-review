@@ -49,8 +49,8 @@ RULES = (
 
 def code_hashes() -> dict[str, str]:
     """Implementation files the lane-12b job depends on (the worker adds its own module)."""
-    paths = ["poc_fix_derive.py", "poc_fix_denylist.py", "poc_fix_select.py", "poc_fix_pool.py",
-             "finding_enrichment.py", "reachability.py", "code_snippets.py", "cwe_catalog.py",
+    paths = ["poc_fix_derive.py", "contract_derive.py", "poc_fix_denylist.py", "poc_fix_select.py",
+             "poc_fix_pool.py", "finding_enrichment.py", "reachability.py", "code_snippets.py", "cwe_catalog.py",
              "persona_invocation.py", "deterministic_pool_merge.py", "pool_launcher.py", "pool_rendezvous.py",
              "pool_specification.py", "personas/personas/poc-fix-author/persona.json", "personas/roles/poc-fix-author/role.json",
              "personas/roles/poc-fix-coordinator/role.json", "registry/domains/poc-and-fix.json",

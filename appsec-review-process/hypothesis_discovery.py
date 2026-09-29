@@ -99,7 +99,7 @@ def _sha(value: Any) -> str:
 
 
 def _code_hashes() -> dict[str, str]:
-    paths = ["hypothesis_discovery.py", "hypothesis_hunt_derive.py", "claim_ledger.py",
+    paths = ["hypothesis_discovery.py", "hypothesis_hunt_derive.py", "contract_derive.py", "claim_ledger.py",
              "claude_cli_invoker.py", "persona_invocation.py", "deterministic_pool_merge.py",
              "pool_launcher.py", "pool_rendezvous.py", "pool_specification.py", "supporting_evidence_menu.py",
              "registry/job-templates/07-hypothesis-discovery.json",

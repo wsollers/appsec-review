@@ -31,6 +31,7 @@ import json
 import re
 from typing import Any
 
+import contract_derive
 import poc_fix_denylist as denylist
 from claude_cli_invoker import InvokerOutputError
 from execution_state import digest
@@ -46,8 +47,9 @@ BOUNDS = {"poc_chars": 2400, "poc_lines": 40, "explanation_chars": 2000, "fix_ch
           "cited_lines_max": 8, "span_lines_max": 40}
 CLAIM_LIMITS = {"executed": False, "validated": False, "target_modified": False, "fixed_claimed": False,
                 "hostile_content_permitted": False}
-_ORCHESTRATOR_KEYS = {"poc_fix_id", "request_id", "claim_id", "label", "status", "source_sha256", "hash_basis",
-                      "text_sha256", "diff_sha256", "denylist_hits", "author", "claim_limits", "files"}
+# Every field the record declares where the persona schema does not (ADR-0013: Python derives it). An
+# echo at any of the reply, poc, fix or cited_lines positions is dropped with a note, never repaired.
+_ORCHESTRATOR_KEYS = contract_derive.orchestrator_keys(RECORD_SCHEMA, PERSONA_SCHEMA)
 _PROMOTION_KEYS = {"severity", "cvss", "cvss_score", "priority", "verified", "validated", "finding", "fixed"}
 _DIFF_FILE = re.compile(r"^(?:---|\+\+\+) (?:[ab]/)?(\S+)")
 

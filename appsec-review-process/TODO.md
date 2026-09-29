@@ -526,13 +526,26 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] William: convert the 1,025 inline copies to `$ref` (top-level schema edits: every job's definition
       hash moves; `$`-anchored copies also start rejecting a trailing newline). One batch, then
       `schema_format_lint.py --write-baseline`.
-- [ ] William: `_ORCHESTRATOR_KEYS` drift the schemas show (an echo costs a repair round, not a note):
+- [x] William: `_ORCHESTRATOR_KEYS` drift the schemas show (an echo costs a repair round, not a note):
       `poc_fix_derive` misses `explanation_status`, `poc.reason`; `claim_review_derive` misses `citations`;
-      `hypothesis_hunt_derive` misses `drop_reason`. Fix edits the derive module (its job's fingerprint);
-      `tests/test_contract_derive.py` KNOWN_DRIFT tracks it.
+      `hypothesis_hunt_derive` misses `drop_reason`. Fixed in brief L2 (section below).
 - [ ] William: `const`/`enum` still use Python equality (`0` passes `const: false`), as before. Strict JSON
       equality (`schema_validate.json_equal`, already used by `uniqueItems`) changes the rejection message in
       three tests owned elsewhere (owasp_dispatch, evidence_index_metrics, pool_rendezvous); no published bytes.
+
+## L2: derive-list fixes (brief L2, branch `derive-fixes`)
+
+- [x] `poc_fix_derive` and `hypothesis_hunt_derive` build `_ORCHESTRATOR_KEYS` with
+      `contract_derive.orchestrator_keys` (record vs persona schema; the hunter keeps its echo-habit names on
+      top); `contract_derive.py` joins lane 12b's and 07-hypothesis-discovery's implementation lists.
+      `explanation_status`, `poc.reason` and `drop_reason` echoes are now dropped (poc-fix with a note).
+- [x] `claim_review_derive` keeps a hand-written list, now with `citations` (decision and proof
+      obligation; the ids an echo names still join `citation_ids`, behaviour unchanged). Generating it would
+      list `contract_derive.py` in `claim_reviewer_pool.py`, which the intake persona-tool pool also hashes.
+- [x] `tests/test_contract_derive.py` fails when any schema-derived field is missing from a derive list
+      (KNOWN_DRIFT removed). Fingerprints moved: claim-review pool, 07-hypothesis-discovery, 12b only.
+- [ ] `attack_chain_derive` (checked, no drift) and `owasp_validator_derive` (not in the drift test) still
+      hand-write their lists.
 
 ## Breakage log
 
