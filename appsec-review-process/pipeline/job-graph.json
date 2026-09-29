@@ -375,6 +375,12 @@
           "allowed_skip_reasons": [
             "not-applicable-no-matching-inputs"
           ]
+        },
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
+          "allowed_skip_reasons": []
         }
       ],
       "join_policy": {
@@ -1628,6 +1634,68 @@
       "required_artifacts": [
         "code-property-graph.json",
         "b13-receipt.json",
+        "permission.json",
+        "lineage.json"
+      ]
+    },
+    "02-treesitter-ast": {
+      "lane": "02-evidence-pregather",
+      "contract": "treesitter-ast",
+      "template": "02-treesitter-ast",
+      "implemented": true,
+      "namespace": "02-treesitter-ast",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Pinned offline tree-sitter parse of the checkout: per-file functions with spans, call sites and imports as a hash-bound records file; a second AST source beside the CPG, locator-only.",
+      "required_artifacts": [
+        "treesitter-ast.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
+      ]
+    },
+    "02-code-index": {
+      "lane": "02-evidence-pregather",
+      "contract": "code-index",
+      "template": "02-code-index",
+      "implemented": true,
+      "namespace": "02-code-index",
+      "dependencies": [
+        {
+          "job": "02-code-property-graph",
+          "kind": "required",
+          "contract": "code-property-graph",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-treesitter-ast",
+          "kind": "required",
+          "contract": "treesitter-ast",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-binary-triage",
+          "kind": "required",
+          "contract": "binary-triage",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        }
+      ],
+      "planned_scope": "Deterministic SQLite code index (methods, resolved calls and escapes, types, identifiers, literals, tree-sitter spans and outlines, export joins, FTS) built from accepted artifacts for the model jobs' structural query tools (ADR-0032).",
+      "required_artifacts": [
+        "code-index.json",
+        "code-index.sqlite",
+        "status.json",
         "permission.json",
         "lineage.json"
       ]

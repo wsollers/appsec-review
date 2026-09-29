@@ -15,6 +15,8 @@ import native_build as native_build_worker
 import source_sast as source_sast_worker
 import codeql_sast as codeql_sast_worker
 import reachability_engine_jobs
+import treesitter_ast_job
+import code_index_job
 import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
@@ -773,6 +775,23 @@ def reachability_engine_op(engine, pool):
     return reachability_engine_work
 
 
+def structural_index_op(job_id, worker, result_name, pool):
+    # Brief U0: 02-treesitter-ast (pinned container) and 02-code-index (deterministic Python).
+    @op(name='job_' + job_id.replace('-', '_'), ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def structural_index_work(context, configured, upstream):
+        run_id = configured['engagement_run_id']
+        result = worker.run(run_id, context.run_id, configured.get('force', False))
+        attempt = worker.root(run_id) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({'output': MetadataValue.path(str(attempt / result_name)),
+                                     'envelope': MetadataValue.path(str(attempt / 'result.json')),
+                                     'attempt_id': result['attempt_id']})
+        return result
+    return structural_index_work
+
+
+treesitter_ast_lifecycle_work = structural_index_op('02-treesitter-ast', treesitter_ast_job, treesitter_ast_job.RESULT,
+                                                    OFFLINE_DOCKER_POOL)
+code_index_lifecycle_work = structural_index_op('02-code-index', code_index_job, code_index_job.RESULT, CPU_POOL)
 reachability_codeql_lifecycle_work = reachability_engine_op('codeql', DOCKER_POOL)
 reachability_ir_lifecycle_work = reachability_engine_op('ir', CPU_POOL)
 cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
@@ -1711,6 +1730,8 @@ LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
 LIFECYCLE_OPS['02-ir-link']=ir_link_work
 LIFECYCLE_OPS['02-ir-facts']=ir_facts_work
 LIFECYCLE_OPS['02-code-property-graph']=code_property_graph_work
+LIFECYCLE_OPS['02-treesitter-ast']=treesitter_ast_lifecycle_work
+LIFECYCLE_OPS['02-code-index']=code_index_lifecycle_work
 LIFECYCLE_OPS['02-api-collection-intelligence-ingest']=api_collection_intelligence_work
 LIFECYCLE_OPS['02-doc-intelligence-ingest']=doc_intelligence_work
 LIFECYCLE_OPS['02-test-intelligence-ingest']=test_intelligence_work

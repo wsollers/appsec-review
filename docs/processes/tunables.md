@@ -11,6 +11,18 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
 | `binary_raw_output_max_bytes` | 16 MiB | safety | Largest raw binary-tool output accepted (binary triage, debug symbols, CFG, binary intelligence). | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
+| `code_query_depth_max` | 4 count | window | Deepest code_callers / code_callees walk (hops). |  |
+| `code_query_exports_enabled` | True flag | safety | Grant the code_exports query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_graph_enabled` | True flag | safety | Grant the code_callers, code_callees, code_path query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_native_enabled` | True flag | safety | Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_outline_enabled` | True flag | safety | Grant the code_file_outline query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_path_depth_max` | 24 count | safety | Longest call path code_path explores (edges). |  |
+| `code_query_path_nodes_max` | 50000 count | safety | Functions code_path may expand per call before it stops with complete=false. | Grows with the call graph; freeciv21-size graphs stay well under this per query. |
+| `code_query_paths_max` | 10 count | window | Most call paths one code_path call returns. |  |
+| `code_query_rows_default` | 20 count | window | Rows a code_* query tool returns when the call gives no limit (brief U1). |  |
+| `code_query_rows_max` | 200 count | window | Most rows one code_* query tool call returns; more is flagged truncated and the model narrows the query. |  |
+| `code_query_symbols_enabled` | True flag | safety | Grant the code_symbol, code_locate, code_search query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_types_enabled` | True flag | safety | Grant the code_type_info, code_overrides query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `container_argv_member_chars_max` | 4096 chars | safety | Longest single argv entry. |  |
 | `container_argv_members_max` | 256 count | safety | Most argv entries in one container request. | Pass file lists as files, not argv. |
 | `container_argv_total_chars_max` | 65536 chars | safety | Total argv size. |  |
@@ -550,6 +562,22 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `file_max_bytes` | 1 MiB | window | Bytes read per input file. |  |
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
+
+### `02-treesitter-ast`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `container_memory_bytes` | 4 GiB | resource | Memory limit for the container (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `container_pids` | 256 count | resource | Process/thread limit (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (tree-sitter AST). | Grows with target size; tree-sitter parses ~50-100 MB/min per core (docs/language-servers.md section 5). |
+| `image_id` | audit-buildenv-cpp id | resource | Pinned compiler image whose /opt/treesitter venv (py-tree-sitter and every pinned grammar) runs treesitter_ast.py. |  |
+| `max_file_bytes` | 2 MiB | safety | Largest file parsed; larger files are recorded as file-too-large gaps. | Generated amalgamations (sqlite3.c ~9 MB) exceed it and are gaps. |
+| `max_files` | 200000 count | safety | Most files parsed; the rest are max-files gaps. | Linux ~70K parsed files; engine-size trees ~150K. |
+| `max_rows_per_file` | 5000 count | window | Most functions, calls and imports kept per file; the rest are rows-truncated gaps. |  |
 
 ### `03-threat-model-dfd-stride`
 

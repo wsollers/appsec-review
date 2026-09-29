@@ -33,6 +33,10 @@ WORKERS = {
                                "appsec-review-process/reachability_engine_jobs.py:validate_codeql"),
     "06-reachability-ir": ("deterministic_python", "appsec-review-process/reachability_engine_jobs.py:run_ir",
                            "appsec-review-process/reachability_engine_jobs.py:validate_ir"),
+    "02-treesitter-ast": ("pinned_container", "appsec-review-process/treesitter_ast_job.py:run",
+                          "appsec-review-process/treesitter_ast_job.py:validate"),
+    "02-code-index": ("deterministic_python", "appsec-review-process/code_index_job.py:run",
+                      "appsec-review-process/code_index_job.py:validate"),
 }
 
 for _discovery_job in ("02-repository-partition-discovery", "02-dev-project-discovery",

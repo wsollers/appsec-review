@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 81,
+  "lifecycle_jobs": 83,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1196,7 +1196,8 @@
         "job:02-license-scan",
         "job:02-dependency-lifecycle",
         "job:02-binary-hardening",
-        "job:02-mobile-sast"
+        "job:02-mobile-sast",
+        "job:02-code-index"
        ],
        "produces": [
         "job:02-evidence-assembly"
@@ -1469,6 +1470,40 @@
         "accepted source snapshot",
         "pinned audit-native image",
         "hash-bound Joern exporter"
+       ]
+      },
+      {
+       "ref": "job:02-treesitter-ast",
+       "id": "02-treesitter-ast",
+       "name": "Tree-sitter AST summary",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-treesitter-ast"
+       ],
+       "declared_inputs": [
+        "accepted source snapshot",
+        "pinned compiler image with the vendored /opt/treesitter venv",
+        "hash-bound treesitter_ast.py"
+       ]
+      },
+      {
+       "ref": "job:02-code-index",
+       "id": "02-code-index",
+       "name": "Structural code index (SQLite)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-property-graph",
+        "job:02-treesitter-ast",
+        "job:02-binary-triage"
+       ],
+       "produces": [
+        "job:02-code-index"
+       ],
+       "declared_inputs": [
+        "accepted code property graph records file"
        ]
       },
       {
@@ -1844,6 +1879,8 @@
        "job:02-test-intelligence-ingest",
        "job:02-source-sast",
        "job:02-code-property-graph",
+       "job:02-treesitter-ast",
+       "job:02-code-index",
        "job:02-native-sast",
        "job:02-ir-capture",
        "job:02-ir-link",
@@ -1906,6 +1943,9 @@
        "accepted source snapshot",
        "pinned audit-native image",
        "hash-bound Joern exporter",
+       "pinned compiler image with the vendored /opt/treesitter venv",
+       "hash-bound treesitter_ast.py",
+       "accepted code property graph records file",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
        "B16 audit-native record",
@@ -2845,6 +2885,8 @@
      "job:02-codeql-ruby",
      "job:02-codeql-rust",
      "job:02-code-property-graph",
+     "job:02-treesitter-ast",
+     "job:02-code-index",
      "job:02-native-sast",
      "job:02-ir-capture",
      "job:02-ir-link",
@@ -2944,6 +2986,9 @@
      "accepted source snapshot",
      "pinned audit-native image",
      "hash-bound Joern exporter",
+     "pinned compiler image with the vendored /opt/treesitter venv",
+     "hash-bound treesitter_ast.py",
+     "accepted code property graph records file",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
      "B16 audit-native record",
@@ -4049,7 +4094,8 @@
         "job:02-license-scan",
         "job:02-dependency-lifecycle",
         "job:02-binary-hardening",
-        "job:02-mobile-sast"
+        "job:02-mobile-sast",
+        "job:02-code-index"
        ],
        "produces": [
         "job:02-evidence-assembly"
@@ -4359,6 +4405,40 @@
         "accepted source snapshot",
         "pinned audit-native image",
         "hash-bound Joern exporter"
+       ]
+      },
+      {
+       "ref": "job:02-treesitter-ast",
+       "id": "02-treesitter-ast",
+       "name": "Tree-sitter AST summary",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-treesitter-ast"
+       ],
+       "declared_inputs": [
+        "accepted source snapshot",
+        "pinned compiler image with the vendored /opt/treesitter venv",
+        "hash-bound treesitter_ast.py"
+       ]
+      },
+      {
+       "ref": "job:02-code-index",
+       "id": "02-code-index",
+       "name": "Structural code index (SQLite)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-property-graph",
+        "job:02-treesitter-ast",
+        "job:02-binary-triage"
+       ],
+       "produces": [
+        "job:02-code-index"
+       ],
+       "declared_inputs": [
+        "accepted code property graph records file"
        ]
       },
       {
@@ -4748,6 +4828,8 @@
        "job:02-native-build",
        "job:02-source-sast",
        "job:02-code-property-graph",
+       "job:02-treesitter-ast",
+       "job:02-code-index",
        "job:02-native-sast",
        "job:02-ir-capture",
        "job:02-ir-link",
@@ -4817,6 +4899,9 @@
        "accepted source snapshot",
        "pinned audit-native image",
        "hash-bound Joern exporter",
+       "pinned compiler image with the vendored /opt/treesitter venv",
+       "hash-bound treesitter_ast.py",
+       "accepted code property graph records file",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
        "B16 audit-native record",
@@ -5858,6 +5943,8 @@
      "job:02-codeql-ruby",
      "job:02-codeql-rust",
      "job:02-code-property-graph",
+     "job:02-treesitter-ast",
+     "job:02-code-index",
      "job:02-native-sast",
      "job:02-ir-capture",
      "job:02-ir-link",
@@ -5961,6 +6048,9 @@
      "accepted source snapshot",
      "pinned audit-native image",
      "hash-bound Joern exporter",
+     "pinned compiler image with the vendored /opt/treesitter venv",
+     "hash-bound treesitter_ast.py",
+     "accepted code property graph records file",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
      "B16 audit-native record",
@@ -8108,6 +8198,11 @@
      "job": "02-mobile-sast",
      "kind": "required",
      "contract": "mobile-sast"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
     }
    ],
    "declared_inputs": [
@@ -8162,7 +8257,8 @@
     "job:02-license-scan",
     "job:02-dependency-lifecycle",
     "job:02-binary-hardening",
-    "job:02-mobile-sast"
+    "job:02-mobile-sast",
+    "job:02-code-index"
    ],
    "produces": [
     "job:02-evidence-assembly"
@@ -11270,6 +11366,143 @@
    ]
   },
   {
+   "id": "02-treesitter-ast",
+   "lane": "02-evidence-pregather",
+   "name": "Tree-sitter AST summary",
+   "contract": "treesitter-ast",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/treesitter_ast_job.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "treesitter-ast"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted source snapshot"
+    },
+    {
+     "need": "required",
+     "input": "pinned compiler image with the vendored /opt/treesitter venv"
+    },
+    {
+     "need": "required",
+     "input": "hash-bound treesitter_ast.py"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/02-treesitter-ast.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-treesitter-ast/",
+   "output_files": [
+    "treesitter-ast.json",
+    "treesitter-ast-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/treesitter-ast.json",
+   "claim_class": "structural_source_evidence",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-treesitter-ast"
+   ]
+  },
+  {
+   "id": "02-code-index",
+   "lane": "02-evidence-pregather",
+   "name": "Structural code index (SQLite)",
+   "contract": "code-index",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/code_index_job.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "code-index"
+   },
+   "depends_on": [
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-treesitter-ast",
+     "kind": "required",
+     "contract": "treesitter-ast"
+    },
+    {
+     "job": "02-binary-triage",
+     "kind": "required",
+     "contract": "binary-triage"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted code property graph records file"
+    },
+    {
+     "need": "optional",
+     "input": "accepted tree-sitter AST summary"
+    },
+    {
+     "need": "optional",
+     "input": "accepted binary triage export tables"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/02-code-index.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-code-index/",
+   "output_files": [
+    "code-index.json",
+    "code-index.sqlite",
+    "code-index-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/code-index.json",
+   "claim_class": "structural_source_evidence",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-code-property-graph",
+    "job:02-treesitter-ast",
+    "job:02-binary-triage"
+   ],
+   "produces": [
+    "job:02-code-index"
+   ]
+  },
+  {
    "id": "02-native-sast",
    "lane": "02-evidence-pregather",
    "name": "Native SAST",
@@ -14024,6 +14257,7 @@
     "job:02-codeql-ruby",
     "job:02-codeql-rust",
     "job:02-code-property-graph",
+    "job:02-treesitter-ast",
     "job:02-operations-doc-ingest",
     "job:02-evidence-index",
     "job:02-secrets-inventory",
@@ -14743,7 +14977,32 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:06-reachability-ir"
+    "job:06-reachability-ir",
+    "job:02-code-index"
+   ]
+  },
+  "job:02-treesitter-ast": {
+   "id": "job:02-treesitter-ast",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-treesitter-ast/",
+   "about": "Accepted treesitter-ast output of 02-treesitter-ast.",
+   "produced_by": [
+    "job:02-treesitter-ast"
+   ],
+   "consumed_by": [
+    "job:02-code-index"
+   ]
+  },
+  "job:02-code-index": {
+   "id": "job:02-code-index",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-code-index/",
+   "about": "Accepted code-index output of 02-code-index.",
+   "produced_by": [
+    "job:02-code-index"
+   ],
+   "consumed_by": [
+    "job:02-evidence-assembly"
    ]
   },
   "job:02-native-sast": {
@@ -14820,6 +15079,7 @@
    ],
    "consumed_by": [
     "job:02-binary-intelligence-ingest",
+    "job:02-code-index",
     "job:02-binary-cfg"
    ]
   },

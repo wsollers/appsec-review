@@ -166,6 +166,14 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "structural_source_evidence",
         "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
     },
+    "treesitter-ast": {
+        "claim_class_id": "structural_source_evidence",
+        "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
+    },
+    "code-index": {
+        "claim_class_id": "structural_source_evidence",
+        "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
+    },
     "semantic-recall-index": {
         "claim_class_id": "semantic_recall_locator",
         "allowed_assertions": {"candidate-locator", "coverage-gap"},

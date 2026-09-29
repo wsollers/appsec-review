@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "treesitter-ast-job.schema.json",
+  "title": "Accepted 02-treesitter-ast result: summary of the tree-sitter AST document plus its records file",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_snapshot_sha256",
+    "source_revision",
+    "source_tree_sha256",
+    "image_id",
+    "image_digest",
+    "script_sha256",
+    "languages",
+    "status",
+    "skip_reason",
+    "records_file",
+    "content_sha256",
+    "totals",
+    "generator",
+    "gaps",
+    "gap_count",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/treesitter-ast-job/1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "source_tree_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "image_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "image_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "script_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED"
+      ]
+    },
+    "skip_reason": {
+      "enum": [
+        null,
+        "not-applicable-language-absent"
+      ]
+    },
+    "records_file": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "count"
+          ],
+          "properties": {
+            "path": {
+              "const": "treesitter-ast.records.jsonl"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "content_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_manifest_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "totals": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "generator": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "gaps": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object"
+      }
+    },
+    "gap_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "claim_boundary": {
+      "const": "STRUCTURAL_RETRIEVAL_NOT_FINDING_OR_RUNTIME_PROOF"
+    }
+  }
+}

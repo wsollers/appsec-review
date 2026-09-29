@@ -1462,7 +1462,8 @@
           "02-license-scan",
           "02-dependency-lifecycle",
           "02-binary-hardening",
-          "02-mobile-sast"
+          "02-mobile-sast",
+          "02-code-index"
         ]
       },
       "registry": {
@@ -4366,6 +4367,134 @@
       },
       "gaps": [
         "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-treesitter-ast",
+      "design_refs": [
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "02-treesitter-ast",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-treesitter-ast",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "treesitter-ast"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/treesitter_ast_job.py:run",
+        "validator": "appsec-review-process/treesitter_ast_job.py:validate"
+      },
+      "output": {
+        "contract": "treesitter-ast",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/treesitter-ast.json",
+        "schema_file": "schemas/treesitter-ast-job.schema.json",
+        "claim_class": "structural_source_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-code-index",
+      "design_refs": [
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "02-code-index",
+        "implemented": true,
+        "dependencies": [
+          "02-code-property-graph",
+          "02-treesitter-ast",
+          "02-binary-triage"
+        ]
+      },
+      "registry": {
+        "template": "02-code-index",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "code-index"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/code_index_job.py:run",
+        "validator": "appsec-review-process/code_index_job.py:validate"
+      },
+      "output": {
+        "contract": "code-index",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/code-index.json",
+        "schema_file": "schemas/code-index.schema.json",
+        "claim_class": "structural_source_evidence"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
       ],
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
