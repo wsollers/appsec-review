@@ -5,7 +5,8 @@ flowchart LR
 
   C[Accepted component characterization]:::qualified --> PLAN[Deterministically derived<br/>full-review launch plan]:::qualified
   PLAN --> ASM[02 full-review input assembly<br/>revalidate, bound, dispatch first wave]:::qualified
-  C --> L6A[L6A initial DFD and STRIDE]:::qualified --> L6B[L6B threat reconciliation]:::qualified
+  CQ[02-codeql-sast<br/>CodeQL leads, per-language gaps]:::open --> C
+  C --> L6A[L6A DFD/STRIDE core<br/>+ threat workbench cells]:::open --> L6B[L6B threat reconciliation]:::qualified
   C --> OW[OWASP T03-T14<br/>component routing, validation, pagination]:::qualified
   C --> STIG[STIG/SRG worklist]:::qualified --> DEPLOY[Deployment hardening]:::qualified
   ASM --> FAM[First-wave analysis families<br/>plus explicit SKIPPED_NA]:::qualified
@@ -14,7 +15,10 @@ flowchart LR
   FAM & L6B & OW & DEPLOY --> CLAIMS[Candidate ledger]:::qualified
   CLAIMS --> RED[07 red-team hypotheses]:::qualified --> BLUE[08 refutation]:::qualified
   BLUE --> VERIFY[09 independent verification]:::qualified --> SCORE[12 scoring]:::qualified
+  VERIFY --> CH1[14 attack-chain composition]:::open --> CH2[14 attack-chain refutation]:::open
   SCORE --> SYNTH[10 synthesis publication]:::qualified
+  CH2 -.->|optional| SYNTH
+  CQ -.->|P1 leads| CLAIMS
   SYNTH --> DRAFT[DRAFT_EVIDENCE_BACKED<br/>LaTeX + self-contained HTML]:::qualified
   DRAFT --> LIVE[Retained real accepted<br/>end-to-end run]:::open
   LIVE --> SIGN[Human authorization<br/>FINAL publication]:::human
