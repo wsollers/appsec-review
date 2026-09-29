@@ -6,12 +6,7 @@ executive-design templates. They are draft documentation outputs, not review evi
 | Document | Canonical source | PDF | KaTeX HTML |
 |---|---|---|---|
 | Operator user guide | [`user-guide.tex`](user-guide.tex) | [`user-guide.pdf`](user-guide.pdf) | [`user-guide.html`](user-guide.html) |
-| Executive design document | [`design-doc.tex`](design-doc.tex) | [`design-doc.pdf`](design-doc.pdf) **(stale: v0.5; rebuild for v0.6)** | [`design-doc.html`](design-doc.html) |
-
-**Stale PDF.** `design-doc.pdf` is still the v0.5 build. The `.tex` and `.html` are v0.6
-(2026-09-29), which was regenerated in a session without Docker. Rebuild it in WSL with
-`SKIP_BUILD=1 bash pipeline/report/latex/build-in-docker.sh design-doc.tex`, then copy
-`pipeline/report/build/latex/design-doc.pdf` here and remove this note.
+| Executive design document | [`design-doc.tex`](design-doc.tex) | [`design-doc.pdf`](design-doc.pdf) | [`design-doc.html`](design-doc.html) |
 
 The `.tex` file is authoritative. The PDF is compiled from that exact source by the pinned
 `audit-report:local` container with networking disabled. The HTML is produced from the same source
