@@ -21,6 +21,7 @@ import tempfile
 from typing import Any
 
 from schema_validate import validate_document
+import tunables
 
 KINDS = {"grype-db", "osv"}
 SCHEMA = "appsec-review/dependency-database-snapshot/1.0"
@@ -213,7 +214,8 @@ def main() -> int:
     add.add_argument("--source", type=Path, required=True); add.add_argument("--metadata", type=Path, required=True)
     add.add_argument("--registry-root", type=Path, required=True)
     feed = sub.add_parser("register-osv-feed"); feed.add_argument("--feed-root", type=Path, required=True)
-    feed.add_argument("--registry-root", type=Path, required=True); feed.add_argument("--max-age-seconds", type=int, default=1209600)
+    feed.add_argument("--registry-root", type=Path, required=True); feed.add_argument("--max-age-seconds", type=int,
+                      default=tunables.shared("reference_snapshot_max_age_seconds"))
     feed.add_argument("--now", required=True)
     get = sub.add_parser("resolve"); get.add_argument("--kind", choices=sorted(KINDS), required=True)
     get.add_argument("--registry-root", type=Path, required=True); get.add_argument("--max-age-seconds", type=int, required=True)

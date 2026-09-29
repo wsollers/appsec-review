@@ -481,6 +481,29 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
   inputs record); consumers read `accepted.json` + `result.json` and are unaffected.
 - [ ] Not run live: needs the code location started with `APPSEC_RUN_MODE=dev` in WSL.
 
+## O: MITRE ATT&CK / CAPEC reference feed (ADR-0026, brief O, branch `mitre-feed`)
+
+- [x] `mitre_feed.py` (sync/verify/resolve, pinned ATT&CK Enterprise v19.2 + CAPEC 3.9, carry-forward with the
+      original `fetched_at`), `attack_reference.py` (derived `reference.json`, validator, `screen`), third op
+      `mitre_sync_work` in `nvd_reference_sync`, tunable `reference_snapshot_max_age_seconds` (1209600) used by
+      OSV and this feed, optional `attack_refs`/`capec_refs` at 07 (-> `mitre_refs`, carried to 12) and on lane-14
+      chain links (rendered in the attack-chain section only); `scripts/smoke_mitre_feed.sh`; `docs/mitre-feed.md`.
+- [ ] Operator (WSL): `python3 appsec-review-process/mitre_feed.py sync`, then `verify`, then
+      `bash scripts/smoke_mitre_feed.sh`. Until the first sync every tag is withheld as `MITRE_REFERENCE_MISSING`.
+- [ ] Prompt menu (after brief J, persona files under `appsec-review-process/personas/` are J's): give lane 14's
+      composer and lane 07 vendor/insider mode (L5) a tactic-filtered technique menu or an `attack_reference`
+      lookup tool, never the whole matrix in a prompt; tell the 07 reviewer and the composer persona the fields
+      exist (today only the runtime `judgment_fields` block and the schema descriptions mention them).
+- [ ] Show claim-level `mitre_refs` in the synthesis report (`synthesis_report.JUDGMENT_FIELDS` /
+      presentation are brief M's); today they stop at the 12 scored records.
+- [ ] CAPEC from `mitre/cti` is frozen at 3.9 (2023); if MITRE publishes a newer CAPEC only as XML at
+      capec.mitre.org, add an XML source (not reachable from the build sandbox; verify the URL in WSL).
+- [ ] Verify the ATT&CK and CAPEC terms-of-use text in `mitre_feed.NOTICE` against attack.mitre.org and
+      capec.mitre.org (both blocked from the build sandbox; text is from MITRE's published terms).
+- [ ] Shell literals of the 14-day ceiling remain in `orchestrator/prepare-host.sh`, `orchestrator/stage-run.sh`
+      and the operator guide (`--max-database-age-seconds 1209600`); read the tunable there if wanted.
+- [ ] Decision to confirm (William): stale/missing MITRE snapshot withholds tags as a gap (current) vs hard block.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).

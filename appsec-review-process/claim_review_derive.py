@@ -55,7 +55,8 @@ CITABLE = {"07-red-team-adversarial": ("citations",),
            "09-independent-verification": ("citations", "refutation_citations")}
 # Model-facing decision fields per stage: (required, optional).
 PERSONA_FIELDS = {
-    "07-red-team-adversarial": ({"claim_id", "attacker_case", "citation_ids"}, {"dissent_ids", "cwe"}),
+    "07-red-team-adversarial": ({"claim_id", "attacker_case", "citation_ids"},
+                                {"dissent_ids", "cwe", "attack_refs", "capec_refs"}),
     "08-blue-team-refutation": ({"claim_id", "disposition", "rationale", "proof_obligations",
                                  "citation_ids"}, {"dissent_ids"}),
     "09-independent-verification": ({"claim_id", "disposition", "method", "proof_obligations",
@@ -275,7 +276,7 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
                           f"of this claim (allowed: {order})")
             continue
         decision[ACTOR_FIELD[stage]] = actor(stage, request, request_sha256, record)
-        for key in ("attacker_case", "disposition", "rationale", "method", "cwe"):
+        for key in ("attacker_case", "disposition", "rationale", "method", "cwe", "attack_refs", "capec_refs"):
             if key in row:
                 decision[key] = row[key]
         if obligations is not None:

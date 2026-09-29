@@ -104,7 +104,8 @@ def build(report: dict[str, Any], run_root: Path, *, reported_max: int | None = 
                 ref = link["fact_ref"]
             links.append({"index": link["index"], "stage": link["stage"], "ref": ref, "label": _clip(label),
                           "link_state": link["link_state"],
-                          "severity": severities.get(link["claim_id"]) if link["claim_id"] else None})
+                          "severity": severities.get(link["claim_id"]) if link["claim_id"] else None,
+                          **({"attack_refs": link["attack_refs"]} if link.get("attack_refs") else {})})
         refutation = chain["refutation"]
         rows.append({"rank": position + 1, "chain_id": chain["chain_id"], "state": chain["state"],
                      "impact_kind": chain["impact_kind"], "objective": _clip(chain["objective"], 300),
@@ -114,7 +115,10 @@ def build(report: dict[str, Any], run_root: Path, *, reported_max: int | None = 
                      "boundaries_crossed": chain.get("boundaries_crossed", []),
                      "refutation": {"disposition": refutation["disposition"], "target": refutation["target"],
                                     "mechanism": _clip(refutation["mechanism"], 600) if refutation["mechanism"] else None,
-                                    "citations": len(refutation["citations"])}})
+                                    "citations": len(refutation["citations"])},
+                     # ADR-0026: validated ATT&CK labels only; never evidence, never a severity input.
+                     **({"attack_versions": chain["mitre_reference"]["attack_versions"]}
+                        if (chain.get("mitre_reference") or {}).get("attack_versions") else {})})
     body, appendix = rows[:limit], rows[limit:]
     return {"schema": SCHEMA, "run_id": report["run_id"], "status": "PUBLISHED",
             "reason": None if rows else "the lane published no surviving chain",

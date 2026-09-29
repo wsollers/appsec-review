@@ -282,9 +282,10 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Weakest link</span><span>{{ c.weakest.reason }}</span>
         <span class="eyebrow">Refutation</span><span>{{ c.refutation.disposition }}{% if c.refutation.mechanism %}: {{ c.refutation.mechanism }}{% endif %} ({{ c.refutation.citations }} citation(s))</span>
         {% if c.boundaries_crossed %}<span class="eyebrow">Boundaries</span><span>{{ c.boundaries_crossed|join(', ') }}</span>{% endif %}
+        {% if c.get('attack_versions') %}<span class="eyebrow">ATT&amp;CK labels</span><span>{% for d, v in c.attack_versions|dictsort %}{{ d }} v{{ v }}{% if not loop.last %}, {% endif %}{% endfor %}; labels only, never evidence</span>{% endif %}
       </div>
       <div class="block"><div class="eyebrow">Stages</div>
-        <div class="trail">{% for l in c.links %}<span><span class="lane">{{ l.stage }}</span>{{ l.label }} <span class="muted">({{ l.link_state }}{% if l.severity %}, {{ l.severity }}{% endif %})</span></span>{% if not loop.last %}{% set e = c.edges[loop.index0] %}<span class="arrow" aria-hidden="true">→</span><span class="muted">{{ e.basis }}{% if e.downgraded_from %} (claimed {{ e.downgraded_from }}){% endif %}</span><span class="arrow" aria-hidden="true">→</span>{% endif %}{% endfor %}</div></div>
+        <div class="trail">{% for l in c.links %}<span><span class="lane">{{ l.stage }}</span>{{ l.label }} <span class="muted">({{ l.link_state }}{% if l.severity %}, {{ l.severity }}{% endif %})</span>{% if l.get('attack_refs') %} <span class="mono muted">ATT&amp;CK {{ l.attack_refs|join(', ') }}</span>{% endif %}</span>{% if not loop.last %}{% set e = c.edges[loop.index0] %}<span class="arrow" aria-hidden="true">→</span><span class="muted">{{ e.basis }}{% if e.downgraded_from %} (claimed {{ e.downgraded_from }}){% endif %}</span><span class="arrow" aria-hidden="true">→</span>{% endif %}{% endfor %}</div></div>
       <p>{{ c.narrative }}</p>
     </article>
     {% endfor %}

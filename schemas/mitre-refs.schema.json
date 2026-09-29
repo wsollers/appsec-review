@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mitre-refs.schema.json",
+  "description": "Validated MITRE ATT&CK / CAPEC labels on a claim or chain link (ADR-0026). A reviewer supplies attack_refs/capec_refs; attack_reference.screen keeps only ids that validate OK against the resolved, in-ceiling MITRE snapshot and records every drop, and a missing, stale or invalid snapshot, as a gap that withholds the tags. Labels only: never evidence, never a promotion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attack_refs", "capec_refs", "reference", "gaps"],
+  "properties": {
+    "attack_refs": {"type": "array", "items": {"type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"}},
+    "capec_refs": {"type": "array", "items": {"type": "string", "pattern": "^CAPEC-[1-9][0-9]{0,4}$"}},
+    "reference": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "reference_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "attack_versions": {"type": "object"},
+        "capec_version": {"type": ["string", "null"]}
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code"],
+        "properties": {
+          "code": {"enum": ["MITRE_REFERENCE_MISSING", "MITRE_REFERENCE_STALE", "MITRE_REFERENCE_INVALID",
+                            "MITRE_REF_UNKNOWN_ID", "MITRE_REF_DEPRECATED", "MITRE_REF_TACTIC_MISMATCH",
+                            "MITRE_REF_OVER_LIMIT"]},
+          "ref": {"type": "string"},
+          "detail": {"type": "string"},
+          "withheld": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

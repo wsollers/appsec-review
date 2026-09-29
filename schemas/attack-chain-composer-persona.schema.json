@@ -102,6 +102,15 @@
                     "type": "string",
                     "minLength": 1
                   }
+                },
+                "attack_refs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "description": "Optional: MITRE ATT&CK technique ids (T<nnnn>[.<nnn>]) labelling this link's step, matching its stage's tactics. A label, never evidence; unknown, deprecated or off-tactic ids, and all ids when the MITRE snapshot is missing or stale, are dropped with a recorded limitation."
                 }
               }
             }

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import attack_reference
 import bounded_analysis_workers
 import claim_lifecycle_core as core
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
@@ -39,8 +40,10 @@ DECISION_KEYS = {
                                     "proof_obligations", "citations", "dissent_ids"},
     "12-scoring-prioritization": {"claim_id", "factors", "rationale"},
 }
-# Optional reviewer judgment (ADR-0020): CWE at 07/09/12; CVSS v4.0 base metrics + remediation at 12.
-OPTIONAL_DECISION_KEYS = {"07-red-team-adversarial": {"cwe"}, "08-blue-team-refutation": set(),
+# Optional reviewer judgment (ADR-0020): CWE at 07/09/12; CVSS v4.0 base metrics + remediation at 12;
+# ATT&CK/CAPEC labels at 07 (ADR-0026).
+OPTIONAL_DECISION_KEYS = {"07-red-team-adversarial": {"cwe", "attack_refs", "capec_refs"},
+                          "08-blue-team-refutation": set(),
                           "09-independent-verification": {"cwe"},
                           "12-scoring-prioritization": {"cwe", "cvss_v4", "remediation"}}
 
@@ -68,6 +71,8 @@ def _code_hashes(stage: str) -> dict[str, str]:
     names = ("claim_review_lifecycle.py", "claim_lifecycle_core.py", WORKERS[stage],
              "publish_job_output.py", "validate_job_output.py",
              f"registry/output-contracts/{stage}.json")
+    if stage == "07-red-team-adversarial":          # ATT&CK/CAPEC label validation (ADR-0026)
+        names += ("attack_reference.py", "mitre_feed.py")
     result = {name: file_hash(ROOT / name) for name in names}
     result["schemas/claim-review-decision.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-decision.schema.json")
@@ -180,11 +185,17 @@ def current_inputs(run_id: str, stage: str) -> dict[str, Any]:
         decisions = decisions_from_pool(stage, upstream, pool)
     else:
         pool, pool_binding, decisions = None, None, {"decisions": []}
-    return {"run_id": run_id, "stage": stage, "source_generation": source,
-            "upstream": upstream, "upstream_binding": upstream_binding,
-            "pool": pool, "pool_binding": pool_binding, "decisions": decisions,
-            "applicability": "APPLICABLE" if records else "SKIPPED_NA_NO_CANDIDATES",
-            "code": _code_hashes(stage)}
+    inputs = {"run_id": run_id, "stage": stage, "source_generation": source,
+              "upstream": upstream, "upstream_binding": upstream_binding,
+              "pool": pool, "pool_binding": pool_binding, "decisions": decisions,
+              "applicability": "APPLICABLE" if records else "SKIPPED_NA_NO_CANDIDATES",
+              "code": _code_hashes(stage)}
+    if stage == "07-red-team-adversarial" and any("attack_refs" in row or "capec_refs" in row
+                                                  for row in decisions["decisions"]):
+        # ADR-0026: the MITRE reference identity (or its gap) is an input, so a stale or re-pinned
+        # snapshot re-executes the stage and a re-validation reproduces the same tags.
+        inputs["mitre_reference"] = attack_reference.binding()
+    return inputs
 
 
 def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
@@ -193,6 +204,9 @@ def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
                 "08-blue-team-refutation": core.blue_team,
                 "09-independent-verification": core.verify,
                 "12-scoring-prioritization": core.score}[stage]
+    if "mitre_reference" in inputs:
+        return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"],
+                        inputs["mitre_reference"])
     return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"])
 
 

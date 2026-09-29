@@ -16,7 +16,10 @@ an explicit ``no_chain_reason``. This module keeps the books (ADR-0016 decisions
   between the two links is that basis; a claimed basis whose ref does not join both endpoints is
   downgraded to ``synthetic`` and the downgrade recorded;
 * ``chain_id``, link states, ``causal_claim_ids``, ``fact_refs``, the chain state and its weakest
-  link (:func:`chain_state`), deduplication.
+  link (:func:`chain_state`), deduplication;
+* optional link ``attack_refs`` (ADR-0026): ATT&CK technique ids validated against the in-ceiling
+  MITRE snapshot and the link stage's tactics; a drop, or a missing or stale snapshot, is a recorded
+  limitation that withholds the label. Labels never change a link state, an edge or the chain state.
 
 An unknown id, an illegal stage order, a missing hop or a bound overrun raises
 ``InvokerOutputError`` so the invoker's bounded repair loop re-asks the model. The model never
@@ -30,6 +33,7 @@ import json
 import re
 from typing import Any
 
+import attack_reference
 from claude_cli_invoker import InvokerOutputError
 from execution_state import digest
 from schema_validate import SchemaStore, validate_document
@@ -56,7 +60,7 @@ _PAYLOAD_RE = re.compile(r"```|(?:\\x[0-9a-fA-F]{2}){4,}|(?:%[0-9a-fA-F]{2}){6,}
                          re.IGNORECASE)
 _ORCHESTRATOR_KEYS = {"chain_id", "cluster_id", "state", "weakest", "link_state", "causal_claim_ids",
                       "fact_refs", "composer", "claim_limits", "refutation", "citations", "basis",
-                      "downgraded_from", "index", "adjacency_edge_id"}
+                      "downgraded_from", "index", "adjacency_edge_id", "mitre_reference"}
 _PROMOTION_KEYS = {"severity", "cvss", "cvss_score", "risk", "priority", "verified", "finding"}
 
 
@@ -167,15 +171,37 @@ def _adjacent(workspace: dict[str, Any]) -> dict[tuple[str, str], list[dict[str,
     return pairs
 
 
+def _mitre(chains: list[Any]) -> tuple[Any, dict[str, Any] | None]:
+    """The MITRE reference for link labels, loaded only when a link carries ``attack_refs``."""
+    if not any(isinstance(link, dict) and link.get("attack_refs") is not None
+               for chain in chains if isinstance(chain, dict) for link in chain.get("links") or []):
+        return None, None
+    return attack_reference.load()
+
+
+def _labels(row: dict[str, Any], at: str, mitre: tuple[Any, dict[str, Any] | None], notes: list[str],
+            seen: list[dict[str, Any]]) -> list[str] | None:
+    if row.get("attack_refs") is None:
+        return None
+    reference, gap = mitre
+    screened = attack_reference.screen(row["attack_refs"], [], tactic=attack_reference.CHAIN_STAGE_TACTICS[row["stage"]],
+                                       reference=reference, gap=gap)
+    for item in screened["gaps"]:
+        shown = item.get("ref") or ", ".join(item.get("withheld") or [])
+        notes.append(f"{at}: ATT&CK label {shown} withheld ({item['code']}); labels are never evidence")
+    seen.append(screened["reference"])
+    return screened["attack_refs"]
+
+
 def _chain(workspace: dict[str, Any], chain: dict[str, Any], where: str, *, claims: dict[str, dict[str, Any]],
            facts: dict[str, dict[str, Any]], pairs: dict, links_max: int, errors: list[str],
-           notes: list[str]) -> dict[str, Any] | None:
+           notes: list[str], mitre: tuple[Any, dict[str, Any] | None] = (None, None)) -> dict[str, Any] | None:
     start = len(errors)
     rows = chain["links"]
     if not 2 <= len(rows) <= links_max:
         errors.append(f"{where}: a chain has 2 to {links_max} links (chain_links_max); got {len(rows)}")
         return None
-    links, refs = [], []
+    links, refs, labelled = [], [], []
     for index, row in enumerate(rows):
         at = f"{where}.links[{index}]"
         given = [key for key in ("claim_id", "fact_ref") if row.get(key)]
@@ -224,6 +250,9 @@ def _chain(workspace: dict[str, Any], chain: dict[str, Any], where: str, *, clai
         links.append({"index": index, "stage": row["stage"], "claim_id": ref if given[0] == "claim_id" else None,
                       "fact_ref": ref if given[0] == "fact_ref" else None, "link_state": state,
                       "prerequisites": prerequisites, "citations": citations})
+        labels = _labels(row, at, mitre, notes, labelled)
+        if labels is not None:
+            links[-1]["attack_refs"] = labels
     if len(errors) > start:
         return None
     stages = [link["stage"] for link in links]
@@ -288,12 +317,15 @@ def _chain(workspace: dict[str, Any], chain: dict[str, Any], where: str, *, clai
         return None
     identity = {"links": refs, "edges": [[edge["basis"], edge["fact_refs"]] for edge in edges]}
     state, weakest = chain_state(links, edges, None)
-    return {"chain_id": "chain-" + digest(identity)[:24], "cluster_id": workspace["cluster_id"],
-            "objective": _clip(chain["objective"], OBJECTIVE_CHARS), "impact_kind": chain["impact_kind"],
-            "narrative": narrative, "links": links, "edges": edges, "causal_claim_ids": causal,
-            "fact_refs": [link["fact_ref"] for link in links if link["fact_ref"]],
-            "weakest": weakest, "refutation": None, "state": state, "composer": None,
-            "claim_limits": dict(CLAIM_LIMITS)}
+    record = {"chain_id": "chain-" + digest(identity)[:24], "cluster_id": workspace["cluster_id"],
+              "objective": _clip(chain["objective"], OBJECTIVE_CHARS), "impact_kind": chain["impact_kind"],
+              "narrative": narrative, "links": links, "edges": edges, "causal_claim_ids": causal,
+              "fact_refs": [link["fact_ref"] for link in links if link["fact_ref"]],
+              "weakest": weakest, "refutation": None, "state": state, "composer": None,
+              "claim_limits": dict(CLAIM_LIMITS)}
+    if any(labelled):
+        record["mitre_reference"] = next(item for item in labelled if item)
+    return record
 
 
 def derive(workspace: dict[str, Any], reply: Any, *, composer: dict[str, Any],
@@ -319,10 +351,11 @@ def derive(workspace: dict[str, Any], reply: Any, *, composer: dict[str, Any],
     claims = {claim["claim_id"]: claim for claim in workspace["claims"]}
     facts = {fact["fact_id"]: fact for fact in workspace["facts"]}
     pairs = _adjacent(workspace)
+    mitre = _mitre(chains)
     records: dict[str, dict[str, Any]] = {}
     for index, chain in enumerate(chains):
         record = _chain(workspace, chain, f"chains[{index}]", claims=claims, facts=facts, pairs=pairs,
-                        links_max=limits["chain_links_max"], errors=errors, notes=notes)
+                        links_max=limits["chain_links_max"], errors=errors, notes=notes, mitre=mitre)
         if record is None:
             continue
         record["composer"] = composer

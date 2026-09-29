@@ -23,10 +23,13 @@ import os
 from pathlib import Path
 import re
 
+import tunables
+
 IDENTITY_SCHEMA = "appsec-review/osv-database-identity/1"
 POINTER_SCHEMA = "appsec-review/osv-current-pointer/1"
 MANIFEST_SCHEMA = "appsec-review/osv-snapshot-manifest/1"
-DEFAULT_MAX_AGE = timedelta(seconds=1_209_600)   # 14 days, same as NVD
+# 14 days, same as NVD: the one reference-snapshot ceiling (registry/tunables.json, ADR-0026).
+DEFAULT_MAX_AGE = timedelta(seconds=tunables.shared("reference_snapshot_max_age_seconds"))
 
 OK, BLOCKED, FAILED = "OK", "BLOCKED", "FAILED"
 REASONS = {

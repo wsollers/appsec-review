@@ -36,7 +36,7 @@ class OsvDagsterTests(unittest.TestCase):
 
     def test_job_runs_both_ops_and_keeps_the_nvd_tag_and_schedule(self):
         job = self.definitions.nvd_reference_sync
-        self.assertEqual({n.name for n in job.nodes}, {"nvd_sync_work", "osv_sync_work"})
+        self.assertEqual({n.name for n in job.nodes}, {"nvd_sync_work", "osv_sync_work", "mitre_sync_work"})
         self.assertEqual(job.tags["nvd_feed_id"], "nvd")
         self.assertEqual(job.tags["osv_feed_id"], "osv")
         self.assertEqual([s.name for s in self.definitions.defs.schedules], ["nvd_reference_schedule"])
