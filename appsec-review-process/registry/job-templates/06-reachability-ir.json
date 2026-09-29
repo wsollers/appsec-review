@@ -1,0 +1,63 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "06-reachability-ir",
+  "display_name": "IR/CPG dependency reachability",
+  "process": "06-cve-reachability",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "engine-reachability"
+  },
+  "inputs": {
+    "required": [
+      "accepted SCA match evidence",
+      "accepted SBOM",
+      "accepted source projection"
+    ],
+    "optional": [
+      "accepted code property graph",
+      "accepted LLVM IR facts",
+      "published OSV snapshot index",
+      "run-supplied reviewed advisory-to-function map and entry points"
+    ]
+  },
+  "outputs": {
+    "directory": "data/jobs/06-reachability-ir/attempts/<attempt_id>",
+    "files": [
+      "engine-reachability.json",
+      "engine-reachability-summary.md",
+      "status.json",
+      "permission.json",
+      "lineage.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 600,
+  "execution": {
+    "worker": "reachability_engine_jobs.py",
+    "arguments": [
+      "{run_id}",
+      "ir"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "accepted SCA matches of native ecosystems (conan, generic, deb, rpm, apk); the only engine that may report unreachable (complete CPG search with the vulnerable function's source present)",
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator"
+}

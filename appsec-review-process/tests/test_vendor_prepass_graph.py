@@ -198,7 +198,10 @@ class VendorPrepassGraphTests(unittest.TestCase):
     def test_new_node_consumers_are_declared_siblings_assembly_or_integrated_downstream_jobs(self):
         s = self.s
         integrated_downstream = {("02-sca-vulnerability-match", "06-cve-reachability"),
-                                 ("02-iac-config-scan", "15-deployment-hardening")}
+                                 ("02-iac-config-scan", "15-deployment-hardening"),
+                                 # ADR-0023: the reachability engine jobs read the matches and the SBOM
+                                 *((producer, engine) for producer in ("02-sca-vulnerability-match", "02-sbom-inventory")
+                                   for engine in ("06-reachability-codeql", "06-reachability-ir"))}
         for consumer, node in s.jobs.items():
             for edge in node["dependencies"]:
                 if edge["job"] in s.adopted:

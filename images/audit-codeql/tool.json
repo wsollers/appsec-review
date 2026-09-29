@@ -10,7 +10,8 @@
     "02-codeql-java",
     "02-codeql-javascript",
     "02-codeql-python",
-    "02-codeql-ruby"
+    "02-codeql-ruby",
+    "06-reachability-codeql"
   ],
   "executable": "/opt/codeql/codeql",
   "version_argv": [
@@ -28,6 +29,10 @@
   "lane_script": {
     "path": "/opt/scripts/codeql-sast-lane.sh",
     "source": "scripts/codeql-sast-lane.sh"
+  },
+  "reachability_script": {
+    "path": "/opt/scripts/codeql-reachability-lane.sh",
+    "source": "scripts/codeql-reachability-lane.sh"
   },
   "query_suites": {
     "cpp": "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls",

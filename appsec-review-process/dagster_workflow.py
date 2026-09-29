@@ -14,6 +14,7 @@ import build_configure as build_configure_worker
 import native_build as native_build_worker
 import source_sast as source_sast_worker
 import codeql_sast as codeql_sast_worker
+import reachability_engine_jobs
 import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
@@ -757,6 +758,23 @@ def analysis_feature_lifecycle_op(job_id):
 
 
 native_memory_lifecycle_work = analysis_feature_lifecycle_op('05-native-memory')
+def reachability_engine_op(engine, pool):
+    # ADR-0023: 06-reachability-codeql / 06-reachability-ir publish the shared engine table.
+    @op(name='job_' + reachability_engine_jobs.job_id(engine).replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def reachability_engine_work(context, configured, upstream):
+        run_id = configured['engagement_run_id']
+        result = reachability_engine_jobs.run(run_id, context.run_id, engine, configured.get('force', False))
+        attempt = reachability_engine_jobs.root(run_id, engine) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({'output': MetadataValue.path(str(attempt / reachability_engine_jobs.RESULT)),
+                                     'envelope': MetadataValue.path(str(attempt / 'result.json')),
+                                     'attempt_id': result['attempt_id']})
+        return result
+    return reachability_engine_work
+
+
+reachability_codeql_lifecycle_work = reachability_engine_op('codeql', DOCKER_POOL)
+reachability_ir_lifecycle_work = reachability_engine_op('ir', CPU_POOL)
 cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
 fuzz_triage_lifecycle_work = analysis_feature_lifecycle_op('13-fuzz-target-triage')
 
@@ -1720,6 +1738,8 @@ LIFECYCLE_OPS['08-blue-team-refutation']=blue_team_lifecycle_work
 LIFECYCLE_OPS['09-independent-verification']=verification_lifecycle_work
 LIFECYCLE_OPS['12-scoring-prioritization']=scoring_lifecycle_work
 LIFECYCLE_OPS['05-native-memory']=native_memory_lifecycle_work
+LIFECYCLE_OPS['06-reachability-codeql']=reachability_codeql_lifecycle_work
+LIFECYCLE_OPS['06-reachability-ir']=reachability_ir_lifecycle_work
 LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
 LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
 LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work

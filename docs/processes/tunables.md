@@ -560,6 +560,21 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `workbench_records_per_cell_max` | 60 count | window | Most records of one family the join takes from one cell reply; the rest is recorded as a gap. |  |
 | `workbench_wave_timeout_seconds` | 5400 s (90 min) | resource | Wait-all limit for one workbench wave pool. | Cells run concurrently; raise with slow models, not with target size (lookup tools keep calls small). |
 
+### `06-reachability-codeql`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `codeql_ram_bytes` | 6 GiB | resource | codeql --ram (JVM and evaluator budget, passed in MiB); must stay below container_memory_bytes (CodeQL otherwise sizes itself from host memory and is OOM-killed). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `codeql_threads` | 4 count | resource | codeql --threads for database create and analyze; keep at or below container_cpu_millis / 1000. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (CodeQL reachability, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (CodeQL reachability, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 1024 count | resource | Process/thread limit (CodeQL reachability, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (CodeQL reachability, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (CodeQL reachability, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for one CodeQL reachability, per language container (database create + analyze). A TIMEOUT is a coverage gap (ADR-0013). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (CodeQL reachability, per language). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `reachability_parallel_languages` | 2 count | resource | Languages whose reachability containers run at the same time inside the job (each also holds container_memory_bytes); 1 runs them one after another. | Bounded by host memory: parallel x container_memory_bytes must fit. |
+
 ### `07-hypothesis-discovery`
 
 | Tunable | Value | Kind | What it does | Scale |

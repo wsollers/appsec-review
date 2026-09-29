@@ -616,6 +616,136 @@
         "status.json"
       ]
     },
+    "06-reachability-codeql": {
+      "lane": "06-cve-reachability",
+      "contract": "engine-reachability",
+      "template": "06-reachability-codeql",
+      "implemented": true,
+      "namespace": "06-reachability-codeql",
+      "dependencies": [
+        {
+          "job": "02-sca-vulnerability-match",
+          "kind": "required",
+          "contract": "sca-vulnerability-match",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-codeql-cpp",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-csharp",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-go",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-java",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-javascript",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-python",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-ruby",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-rust",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        }
+      ],
+      "planned_scope": "CodeQL dependency reachability (ADR-0023): advisory symbols resolved through each dependency's own manifest, the pinned data/codeql-reachability/<lang> pack (calls* from entry points, TaintTracking::Global from remote sources) run per language, in parallel, against the databases the 02-codeql-<lang> nodes retained (re-hashed, never rebuilt); cpp reads the traced graph tables. One row per SCA match with verdict reachable|unknown, tier, witness and gaps.",
+      "required_artifacts": [
+        "engine-reachability.json",
+        "b13-receipts.json"
+      ]
+    },
+    "06-reachability-ir": {
+      "lane": "06-cve-reachability",
+      "contract": "engine-reachability",
+      "template": "06-reachability-ir",
+      "implemented": true,
+      "namespace": "06-reachability-ir",
+      "dependencies": [
+        {
+          "job": "02-sca-vulnerability-match",
+          "kind": "required",
+          "contract": "sca-vulnerability-match",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-code-property-graph",
+          "kind": "required",
+          "contract": "code-property-graph",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "required",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        }
+      ],
+      "planned_scope": "IR/CPG dependency reachability (ADR-0023): the reachability.py arbiter over the accepted Joern CPG plus LLVM IR facts for native ecosystems; the only engine that may report unreachable (complete search, vulnerable function source present, hash-bound target). Java bytecode and .NET IL engines are deferred behind the same interface.",
+      "required_artifacts": [
+        "engine-reachability.json"
+      ]
+    },
     "06-cve-reachability": {
       "lane": "06-cve-reachability",
       "contract": "cve-reachability",
@@ -651,6 +781,18 @@
           "allowed_skip_reasons": [
             "not-applicable-language-absent"
           ]
+        },
+        {
+          "job": "06-reachability-codeql",
+          "kind": "required",
+          "contract": "engine-reachability",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "06-reachability-ir",
+          "kind": "required",
+          "contract": "engine-reachability",
+          "allowed_skip_reasons": []
         }
       ],
       "planned_scope": "Deterministic language-aware reachability (ADR-0022) over the exact accepted SCA matches: advisory symbols from a reviewed map or the OSV index, engines by ecosystem (CPG/IR, CodeQL tables, language-server call hierarchy, tree-sitter hints) over hash-bound run evidence, joined into reachable/unreachable/unknown with a witness path. Version matches alone never establish reachability and outputs remain evidence leads.",

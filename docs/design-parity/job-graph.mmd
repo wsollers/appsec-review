@@ -109,6 +109,26 @@ flowchart TD
   01_component_characterization_post -->|required| 05_native_memory_config
   02_native_sast_post -->|required| 05_native_memory_config
   02_ir_facts_post -->|required| 05_native_memory_config
+  06_reachability_codeql_config["06-reachability-codeql: resolve job configuration"] --> 06_reachability_codeql_pre["06-reachability-codeql: pre-validation"]
+  06_reachability_codeql_pre --> 06_reachability_codeql["06-reachability-codeql: work or reuse"]
+  06_reachability_codeql --> 06_reachability_codeql_post["06-reachability-codeql: post-validation and publish"]
+  02_sca_vulnerability_match_post -->|required| 06_reachability_codeql_config
+  02_sbom_inventory_post -->|required| 06_reachability_codeql_config
+  02_codeql_cpp_post -->|required| 06_reachability_codeql_config
+  02_codeql_csharp_post -->|required| 06_reachability_codeql_config
+  02_codeql_go_post -->|required| 06_reachability_codeql_config
+  02_codeql_java_post -->|required| 06_reachability_codeql_config
+  02_codeql_javascript_post -->|required| 06_reachability_codeql_config
+  02_codeql_python_post -->|required| 06_reachability_codeql_config
+  02_codeql_ruby_post -->|required| 06_reachability_codeql_config
+  02_codeql_rust_post -->|required| 06_reachability_codeql_config
+  06_reachability_ir_config["06-reachability-ir: resolve job configuration"] --> 06_reachability_ir_pre["06-reachability-ir: pre-validation"]
+  06_reachability_ir_pre --> 06_reachability_ir["06-reachability-ir: work or reuse"]
+  06_reachability_ir --> 06_reachability_ir_post["06-reachability-ir: post-validation and publish"]
+  02_sca_vulnerability_match_post -->|required| 06_reachability_ir_config
+  02_sbom_inventory_post -->|required| 06_reachability_ir_config
+  02_code_property_graph_post -->|required| 06_reachability_ir_config
+  02_ir_facts_post -->|required| 06_reachability_ir_config
   06_cve_reachability_config["06-cve-reachability: resolve job configuration"] --> 06_cve_reachability_pre["06-cve-reachability: pre-validation"]
   06_cve_reachability_pre --> 06_cve_reachability["06-cve-reachability: work or reuse"]
   06_cve_reachability --> 06_cve_reachability_post["06-cve-reachability: post-validation and publish"]
@@ -116,6 +136,8 @@ flowchart TD
   02_ir_facts_post -->|required| 06_cve_reachability_config
   02_code_property_graph_post -->|required| 06_cve_reachability_config
   02_codeql_cpp_post -->|required| 06_cve_reachability_config
+  06_reachability_codeql_post -->|required| 06_cve_reachability_config
+  06_reachability_ir_post -->|required| 06_cve_reachability_config
   13_fuzz_target_triage_config["13-fuzz-target-triage: resolve job configuration"] --> 13_fuzz_target_triage_pre["13-fuzz-target-triage: pre-validation"]
   13_fuzz_target_triage_pre --> 13_fuzz_target_triage["13-fuzz-target-triage: work or reuse"]
   13_fuzz_target_triage --> 13_fuzz_target_triage_post["13-fuzz-target-triage: post-validation and publish"]

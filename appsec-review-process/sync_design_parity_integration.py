@@ -26,6 +26,10 @@ WORKERS = {
                         "appsec-review-process/poc_fix_worker.py:_validate_attempt"),
     "11-remediation-proposal": ("deterministic_python", "appsec-review-process/remediation_proposal.py:run",
                                  "appsec-review-process/remediation_proposal.py:_validate_attempt"),
+    "06-reachability-codeql": ("pinned_container", "appsec-review-process/reachability_engine_jobs.py:run_codeql",
+                               "appsec-review-process/reachability_engine_jobs.py:validate_codeql"),
+    "06-reachability-ir": ("deterministic_python", "appsec-review-process/reachability_engine_jobs.py:run_ir",
+                           "appsec-review-process/reachability_engine_jobs.py:validate_ir"),
 }
 
 for _discovery_job in ("02-repository-partition-discovery", "02-dev-project-discovery",

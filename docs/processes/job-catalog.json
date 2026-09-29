@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 79,
+  "lifecycle_jobs": 81,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2136,6 +2136,54 @@
        ]
       },
       {
+       "ref": "job:06-reachability-codeql",
+       "id": "06-reachability-codeql",
+       "name": "CodeQL dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-codeql-cpp",
+        "job:02-codeql-csharp",
+        "job:02-codeql-go",
+        "job:02-codeql-java",
+        "job:02-codeql-javascript",
+        "job:02-codeql-python",
+        "job:02-codeql-ruby",
+        "job:02-codeql-rust"
+       ],
+       "produces": [
+        "job:06-reachability-codeql"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+       ]
+      },
+      {
+       "ref": "job:06-reachability-ir",
+       "id": "06-reachability-ir",
+       "name": "IR/CPG dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-code-property-graph",
+        "job:02-ir-facts"
+       ],
+       "produces": [
+        "job:06-reachability-ir"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection"
+       ]
+      },
+      {
        "ref": "job:06-cve-reachability",
        "id": "06-cve-reachability",
        "name": "CVE Reachability Evidence",
@@ -2144,7 +2192,9 @@
         "job:02-sca-vulnerability-match",
         "job:02-ir-facts",
         "job:02-code-property-graph",
-        "job:02-codeql-cpp"
+        "job:02-codeql-cpp",
+        "job:06-reachability-codeql",
+        "job:06-reachability-ir"
        ],
        "produces": [
         "job:06-cve-reachability"
@@ -2219,8 +2269,16 @@
        "job:02-native-sast",
        "job:02-ir-facts",
        "job:02-sca-vulnerability-match",
-       "job:02-code-property-graph",
+       "job:02-sbom-inventory",
        "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust",
+       "job:02-code-property-graph",
        "job:02-iac-config-scan"
       ],
       "leaves": [
@@ -2237,6 +2295,8 @@
        "job:03-threat-model-reconciliation",
        "job:04-owasp-validation-worklist",
        "job:05-native-memory",
+       "job:06-reachability-codeql",
+       "job:06-reachability-ir",
        "job:06-cve-reachability",
        "job:15-stig-srg-validation-worklist"
       ],
@@ -2257,7 +2317,10 @@
        "accepted native SAST/IR evidence",
        "hash-bound citations",
        "accepted SCA match evidence",
+       "accepted SBOM",
        "accepted source projection",
+       "B16 audit-codeql record",
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
        "accepted component/native evidence",
        "candidate entrypoints",
        "accepted deployment configuration evidence",
@@ -2800,6 +2863,8 @@
      "job:04-asvs-masvs",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
+     "job:06-reachability-codeql",
+     "job:06-reachability-ir",
      "job:06-cve-reachability",
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
@@ -2916,6 +2981,7 @@
      "hash-bound citations",
      "accepted SCA match evidence",
      "accepted source projection",
+     "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -5012,6 +5078,54 @@
      "name": "06-cve-reachability",
      "entries": [
       {
+       "ref": "job:06-reachability-codeql",
+       "id": "06-reachability-codeql",
+       "name": "CodeQL dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-codeql-cpp",
+        "job:02-codeql-csharp",
+        "job:02-codeql-go",
+        "job:02-codeql-java",
+        "job:02-codeql-javascript",
+        "job:02-codeql-python",
+        "job:02-codeql-ruby",
+        "job:02-codeql-rust"
+       ],
+       "produces": [
+        "job:06-reachability-codeql"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection",
+        "B16 audit-codeql record",
+        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+       ]
+      },
+      {
+       "ref": "job:06-reachability-ir",
+       "id": "06-reachability-ir",
+       "name": "IR/CPG dependency reachability",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-sca-vulnerability-match",
+        "job:02-sbom-inventory",
+        "job:02-code-property-graph",
+        "job:02-ir-facts"
+       ],
+       "produces": [
+        "job:06-reachability-ir"
+       ],
+       "declared_inputs": [
+        "accepted SCA match evidence",
+        "accepted SBOM",
+        "accepted source projection"
+       ]
+      },
+      {
        "ref": "job:06-cve-reachability",
        "id": "06-cve-reachability",
        "name": "CVE Reachability Evidence",
@@ -5020,7 +5134,9 @@
         "job:02-sca-vulnerability-match",
         "job:02-ir-facts",
         "job:02-code-property-graph",
-        "job:02-codeql-cpp"
+        "job:02-codeql-cpp",
+        "job:06-reachability-codeql",
+        "job:06-reachability-ir"
        ],
        "produces": [
         "job:06-cve-reachability"
@@ -5034,17 +5150,31 @@
      "rollup": {
       "enters": [
        "job:02-sca-vulnerability-match",
-       "job:02-ir-facts",
+       "job:02-sbom-inventory",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust",
        "job:02-code-property-graph",
-       "job:02-codeql-cpp"
+       "job:02-ir-facts"
       ],
       "leaves": [
        "job:06-cve-reachability"
       ],
-      "passes": [],
+      "passes": [
+       "job:06-reachability-codeql",
+       "job:06-reachability-ir"
+      ],
       "declared_inputs": [
        "accepted SCA match evidence",
-       "accepted source projection"
+       "accepted SBOM",
+       "accepted source projection",
+       "B16 audit-codeql record",
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
       ]
      }
     },
@@ -5746,6 +5876,8 @@
      "job:04-asvs-masvs",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
+     "job:06-reachability-codeql",
+     "job:06-reachability-ir",
      "job:06-cve-reachability",
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
@@ -5867,6 +5999,7 @@
      "hash-bound citations",
      "accepted SCA match evidence",
      "accepted source projection",
+     "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -8497,6 +8630,242 @@
    ]
   },
   {
+   "id": "06-reachability-codeql",
+   "lane": "06-cve-reachability",
+   "name": "CodeQL dependency reachability",
+   "contract": "engine-reachability",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/reachability_engine_jobs.py:run_codeql",
+   "resource_pool": "docker",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "engine-reachability"
+   },
+   "depends_on": [
+    {
+     "job": "02-sca-vulnerability-match",
+     "kind": "required",
+     "contract": "sca-vulnerability-match"
+    },
+    {
+     "job": "02-sbom-inventory",
+     "kind": "required",
+     "contract": "sbom-inventory"
+    },
+    {
+     "job": "02-codeql-cpp",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-csharp",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-go",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-java",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-javascript",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-python",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-ruby",
+     "kind": "required",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-rust",
+     "kind": "required",
+     "contract": "codeql-language"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SCA match evidence"
+    },
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "accepted source projection"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-codeql record"
+    },
+    {
+     "need": "required",
+     "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-codeql-<lang> database pointers"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-codeql-cpp traced graph tables"
+    },
+    {
+     "need": "optional",
+     "input": "published OSV snapshot index"
+    },
+    {
+     "need": "optional",
+     "input": "run-supplied reviewed advisory-to-function map and entry points"
+    }
+   ],
+   "inputs_source": "registry/job-templates/06-reachability-codeql.json",
+   "output_dir": "runs/<run_id>/data/jobs/06-reachability-codeql/",
+   "output_files": [
+    "engine-reachability.json",
+    "engine-reachability-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/engine-reachability.json",
+   "claim_class": "cve_reachability_evidence_lead",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-sca-vulnerability-match",
+    "job:02-sbom-inventory",
+    "job:02-codeql-cpp",
+    "job:02-codeql-csharp",
+    "job:02-codeql-go",
+    "job:02-codeql-java",
+    "job:02-codeql-javascript",
+    "job:02-codeql-python",
+    "job:02-codeql-ruby",
+    "job:02-codeql-rust"
+   ],
+   "produces": [
+    "job:06-reachability-codeql"
+   ]
+  },
+  {
+   "id": "06-reachability-ir",
+   "lane": "06-cve-reachability",
+   "name": "IR/CPG dependency reachability",
+   "contract": "engine-reachability",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/reachability_engine_jobs.py:run_ir",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "engine-reachability"
+   },
+   "depends_on": [
+    {
+     "job": "02-sca-vulnerability-match",
+     "kind": "required",
+     "contract": "sca-vulnerability-match"
+    },
+    {
+     "job": "02-sbom-inventory",
+     "kind": "required",
+     "contract": "sbom-inventory"
+    },
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "required",
+     "contract": "ir-facts"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SCA match evidence"
+    },
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "accepted source projection"
+    },
+    {
+     "need": "optional",
+     "input": "accepted code property graph"
+    },
+    {
+     "need": "optional",
+     "input": "accepted LLVM IR facts"
+    },
+    {
+     "need": "optional",
+     "input": "published OSV snapshot index"
+    },
+    {
+     "need": "optional",
+     "input": "run-supplied reviewed advisory-to-function map and entry points"
+    }
+   ],
+   "inputs_source": "registry/job-templates/06-reachability-ir.json",
+   "output_dir": "runs/<run_id>/data/jobs/06-reachability-ir/",
+   "output_files": [
+    "engine-reachability.json",
+    "engine-reachability-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/engine-reachability.json",
+   "claim_class": "cve_reachability_evidence_lead",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-sca-vulnerability-match",
+    "job:02-sbom-inventory",
+    "job:02-code-property-graph",
+    "job:02-ir-facts"
+   ],
+   "produces": [
+    "job:06-reachability-ir"
+   ]
+  },
+  {
    "id": "06-cve-reachability",
    "lane": "06-cve-reachability",
    "name": "CVE Reachability Evidence",
@@ -8537,6 +8906,16 @@
      "job": "02-codeql-cpp",
      "kind": "required",
      "contract": "codeql-language"
+    },
+    {
+     "job": "06-reachability-codeql",
+     "kind": "required",
+     "contract": "engine-reachability"
+    },
+    {
+     "job": "06-reachability-ir",
+     "kind": "required",
+     "contract": "engine-reachability"
     }
    ],
    "declared_inputs": [
@@ -8587,7 +8966,9 @@
     "job:02-sca-vulnerability-match",
     "job:02-ir-facts",
     "job:02-code-property-graph",
-    "job:02-codeql-cpp"
+    "job:02-codeql-cpp",
+    "job:06-reachability-codeql",
+    "job:06-reachability-ir"
    ],
    "produces": [
     "job:06-cve-reachability"
@@ -13953,6 +14334,30 @@
     "job:07-red-team-adversarial"
    ]
   },
+  "job:06-reachability-codeql": {
+   "id": "job:06-reachability-codeql",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/06-reachability-codeql/",
+   "about": "Accepted engine-reachability output of 06-reachability-codeql.",
+   "produced_by": [
+    "job:06-reachability-codeql"
+   ],
+   "consumed_by": [
+    "job:06-cve-reachability"
+   ]
+  },
+  "job:06-reachability-ir": {
+   "id": "job:06-reachability-ir",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/06-reachability-ir/",
+   "about": "Accepted engine-reachability output of 06-reachability-ir.",
+   "produced_by": [
+    "job:06-reachability-ir"
+   ],
+   "consumed_by": [
+    "job:06-cve-reachability"
+   ]
+  },
   "job:06-cve-reachability": {
    "id": "job:06-cve-reachability",
    "kind": "job output",
@@ -14285,6 +14690,7 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
+    "job:06-reachability-codeql",
     "job:06-cve-reachability"
    ]
   },
@@ -14297,7 +14703,8 @@
     "job:02-codeql-csharp"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-go": {
@@ -14309,7 +14716,8 @@
     "job:02-codeql-go"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-java": {
@@ -14321,7 +14729,8 @@
     "job:02-codeql-java"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-javascript": {
@@ -14333,7 +14742,8 @@
     "job:02-codeql-javascript"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-python": {
@@ -14345,7 +14755,8 @@
     "job:02-codeql-python"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-ruby": {
@@ -14357,7 +14768,8 @@
     "job:02-codeql-ruby"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-rust": {
@@ -14369,7 +14781,8 @@
     "job:02-codeql-rust"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-code-property-graph": {
@@ -14382,6 +14795,7 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
+    "job:06-reachability-ir",
     "job:06-cve-reachability"
    ]
   },
@@ -14434,6 +14848,7 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:05-native-memory",
+    "job:06-reachability-ir",
     "job:06-cve-reachability"
    ]
   },
@@ -14588,6 +15003,8 @@
     "step:license-scan",
     "step:dependency-lifecycle",
     "job:02-evidence-assembly",
+    "job:06-reachability-codeql",
+    "job:06-reachability-ir",
     "job:02-sca-vulnerability-match",
     "job:02-license-scan",
     "job:02-dependency-lifecycle"
@@ -14605,6 +15022,8 @@
    "consumed_by": [
     "step:cve-reachability",
     "job:02-evidence-assembly",
+    "job:06-reachability-codeql",
+    "job:06-reachability-ir",
     "job:06-cve-reachability"
    ]
   },
