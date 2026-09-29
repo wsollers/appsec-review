@@ -16,6 +16,7 @@ Each file here is the exact prompt to paste into a new Claude session. Every pro
 | `I-dev-restart-and-executor.md` | cloud | now (wave 1) | `dev-executor` |
 | `J-personas-roles-folder.md` | cloud | now (wave 1) | `personas-folder` |
 | `M-report-completion.md` | cloud | now (wave 1) | `report-complete` |
+| `O-mitre-attack-capec-feed.md` | cloud | now (independent of I, J, M) | `mitre-feed` |
 | `K-registry-into-pipeline.md` | cloud | after `dev-executor` and `personas-folder` merge (wave 2) | `registry-move` |
 | `L-formats-finish.md` | cloud | after `personas-folder` merges (wave 2) | `formats-2` |
 | `N-caches-and-memo.md` | cloud | after `dev-executor` merges (wave 2) | `caches` |
