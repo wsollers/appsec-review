@@ -2554,6 +2554,21 @@
        ]
       },
       {
+       "ref": "job:12b-poc-and-fix",
+       "id": "12b-poc-and-fix",
+       "name": "Light PoC and Proposed Fix",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:12-scoring-prioritization"
+       ],
+       "produces": [
+        "job:12b-poc-and-fix"
+       ],
+       "declared_inputs": [
+        "accepted 12-scoring-prioritization result"
+       ]
+      },
+      {
        "ref": "job:14-attack-chain-composition",
        "id": "14-attack-chain-composition",
        "name": "Attack-chain Composition",
@@ -2702,7 +2717,6 @@
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
-       "job:12b-poc-and-fix",
        "job:dynamic-rescope",
        "critical-findings-md"
       ],
@@ -2721,6 +2735,7 @@
        "job:11-remediation-proposal",
        "job:remediation-retest-feedback",
        "job:12-scoring-prioritization",
+       "job:12b-poc-and-fix",
        "job:14-attack-chain-composition",
        "job:14-attack-chain-refutation",
        "job:10-synthesis-report",
@@ -2745,6 +2760,7 @@
        "verified claims and remediation proposals",
        "accepted independent-verification result",
        "accepted complete scoring persona/tool-pool merge when verifications exist",
+       "accepted 12-scoring-prioritization result",
        "accepted 09-independent-verification result (and its 08 upstream)",
        "accepted integrated threat model",
        "accepted 14-attack-chain-composition result and seeds",
@@ -2779,7 +2795,6 @@
      "llm-invoker",
      "buildenv-catalog",
      "buildenv-image",
-     "job:12b-poc-and-fix",
      "critical-findings-md"
     ],
     "leaves": [
@@ -2883,6 +2898,7 @@
      "job:11-remediation-proposal",
      "job:remediation-retest-feedback",
      "job:12-scoring-prioritization",
+     "job:12b-poc-and-fix",
      "job:14-attack-chain-composition",
      "job:14-attack-chain-refutation",
      "job:10-synthesis-report",
@@ -3010,6 +3026,7 @@
      "verified claims and remediation proposals",
      "accepted independent-verification result",
      "accepted complete scoring persona/tool-pool merge when verifications exist",
+     "accepted 12-scoring-prioritization result",
      "accepted 09-independent-verification result (and its 08 upstream)",
      "accepted integrated threat model",
      "accepted 14-attack-chain-composition result and seeds",

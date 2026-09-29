@@ -15,6 +15,7 @@
         <bpmn:flowNodeRef>Task_ThreatInitial</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_ThreatReconcile</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Owasp</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CveReach</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Stig</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Deployment</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_EvidenceJoin</bpmn:flowNodeRef>
@@ -27,6 +28,7 @@
         <bpmn:flowNodeRef>Task_Append</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_ChainSplit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Score</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PocFix</bpmn:flowNodeRef>
       </bpmn:lane>
       <bpmn:lane id="Lane_Chains" name="Attack-chain candidates (lane 14, ADR-0016)">
         <bpmn:flowNodeRef>Task_ChainCompose</bpmn:flowNodeRef>
@@ -49,6 +51,7 @@
     <bpmn:task id="Task_ThreatInitial" name="L6A deterministic DFD/STRIDE core plus threat workbench persona cells (waves 1-2)"/>
     <bpmn:task id="Task_ThreatReconcile" name="L6B reconcile threat model, conflicts and coverage"/>
     <bpmn:task id="Task_Owasp" name="Run OWASP worklist and publish ASVS/MASVS matrix"/>
+    <bpmn:task id="Task_CveReach" name="06-cve-reachability: dependency reachability per SCA match (CPG, CodeQL, LSP engines)"/>
     <bpmn:task id="Task_Stig" name="Run separate STIG/SRG validation worklist"/>
     <bpmn:task id="Task_Deployment" name="Assess deployment hardening from accepted worklist"/>
     <bpmn:parallelGateway id="Gateway_EvidenceJoin" name="Wait for exact accepted sources"/>
@@ -58,12 +61,13 @@
     <bpmn:task id="Task_Verify" name="09 independently verify, refute or block"/>
     <bpmn:task id="Task_Append" name="L01 append exact accepted decisions; record current head"/>
     <bpmn:task id="Task_Score" name="12 score independently verified claims only"/>
+    <bpmn:task id="Task_PocFix" name="12b-poc-and-fix: light PoC and proposed fix for verified, CRITICAL, REACHABLE findings"/>
     <bpmn:parallelGateway id="Gateway_ChainSplit" name="Score and compose chains in parallel"/>
     <bpmn:task id="Task_ChainCompose" name="14-attack-chain-composition: seed from 09 claims, entry points and threat-model actors; composer pool; derive chains"/>
     <bpmn:exclusiveGateway id="Gateway_ChainSeeds" name="Any chain seeds?"/>
     <bpmn:task id="Task_ChainRefute" name="14-attack-chain-refutation: refuter pool; publish attack-chain ledger"/>
     <bpmn:exclusiveGateway id="Gateway_ChainMerge"/>
-    <bpmn:parallelGateway id="Gateway_ReportJoin" name="Wait for 12 and lane 14 (optional input)"/>
+    <bpmn:parallelGateway id="Gateway_ReportJoin" name="Wait for 12, 12b and lane 14 (12b and 14 optional)"/>
     <bpmn:task id="Task_ReportInput" name="Revalidate exact accepted synthesis inputs"/>
     <bpmn:task id="Task_Synthesis" name="10 publish hash-bound evidence-backed draft"/>
     <bpmn:task id="Task_Draft" name="Hash immutable DRAFT_EVIDENCE_BACKED package"/>
@@ -77,6 +81,8 @@
     <bpmn:sequenceFlow id="Flow_ThreatB" sourceRef="Task_ThreatInitial" targetRef="Task_ThreatReconcile"/>
     <bpmn:sequenceFlow id="Flow_03A" sourceRef="Task_ThreatReconcile" targetRef="Gateway_EvidenceJoin"/>
     <bpmn:sequenceFlow id="Flow_03B" sourceRef="Task_Owasp" targetRef="Gateway_EvidenceJoin"/>
+    <bpmn:sequenceFlow id="Flow_CveA" sourceRef="Gateway_EvidenceSplit" targetRef="Task_CveReach"/>
+    <bpmn:sequenceFlow id="Flow_CveB" sourceRef="Task_CveReach" targetRef="Gateway_EvidenceJoin"/>
     <bpmn:sequenceFlow id="Flow_StigDeploy" sourceRef="Task_Stig" targetRef="Task_Deployment"/>
     <bpmn:sequenceFlow id="Flow_03C" sourceRef="Task_Deployment" targetRef="Gateway_EvidenceJoin"/>
     <bpmn:sequenceFlow id="Flow_03" sourceRef="Gateway_EvidenceJoin" targetRef="Task_Admission"/>
@@ -92,7 +98,8 @@
     <bpmn:sequenceFlow id="Flow_Chain4" name="no chain seeds: SKIPPED" sourceRef="Gateway_ChainSeeds" targetRef="Gateway_ChainMerge"/>
     <bpmn:sequenceFlow id="Flow_Chain5" sourceRef="Task_ChainRefute" targetRef="Gateway_ChainMerge"/>
     <bpmn:sequenceFlow id="Flow_Chain6" sourceRef="Gateway_ChainMerge" targetRef="Gateway_ReportJoin"/>
-    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Score" targetRef="Gateway_ReportJoin"/>
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Score" targetRef="Task_PocFix"/>
+    <bpmn:sequenceFlow id="Flow_Poc" sourceRef="Task_PocFix" targetRef="Gateway_ReportJoin"/>
     <bpmn:sequenceFlow id="Flow_09B" sourceRef="Gateway_ReportJoin" targetRef="Task_ReportInput"/>
     <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_ReportInput" targetRef="Task_Synthesis"/>
     <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Synthesis" targetRef="Task_Draft"/>
@@ -102,6 +109,10 @@
     <bpmn:textAnnotation id="Note_Final"><bpmn:text>The package is DRAFT_EVIDENCE_BACKED only. One real accepted end-to-end run and human final authorization are still required.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Codeql"><bpmn:text>ADR-0017. Go and any language without a registered image are per-language gaps (OK_WITH_GAPS). Traced C/C++ (codeql-cpp-traced) exists in code but is not wired into full_review. Not live-qualified.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Chains"><bpmn:text>Chains are candidates, never findings. 10 reads the refuted ledger as an optional input and states SKIPPED or ABSENT with a reason. Unit-tested only; nothing has run live.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Cve"><bpmn:text>ADR-0022. Model text never decides reachability; unreachable only from a complete CPG search; everything else unknown with a gap. Critical requires REACHABLE (ADR-0020).</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Poc"><bpmn:text>Optional input of 10: SKIPPED not-applicable-no-eligible-findings when nothing qualifies; a failed pool never holds the report. Unit-tested only.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Cve" sourceRef="Note_Cve" targetRef="Task_CveReach"/>
+    <bpmn:association id="Assoc_Poc" sourceRef="Note_Poc" targetRef="Task_PocFix"/>
     <bpmn:association id="Assoc_Codeql" sourceRef="Note_Codeql" targetRef="Task_CodeqlSast"/>
     <bpmn:association id="Assoc_Chains" sourceRef="Note_Chains" targetRef="Task_ChainRefute"/>
     <bpmn:association id="Assoc_Standalone" sourceRef="Note_Standalone" targetRef="Task_Red"/>
@@ -112,7 +123,7 @@
     <bpmndi:BPMNPlane id="Plane_ReportHappyPath" bpmnElement="Process_ReportHappyPath">
       <bpmndi:BPMNShape id="Shape_Lane_Evidence" bpmnElement="Lane_Evidence" isHorizontal="true"><dc:Bounds x="20" y="20" width="3600" height="340"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Claims" bpmnElement="Lane_Claims" isHorizontal="true"><dc:Bounds x="20" y="360" width="3600" height="180"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="720" width="3600" height="240"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="720" width="3600" height="330"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Lane_Chains" bpmnElement="Lane_Chains" isHorizontal="true"><dc:Bounds x="20" y="540" width="3600" height="180"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_CodeqlSast" bpmnElement="Task_CodeqlSast"><dc:Bounds x="130" y="280" width="200" height="65"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_ChainSplit" bpmnElement="Gateway_ChainSplit"><dc:Bounds x="2030" y="425" width="50" height="50"/></bpmndi:BPMNShape>
@@ -123,6 +134,10 @@
       <bpmndi:BPMNShape id="Shape_ReportJoin" bpmnElement="Gateway_ReportJoin"><dc:Bounds x="2730" y="805" width="50" height="50"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Note_Codeql" bpmnElement="Note_Codeql"><dc:Bounds x="400" y="885" width="440" height="60"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Note_Chains" bpmnElement="Note_Chains"><dc:Bounds x="2150" y="885" width="440" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_CveReach" bpmnElement="Task_CveReach"><dc:Bounds x="430" y="280" width="200" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_PocFix" bpmnElement="Task_PocFix"><dc:Bounds x="2330" y="410" width="190" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Cve" bpmnElement="Note_Cve"><dc:Bounds x="20" y="975" width="520" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Poc" bpmnElement="Note_Poc"><dc:Bounds x="2640" y="975" width="440" height="60"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Start" bpmnElement="Start_Run"><dc:Bounds x="60" y="132" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Component" bpmnElement="Task_Component"><dc:Bounds x="130" y="110" width="160" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_EvidenceSplit" bpmnElement="Gateway_EvidenceSplit"><dc:Bounds x="330" y="125" width="50" height="50"/></bpmndi:BPMNShape>
@@ -161,7 +176,7 @@
       <bpmndi:BPMNEdge id="Edge_06" bpmnElement="Flow_06"><di:waypoint x="1570" y="450"/><di:waypoint x="1610" y="450"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_07" bpmnElement="Flow_07"><di:waypoint x="1770" y="450"/><di:waypoint x="1810" y="450"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_08" bpmnElement="Flow_08"><di:waypoint x="1990" y="450"/><di:waypoint x="2030" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="2290" y="450"/><di:waypoint x="2710" y="450"/><di:waypoint x="2710" y="830"/><di:waypoint x="2730" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="2290" y="450"/><di:waypoint x="2330" y="450"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="3000" y="830"/><di:waypoint x="3040" y="830"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="3210" y="830"/><di:waypoint x="3250" y="830"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="3430" y="830"/><di:waypoint x="3500" y="830"/></bpmndi:BPMNEdge>
@@ -179,6 +194,11 @@
       <bpmndi:BPMNEdge id="Edge_09B" bpmnElement="Flow_09B"><di:waypoint x="2780" y="830"/><di:waypoint x="2820" y="830"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_Assoc_Codeql" bpmnElement="Assoc_Codeql"><di:waypoint x="500" y="885"/><di:waypoint x="300" y="345"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_Assoc_Chains" bpmnElement="Assoc_Chains"><di:waypoint x="2400" y="885"/><di:waypoint x="2500" y="670"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveA" bpmnElement="Flow_CveA"><di:waypoint x="355" y="175"/><di:waypoint x="355" y="312"/><di:waypoint x="430" y="312"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveB" bpmnElement="Flow_CveB"><di:waypoint x="630" y="312"/><di:waypoint x="870" y="312"/><di:waypoint x="870" y="160"/><di:waypoint x="880" y="150"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Poc" bpmnElement="Flow_Poc"><di:waypoint x="2520" y="450"/><di:waypoint x="2710" y="450"/><di:waypoint x="2710" y="830"/><di:waypoint x="2730" y="830"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Cve" bpmnElement="Assoc_Cve"><di:waypoint x="300" y="975"/><di:waypoint x="500" y="345"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Poc" bpmnElement="Assoc_Poc"><di:waypoint x="2700" y="975"/><di:waypoint x="2450" y="490"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

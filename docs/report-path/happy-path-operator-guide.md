@@ -179,6 +179,20 @@ For SCA, seed Grype/OSV snapshots through the maintenance sync outside the engag
 engagement binds exact snapshot bytes and accepts only the configured age window. Do not enable
 network access to make a stale scan pass.
 
+`06-cve-reachability` ([ADR-0022](../decisions/ADR-0022-dependency-reachability.md),
+[`docs/dependency-reachability.md`](../dependency-reachability.md)) now runs in `full_review` after SCA,
+the code property graph and CodeQL: for each SCA match it takes the advisory's vulnerable symbols (a
+reviewed map, else the OSV index) and asks the language's engines whether an entry point reaches
+them. Only a CPG, CodeQL or LSP path makes a match `reachable`; `unreachable` needs a complete CPG
+search; everything else is `unknown` with a gap, and a dependency finding without `reachable` is
+capped at High. Optional run inputs, all hash-bound into the 06 attempt:
+
+- `$RUN_ROOT/inputs/cve-reachability-functions.json` (reviewed advisory -> symbols; needed outside Go,
+  where OSV rarely lists symbols) and `inputs/reachability-entry-points.json` (extra roots);
+- `$RUN_ROOT/inputs/dependency-reachability/` with CodeQL tables, LSP call-hierarchy and tree-sitter
+  output for Go/Java/C#/JS/Python. No job produces these in a run yet, so without them those
+  languages are `unknown` (`engine-input-absent`).
+
 ## 4. Characterize components and assemble review requests
 
 `01-component-characterization` derives stable components, ownership, languages, trust boundaries,
@@ -223,6 +237,14 @@ break each chain and publishes the hash-linked attack-chain ledger. With no seed
 (`not-applicable-no-chain-seeds`). Chains are candidates, never findings; lane-14 ops return rather
 than raise, so a lane-14 failure never stops the report. Lane 14 has not run live yet.
 
+Lane 12b (`12b-poc-and-fix`, brief F) runs after 12 for findings that are independently verified,
+scored CRITICAL and REACHABLE (the report's own eligibility code, at most `poc_findings_max`). One
+`poc-fix-author` persona cell per finding writes a light proof of concept and a proposed fix, citing
+only hash-pinned lines around the finding and its witness; a denylist rejects unsafe PoC text, and
+a rejected PoC is dropped, never published. With nothing eligible it is SKIPPED
+(`not-applicable-no-eligible-findings`); like lane 14 it is an optional input of 10, so a failure
+never holds the report. Lane 12b has not run live yet.
+
 If a member is missing, timed out, canceled or blocked, retain that state as a coverage gap. Never
 reduce the expected-member manifest after dispatch to force a rendezvous.
 
@@ -230,8 +252,9 @@ reduce the expected-member manifest after dispatch to force a rendezvous.
 
 The `full_review` lifecycle invokes `synthesis_report` with exact accepted inputs and publishes `report.json`,
 `report.md`, coverage appendix, trace index, publication manifest, LaTeX presentation input,
-HTML, PDF and render manifests, plus `attack-chains.json` (the optional "Attack chains" section:
-`PUBLISHED`, or `SKIPPED`/`ABSENT` with the reason). Its publication status must remain
+HTML, PDF and render manifests, plus two optional sections, each `PUBLISHED` or `SKIPPED`/`ABSENT`
+with the reason: `attack-chains.json` ("Attack chains") and `poc-fix-section.json` (the lane-12b
+PoC and proposed fix under each Critical REACHABLE finding). Its publication status must remain
 `DRAFT_EVIDENCE_BACKED`, with `final=false` and `human_signoff=false`, until the final gate is
 human-authorized.
 
@@ -275,5 +298,6 @@ operator and design-document HTML publications are self-contained, but this demo
 | Rendezvous never closes | Inspect expected members and durable terminal states; preserve blocked/missing members. |
 | Synthesis reports `OK_WITH_GAPS` | Read the limitations and coverage appendix; this is an honest accepted draft state. |
 | Dagster shows old definitions | Run `orchestrator/dagster/code-location.sh reload`. |
+| Every dependency finding is `unknown` reachability | Read the gaps in 06's `outputs/dependency-reachability.json`: `no-advisory-symbols` needs a reviewed map; `engine-input-absent` means no CPG/CodeQL/LSP input for that language. |
 | A model step seems hung | `orchestrator/tail-run-log.sh "$RUN_ID" --level warn`: `IDLE` lines name the stalled call; set `APPSEC_IDLE_KILL_SECONDS` to stop such calls automatically. |
 | CodeQL reports every language `UNAVAILABLE` | The `audit-codeql` image has no B16 record yet; build and register it (`images/audit-codeql/README.md`). |

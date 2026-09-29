@@ -82,7 +82,7 @@ Top-level process docs now live under `docs/`:
 - [`docs/design-parity/design-parity-completion-plan.md`](docs/design-parity/design-parity-completion-plan.md)
 - [`docs/dagster/critical-findings-sarif-job.md`](docs/dagster/critical-findings-sarif-job.md)
 - [`docs/report-path/happy-path-operator-guide.md`](docs/report-path/happy-path-operator-guide.md) (run to a draft report; tail the run log)
-- [`docs/run-log.md`](docs/run-log.md), [`docs/osv-feed.md`](docs/osv-feed.md), [`docs/language-servers.md`](docs/language-servers.md)
+- [`docs/run-log.md`](docs/run-log.md), [`docs/osv-feed.md`](docs/osv-feed.md), [`docs/language-servers.md`](docs/language-servers.md), [`docs/dependency-reachability.md`](docs/dependency-reachability.md)
 
 The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).
 Machine-readable implementation readiness lives in
