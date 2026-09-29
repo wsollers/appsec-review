@@ -338,6 +338,16 @@ OPEN:
 - `codeql-cpp-traced` tables reach 06 only once C's `02-native-build -> 02-codeql-sast` wiring lands.
 - No Ruby or Rust CodeQL pack; PHP has no CodeQL extractor (lsp/treesitter only).
 
+## G: per-language CodeQL nodes and reachability engines (brief G, design agreed 2026-09-29)
+
+Design: per-language `02-codeql-<lang>` nodes (parallel; compiled languages gated on a successful build of that language, otherwise a gap, never a failure), engine jobs `06-reachability-codeql` and `06-reachability-ir` (same table shape), and `06-cve-reachability` becomes the Python correlator whose output feeds the report and the 07/08/09 red/blue lanes. See `docs/agent-briefs/G-per-language-codeql-reachability.md`.
+
+OPEN (deferred, not in brief G's first cut):
+- [ ] **Java bytecode reachability** in `06-reachability-ir`: a JVM call-graph engine over the built classes and the vendored dependency jars (for example Soot, WALA or ASM-based class-hierarchy/RTA analysis), including shaded/relocated jars, so a Java dependency can be `reachable`/`unreachable` without relying on CodeQL alone.
+- [ ] **.NET IL reachability** in `06-reachability-ir`: the same for C# assemblies (IL call graph over the built assemblies and the vendored NuGet packages, resolving assembly and namespace names to package ids).
+- [ ] Rust MIR/LLVM IR engine and Go SSA engine (same table shape) once the C/C++ LLVM IR + Joern path is qualified.
+- [ ] Reflection, dynamic dispatch, dependency injection and serialisation entry points: record a per-language "incomplete call graph" reason so `unreachable` is never asserted across them.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).
@@ -452,12 +462,3 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-build-resolution` | BLOCKED `STALE_GRANT`: build grants bind to the hash of `artifact-manifest.json`, which intake rewrites on acceptance; the controls had been staged before intake | Operator order: run `phase1_intake` before `build_resolution`/`build_configure stage-control` (`stage-run.sh`, operator guide); this run's controls re-staged after intake |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |
-## G: per-language CodeQL nodes and reachability engines (brief G, design agreed 2026-09-29)
-
-Design: per-language `02-codeql-<lang>` nodes (parallel; compiled languages gated on a successful build of that language, otherwise a gap, never a failure), engine jobs `06-reachability-codeql` and `06-reachability-ir` (same table shape), and `06-cve-reachability` becomes the Python correlator whose output feeds the report and the 07/08/09 red/blue lanes. See `docs/agent-briefs/G-per-language-codeql-reachability.md`.
-
-OPEN (deferred, not in brief G's first cut):
-- [ ] **Java bytecode reachability** in `06-reachability-ir`: a JVM call-graph engine over the built classes and the vendored dependency jars (for example Soot, WALA or ASM-based class-hierarchy/RTA analysis), including shaded/relocated jars, so a Java dependency can be `reachable`/`unreachable` without relying on CodeQL alone.
-- [ ] **.NET IL reachability** in `06-reachability-ir`: the same for C# assemblies (IL call graph over the built assemblies and the vendored NuGet packages, resolving assembly and namespace names to package ids).
-- [ ] Rust MIR/LLVM IR engine and Go SSA engine (same table shape) once the C/C++ LLVM IR + Joern path is qualified.
-- [ ] Reflection, dynamic dispatch, dependency injection and serialisation entry points: record a per-language "incomplete call graph" reason so `unreachable` is never asserted across them.
