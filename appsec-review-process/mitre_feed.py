@@ -1,13 +1,16 @@
-"""Immutable MITRE ATT&CK / CAPEC reference snapshot publisher (sibling of ``osv_feed.py``, ADR-0026).
+"""Immutable MITRE ATT&CK / CAPEC / CWE reference snapshot publisher (sibling of ``osv_feed.py``, ADR-0026).
 
 Downloads release-pinned STIX 2.1 bundles (ATT&CK Enterprise by default, Mobile and ICS on request;
-CAPEC from ``mitre/cti``), verifies each parses as the expected bundle at the pinned upstream version
-and bytes, and publishes an immutable snapshot:
+CAPEC from ``mitre/cti``) and the version-pinned MITRE CWE catalog (``cwec_v<version>.xml.zip``,
+brief O1b), verifies each parses as the expected data at the pinned upstream version (and bytes, where
+pinned), and publishes an immutable snapshot:
 
     <root>/snapshots/<snapshot_id>/manifest.json
     <root>/snapshots/<snapshot_id>/NOTICE.txt
     <root>/snapshots/<snapshot_id>/reference.json          (derived by attack_reference.py, hash-listed)
+    <root>/snapshots/<snapshot_id>/cwe-catalog.json        (derived by cwe_catalog.py, hash-listed)
     <root>/snapshots/<snapshot_id>/sources/<source>.json    (unmodified upstream bundles)
+    <root>/snapshots/<snapshot_id>/sources/cwe.xml.zip      (unmodified upstream CWE zip)
 
 ``<root>/current.json`` is advanced atomically only after the snapshot directory is complete.
 Reference data only: an ATT&CK technique or CAPEC pattern id labels a claim; it is never evidence.
@@ -18,7 +21,9 @@ ceiling still bites) or, if there never was one, the source is a recorded gap.
 
 ``resolve()`` is the read side with the SCA registry's semantics (age from the ORIGINAL fetched_at,
 ``SnapshotBlocked`` / ``SnapshotStale`` / ``SnapshotInvalid``); the SCA registry is container-DB
-shaped, so this feed is not bound into it.
+shaped, so this feed is not bound into it. ``resolve(kinds=...)`` ages only the named source kinds, so
+a stale CWE download never withholds ATT&CK tags and a stale ATT&CK bundle never demotes the CWE
+catalog (``cwe_catalog.Catalog`` resolves ``kinds=("cwe",)``).
 """
 from __future__ import annotations
 
@@ -35,6 +40,7 @@ import uuid
 from datetime import datetime, timezone
 
 import attack_reference
+import cwe_catalog
 from dependency_snapshot_registry import SnapshotBlocked, SnapshotInvalid, SnapshotStale
 from execution_state import Blocked, Lock, atomic_json, beneath, event, file_hash, now, read_json
 import tunables
@@ -48,6 +54,8 @@ USER_AGENT = "appsec-review-mitre-publisher/1"
 DEFAULT_KEEP = 3
 MAX_SOURCE_BYTES = 256 * 1024 ** 2
 REFERENCE_NAME = "reference.json"
+CWE_TABLE_NAME = "cwe-catalog.json"
+REFERENCE_KINDS = ("attack", "capec")
 ATTACK_RELEASE = "19.2"
 # Pinned by release tag, never master/latest at run time (verified 2026-09-29: the tags resolve and the
 # bytes hash as below). Raising a pin is a reviewed change to this table.
@@ -66,12 +74,18 @@ SOURCES = {
               "url": "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v19.2/capec/2.1/stix-capec.json",
               "upstream_version": "3.9", "licence": "MITRE CAPEC Terms of Use",
               "sha256": "ee6244f48259c1963d0507535e1843d67ba08fe58b4dfe351c1b74f9e376fa69"},
+    # CWE List 4.19 (current release per cwe.mitre.org/data/archive.html, 2026-09-29). Pinned by
+    # version; the bytes were NOT hashed because cwe.mitre.org is unreachable from the authoring
+    # environment. Set sha256 from the first WSL sync's manifest entry (a reviewed change).
+    "cwe": {"kind": "cwe", "url": "https://cwe.mitre.org/data/xml/cwec_v4.19.xml.zip",
+            "upstream_version": "4.19", "licence": "MITRE CWE Terms of Use", "sha256": None},
 }
-DEFAULT_SOURCES = ("enterprise-attack", "capec")      # mobile/ICS: APPSEC_MITRE_SOURCES or --sources
-NOTICE = """MITRE ATT&CK and CAPEC attribution
-==================================
+DEFAULT_SOURCES = ("enterprise-attack", "capec", "cwe")      # mobile/ICS: APPSEC_MITRE_SOURCES or --sources
+NOTICE = """MITRE ATT&CK, CAPEC and CWE attribution
+=======================================
 
-This directory holds unmodified copies of MITRE STIX 2.1 bundles retrieved from:
+This directory holds unmodified copies of MITRE STIX 2.1 bundles and the MITRE CWE XML catalog
+retrieved from:
 {urls}
 
 ATT&CK: (c) 2015-2026 The MITRE Corporation. This work is reproduced and distributed with the
@@ -87,15 +101,22 @@ non-exclusive, royalty-free license to use Common Attack Pattern Enumeration and
 (CAPEC) for research, development, and commercial purposes. Any copy you make for such purposes is
 authorized provided that you reproduce MITRE's copyright designation and this license in any such copy.
 
+CWE: (c) 2006-2026 The MITRE Corporation. CWE and the CWE logo are trademarks of The MITRE Corporation.
+Licence (MITRE CWE Terms of Use): The MITRE Corporation (MITRE) hereby grants you a non-exclusive,
+royalty-free license to use Common Weakness Enumeration (CWE) for research, development, and
+commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce
+MITRE's copyright designation and this license in any such copy.
+
 DISCLAIMERS: ALL DOCUMENTS AND THE INFORMATION CONTAINED THEREIN ARE PROVIDED ON AN "AS IS" BASIS AND
 THE CONTRIBUTOR, THE ORGANIZATION HE/SHE REPRESENTS OR IS SPONSORED BY (IF ANY), THE MITRE CORPORATION,
 ITS BOARD OF TRUSTEES, OFFICERS, AGENTS, AND EMPLOYEES, DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED.
 
 The copyright statements carried inside each bundle are recorded in manifest.json ("markings").
-reference.json is derived from these bundles by attack_reference.py; it keeps this attribution.
+reference.json is derived from these bundles by attack_reference.py and cwe-catalog.json from the CWE
+XML by cwe_catalog.py; both keep this attribution.
 
-This is reference data. An ATT&CK technique or CAPEC pattern id labels a claim; it never establishes
-that a weakness exists, is reachable or is exploitable in any reviewed target.
+This is reference data. An ATT&CK technique, CAPEC pattern or CWE id labels a claim; it never
+establishes that a weakness exists, is reachable or is exploitable in any reviewed target.
 """
 
 
@@ -182,6 +203,11 @@ def _sha256(path):
     return file_hash(path)
 
 
+def source_file(name, kind):
+    """Published file name of one source under ``sources/`` (the CWE zip keeps its format)."""
+    return f"{name}.xml.zip" if kind == "cwe" else f"{name}.json"
+
+
 def validate_source(path, spec):
     """The bundle must parse as the expected STIX bundle at the pinned upstream version (and, when the
     spec pins bytes, hash to them). Returns the summary; fails closed on anything else."""
@@ -191,7 +217,13 @@ def validate_source(path, spec):
     if spec.get("sha256") and _sha256(path) != spec["sha256"]:
         raise ValueError("MITRE bundle bytes do not match the pinned sha256")
     data = path.read_bytes()
-    summary = (attack_reference.summarize_attack if spec["kind"] == "attack" else attack_reference.summarize_capec)(data)
+    if spec["kind"] == "cwe":
+        parsed = cwe_catalog.parse_feed(data)
+        summary = {"upstream_version": parsed["upstream_version"], "record_count": len(parsed["entries"]),
+                   "marking_statements": []}
+    else:
+        summary = (attack_reference.summarize_attack if spec["kind"] == "attack"
+                   else attack_reference.summarize_capec)(data)
     if summary["upstream_version"] != spec["upstream_version"]:
         raise ValueError(f"MITRE bundle is version {summary['upstream_version']!r}, pinned {spec['upstream_version']!r}")
     return summary
@@ -268,15 +300,16 @@ def sync(root=None, coordinator_id=None, clock=utcnow, fetch_file=download, sour
                 raise RuntimeError("no MITRE source produced a usable bundle: "
                                    + "; ".join(f"{n}: {e.get('error')}" for n, e in entries.items()))
             reference = _build_reference(staging, entries)
+            cwe_table = _build_cwe(staging, entries)
             manifest = {
                 "schema": SCHEMA, "feed_id": FEED_ID, "captured_at": timestamp(started),
                 "parent_snapshot_id": current["snapshot_id"] if current else None,
-                "sources": entries, "reference": reference,
+                "sources": entries, "reference": reference, "cwe_catalog": cwe_table,
                 "data_timestamp": min(entries[n]["fetched_at"] for n in usable),
                 "gaps": sorted(n for n, e in entries.items() if e["status"] == "FAILED"),
                 "licences": {n: e["licence"] for n, e in sorted(entries.items())},
                 "markings": sorted({s for e in entries.values() for s in e.get("marking_statements", [])}),
-                "limitations": ["Reference data only; an ATT&CK or CAPEC id labels a claim and is never evidence."],
+                "limitations": ["Reference data only; an ATT&CK, CAPEC or CWE id labels a claim and is never evidence."],
             }
             snapshot_id = _snapshot_id(manifest)
             manifest["snapshot_id"] = snapshot_id
@@ -313,8 +346,9 @@ def sync(root=None, coordinator_id=None, clock=utcnow, fetch_file=download, sour
 def _build_reference(staging, entries):
     """Derive reference.json from the staged bundles. Unlike the OSV index this is the feed's product,
     so a derivation failure fails the publication (the prior pointer stays)."""
-    sources = {name: (entry["kind"], (staging / "sources" / f"{name}.json").read_bytes())
-               for name, entry in entries.items() if entry["status"] != "FAILED"}
+    sources = {name: (entry["kind"], (staging / "sources" / source_file(name, entry["kind"])).read_bytes())
+               for name, entry in entries.items()
+               if entry["status"] != "FAILED" and entry["kind"] in REFERENCE_KINDS}
     data = attack_reference.reference_bytes(attack_reference.derive(sources))
     target = staging / REFERENCE_NAME
     target.write_bytes(data)
@@ -326,6 +360,25 @@ def _build_reference(staging, entries):
                        "capec_patterns": len((reference["capec"] or {}).get("patterns", []))}}
 
 
+def _build_cwe(staging, entries):
+    """Derive cwe-catalog.json (same shape as the committed catalog) from the CWE zip, or None when
+    no CWE source is usable in this snapshot."""
+    usable = [(name, entry) for name, entry in sorted(entries.items())
+              if entry["kind"] == "cwe" and entry["status"] != "FAILED"]
+    if not usable:
+        return None
+    name, entry = usable[0]
+    source = staging / "sources" / source_file(name, "cwe")
+    table = cwe_catalog.feed_table(cwe_catalog.parse_feed(source.read_bytes()), source.name, entry["sha256"])
+    data = cwe_catalog.table_bytes(table)
+    target = staging / CWE_TABLE_NAME
+    target.write_bytes(data)
+    return {"path": CWE_TABLE_NAME, "source": name, "schema": cwe_catalog.CATALOG_SCHEMA,
+            "sha256": _sha256(target), "size_bytes": len(data), "version": table["version"],
+            "counts": {"weaknesses": sum(not row["deprecated"] for row in table["entries"]),
+                       "deprecated": sum(row["deprecated"] for row in table["entries"])}}
+
+
 def _events(root):
     path = Path(root) / "events.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -335,9 +388,9 @@ def _events(root):
 def _carry(root, staging, name, spec, previous, prior_entry, reason):
     """Keep the last good bundle for ``name`` (original fetched_at) or record a gap."""
     if prior_entry and prior_entry.get("status") != "FAILED" and previous:
-        source = Path(root) / "snapshots" / previous["snapshot_id"] / "sources" / f"{name}.json"
+        source = Path(root) / "snapshots" / previous["snapshot_id"] / "sources" / source_file(name, spec["kind"])
         if source.is_file() and _sha256(source) == prior_entry["sha256"]:
-            target = staging / "sources" / f"{name}.json"
+            target = staging / "sources" / source_file(name, spec["kind"])
             _link_or_copy(source, target)
             return {**{k: prior_entry[k] for k in prior_entry
                        if k not in ("status", "error", "carried_reason")},
@@ -371,7 +424,7 @@ def _refresh_one(root, staging, name, spec, previous, prior_entry, started, fetc
             raise ValueError("MITRE bundle size differs from the transport length")
         summary = validate_source(bundle, spec)
         digest = _sha256(bundle)
-        target = staging / "sources" / f"{name}.json"
+        target = staging / "sources" / source_file(name, spec["kind"])
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(bundle, target)
         shutil.rmtree(work, ignore_errors=True)
@@ -409,7 +462,7 @@ def _verified(root):
     for name, entry in manifest["sources"].items():
         if entry["status"] == "FAILED":
             continue
-        path = directory / "sources" / f"{name}.json"
+        path = directory / "sources" / source_file(name, entry["kind"])
         if not path.is_file() or path.is_symlink():
             raise SnapshotInvalid(f"MITRE bundle missing: {name}")
         if _sha256(path) != entry["sha256"] or path.stat().st_size != entry["size_bytes"]:
@@ -419,6 +472,12 @@ def _verified(root):
     if (not path.is_file() or path.is_symlink() or _sha256(path) != reference["sha256"]
             or path.stat().st_size != reference["size_bytes"]):
         raise SnapshotInvalid("MITRE reference.json integrity mismatch")
+    table = manifest.get("cwe_catalog")
+    if table is not None:
+        path = directory / table["path"]
+        if (not path.is_file() or path.is_symlink() or _sha256(path) != table["sha256"]
+                or path.stat().st_size != table["size_bytes"]):
+            raise SnapshotInvalid("MITRE cwe-catalog.json integrity mismatch")
     return current, manifest, directory
 
 
@@ -428,14 +487,17 @@ def verify(root=None):
     current, manifest, _ = _verified(root)
     return {"snapshot_id": current["snapshot_id"], "data_timestamp": manifest["data_timestamp"],
             "gaps": manifest["gaps"], "reference": manifest["reference"]["counts"],
+            "cwe_catalog": (manifest.get("cwe_catalog") or {}).get("counts"),
             "upstream_versions": {n: e.get("upstream_version") for n, e in sorted(manifest["sources"].items())
                                   if e["status"] != "FAILED"}}
 
 
-def resolve(root=None, *, now, max_age_seconds=None):
+def resolve(root=None, *, now, max_age_seconds=None, kinds=None):
     """Verified identity of the current snapshot when its OLDEST usable source (original fetched_at)
     is within the ceiling. ``SnapshotBlocked`` when absent, ``SnapshotStale`` when over the ceiling,
-    ``SnapshotInvalid`` on any integrity failure. ``now`` is required; never read from the clock here."""
+    ``SnapshotInvalid`` on any integrity failure. ``now`` is required; never read from the clock here.
+    ``kinds`` restricts the age check to sources of those kinds; ``SnapshotBlocked`` when the snapshot
+    holds no usable source of any of them."""
     if not isinstance(now, datetime) or now.tzinfo is None:
         raise ValueError("now must be a timezone-aware datetime")
     limit = max_age_seconds if max_age_seconds is not None else default_max_age_seconds()
@@ -446,8 +508,11 @@ def resolve(root=None, *, now, max_age_seconds=None):
         raise SnapshotBlocked("the MITRE feed root does not exist; the publisher has not run here")
     try:
         current, manifest, directory = _verified(root)
-        oldest = min(parse_time(entry["fetched_at"]) for entry in manifest["sources"].values()
-                     if entry["status"] != "FAILED")
+        aged = [entry for entry in manifest["sources"].values()
+                if entry["status"] != "FAILED" and (kinds is None or entry["kind"] in kinds)]
+        if not aged:
+            raise SnapshotBlocked(f"the MITRE snapshot {current['snapshot_id']} has no usable {'/'.join(kinds)} source")
+        oldest = min(parse_time(entry["fetched_at"]) for entry in aged)
     except (SnapshotBlocked, SnapshotInvalid):
         raise
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -462,6 +527,8 @@ def resolve(root=None, *, now, max_age_seconds=None):
             "age_seconds": age, "max_age_seconds": limit, "gaps": manifest["gaps"],
             "reference_path": str(directory / manifest["reference"]["path"]),
             "reference_sha256": manifest["reference"]["sha256"],
+            "cwe_catalog_path": str(directory / manifest["cwe_catalog"]["path"]) if manifest.get("cwe_catalog") else None,
+            "cwe_catalog_sha256": (manifest.get("cwe_catalog") or {}).get("sha256"),
             "upstream_versions": {n: e.get("upstream_version") for n, e in sorted(manifest["sources"].items())
                                   if e["status"] != "FAILED"}}
 
@@ -480,6 +547,7 @@ def main(argv=None):
     resolve_parser.add_argument("--root", type=Path)
     resolve_parser.add_argument("--now", help="UTC timestamp; default the wall clock")
     resolve_parser.add_argument("--max-age-seconds", type=int)
+    resolve_parser.add_argument("--kinds", help="comma list of source kinds to age (attack,capec,cwe); default all")
     args = parser.parse_args(argv)
     if args.command == "sync":
         sources = [item.strip() for item in args.sources.split(",")] if args.sources else None
@@ -489,7 +557,8 @@ def main(argv=None):
     else:
         try:
             result = resolve(args.root, now=parse_time(args.now) if args.now else utcnow(),
-                             max_age_seconds=args.max_age_seconds)
+                             max_age_seconds=args.max_age_seconds,
+                             kinds=tuple(k.strip() for k in args.kinds.split(",")) if args.kinds else None)
         except SnapshotBlocked as exc:
             print(json.dumps({"status": "BLOCKED", "gap": attack_reference.GAP_MISSING, "cause": str(exc)})); return 2
         except SnapshotStale as exc:

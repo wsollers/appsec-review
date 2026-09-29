@@ -299,7 +299,7 @@ def _cwe_judgment(stage: str, decision: dict[str, Any]) -> dict[str, Any] | None
     except cwe_catalog.CWEError as exc:
         raise Blocked(f"{stage}: {exc}") from None
     return {"stage": stage, "cwe_id": cwe_id, "cwe_name": _cwe_catalog().name(cwe_id),
-            "rationale": value["rationale"].strip()[:600]}
+            "rationale": value["rationale"].strip()[:600], "catalog": _cwe_catalog().source}
 
 
 def _judged(record: dict[str, Any], upstream: dict[str, Any], judgment: dict[str, Any] | None) -> dict[str, Any]:

@@ -87,7 +87,7 @@ class Context:
     def __init__(self, run_root: Path, snapshot_dir: Path | None = None):
         self.run_root = Path(run_root)
         self.catalog = cwe_catalog.Catalog()
-        self.gaps: list[str] = []
+        self.gaps: list[str] = [self.catalog.gap_line()] if self.catalog.gap else []
         self.bindings = input_bindings(self.run_root)
         entry = self.run_root / ENTRY_POINTS
         self.entry_points: list[str] = []
@@ -167,7 +167,14 @@ def _cwe(ctx: Context, finding: dict[str, Any], code: list[dict[str, Any]]) -> d
             source = f"tool rule {row['tool_id']} {row['rule_id']}"
             if source not in entries[cwe_id]["sources"]:
                 entries[cwe_id]["sources"].append(source)
-    judgments = sorted(finding.get("cwe_judgments") or [], key=lambda item: STAGE_RANK.get(item["stage"], 9))
+    judgments = []
+    for item in sorted(finding.get("cwe_judgments") or [], key=lambda item: STAGE_RANK.get(item["stage"], 9)):
+        try:                          # validated upstream, possibly against a catalog no longer in force
+            ctx.catalog.validate(item["cwe_id"])
+        except cwe_catalog.CWEError as exc:
+            gaps.append(f"reviewer {item['stage']} CWE judgment dropped: {exc}")
+            continue
+        judgments.append(item)
     for item in judgments:
         cwe_id = ctx.catalog.validate(item["cwe_id"])
         entries.setdefault(cwe_id, {"cwe_id": cwe_id, "name": ctx.catalog.name(cwe_id), "sources": []})
