@@ -29,6 +29,9 @@ advisory ("package X, function Y") to the names a language uses was a single nam
    pool bounds concurrency, as for every B13 job). All share code (`codeql_sast.py`, one
    `run(run_id, dagster_id, language)`), the output contract `codeql-language` and the schema
    `codeql-language.schema.json`; each has its own template, namespace and fingerprint.
+   The nodes are not edges of `02-evidence-assembly`: its persona pool makes one check per producer
+   and eight more would exceed the shared `pool_groups_max` (32); the claim ledger still runs after
+   them through `06-reachability-codeql` -> `06-cve-reachability` -> `claim-ledger-routing`.
 
 2. **Gating.**
    * Interpreted languages (`javascript`, `python`, `ruby`) need only the accepted intake.

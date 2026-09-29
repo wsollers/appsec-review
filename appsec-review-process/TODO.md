@@ -380,6 +380,9 @@ OPEN (deferred, not in brief G's first cut):
 - [ ] Controller to confirm: node name `02-codeql-javascript` (CodeQL's `javascript` extractor, JS+TS);
       cpp always also runs build-mode none next to traced rows; `06-cve-reachability` now feeds
       `claim-ledger-routing` and `10-synthesis-report` directly (new required edges).
+- [ ] Controller to confirm: the `02-codeql-<lang>` nodes are NOT edges of `02-evidence-assembly`
+      (brief asked to move the edge; 34 producers would exceed `pool_groups_max` 32 in its persona
+      pool). Ordering into the ledger holds via 06-reachability-codeql -> 06 -> claim-ledger-routing.
 
 ## Breakage log
 

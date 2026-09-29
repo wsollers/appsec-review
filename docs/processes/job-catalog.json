@@ -1180,14 +1180,6 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
-        "job:02-codeql-cpp",
-        "job:02-codeql-csharp",
-        "job:02-codeql-go",
-        "job:02-codeql-java",
-        "job:02-codeql-javascript",
-        "job:02-codeql-python",
-        "job:02-codeql-ruby",
-        "job:02-codeql-rust",
         "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
@@ -1828,7 +1820,15 @@
       "leaves": [
        "legacy-pregather",
        "job:02-build-resolution",
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -1843,14 +1843,6 @@
        "job:02-standards-source-ingest",
        "job:02-test-intelligence-ingest",
        "job:02-source-sast",
-       "job:02-codeql-cpp",
-       "job:02-codeql-csharp",
-       "job:02-codeql-go",
-       "job:02-codeql-java",
-       "job:02-codeql-javascript",
-       "job:02-codeql-python",
-       "job:02-codeql-ruby",
-       "job:02-codeql-rust",
        "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
@@ -4041,14 +4033,6 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
-        "job:02-codeql-cpp",
-        "job:02-codeql-csharp",
-        "job:02-codeql-go",
-        "job:02-codeql-java",
-        "job:02-codeql-javascript",
-        "job:02-codeql-python",
-        "job:02-codeql-ruby",
-        "job:02-codeql-rust",
         "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
@@ -4735,7 +4719,15 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -4755,14 +4747,6 @@
        "job:02-build-configure",
        "job:02-native-build",
        "job:02-source-sast",
-       "job:02-codeql-cpp",
-       "job:02-codeql-csharp",
-       "job:02-codeql-go",
-       "job:02-codeql-java",
-       "job:02-codeql-javascript",
-       "job:02-codeql-python",
-       "job:02-codeql-ruby",
-       "job:02-codeql-rust",
        "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
@@ -8041,46 +8025,6 @@
      "contract": "source-sast"
     },
     {
-     "job": "02-codeql-cpp",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-csharp",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-go",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-java",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-javascript",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-python",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-ruby",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
-     "job": "02-codeql-rust",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
      "job": "02-code-property-graph",
      "kind": "required",
      "contract": "code-property-graph"
@@ -8202,14 +8146,6 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
-    "job:02-codeql-cpp",
-    "job:02-codeql-csharp",
-    "job:02-codeql-go",
-    "job:02-codeql-java",
-    "job:02-codeql-javascript",
-    "job:02-codeql-python",
-    "job:02-codeql-ruby",
-    "job:02-codeql-rust",
     "job:02-code-property-graph",
     "job:02-native-sast",
     "job:02-ir-facts",
@@ -14710,7 +14646,6 @@
     "job:02-codeql-cpp"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14723,7 +14658,6 @@
     "job:02-codeql-csharp"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14736,7 +14670,6 @@
     "job:02-codeql-go"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14749,7 +14682,6 @@
     "job:02-codeql-java"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14762,7 +14694,6 @@
     "job:02-codeql-javascript"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14775,7 +14706,6 @@
     "job:02-codeql-python"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14788,7 +14718,6 @@
     "job:02-codeql-ruby"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
@@ -14801,7 +14730,6 @@
     "job:02-codeql-rust"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly",
     "job:06-reachability-codeql"
    ]
   },
