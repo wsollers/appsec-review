@@ -2,7 +2,7 @@
 
 The Dagster `full_review` job exposes 81 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
-not a recursively scheduled review job. The graph comes from `appsec-review-process/job-graph.json`.
+not a recursively scheduled review job. The graph comes from `appsec-review-process/pipeline/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
 engagement's `data/orchestration/dagster/<dagster_run_id>/<job>/`. Its descendants cannot run.
 Registration does not mean that a worker, its persona implementation or its output contract

@@ -476,7 +476,7 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
   attempt ids). The win arrives per job as jobs are ported to the item executor.
 - [ ] Container items: `job_executor.check_item` refuses `grants.container` until an item needs one
   (route through `container_execution` then). Network grants likewise.
-- [ ] Brief K (registry move) must update the `registry/...` paths in `items/*/item.json`.
+- [x] Brief K (registry move) must update the `registry/...` paths in `items/*/item.json` (done, brief K).
 - [ ] The legacy CLI `operations_doc_ingest.py validate` does not accept executor attempts (different
   inputs record); consumers read `accepted.json` + `result.json` and are unaffected.
 - [ ] Not run live: needs the code location started with `APPSEC_RUN_MODE=dev` in WSL.
@@ -533,6 +533,21 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] William: `const`/`enum` still use Python equality (`0` passes `const: false`), as before. Strict JSON
       equality (`schema_validate.json_equal`, already used by `uniqueItems`) changes the rejection message in
       three tests owned elsewhere (owasp_dispatch, evidence_index_metrics, pool_rendezvous); no published bytes.
+
+## K: job definitions in `appsec-review-process/pipeline/` (ADR-0028, brief K, branch `registry-move`)
+- [x] `registry/*` and `job-graph.json` moved to `appsec-review-process/pipeline/` (pure `git mv`); every
+  path comes from `registry_paths.py`; catalogs, parity views and tunables doc regenerated.
+- [ ] Controller: prod fingerprints change for every job with a `registry/` or `job-graph.json` key
+  (paths are hash keys; record content is byte-identical). See
+  `docs/decisions/ADR-0028-fingerprint-comparison.md`. Accepted prod runs rerun once.
+- [ ] Controller: a stable logical key (`kind/id`) for implementation maps would stop future moves
+  invalidating fingerprints; that is a logic change, not done here.
+- [ ] `phase-1-implementation-prompt.md` (prompt-hash attested, A01) and
+  `pipeline/prompt-fragments/governing-rules.md` (prompt content) still say `registry/`; editing either
+  changes an attested or live prompt, so they were left for the owner.
+- [ ] Not run live: needs the Dagster code location restarted in WSL (`orchestrator/dagster/definitions.py`
+  now reads `registry_paths`), and `images/registry_records.py generate` writes to
+  `pipeline/container-images/` (host-local records under the old path are no longer read).
 
 ## Breakage log
 

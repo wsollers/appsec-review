@@ -3,6 +3,27 @@
 This registry turns the proposal documents into reusable review records. Lanes remain the lifecycle;
 registry jobs are bounded units a lane can dispatch or render into handoffs.
 
+## Where job definitions live
+
+Everything that defines a job sits in this one folder, `appsec-review-process/pipeline/` (brief K,
+[ADR-0028](../../docs/decisions/ADR-0028-job-definitions-in-one-pipeline-folder.md)):
+
+| Path | Holds |
+|---|---|
+| `job-graph.json` | lifecycle nodes, lanes, dependencies, required artifacts |
+| `tunables.json` | shared tunables (per-job ones sit in each job template) |
+| `job-templates/`, `output-contracts/`, `domains/`, `tooling-profiles/` | the composition records |
+| `permission-capabilities/`, `container-images/` | capability definitions and pinned image records |
+| `prompt-fragments/` | prompt text shared by job templates |
+| `AUTHORING-TEMPLATE.md` | what makes a good record |
+
+Naming: this is **not** the repository-root `pipeline/` folder, which holds the Layer 1 evidence
+scripts (`pipeline/engagement_job.sh`, report rendering). The two are unrelated; this one is always
+written with its `appsec-review-process/` prefix.
+
+Code never spells these paths: `../registry_paths.py` holds every one of them and every reader
+imports it. Personas and roles live in `../personas/`, whose paths `../persona_registry.py` owns.
+
 Record types:
 
 The accepted Phase 1 runner executes `00-intake` with the `intake-coordinator` persona and role,

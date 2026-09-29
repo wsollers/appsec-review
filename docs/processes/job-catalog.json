@@ -3818,7 +3818,7 @@
   {
    "id": "lifecycle",
    "name": "Lifecycle graph (full_review, job-graph.json)",
-   "source": "appsec-review-process/job-graph.json",
+   "source": "appsec-review-process/pipeline/job-graph.json",
    "about": "All current lifecycle nodes, grouped by lane in process-manifest.json order.",
    "groups": [
     {
@@ -7286,14 +7286,14 @@
      "input": "hashed imports"
     }
    ],
-   "inputs_source": "registry/job-templates/00-intake.json",
+   "inputs_source": "pipeline/job-templates/00-intake.json",
    "output_dir": "runs/<run_id>/data/jobs/00-intake/",
    "output_files": [
     "outputs/intake.json",
     "outputs/build-discovery.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/intake.json",
+   "outputs_source": "pipeline/output-contracts/intake.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -7346,7 +7346,7 @@
      "input": "40-hex commit pin per repository"
     }
    ],
-   "inputs_source": "registry/job-templates/02-ossf-scorecard.json",
+   "inputs_source": "pipeline/job-templates/02-ossf-scorecard.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ossf-scorecard/",
    "output_files": [
     "manifest.json",
@@ -7354,7 +7354,7 @@
     "outputs/summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/ossf-scorecard-results.json",
+   "outputs_source": "pipeline/output-contracts/ossf-scorecard-results.json",
    "claim_class": "supply_chain_posture_evidence",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -7435,14 +7435,14 @@
      "input": "existing component map"
     }
    ],
-   "inputs_source": "registry/job-templates/02-repository-partition-discovery.json",
+   "inputs_source": "pipeline/job-templates/02-repository-partition-discovery.json",
    "output_dir": "runs/<run_id>/data/jobs/02-repository-partition-discovery/",
    "output_files": [
     "repository-partition-map.json",
     "repository-partition-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/repository-partition-map.json",
+   "outputs_source": "pipeline/output-contracts/repository-partition-map.json",
    "claim_class": "supplied_partition_map",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -7507,14 +7507,14 @@
      "input": "project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments"
     }
    ],
-   "inputs_source": "registry/job-templates/02-dev-project-discovery.json",
+   "inputs_source": "pipeline/job-templates/02-dev-project-discovery.json",
    "output_dir": "runs/<run_id>/data/jobs/02-dev-project-discovery/",
    "output_files": [
     "project-inventory.json",
     "project-discovery-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/project-discovery.json",
+   "outputs_source": "pipeline/output-contracts/project-discovery.json",
    "claim_class": "supplied_project_discovery",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -7583,14 +7583,14 @@
      "input": "project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments"
     }
    ],
-   "inputs_source": "registry/job-templates/02-devops-project-discovery.json",
+   "inputs_source": "pipeline/job-templates/02-devops-project-discovery.json",
    "output_dir": "runs/<run_id>/data/jobs/02-devops-project-discovery/",
    "output_files": [
     "project-inventory.json",
     "project-discovery-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/project-discovery.json",
+   "outputs_source": "pipeline/output-contracts/project-discovery.json",
    "claim_class": "supplied_project_discovery",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -7659,14 +7659,14 @@
      "input": "project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments"
     }
    ],
-   "inputs_source": "registry/job-templates/02-sre-operations-topology.json",
+   "inputs_source": "pipeline/job-templates/02-sre-operations-topology.json",
    "output_dir": "runs/<run_id>/data/jobs/02-sre-operations-topology/",
    "output_files": [
     "service-inventory.json",
     "operations-topology-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/operations-topology.json",
+   "outputs_source": "pipeline/output-contracts/operations-topology.json",
    "claim_class": "supplied_operations_topology",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -7742,14 +7742,14 @@
      "input": "staged target checkout"
     }
    ],
-   "inputs_source": "registry/job-templates/02-build-index.json",
+   "inputs_source": "pipeline/job-templates/02-build-index.json",
    "output_dir": "runs/<run_id>/data/jobs/02-build-index/",
    "output_files": [
     "build-index.json",
     "build-index.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/build-index.json",
+   "outputs_source": "pipeline/output-contracts/build-index.json",
    "claim_class": null,
    "gaps": [
     "fault_recovery_not_qualified"
@@ -7803,14 +7803,14 @@
      "input": "accepted build-index.json from 02-build-index"
     }
    ],
-   "inputs_source": "registry/job-templates/02-build-classify.json",
+   "inputs_source": "pipeline/job-templates/02-build-classify.json",
    "output_dir": "runs/<run_id>/data/jobs/02-build-classify/",
    "output_files": [
     "build-classification.json",
     "build-classification-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/build-classification.json",
+   "outputs_source": "pipeline/output-contracts/build-classification.json",
    "claim_class": "build_unit_classification",
    "gaps": [
     "fault_recovery_not_qualified"
@@ -7873,14 +7873,14 @@
      "input": "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-build-plan.json",
+   "inputs_source": "pipeline/job-templates/02-build-plan.json",
    "output_dir": "runs/<run_id>/data/jobs/02-build-plan/",
    "output_files": [
     "build-plan.json",
     "build-plan-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/build-plan.json",
+   "outputs_source": "pipeline/output-contracts/build-plan.json",
    "claim_class": "build_unit_plan",
    "gaps": [
     "fault_recovery_not_qualified"
@@ -7939,7 +7939,7 @@
      "input": "explicit permission grants"
     }
    ],
-   "inputs_source": "registry/job-templates/02-build-resolution.json",
+   "inputs_source": "pipeline/job-templates/02-build-resolution.json",
    "output_dir": "runs/<run_id>/data/jobs/02-build-resolution/",
    "output_files": [
     "build-resolution.json",
@@ -7948,7 +7948,7 @@
     "build-resolution-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/build-resolution.json",
+   "outputs_source": "pipeline/output-contracts/build-resolution.json",
    "claim_class": "build_resolution",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -8124,13 +8124,13 @@
      "input": "all graph-required producer accepted pointers and envelopes"
     }
    ],
-   "inputs_source": "registry/job-templates/02-evidence-assembly.json",
+   "inputs_source": "pipeline/job-templates/02-evidence-assembly.json",
    "output_dir": "runs/<run_id>/data/jobs/02-evidence-assembly/",
    "output_files": [
     "intel-manifest.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/pregather.json",
+   "outputs_source": "pipeline/output-contracts/pregather.json",
    "claim_class": null,
    "gaps": [
     "no_live_qualification"
@@ -8218,14 +8218,14 @@
      "input": "build, source-SAST and operations evidence"
     }
    ],
-   "inputs_source": "registry/job-templates/01-component-characterization.json",
+   "inputs_source": "pipeline/job-templates/01-component-characterization.json",
    "output_dir": "runs/<run_id>/data/jobs/01-component-characterization/",
    "output_files": [
     "component-purpose-map.json",
     "component-purpose-map.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/component-map.json",
+   "outputs_source": "pipeline/output-contracts/component-map.json",
    "claim_class": "component_characterization",
    "gaps": [
     "blocked_on_02-evidence-assembly",
@@ -8285,13 +8285,13 @@
      "input": "current accepted SBOM/license/SCA producers for later waves"
     }
    ],
-   "inputs_source": "registry/job-templates/02-full-review-input-assembly.json",
+   "inputs_source": "pipeline/job-templates/02-full-review-input-assembly.json",
    "output_dir": "runs/<run_id>/data/jobs/02-full-review-input-assembly/",
    "output_files": [
     "full-review-input-assembly.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/full-review-input-assembly.json",
+   "outputs_source": "pipeline/output-contracts/full-review-input-assembly.json",
    "claim_class": null,
    "gaps": [
     "later_dependency_waves_require_reinvocation_after_prerequisites_publish"
@@ -8342,7 +8342,7 @@
      "input": "exact F02 evidence assembly and dereferenced artifact cited through F03"
     }
    ],
-   "inputs_source": "registry/job-templates/03-threat-model-dfd-stride.json",
+   "inputs_source": "pipeline/job-templates/03-threat-model-dfd-stride.json",
    "output_dir": "runs/<run_id>/data/jobs/03-threat-model-dfd-stride/",
    "output_files": [
     "integrated-threat-model.json",
@@ -8355,7 +8355,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/threat-model-core.json",
+   "outputs_source": "pipeline/output-contracts/threat-model-core.json",
    "claim_class": "threat_model_candidate",
    "gaps": [
     "freeciv_live_qualification_pending"
@@ -8420,7 +8420,7 @@
      "input": "bounded reviewer/model reconciliation input control"
     }
    ],
-   "inputs_source": "registry/job-templates/03-threat-model-reconciliation.json",
+   "inputs_source": "pipeline/job-templates/03-threat-model-reconciliation.json",
    "output_dir": "runs/<run_id>/data/jobs/03-threat-model-reconciliation/",
    "output_files": [
     "threat-model-reconciliation.json",
@@ -8429,7 +8429,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/threat-model-reconciliation.json",
+   "outputs_source": "pipeline/output-contracts/threat-model-reconciliation.json",
    "claim_class": "threat_model_reconciliation",
    "gaps": [
     "freeciv_live_qualification_pending"
@@ -8497,7 +8497,7 @@
      "input": "hash-verified applicability and assessment artifacts"
     }
    ],
-   "inputs_source": "registry/job-templates/04-asvs-masvs.json",
+   "inputs_source": "pipeline/job-templates/04-asvs-masvs.json",
    "output_dir": "runs/<run_id>/data/jobs/04-asvs-masvs/",
    "output_files": [
     "owasp-control-status-matrix-manifest.json",
@@ -8507,7 +8507,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/owasp-join-report.json",
+   "outputs_source": "pipeline/output-contracts/owasp-join-report.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -8569,7 +8569,7 @@
      "input": "hash-bound citations"
     }
    ],
-   "inputs_source": "registry/job-templates/05-native-memory.json",
+   "inputs_source": "pipeline/job-templates/05-native-memory.json",
    "output_dir": "runs/<run_id>/data/jobs/05-native-memory/",
    "output_files": [
     "native-memory-analysis.json",
@@ -8578,7 +8578,7 @@
     "status.json",
     "applicability-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/native-memory-analysis.json",
+   "outputs_source": "pipeline/output-contracts/native-memory-analysis.json",
    "claim_class": "candidate_only",
    "gaps": [
     "no_live_qualification"
@@ -8702,7 +8702,7 @@
      "input": "run-supplied reviewed advisory-to-function map and entry points"
     }
    ],
-   "inputs_source": "registry/job-templates/06-reachability-codeql.json",
+   "inputs_source": "pipeline/job-templates/06-reachability-codeql.json",
    "output_dir": "runs/<run_id>/data/jobs/06-reachability-codeql/",
    "output_files": [
     "engine-reachability.json",
@@ -8711,7 +8711,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/engine-reachability.json",
+   "outputs_source": "pipeline/output-contracts/engine-reachability.json",
    "claim_class": "cve_reachability_evidence_lead",
    "gaps": [
     "no_live_qualification"
@@ -8804,7 +8804,7 @@
      "input": "run-supplied reviewed advisory-to-function map and entry points"
     }
    ],
-   "inputs_source": "registry/job-templates/06-reachability-ir.json",
+   "inputs_source": "pipeline/job-templates/06-reachability-ir.json",
    "output_dir": "runs/<run_id>/data/jobs/06-reachability-ir/",
    "output_files": [
     "engine-reachability.json",
@@ -8813,7 +8813,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/engine-reachability.json",
+   "outputs_source": "pipeline/output-contracts/engine-reachability.json",
    "claim_class": "cve_reachability_evidence_lead",
    "gaps": [
     "no_live_qualification"
@@ -8893,7 +8893,7 @@
      "input": "run-supplied entry points and language-server / tree-sitter hint documents"
     }
    ],
-   "inputs_source": "registry/job-templates/06-cve-reachability.json",
+   "inputs_source": "pipeline/job-templates/06-cve-reachability.json",
    "output_dir": "runs/<run_id>/data/jobs/06-cve-reachability/",
    "output_files": [
     "inputs.json",
@@ -8901,7 +8901,7 @@
     "outputs/reachability-evidence-identity.json",
     "applicability-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/cve-reachability.json",
+   "outputs_source": "pipeline/output-contracts/cve-reachability.json",
    "claim_class": "cve_reachability_evidence_lead",
    "gaps": [
     "no_live_qualification"
@@ -8969,7 +8969,7 @@
      "input": "candidate entrypoints"
     }
    ],
-   "inputs_source": "registry/job-templates/13-fuzz-target-triage.json",
+   "inputs_source": "pipeline/job-templates/13-fuzz-target-triage.json",
    "output_dir": "runs/<run_id>/data/jobs/13-fuzz-target-triage/",
    "output_files": [
     "fuzz-target-triage.json",
@@ -8978,7 +8978,7 @@
     "status.json",
     "applicability-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/fuzz-target-triage.json",
+   "outputs_source": "pipeline/output-contracts/fuzz-target-triage.json",
    "claim_class": "planning_evidence",
    "gaps": [
     "no_live_qualification"
@@ -9042,7 +9042,7 @@
      "input": "accepted STIG/SRG worklist"
     }
    ],
-   "inputs_source": "registry/job-templates/15-deployment-hardening.json",
+   "inputs_source": "pipeline/job-templates/15-deployment-hardening.json",
    "output_dir": "runs/<run_id>/data/jobs/15-deployment-hardening/",
    "output_files": [
     "deployment-hardening.json",
@@ -9050,7 +9050,7 @@
     "lineage-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/deployment-hardening.json",
+   "outputs_source": "pipeline/output-contracts/deployment-hardening.json",
    "claim_class": "static_configuration_evidence",
    "gaps": [
     "no_live_qualification"
@@ -9124,7 +9124,7 @@
      "input": "supporting-evidence menu"
     }
    ],
-   "inputs_source": "registry/job-templates/07-hypothesis-discovery.json",
+   "inputs_source": "pipeline/job-templates/07-hypothesis-discovery.json",
    "output_dir": "runs/<run_id>/data/jobs/07-hypothesis-discovery/",
    "output_files": [
     "hypothesis-discovery.json",
@@ -9135,7 +9135,7 @@
     "pool-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/hypothesis-discovery.json",
+   "outputs_source": "pipeline/output-contracts/hypothesis-discovery.json",
    "claim_class": "candidate_hypothesis",
    "gaps": [
     "no_live_qualification"
@@ -9206,7 +9206,7 @@
      "input": "authorized decision events"
     }
    ],
-   "inputs_source": "registry/job-templates/claim-ledger-routing.json",
+   "inputs_source": "pipeline/job-templates/claim-ledger-routing.json",
    "output_dir": "runs/<run_id>/data/jobs/claim-ledger-routing/",
    "output_files": [
     "claim-decision-ledger.json",
@@ -9216,7 +9216,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/claim-ledger-core.json",
+   "outputs_source": "pipeline/output-contracts/claim-ledger-core.json",
    "claim_class": "candidate_claim_ledger",
    "gaps": [
     "no_live_qualification"
@@ -9303,7 +9303,7 @@
      "input": "accepted complete red-team persona/tool-pool merge when candidates exist"
     }
    ],
-   "inputs_source": "registry/job-templates/07-red-team-adversarial.json",
+   "inputs_source": "pipeline/job-templates/07-red-team-adversarial.json",
    "output_dir": "runs/<run_id>/data/jobs/07-red-team-adversarial/",
    "output_files": [
     "red-team-adversarial.json",
@@ -9311,7 +9311,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/07-red-team-adversarial.json",
+   "outputs_source": "pipeline/output-contracts/07-red-team-adversarial.json",
    "claim_class": null,
    "gaps": [
     "no_live_qualification"
@@ -9372,7 +9372,7 @@
      "input": "accepted complete blue-team persona/tool-pool merge when hypotheses exist"
     }
    ],
-   "inputs_source": "registry/job-templates/08-blue-team-refutation.json",
+   "inputs_source": "pipeline/job-templates/08-blue-team-refutation.json",
    "output_dir": "runs/<run_id>/data/jobs/08-blue-team-refutation/",
    "output_files": [
     "blue-team-refutation.json",
@@ -9380,7 +9380,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/08-blue-team-refutation.json",
+   "outputs_source": "pipeline/output-contracts/08-blue-team-refutation.json",
    "claim_class": null,
    "gaps": [
     "no_live_qualification"
@@ -9435,7 +9435,7 @@
      "input": "accepted complete verifier persona/tool-pool merge when reviews exist"
     }
    ],
-   "inputs_source": "registry/job-templates/09-independent-verification.json",
+   "inputs_source": "pipeline/job-templates/09-independent-verification.json",
    "output_dir": "runs/<run_id>/data/jobs/09-independent-verification/",
    "output_files": [
     "independent-verification.json",
@@ -9443,7 +9443,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/09-independent-verification.json",
+   "outputs_source": "pipeline/output-contracts/09-independent-verification.json",
    "claim_class": null,
    "gaps": [
     "no_live_qualification"
@@ -9493,7 +9493,7 @@
      "input": "current accepted native build environment"
     }
    ],
-   "inputs_source": "registry/job-templates/11-remediation-proposal.json",
+   "inputs_source": "pipeline/job-templates/11-remediation-proposal.json",
    "output_dir": "runs/<run_id>/data/jobs/11-remediation-proposal/",
    "output_files": [
     "remediation-proposal.json",
@@ -9502,7 +9502,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/11-remediation-proposal.json",
+   "outputs_source": "pipeline/output-contracts/11-remediation-proposal.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -9559,7 +9559,7 @@
      "input": "accepted complete scoring persona/tool-pool merge when verifications exist"
     }
    ],
-   "inputs_source": "registry/job-templates/12-scoring-prioritization.json",
+   "inputs_source": "pipeline/job-templates/12-scoring-prioritization.json",
    "output_dir": "runs/<run_id>/data/jobs/12-scoring-prioritization/",
    "output_files": [
     "scoring-prioritization.json",
@@ -9567,7 +9567,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/12-scoring-prioritization.json",
+   "outputs_source": "pipeline/output-contracts/12-scoring-prioritization.json",
    "claim_class": null,
    "gaps": [
     "no_live_qualification"
@@ -9636,7 +9636,7 @@
      "input": "supporting-evidence menu: CPG records and IR facts"
     }
    ],
-   "inputs_source": "registry/job-templates/14-attack-chain-composition.json",
+   "inputs_source": "pipeline/job-templates/14-attack-chain-composition.json",
    "output_dir": "runs/<run_id>/data/jobs/14-attack-chain-composition/",
    "output_files": [
     "attack-chain-composition.json",
@@ -9648,7 +9648,7 @@
     "pool-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/14-attack-chain-composition.json",
+   "outputs_source": "pipeline/output-contracts/14-attack-chain-composition.json",
    "claim_class": "candidate_hypothesis",
    "gaps": [
     "no_live_qualification"
@@ -9699,7 +9699,7 @@
      "input": "supporting-evidence menu"
     }
    ],
-   "inputs_source": "registry/job-templates/14-attack-chain-refutation.json",
+   "inputs_source": "pipeline/job-templates/14-attack-chain-refutation.json",
    "output_dir": "runs/<run_id>/data/jobs/14-attack-chain-refutation/",
    "output_files": [
     "attack-chain-ledger.json",
@@ -9710,7 +9710,7 @@
     "pool-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/14-attack-chain-refutation.json",
+   "outputs_source": "pipeline/output-contracts/14-attack-chain-refutation.json",
    "claim_class": "candidate_hypothesis",
    "gaps": [
     "no_live_qualification"
@@ -9767,7 +9767,7 @@
      "input": "projected source checkout (hashes, snippets)"
     }
    ],
-   "inputs_source": "registry/job-templates/12b-poc-and-fix.json",
+   "inputs_source": "pipeline/job-templates/12b-poc-and-fix.json",
    "output_dir": "runs/<run_id>/data/jobs/12b-poc-and-fix/",
    "output_files": [
     "poc-fix.json",
@@ -9778,7 +9778,7 @@
     "pool-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/12b-poc-and-fix.json",
+   "outputs_source": "pipeline/output-contracts/12b-poc-and-fix.json",
    "claim_class": "candidate_hypothesis",
    "gaps": [
     "no_live_qualification"
@@ -9900,7 +9900,7 @@
      "input": "L08 verification/scoring"
     }
    ],
-   "inputs_source": "registry/job-templates/10-synthesis-report.json",
+   "inputs_source": "pipeline/job-templates/10-synthesis-report.json",
    "output_dir": "runs/<run_id>/data/jobs/10-synthesis-report/",
    "output_files": [
     "synthesis-input.json",
@@ -9925,7 +9925,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/synthesis-report-publication.json",
+   "outputs_source": "pipeline/output-contracts/synthesis-report-publication.json",
    "claim_class": null,
    "gaps": [
     "real_accepted_upstream_chain_pending",
@@ -10002,7 +10002,7 @@
      "input": "component map"
     }
    ],
-   "inputs_source": "registry/job-templates/02-api-collection-intelligence-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-api-collection-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/",
    "output_files": [
     "api-collection-intelligence.json",
@@ -10010,7 +10010,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/api-collection-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/api-collection-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
     "no_live_qualification"
@@ -10076,7 +10076,7 @@
      "input": "deterministically derived normalized binary leads"
     }
    ],
-   "inputs_source": "registry/job-templates/02-binary-intelligence-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-binary-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-intelligence-ingest/",
    "output_files": [
     "binary-intelligence.json",
@@ -10085,7 +10085,7 @@
     "lineage.json",
     "applicability-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/binary-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/binary-intelligence.json",
    "claim_class": "binary_lead_evidence",
    "gaps": [
     "m02_pinned_binary_tool_unavailable",
@@ -10152,7 +10152,7 @@
      "input": "product glossary"
     }
    ],
-   "inputs_source": "registry/job-templates/02-doc-intelligence-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-doc-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-doc-intelligence-ingest/",
    "output_files": [
     "doc-intelligence.json",
@@ -10160,7 +10160,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/doc-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/doc-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
     "no_live_qualification"
@@ -10213,7 +10213,7 @@
      "input": "repository-pinned data/reference/source-lock.json and selected snapshots"
     }
    ],
-   "inputs_source": "registry/job-templates/02-standards-source-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-standards-source-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-standards-source-ingest/",
    "output_files": [
     "standards-source.json",
@@ -10221,7 +10221,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/standards-source-extract.json",
+   "outputs_source": "pipeline/output-contracts/standards-source-extract.json",
    "claim_class": null,
    "gaps": [
     "no_live_qualification"
@@ -10286,7 +10286,7 @@
      "input": "CI test metadata"
     }
    ],
-   "inputs_source": "registry/job-templates/02-test-intelligence-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-test-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-intelligence-ingest/",
    "output_files": [
     "test-intelligence.json",
@@ -10294,7 +10294,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/test-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/test-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
     "no_live_qualification"
@@ -10350,7 +10350,7 @@
      "input": "accepted applicability evidence"
     }
    ],
-   "inputs_source": "registry/job-templates/04-owasp-validation-worklist-core.json",
+   "inputs_source": "pipeline/job-templates/04-owasp-validation-worklist-core.json",
    "output_dir": "runs/<run_id>/data/jobs/04-owasp-validation-worklist/",
    "output_files": [
     "owasp-validation-worklist.json",
@@ -10358,7 +10358,7 @@
     "lineage-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/owasp-validation-worklist.json",
+   "outputs_source": "pipeline/output-contracts/owasp-validation-worklist.json",
    "claim_class": "control_worklist",
    "gaps": [
     "no_live_qualification"
@@ -10415,7 +10415,7 @@
      "input": "accepted platform inventory"
     }
    ],
-   "inputs_source": "registry/job-templates/15-stig-srg-validation-worklist-core.json",
+   "inputs_source": "pipeline/job-templates/15-stig-srg-validation-worklist-core.json",
    "output_dir": "runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/",
    "output_files": [
     "stig-srg-validation-worklist.json",
@@ -10423,7 +10423,7 @@
     "lineage-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/stig-srg-validation-worklist.json",
+   "outputs_source": "pipeline/output-contracts/stig-srg-validation-worklist.json",
    "claim_class": "control_worklist",
    "gaps": [
     "no_live_qualification"
@@ -10483,7 +10483,7 @@
      "input": "target-execution grant"
     }
    ],
-   "inputs_source": "registry/job-templates/02-build-configure.json",
+   "inputs_source": "pipeline/job-templates/02-build-configure.json",
    "output_dir": "runs/<run_id>/data/jobs/02-build-configure/",
    "output_files": [
     "configured-build.json",
@@ -10491,7 +10491,7 @@
     "configured-build-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/configured-build.json",
+   "outputs_source": "pipeline/output-contracts/configured-build.json",
    "claim_class": "build_replay",
    "gaps": [
     "fault_recovery_not_qualified"
@@ -10554,7 +10554,7 @@
      "input": "target-execution grant"
     }
    ],
-   "inputs_source": "registry/job-templates/02-native-build.json",
+   "inputs_source": "pipeline/job-templates/02-native-build.json",
    "output_dir": "runs/<run_id>/data/jobs/02-native-build/",
    "output_files": [
     "native-build.json",
@@ -10562,7 +10562,7 @@
     "native-build-summary.md",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/native-build.json",
+   "outputs_source": "pipeline/output-contracts/native-build.json",
    "claim_class": "build_replay",
    "gaps": [
     "fault_recovery_not_qualified"
@@ -10621,7 +10621,7 @@
      "input": "repository-owned hashed ruleset"
     }
    ],
-   "inputs_source": "registry/job-templates/02-source-sast.json",
+   "inputs_source": "pipeline/job-templates/02-source-sast.json",
    "output_dir": "runs/<run_id>/data/jobs/02-source-sast/",
    "output_files": [
     "source-sast.json",
@@ -10631,7 +10631,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/source-sast.json",
+   "outputs_source": "pipeline/output-contracts/source-sast.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "fault_recovery_not_qualified"
@@ -10699,7 +10699,7 @@
      "input": "accepted 02-native-build (traced replay per unit; B16 audit-codeql-native record)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-cpp.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-cpp.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-cpp/",
    "output_files": [
     "codeql-language.json",
@@ -10709,7 +10709,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -10769,7 +10769,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-csharp.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-csharp.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-csharp/",
    "output_files": [
     "codeql-language.json",
@@ -10779,7 +10779,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -10838,7 +10838,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-go.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-go.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-go/",
    "output_files": [
     "codeql-language.json",
@@ -10848,7 +10848,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -10907,7 +10907,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-java.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-java.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-java/",
    "output_files": [
     "codeql-language.json",
@@ -10917,7 +10917,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -10976,7 +10976,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-javascript.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-javascript.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-javascript/",
    "output_files": [
     "codeql-language.json",
@@ -10986,7 +10986,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11045,7 +11045,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-python.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-python.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-python/",
    "output_files": [
     "codeql-language.json",
@@ -11055,7 +11055,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11114,7 +11114,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-ruby.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-ruby.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-ruby/",
    "output_files": [
     "codeql-language.json",
@@ -11124,7 +11124,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11183,7 +11183,7 @@
      "input": "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     }
    ],
-   "inputs_source": "registry/job-templates/02-codeql-rust.json",
+   "inputs_source": "pipeline/job-templates/02-codeql-rust.json",
    "output_dir": "runs/<run_id>/data/jobs/02-codeql-rust/",
    "output_files": [
     "codeql-language.json",
@@ -11193,7 +11193,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/codeql-language.json",
+   "outputs_source": "pipeline/output-contracts/codeql-language.json",
    "claim_class": "source_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11248,7 +11248,7 @@
      "input": "hash-bound Joern exporter"
     }
    ],
-   "inputs_source": "registry/job-templates/02-code-property-graph.json",
+   "inputs_source": "pipeline/job-templates/02-code-property-graph.json",
    "output_dir": "runs/<run_id>/data/jobs/02-code-property-graph/",
    "output_files": [
     "code-property-graph.json",
@@ -11256,7 +11256,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/code-property-graph.json",
+   "outputs_source": "pipeline/output-contracts/code-property-graph.json",
    "claim_class": "structural_source_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11313,7 +11313,7 @@
      "input": "tracked native-SAST configuration"
     }
    ],
-   "inputs_source": "registry/job-templates/02-native-sast.json",
+   "inputs_source": "pipeline/job-templates/02-native-sast.json",
    "output_dir": "runs/<run_id>/data/jobs/02-native-sast/",
    "output_files": [
     "native-sast.json",
@@ -11323,7 +11323,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/native-sast.json",
+   "outputs_source": "pipeline/output-contracts/native-sast.json",
    "claim_class": "native_static_evidence",
    "gaps": [
     "pinned_image_live_qualification_missing",
@@ -11375,7 +11375,7 @@
      "input": "clang compile database"
     }
    ],
-   "inputs_source": "registry/job-templates/02-ir-capture.json",
+   "inputs_source": "pipeline/job-templates/02-ir-capture.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ir-capture/",
    "output_files": [
     "ir-capture.json",
@@ -11383,7 +11383,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/ir-capture.json",
+   "outputs_source": "pipeline/output-contracts/ir-capture.json",
    "claim_class": "ir_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11430,7 +11430,7 @@
      "input": "accepted IR capture"
     }
    ],
-   "inputs_source": "registry/job-templates/02-ir-link.json",
+   "inputs_source": "pipeline/job-templates/02-ir-link.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ir-link/",
    "output_files": [
     "ir-link.json",
@@ -11438,7 +11438,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/ir-link.json",
+   "outputs_source": "pipeline/output-contracts/ir-link.json",
    "claim_class": "ir_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11485,7 +11485,7 @@
      "input": "accepted linked LLVM module"
     }
    ],
-   "inputs_source": "registry/job-templates/02-ir-facts.json",
+   "inputs_source": "pipeline/job-templates/02-ir-facts.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ir-facts/",
    "output_files": [
     "ir-facts.json",
@@ -11493,7 +11493,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/ir-facts.json",
+   "outputs_source": "pipeline/output-contracts/ir-facts.json",
    "claim_class": "ir_static_evidence",
    "gaps": [
     "live_dagster_qualification_missing"
@@ -11542,7 +11542,7 @@
      "input": "registered audit-binary-analysis image"
     }
    ],
-   "inputs_source": "registry/job-templates/02-debug-symbol-index.json",
+   "inputs_source": "pipeline/job-templates/02-debug-symbol-index.json",
    "output_dir": "runs/<run_id>/data/jobs/02-debug-symbol-index/",
    "output_files": [
     "debug-symbol-index.json",
@@ -11554,7 +11554,7 @@
     "applicability-receipt.json",
     "debug-symbol-index.records.jsonl"
    ],
-   "outputs_source": "registry/output-contracts/debug-symbol-index.json",
+   "outputs_source": "pipeline/output-contracts/debug-symbol-index.json",
    "claim_class": "debug_symbol_static_evidence",
    "gaps": [
     "m02_pinned_binary_tool_unavailable",
@@ -11604,7 +11604,7 @@
      "input": "registered audit-binary-analysis image"
     }
    ],
-   "inputs_source": "registry/job-templates/02-binary-triage.json",
+   "inputs_source": "pipeline/job-templates/02-binary-triage.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-triage/",
    "output_files": [
     "binary-triage-manifest.json",
@@ -11615,7 +11615,7 @@
     "binary-b13-receipts.json",
     "applicability-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/binary-triage.json",
+   "outputs_source": "pipeline/output-contracts/binary-triage.json",
    "claim_class": "binary_inventory_static_evidence",
    "gaps": [
     "m02_pinned_binary_tool_unavailable",
@@ -11678,7 +11678,7 @@
      "input": "registered audit-binary-analysis image"
     }
    ],
-   "inputs_source": "registry/job-templates/02-binary-cfg.json",
+   "inputs_source": "pipeline/job-templates/02-binary-cfg.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-cfg/",
    "output_files": [
     "cfg-manifest.json",
@@ -11689,7 +11689,7 @@
     "binary-b13-receipts.json",
     "applicability-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/binary-cfg.json",
+   "outputs_source": "pipeline/output-contracts/binary-cfg.json",
    "claim_class": "binary_cfg_static_evidence",
    "gaps": [
     "m02_pinned_binary_tool_unavailable",
@@ -11744,7 +11744,7 @@
      "input": "target-execution grant"
     }
    ],
-   "inputs_source": "registry/job-templates/02-test-execution.json",
+   "inputs_source": "pipeline/job-templates/02-test-execution.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-execution/",
    "output_files": [
     "test-execution.json",
@@ -11754,7 +11754,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/test-execution.json",
+   "outputs_source": "pipeline/output-contracts/test-execution.json",
    "claim_class": "test_evidence",
    "gaps": [
     "no_live_qualification"
@@ -11799,7 +11799,7 @@
      "input": "accepted test execution"
     }
    ],
-   "inputs_source": "registry/job-templates/02-test-result-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-test-result-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-result-ingest/",
    "output_files": [
     "test-results.json",
@@ -11808,7 +11808,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/test-result-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/test-result-intelligence.json",
    "claim_class": "test_evidence",
    "gaps": [
     "no_live_qualification"
@@ -11853,7 +11853,7 @@
      "input": "accepted test execution"
     }
    ],
-   "inputs_source": "registry/job-templates/02-test-coverage-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-test-coverage-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-coverage-ingest/",
    "output_files": [
     "test-coverage.json",
@@ -11862,7 +11862,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/test-coverage-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/test-coverage-intelligence.json",
    "claim_class": "test_evidence",
    "gaps": [
     "no_live_qualification"
@@ -11907,7 +11907,7 @@
      "input": "exact accepted intake source inventory"
     }
    ],
-   "inputs_source": "registry/job-templates/02-operations-doc-ingest.json",
+   "inputs_source": "pipeline/job-templates/02-operations-doc-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-operations-doc-ingest/",
    "output_files": [
     "operations-doc-intelligence.json",
@@ -11915,7 +11915,7 @@
     "permission.json",
     "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/operations-doc-intelligence.json",
+   "outputs_source": "pipeline/output-contracts/operations-doc-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
     "no_live_qualification"
@@ -11966,7 +11966,7 @@
      "input": "accepted build discovery"
     }
    ],
-   "inputs_source": "registry/job-templates/02-evidence-index.json",
+   "inputs_source": "pipeline/job-templates/02-evidence-index.json",
    "output_dir": "runs/<run_id>/data/jobs/02-evidence-index/",
    "output_files": [
     "manifest.json",
@@ -11977,7 +11977,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/evidence-index.json",
+   "outputs_source": "pipeline/output-contracts/evidence-index.json",
    "claim_class": null,
    "gaps": [
     "derived_producer_selection_not_orchestrated",
@@ -12034,7 +12034,7 @@
      "input": "B16 scanner image records"
     }
    ],
-   "inputs_source": "registry/job-templates/02-secrets-inventory.json",
+   "inputs_source": "pipeline/job-templates/02-secrets-inventory.json",
    "output_dir": "runs/<run_id>/data/jobs/02-secrets-inventory/",
    "output_files": [
     "manifest.json",
@@ -12044,7 +12044,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/secrets-inventory.json",
+   "outputs_source": "pipeline/output-contracts/secrets-inventory.json",
    "claim_class": "secret_exposure_lead",
    "gaps": [
     "no_live_docker_qualification"
@@ -12099,7 +12099,7 @@
      "input": "B16 scanner image records"
     }
    ],
-   "inputs_source": "registry/job-templates/02-iac-config-scan.json",
+   "inputs_source": "pipeline/job-templates/02-iac-config-scan.json",
    "output_dir": "runs/<run_id>/data/jobs/02-iac-config-scan/",
    "output_files": [
     "manifest.json",
@@ -12111,7 +12111,7 @@
     "outputs/coverage.json",
     "outputs/applicability-probe-receipt.json"
    ],
-   "outputs_source": "registry/output-contracts/iac-config-evidence.json",
+   "outputs_source": "pipeline/output-contracts/iac-config-evidence.json",
    "claim_class": "declared_configuration_evidence",
    "gaps": [
     "no_live_docker_qualification"
@@ -12166,7 +12166,7 @@
      "input": "B16 scanner image records"
     }
    ],
-   "inputs_source": "registry/job-templates/02-container-image-inventory.json",
+   "inputs_source": "pipeline/job-templates/02-container-image-inventory.json",
    "output_dir": "runs/<run_id>/data/jobs/02-container-image-inventory/",
    "output_files": [
     "manifest.json",
@@ -12177,7 +12177,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/container-image-inventory.json",
+   "outputs_source": "pipeline/output-contracts/container-image-inventory.json",
    "claim_class": "supplied_image_static_evidence",
    "gaps": [
     "no_live_docker_qualification"
@@ -12241,7 +12241,7 @@
      "input": "B16 Syft image record"
     }
    ],
-   "inputs_source": "registry/job-templates/02-sbom-inventory.json",
+   "inputs_source": "pipeline/job-templates/02-sbom-inventory.json",
    "output_dir": "runs/<run_id>/data/jobs/02-sbom-inventory/",
    "output_files": [
     "manifest.json",
@@ -12253,7 +12253,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/sbom-inventory.json",
+   "outputs_source": "pipeline/output-contracts/sbom-inventory.json",
    "claim_class": "dependency_inventory_evidence",
    "gaps": [
     "no_live_docker_qualification",
@@ -12314,7 +12314,7 @@
      "input": "explicit database age ceiling"
     }
    ],
-   "inputs_source": "registry/job-templates/02-sca-vulnerability-match.json",
+   "inputs_source": "pipeline/job-templates/02-sca-vulnerability-match.json",
    "output_dir": "runs/<run_id>/data/jobs/02-sca-vulnerability-match/",
    "output_files": [
     "manifest.json",
@@ -12328,7 +12328,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/sca-vulnerability-match.json",
+   "outputs_source": "pipeline/output-contracts/sca-vulnerability-match.json",
    "claim_class": "known_vulnerability_match_lead",
    "gaps": [
     "no_live_docker_qualification",
@@ -12389,7 +12389,7 @@
      "input": "B16 ScanCode image record"
     }
    ],
-   "inputs_source": "registry/job-templates/02-license-scan.json",
+   "inputs_source": "pipeline/job-templates/02-license-scan.json",
    "output_dir": "runs/<run_id>/data/jobs/02-license-scan/",
    "output_files": [
     "manifest.json",
@@ -12399,7 +12399,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/license-inventory.json",
+   "outputs_source": "pipeline/output-contracts/license-inventory.json",
    "claim_class": "license_detection_evidence",
    "gaps": [
     "no_live_docker_qualification",
@@ -12465,7 +12465,7 @@
      "input": "explicit table age ceiling"
     }
    ],
-   "inputs_source": "registry/job-templates/02-dependency-lifecycle.json",
+   "inputs_source": "pipeline/job-templates/02-dependency-lifecycle.json",
    "output_dir": "runs/<run_id>/data/jobs/02-dependency-lifecycle/",
    "output_files": [
     "manifest.json",
@@ -12476,7 +12476,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/dependency-lifecycle.json",
+   "outputs_source": "pipeline/output-contracts/dependency-lifecycle.json",
    "claim_class": "dependency_lifecycle_evidence",
    "gaps": [
     "no_live_qualification",
@@ -12533,7 +12533,7 @@
      "input": "B16 scanner image records"
     }
    ],
-   "inputs_source": "registry/job-templates/02-binary-hardening.json",
+   "inputs_source": "pipeline/job-templates/02-binary-hardening.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-hardening/",
    "output_files": [
     "manifest.json",
@@ -12544,7 +12544,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/binary-hardening.json",
+   "outputs_source": "pipeline/output-contracts/binary-hardening.json",
    "claim_class": "binary_hardening_property_evidence",
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -12597,7 +12597,7 @@
      "input": "B16 scanner image records"
     }
    ],
-   "inputs_source": "registry/job-templates/02-mobile-sast.json",
+   "inputs_source": "pipeline/job-templates/02-mobile-sast.json",
    "output_dir": "runs/<run_id>/data/jobs/02-mobile-sast/",
    "output_files": [
     "manifest.json",
@@ -12608,7 +12608,7 @@
     "outputs/tool-results.json",
     "outputs/coverage.json"
    ],
-   "outputs_source": "registry/output-contracts/mobile-sast.json",
+   "outputs_source": "pipeline/output-contracts/mobile-sast.json",
    "claim_class": "mobile_static_lead",
    "gaps": [
     "no_live_docker_qualification"
@@ -12655,7 +12655,7 @@
      "input": "newest accepted intake and run artifact-manifest context"
     }
    ],
-   "inputs_source": "registry/job-templates/persona-tool-pool-dispatch.json",
+   "inputs_source": "pipeline/job-templates/persona-tool-pool-dispatch.json",
    "output_dir": "runs/<run_id>/data/jobs/persona-tool-pool-dispatch/",
    "output_files": [
     "persona-tool-pool-dispatch.json",
@@ -12666,7 +12666,7 @@
     "applicability.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/persona-tool-pool-dispatch.json",
+   "outputs_source": "pipeline/output-contracts/persona-tool-pool-dispatch.json",
    "claim_class": null,
    "gaps": [
     "no_live_persona_pool_qualification"
@@ -12713,7 +12713,7 @@
      "input": "reverified C02 terminal manifest"
     }
    ],
-   "inputs_source": "registry/job-templates/deterministic-pool-merge.json",
+   "inputs_source": "pipeline/job-templates/deterministic-pool-merge.json",
    "output_dir": "runs/<run_id>/data/jobs/deterministic-pool-merge/",
    "output_files": [
     "deterministic-pool-merge.json",
@@ -12721,7 +12721,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/deterministic-pool-merge.json",
+   "outputs_source": "pipeline/output-contracts/deterministic-pool-merge.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -12766,7 +12766,7 @@
      "input": "current accepted deterministic merge reference"
     }
    ],
-   "inputs_source": "registry/job-templates/evidence-qualified-quorum.json",
+   "inputs_source": "pipeline/job-templates/evidence-qualified-quorum.json",
    "output_dir": "runs/<run_id>/data/jobs/evidence-qualified-quorum/",
    "output_files": [
     "evidence-qualified-quorum.json",
@@ -12774,7 +12774,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/evidence-qualified-quorum.json",
+   "outputs_source": "pipeline/output-contracts/evidence-qualified-quorum.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -12823,7 +12823,7 @@
      "input": "accepted predecessor reference"
     }
    ],
-   "inputs_source": "registry/job-templates/dynamic-rescope.json",
+   "inputs_source": "pipeline/job-templates/dynamic-rescope.json",
    "output_dir": "runs/<run_id>/data/jobs/dynamic-rescope/",
    "output_files": [
     "bounded-rescope-plan.json",
@@ -12831,7 +12831,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/bounded-rescope-plan.json",
+   "outputs_source": "pipeline/output-contracts/bounded-rescope-plan.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -12876,7 +12876,7 @@
      "input": "evidence-bound obligation inventory"
     }
    ],
-   "inputs_source": "registry/job-templates/completeness-audit.json",
+   "inputs_source": "pipeline/job-templates/completeness-audit.json",
    "output_dir": "runs/<run_id>/data/jobs/completeness-audit/",
    "output_files": [
     "completeness-audit.json",
@@ -12884,7 +12884,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/completeness-audit.json",
+   "outputs_source": "pipeline/output-contracts/completeness-audit.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -12933,7 +12933,7 @@
      "input": "accepted predecessor reference"
     }
    ],
-   "inputs_source": "registry/job-templates/synthetic-hypothesis-resynthesis.json",
+   "inputs_source": "pipeline/job-templates/synthetic-hypothesis-resynthesis.json",
    "output_dir": "runs/<run_id>/data/jobs/synthetic-hypothesis-resynthesis/",
    "output_files": [
     "synthetic-hypothesis-resynthesis.json",
@@ -12941,7 +12941,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/synthetic-hypothesis-resynthesis.json",
+   "outputs_source": "pipeline/output-contracts/synthetic-hypothesis-resynthesis.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -12995,7 +12995,7 @@
      "input": "same-environment retests"
     }
    ],
-   "inputs_source": "registry/job-templates/remediation-retest-feedback.json",
+   "inputs_source": "pipeline/job-templates/remediation-retest-feedback.json",
    "output_dir": "runs/<run_id>/data/jobs/remediation-retest-feedback/",
    "output_files": [
     "remediation-retest.json",
@@ -13003,7 +13003,7 @@
     "lineage.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/remediation-retest-feedback.json",
+   "outputs_source": "pipeline/output-contracts/remediation-retest-feedback.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -13098,7 +13098,7 @@
      "input": "authorized human signoff ledger"
     }
    ],
-   "inputs_source": "registry/job-templates/final-publication-gate.json",
+   "inputs_source": "pipeline/job-templates/final-publication-gate.json",
    "output_dir": "runs/<run_id>/data/jobs/final-publication-gate/",
    "output_files": [
     "report.json",
@@ -13111,7 +13111,7 @@
     "completion/accepted-bindings.json",
     "final-publication.json"
    ],
-   "outputs_source": "registry/output-contracts/final-publication-package.json",
+   "outputs_source": "pipeline/output-contracts/final-publication-package.json",
    "claim_class": null,
    "gaps": [],
    "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
@@ -13835,7 +13835,7 @@
   "semgrep-image": {
    "id": "semgrep-image",
    "kind": "record",
-   "path": "appsec-review-process/registry/container-images/tool-semgrep.json",
+   "path": "appsec-review-process/pipeline/container-images/tool-semgrep.json",
    "about": "B16-resolved immutable image record for the pinned Semgrep tool.",
    "produced_by": [],
    "consumed_by": [
@@ -13855,7 +13855,7 @@
   "syft-image": {
    "id": "syft-image",
    "kind": "record",
-   "path": "appsec-review-process/registry/container-images/tool-syft.json",
+   "path": "appsec-review-process/pipeline/container-images/tool-syft.json",
    "about": "B16-resolved immutable image record used by the fixed offline Syft B13 adapter.",
    "produced_by": [],
    "consumed_by": [
@@ -13865,7 +13865,7 @@
   "grype-image": {
    "id": "grype-image",
    "kind": "record",
-   "path": "appsec-review-process/registry/container-images/tool-grype.json",
+   "path": "appsec-review-process/pipeline/container-images/tool-grype.json",
    "about": "B16-resolved immutable image record used by the fixed offline Grype B13 adapter.",
    "produced_by": [],
    "consumed_by": [
@@ -13875,7 +13875,7 @@
   "osv-image": {
    "id": "osv-image",
    "kind": "record",
-   "path": "appsec-review-process/registry/container-images/tool-osv-scanner.json",
+   "path": "appsec-review-process/pipeline/container-images/tool-osv-scanner.json",
    "about": "B16-resolved immutable image record used by the fixed offline OSV Scanner B13 adapter.",
    "produced_by": [],
    "consumed_by": [
@@ -13885,7 +13885,7 @@
   "scancode-image": {
    "id": "scancode-image",
    "kind": "record",
-   "path": "appsec-review-process/registry/container-images/scancode-toolkit.json",
+   "path": "appsec-review-process/pipeline/container-images/scancode-toolkit.json",
    "about": "B16-resolved immutable image record used by the fixed offline ScanCode B13 adapter.",
    "produced_by": [],
    "consumed_by": [
@@ -13945,7 +13945,7 @@
   "fixture-harmless-image": {
    "id": "fixture-harmless-image",
    "kind": "record",
-   "path": "appsec-review-process/registry/container-images/fixture-harmless.json",
+   "path": "appsec-review-process/pipeline/container-images/fixture-harmless.json",
    "about": "Tracked immutable Alpine image-index record used only for harmless B13 adapter qualification.",
    "produced_by": [],
    "consumed_by": [

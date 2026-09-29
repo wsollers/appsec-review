@@ -17,7 +17,7 @@ reporting, and current readiness in one place.
 | `pools/` | Resource pools (B15) and pool specification / deterministic expansion (C01). | Dispatching more than one worker. |
 | `rendezvous/` | Wait-all rendezvous and the terminal-instance manifest (C02). | Waiting on a pool. |
 | `adapters/` | The worker-result envelope, pinned-container (B13) and persona-invocation (B14) adapters, permission capabilities (B11). | Writing or validating a worker. |
-| `personas-and-registry/` | The human-readable persona catalog (machine records: `appsec-review-process/registry/`). | Selecting or interpreting persona work. |
+| `personas-and-registry/` | The human-readable persona catalog (machine records: `appsec-review-process/pipeline/`). | Selecting or interpreting persona work. |
 | `contracts/` | Validator dispatch rules for output contracts. | Validating an attempt. |
 | `design-parity/` | The completion plan and five **generated** views (`design-parity-readiness.md`, `design-parity-report.md`, `full-review-workflow.mmd`, `job-graph.mmd`, and `pipeline-job-graph.mermaid`, one node per lifecycle job with the threat-workbench cells). Never hand-edit the generated ones; run `validate_design_parity.py --write-generated-views --write-report docs/design-parity/design-parity-report.md`, `phase1.py graph` and `python3 docs/design-parity/pipeline_job_graph.py` (each has a `--check`). | Asking "is X built and qualified?". |
 | `report-path/` | The operator guide to a draft report (including tailing the run log and the `APPSEC_*` environment settings) and its BPMN/Mermaid flow. | Running `full_review` end to end. |

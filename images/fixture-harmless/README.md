@@ -10,7 +10,7 @@ upstream image named **only by digest**:
 
 | Field | Value |
 |---|---|
-| Registry record | `appsec-review-process/registry/container-images/fixture-harmless.json` |
+| Registry record | `appsec-review-process/pipeline/container-images/fixture-harmless.json` |
 | Repository | `docker.io/library/alpine` |
 | Digest (image index) | `sha256:f71a5f071694a785e064f05fed657bf8277f1b2113a8ed70c90ad486d6ee54dc` |
 | Upstream release | Docker Official Image `alpine` 3.17 (3.17.5) |

@@ -42,7 +42,8 @@ See [`docs/evidence/ossf-scorecard-job.md`](../docs/evidence/ossf-scorecard-job.
 | `manual-orchestration-runbook.md` | How to operate the process before a full orchestrator exists. |
 | `initial-idsoftware-game-repo-compile-and-review.md` | Fresh-task starter prompt for selecting, cloning, building, and staging an id Software game/engine repo. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
-| `registry/` | Composable persona, role, domain, tooling-profile, output-contract, and job-template records. |
+| `pipeline/` | Job definitions in one place: `job-graph.json`, `tunables.json`, and the job-template, output-contract, domain, tooling-profile, permission-capability, container-image and prompt-fragment records ([README](pipeline/README.md)). Not the repository-root `pipeline/`. Paths come from `registry_paths.py`. |
+| `personas/` | Persona and role records, one folder each (paths from `persona_registry.py`). |
 | `tooling/buildenv-catalog.json` | Language, LSP, MCP, and binary-analysis image catalog. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
 | `logs/` | Local run logs, scratch notes, and pasted outputs. Contents are ignored. |
@@ -274,7 +275,7 @@ native bundle, correlated findings, deep confirmation, and retrieval plan as nee
 
 ## Composable Registry, Skills, And Worker Images
 
-The registry under `appsec-review-process/registry/` now contains dispatchable building blocks for
+The registry under `appsec-review-process/pipeline/` now contains dispatchable building blocks for
 bounded work inside lanes:
 
 - personas for developer, DevOps, SRE, standards validation, QA/test intelligence, document

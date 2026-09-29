@@ -27,7 +27,7 @@ other analysis images are listed so the gap is visible.
 | `audit-lsp-vendor` (new) | `rust:1.90.0-bookworm`, `python:3.12-bookworm` | none | build-only: vendored tree-sitter CLI + wheels |
 | `audit-native`, `audit-static`, `audit-static-opengrep`, `audit-binary-analysis`, `audit-iac`, `audit-container`, `audit-report`, `tool-*` | — | various | **not in scope** of this branch: no language server or tree-sitter added (see §7 OPEN) |
 
-B16 records (`appsec-review-process/registry/container-images/*.json`) are generated host-locally by
+B16 records (`appsec-review-process/pipeline/container-images/*.json`) are generated host-locally by
 `images/registry_records.py` from the successful build state and are not tracked. The
 `STEP4_IMAGE_IDS` list now includes `audit-codeql` and `audit-codeql-native`, so
 `prepare-host.sh` builds and registers them (ADR-0017 consequence 1).
