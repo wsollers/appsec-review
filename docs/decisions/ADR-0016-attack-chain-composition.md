@@ -1,8 +1,8 @@
 # ADR-0016: Attack chains are composed from reviewed claims after verification
 
 Status: **Accepted** (2026-09-29, William, recommended defaults: lane 14 parallel to 12, `supported`
-ceiling, optional input of 10, default bounds, job names as below). **Implemented** on branch
-`kill-chains`: seeding, composer and refuter pools, derive and merge rules, attack-chain ledger, job
+ceiling, optional input of 10, default bounds, job names as below). **Implemented** and merged to
+`main` from `kill-chains` (`497e1b7`, `bc95049`, 2026-09-29; unit tests with stub invokers only): seeding, composer and refuter pools, derive and merge rules, attack-chain ledger, job
 graph and Dagster wiring (plan slices S1-S3) and the report section (plan S4, as a separate
 `attack-chains.json` artifact of 10). **Open:** live acceptance (S5), later slices (S6). Builds on ADR-0015.
 

@@ -1,7 +1,13 @@
 # ADR-0017: CodeQL runs in its own job, always, with build-mode none
 
-Status: **Proposed** (implemented on branch `ws-sast`; decisions 1 and 2 are William's, 2026-09-28;
-3 to 6 are the implementer's and need review)
+Status: **Proposed** (decisions 1 and 2 are William's, 2026-09-28; 3 to 6 are the implementer's and need review)
+
+Implementation (2026-09-29): merged to `main` from `ws-sast` (`fa5d37d`). The claim-ledger producer row of
+decision 3 is in (`f50caba`: CodeQL leads are P1). The later traced C/C++ tool id `codeql-cpp-traced`
+(image `audit-codeql-native`, merged from `lang-servers`, `955d797`) exists in `codeql_sast.py` but is not
+wired: `full_review` passes no native-build root and there is no `02-native-build -> 02-codeql-sast`
+edge, so runs use build-mode none only. The `audit-codeql` image now carries a .NET SDK for C#. No B16
+record is registered yet (every language is `UNAVAILABLE` until one is) and nothing has run live.
 
 ## Context
 

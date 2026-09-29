@@ -1,6 +1,7 @@
 # ADR-0019: Threat Workbench Slice 1 And The Privacy Cell (L13)
 
-Status: Proposed 2026-09-28 (implemented on branch `ws-workbench`; the open decisions below need William).
+Status: Proposed 2026-09-28 (the open decisions below need William). Implementation: merged to `main` from
+`ws-workbench` (`35fca25`, 2026-09-29); no live run yet.
 
 Builds on: [ADR-0008](ADR-0008-threat-workbench.md) (accepted design), [ADR-0013](ADR-0013-run-to-report-first.md)
 (run to report), [ADR-0015](ADR-0015-tool-leads-are-ledger-candidates.md) (supporting-evidence menu,
