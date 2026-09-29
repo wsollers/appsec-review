@@ -7,11 +7,12 @@ changes (decision 9). The engine order per language, "model text never
 decides reachability" and "tree-sitter alone is never `reachable`" were decided by William in the
 brief; the rest awaits review.
 
-Implementation (2026-09-29): merged to `main` (`f5ca4d3`); 06 derives its evidence in `full_review`
-from new edges on `02-code-property-graph` and `02-codeql-sast`. The CodeQL reachability packs in
-`data/codeql-reachability/` are written but not compiled, and no job yet runs them, the LSP
-incomingCalls walk or `treesitter_ast.py` in a run (those inputs come from `<run>/inputs/`). Unit
-tests only; no live run. Details: [`docs/dependency-reachability.md`](../dependency-reachability.md).
+Implementation (2026-09-29): merged to `main` (`f5ca4d3`). Since ADR-0023 (`1248b43`) the CodeQL
+reachability packs in `data/codeql-reachability/` run in `06-reachability-codeql` against the
+databases the `02-codeql-<lang>` nodes retain, the CPG path runs in `06-reachability-ir`, and 06 is
+the correlator over both. The packs are still uncompiled (QL compile round pending with the image
+rebuild); the LSP incomingCalls walk and `treesitter_ast.py` still run outside the graph (hints come
+from `<run>/inputs/`). Unit tests only; no live run. Details: [`docs/dependency-reachability.md`](../dependency-reachability.md).
 
 ## Context
 
