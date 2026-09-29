@@ -62,6 +62,26 @@ class SharedRuntimeScope(unittest.TestCase):
             self.assertIn('analysis_feature_lifecycle.py', code)
             self.assertEqual('dependency_workers.py' in code, job == '06-cve-reachability')
 
+    def test_control_feature_lifecycle(self):
+        import control_feature_lifecycle as lifecycle
+        for job in lifecycle.JOBS:
+            code = lifecycle._code(job)
+            self.assertNoSharedRuntime(code, job)
+            self.assertIn('control_feature_lifecycle.py', code)
+
+    def test_joern_cpg(self):
+        import joern_cpg
+        code = joern_cpg._code()
+        self.assertNoSharedRuntime(code, joern_cpg.JOB)
+        self.assertIn('joern_cpg.py', code)
+
+    def test_test_evidence(self):
+        import test_evidence
+        for job in test_evidence.SPECS:
+            code = test_evidence.code_hashes(job)
+            self.assertNoSharedRuntime(code, job)
+            self.assertIn('test_evidence.py', code)
+
 
 if __name__ == '__main__':
     unittest.main()
