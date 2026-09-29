@@ -191,6 +191,7 @@
           "line",
           "function",
           "component_ids",
+          "boundary_ids",
           "deterministic",
           "entry",
           "entry_reason",
@@ -280,6 +281,12 @@
                 "type": "string",
                 "pattern": "^sha256:[0-9a-f]{64}$"
               }
+            }
+          },
+          "boundary_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }

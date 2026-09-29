@@ -508,6 +508,18 @@ Looks for:
 
 ## Defensive And Verification Personas
 
+### attack-chain-refuter
+
+Refuter cell of `14-attack-chain-refutation` (ADR-0016): reads one batch of composed attack chains and, for
+each, tries to break the weakest link first; answers `broken`, `narrowed`, `holds` or `cannot_assess` with the
+target link or edge, the mechanism and citations (the chain's own citations and fact refs, or pinned menu
+files). Carries the 08 kill-chain rules: one broken link breaks the chain; a tainted-data chain is broken only
+by a cited block at a specific hop. Uses `14-attack-chain/task-attack-chain-refutation-cell.md`. Role
+`chain-refuter`, domain `attack-chain-lifecycle`, tooling profile `claim-review-static`.
+
+Must not change a claim's review state, cite evidence outside its batch or the pinned menu, rate severity, or
+write exploit code or payloads.
+
 ### defensive-skeptic
 
 Attempts to refute or narrow claims using evidence.

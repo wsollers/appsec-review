@@ -142,7 +142,14 @@
               "input-missing",
               "cluster-cap",
               "cluster-claims-cap",
-              "cluster-facts-cap"
+              "cluster-facts-cap",
+              "composer-failed",
+              "composer-no-chain",
+              "merge-conflict",
+              "refutation-cap",
+              "refuter-failed",
+              "refutation-skipped-budget",
+              "synthetic-edge"
             ]
           },
           "detail": {

@@ -1,0 +1,55 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "attack-chain-refutation-cell",
+  "display_name": "Attack-chain Refuter Cell",
+  "process": "14-attack-chain",
+  "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "_note": "ADR-0016 asks for a different model family from the composer where the registry allows; the configured aliases are claude-sonnet-5 and haiku only, so the refuter differs by persona and role (open for the controller)."
+  },
+  "composition": {
+    "persona_id": "attack-chain-refuter",
+    "role_id": "chain-refuter",
+    "domain_id": "attack-chain-lifecycle",
+    "tooling_profile_id": "claim-review-static",
+    "output_contract_id": "attack-chain-candidates"
+  },
+  "inputs": {
+    "required": [
+      "refutation batch (readable input 0)"
+    ],
+    "optional": [
+      "supporting-evidence menu and pinned files"
+    ]
+  },
+  "outputs": {
+    "directory": "private persona instance output",
+    "files": [
+      "candidates.json"
+    ]
+  },
+  "permissions": [
+    "read-run-data"
+  ],
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "task",
+    "output_contract"
+  ],
+  "task_prompt": "appsec-review-process/14-attack-chain/task-attack-chain-refutation-cell.md",
+  "implemented": true,
+  "applicability": "one persona cell per chain_refutation_batch composed chains of 14-attack-chain-refutation; zero instances when no chain was composed or the run budget is probe",
+  "timeout_seconds": 1800,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
+}

@@ -159,7 +159,7 @@ class _Code:
         artifact = self.artifacts.get(item_id)
         self.facts.setdefault(key, {"fact_id": key, "item_id": item_id, "locator": locator, "kind": kind,
             "label": _clip(label, LABEL_CHARS), "path": path, "line": line,
-            "function": _clip(function, 200) if function else None, "component_ids": [],
+            "function": _clip(function, 200) if function else None, "component_ids": [], "boundary_ids": [],
             "deterministic": item_id in DETERMINISTIC_ITEMS, "entry": entry_reason is not None,
             "entry_reason": entry_reason,
             "artifact": {"path": artifact["path"], "sha256": artifact["sha256"]} if artifact else None})
@@ -379,6 +379,7 @@ def build(run_id: str, verification: dict[str, Any], *, ledger_states: dict[str,
                          + (f" crossing {', '.join(flow['boundary_ids'])}" if flow.get("boundary_ids") else ""),
                          None, None, None)
         boundaries[key] = set(flow.get("boundary_ids") or [])
+        code.facts[key]["boundary_ids"] = sorted(boundaries[key])
         for a in sources:
             for b in targets:
                 graph.add(a, b, "model_flow", [key], f"threat-model flow {flow['flow_id']}")
