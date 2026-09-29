@@ -63,6 +63,7 @@ REFUTER_RULES = (
 def code_hashes() -> dict[str, str]:
     """Implementation files both lane-14 jobs depend on (the workers add their own module)."""
     paths = ["attack_chain_seeds.py", "attack_chain_derive.py", "attack_chain_refute.py", "attack_chain_pool.py",
+             "attack_reference.py", "mitre_feed.py",
              "claim_ledger.py", "persona_invocation.py", "deterministic_pool_merge.py", "pool_launcher.py",
              "pool_rendezvous.py", "pool_specification.py", "supporting_evidence_menu.py",
              "personas/personas/attack-chain-composer/persona.json", "personas/personas/attack-chain-refuter/persona.json",

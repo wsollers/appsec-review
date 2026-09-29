@@ -121,7 +121,12 @@ def _runtime_instructions(package: Any) -> str:
                         "VA SC SI SA, rationale: one justification per metric}; Python computes vector, score and "
                         "severity (reachability may cap it later)"),
             "remediation": ("VERIFIED claims only, optional: {objective, patch_proposal}; published as "
-                            "PATCH_PROPOSED_UNVALIDATED")}.items() if key in optional},
+                            "PATCH_PROPOSED_UNVALIDATED"),
+            "attack_refs": ("optional: up to 8 MITRE ATT&CK technique ids ('T1190', 'T1059.004') labelling the "
+                            "attacker case; labels only, never evidence; unknown or deprecated ids are dropped; "
+                            "omit when unsure"),
+            "capec_refs": ("optional: up to 8 CAPEC ids ('CAPEC-66') labelling the attack pattern; labels only, "
+                           "never evidence; omit when unsure")}.items() if key in optional},
         "citation_rule": (("cite by citation_id only, using ids from " + citable[stage] +
                            "; never copy or invent citation objects") if stage in citable else
                           "no citations for this stage"),

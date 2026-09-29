@@ -13,6 +13,7 @@ from execution_state import Blocked, atomic_json, digest, file_hash, read_json, 
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import attack_reference
 import control_process_worker
 import cvss4
 import cwe_catalog
@@ -308,7 +309,32 @@ def _judged(record: dict[str, Any], upstream: dict[str, Any], judgment: dict[str
         judgments.append(judgment)
     if judgments:
         record["cwe_judgments"] = judgments
+    if "mitre_refs" not in record and upstream.get("mitre_refs") is not None:
+        record["mitre_refs"] = upstream["mitre_refs"]
     return record
+
+
+def _mitre_refs(decision: dict[str, Any], reference: Any, gap: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Optional ATT&CK/CAPEC labels at 07 (ADR-0026): only ids that validate OK against the bound,
+    in-ceiling MITRE snapshot are kept; every drop, and a missing or stale snapshot, is a recorded gap
+    that withholds the tags. Never blocks the claim, never evidence (absent stays absent)."""
+    attack, capec = decision.get("attack_refs"), decision.get("capec_refs")
+    if attack is None and capec is None:
+        return None
+    if not all(isinstance(value, list) for value in (attack or [], capec or [])):
+        raise Blocked("red team: attack_refs and capec_refs are lists of ids")
+    return attack_reference.screen(attack or [], capec or [], reference=reference,
+                                   gap=gap or {"code": attack_reference.GAP_MISSING, "detail": "no MITRE reference"})
+
+
+def _mitre_reference(decisions: Any, mitre_binding: dict[str, Any] | None) -> tuple[Any, dict[str, Any] | None]:
+    """The reference 07 validates tags against: the one bound into the stage inputs (deterministic on
+    re-validation), or the live in-ceiling snapshot when no binding was recorded. Loaded only when a
+    decision carries tags."""
+    rows = decisions.values() if isinstance(decisions, dict) else decisions
+    if not any(isinstance(row, dict) and ("attack_refs" in row or "capec_refs" in row) for row in rows):
+        return None, None
+    return attack_reference.bound(mitre_binding) if mitre_binding is not None else attack_reference.load()
 
 
 def _cvss_assessment(decision: dict[str, Any]) -> dict[str, Any] | None:
@@ -434,14 +460,17 @@ def source_generation(result: dict[str, Any]) -> str:
     return generation
 
 
-def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
+def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any],
+             mitre_binding: dict[str, Any] | None = None) -> dict[str, Any]:
     _validate_ledger(ledger)
     candidates = _index(ledger["candidates"])
     rows = _decision_index(decisions, set(candidates))
+    mitre, mitre_gap = _mitre_reference(rows, mitre_binding)
     hypotheses = []
     for claim_id in sorted(candidates):
         candidate, decision = candidates[claim_id], rows[claim_id]
-        _closed(decision, {"claim_id", "reviewer", "attacker_case", "citations", "dissent_ids"}, "red team", {"cwe"})
+        _closed(decision, {"claim_id", "reviewer", "attacker_case", "citations", "dissent_ids"}, "red team",
+                {"cwe", "attack_refs", "capec_refs"})
         judgment = _cwe_judgment("07-red-team-adversarial", decision)
         if candidate["claim_class"] != "candidate_only" or candidate["status"] != "candidate":
             raise Blocked("red team: ledger record is not a candidate")
@@ -452,7 +481,9 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
             raise Blocked("red team: attacker case and citations are required")
         if not _citation_ids(decision["citations"]) <= _citation_ids(candidate["citations"]):
             raise Blocked("red team: cited evidence does not resolve in the accepted candidate")
+        labels = _mitre_refs(decision, mitre, mitre_gap)
         hypotheses.append(_judged({**_preserved(candidate), "status": "HYPOTHESIS",
+            **({"mitre_refs": labels} if labels is not None else {}),
             "proof_obligations": [{**item, "status": "OPEN", "citations": []}
                                   for item in candidate["proof_obligations"]],
             "hypothesis_id": "hyp_" + digest((claim_id, decision))[:20],

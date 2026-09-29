@@ -134,6 +134,13 @@
                 }
               }
             }
+          },
+          "attack_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"
+            }
           }
         }
       }
@@ -374,6 +381,28 @@
         },
         "severity_assigned": {
           "const": false
+        }
+      }
+    },
+    "mitre_reference": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reference_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "attack_versions": {
+          "type": "object"
+        },
+        "capec_version": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     }

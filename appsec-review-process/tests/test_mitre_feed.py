@@ -309,7 +309,7 @@ class ValidatorTests(unittest.TestCase):
     def setUpClass(cls):
         reference = attack_reference.derive({"enterprise-attack": ("attack", attack_bundle()),
                                              "capec": ("capec", capec_bundle())})
-        cls.ref = attack_reference.Reference(reference, {"snapshot_id": "sha256-0123456789abcdef"})
+        cls.ref = attack_reference.Reference(reference, {"reference_sha256": "0" * 64})
 
     def test_validate_technique(self):
         ref = self.ref
@@ -337,7 +337,7 @@ class ValidatorTests(unittest.TestCase):
                                          reference=self.ref)
         self.assertEqual(result["attack_refs"], ["T1190"])
         self.assertEqual(result["capec_refs"], ["CAPEC-66"])
-        self.assertEqual(result["reference"]["snapshot_id"], "sha256-0123456789abcdef")
+        self.assertEqual(result["reference"]["reference_sha256"], "0" * 64)
         codes = [(gap["code"], gap["ref"]) for gap in result["gaps"]]
         self.assertIn(("MITRE_REF_UNKNOWN_ID", "T9999"), codes)
         self.assertIn(("MITRE_REF_DEPRECATED", "T1066"), codes)
@@ -395,6 +395,39 @@ class StalenessGateTests(unittest.TestCase):
         self.assertEqual((result["attack_refs"], result["capec_refs"]), (["T1190"], []))
         self.assertEqual(result["gaps"][0]["code"], "MITRE_REFERENCE_MISSING")
 
+
+
+class MitreDagsterTests(unittest.TestCase):
+    """The third independent op of nvd_reference_sync (a failure in one op never stops the others)."""
+
+    def setUp(self):
+        try:
+            import dagster  # noqa: F401
+        except ImportError:
+            self.skipTest("dagster is not installed")
+        sys.path.insert(0, os.environ.get("APPSEC_DEFINITIONS_DIR",
+                                          str(Path(__file__).resolve().parents[2] / "orchestrator" / "dagster")))
+        import definitions
+        self.definitions = definitions
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name) / "data" / "feeds" / "mitre"
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_job_has_three_independent_ops_and_the_op_publishes(self):
+        import dagster
+        job = self.definitions.nvd_reference_sync
+        self.assertEqual({n.name for n in job.nodes}, {"nvd_sync_work", "osv_sync_work", "mitre_sync_work"})
+        self.assertEqual(job.tags["mitre_feed_id"], "mitre")
+        self.assertEqual(sum(1 for _ in job.graph.dependency_structure.input_to_upstream_outputs_for_node("mitre_sync_work")), 0)
+        payloads = {"enterprise-attack": attack_bundle(), "capec": OSError("down")}
+        fake = lambda coordinator_id: mitre_feed.sync(self.root, coordinator_id, specs=SPECS, sources=tuple(SPECS),
+                                                      fetch_file=FakeDownloader(payloads))
+        with unittest.mock.patch.object(self.definitions, "sync_mitre", fake):
+            snapshot_id = self.definitions.mitre_sync_work(dagster.build_op_context())
+        self.assertTrue(snapshot_id.startswith("sha256-"))
+        self.assertEqual(mitre_feed.verify(self.root)["gaps"], ["capec"])
 
 
 if __name__ == "__main__":

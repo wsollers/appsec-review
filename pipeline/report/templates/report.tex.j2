@@ -291,12 +291,13 @@ verification (lane 09). Refuted hypotheses are kept for the record with priority
 \eyebrow{Impact} & \VAR{c.impact_kind|tex}\\
 \eyebrow{Weakest link} & \VAR{c.weakest.reason|tex}\\
 \eyebrow{Refutation} & \VAR{c.refutation.disposition|tex}\BLOCK{if c.refutation.mechanism}: \VAR{c.refutation.mechanism|tex}\BLOCK{endif} (\VAR{c.refutation.citations} citation(s))\\
-\end{tabularx}}
+\BLOCK{if c.get('attack_versions')}\eyebrow{ATT\&CK labels} & \BLOCK{for d, v in c.attack_versions|dictsort}\VAR{d|tex} v\VAR{v|tex}\BLOCK{if not loop.last}, \BLOCK{endif}\BLOCK{endfor}; labels only, never evidence\\
+\BLOCK{endif}\end{tabularx}}
 
 \eyebrow{Stages}\\
 {\small
 %% for l in c.links
-\colorbox{panel}{\sffamily\scriptsize\bfseries \VAR{l.stage|tex}} \VAR{l.label|tex} \textcolor{muted}{(\VAR{l.link_state|tex}\BLOCK{if l.severity}, \VAR{l.severity|tex}\BLOCK{endif})}\BLOCK{if not loop.last}\quad$\rightarrow$ \textcolor{muted}{\VAR{c.edges[loop.index0].basis|tex}} $\rightarrow$\quad\BLOCK{endif}
+\colorbox{panel}{\sffamily\scriptsize\bfseries \VAR{l.stage|tex}} \VAR{l.label|tex} \textcolor{muted}{(\VAR{l.link_state|tex}\BLOCK{if l.severity}, \VAR{l.severity|tex}\BLOCK{endif})}\BLOCK{if l.get('attack_refs')} \textcolor{muted}{\mono{ATT\&CK \VAR{l.attack_refs|join(', ')|tex}}}\BLOCK{endif}\BLOCK{if not loop.last}\quad$\rightarrow$ \textcolor{muted}{\VAR{c.edges[loop.index0].basis|tex}} $\rightarrow$\quad\BLOCK{endif}
 %% endfor
 }
 

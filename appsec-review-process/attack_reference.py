@@ -38,6 +38,16 @@ CWE_ID = re.compile(r"CWE-[1-9][0-9]{0,4}")
 _ATTACK_URL = re.compile(r"https://attack\.mitre\.org/[A-Za-z0-9/._-]{1,120}")
 _CAPEC_URL = re.compile(r"https?://capec\.mitre\.org/[A-Za-z0-9/._-]{1,120}")
 NAME_CHARS = 200
+# Lane-14 chain stage -> ATT&CK Enterprise tactic shortnames a link's technique may carry (ADR-0026).
+# Deliberately permissive: a mismatch only drops the label with a recorded gap.
+CHAIN_STAGE_TACTICS = {
+    "entry": ("initial-access", "reconnaissance", "resource-development"),
+    "execution": ("execution", "stealth", "defense-impairment"),
+    "privilege_gain": ("privilege-escalation", "credential-access"),
+    "persistence": ("persistence", "stealth", "defense-impairment"),
+    "lateral_movement": ("lateral-movement", "discovery"),
+    "impact": ("impact", "exfiltration", "collection", "credential-access", "command-and-control"),
+}
 
 
 class MitreReferenceError(ValueError):
@@ -266,6 +276,30 @@ def load(root: Any = None, *, now: datetime | None = None,
     return _LOADED[key], None
 
 
+def binding(root: Any = None, *, now: datetime | None = None) -> dict[str, Any]:
+    """Stable identity of the reference a stage validated against, for its input fingerprint: the
+    derived table's hash and upstream versions when the snapshot is in the ceiling (unchanged across
+    re-syncs of the same pins), else only the gap code. Never raises."""
+    reference, gap = load(root, now=now)
+    if reference is None:
+        return {"status": gap["code"]}
+    return {"status": OK, "reference_sha256": reference.identity["reference_sha256"],
+            "attack_versions": reference.attack_versions, "capec_version": reference.capec_version}
+
+
+def bound(value: dict[str, Any], root: Any = None) -> tuple[Reference | None, dict[str, Any] | None]:
+    """The Reference a recorded ``binding`` names, integrity-checked but not re-aged: the ceiling was
+    applied when the binding was taken, so a re-validation reproduces the same result."""
+    status = (value or {}).get("status")
+    if status != OK:
+        code = status if status in (GAP_MISSING, GAP_STALE, GAP_INVALID) else GAP_INVALID
+        return None, {"code": code, "detail": "MITRE reference snapshot was not usable when this stage's inputs were bound"}
+    reference, gap = load(root, now=datetime.now(timezone.utc), max_age_seconds=sys.maxsize)
+    if reference is None or reference.identity.get("reference_sha256") != value.get("reference_sha256"):
+        return None, {"code": GAP_INVALID, "detail": "the bound MITRE reference table is no longer published"}
+    return reference, None
+
+
 def _shown(value: Any) -> str:
     """Echo a model-supplied tag only when it is id-shaped; anything else is described, never copied."""
     text = str(value).strip().upper() if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
@@ -274,11 +308,18 @@ def _shown(value: Any) -> str:
     return f"<malformed id, {len(str(value))} chars>"
 
 
+def _any_tactic(reference: Reference, value: Any, tactic: Any) -> str:
+    tactics = [tactic] if tactic is None or isinstance(tactic, str) else (list(tactic) or [None])
+    statuses = [reference.validate_technique(value, item) for item in tactics]
+    return OK if OK in statuses else statuses[0]
+
+
 def screen(attack_refs: Iterable[Any] | None = (), capec_refs: Iterable[Any] | None = (), *,
            tactic: Any = None, reference: Reference | None = None, gap: dict[str, Any] | None = None,
            root: Any = None, now: datetime | None = None) -> dict[str, Any]:
     """Validate optional tags. Returns ``{attack_refs, capec_refs, reference, gaps}`` where the ref
-    lists hold only OK ids (canonical, sorted, de-duplicated) and every drop or withheld tag is a gap."""
+    lists hold only OK ids (canonical, sorted, de-duplicated) and every drop or withheld tag is a gap.
+    ``tactic`` is one tactic or a sequence of acceptable tactics (any match is OK)."""
     attack_refs, capec_refs = list(attack_refs or []), list(capec_refs or [])
     if reference is None and gap is None and (attack_refs or capec_refs):
         reference, gap = load(root, now=now)
@@ -289,10 +330,10 @@ def screen(attack_refs: Iterable[Any] | None = (), capec_refs: Iterable[Any] | N
         result["gaps"].append({**(gap or {"code": GAP_MISSING, "detail": "no MITRE reference snapshot"}),
                                "withheld": sorted({_shown(item) for item in attack_refs + capec_refs})[:2 * REFS_MAX]})
         return result
-    result["reference"] = {key: reference.identity.get(key) for key in ("snapshot_id", "data_timestamp", "reference_sha256")}
-    result["reference"].update(attack_versions=reference.attack_versions, capec_version=reference.capec_version)
+    result["reference"] = {"reference_sha256": reference.identity.get("reference_sha256"),
+                           "attack_versions": reference.attack_versions, "capec_version": reference.capec_version}
     for kind, values, available, check, canon in (
-            ("attack", attack_refs, reference.has_attack, lambda v: reference.validate_technique(v, tactic),
+            ("attack", attack_refs, reference.has_attack, lambda v: _any_tactic(reference, v, tactic),
              lambda v: _canonical(v, TECHNIQUE_ID)),
             ("capec", capec_refs, reference.has_capec, reference.validate_capec,
              lambda v: _canonical(v, CAPEC_ID, "CAPEC-"))):
