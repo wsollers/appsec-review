@@ -317,6 +317,17 @@ proposing candidate-only hypotheses. Role `vulnerability-hypothesis-hunter`, dom
 
 Must not cite a file or line it did not read, rate severity, or claim a confirmed finding.
 
+### attack-chain-composer
+
+Composer cell of `14-attack-chain-composition` (ADR-0016): reads one cluster workspace (reviewed claims,
+CPG/IR and threat-model facts, seeded adjacency) and proposes ordered attack chains (entry -> execution ->
+privilege_gain -> persistence | lateral_movement -> impact) whose links cite only workspace claim ids or
+fact refs, or an explicit no-chain reason. Uses `14-attack-chain/task-attack-chain-composition-cell.md`.
+Role `chain-composer`, domain `attack-chain-lifecycle`, tooling profile `claim-review-static`.
+
+Must not cite a claim, fact, file or line outside the workspace, rate severity, call a chain verified, or
+write exploit code or payloads.
+
 ## Domain Specialist Personas
 
 ### nginx-rest-api-specialist
@@ -496,6 +507,18 @@ Looks for:
 - deployment approval bypasses
 
 ## Defensive And Verification Personas
+
+### attack-chain-refuter
+
+Refuter cell of `14-attack-chain-refutation` (ADR-0016): reads one batch of composed attack chains and, for
+each, tries to break the weakest link first; answers `broken`, `narrowed`, `holds` or `cannot_assess` with the
+target link or edge, the mechanism and citations (the chain's own citations and fact refs, or pinned menu
+files). Carries the 08 kill-chain rules: one broken link breaks the chain; a tainted-data chain is broken only
+by a cited block at a specific hop. Uses `14-attack-chain/task-attack-chain-refutation-cell.md`. Role
+`chain-refuter`, domain `attack-chain-lifecycle`, tooling profile `claim-review-static`.
+
+Must not change a claim's review state, cite evidence outside its batch or the pinned menu, rate severity, or
+write exploit code or payloads.
 
 ### defensive-skeptic
 
@@ -926,7 +949,7 @@ Outputs:
 Feeds:
 
 - threat model
-- red-team kill-chain scenarios
+- lane-14 attack-chain composition (ADR-0016)
 - QA validation plan
 - synthesis limitations
 

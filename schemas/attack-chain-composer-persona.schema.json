@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "attack-chain-composer-persona.schema.json",
+  "description": "Model-facing reply of one attack-chain-composer cell (one cluster workspace). Judgment only: which workspace claims or facts form a chain, each link's stage, prerequisites and citation ids, the fact ref that justifies each hop and the basis it claims, the objective, impact kind and a short narrative naming the chain's claim ids; or chains [] with a no_chain_reason. Each link gives exactly one of claim_id or fact_ref. The orchestrator derives chain ids, link states, edge bases, canonical citations, the chain state and its weakest link.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chains"
+  ],
+  "properties": {
+    "no_chain_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objective",
+          "impact_kind",
+          "links",
+          "edges",
+          "narrative"
+        ],
+        "properties": {
+          "objective": {
+            "type": "string",
+            "minLength": 1
+          },
+          "impact_kind": {
+            "enum": [
+              "code_execution",
+              "data_disclosure",
+              "data_tampering",
+              "denial_of_service",
+              "credential_theft",
+              "exfiltration"
+            ]
+          },
+          "narrative": {
+            "type": "string",
+            "minLength": 1
+          },
+          "links": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stage"
+              ],
+              "properties": {
+                "claim_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fact_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "stage": {
+                  "enum": [
+                    "entry",
+                    "execution",
+                    "privilege_gain",
+                    "persistence",
+                    "lateral_movement",
+                    "impact"
+                  ]
+                },
+                "prerequisites": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "text",
+                      "requires_link_indexes"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "requires_link_indexes": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                },
+                "citation_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from",
+                "to",
+                "basis_claimed",
+                "rationale"
+              ],
+              "properties": {
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                },
+                "basis_claimed": {
+                  "enum": [
+                    "code_fact",
+                    "model_flow",
+                    "synthetic"
+                  ]
+                },
+                "fact_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

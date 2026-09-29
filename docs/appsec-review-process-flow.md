@@ -28,7 +28,9 @@ flowchart TD
   R --> U[08 blue-team refutation]
   U --> V[09 independent verification]
   V --> Q[12 scoring of verified claims]
+  V --> K[14 attack-chain composition and refutation]
   Q --> X[10 synthesis report publication]
+  K -.->|optional| X
   X --> A[Completeness and final-publication controls]
 ```
 
@@ -103,6 +105,22 @@ them. Each 07/08/09/12 reviewer also receives a hash-bound supporting-evidence m
 build and compile databases, IR, code property graph, debug symbols, binary, SBOM and test evidence)
 with every listed file pinned as a readable input, and a task guide for the `input_jq` and
 `evidence_*` lookup tools.
+
+## Attack chains (lane 14)
+
+[ADR-0016](decisions/ADR-0016-attack-chain-composition.md) adds a lane after 09 that runs in
+parallel with 12. `14-attack-chain-composition` seeds clusters from the reviewed claims (verified,
+narrowed or open; refuted excluded), entry facts (CPG input calls and `argv`/`envp` in `main`, IR
+reads in `main`, threat-model actors and external systems, public-ingress and client-device
+components) and adjacency (CPG/IR function membership and call records, threat-model flows,
+component relationships), then runs one `attack-chain-composer` persona cell per cluster. The model
+chooses links, stages, prerequisites and the fact ref for each hop; Python derives chain ids, edge
+bases (an unjoined hop is `synthetic`), link states and the chain state. `14-attack-chain-refutation`
+runs `attack-chain-refuter` cells that try to break each chain's weakest link, drops refuted chains
+with their reason and publishes the hash-linked `attack-chain-ledger.json`. A chain is at most
+`supported` and never a verified finding. The lane is an optional input of 10: a SKIPPED lane
+(`not-applicable-no-chain-seeds`) or a lane failure is a recorded gap, not a report failure. The
+report's "Attack chains" section is the next slice.
 
 ## Reporting and remaining gates
 

@@ -225,6 +225,14 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "candidate_hypothesis",
         "allowed_assertions": {"candidate-hypothesis", "coverage-gap"},
     },
+    "14-attack-chain-composition": {
+        "claim_class_id": "candidate_hypothesis",
+        "allowed_assertions": {"attack-chain-candidate", "coverage-gap"},
+    },
+    "14-attack-chain-refutation": {
+        "claim_class_id": "candidate_hypothesis",
+        "allowed_assertions": {"attack-chain", "attack-chain-refutation", "coverage-gap"},
+    },
     "claim-ledger-core": {
         "claim_class_id": "candidate_claim_ledger",
         "allowed_assertions": {"candidate-hypothesis", "candidate-status", "proof-obligation",

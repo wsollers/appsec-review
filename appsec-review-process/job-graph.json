@@ -899,6 +899,71 @@
         }
       ]
     },
+    "14-attack-chain-composition": {
+      "lane": "14-attack-chain",
+      "contract": "14-attack-chain-composition",
+      "template": "14-attack-chain-composition",
+      "implemented": true,
+      "namespace": "14-attack-chain-composition",
+      "dependencies": [
+        {
+          "job": "09-independent-verification",
+          "kind": "required",
+          "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "threat-model-core",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Seeds clusters of reviewed claims and entry facts (CPG/IR, threat model, component map) and runs one attack-chain composer persona cell per cluster; Python derives chain ids, edge bases, link and chain states (ADR-0016).",
+      "required_artifacts": [
+        "attack-chain-composition.json",
+        "attack-chain-seeds.json",
+        "attack-chain-composition.md",
+        "chain-pool-merge.json",
+        "permission.json",
+        "lineage.json",
+        "pool-receipt.json",
+        "status.json"
+      ]
+    },
+    "14-attack-chain-refutation": {
+      "lane": "14-attack-chain",
+      "contract": "14-attack-chain-refutation",
+      "template": "14-attack-chain-refutation",
+      "implemented": true,
+      "namespace": "14-attack-chain-refutation",
+      "dependencies": [
+        {
+          "job": "14-attack-chain-composition",
+          "kind": "required",
+          "contract": "14-attack-chain-composition",
+          "allowed_skip_reasons": [
+            "not-applicable-no-chain-seeds"
+          ]
+        }
+      ],
+      "planned_scope": "Runs attack-chain refuter persona cells against the composed chains (weakest link first), applies the weakest-link ceiling and publishes the hash-linked attack-chain ledger (ADR-0016).",
+      "required_artifacts": [
+        "attack-chain-ledger.json",
+        "attack-chain-ledger.md",
+        "refutation-pool-merge.json",
+        "permission.json",
+        "lineage.json",
+        "pool-receipt.json",
+        "status.json"
+      ]
+    },
     "10-synthesis-report": {
       "lane": "10-synthesis-report",
       "contract": "synthesis-report-publication",
@@ -953,6 +1018,14 @@
           "kind": "required",
           "contract": "12-scoring-prioritization",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "14-attack-chain-refutation",
+          "kind": "optional",
+          "contract": "14-attack-chain-refutation",
+          "allowed_skip_reasons": [
+            "not-applicable-no-chain-seeds"
+          ]
         },
         {
           "job": "11-remediation-proposal",

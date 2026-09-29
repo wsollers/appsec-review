@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 69,
+  "lifecycle_jobs": 71,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2357,6 +2357,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:14-attack-chain-refutation",
         "job:11-remediation-proposal"
        ],
        "produces": [
@@ -2455,6 +2456,7 @@
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
+       "job:14-attack-chain-refutation",
        "job:dynamic-rescope",
        "critical-findings-md"
       ],
@@ -2526,6 +2528,7 @@
      "llm-invoker",
      "buildenv-catalog",
      "buildenv-image",
+     "job:14-attack-chain-refutation",
      "critical-findings-md"
     ],
     "leaves": [
@@ -5112,6 +5115,64 @@
      }
     },
     {
+     "name": "14-attack-chain",
+     "entries": [
+      {
+       "ref": "job:14-attack-chain-composition",
+       "id": "14-attack-chain-composition",
+       "name": "Attack-chain Composition",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:09-independent-verification",
+        "job:03-threat-model-dfd-stride",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:14-attack-chain-composition"
+       ],
+       "declared_inputs": [
+        "accepted 09-independent-verification result (and its 08 upstream)",
+        "accepted integrated threat model",
+        "accepted component map"
+       ]
+      },
+      {
+       "ref": "job:14-attack-chain-refutation",
+       "id": "14-attack-chain-refutation",
+       "name": "Attack-chain Refutation and Ledger",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:14-attack-chain-composition"
+       ],
+       "produces": [
+        "job:14-attack-chain-refutation"
+       ],
+       "declared_inputs": [
+        "accepted 14-attack-chain-composition result and seeds"
+       ]
+      }
+     ],
+     "rollup": {
+      "enters": [
+       "job:09-independent-verification",
+       "job:03-threat-model-dfd-stride",
+       "job:01-component-characterization"
+      ],
+      "leaves": [
+       "job:14-attack-chain-refutation"
+      ],
+      "passes": [
+       "job:14-attack-chain-composition"
+      ],
+      "declared_inputs": [
+       "accepted 09-independent-verification result (and its 08 upstream)",
+       "accepted integrated threat model",
+       "accepted component map",
+       "accepted 14-attack-chain-composition result and seeds"
+      ]
+     }
+    },
+    {
      "name": "10-synthesis-report",
      "entries": [
       {
@@ -5128,6 +5189,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:14-attack-chain-refutation",
         "job:11-remediation-proposal"
        ],
        "produces": [
@@ -5209,6 +5271,7 @@
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
        "job:12-scoring-prioritization",
+       "job:14-attack-chain-refutation",
        "job:11-remediation-proposal",
        "job:evidence-qualified-quorum",
        "job:dynamic-rescope",
@@ -5315,6 +5378,8 @@
      "job:11-remediation-proposal",
      "job:remediation-retest-feedback",
      "job:12-scoring-prioritization",
+     "job:14-attack-chain-composition",
+     "job:14-attack-chain-refutation",
      "job:10-synthesis-report",
      "job:completeness-audit",
      "job:synthetic-hypothesis-resynthesis"
@@ -5441,6 +5506,9 @@
      "verified claims and remediation proposals",
      "accepted independent-verification result",
      "accepted complete scoring persona/tool-pool merge when verifications exist",
+     "accepted 09-independent-verification result (and its 08 upstream)",
+     "accepted integrated threat model",
+     "accepted 14-attack-chain-composition result and seeds",
      "exact accepted synthesis-input manifest",
      "F03 component map",
      "S02 threat model",
@@ -8731,6 +8799,147 @@
    ]
   },
   {
+   "id": "14-attack-chain-composition",
+   "lane": "14-attack-chain",
+   "name": "Attack-chain Composition",
+   "contract": "14-attack-chain-composition",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/attack_chain_composition.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "attack-chain-composer",
+    "role_id": "attack-chain-coordinator",
+    "domain_id": "attack-chain-lifecycle",
+    "tooling_profile_id": "claim-review-static",
+    "output_contract_id": "14-attack-chain-composition"
+   },
+   "depends_on": [
+    {
+     "job": "09-independent-verification",
+     "kind": "required",
+     "contract": "09-independent-verification"
+    },
+    {
+     "job": "03-threat-model-dfd-stride",
+     "kind": "required",
+     "contract": "threat-model-core"
+    },
+    {
+     "job": "01-component-characterization",
+     "kind": "required",
+     "contract": "component-map"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 09-independent-verification result (and its 08 upstream)"
+    },
+    {
+     "need": "required",
+     "input": "accepted integrated threat model"
+    },
+    {
+     "need": "required",
+     "input": "accepted component map"
+    },
+    {
+     "need": "optional",
+     "input": "supporting-evidence menu: CPG records and IR facts"
+    }
+   ],
+   "inputs_source": "registry/job-templates/14-attack-chain-composition.json",
+   "output_dir": "runs/<run_id>/data/jobs/14-attack-chain-composition/",
+   "output_files": [
+    "attack-chain-composition.json",
+    "attack-chain-seeds.json",
+    "attack-chain-composition.md",
+    "chain-pool-merge.json",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/14-attack-chain-composition.json",
+   "claim_class": "candidate_hypothesis",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:09-independent-verification",
+    "job:03-threat-model-dfd-stride",
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:14-attack-chain-composition"
+   ]
+  },
+  {
+   "id": "14-attack-chain-refutation",
+   "lane": "14-attack-chain",
+   "name": "Attack-chain Refutation and Ledger",
+   "contract": "14-attack-chain-refutation",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/attack_chain_refutation.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "attack-chain-refuter",
+    "role_id": "attack-chain-coordinator",
+    "domain_id": "attack-chain-lifecycle",
+    "tooling_profile_id": "claim-review-static",
+    "output_contract_id": "14-attack-chain-refutation"
+   },
+   "depends_on": [
+    {
+     "job": "14-attack-chain-composition",
+     "kind": "required",
+     "contract": "14-attack-chain-composition"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 14-attack-chain-composition result and seeds"
+    },
+    {
+     "need": "optional",
+     "input": "supporting-evidence menu"
+    }
+   ],
+   "inputs_source": "registry/job-templates/14-attack-chain-refutation.json",
+   "output_dir": "runs/<run_id>/data/jobs/14-attack-chain-refutation/",
+   "output_files": [
+    "attack-chain-ledger.json",
+    "attack-chain-ledger.md",
+    "refutation-pool-merge.json",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/14-attack-chain-refutation.json",
+   "claim_class": "candidate_hypothesis",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:14-attack-chain-composition"
+   ],
+   "produces": [
+    "job:14-attack-chain-refutation"
+   ]
+  },
+  {
    "id": "10-synthesis-report",
    "lane": "10-synthesis-report",
    "name": "Accepted Evidence-backed Draft Report Publisher",
@@ -8791,6 +9000,11 @@
      "job": "12-scoring-prioritization",
      "kind": "required",
      "contract": "12-scoring-prioritization"
+    },
+    {
+     "job": "14-attack-chain-refutation",
+     "kind": "optional",
+     "contract": "14-attack-chain-refutation"
     },
     {
      "job": "11-remediation-proposal",
@@ -8862,6 +9076,7 @@
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
     "job:12-scoring-prioritization",
+    "job:14-attack-chain-refutation",
     "job:11-remediation-proposal"
    ],
    "produces": [
@@ -11568,6 +11783,7 @@
   "09-independent-verification",
   "11-remediation-proposal",
   "12-scoring-prioritization",
+  "14-attack-chain",
   "10-synthesis-report"
  ],
  "artifacts": {
@@ -12626,6 +12842,7 @@
     "job:07-hypothesis-discovery",
     "job:07-red-team-adversarial",
     "job:08-blue-team-refutation",
+    "job:14-attack-chain-composition",
     "job:10-synthesis-report",
     "job:04-owasp-validation-worklist",
     "job:15-stig-srg-validation-worklist"
@@ -12657,6 +12874,7 @@
     "job:13-fuzz-target-triage",
     "job:07-red-team-adversarial",
     "job:12-scoring-prioritization",
+    "job:14-attack-chain-composition",
     "job:10-synthesis-report"
    ]
   },
@@ -12807,6 +13025,7 @@
    "consumed_by": [
     "job:11-remediation-proposal",
     "job:12-scoring-prioritization",
+    "job:14-attack-chain-composition",
     "job:10-synthesis-report",
     "job:remediation-retest-feedback"
    ]
@@ -12831,6 +13050,30 @@
    "about": "Accepted 12-scoring-prioritization output of 12-scoring-prioritization.",
    "produced_by": [
     "job:12-scoring-prioritization"
+   ],
+   "consumed_by": [
+    "job:10-synthesis-report"
+   ]
+  },
+  "job:14-attack-chain-composition": {
+   "id": "job:14-attack-chain-composition",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/14-attack-chain-composition/",
+   "about": "Accepted 14-attack-chain-composition output of 14-attack-chain-composition.",
+   "produced_by": [
+    "job:14-attack-chain-composition"
+   ],
+   "consumed_by": [
+    "job:14-attack-chain-refutation"
+   ]
+  },
+  "job:14-attack-chain-refutation": {
+   "id": "job:14-attack-chain-refutation",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/14-attack-chain-refutation/",
+   "about": "Accepted 14-attack-chain-refutation output of 14-attack-chain-refutation.",
+   "produced_by": [
+    "job:14-attack-chain-refutation"
    ],
    "consumed_by": [
     "job:10-synthesis-report"

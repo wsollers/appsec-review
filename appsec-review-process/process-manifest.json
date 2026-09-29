@@ -20,6 +20,7 @@
     "09-independent-verification",
     "11-remediation-proposal",
     "12-scoring-prioritization",
+    "14-attack-chain",
     "10-synthesis-report"
   ],
   "depends_on": {
@@ -78,7 +79,13 @@
       "07-red-team-adversarial",
       "08-blue-team-refutation",
       "09-independent-verification",
-      "12-scoring-prioritization"
+      "12-scoring-prioritization",
+      "14-attack-chain"
+    ],
+    "14-attack-chain": [
+      "01-component-characterization",
+      "03-threat-model-dfd-stride",
+      "09-independent-verification"
     ]
   },
   "required_global_inputs": [

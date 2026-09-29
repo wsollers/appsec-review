@@ -53,6 +53,8 @@ import standards_source_ingest as standards_source_worker
 import standards_lifecycle
 import claim_ledger
 import hypothesis_discovery
+import attack_chain_composition
+import attack_chain_refutation
 import persona_tool_pool_lifecycle
 import control_feature_lifecycle
 import test_coverage_ingest as test_coverage_worker
@@ -801,6 +803,31 @@ def hypothesis_discovery_lifecycle_op():
 
 
 hypothesis_discovery_lifecycle_work = hypothesis_discovery_lifecycle_op()
+
+
+def attack_chain_lifecycle_op(job_id, worker):
+    """Lane 14 (ADR-0016) is an optional input of 10-synthesis-report: its own lifecycle records a
+    FAILED/BLOCKED terminal, and this op then returns instead of raising so the report is never held."""
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+    def attack_chain_stage(context, configured, upstream):
+        try:
+            result = worker.run(configured['engagement_run_id'], context.run_id, configured.get('force', False))
+        except Exception as exc:
+            context.log.warning(f'{job_id} did not publish ({type(exc).__name__}: {exc}); '
+                                '10-synthesis-report records the lane as a gap')
+            return {'job_id': job_id, 'status': 'NOT_PUBLISHED', 'error': f'{type(exc).__name__}: {exc}'[:500]}
+        attempt = worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / worker.RESULT)),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return attack_chain_stage
+
+
+attack_chain_composition_lifecycle_work = attack_chain_lifecycle_op('14-attack-chain-composition', attack_chain_composition)
+attack_chain_refutation_lifecycle_work = attack_chain_lifecycle_op('14-attack-chain-refutation', attack_chain_refutation)
 
 
 @op(name='job_persona_tool_pool_dispatch_lifecycle',
@@ -1675,6 +1702,8 @@ LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
 LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
 LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
 LIFECYCLE_OPS['07-hypothesis-discovery']=hypothesis_discovery_lifecycle_work
+LIFECYCLE_OPS['14-attack-chain-composition']=attack_chain_composition_lifecycle_work
+LIFECYCLE_OPS['14-attack-chain-refutation']=attack_chain_refutation_lifecycle_work
 LIFECYCLE_OPS['claim-ledger-routing']=claim_ledger_lifecycle_work
 LIFECYCLE_OPS['persona-tool-pool-dispatch']=persona_tool_pool_lifecycle_work
 LIFECYCLE_OPS['deterministic-pool-merge']=deterministic_pool_merge_lifecycle_work

@@ -1,0 +1,197 @@
+{
+ "description": "appsec-multi-vuln case-001: argv[1] (line 6) reaches strcpy into a 16-byte stack buffer (line 7). One verified P1 tool-lead claim; CPG places both in main.",
+ "verification": {
+  "schema": "appsec-review/independent-verification/1.0",
+  "run_id": "r1",
+  "stage": "09-independent-verification",
+  "ledger_head_id": "event-head",
+  "ledger_head_sha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "verifications": [
+   {
+    "claim_id": "claim-000000000000000000case01",
+    "route_id": "tool-lead:P1:0123456789abcdef0123",
+    "claim_class": "candidate_only",
+    "hypothesis": "Tool lead (P1, memory): strcpy at projects/cpp/case-001/main.cpp:7",
+    "confidence": "medium",
+    "component_ids": [
+     "cpp"
+    ],
+    "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "producer": {
+     "contract_id": "02-native-sast",
+     "job_id": "claim-ledger-routing",
+     "attempt_id": "a1",
+     "artifact_path": "claim-decision-ledger.json",
+     "artifact_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+     "accepted_pointer_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "citations": [
+     {
+      "citation_id": "citation-case01a",
+      "producer_job_id": "02-native-sast",
+      "producer_attempt_id": "n1",
+      "artifact_path": "native-sast.json",
+      "artifact_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "locator_json": "{\"path\":\"projects/cpp/case-001/main.cpp\",\"rule_id\":\"strcpy\",\"start_line\":7,\"tool_id\":\"flawfinder\"}",
+      "observed_fact": "flawfinder rule strcpy flagged projects/cpp/case-001/main.cpp"
+     }
+    ],
+    "proof_obligations": [
+     {
+      "obligation_id": "obligation-1",
+      "statement": "Show the flagged construct is present.",
+      "status": "SATISFIED",
+      "citations": []
+     }
+    ],
+    "dissent_ids": [],
+    "causal_claim_ids": [],
+    "supersedes_claim_id": null,
+    "hypothesis_id": "hyp-claim-000000000000000000case01",
+    "status": "VERIFIED",
+    "red_reviewer": {},
+    "blue_reviewer": {},
+    "verifier": {},
+    "verification_method": "read source",
+    "verification_citations": [
+     {
+      "citation_id": "citation-case01v",
+      "producer_job_id": "09-independent-verification",
+      "producer_attempt_id": "v1",
+      "artifact_path": "requests/v1.json",
+      "artifact_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "locator_json": "{\"path\":\"projects/cpp/case-001/main.cpp\",\"rule_id\":\"strcpy\",\"start_line\":7,\"tool_id\":\"flawfinder\"}",
+      "observed_fact": "verifier read the line"
+     }
+    ]
+   }
+  ]
+ },
+ "cpg_records": [
+  {
+   "record_id": "cpg_a01000000000000000000000",
+   "kind": "symbol",
+   "label": "METHOD",
+   "name": "main",
+   "full_name": "main",
+   "caller": "",
+   "type_name": "",
+   "code": "",
+   "source_path": "projects/cpp/case-001/main.cpp",
+   "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+   "start_line": 4,
+   "start_column": 1,
+   "end_line": 4,
+   "search_text": "main",
+   "redaction": "unchanged",
+   "locator": {
+    "artifact": "code-property-graph.json",
+    "record_id": "cpg_a01000000000000000000000",
+    "source_path": "projects/cpp/case-001/main.cpp",
+    "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+    "line": 4
+   }
+  },
+  {
+   "record_id": "cpg_a02000000000000000000000",
+   "kind": "identifier",
+   "label": "IDENTIFIER",
+   "name": "argv",
+   "full_name": "",
+   "caller": "",
+   "type_name": "",
+   "code": "",
+   "source_path": "projects/cpp/case-001/main.cpp",
+   "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+   "start_line": 6,
+   "start_column": 1,
+   "end_line": 6,
+   "search_text": "argv",
+   "redaction": "unchanged",
+   "locator": {
+    "artifact": "code-property-graph.json",
+    "record_id": "cpg_a02000000000000000000000",
+    "source_path": "projects/cpp/case-001/main.cpp",
+    "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+    "line": 6
+   }
+  },
+  {
+   "record_id": "cpg_a03000000000000000000000",
+   "kind": "memory-operation",
+   "label": "CALL",
+   "name": "strcpy",
+   "full_name": "std::strcpy",
+   "caller": "main",
+   "type_name": "",
+   "code": "",
+   "source_path": "projects/cpp/case-001/main.cpp",
+   "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+   "start_line": 7,
+   "start_column": 1,
+   "end_line": 7,
+   "search_text": "strcpy",
+   "redaction": "unchanged",
+   "locator": {
+    "artifact": "code-property-graph.json",
+    "record_id": "cpg_a03000000000000000000000",
+    "source_path": "projects/cpp/case-001/main.cpp",
+    "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+    "line": 7
+   }
+  },
+  {
+   "record_id": "cpg_a04000000000000000000000",
+   "kind": "call",
+   "label": "CALL",
+   "name": "operator<<",
+   "full_name": "std::operator<<",
+   "caller": "main",
+   "type_name": "",
+   "code": "",
+   "source_path": "projects/cpp/case-001/main.cpp",
+   "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+   "start_line": 8,
+   "start_column": 1,
+   "end_line": 8,
+   "search_text": "operator<<",
+   "redaction": "unchanged",
+   "locator": {
+    "artifact": "code-property-graph.json",
+    "record_id": "cpg_a04000000000000000000000",
+    "source_path": "projects/cpp/case-001/main.cpp",
+    "source_sha256": "sha256:608d8de3fba954c50110b6d7386988f27295de845e9d7174e40095ba5efcf1bb",
+    "line": 8
+   }
+  }
+ ],
+ "ir_facts": {
+  "debug_locations": [],
+  "facts": []
+ },
+ "threat_model": {
+  "elements": [],
+  "flows": [],
+  "trust_boundaries": [],
+  "deployment_zones": []
+ },
+ "component_map": {
+  "functional_components": [
+   {
+    "component_id": "cpp",
+    "path_patterns": [
+     "projects/cpp/**"
+    ],
+    "aliases": []
+   }
+  ],
+  "component_relationships": []
+ },
+ "artifacts": {
+  "02-code-property-graph": {
+   "path": "02-code-property-graph/attempts/c1/code-property-graph.records.jsonl",
+   "sha256": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+  }
+ }
+}

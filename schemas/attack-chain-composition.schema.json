@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "attack-chain-composition.schema.json",
+  "description": "14-attack-chain-composition result (ADR-0016 decision 5): the composed chains (state before refutation), every gap (seeding cuts, input gaps, failed or no-chain composer cells, synthetic edges), coverage and the pool identity. skip_reason is set when no cluster had an entry seed and a P1 or verified claim. Chains are candidates, never findings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "source_snapshot_sha256",
+    "bindings",
+    "budget_class",
+    "seeds_sha256",
+    "ledger_head_sha256",
+    "skip_reason",
+    "link_candidate_ids",
+    "chains",
+    "gaps",
+    "coverage",
+    "pool",
+    "claim_limits"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/attack-chain-composition/1.0"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "job_id": {
+      "const": "14-attack-chain-composition"
+    },
+    "source_snapshot_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verification",
+        "blue",
+        "threat_model",
+        "component_map"
+      ],
+      "properties": {
+        "verification": {
+          "type": "object"
+        },
+        "blue": {
+          "type": "object"
+        },
+        "threat_model": {
+          "type": "object"
+        },
+        "component_map": {
+          "type": "object"
+        }
+      }
+    },
+    "budget_class": {
+      "enum": [
+        "probe",
+        "standard",
+        "deep"
+      ]
+    },
+    "seeds_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ledger_head_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "skip_reason": {
+      "enum": [
+        null,
+        "not-applicable-no-chain-seeds"
+      ]
+    },
+    "link_candidate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "chains": {
+      "type": "array",
+      "items": {
+        "$ref": "attack-chain-record.schema.json"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "id",
+          "reason",
+          "detail"
+        ],
+        "properties": {
+          "scope": {
+            "enum": [
+              "input",
+              "cluster",
+              "chain"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "no-native-facts",
+              "input-missing",
+              "cluster-cap",
+              "cluster-claims-cap",
+              "cluster-facts-cap",
+              "composer-failed",
+              "composer-no-chain",
+              "merge-conflict",
+              "refutation-cap",
+              "refuter-failed",
+              "refutation-skipped-budget",
+              "synthetic-edge"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object"
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instances",
+        "expected_worker_ids",
+        "missing_worker_ids",
+        "conflict_candidate_ids"
+      ],
+      "properties": {
+        "instances": {
+          "type": "integer"
+        },
+        "expected_worker_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_worker_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflict_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "claim_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_only",
+        "finding_created",
+        "severity_assigned"
+      ],
+      "properties": {
+        "candidate_only": {
+          "const": true
+        },
+        "finding_created": {
+          "const": false
+        },
+        "severity_assigned": {
+          "const": false
+        }
+      }
+    }
+  }
+}

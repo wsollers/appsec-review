@@ -1,0 +1,54 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "attack-chain-composition-cell",
+  "display_name": "Attack-chain Composer Cell",
+  "process": "14-attack-chain",
+  "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "high"
+  },
+  "composition": {
+    "persona_id": "attack-chain-composer",
+    "role_id": "chain-composer",
+    "domain_id": "attack-chain-lifecycle",
+    "tooling_profile_id": "claim-review-static",
+    "output_contract_id": "attack-chain-candidates"
+  },
+  "inputs": {
+    "required": [
+      "cluster workspace (readable input 0)"
+    ],
+    "optional": [
+      "supporting-evidence menu and pinned files"
+    ]
+  },
+  "outputs": {
+    "directory": "private persona instance output",
+    "files": [
+      "candidates.json"
+    ]
+  },
+  "permissions": [
+    "read-run-data"
+  ],
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "task",
+    "output_contract"
+  ],
+  "task_prompt": "appsec-review-process/14-attack-chain/task-attack-chain-composition-cell.md",
+  "implemented": true,
+  "applicability": "one persona cell per selected cluster of 14-attack-chain-composition; zero instances when no cluster has an entry seed and a P1 or verified claim",
+  "timeout_seconds": 1800,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
+}

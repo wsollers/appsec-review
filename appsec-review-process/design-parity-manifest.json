@@ -2594,6 +2594,146 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "14-attack-chain-composition",
+      "design_refs": [
+        "docs/decisions/ADR-0016-attack-chain-composition.md",
+        "docs/proposals/attack-chains/implementation-plan.md",
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "14-attack-chain-composition",
+        "implemented": true,
+        "dependencies": [
+          "09-independent-verification",
+          "03-threat-model-dfd-stride",
+          "01-component-characterization"
+        ]
+      },
+      "registry": {
+        "template": "14-attack-chain-composition",
+        "persona": "attack-chain-composer",
+        "role": "attack-chain-coordinator",
+        "domain": "attack-chain-lifecycle",
+        "tooling_profile": "claim-review-static",
+        "output_contract": "14-attack-chain-composition"
+      },
+      "execution": {
+        "mode": "pool_coordinator",
+        "worker": "appsec-review-process/attack_chain_composition.py:run",
+        "validator": "appsec-review-process/attack_chain_composition.py:_validate_attempt"
+      },
+      "output": {
+        "contract": "14-attack-chain-composition",
+        "contract_file": "appsec-review-process/registry/output-contracts/14-attack-chain-composition.json",
+        "schema_file": "schemas/attack-chain-composition.schema.json",
+        "claim_class": "candidate_hypothesis"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_attack_chain_seeds.py",
+          "appsec-review-process/tests/test_attack_chain_derive.py",
+          "appsec-review-process/tests/test_attack_chain_refute.py",
+          "appsec-review-process/tests/test_attack_chain_pool.py",
+          "appsec-review-process/tests/test_attack_chain_workers.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "14-attack-chain-refutation",
+      "design_refs": [
+        "docs/decisions/ADR-0016-attack-chain-composition.md",
+        "docs/proposals/attack-chains/implementation-plan.md",
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "14-attack-chain-refutation",
+        "implemented": true,
+        "dependencies": [
+          "14-attack-chain-composition"
+        ]
+      },
+      "registry": {
+        "template": "14-attack-chain-refutation",
+        "persona": "attack-chain-refuter",
+        "role": "attack-chain-coordinator",
+        "domain": "attack-chain-lifecycle",
+        "tooling_profile": "claim-review-static",
+        "output_contract": "14-attack-chain-refutation"
+      },
+      "execution": {
+        "mode": "pool_coordinator",
+        "worker": "appsec-review-process/attack_chain_refutation.py:run",
+        "validator": "appsec-review-process/attack_chain_refutation.py:_validate_attempt"
+      },
+      "output": {
+        "contract": "14-attack-chain-refutation",
+        "contract_file": "appsec-review-process/registry/output-contracts/14-attack-chain-refutation.json",
+        "schema_file": "schemas/attack-chain-ledger.schema.json",
+        "claim_class": "candidate_hypothesis"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_attack_chain_seeds.py",
+          "appsec-review-process/tests/test_attack_chain_derive.py",
+          "appsec-review-process/tests/test_attack_chain_refute.py",
+          "appsec-review-process/tests/test_attack_chain_pool.py",
+          "appsec-review-process/tests/test_attack_chain_workers.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
       "id": "10-synthesis-report",
       "design_refs": [
         "docs/architecture/design-v3.md#152-verified-fact-graph-for-l14-synthesis",
@@ -2611,6 +2751,7 @@
           "08-blue-team-refutation",
           "09-independent-verification",
           "12-scoring-prioritization",
+          "14-attack-chain-refutation",
           "11-remediation-proposal"
         ]
       },
@@ -3403,8 +3544,8 @@
           "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "full_review",
-          "codeql_sast"
+          "codeql_sast",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
