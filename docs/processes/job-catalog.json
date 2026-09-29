@@ -1909,7 +1909,7 @@
       {
        "ref": "job:03-threat-model-dfd-stride",
        "id": "03-threat-model-dfd-stride",
-       "name": "Deterministic DFD And STRIDE Core",
+       "name": "DFD And STRIDE Core With Threat Workbench",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization"
@@ -4517,7 +4517,7 @@
       {
        "ref": "job:03-threat-model-dfd-stride",
        "id": "03-threat-model-dfd-stride",
-       "name": "Deterministic DFD And STRIDE Core",
+       "name": "DFD And STRIDE Core With Threat Workbench",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization"
@@ -7715,7 +7715,7 @@
   {
    "id": "03-threat-model-dfd-stride",
    "lane": "03-threat-model-dfd-stride",
-   "name": "Deterministic DFD And STRIDE Core",
+   "name": "DFD And STRIDE Core With Threat Workbench",
    "contract": "threat-model-core",
    "implemented": true,
    "readiness": "implemented_not_qualified",
@@ -7755,6 +7755,10 @@
    "output_files": [
     "integrated-threat-model.json",
     "threat-model-summary.md",
+    "attack-trees.mmd",
+    "dfd.mmd",
+    "ranked-threat-scenarios.json",
+    "intercom-transcript.jsonl",
     "permission.json",
     "lineage.json",
     "status.json"

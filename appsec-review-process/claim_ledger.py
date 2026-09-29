@@ -192,6 +192,7 @@ def owasp_candidates(source: dict[str, Any]) -> list[dict[str, Any]]:
 # absent or SKIPPED contributes no candidates and is recorded as lead coverage, never a failure.
 LEAD_PRODUCERS = (
     ("02-source-sast", "source-sast", "source-sast.json", "source-sast.schema.json"),
+    ("02-codeql-sast", "codeql-sast", "codeql-sast.json", "codeql-sast.schema.json"),
     ("02-native-sast", "native-sast", "native-sast.json", "native-sast.schema.json"),
     ("02-secrets-inventory", "secrets-inventory", "outputs/secrets-inventory.redacted.json",
      "secrets-inventory.schema.json"),
@@ -208,7 +209,8 @@ LEAD_HYPOTHESIS_PREFIX = "Tool lead ("
 TIERS = ("P1", "P2", "P3")
 # P1: security-relevant sink/weakness categories. P3: code-quality/style checks (kept, ordered last).
 # Everything unlisted is P2: reviewable, but not a named security sink.
-P1_CATEGORIES = frozenset({"unsafe-copy", "memory-copy", "command-execution", "buffer-safety",
+P1_CATEGORIES = frozenset({"codeql-security-query", "unsafe-input", "memory-lifetime",
+    "sensitive-memory-clear", "resource-exhaustion", "unsafe-copy", "memory-copy", "command-execution", "buffer-safety",
     "null-dereference", "undefined-behavior", "format-string", "injection", "sql-injection",
     "path-traversal", "deserialization", "weak-crypto", "insecure-random", "api-misuse",
     "network-exposure", "public-access-grant", "access-control", "encryption-at-rest",
@@ -261,8 +263,10 @@ def normalize_leads(job_id: str, document: dict[str, Any]) -> list[dict[str, Any
             "rule_id": _clean(item["rule_id"]), "category": item["category"], "path": item["path"],
             "start_line": item["start_line"], "end_line": item.get("end_line", item["start_line"]),
             "source_sha256": item.get("source_sha256"), **extra}
-    if job_id == "02-source-sast":
-        rows = [code(item) for item in document.get("leads", [])]
+    if job_id in ("02-source-sast", "02-codeql-sast"):
+        rows = [code(item, **({k: item[k] for k in ("language", "rule_name", "cwe") if k in item}
+                             if job_id == "02-codeql-sast" else {}))
+                for item in document.get("leads", [])]
     elif job_id == "02-native-sast":
         rows = [code(item, unit_id=item.get("unit_id"), start_column=item.get("start_column"))
                 for unit in document.get("units", []) for item in unit.get("leads", [])]
