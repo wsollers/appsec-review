@@ -14,7 +14,8 @@
     "verified/refuted/unresolved verdict",
     "proof obligations satisfied or failed",
     "counterevidence checked",
-    "remaining assumptions"
+    "remaining assumptions",
+    "optional CWE id with a one-line rationale (Python validates it against the pinned catalog)"
   ],
   "must_not": [
     "accept discoverer narrative as evidence",

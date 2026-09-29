@@ -350,5 +350,35 @@ class LiveRequest(Base):
         other = bp._stage_unit_upstreams(bp.root(self.run_id), record, cpath, ipath, classification, 'dir:.')
         self.assertEqual(other, upstream)
 
+class PlanBookkeepingDerivationTests(unittest.TestCase):
+    """B4: mechanical plan fields are derived from the classification, not trusted from the model."""
+    classification = {'source_revision': 'r', 'target': 't', 'units': [
+        {'unit_id': 'dir:a', 'root': 'a', 'class': 'native-build'}, {'unit_id': 'dir:b', 'root': 'b', 'class': 'native-build'}]}
+
+    def fill(self, plan):
+        envelope = {'result': {'plans': [plan], 'coverage_gaps': []}}
+        bp._fill_known(self.classification)(envelope, 'result')
+        return envelope['result']['plans'][0]
+
+    def test_root_and_class_come_from_the_classification_but_the_unit_id_is_never_rewritten(self):
+        plan = self.fill({'unit_id': 'dir:a', 'root': 'b', 'class': 'wrong', 'commands': [], 'image': {'base': 'x'}})
+        self.assertEqual((plan['unit_id'], plan['root'], plan['class']), ('dir:a', 'a', 'native-build'))
+        other = self.fill({'unit_id': 'dir:zz', 'root': 'b', 'class': 'wrong', 'commands': [], 'image': {'base': 'x'}})
+        self.assertEqual((other['unit_id'], other['root'], other['class']), ('dir:zz', 'b', 'wrong'))
+
+    def test_commands_are_ordered_configure_then_build_and_packages_deduplicated(self):
+        plan = self.fill({'unit_id': 'dir:a', 'commands': [
+            {'phase': 'build', 'argv': ['make']}, {'phase': 'configure', 'argv': ['cmake']},
+            {'phase': 'build', 'argv': ['ninja']}],
+            'image': {'base': 'x', 'apt_packages': [{'name': 'zlib1g-dev'}, {'name': 'zlib1g-dev'}, {'name': 'cmake'}]}})
+        self.assertEqual([c['argv'][0] for c in plan['commands']], ['cmake', 'make', 'ninja'])
+        self.assertEqual([p['name'] for p in plan['image']['apt_packages']], ['zlib1g-dev', 'cmake'])
+
+    def test_an_unknown_phase_is_left_for_the_validator(self):
+        plan = self.fill({'unit_id': 'dir:a', 'commands': [{'phase': 'test', 'argv': ['x']}, {'phase': 'build', 'argv': ['y']}],
+                          'image': {'base': 'x'}})
+        self.assertEqual([c['phase'] for c in plan['commands']], ['test', 'build'])
+
+
 if __name__ == '__main__':
     unittest.main()

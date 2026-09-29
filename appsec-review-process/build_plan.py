@@ -412,9 +412,34 @@ def _stage_unit_upstreams(base, record, cpath, ipath, classification, unit_id):
     })
 
 
+def _derive_plan_bookkeeping(plan, units):
+    """ADR-0013: mechanical plan fields the model kept getting wrong (B4). ``root`` and ``class`` are the
+    classification's for the unit the plan names (the unit id itself is never rewritten: a plan for
+    the wrong unit stays a validation error); commands are ordered configure-then-build (stable);
+    apt package names repeat at most once. Each is checked again by ``check``."""
+    unit = units.get(plan.get('unit_id')) if isinstance(plan.get('unit_id'), str) else None
+    if unit is not None:
+        plan['root'], plan['class'] = unit['root'], unit['class']
+    commands = plan.get('commands')
+    order = ('configure', 'build')
+    if isinstance(commands, list) and all(isinstance(c, dict) and c.get('phase') in order for c in commands):
+        plan['commands'] = sorted(commands, key=lambda c: order.index(c['phase']))
+    image = plan.get('image')
+    packages = image.get('apt_packages') if isinstance(image, dict) else None
+    if isinstance(packages, list) and all(isinstance(p, dict) and isinstance(p.get('name'), str) for p in packages):
+        seen, kept = set(), []
+        for package in packages:
+            if package['name'] not in seen:
+                seen.add(package['name'])
+                kept.append(package)
+        image['apt_packages'] = kept
+
+
 def _fill_known(classification):
     """Orchestrator-known fields (finalize overwrites them anyway) filled before schema checks, so a
     null source_revision never costs a repair round (freeciv21: both units)."""
+    units = {u['unit_id']: u for u in classification.get('units', []) if isinstance(u, dict) and 'unit_id' in u}
+
     def fill(envelope, field):
         value = envelope.get(field)
         if isinstance(value, dict):
@@ -427,6 +452,7 @@ def _fill_known(classification):
             for plan in value.get('plans') or []:
                 if not isinstance(plan, dict):
                     continue
+                _derive_plan_bookkeeping(plan, units)
                 image = plan.get('image')
                 if isinstance(image, dict) and isinstance(image.get('base'), str):
                     # base images are registry ids; the model sometimes adds the local tag

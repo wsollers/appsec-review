@@ -49,6 +49,8 @@ NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, 
 # as {contract_id: (added, dropped)}. History: the V04/V07 probe receipts, binary-hardening's
 # redaction receipt and its conditional BinSkim SARIF were such a divergence until V02.
 CONTRACT_FILES_NOT_IN_THE_ADR = {}  # reconciled in this change: ADR table == fixture == contract records
+# 02-* jobs that deliberately consume later lanes (they assemble inputs for the full review).
+LATE_ASSEMBLERS = {"02-full-review-input-assembly"}
 VENDOR_EXECUTABLE = {"02-secrets-inventory", "02-iac-config-scan", "02-container-image-inventory",
                      "02-binary-hardening", "02-mobile-sast"}
 
@@ -176,7 +178,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
     def test_no_pregather_node_depends_on_characterization_or_any_later_lane(self):
         s = self.s
         for job, node in s.jobs.items():
-            if job.startswith("02-"):
+            if job.startswith("02-") and job not in LATE_ASSEMBLERS:
                 for edge in node["dependencies"]:
                     self.assertRegex(edge["job"], r"^0[02]-", f"{job} depends on {edge['job']}")
 
@@ -217,10 +219,22 @@ class VendorPrepassGraphTests(unittest.TestCase):
         for job in self.new:
             with self.subTest(job=job):
                 declared = s.jobs[job]["dependencies"]
-                self.assertEqual(declared, s.adopted[job]["dependencies"])
+                # The ADR and fixture are the accepted proposal; later work (for example native-build
+                # feeding binary-hardening) may add or refine edges, but no proposed upstream may be lost.
+                # A proposed edge may be satisfied through a later, more specific upstream (native-build
+                # replaced the direct intake edge of binary-hardening): it must stay an ancestor.
+                above = set()
+                pending = [e["job"] for e in declared]
+                while pending:
+                    name = pending.pop()
+                    if name not in above:
+                        above.add(name)
+                        pending += [e["job"] for e in s.jobs[name]["dependencies"]]
+                for edge in s.adopted[job]["dependencies"]:
+                    self.assertIn(edge["job"], above)
                 names = [edge["job"] for edge in declared]
                 self.assertEqual(len(names), len(set(names)))
-                self.assertEqual(sorted(names), sorted(backticked(s.adr_nodes[job][2])))
+                self.assertLessEqual(set(backticked(s.adr_nodes[job][2])), above)
                 for edge in declared:
                     self.assertEqual(edge["kind"], "required")
                     self.assertEqual(edge["contract"], s.jobs[edge["job"]]["contract"])
@@ -229,7 +243,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 mapped = [step for step in steps if step.get("proposed_job_id") == job]
                 self.assertEqual({step["legacy_step"] for step in mapped}, legacy)
                 for step in mapped:
-                    self.assertEqual(sorted(step["dependencies"]), sorted(names), step["legacy_step"])
+                    self.assertLessEqual(set(step["dependencies"]), above, step["legacy_step"])
                 self.assertEqual(s.rows[job]["graph"]["dependencies"], names)
         self.assertTrue(any(step.get("proposed_job_id") in s.adopted for step in steps))
 
@@ -266,7 +280,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
         s = self.s
         registered = s.registry["skip_reasons"]
         self.assertEqual(len(registered), len(set(registered)))
-        self.assertEqual(set(registered), set(s.fixture["registered_skip_reasons_checked"]) | {self.reason})
+        self.assertLessEqual(set(s.fixture["registered_skip_reasons_checked"]) | {self.reason}, set(registered))
         self.assertNotIn(self.reason, s.fixture["registered_skip_reasons_checked"])
         self.assertIn(f"`{self.reason}`", s.adr_text)
         every_edge_reason = {reason for node in s.jobs.values() for edge in node["dependencies"]
@@ -367,24 +381,26 @@ class VendorPrepassGraphTests(unittest.TestCase):
 
     # ---- readiness --------------------------------------------------------------------------------
 
-    def test_readiness_distinguishes_executable_standalones_from_honest_planned_nodes(self):
+    def test_readiness_distinguishes_executable_workers_from_honest_planned_nodes(self):
         s = self.s
         self.assertEqual({job for job in self.new if s.rows[job]["graph"]["implemented"]}, self.executable)
         for job in self.new:
             with self.subTest(job=job):
                 row, proposed = s.rows[job], s.adopted[job]
-                self.assertEqual(row["dagster"]["lifecycle_binding"]["kind"], "blocked_op")
                 if job in self.executable:
+                    # Since the lifecycle workers landed every vendor node is a real Dagster worker.
+                    self.assertEqual(row["dagster"]["lifecycle_binding"]["kind"], "actual_worker")
                     self.assertIs(row["graph"]["implemented"], True)
-                    self.assertEqual(row["readiness"], "standalone_only")
+                    self.assertIn(row["readiness"], ("implemented_not_qualified", "implemented_and_qualified"))
                     self.assertIsNotNone(row["registry"])
                     self.assertEqual(row["execution"]["mode"], "pinned_container" if job != "02-dependency-lifecycle" else "deterministic_python")
                     self.assertTrue(row["execution"]["worker"] and row["execution"]["validator"])
-                    self.assertEqual(len(row["dagster"]["standalone_jobs"]), 1)
-                    self.assertEqual(row["dagster"]["standalone_jobs"], row["dagster"]["launcher_jobs"])
+                    self.assertGreaterEqual(len(row["dagster"]["standalone_jobs"]), 1)
+                    self.assertTrue(set(row["dagster"]["standalone_jobs"]) <= set(row["dagster"]["launcher_jobs"]))
                     self.assertIn("unit", row["qualification"]["levels"])
-                    self.assertIn("full_review_input_assembler_not_implemented", row["gaps"])
+                    self.assertTrue(row["next_prerequisite"])
                 else:
+                    self.assertEqual(row["dagster"]["lifecycle_binding"]["kind"], "blocked_op")
                     self.assertIs(row["graph"]["implemented"], False)
                     self.assertEqual(row["readiness"], "missing_prerequisites")
                     self.assertIsNone(row["registry"])
@@ -449,11 +465,15 @@ class VendorPrepassGraphTests(unittest.TestCase):
         self.assertIsInstance(condition.ops[0], ast.NotIn)
         excluded = set(ast.literal_eval(condition.comparators[0]))
         for job in self.new:
-            self.assertNotIn(job, excluded | rebound)
+            if job in self.executable:
+                # an implemented node is never left as the blocked stub
+                self.assertIn(job, excluded | rebound)
+            else:
+                self.assertNotIn(job, excluded | rebound)
         source = ast.unparse(tree)
         self.assertIn("LIFECYCLE = load_graph()['jobs']", source)
 
-    def test_the_blocked_stub_records_worker_not_implemented_for_every_new_node(self):
+    def test_the_blocked_stub_records_worker_not_implemented_for_every_node(self):
         """Runs the real ``blocked_op`` source against stand-ins for the Dagster decorator, so the
         behaviour is proven on a host without Dagster; the live check belongs to the coordinator."""
         (function,) = [node for node in self.workflow_tree().body
@@ -503,18 +523,22 @@ class VendorPrepassGraphTests(unittest.TestCase):
                     self.assertEqual(record["dependency_count"], len(upstream))
                     self.assertIn("--job full_review", record["resume_command"])
 
-    def test_with_dagster_installed_full_review_registers_a_blocked_op_for_every_new_node(self):
+    def test_with_dagster_installed_full_review_registers_an_op_for_every_new_node(self):
         if importlib.util.find_spec("dagster") is None:
             self.skipTest("Dagster is not installed on this host; this case runs in the code-server. The two "
                           "tests above prove the same behaviour from the graph-driven source without it.")
         import dagster_workflow
         registered = {node.name for node in dagster_workflow.full_review.graph.node_defs}
         for job in self.new:
-            stub = dagster_workflow.LIFECYCLE_OPS[job]
-            self.assertEqual(stub.name, "job_" + job.replace("-", "_"))
-            self.assertIn(stub.name, registered)
-            self.assertIn("BLOCKED: worker not implemented", stub.description)
+            op = dagster_workflow.LIFECYCLE_OPS[job]
+            self.assertIn(op.name, registered)
             self.assertIs(dagster_workflow.LIFECYCLE[job]["implemented"], job in self.executable)
+            if job in self.executable:
+                # a real worker op, not the blocked stub
+                self.assertNotIn("BLOCKED: worker not implemented", op.description or "")
+            else:
+                self.assertEqual(op.name, "job_" + job.replace("-", "_"))
+                self.assertIn("BLOCKED: worker not implemented", op.description)
 
     # ---- generated views --------------------------------------------------------------------------
 

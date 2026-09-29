@@ -50,6 +50,18 @@
         "$ref": "native-sast-unit.schema.json"
       }
     },
+    "failed_units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unit_id", "cause"],
+        "properties": {
+          "unit_id": {"type": "string", "minLength": 1},
+          "cause": {"enum": ["TIMEOUT", "TOOL_ERROR", "PARSE_ERROR", "OOM"]}
+        }
+      }
+    },
     "coverage_gaps": {
       "type": "array",
       "items": {

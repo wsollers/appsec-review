@@ -714,6 +714,125 @@ def _drop_unresolved_relationships(value: dict[str, Any]) -> None:
     value["component_relationships"] = kept
 
 
+def _gap(value: dict[str, Any], gap_id: str, subject: str, reason: str, impact: str, action: str) -> None:
+    gaps = value.setdefault("classification_gaps", [])
+    if any(g.get("gap_id") == gap_id for g in gaps):
+        return
+    gaps.append({"gap_id": gap_id, "subject": subject, "reason": reason,
+                 "routing_impact": impact, "resolution_action": action})
+
+
+def _lane_vocabulary() -> dict[str, str]:
+    """The closed lane vocabulary: the numbered lane folders and the numbered job-template ids (a
+    component may route to a job such as ``02-native-build``), keyed by the id itself and by its name
+    without the number when that name is unambiguous."""
+    ids = {folder.name for folder in ROOT.iterdir() if folder.is_dir() and re.fullmatch(r"\d\d-[a-z0-9-]+", folder.name)}
+    ids |= {path.stem for path in (ROOT / "registry" / "job-templates").glob("*.json")
+            if re.fullmatch(r"\d\d-[a-z0-9-]+", path.stem)}
+    table = {lane: lane for lane in ids}
+    names: dict[str, set[str]] = {}
+    for lane in ids:
+        names.setdefault(lane[3:], set()).add(lane)
+    table.update({name: next(iter(lanes)) for name, lanes in names.items() if len(lanes) == 1})
+    return table
+
+
+def _lane_key(value: str) -> str:
+    return re.sub(r"-+", "-", re.sub(r"[\s_/]+", "-", value.strip().lower())).strip("-")
+
+
+def _normalize_lanes(value: dict[str, Any]) -> None:
+    """ADR-0013: ``downstream_lanes`` is a closed vocabulary (the lane folders). Map every accepted
+    spelling to the lane id, drop repeats, and record any name that is not a lane as a gap. A list
+    that would end up empty is left as the model wrote it (the schema needs one lane)."""
+    vocabulary = _lane_vocabulary()
+    for key, label in (("functional_components", "component_id"), ("parallel_review_groups", "group_id")):
+        for item in value.get(key) or []:
+            lanes = item.get("downstream_lanes")
+            if not isinstance(lanes, list):
+                continue
+            mapped: list[str] = []
+            unknown: list[str] = []
+            for lane in lanes:
+                found = vocabulary.get(_lane_key(lane)) if isinstance(lane, str) else None
+                if found is None:
+                    unknown.append(str(lane))
+                elif found not in mapped:
+                    mapped.append(found)
+            if not mapped:
+                continue
+            item["downstream_lanes"] = mapped
+            for name in unknown:
+                _gap(value, f"gap-unknown-lane-{_slug(str(item.get(label)))[:60]}-{_slug(name)[:40]}",
+                     f"{key}:{item.get(label)}",
+                     "The model named a downstream lane that is not in the closed lane vocabulary.",
+                     "The named lane is not routed to; the remaining lanes still apply.",
+                     "Name the lane by its id (NN-name) in a later pass.")
+
+
+def _normalize_references(value: dict[str, Any]) -> None:
+    """ADR-0013: cross-references and lineage the model keeps getting wrong are derived.
+
+    Exact duplicate list entries are dropped; a component's ``parallel_review_group`` is the source of
+    truth for group membership (group ``component_ids`` are rebuilt from it, and a group that a
+    component names but the map lacks is created from its components); unresolved ids in rescope
+    triggers and unknowns are removed and recorded as gaps; an ``unknown`` ownership never names a party."""
+    for key in ("code_scope_classification", "functional_components", "parallel_review_groups",
+                "rescope_triggers", "unknowns", "classification_gaps"):
+        items, kept = value.get(key), []
+        if isinstance(items, list):
+            for item in items:
+                if item not in kept:
+                    kept.append(item)
+            value[key] = kept
+    components = [c for c in value.get("functional_components") or [] if isinstance(c, dict)]
+    component_ids = {c.get("component_id") for c in components}
+    for c in components:
+        ownership = c.get("ownership")
+        if isinstance(ownership, dict) and ownership.get("kind") == "unknown":
+            ownership["responsible_party"] = None
+    groups = value.get("parallel_review_groups")
+    if isinstance(groups, list):
+        by_id = {g.get("group_id"): g for g in groups if isinstance(g, dict)}
+        for c in components:
+            gid = c.get("parallel_review_group")
+            if isinstance(gid, str) and gid not in by_id and re.fullmatch(r"[a-z0-9][a-z0-9-]*", gid):
+                members = [m for m in components if m.get("parallel_review_group") == gid]
+                lanes = sorted({lane for m in members for lane in m.get("downstream_lanes") or []})
+                if lanes:
+                    by_id[gid] = {"group_id": gid, "component_ids": sorted(m["component_id"] for m in members),
+                                  "downstream_lanes": lanes,
+                                  "rationale": "Group derived from the parallel_review_group its components name."}
+                    groups.append(by_id[gid])
+                    _gap(value, f"gap-derived-group-{gid}", f"parallel_review_groups:{gid}",
+                         "The model assigned components to a review group it did not define.",
+                         "The group's lanes are the union of its components' lanes.",
+                         "Review the derived group definition in a later pass.")
+        for gid, group in by_id.items():
+            members = sorted(m["component_id"] for m in components if m.get("parallel_review_group") == gid)
+            if members:
+                group["component_ids"] = members
+            else:
+                group["component_ids"] = sorted(set(group.get("component_ids") or []) & component_ids) \
+                    or group.get("component_ids") or []
+    scope_ids = {s.get("scope_id") for s in value.get("code_scope_classification") or [] if isinstance(s, dict)}
+    for key, id_key, fields in (
+            ("rescope_triggers", "trigger_id", (("affected_scope_ids", scope_ids), ("affected_component_ids", component_ids))),
+            ("unknowns", "unknown_id", (("affected_component_ids", component_ids),))):
+        for item in value.get(key) or []:
+            for field, known in fields:
+                have = item.get(field)
+                if not isinstance(have, list):
+                    continue
+                item[field] = [i for i in have if i in known]
+                if len(item[field]) != len(have):
+                    _gap(value, f"gap-unresolved-{key}-{_slug(str(item.get(id_key)))[:60]}-{field}",
+                         f"{key}:{item.get(id_key)}",
+                         f"The model named {field} that do not resolve in this map.",
+                         "The unresolved references are removed from this entry.",
+                         "Characterise the missing scope or component in a later pass.")
+
+
 def _repair_against_target(value: dict[str, Any], target_root: Path) -> None:
     """ADR-0013 repairs that need the file list (freeciv21 a63ffa38): order tag ids, drop
     representative locations that are not target files, and record files no scope claims as gaps."""
@@ -797,6 +916,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         _normalize_tag_cloud(value)
         _retype_citations(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
         _drop_unresolved_relationships(value)
+        _normalize_lanes(value)
+        _normalize_references(value)
         _repair_against_target(value, Path(inputs["target_root"]))
         _record_untagged_gaps(value)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),

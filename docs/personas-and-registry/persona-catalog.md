@@ -563,6 +563,7 @@ Outputs:
 - proof obligations satisfied or failed
 - counterevidence checked
 - remaining assumptions
+- optional CWE id with a one-line rationale (Python validates it against the pinned catalog)
 
 ### dependency-reachability-skeptic
 
@@ -1263,6 +1264,12 @@ Must distinguish:
 - confidence
 - remediation cost
 - business priority
+
+Outputs:
+
+- optional CWE id with a one-line rationale
+- the eleven CVSS v4.0 base metrics with one justification each (Python derives the vector, score and severity)
+- optional remediation objective
 
 ### remediation-planner
 

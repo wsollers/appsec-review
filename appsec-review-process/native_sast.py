@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 import re
 import threading
 from typing import Any
+import xml.etree.ElementTree as ET
 
 import container_execution as ce
 from execution_state import (Blocked, ROOT, atomic_json, data_path, digest, file_hash, now,
@@ -111,6 +112,61 @@ def _owned(root_path: Path, relative: str, label: str) -> Path:
 
 
 GENERATED_SAMPLE = 5
+
+# B1: a failed unit is a recorded coverage gap, never target-controlled text.  The cause is one of
+# this closed enum; raw exception/analyzer output is never carried into the result.
+FAILURE_CAUSES = ("TIMEOUT", "TOOL_ERROR", "PARSE_ERROR", "OOM")
+_FAILURE_PRECEDENCE = ("OOM", "TIMEOUT", "TOOL_ERROR", "PARSE_ERROR")
+# Verified container terminals that mean "this unit's analysis failed" (mirrors
+# dependency_b13_adapters.TOOL_GAP_CAUSES).  Any other non-OK terminal breaks the job itself.
+_TERMINAL_CAUSE = {"TIMEOUT": "TIMEOUT", "OOM_KILLED": "OOM", "CONTAINER_EXIT_NONZERO": "TOOL_ERROR"}
+_PARSE_ERRORS = (KeyError, OSError, ValueError, TypeError, ET.ParseError)
+GROUPS = ("clang-cppcheck", "csa")
+
+
+def terminal_failure_cause(terminal: Any) -> str | None:
+    """Failure enum for a verified container terminal, None when OK; Blocked when job-level."""
+    if terminal.get("execution_status") == "OK":
+        return None
+    cause = _TERMINAL_CAUSE.get(terminal.get("cause")) if terminal.get("execution_status") == "FAILED" else None
+    if cause is None:
+        raise RuntimeError(f"{JOB}: adapter ended {terminal.get('execution_status')}")
+    return cause
+
+
+def failed_unit_gap(entry: dict[str, str]) -> str:
+    return f"unit-analysis-failed:{entry['unit_id']}:{entry['cause']}"
+
+
+def unit_outcome(unit: dict[str, Any], group_causes: dict[str, str | None], *, target: Path,
+                 attempt: Path, trials: dict[str, Path], inputs: dict[str, Any]) -> dict[str, Any]:
+    """Either ``{"unit": normalized}`` or ``{"failed": {"unit_id", "cause"}}``; never raises for a
+    per-unit tool failure or unparsable analyzer output."""
+    causes = {cause for cause in group_causes.values() if cause}
+    if not causes:
+        try:
+            return {"unit": normalize_unit(unit, target=target, attempt=attempt,
+                clang_trial=trials["clang-cppcheck"], csa_trial=trials["csa"], inputs=inputs)}
+        except _PARSE_ERRORS:
+            causes = {"PARSE_ERROR"}
+    cause = next(item for item in _FAILURE_PRECEDENCE if item in causes)
+    return {"failed": {"unit_id": unit["unit_id"], "cause": cause}}
+
+
+def assemble_result(run_id: str, attempt_id: str, inputs: dict[str, Any],
+                    outcomes: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized = [item["unit"] for item in outcomes if "unit" in item]
+    failed = [item["failed"] for item in outcomes if "failed" in item]
+    if inputs["units"] and not normalized:
+        raise RuntimeError(f"{JOB}: every unit failed analysis")
+    gaps = sorted([gap for unit in normalized for gap in unit["coverage_gaps"]] +
+                  [failed_unit_gap(entry) for entry in failed] + excluded_unit_gaps(inputs))
+    return {"schema": SCHEMA, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
+        "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+        "native_build": inputs["native_build"],
+        # ADR-0014: zero built units is a skip, not a failure
+        "status": ("SKIPPED" if not inputs["units"] else "OK_WITH_GAPS" if gaps else "OK"),
+        "units": normalized, "failed_units": failed, "coverage_gaps": gaps}
 
 
 def _absent_from_checkout(root_path: Path, relative: str) -> bool:
@@ -451,6 +507,7 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         raise Blocked(f"{JOB}: B13 receipt set is incomplete")
     runtime = _runtime(inputs["source_snapshot_sha256"])
     trials: dict[tuple[str, str], Path] = {}
+    causes: dict[tuple[str, str], str | None] = {}
     for item in receipt:
         trial = attempt / item["trial_path"]
         request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
@@ -460,23 +517,23 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         if errors:
             raise Blocked(f"{JOB}: B13 evidence failed re-verification ({len(errors)} errors)")
         key = (item.get("unit_id"), item.get("tool_group"))
-        if key in trials or key[0] not in {unit["unit_id"] for unit in inputs["units"]} or key[1] not in {"clang-cppcheck", "csa"}:
+        if key in trials or key[0] not in {unit["unit_id"] for unit in inputs["units"]} or key[1] not in GROUPS:
             raise Blocked(f"{JOB}: B13 receipt identity is duplicate or unknown")
         trials[key] = trial
+        try:
+            causes[key] = terminal_failure_cause(read_json(trial / "logs/container" / ce.RESULT_FILE))
+        except RuntimeError as exc:
+            raise Blocked(f"{JOB}: B13 evidence is a job-level failure") from exc
+        if item.get("failure_cause") != causes[key]:
+            raise Blocked(f"{JOB}: B13 receipt failure cause differs from its verified terminal")
     try:
-        expected_units = [normalize_unit(unit, target=Path(inputs["target_path"]), attempt=attempt,
-            clang_trial=trials[(unit["unit_id"], "clang-cppcheck")],
-            csa_trial=trials[(unit["unit_id"], "csa")], inputs=inputs)
+        outcomes = [unit_outcome(unit, {g: causes[(unit["unit_id"], g)] for g in GROUPS},
+            target=Path(inputs["target_path"]), attempt=attempt,
+            trials={g: trials[(unit["unit_id"], g)] for g in GROUPS}, inputs=inputs)
             for unit in inputs["units"]]
-    except (KeyError, OSError, ValueError) as exc:
-        raise Blocked(f"{JOB}: normalized raw evidence cannot be re-derived ({exc})") from exc
-    expected_gaps = sorted([gap for unit in expected_units for gap in unit["coverage_gaps"]] +
-                           excluded_unit_gaps(inputs))
-    expected = {"schema": SCHEMA, "run_id": run_id, "job_id": JOB,
-        "attempt_id": attempt.name, "source_snapshot_sha256": inputs["source_snapshot_sha256"],
-        "native_build": inputs["native_build"],
-        "status": ("SKIPPED" if not inputs["units"] else "OK_WITH_GAPS" if expected_gaps else "OK"),
-        "units": expected_units, "coverage_gaps": expected_gaps}
+        expected = assemble_result(run_id, attempt.name, inputs, outcomes)
+    except (KeyError, RuntimeError) as exc:
+        raise Blocked(f"{JOB}: normalized raw evidence cannot be re-derived") from exc
     if result != expected:
         raise Blocked(f"{JOB}: normalized result differs from its immutable raw analyzer evidence")
 
@@ -501,10 +558,10 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             folder = database_root / digest(unit["unit_id"])[:16]
             folder.mkdir(parents=True)
             atomic_json(folder / "compile_commands.json", unit["adapted"])
-        receipts, normalized = [], []
+        receipts, outcomes = [], []
         for ordinal, unit in enumerate(inputs["units"]):
-            trials = {}
-            for group in ("clang-cppcheck", "csa"):
+            trials, group_causes = {}, {}
+            for group in GROUPS:
                 adapter_id = f"n{ordinal}-{group}"
                 trial = attempt / "tools" / digest(unit["unit_id"])[:16] / group
                 trial.mkdir(parents=True)
@@ -516,25 +573,18 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
                 ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
                     request=request, images_dir=runtime.images_dir,
                     expected_result_sha256=expected, **_host(runtime))
-                if terminal["execution_status"] != "OK":
-                    raise RuntimeError(f"{JOB}: {group} adapter ended {terminal['execution_status']}")
+                # B1: a per-unit timeout/OOM/tool error is a gap; anything else raises (job broken)
+                failure = terminal_failure_cause(terminal)
                 receipts.append({"unit_id": unit["unit_id"], "tool_group": group,
                     "adapter_attempt_id": adapter_id, "trial_path": trial.relative_to(attempt).as_posix(),
-                    "expected_result_sha256": expected})
+                    "expected_result_sha256": expected, "failure_cause": failure})
                 trials[group] = trial
-            normalized.append(normalize_unit(units_by_id[unit["unit_id"]],
-                target=Path(inputs["target_path"]), attempt=attempt,
-                clang_trial=trials["clang-cppcheck"], csa_trial=trials["csa"], inputs=inputs))
-        gaps = sorted([gap for unit in normalized for gap in unit["coverage_gaps"]] +
-                      excluded_unit_gaps(inputs))
-        result = {"schema": SCHEMA, "run_id": run_id, "job_id": JOB,
-            "attempt_id": allocation["attempt_id"],
-            "source_snapshot_sha256": inputs["source_snapshot_sha256"],
-            "native_build": inputs["native_build"],
-            # ADR-0014: zero built units is a skip, not a failure
-            "status": ("SKIPPED" if not inputs["units"] else "OK_WITH_GAPS" if gaps else "OK"),
-            "units": normalized,
-            "coverage_gaps": gaps}
+                group_causes[group] = failure
+            outcomes.append(unit_outcome(unit, group_causes, target=Path(inputs["target_path"]),
+                attempt=attempt, trials=trials, inputs=inputs))
+        result = assemble_result(run_id, allocation["attempt_id"], inputs, outcomes)
+        normalized = result["units"]
+        gaps = result["coverage_gaps"]
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, receipts)
         atomic_json(attempt / "permission.json", {"schema": PERMISSION_SCHEMA, "run_id": run_id,
@@ -546,13 +596,13 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
         (attempt / SUMMARY).write_text(
             "# Native SAST\n\n" +
             f"- Units: {len(normalized)}\n- Evidence leads: {sum(len(x['leads']) for x in normalized)}\n"
-            f"- Coverage gaps: {len(gaps)}\n- Qualification: nominal core only.\n", encoding="utf-8")
+            f"- Failed units: {len(result['failed_units'])}\n- Coverage gaps: {len(gaps)}\n- Qualification: nominal core only.\n", encoding="utf-8")
         status = {"process": JOB, "status": result["status"], "run_id": run_id,
             "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
             "source_snapshot_sha256": inputs["source_snapshot_sha256"],
             "native_build_attempt_id": inputs["native_build"]["attempt_id"],
             "build_variants": sorted(x["build_variant"]["variant_id"] for x in normalized),
-            "tools_run": list(TOOLS), "leads": sum(len(x["leads"]) for x in normalized),
+            "tools_run": list(TOOLS), "failed_units": result["failed_units"], "leads": sum(len(x["leads"]) for x in normalized),
             "network": "none", "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         artifacts = [RESULT, RECEIPTS, SUMMARY, "status.json", "permission.json", "lineage.json"]

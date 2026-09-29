@@ -213,11 +213,11 @@ def prepare_handoffs(run_id: str, dagster_run_id: str, force: bool = False, *,
 def live_invoker(budget: str = BUDGET):
     """The live B14 invoker every other model pool uses: the strict Claude CLI invoker."""
     import review_cli
-    from claude_cli_invoker import ClaudeCliInvoker
     template_id = read_json(REPO_ROOT / DISPATCH_CONFIG)["job_template_id"]
     resolved = review_cli.resolve_model(template_id, budget)
     budget_usd = (review_cli.load_model_config().get("budget_max_usd_per_call") or {}).get(budget)
-    return ClaudeCliInvoker(effort=resolved["effort"], budget_usd=budget_usd)
+    # B3: the validator cell replies with reduced citations; Python derives the rest (ADR-0013)
+    return owasp_dispatch.CellInvoker(effort=resolved["effort"], budget_usd=budget_usd)
 
 
 def run_dispatch(run_id: str, dagster_run_id: str, force: bool = False, *,

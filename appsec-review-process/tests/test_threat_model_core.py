@@ -188,7 +188,9 @@ class ThreatModelCoreTests(unittest.TestCase):
         model = tm.build_model(self.inputs, "attempt-1")
         state.atomic_json(attempt / tm.RESULT, model)
         self.assertEqual(output_validator.validate_contract_result(attempt, contract, run_id="run1"), [])
-        model["stride_hypotheses"][0]["statement"] = "severity: high"
+        # ADR-0013: the contract layer no longer parses free text for promotion grammar (the model
+        # validator above still does); it fails a STRUCTURED severity field.
+        model["stride_hypotheses"][0]["severity"] = "high"
         state.atomic_json(attempt / tm.RESULT, model)
         self.assertTrue(any("severity promotion" in error for error in
                             output_validator.validate_contract_result(attempt, contract, run_id="run1")))

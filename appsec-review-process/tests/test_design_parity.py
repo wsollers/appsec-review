@@ -62,7 +62,7 @@ class DesignParityTests(unittest.TestCase):
     def test_current_honest_baseline(self):
         result = validate_manifest(self.manifest)
         self.assertEqual(result["status"], "PASS", result["errors"])
-        self.assertEqual(result["job_count"], 66)
+        self.assertEqual(result["job_count"], 69)
         self.assertEqual(result["capability_count"], 16)
         self.assertNotIn("resource_pools: no dedicated Dagster resource pools are configured", result["gaps"])
         self.assertEqual(tuple(self.manifest["dagster_inventory"]["resource_pools"]), resource_pools.POOL_IDS)
@@ -133,13 +133,18 @@ class DesignParityTests(unittest.TestCase):
 
     def test_supplied_gate_cannot_be_called_automatic_dispatch(self):
         manifest = self.mutated()
+        # every job is an automatic worker now; the rule is exercised by declaring a supplied gate
         record = self.record(manifest, "02-repository-partition-discovery")
+        record["readiness"] = "supplied_artifact_gate"
         record["execution"]["mode"] = "persona"
         self.assertIn("supplied-artifact readiness requires", self.errors(manifest))
 
     def test_blocked_op_cannot_be_called_implemented(self):
         manifest = self.mutated()
-        self.record(manifest, "02-evidence-assembly")["readiness"] = "implemented_not_qualified"
+        # no blocked_op remains in the graph; bind one to an implemented job to exercise the rule
+        record = self.record(manifest, "02-evidence-assembly")
+        record["readiness"] = "implemented_not_qualified"
+        record["dagster"]["lifecycle_binding"]["kind"] = "blocked_op"
         self.assertIn("blocked_op cannot be classified", self.errors(manifest))
 
     def test_launcher_and_sensor_mismatch(self):
@@ -156,7 +161,9 @@ class DesignParityTests(unittest.TestCase):
         # Built workers have explicit pools; a job whose worker does not exist stays unassigned.
         self.assertNotIn("02-evidence-index: resource pool unassigned", result["gaps"])
         self.assertNotIn("02-native-build: resource pool unassigned", result["gaps"])
-        self.assertIn("02-native-sast: resource pool unassigned", result["gaps"])
+        self.assertNotIn("02-native-sast: resource pool unassigned", result["gaps"])
+        # a capability whose pool is not yet assigned is still an explicit gap
+        self.assertIn("common-worker-result-envelope: resource pool unassigned", result["gaps"])
 
     def test_qualification_reference_mutation(self):
         manifest = self.mutated()
@@ -168,7 +175,7 @@ class DesignParityTests(unittest.TestCase):
         first = render_report(self.manifest, result)
         second = render_report(deepcopy(self.manifest), validate_manifest(deepcopy(self.manifest)))
         self.assertEqual(first, second)
-        self.assertIn("Lifecycle jobs: **66**", first)
+        self.assertIn("Lifecycle jobs: **69**", first)
 
     def test_common_worker_result_envelope_semantics(self):
         base = {

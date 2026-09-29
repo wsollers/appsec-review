@@ -11,7 +11,9 @@
     "accepted upstream artifacts and cited evidence for the assigned surface (catalog lists no specific inputs)"
   ],
   "outputs": [
-    "evidence-bound observations within this persona's focus (catalog lists no specific outputs)"
+    "optional CWE id with a one-line rationale",
+    "the eleven CVSS v4.0 base metrics with one justification each (Python derives the vector, score and severity)",
+    "optional remediation objective"
   ],
   "must_not": [
     "fail to distinguish: severity; exploitability; exposure; confidence; remediation cost; business priority",
