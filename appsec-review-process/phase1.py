@@ -19,6 +19,7 @@ from execution_state import (ROOT, RUNS, Blocked, Lock, atomic_json, atomic_byte
                              read_json, run_path, tree_hashes)
 from intake import source_identity, validate_intake, git
 from job_graph import composition, definition_hash, dependency_ok, descendants, load_graph, mermaid
+import registry_paths
 
 JOB = '00-intake'
 LANE = '00-intake-recovery'
@@ -110,7 +111,7 @@ def accepted(run_id, job=JOB, scope='whole', fresh=True):
         source = read_json(attempt / 'evidence/source.json')
         validate_intake(read_json(attempt / 'outputs/intake.json'), source, inputs['config'])
         if fresh:
-            template = read_json(ROOT / 'registry/job-templates/00-intake.json')
+            template = read_json(registry_paths.template("00-intake"))
             live = current_inputs(run_id, template, config_for(run_id))
             # ADR-0013 item 8: intake is stale only when what it read changed (the target snapshot,
             # its config, its dependencies, its tools). definition_hash also covers shared runtime,
@@ -204,8 +205,8 @@ class Session:
 
     def configure(self):
         self.graph = load_graph()
-        self.job = read_json(ROOT / 'registry/job-templates/00-intake.json')
-        self.validator = read_json(ROOT / 'registry/job-templates' / (self.graph['validator_template']+'.json'))
+        self.job = read_json(registry_paths.template("00-intake"))
+        self.validator = read_json(registry_paths.template(self.graph['validator_template']))
         composition(self.job); composition(self.validator)
         return {'config':config_for(self.run_id),'job':self.job,'validator':self.validator,
                 'definition_hash':definition_hash(self.job),

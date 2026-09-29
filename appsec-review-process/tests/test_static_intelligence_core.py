@@ -5,6 +5,7 @@ import static_intelligence_core as core
 import validate_job_output as output_validator
 from execution_state import file_hash, Blocked
 from schema_validate import validate_document
+import registry_paths
 
 class StaticIntelTests(unittest.TestCase):
  def source(self,target):
@@ -60,7 +61,7 @@ class StaticIntelTests(unittest.TestCase):
    with self.assertRaises(Blocked): core.extract('02-doc-intelligence-ingest',run_id='r',attempt_id='a',target=target,source={},source_files=files)
  def test_registry_is_not_executable(self):
   for job,(contract,result,schema) in core.SPECS.items():
-   t=json.loads((ROOT/f'registry/job-templates/{job}.json').read_text()); c=json.loads((ROOT/f'registry/output-contracts/{contract}.json').read_text())
+   t=json.loads((ROOT/registry_paths.template_rel(job)).read_text()); c=json.loads((ROOT/registry_paths.contract_rel(contract)).read_text())
    self.assertFalse(t['implemented']); self.assertEqual(c['result_schema'],{"artifact":result,"schema_file":schema})
    self.assertTrue(set(c['required_files'])<=set(t['outputs']['files']))
    self.assertEqual(output_validator._claim_class_errors(c,{"records":[]}),[])

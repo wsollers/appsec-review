@@ -24,6 +24,7 @@ import build_resolution
 import container_execution as ce
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json, run_path
 import permission_capabilities as pc
+import registry_paths
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 
@@ -178,7 +179,7 @@ def _code_hashes(job: str) -> dict[str, str]:
     wrapper = "build_configure.py" if job == "02-build-configure" else "native_build.py"
     names = ("build_replay.py", wrapper, "container_execution.py", "permission_capabilities.py",
              "publish_job_output.py", "validate_job_output.py",
-             f"registry/output-contracts/{spec(job)['contract']}.json")
+             registry_paths.contract_rel(spec(job)["contract"]))
     result = {name: file_hash(ROOT / name) for name in names}
     for name in ("build-replay-input.schema.json", spec(job)["schema"],
                  "container-image.schema.json", "pinned-container-result.schema.json"):

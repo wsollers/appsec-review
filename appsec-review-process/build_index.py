@@ -34,6 +34,7 @@ import phase1
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 from validate_job_output import SECRET_PATTERNS
+import registry_paths
 
 SCHEMA = 'appsec-review/build-index/1'
 RULES_VERSION = 1
@@ -1111,8 +1112,8 @@ UPSTREAM_JOBS = ('02-repository-partition-discovery', '02-dev-project-discovery'
                  '02-devops-project-discovery')
 CODE_FILES = ('build_index.py', 'execution_state.py', 'schema_validate.py', 'intake.py', 'phase1.py',
               'discovery_gate.py', 'publish_job_output.py', 'validate_job_output.py',
-              'registry/job-templates/02-build-index.json',
-              'registry/output-contracts/build-index.json')
+              registry_paths.template_rel("02-build-index"),
+              registry_paths.contract_rel("build-index"))
 
 
 def root(run_id):

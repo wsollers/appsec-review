@@ -18,6 +18,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claim_ledger as ledger
 import claude_cli_invoker as cli
@@ -149,7 +150,7 @@ class DeriveTests(unittest.TestCase):
 class HunterInvokerTests(unittest.TestCase):
     def test_persona_schema_and_hunt_block_are_rendered_and_candidates_derived(self):
         value = brief()
-        contract = json.loads((ROOT / "registry/output-contracts/hypothesis-hunt-candidates.json").read_text())
+        contract = json.loads((registry_paths.contract("hypothesis-hunt-candidates")).read_text())
         package = SimpleNamespace(composition={"output_contract": contract}, prompt=b"OUTER", inputs=inputs_for(value),
             request={"model": {"family": "claude-sonnet-5"}, "run_id": "r", "job_id": hunt.JOB, "attempt_id": "a" * 32,
                      "budget": {"input_unit_limit": 10 ** 9}},

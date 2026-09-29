@@ -38,6 +38,7 @@ from publish_job_output import coordinate_worker_lifecycle, record_terminal_curr
 import review_cli as rc
 from schema_validate import SchemaStore, validate_document
 import validate_job_output as vjo
+import registry_paths
 
 JOB = '02-build-classify'
 CONTRACT = 'build-classification'
@@ -51,8 +52,8 @@ PART_RE = re.compile(r'^(?P<base>(?:dir|file):\S+?)::(?P<part>[a-z0-9][a-z0-9-]*
 CODE_FILES = ('build_classify.py', 'build_index.py', 'discovery_gate.py', 'persona_dispatch.py',
               'persona_invocation.py', 'persona_prompt_assembly.py', 'claude_cli_invoker.py',
               'publish_job_output.py', 'validate_job_output.py',
-              'registry/job-templates/02-build-classify.json',
-              'registry/output-contracts/build-classification.json',
+              registry_paths.template_rel("02-build-classify"),
+              registry_paths.contract_rel("build-classification"),
               '02-evidence-pregather/task-build-classify.md')
 
 
@@ -284,7 +285,7 @@ def run(run_id, dagster_id, force=False):
         if record['code'] != _code_hashes():
             raise Blocked(f'{JOB}: implementation changed during work')
         gaps = gaps_of(value)
-        template = read_json(ROOT / 'registry' / 'job-templates' / f'{JOB}.json')
+        template = read_json(registry_paths.template(JOB))
         composition = template['composition']
         status = {'process': '02-evidence-pregather', 'budget': template.get('budget_default'),
                   'persona_id': composition['persona_id'], 'role_id': composition['role_id'],

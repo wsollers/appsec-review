@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+import registry_paths
 JOB = "03-threat-model-dfd-stride"
 
 
@@ -21,19 +22,19 @@ def load(relative: str):
 
 class ThreatModelJobMetadataTests(unittest.TestCase):
     def test_required_artifacts_match_the_output_contract(self):
-        node = load("job-graph.json")["jobs"][JOB]
-        contract = load(f"registry/output-contracts/{node['contract']}.json")
-        template = load(f"registry/job-templates/{node['template']}.json")
+        node = load(registry_paths.GRAPH_REL)["jobs"][JOB]
+        contract = load(registry_paths.contract_rel(node["contract"]))
+        template = load(registry_paths.template_rel(node["template"]))
         self.assertEqual(sorted(node["required_artifacts"]), sorted(contract["required_files"]))
         self.assertEqual(sorted(template["outputs"]["files"]), sorted(contract["required_files"]))
         for name in ("attack-trees.mmd", "dfd.mmd", "ranked-threat-scenarios.json", "intercom-transcript.jsonl"):
             self.assertIn(name, node["required_artifacts"])
 
     def test_template_and_worker_describe_the_persona_cell_job(self):
-        template = load(f"registry/job-templates/{JOB}.json")
+        template = load(registry_paths.template_rel(JOB))
         self.assertNotEqual(template["model"]["model"], "deterministic-python")
-        cells = [load(f"registry/job-templates/{path.name}")
-                 for path in sorted((ROOT / "registry" / "job-templates").glob("threat-workbench-*.json"))]
+        cells = [load(registry_paths.template_rel(path.stem))
+                 for path in sorted(registry_paths.JOB_TEMPLATES_DIR.glob("threat-workbench-*.json"))]
         self.assertTrue(cells)
         self.assertIn(template["model"]["model"], {cell["model"]["model"] for cell in cells})
         source = (ROOT / "threat_model_core.py").read_text(encoding="utf-8")

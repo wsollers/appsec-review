@@ -51,7 +51,7 @@
        {"name": "Join", "members": ["step:op-workflow_publish"]}
      ]},
     {"id": "lifecycle", "name": "Lifecycle graph (full_review, job-graph.json)",
-     "source": "appsec-review-process/job-graph.json",
+     "source": "appsec-review-process/pipeline/job-graph.json",
      "about": "All current lifecycle nodes, grouped by lane in process-manifest.json order.",
      "groups": "lanes"}
   ]

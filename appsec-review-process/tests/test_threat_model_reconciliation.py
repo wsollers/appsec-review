@@ -11,6 +11,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state as state
 from schema_validate import SchemaStore, validate_document
@@ -135,14 +136,14 @@ class ThreatModelReconciliationTests(unittest.TestCase):
                 ("../personas/roles/threat-model-reconciler/role.json","role.schema.json"),
                 ("domains/threat-model-reconciliation.json","domain.schema.json"),
                 ("tooling-profiles/threat-model-reconciliation.json","tooling-profile.schema.json")):
-            value=json.loads((ROOT/"registry"/relative).read_text())
+            value=json.loads((registry_paths.REGISTRY/relative).read_text())
             self.assertEqual(validate_document(value,schema,store),[],relative)
-        contract=json.loads((ROOT/"registry/output-contracts/threat-model-reconciliation.json").read_text())
+        contract=json.loads((registry_paths.contract("threat-model-reconciliation")).read_text())
         policy=output_validator.CLAIM_CLASS_POLICIES[tr.CONTRACT]
         self.assertEqual(policy["claim_class_id"],contract["claim_class"]["claim_class_id"])
         self.assertEqual(policy["allowed_assertions"],set(contract["claim_class"]["allowed_assertions"]))
         role=json.loads((ROOT/"personas/roles/threat-model-reconciler/role.json").read_text())
-        tooling=json.loads((ROOT/"registry/tooling-profiles/threat-model-reconciliation.json").read_text())
+        tooling=json.loads((registry_paths.record(registry_paths.TOOLING_PROFILES, "threat-model-reconciliation")).read_text())
         self.assertEqual(set(role["allowed_outputs"]),set(tooling["claim_limits"]["allowed"]))
 
     def test_l6a_to_l6b_common_envelope_qualification(self):

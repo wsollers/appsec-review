@@ -17,6 +17,7 @@ from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, digest, fi
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 JOB = "10-synthesis-report"
 CONTRACT = "synthesis-report-draft"
@@ -44,9 +45,9 @@ PROHIBITED_TEXT = tuple(re.compile(value, re.I) for value in (
     r"(?<!not a )\bfinal(?:ized)?\s+report\b", r"\bhuman\s+sign[- ]?off\s+(?:recorded|complete|approved)\b", r"\bcompliance\s+(?:certified|verdict)\b",
     r"\b(?:is|has been)\s+(?:fixed|remediated)\b", r"\bobserved\s+runtime\b"))
 CODE_FILES = ("synthesis_report.py","10-synthesis-report/task-synthesis-report-core.md",
-    "registry/job-templates/10-synthesis-report.json","registry/output-contracts/synthesis-report-draft.json",
+    registry_paths.template_rel("10-synthesis-report"),registry_paths.contract_rel("synthesis-report-draft"),
     "personas/personas/synthesis-report-drafter/persona.json","personas/roles/synthesis-report-drafter/role.json",
-    "registry/domains/synthesis-report-core.json","registry/tooling-profiles/synthesis-report-static.json")
+    registry_paths.rel(registry_paths.DOMAINS, "synthesis-report-core"),registry_paths.rel(registry_paths.TOOLING_PROFILES, "synthesis-report-static"))
 SCHEMA_FILES = ("synthesis-artifact-ref.schema.json","synthesis-owasp-ref.schema.json",
     "synthesis-input.schema.json","synthesis-citation.schema.json","synthesis-proof-obligation.schema.json",
     "synthesis-upstream-binding.schema.json","synthesis-l08-record.schema.json","synthesis-l08-adapter.schema.json",

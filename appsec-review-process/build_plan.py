@@ -44,6 +44,7 @@ from publish_job_output import coordinate_worker_lifecycle, record_terminal_curr
 import review_cli as rc
 from schema_validate import SchemaStore, validate_document
 import validate_job_output as vjo
+import registry_paths
 
 JOB = '02-build-plan'
 CONTRACT = 'build-plan'
@@ -73,7 +74,7 @@ DISPOSITIONS = {
 CODE_FILES = ('build_plan.py', 'build_classify.py', 'build_index.py', 'discovery_gate.py',
               'persona_dispatch.py', 'persona_invocation.py', 'persona_prompt_assembly.py',
               'claude_cli_invoker.py', 'publish_job_output.py', 'validate_job_output.py',
-              'registry/job-templates/02-build-plan.json', 'registry/output-contracts/build-plan.json',
+              registry_paths.template_rel("02-build-plan"), registry_paths.contract_rel("build-plan"),
               '02-evidence-pregather/task-build-plan.md', 'tooling/buildenv-catalog.json')
 
 # --- argv rules (build-resolution.md section 3; ADR-0012 Revision 3) ---------------------------------
@@ -533,7 +534,7 @@ def run(run_id, dagster_id, force=False, dispatch=None):
         attempt, attempt_id, started = allocation['attempt'], allocation['attempt_id'], allocation['started_at']
         cpath, classification, ipath, index, (index_ref, classification_ref) = _accepted_upstreams(run_id, record)
         catalog = read_json(CATALOG_PATH)
-        template = read_json(ROOT / 'registry' / 'job-templates' / f'{JOB}.json')
+        template = read_json(registry_paths.template(JOB))
         composition = template['composition']
         common = {'process': '02-evidence-pregather', 'budget': template.get('budget_default'),
                   'persona_id': composition['persona_id'], 'role_id': composition['role_id'],

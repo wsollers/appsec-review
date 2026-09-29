@@ -29,6 +29,7 @@ import permission_capabilities as pc
 import cow_install as cow
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "02-build-resolution"
 DAGSTER_JOB = "build_resolution"
@@ -46,7 +47,7 @@ APT_MIRROR = {"scheme": "http", "host": "archive.ubuntu.com", "port": 80,
               "suite": "noble", "components": ["main", "universe"]}
 CODE_FILES = ("build_resolution.py", "build_plan.py", "container_execution.py",
               "permission_capabilities.py", "publish_job_output.py", "validate_job_output.py",
-              "registry/output-contracts/build-resolution.json")
+              registry_paths.contract_rel("build-resolution"))
 
 
 def root(run_id: str) -> Path:

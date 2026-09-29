@@ -27,6 +27,7 @@ from publish_job_output import (ACCEPTED_SCHEMA, coordinate_worker_lifecycle,
                                 record_terminal_current, validate_published)
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 JOB = "02-evidence-assembly"
 CONTRACT = "pregather"
@@ -34,7 +35,7 @@ WORKER_KIND = "join_controller"
 RESULT = "intel-manifest.json"
 SUPPLY = "assembly-supply.json"
 TERMINAL = "terminal-instances.json"
-GRAPH = ROOT / "job-graph.json"
+GRAPH = registry_paths.JOB_GRAPH
 SCHEMA = "appsec-review/intel-manifest/1.0"
 SUPPLY_SCHEMA = "appsec-review/evidence-assembly-supply/1.0"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
@@ -43,10 +44,10 @@ CODE_FILES = (
     "evidence_assembly.py", "execution_state.py", "publish_job_output.py",
     "validate_job_output.py", "worker_result.py", "pool_rendezvous.py", "pool_specification.py",
     "worker_adapters.py", "container_execution.py", "persona_invocation.py",
-    "registry/job-templates/02-evidence-assembly.json",
-    "registry/output-contracts/pregather.json", "personas/roles/evidence-assembler/role.json",
-    "registry/domains/evidence-assembly.json",
-    "registry/tooling-profiles/hash-bound-evidence-assembly.json",
+    registry_paths.template_rel("02-evidence-assembly"),
+    registry_paths.contract_rel("pregather"), "personas/roles/evidence-assembler/role.json",
+    registry_paths.rel(registry_paths.DOMAINS, "evidence-assembly"),
+    registry_paths.rel(registry_paths.TOOLING_PROFILES, "hash-bound-evidence-assembly"),
 )
 
 
@@ -314,7 +315,7 @@ def _code_hashes() -> dict[str, str]:
                  "evidence-assembly-supply.schema.json",
                  "pool-rendezvous-manifest.schema.json", "worker-result-envelope.schema.json"):
         result["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
-    result["job-graph.json"] = file_hash(GRAPH)
+    result[registry_paths.GRAPH_REL] = file_hash(GRAPH)
     return result
 
 

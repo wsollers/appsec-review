@@ -17,6 +17,7 @@ import claim_lifecycle_core as core
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import validate_document
+import registry_paths
 
 STAGES = tuple(core.STAGES)
 ARRAYS = {"07-red-team-adversarial": "candidates", "08-blue-team-refutation": "hypotheses",
@@ -70,14 +71,14 @@ def _sha(value: Any) -> str:
 def _code_hashes(stage: str) -> dict[str, str]:
     names = ("claim_review_lifecycle.py", "claim_lifecycle_core.py", WORKERS[stage],
              "publish_job_output.py", "validate_job_output.py",
-             f"registry/output-contracts/{stage}.json")
+             registry_paths.contract_rel(stage))
     if stage == "07-red-team-adversarial":          # ATT&CK/CAPEC label validation (ADR-0026)
         names += ("attack_reference.py", "mitre_feed.py")
     result = {name: file_hash(ROOT / name) for name in names}
     result["schemas/claim-review-decision.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-decision.schema.json")
     result["schemas/" + core.STAGES[stage][3]] = file_hash(ROOT.parent / "schemas" / core.STAGES[stage][3])
-    template = f"registry/job-templates/{stage}.json"
+    template = registry_paths.template_rel(stage)
     result[template] = file_hash(ROOT / template)
     return result
 

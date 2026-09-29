@@ -24,9 +24,10 @@ from schema_validate import SchemaStore, validate_document
 import secrets_iac_contracts as _v04
 from tool_instance_shapes import HEADER_FIELDS, NODE_STATUSES
 from worker_result import validate_immutable_reuse, validate_worker_result
+import registry_paths
 
-REGISTRY = ROOT / "registry"
-GRAPH = ROOT / "job-graph.json"
+REGISTRY = registry_paths.REGISTRY
+GRAPH = registry_paths.JOB_GRAPH
 SCHEMAS = ROOT.parent / "schemas"
 MAX_RESULT_BYTES = tunables.shared("result_artifact_max_bytes")
 MAX_CITATIONS = 4096

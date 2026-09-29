@@ -17,6 +17,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import build_classify as bc
 import build_plan as bp
@@ -304,7 +305,7 @@ class Worker(Base):
         import validate_job_output as vjo
         pointer = self.run_plan()
         attempt = bp.root(self.run_id) / 'attempts' / pointer['attempt_id']
-        contract = read_json(ROOT / 'registry' / 'output-contracts' / 'build-plan.json')
+        contract = read_json(registry_paths.contract("build-plan"))
         self.assertEqual(vjo.validate_contract_result(attempt, contract, run_id=self.run_id), [])
         value = read_json(attempt / bp.RESULT)
         value['plans'][0]['commands'][2]['argv'] = ['make', 'install']
@@ -344,7 +345,7 @@ class LiveRequest(Base):
         prompt = (ROOT / request['outer_prompt']['path']).read_text(encoding='utf-8')
         self.assertIn('# Build Plan (one unit)', prompt)
         self.assertIn('build-planner', prompt)
-        contract = read_json(ROOT / 'registry' / 'output-contracts' / 'build-plan.json')
+        contract = read_json(registry_paths.contract("build-plan"))
         self.assertEqual([f[0] for f in cci._envelope_fields(contract)], [bp.RESULT, bp.SUMMARY])
         # The staged copies never collide with a second unit's plan-unit.json.
         other = bp._stage_unit_upstreams(bp.root(self.run_id), record, cpath, ipath, classification, 'dir:.')

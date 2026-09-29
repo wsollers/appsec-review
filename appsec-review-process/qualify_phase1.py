@@ -13,6 +13,7 @@ import urllib.request
 import uuid
 
 from execution_state import ROOT, atomic_json, atomic_bytes, data_path, digest, execute, file_hash, now, read_json
+import registry_paths
 
 REPO = ROOT.parent
 COMPOSE = ['docker','compose','-f','orchestrator/dagster/compose.yaml']
@@ -23,9 +24,9 @@ SERVICES = 3  # postgres, webserver, daemon
 
 
 def code_identity():
-    paths = list(ROOT.glob('*.py')) + [ROOT/'job-graph.json',ROOT/'process-manifest.json',ROOT/'phase-1-implementation-prompt.md',
+    paths = list(ROOT.glob('*.py')) + [registry_paths.JOB_GRAPH,ROOT/'process-manifest.json',ROOT/'phase-1-implementation-prompt.md',
         ROOT/'00-intake-recovery/config.md',ROOT/'00-intake-recovery/prompt.md',ROOT/'tooling/buildenv-catalog.json']
-    paths += list((ROOT/'registry').rglob('*.json')) + list((REPO/'schemas').glob('*.json')) + list((ROOT/'tests').glob('*.py'))
+    paths += list(registry_paths.REGISTRY.rglob('*.json')) + list((REPO/'schemas').glob('*.json')) + list((ROOT/'tests').glob('*.py'))
     paths += [p for p in (ROOT/'personas').rglob('*') if p.is_file()]
     paths += [REPO/'orchestrator/dagster'/name for name in ('definitions.py','compose.yaml','Dockerfile','requirements.txt','requirements.lock.txt','dagster.yaml','workspace.yaml','code-location.sh')]
     paths += [REPO/'pipeline/engagement_job.ps1',REPO/'pipeline/engagement_job.sh',REPO/'docs/design-parity/job-graph.mmd']
@@ -63,8 +64,8 @@ def contracts():
            'job-templates':('job-template','job_template_id'),'container-images':('container-image','image_id')}
     count=0
     for folder,(schema,field) in kinds.items():
-        for rid in persona_registry.record_ids(ROOT/'registry',folder):
-            path=persona_registry.record_path(ROOT/'registry',folder,rid)[1]
+        for rid in persona_registry.record_ids(registry_paths.REGISTRY,folder):
+            path=persona_registry.record_path(registry_paths.REGISTRY,folder,rid)[1]
             record=read_json(path); errors=validate_document(record,schema+'.schema.json')
             if errors or record[field] != rid: raise ValueError(str(path)+': '+str(errors))
             if folder=='job-templates': composition(record)
@@ -194,7 +195,7 @@ def main(argv=None):
     mappings={
       'A01':(['qualify_phase1.py','phase-1-implementation-prompt.md'],['contracts']),
       'A02':(['orchestrator/dagster/compose.yaml','orchestrator/dagster/definitions.py','orchestrator/dagster/code-location.sh','qualify_dagster.py'],['dagster','restart','code-location-check','restart-check','runtime']),
-      'A03':(['job_graph.py','registry/'],['contracts','tests-host','tests-linux']),
+      'A03':(['job_graph.py',registry_paths.DIRNAME+'/'],['contracts','tests-host','tests-linux']),
       'A04':(['intake.py'],['tests-host','tests-linux','intake-host']),
       'A05':(['phase1.py:validate_supplied'],['tests-host','tests-linux']),
       'A06':(['execution_state.py:identifier/beneath','phase1.py'],['tests-host','tests-linux']),
@@ -206,7 +207,7 @@ def main(argv=None):
       'A12':(['execution_state.py:ProcessTree/execute','phase1.py:Session.fail'],['tests-host','tests-linux']),
       'A13':(['stage_artifacts.py','create_handoff.py','review_cli.py','validate_lane_output.py','pipeline/engagement_job.*'],['tests-host','tests-linux','handoff-host','status-host','validate-host']),
       'A14':(['intake.py','qualify_dagster.py'],['intake-host','reuse-host','dagster']),
-      'A15':(['job-graph.json','docs/design-parity/job-graph.mmd','job_graph.py','review_cli.py'],['graph','status-host','dagster','tests-host','tests-linux']),
+      'A15':([registry_paths.GRAPH_REL,'docs/design-parity/job-graph.mmd','job_graph.py','review_cli.py'],['graph','status-host','dagster','tests-host','tests-linux']),
       'A16':(['qualify_phase1.py'],list(steps))}
     conditions={'A01':ok('contracts') and stable and vetted,'A02':all(ok(n) for n in ('dagster','restart','code-location-check','restart-check','runtime')) and healthy and web_ok,
                 **{f'A{i:02}':tests_ok for i in range(3,14)},

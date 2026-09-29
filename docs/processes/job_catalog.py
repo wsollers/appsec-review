@@ -4,11 +4,12 @@
 Reads the machine-readable sources and writes docs/processes/job-catalog.md (and job-catalog.json,
 the same data for other renderers such as the Google Doc build):
 
-  appsec-review-process/job-graph.json               lifecycle nodes, lanes, dependencies, contracts
+  appsec-review-process/pipeline/job-graph.json      lifecycle nodes, lanes, dependencies, contracts
   appsec-review-process/design-parity-manifest.json  readiness, execution mode, worker, pool, Dagster jobs
   appsec-review-process/process-manifest.json        lane order
-  appsec-review-process/registry/job-templates/      declared inputs and outputs, persona composition
-  appsec-review-process/registry/output-contracts/   required output files, claim class
+  appsec-review-process/pipeline/job-templates/      declared inputs and outputs, persona composition
+  appsec-review-process/pipeline/output-contracts/   required output files, claim class
+  (the pipeline/ paths come from appsec-review-process/registry_paths.py)
   appsec-review-process/<lane>/config.md             "Required Inputs" / "Required Outputs" of stage lanes
   docs/processes/catalog/steps.json                  operator steps, human tasks, standalone Dagster jobs, ops
   docs/processes/catalog/artifacts.json              artifact vocabulary for those steps
@@ -24,6 +25,7 @@ Standard library only, so it runs with any Python 3.10+ on the host.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
@@ -31,6 +33,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PROC = ROOT / 'appsec-review-process'
+_spec = importlib.util.spec_from_file_location('registry_paths', PROC / 'registry_paths.py')
+registry_paths = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(registry_paths)
 CAT = ROOT / 'docs' / 'processes' / 'catalog'
 OUT_MD = ROOT / 'docs' / 'processes' / 'job-catalog.md'
 OUT_JSON = ROOT / 'docs' / 'processes' / 'job-catalog.json'
@@ -67,11 +72,11 @@ def config_sections(lane: str) -> dict[str, list[str]]:
 
 
 def build() -> dict:
-    graph = load(PROC / 'job-graph.json')['jobs']
+    graph = load(registry_paths.JOB_GRAPH)['jobs']
     parity = {j['id']: j for j in load(PROC / 'design-parity-manifest.json')['jobs']}
     order = load(PROC / 'process-manifest.json')['process_order']
-    templates = {p.stem: load(p) for p in sorted((PROC / 'registry' / 'job-templates').glob('*.json'))}
-    contracts = {load(p)['contract_id']: load(p) for p in sorted((PROC / 'registry' / 'output-contracts').glob('*.json'))}
+    templates = {p.stem: load(p) for p in sorted(registry_paths.JOB_TEMPLATES_DIR.glob('*.json'))}
+    contracts = {load(p)['contract_id']: load(p) for p in sorted(registry_paths.OUTPUT_CONTRACTS_DIR.glob('*.json'))}
     steps = load(CAT / 'steps.json')['steps']
     artifacts = load(CAT / 'artifacts.json')['artifacts']
     models = load(CAT / 'models.json')['models']
@@ -88,16 +93,16 @@ def build() -> dict:
         if tpl:
             declared_in = [('required', x) for x in tpl['inputs'].get('required', [])] + \
                           [('optional', x) for x in tpl['inputs'].get('optional', [])]
-            in_src = f"registry/job-templates/{node['template']}.json"
+            in_src = registry_paths.template_rel(node['template'])
         elif stage.get('Required Inputs'):
             declared_in = [('required', x) for x in stage['Required Inputs']]
             in_src = f"{node['lane']}/config.md"
         if contract:
             declared_out = list(contract.get('required_files', []))
-            out_src = f"registry/output-contracts/{node['contract']}.json"
+            out_src = registry_paths.contract_rel(node['contract'])
         elif tpl:
             declared_out = list(tpl['outputs'].get('files', []))
-            out_src = f"registry/job-templates/{node['template']}.json"
+            out_src = registry_paths.template_rel(node['template'])
         elif stage.get('Required Outputs'):
             declared_out = stage['Required Outputs']
             out_src = f"{node['lane']}/config.md"

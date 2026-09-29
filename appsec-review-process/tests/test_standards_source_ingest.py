@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import evidence_assembly
 import execution_state as state
@@ -69,8 +70,8 @@ class StandardsSourceIngestTests(unittest.TestCase):
 
     def test_binding_and_owned_registry_records_are_closed_and_non_executable(self):
         self.assertEqual(validate_document(self.fixture, "standards-source-binding.schema.json"), [])
-        template = json.loads((ROOT / "registry/job-templates/02-standards-source-ingest.json").read_text())
-        contract = json.loads((ROOT / "registry/output-contracts/standards-source-extract.json").read_text())
+        template = json.loads((registry_paths.template("02-standards-source-ingest")).read_text())
+        contract = json.loads((registry_paths.contract("standards-source-extract")).read_text())
         self.assertFalse(template["implemented"])
         self.assertEqual(template["permissions"], worker._permissions())
         self.assertEqual(contract["result_schema"], {"artifact": worker.RESULT,

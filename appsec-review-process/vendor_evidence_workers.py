@@ -22,6 +22,7 @@ import evidence_redaction
 import permission_capabilities as permissions
 import secrets_iac_contracts as sic
 import tool_instance_shapes as shapes
+import registry_paths
 
 SKIP = shapes.SKIP_REASON
 HASH = lambda b: "sha256:" + hashlib.sha256(b).hexdigest()
@@ -38,7 +39,7 @@ SPECS = {
     "02-binary-hardening": ("binary-hardening", ["binskim"]),
     "02-mobile-sast": ("mobile-sast", ["mobsfscan-android", "mobsfscan-ios"]),
 }
-REGISTRY = Path(__file__).resolve().parent / "registry" / "job-templates"
+REGISTRY = registry_paths.JOB_TEMPLATES_DIR
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 IMPLEMENTATION = "vendor-evidence-workers-v2-producer-receipts"

@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import build_classify as bc
 import build_index as bi
@@ -302,7 +303,7 @@ class Worker(Base):
         import validate_job_output as vjo
         pointer = bc.run(self.run_id, 'dagster-1')
         attempt = bc.root(self.run_id) / 'attempts' / pointer['attempt_id']
-        contract = read_json(ROOT / 'registry' / 'output-contracts' / 'build-classification.json')
+        contract = read_json(registry_paths.contract("build-classification"))
         self.assertEqual(vjo.validate_contract_result(attempt, contract, run_id=self.run_id), [])
         value = read_json(attempt / bc.RESULT)
         value['units'].pop()
@@ -342,7 +343,7 @@ class Request(Base):
         prompt = (ROOT / request['outer_prompt']['path']).read_text(encoding='utf-8')  # gitignored prompt-cache
         self.assertIn('# Build Unit Classification', prompt)  # the task prompt section
         self.assertIn('build-unit-classifier', prompt)  # the role section
-        contract = read_json(ROOT / 'registry' / 'output-contracts' / 'build-classification.json')
+        contract = read_json(registry_paths.contract("build-classification"))
         self.assertEqual([f[0] for f in cci._envelope_fields(contract)], [bc.RESULT, bc.SUMMARY])
 
 

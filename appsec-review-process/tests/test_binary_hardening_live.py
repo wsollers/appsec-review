@@ -11,6 +11,7 @@ from unittest import mock
 PROCESS = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(PROCESS))
+import registry_paths
 
 import binary_hardening_input
 import execution_state as state
@@ -22,9 +23,9 @@ import vendor_evidence_orchestration
 class BinaryHardeningLiveTests(unittest.TestCase):
     def test_real_elf_from_native_projection_reaches_accepted_checksec_evidence(self):
         build_image = state.read_json(
-            PROCESS / "registry/container-images/audit-buildenv-cpp.json")
+            registry_paths.record(registry_paths.CONTAINER_IMAGES, "audit-buildenv-cpp"))
         scanner_image = state.read_json(
-            PROCESS / "registry/container-images/audit-binary-analysis.json")
+            registry_paths.record(registry_paths.CONTAINER_IMAGES, "audit-binary-analysis"))
         self.assertEqual(build_image["digest_kind"], "image-id")
         self.assertEqual(scanner_image["digest_kind"], "image-id")
 

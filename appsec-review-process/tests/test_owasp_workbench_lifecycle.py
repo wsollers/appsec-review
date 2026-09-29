@@ -9,6 +9,7 @@ from unittest import mock
 
 PROCESS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROCESS))
+import registry_paths
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import execution_state  # noqa: E402
@@ -43,7 +44,7 @@ class WorkbenchCase(unittest.TestCase):
         self.fixture = routing_fixture.OwaspComponentRoutingTests(methodName="runTest")
         self.fixture.run_id, self.fixture.run, self.fixture.data = self.run_id, self.run, self.data
         self.facts = owasp_dispatch.DispatchFacts(
-            registry_dir=PROCESS / "registry", allowed_models=(invocation_support.MODEL,),
+            registry_dir=registry_paths.REGISTRY, allowed_models=(invocation_support.MODEL,),
             invoker_id=persona_invocation.FixtureInvoker.invoker_id,
             source_snapshot_sha256=invocation_support.SNAPSHOT, registry_ceiling=None)
 

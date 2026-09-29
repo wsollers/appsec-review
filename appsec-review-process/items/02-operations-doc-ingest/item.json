@@ -17,8 +17,8 @@
   "implementation": {
     "own": [
       "static_intelligence_core.py",
-      "registry/job-templates/02-operations-doc-ingest.json",
-      "registry/output-contracts/operations-doc-intelligence.json",
+      "pipeline/job-templates/02-operations-doc-ingest.json",
+      "pipeline/output-contracts/operations-doc-intelligence.json",
       "schemas/operations-doc-intelligence.schema.json",
       "schemas/static-intelligence-record.schema.json",
       "schemas/static-intelligence-source.schema.json",

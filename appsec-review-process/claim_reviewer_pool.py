@@ -39,6 +39,7 @@ import tunables
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import registry_paths
 
 JOB = "deterministic-pool-merge"
 TEMPLATE = "claim-review-pool-cell"
@@ -192,11 +193,11 @@ def _code_hashes() -> dict[str, str]:
              "claim_lifecycle_core.py",
              "claude_cli_invoker.py", "persona_invocation.py", "deterministic_pool_merge.py",
              "pool_launcher.py", "pool_rendezvous.py", "pool_specification.py",
-             "registry/job-templates/claim-review-pool-cell.json",
-             "registry/output-contracts/claim-review-pool-candidates.json",
+             registry_paths.template_rel("claim-review-pool-cell"),
+             registry_paths.contract_rel("claim-review-pool-candidates"),
              "personas/personas/claim-reviewer/persona.json", "personas/roles/claim-reviewer/role.json",
-             "registry/domains/claim-review-lifecycle.json",
-             "registry/tooling-profiles/claim-review-static.json", "claim-review-pool-task.md"]
+             registry_paths.rel(registry_paths.DOMAINS, "claim-review-lifecycle"),
+             registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"), "claim-review-pool-task.md"]
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")

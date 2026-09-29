@@ -19,6 +19,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import dev_restart as dr
 import execution_state as state
@@ -277,7 +278,7 @@ class DefinitionTests(unittest.TestCase):
 
     def test_ported_item_is_valid_and_registers_from_the_graph(self):
         self.assertEqual(jx.check_item(self.item()), [])
-        graph = json.loads((ROOT / 'job-graph.json').read_text())['jobs']
+        graph = json.loads((registry_paths.JOB_GRAPH).read_text())['jobs']
         ops = {}
         with patch.object(jx, 'dagster_item_op', side_effect=lambda job, pool: f'op:{job}'):
             self.assertEqual(jx.register_item_ops(graph, ops, 'cpu'), [JOB])

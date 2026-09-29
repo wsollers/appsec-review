@@ -11,6 +11,7 @@ from execution_state import ROOT, Blocked, Lock, atomic_json, atomic_bytes, data
 from phase1 import accepted, job_root, config_for
 from job_graph import composition, load_graph
 import build_discovery
+import registry_paths
 
 PLAN = ROOT/'workflow-plan.json'
 
@@ -69,7 +70,7 @@ def branch_result(branch, data, templates):
 def templates_for(data):
     result={}
     for selected in data['selected_jobs']:
-        template=read_json(ROOT/'registry/job-templates'/(identifier(selected['job'])+'.json'))
+        template=read_json(registry_paths.JOB_TEMPLATES_DIR/(identifier(selected['job'])+'.json'))
         composition(template)
         result[selected['job']]=template
     return result
@@ -103,8 +104,8 @@ def run_branch(run_id, branch, pointer, dagster_id, force=False):
             templates['_build_evidence']=build_discovery.collect(run_id,pointer,data)
         inputs={'intake':data,'templates':templates,'producer':pointer,
                 'code':{name:file_hash(ROOT/name) for name in ('workflow.py','workflow-plan.json','dagster_workflow.py','build_discovery.py')},
-                'validator':read_json(ROOT/'registry/job-templates/00-validation.json')['composition'],
-                'coordinator':read_json(ROOT/'registry/job-templates/00-intake.json')['composition']}
+                'validator':read_json(registry_paths.template("00-validation"))['composition'],
+                'coordinator':read_json(registry_paths.template("00-intake"))['composition']}
         fingerprint=digest(inputs)
         if not force and (base/'accepted.json').exists():
             candidate=read_json(base/'accepted.json')
