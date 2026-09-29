@@ -436,7 +436,9 @@ ADR-0008 T05 names `cells/<wave>/<instance_id>/`; with `pool_parent = cells/<wav
   only its claims; written into the attempt's `stage-shards/` and hash-pinned in the request) and the
   shared supporting-evidence menu.
 - **Persona.** Each group's `persona_request.persona` names the shard's persona from
-  `stage_personas` (a `persona_variants` entry of the template) with its own outer prompt.
+  `stage_personas` (a `persona_variants` entry of the template) with its own outer prompt, and the
+  stage's role from `stage_roles` (a `role_variants` entry, ADR-0024), so the request's claim ceiling
+  is the stage's claim class alone.
 - **Budget.** `pool_budget` is instances x the per-instance persona budget; each request keeps the
   standard per-instance limits. `claim_review_pool_max_parallel` (default 3) instances run at once.
 - **Merge.** `deterministic_pool_merge` merges the shard outputs unchanged; the lifecycle rules then
