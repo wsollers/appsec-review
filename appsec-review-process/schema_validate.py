@@ -15,11 +15,12 @@ rejected: a schema node carrying any other keyword raises ``UnsupportedSchema`` 
 silently ignored. ``schema_keyword_lint.py`` lists the keywords the repo's schemas use against
 these sets. ``format`` is asserted, and only the formats in ``FORMAT_CHECKERS`` are accepted.
 
-Two deliberate dialect points, both kept from the original subset so no schema changes meaning:
+Three deliberate dialect points, all kept from the original subset so no schema changes meaning:
 ``pattern`` uses Python ``re`` syntax (the schemas use ``\\Z``) and is matched with ``re.match``
 (anchored at the start of the string); ``$ref`` resolves a bare file name against schemas/ (or a
 sub-directory such as ``common/``), ``file#/json/pointer`` inside that file, and ``#/json/pointer``
-inside the document being validated. Remote references are rejected.
+inside the document being validated. Remote references are rejected. ``const`` and ``enum`` use
+Python equality, so ``0`` satisfies ``const: false`` (``uniqueItems`` uses JSON equality).
 
 classification/classification_taxonomy cross-checking against verdict-taxonomies.json is NOT
 expressible as plain JSON Schema (it depends on a sibling field's value) and is handled by
@@ -233,8 +234,11 @@ def validate(instance: Any, schema: Any, store: SchemaStore, path: str = "$",
         target, target_root = resolve_ref(schema["$ref"], root, store)
         errors.extend(validate(instance, target, store, path, target_root))
 
+    # const/enum keep Python equality (0 == false, 1 == true), as the original subset did: three
+    # tests (owasp_dispatch, evidence_index_metrics, pool_rendezvous) pin the later, named check
+    # that rejects a number for a boolean. JSON equality (json_equal) is an owner decision (TODO L).
     if "const" in schema:
-        if not json_equal(instance, schema["const"]):
+        if instance != schema["const"]:
             errors.append(f"{path}: expected const {schema['const']!r}, got {instance!r}")
         return errors
 
@@ -242,7 +246,7 @@ def validate(instance: Any, schema: Any, store: SchemaStore, path: str = "$",
         errors.append(f"{path}: expected type {schema['type']!r}, got {type(instance).__name__}")
         return errors  # further checks would be noise once the base type is wrong
 
-    if "enum" in schema and not any(json_equal(instance, option) for option in schema["enum"]):
+    if "enum" in schema and instance not in schema["enum"]:
         errors.append(f"{path}: {instance!r} not in enum {schema['enum']}")
 
     pattern = _regex(schema["pattern"]) if "pattern" in schema else None  # compiles for any instance

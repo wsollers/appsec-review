@@ -474,6 +474,9 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       `poc_fix_derive` misses `explanation_status`, `poc.reason`; `claim_review_derive` misses `citations`;
       `hypothesis_hunt_derive` misses `drop_reason`. Fix edits the derive module (its job's fingerprint);
       `tests/test_contract_derive.py` KNOWN_DRIFT tracks it.
+- [ ] William: `const`/`enum` still use Python equality (`0` passes `const: false`), as before. Strict JSON
+      equality (`schema_validate.json_equal`, already used by `uniqueItems`) changes the rejection message in
+      three tests owned elsewhere (owasp_dispatch, evidence_index_metrics, pool_rendezvous); no published bytes.
 
 ## Breakage log
 
