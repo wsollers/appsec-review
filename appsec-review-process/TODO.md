@@ -428,6 +428,9 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
   coverage/gap record, receipt (mode, evidence_grade, resume_from, rerun_command), pass-through
   normaliser, publication through `publish_job_output`. `02-operations-doc-ingest` ported; outputs
   byte-identical to the legacy worker (tests/test_job_executor.py).
+- [ ] HOLD with I3: I2b registers item ops in `dagster_workflow.py` (`job_executor.register_item_ops`).
+  `workflow.py` hashes `dagster_workflow.py` into the workflow-preparation branch fingerprints, so this
+  one-line wiring reruns build discovery (and what follows it) once in prod.
 - [ ] Legacy lifecycles keep their prod fingerprint in dev too (no early cutoff: inputs pin upstream
   attempt ids). The win arrives per job as jobs are ported to the item executor.
 - [ ] Container items: `job_executor.check_item` refuses `grants.container` until an item needs one
