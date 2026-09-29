@@ -4,6 +4,12 @@ Status: **Proposed** (brief E, 2026-09-29). The engine order per language, "mode
 decides reachability" and "tree-sitter alone is never `reachable`" were decided by William in the
 brief; the rest awaits review.
 
+Implementation (2026-09-29): merged to `main` (`f5ca4d3`); 06 derives its evidence in `full_review`
+from new edges on `02-code-property-graph` and `02-codeql-sast`. The CodeQL reachability packs in
+`data/codeql-reachability/` are written but not compiled, and no job yet runs them, the LSP
+incomingCalls walk or `treesitter_ast.py` in a run (those inputs come from `<run>/inputs/`). Unit
+tests only; no live run. Details: [`docs/dependency-reachability.md`](../dependency-reachability.md).
+
 ## Context
 
 `06-cve-reachability` ran in `full_review` but joined an evidence file that the lifecycle always

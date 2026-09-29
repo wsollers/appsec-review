@@ -102,7 +102,7 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 | Pinned rule->CWE map + CWE catalog; reviewer `cwe` at 07/09/12 validated and carried to the report | DONE (curated 96-entry catalog; import full MITRE export with `cwe_catalog.py intake`) |
 | `cvss4.py` pinned CVSS v4.0; 12 `cvss_v4` base metrics + rationale -> vector/score/severity | DONE (diff the table once against FIRST `cvss_lookup.js`) |
 | `reachability.py` CPG call-graph arbiter with witness; Critical requires REACHABLE | DONE for code findings; entry points beyond `main` need a source (exports/handlers) |
-| 06 CVE reachability from vulnerable function -> app call path (`reachability.py cve-evidence`) | DONE as an offline command; needs a reviewed advisory->function map per run, not yet wired into full_review |
+| 06 CVE reachability from vulnerable function -> app call path (`reachability.py cve-evidence`) | DONE and wired into full_review by brief E (ADR-0022, `f5ca4d3`); see the dependency reachability section |
 | EPSS/KEV dated snapshot (`epss_kev_snapshot.py intake`), "as of" in report, "not assessed" gap | DONE; no snapshot imported yet |
 | Hash-verified redacted snippets; 11 objectives + 12 PATCH_PROPOSED_UNVALIDATED remediation | DONE |
 | Persona prompt text for 07/09/12 mentions the new judgment fields | DONE (`claim-review-pool-task.md` "Judgement fields", hardening-b `323c022`) |
@@ -301,6 +301,43 @@ OPEN:
 - [x] `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (Dependabot bumps): re-recorded with
   `tool_pins.py pin --keep-lock` (`1661f48`); 20 tests OK.
 
+## Light PoC and proposed fix (lane 12b, brief F, branch `poc-fix`, merged `5d1a7b0`)
+
+- [x] Lane `12b-poc-and-fix` after 12: `poc_fix_select.py` (verified + CRITICAL + REACHABLE via the
+      report's enrichment code), `poc_fix_derive.py`, `poc_fix_denylist.py`, `poc_fix_pool.py`,
+      `poc_fix_worker.py`; persona `poc-fix-author`, graph node, optional edge into 10, Dagster op,
+      catalogs. Unit tests only (fake persona replies); nothing has run live.
+- [x] Report: `poc_fix_report.py` -> `poc-fix-section.json` in the 10 attempt; HTML/TeX block under
+      each Critical REACHABLE finding. HTML and TeX render locally; the PDF compile (Docker
+      `audit-report`) is untested here: run a 10 publication in WSL.
+- [ ] First live run on appsec-multi-vuln (expect one request for the argv -> strcpy finding at
+      `case-001/main.cpp:7` if 12 scores it CRITICAL). Record PoC/fix/denylist counts and cost; tune
+      `poc_findings_max` and `poc_citation_window_lines`.
+- [ ] Denylist false positives (`connect(`, `bind(`, `remove("...")`, `token`-like names) cost a PoC,
+      never publish one; review the rejected-rule counts after the first runs.
+- [x] Merged; 10's fingerprint changed (new optional input, new modules): runs past 12 re-run 10 after a reload.
+- Operator view: `docs/report-path/happy-path-operator-guide.md` §6-7; flow: `docs/appsec-review-process-flow.md`.
+
+## Dependency reachability (06, ADR-0022, brief E, merged `f5ca4d3`)
+
+Merged (details: `docs/dependency-reachability.md`): `dep_reachability.py` (symbols
+from reviewed map / OSV, engine per ecosystem, lattice, hash-bound witness), adapters `cpg`,
+`codeql` (tables), `lsp` (incomingCalls chain), `treesitter` (hints only), CodeQL packs for
+Go/Java/C#/JS/Python in `data/codeql-reachability/` (pinned to bundle 2.27.0 libraries, symbols via
+generated data extension), and `06-cve-reachability` in `full_review` now derives its evidence
+instead of an empty file (new edges from `02-code-property-graph`, `02-codeql-sast`). This
+supersedes the "not yet wired into full_review" row under Report findings.
+OPEN:
+- WSL: `scripts/smoke_codeql_reachability.sh` (needs `audit-codeql:local`); expect QL compile
+  fixes (packs written, not compiled). Go autobuild needs a Go toolchain in `audit-codeql`
+  (image request for brief C's owner).
+- No job runs the CodeQL packs, the LSP incomingCalls walk or `treesitter_ast.py` in a run yet;
+  06 reads those only from `<run>/inputs/dependency-reachability/`. Needs a reachability mode
+  in the `audit-codeql` lane script or a 06 container step (controller decision).
+- OSV symbols exist mostly for Go; other ecosystems need `inputs/cve-reachability-functions.json`.
+- `codeql-cpp-traced` tables reach 06 only once C's `02-native-build -> 02-codeql-sast` wiring lands.
+- No Ruby or Rust CodeQL pack; PHP has no CodeQL extractor (lsp/treesitter only).
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).
@@ -415,45 +452,6 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-build-resolution` | BLOCKED `STALE_GRANT`: build grants bind to the hash of `artifact-manifest.json`, which intake rewrites on acceptance; the controls had been staged before intake | Operator order: run `phase1_intake` before `build_resolution`/`build_configure stage-control` (`stage-run.sh`, operator guide); this run's controls re-staged after intake |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |
-
-## F-poc-fix (agent brief F, branch `poc-fix`)
-
-- [x] Lane `12b-poc-and-fix` after 12: `poc_fix_select.py` (verified + CRITICAL + REACHABLE via the
-      report's enrichment code), `poc_fix_derive.py`, `poc_fix_denylist.py`, `poc_fix_pool.py`,
-      `poc_fix_worker.py`; persona `poc-fix-author`, graph node, optional edge into 10, Dagster op,
-      catalogs. Unit tests only (fake persona replies); nothing has run live.
-- [x] Report: `poc_fix_report.py` -> `poc-fix-section.json` in the 10 attempt; HTML/TeX block under
-      each Critical REACHABLE finding. HTML and TeX render locally; the PDF compile (Docker
-      `audit-report`) is untested here: run a 10 publication in WSL.
-- [ ] First live run on appsec-multi-vuln (expect one request for the argv -> strcpy finding at
-      `case-001/main.cpp:7` if 12 scores it CRITICAL). Record PoC/fix/denylist counts and cost; tune
-      `poc_findings_max` and `poc_citation_window_lines`.
-- [ ] Denylist false positives (`connect(`, `bind(`, `remove("...")`, `token`-like names) cost a PoC,
-      never publish one; review the rejected-rule counts after the first runs.
-- [ ] Merge rule: 10's fingerprint changes (new optional input, new modules); merge when no run is
-      past 12, then reload Dagster.
-
-
-## E-dep-reachability (brief E, ADR-0022)
-
-Done on the branch (details: `docs/dependency-reachability.md`): `dep_reachability.py` (symbols
-from reviewed map / OSV, engine per ecosystem, lattice, hash-bound witness), adapters `cpg`,
-`codeql` (tables), `lsp` (incomingCalls chain), `treesitter` (hints only), CodeQL packs for
-Go/Java/C#/JS/Python in `data/codeql-reachability/` (pinned to bundle 2.27.0 libraries, symbols via
-generated data extension), and `06-cve-reachability` in `full_review` now derives its evidence
-instead of an empty file (new edges from `02-code-property-graph`, `02-codeql-sast`). This
-supersedes the "not yet wired into full_review" row under Report findings.
-OPEN:
-- WSL: `scripts/smoke_codeql_reachability.sh` (needs `audit-codeql:local`); expect QL compile
-  fixes (packs written, not compiled). Go autobuild needs a Go toolchain in `audit-codeql`
-  (image request for brief C's owner).
-- No job runs the CodeQL packs, the LSP incomingCalls walk or `treesitter_ast.py` in a run yet;
-  06 reads those only from `<run>/inputs/dependency-reachability/`. Needs a reachability mode
-  in the `audit-codeql` lane script or a 06 container step (controller decision).
-- OSV symbols exist mostly for Go; other ecosystems need `inputs/cve-reachability-functions.json`.
-- `codeql-cpp-traced` tables reach 06 only once C's `02-native-build -> 02-codeql-sast` wiring lands.
-- No Ruby or Rust CodeQL pack; PHP has no CodeQL extractor (lsp/treesitter only).
-
 ## G: per-language CodeQL nodes and reachability engines (brief G, design agreed 2026-09-29)
 
 Design: per-language `02-codeql-<lang>` nodes (parallel; compiled languages gated on a successful build of that language, otherwise a gap, never a failure), engine jobs `06-reachability-codeql` and `06-reachability-ir` (same table shape), and `06-cve-reachability` becomes the Python correlator whose output feeds the report and the 07/08/09 red/blue lanes. See `docs/agent-briefs/G-per-language-codeql-reachability.md`.

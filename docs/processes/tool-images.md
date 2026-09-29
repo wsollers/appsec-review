@@ -148,6 +148,11 @@ id, Dockerfile hash, build fingerprint and attempt id at startup.
   for C# (branch `lang-servers`). `audit-codeql-native` holds the traced C/C++ lane
   (`codeql-cpp-traced`, graph queries in `queries/appsec-graph-cpp`); it is not yet wired into
   `full_review` (see [`docs/language-servers.md`](../language-servers.md)).
+- **CodeQL reachability packs** for Go, Java, C#, JS/TS and Python live in `data/codeql-reachability/`
+  (pinned to the bundle 2.27.0 libraries; advisory symbols arrive as a generated data extension) and
+  serve `06-cve-reachability` ([`docs/dependency-reachability.md`](../dependency-reachability.md)). They
+  are not compiled yet: `scripts/smoke_codeql_reachability.sh` (needs `audit-codeql:local`) is the
+  first check, and Go needs a Go toolchain in `audit-codeql` for autobuild.
 - **Language servers and tree-sitter** are pinned on every `audit-buildenv-*` image, with the
   tree-sitter grammars vendored in `audit-lsp-vendor`; `lsp_driver.py` and `treesitter_ast.py` drive
   them and `images/test/run-lsp-smoke.sh` / `scripts/smoke_lang_servers.sh` smoke-test them. None of
