@@ -455,5 +455,109 @@ class NativeSastTests(unittest.TestCase):
         self.assertNotIn("execute-container-static-analysis", canonical)
 
 
+class PerUnitFailureTests(unittest.TestCase):
+    """B1: one bad unit is a recorded gap; only a broken job fails."""
+    IMAGE = NativeSastTests.IMAGE
+
+    def _unit(self, unit_id, adapted, unsupported):
+        return {"unit_id": unit_id, "build_variant": VARIANT,
+                "compile_database": {"path": "db", "sha256": "sha256:" + "1" * 64, "entries": 2,
+                    "adapted_path": "adapted-inputs/0123456789abcdef/compile_commands.json",
+                    "adapted_sha256": adapters.canonical_sha(adapted)},
+                "adapted": adapted, "unsupported": unsupported, "generated": []}
+
+    def _setup(self, folder):
+        attempt = Path(folder, "attempt"); attempt.mkdir()
+        target = Path(folder, "target"); shutil.copytree(FIXTURE / "target", target)
+        clang, csa = trial_tree(attempt)
+        adapted, unsupported = adapters.adapt_compile_database(
+            json.loads((FIXTURE / "compile_commands.json").read_text()))
+        inputs = {"image": self.IMAGE, "config": json.loads(worker.CONFIG.read_text()),
+                  "config_sha256": sha(worker.CONFIG), "excluded_units": [],
+                  "source_snapshot_sha256": "sha256:" + "1" * 64,
+                  "native_build": {"job_id": "02-native-build"},
+                  "units": [self._unit("good", adapted, unsupported), self._unit("bad", adapted, unsupported)]}
+        return attempt, target, clang, csa, inputs
+
+    def _outcomes(self, attempt, target, clang, csa, inputs, bad_causes, bad_trials=None):
+        ok = {"clang-cppcheck": None, "csa": None}
+        good = worker.unit_outcome(inputs["units"][0], ok, target=target, attempt=attempt,
+            trials={"clang-cppcheck": clang, "csa": csa}, inputs=inputs)
+        bad = worker.unit_outcome(inputs["units"][1], bad_causes, target=target, attempt=attempt,
+            trials=bad_trials or {"clang-cppcheck": clang, "csa": csa}, inputs=inputs)
+        return [good, bad]
+
+    def test_terminal_cause_mapping_and_job_level_failures(self):
+        f = lambda cause: {"execution_status": "FAILED", "cause": cause}
+        self.assertIsNone(worker.terminal_failure_cause({"execution_status": "OK", "cause": None}))
+        self.assertEqual(worker.terminal_failure_cause(f("TIMEOUT")), "TIMEOUT")
+        self.assertEqual(worker.terminal_failure_cause(f("OOM_KILLED")), "OOM")
+        self.assertEqual(worker.terminal_failure_cause(f("CONTAINER_EXIT_NONZERO")), "TOOL_ERROR")
+        for terminal in (f("WORKER_LOST"), f("CLEANUP_FAILED"),
+                         {"execution_status": "BLOCKED", "cause": "DOCKER_UNAVAILABLE"},
+                         {"execution_status": "CANCELED", "cause": "CANCELED"}):
+            with self.assertRaises(RuntimeError):
+                worker.terminal_failure_cause(terminal)
+
+    def test_one_failing_unit_is_ok_with_gaps_and_keeps_good_leads(self):
+        for cause in worker.FAILURE_CAUSES[:1] + ("OOM", "TOOL_ERROR"):
+            with tempfile.TemporaryDirectory() as folder:
+                attempt, target, clang, csa, inputs = self._setup(folder)
+                outcomes = self._outcomes(attempt, target, clang, csa, inputs,
+                                          {"clang-cppcheck": cause, "csa": None})
+                result = worker.assemble_result("run-e03", "a1", inputs, outcomes)
+        self.assertEqual(result["status"], "OK_WITH_GAPS")
+        self.assertEqual([u["unit_id"] for u in result["units"]], ["good"])
+        self.assertEqual(len(result["units"][0]["leads"]), 3)
+        self.assertEqual(result["failed_units"], [{"unit_id": "bad", "cause": "TOOL_ERROR"}])
+        self.assertIn("unit-analysis-failed:bad:TOOL_ERROR", result["coverage_gaps"])
+
+    def test_failure_cause_precedence_and_enum_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            attempt, target, clang, csa, inputs = self._setup(folder)
+            outcomes = self._outcomes(attempt, target, clang, csa, inputs,
+                                      {"clang-cppcheck": "TIMEOUT", "csa": "OOM"})
+            result = worker.assemble_result("run-e03", "a1", inputs, outcomes)
+        self.assertEqual(result["failed_units"], [{"unit_id": "bad", "cause": "OOM"}])
+
+    def test_unparsable_analyzer_output_is_a_parse_error_gap(self):
+        with tempfile.TemporaryDirectory() as folder:
+            attempt, target, clang, csa, inputs = self._setup(folder)
+            bad_clang = Path(folder, "bad-clang"); shutil.copytree(clang, bad_clang)
+            (bad_clang / "scratch/native-sast/findings-clang-tidy.json").write_text("{not json /etc/passwd")
+            outcomes = self._outcomes(attempt, target, clang, csa, inputs,
+                {"clang-cppcheck": None, "csa": None},
+                {"clang-cppcheck": bad_clang, "csa": csa})
+            result = worker.assemble_result("run-e03", "a1", inputs, outcomes)
+        self.assertEqual(result["failed_units"], [{"unit_id": "bad", "cause": "PARSE_ERROR"}])
+        self.assertEqual(result["status"], "OK_WITH_GAPS")
+        self.assertNotIn("passwd", json.dumps(result))
+
+    def test_all_units_failing_fails_the_job(self):
+        with tempfile.TemporaryDirectory() as folder:
+            attempt, target, clang, csa, inputs = self._setup(folder)
+            outcomes = [worker.unit_outcome(unit, {"clang-cppcheck": "TIMEOUT", "csa": None},
+                target=target, attempt=attempt, trials={"clang-cppcheck": clang, "csa": csa},
+                inputs=inputs) for unit in inputs["units"]]
+            with self.assertRaises(RuntimeError):
+                worker.assemble_result("run-e03", "a1", inputs, outcomes)
+
+    def test_schema_accepts_failed_units_and_downstream_reads_units_leads(self):
+        with tempfile.TemporaryDirectory() as folder:
+            attempt, target, clang, csa, inputs = self._setup(folder)
+            inputs["native_build"] = {"job_id": "02-native-build", "attempt_id": "n1",
+                "fingerprint": "sha256:" + "6" * 64, "pointer_sha256": "sha256:" + "a" * 64,
+                "envelope_sha256": "sha256:" + "b" * 64, "result_sha256": "sha256:" + "c" * 64,
+                "source_revision": "a" * 40}
+            outcomes = self._outcomes(attempt, target, clang, csa, inputs,
+                                      {"clang-cppcheck": "TIMEOUT", "csa": None})
+            result = worker.assemble_result("run-e03", "a1", inputs, outcomes)
+        self.assertEqual(validate_document(result, "native-sast.schema.json"), [])
+        leads = [lead for unit in result.get("units", []) for lead in unit.get("leads", [])]
+        self.assertEqual(len(leads), 3)
+        result["failed_units"][0]["cause"] = "raw exception text"
+        self.assertTrue(validate_document(result, "native-sast.schema.json"))
+
+
 if __name__ == "__main__":
     unittest.main()
