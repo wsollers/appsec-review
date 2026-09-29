@@ -456,6 +456,20 @@
       "unit": "seconds",
       "value": 604800
     },
+    "reachability_codeql_entries": {
+      "description": "The CPG engine also roots the BFS at CodeQL EntryPoints rows (servlet, request mapping, controller action, route handler) joined by the handler's (path, start_line) when both tools saw the same source snapshot. Off until live CodeQL tables are produced and qualified (brief Q2, ADR-0023).",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": false
+    },
+    "reachability_export_entries": {
+      "description": "Finding reachability also roots the BFS at the functions a shipped shared library exports (dynamic export table from the accepted 02-binary-triage evidence, joined uniquely to the CPG; an ambiguous join is an escape, never an entry). When on and a shipped binary's export table is missing or partial, an unreached function is UNKNOWN, never UNREACHABLE. Off until scripts/smoke_entry_exports.sh qualifies it (brief Q).",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": false
+    },
     "redaction_max_file_bytes": {
       "description": "Largest single file the evidence redactor processes; larger files are withheld.",
       "kind": "safety",

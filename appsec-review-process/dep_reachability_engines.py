@@ -46,7 +46,7 @@ MAX_LSP_NODES = 20_000
 # "codeql": the reasons each pack's EntryPoint class adds (handlers, routes, remote-input readers).
 # Every language also takes the hash-bound run file inputs/reachability-entry-points.json.
 ENTRY_POINT_SOURCES: dict[str, dict[str, tuple[str, ...]]] = {
-    "cpp": {"names": ("main", "wmain", "WinMain", "wWinMain", "DllMain"),
+    "cpp": {"names": reachability.PROGRAM_ENTRY_NAMES,
             "codeql": ("main", "no-internal-caller", "address-taken")},
     "go": {"names": ("main", "init", "ServeHTTP"), "codeql": ("main", "init", "remote-flow-source")},
     "java": {"names": ("main", "doGet", "doPost", "doPut", "doDelete", "service"),
@@ -110,15 +110,15 @@ def sha256_bytes(data: bytes) -> str:
 class CpgEngine:
     name = "cpg"
 
-    def __init__(self, graph: reachability.CallGraph | None) -> None:
-        self.graph = graph
+    def __init__(self, graph: reachability.CallGraph | None, extra: reachability.ExtraEntries | None = None) -> None:
+        self.graph, self.extra = graph, extra  # extra: verified roots outside the CPG (entry_exports), off by default
 
     def assess(self, query: Query) -> dict[str, Any]:
         if self.graph is None:
             return result(self.name, ran=False, reason="no accepted code property graph",
                           gaps=["engine-input-absent:cpg"])
         entries = self.graph.entry_points([*ENTRY_POINTS.get(query.language, ()), *query.entry_points])
-        found = reachability.assess_symbols(self.graph, query.symbols, entries)
+        found = reachability.assess_symbols(self.graph, query.symbols, entries, extra=self.extra)
         gaps = [] if found["state"] != reachability.UNKNOWN else ["cpg-undecided"]
         return result(self.name, ran=True, state=STATE[found["state"]], reason=found["reason"],
                       witness=found["witness"], gaps=gaps, target=found.get("target"))
