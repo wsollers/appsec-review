@@ -11,5 +11,6 @@ Each file here is the exact prompt to paste into a new Claude session. Every pro
 | `E-dependency-reachability.md` | cloud | after `osv-feed` and `lang-servers` are merged | `dep-reachability` |
 | `F-poc-and-fix.md` | cloud | after `kill-chains` merged | `poc-fix` |
 | `G-per-language-codeql-reachability.md` | cloud | now (E, F, D, C, A, B are merged) | `codeql-reach` |
+| `DOCS-sync-G.md` | cloud session | after `codeql-reach` is merged to `main` | `docs-sync-G` |
 
 Agent A (`osv-feed`) is finished; its branch is waiting for the controller to push and merge. Only two agents at a time. Each agent pushes ONLY its own branch; the controller merges.
