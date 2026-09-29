@@ -179,7 +179,8 @@ def _disposition(run_id: str, job_id: str) -> dict[str, Any]:
 
 def _code(job_id: str) -> dict[str, str]:
     contract, _artifact, schema = JOBS[job_id]
-    paths = ["control_feature_lifecycle.py", "review_control_loops.py", "publish_job_output.py",
+    # D-13(b): publish_job_output.py is shared runtime (ADR-0013), not part of a job's output.
+    paths = ["control_feature_lifecycle.py", "review_control_loops.py",
              f"registry/output-contracts/{contract}.json"]
     values = {path: file_hash(ROOT / path) for path in paths}
     values[f"schemas/{schema}"] = file_hash(ROOT.parent / "schemas" / schema)

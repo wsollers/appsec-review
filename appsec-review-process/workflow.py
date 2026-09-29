@@ -11,6 +11,7 @@ from execution_state import ROOT, Blocked, Lock, atomic_json, atomic_bytes, data
 from phase1 import accepted, job_root, config_for
 from job_graph import composition, load_graph
 import build_discovery
+import dev_restart
 
 PLAN = ROOT/'workflow-plan.json'
 
@@ -29,6 +30,28 @@ def plan():
 
 def root(run_id):
     return data_path(run_id,'workflows','engagement')
+
+
+# D-13(a): a branch's output is decided by this module, the plan, build_discovery.py and the templates.
+# Of dagster_workflow.py only the op that calls run_branch can change a branch's inputs; hashing the
+# whole Dagster module reran every preparation branch (and build discovery's consumers) on any
+# op-wiring edit.
+BRANCH_OPS = ('branch_op',)
+
+
+def dagster_op_hashes(path=None):
+    """sha256 of the exact source of each function in BRANCH_OPS, read without importing Dagster."""
+    path = path or ROOT/'dagster_workflow.py'
+    values = {f'dagster_workflow.py:{name}': dev_restart.function_source_hash(path, name) for name in BRANCH_OPS}
+    missing = sorted(key for key, value in values.items() if value is None)
+    if missing:
+        raise Blocked('preparation code is missing: ' + ', '.join(missing))
+    return values
+
+
+def code_hashes():
+    return {**{name:file_hash(ROOT/name) for name in ('workflow.py','workflow-plan.json','build_discovery.py')},
+            **dagster_op_hashes()}
 
 
 def intake_data(run_id, pointer):
@@ -102,7 +125,7 @@ def run_branch(run_id, branch, pointer, dagster_id, force=False):
             if accepted(run_id,fresh=True)!=pointer: raise Blocked('stale build discovery input')
             templates['_build_evidence']=build_discovery.collect(run_id,pointer,data)
         inputs={'intake':data,'templates':templates,'producer':pointer,
-                'code':{name:file_hash(ROOT/name) for name in ('workflow.py','workflow-plan.json','dagster_workflow.py','build_discovery.py')},
+                'code':code_hashes(),
                 'validator':read_json(ROOT/'registry/job-templates/00-validation.json')['composition'],
                 'coordinator':read_json(ROOT/'registry/job-templates/00-intake.json')['composition']}
         fingerprint=digest(inputs)
@@ -143,7 +166,7 @@ def run_branch(run_id, branch, pointer, dagster_id, force=False):
             intake_data(run_id,pointer)
             if branch=='build_discovery' and accepted(run_id,fresh=True)!=pointer:
                 raise Blocked('source changed during build discovery')
-            if inputs['code'] != {name:file_hash(ROOT/name) for name in inputs['code']}:
+            if inputs['code'] != code_hashes():
                 raise Blocked('preparation code changed during work')
             atomic_json(attempt/'post.json',{'status':'OK','semantic_validation':'PASS'})
             status.update(status='OK',ended_at=now())

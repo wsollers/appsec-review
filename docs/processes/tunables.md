@@ -37,6 +37,8 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `input_read_lines_max` | 400 lines | window | Most lines input_read returns per call. | Window; the model asks for the next range. |
 | `invoker_inventory_rows_max` | 300 count | window | Above this many inputs, the lookup-mode prompt summarises files by folder; input_list has every row. | Scales: the summary is per folder. |
 | `invoker_timeout_seconds` | 1800 s (30 min) | resource | Default wall-clock limit for one claude CLI dispatch. |  |
+| `item_memo` | dev id | safety | Per-item memo in loops (build-plan units): off, dev (only when APPSEC_RUN_MODE=dev) or on. An item whose own inputs (unit content, catalog, prompt, model) are unchanged reuses its earlier accepted result across attempts and fingerprint changes; today's validation is re-run on it. | multi-vuln re-planned 53 units (41 min) after a change that did not alter most units. |
+| `item_memo_max_entries` | 65536 count | safety | Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first. | One per planned unit per run; engine targets can have thousands. |
 | `model_version_resolve_timeout_seconds` | 120 s (2 min) | resource | Timeout for resolving pinned model versions. |  |
 | `nvd_feed_concurrency` | 1 count | resource | Concurrent NVD feed jobs. |  |
 | `owasp_join_page_max_bytes` | 7 MiB | window | Page size when joining OWASP results. |  |
@@ -90,6 +92,8 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `snapshot_archive_max_bytes` | 4 GiB | safety | Largest Grype/OSV snapshot archive accepted. |  |
 | `snapshot_extracted_max_bytes` | 16 GiB | safety | Largest extracted snapshot. |  |
 | `snapshot_files_max` | 2000000 count | safety | Most files in an extracted snapshot. |  |
+| `tool_output_cache` | dev id | safety | Tool-output cache for pinned B13 tool runs (syft, grype, osv-scanner, scancode): off, dev (only when APPSEC_RUN_MODE=dev) or on. A run with the same image digest, fixed request, limits and content-hashed inputs reuses the earlier verified B13 attempt of the same run and job after full re-verification, with reused_from provenance. The controller flips prod by setting on. | freeciv21 spent 60 min in scancode after a fingerprint change that did not alter its inputs. |
+| `tool_output_cache_max_entries` | 4096 count | safety | Most tool-output cache entries kept under data/caches/tool-output (each a small pointer; the outputs stay in the run tree). Oldest are pruned first. | A few entries per run (one per pinned tool run). |
 
 ## Per job
 

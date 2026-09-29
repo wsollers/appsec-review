@@ -58,3 +58,37 @@ change prod fingerprints.
   prod: the dev results are recomputed.
 - Dev never relaxes scanning rules. A tool that did not run, or a partial scan, is a gap and never
   "no findings", in either mode.
+
+## Tool-output cache and per-item memo (brief N)
+
+Two content-keyed caches cut the relaunch tax: work re-executed after a fingerprint change that did
+not change its inputs (freeciv21: 60 min in scancode; multi-vuln: 41 min re-planning 53 units). Both
+store **pointers, not evidence**: a hit is re-verified as strictly as a fresh result, and a hit that
+fails is invalidated and redone.
+
+| | Tool-output cache (`tool_output_cache.py`) | Per-item memo (`item_memo.py`) |
+|---|---|---|
+| What | Pinned B13 tool runs: syft, grype, osv-scanner, scancode (`dependency_b13_adapters.execute`) | Loop items: 02-build-plan units today |
+| Key | image digest from the B16 record, argv, environment, limits, network, container paths, B13 boundary hash, host binding, run, job, mode, and sha256 digests of the mounted bytes computed by the adapter (the offline registry's re-hashed snapshot identity for a vulnerability database) | the unit's plan-unit request, its classification and index entries, catalog, per-unit prompt bytes, contract, schema, template, the run's pinned model, source snapshot, run, mode |
+| Scope | the same run and job (B13 requests bind the run) | the same run |
+| A hit | reuses the earlier B13 attempt only after full independent re-verification (retained result hash, output hash, re-derived receipt, exact offline permission decision); `dependency_workers` re-verifies it again. The new attempt directory gets `tool-output-reuse.json` with `reused_from` | re-reads the earlier persona attempt's result and summary, checks their hashes and the readable target, re-applies the orchestrator fill, `finalize` and the full unit check with citations. `status.json` marks the unit `reused_from: item-memo` and keeps the original persona attempt id |
+| Never stored | canceled, blocked, tampered or non-zero-exit attempts; a mounted tree that changed during the run. A TIMEOUT / OOM_KILLED gap is stored and reused only under the same limits (limits are in the key) | a unit whose plan failed today's validation |
+| Tunable | `tool_output_cache` | `item_memo` |
+
+Rules shared by both:
+
+- **Target-controlled content is hashed, never trusted.** No key contains a value read out of a tool
+  output, a model reply or a target file; the adapter and the memo compute every digest themselves.
+  A mount with a link or a special file is not cached (the tool still runs).
+- **Mode is part of the key.** Settings are `off`, `dev` (default: on only when
+  `APPSEC_RUN_MODE=dev`) and `on` (both modes). Prod stays off until the controller sets `on`, and
+  a prod run never reuses an entry a dev run stored.
+- **Store:** `data/caches/tool-output/` and `data/caches/item-memo/` at the repository root
+  (git-ignored; `APPSEC_CACHE_ROOT` moves it). One small JSON entry per key, pruned oldest-first
+  beyond `tool_output_cache_max_entries` / `item_memo_max_entries`; invalidations and prunes are
+  logged to `events.jsonl` there. `python3 appsec-review-process/tool_output_cache.py stats|prune|clear`
+  (`prune` also drops entries whose attempt directory is gone).
+
+The per-unit build-plan prompt now names the unit id and root at the top and again at the end (a
+small model anchored on the first unit it read). A unit id that is not plain path text is not pasted
+into the prompt; the prompt points at `plan-unit.json` instead.

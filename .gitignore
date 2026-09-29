@@ -12,6 +12,8 @@
 /data/feeds/nvd/current.json
 /data/feeds/nvd/state.json
 /data/feeds/nvd/events.jsonl
+# Tool-output cache and per-item memo (brief N): pointers into run trees, never committed.
+/data/caches/
 *.jsonl
 !schemas/**/*.jsonl
 # licensed inputs (MSVC headers/libs) are mounted, never committed

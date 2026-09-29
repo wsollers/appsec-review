@@ -190,6 +190,20 @@
       "unit": "seconds",
       "value": 1800
     },
+    "item_memo": {
+      "value": "dev",
+      "unit": "id",
+      "kind": "safety",
+      "description": "Per-item memo in loops (build-plan units): off, dev (only when APPSEC_RUN_MODE=dev) or on. An item whose own inputs (unit content, catalog, prompt, model) are unchanged reuses its earlier accepted result across attempts and fingerprint changes; today's validation is re-run on it.",
+      "scale": "multi-vuln re-planned 53 units (41 min) after a change that did not alter most units."
+    },
+    "item_memo_max_entries": {
+      "value": 65536,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first.",
+      "scale": "One per planned unit per run; engine targets can have thousands."
+    },
     "model_version_resolve_timeout_seconds": {
       "description": "Timeout for resolving pinned model versions.",
       "kind": "resource",
@@ -560,6 +574,20 @@
       "scale": "",
       "unit": "count",
       "value": 2000000
+    },
+    "tool_output_cache": {
+      "value": "dev",
+      "unit": "id",
+      "kind": "safety",
+      "description": "Tool-output cache for pinned B13 tool runs (syft, grype, osv-scanner, scancode): off, dev (only when APPSEC_RUN_MODE=dev) or on. A run with the same image digest, fixed request, limits and content-hashed inputs reuses the earlier verified B13 attempt of the same run and job after full re-verification, with reused_from provenance. The controller flips prod by setting on.",
+      "scale": "freeciv21 spent 60 min in scancode after a fingerprint change that did not alter its inputs."
+    },
+    "tool_output_cache_max_entries": {
+      "value": 4096,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most tool-output cache entries kept under data/caches/tool-output (each a small pointer; the outputs stay in the run tree). Oldest are pruned first.",
+      "scale": "A few entries per run (one per pinned tool run)."
     }
   }
 }
