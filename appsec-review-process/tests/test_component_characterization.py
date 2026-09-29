@@ -392,7 +392,7 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
                 cc, "_dispatch_persona", side_effect=self.dispatch):
             accepted = cc.run(self.run_id, "dagster-a")
         invalid = deepcopy(self.value)
-        invalid["parallel_review_groups"][0]["component_ids"] = ["missing"]
+        invalid["functional_components"][0]["path_patterns"] = ["no-such-dir/**"]
         with patch.object(cc, "current_inputs", return_value=self.inputs), patch.object(
                 cc, "_dispatch_persona", return_value=(invalid, "# invalid\n", self.dispatch()[2])):
             with self.assertRaises(ValueError):
@@ -424,6 +424,61 @@ class PatternAnchoring(unittest.TestCase):
         self.assertTrue(_matches("docs/x.md", "docs/*.md"))
         self.assertEqual(_location_path("src/main.cpp:23-61"), "src/main.cpp")
         self.assertEqual(_location_path("src/main.cpp:7"), "src/main.cpp")
+
+
+class NormalizeLanesAndReferencesTest(unittest.TestCase):
+    """B4: lane vocabulary and cross-reference lineage are derived by Python."""
+
+    def test_lane_spellings_map_to_the_closed_vocabulary_and_unknowns_are_gaps(self) -> None:
+        value = {"functional_components": [{"component_id": "a", "downstream_lanes": [
+                     "04-asvs-masvs", "Native Memory", "deployment_hardening", "native-memory", "made-up-lane"]}],
+                 "parallel_review_groups": [{"group_id": "g", "component_ids": ["a"], "downstream_lanes": ["ASVS-MASVS"]}],
+                 "classification_gaps": []}
+        cc._normalize_lanes(value)
+        self.assertEqual(value["functional_components"][0]["downstream_lanes"],
+                         ["04-asvs-masvs", "05-native-memory", "15-deployment-hardening"])
+        self.assertEqual(value["parallel_review_groups"][0]["downstream_lanes"], ["04-asvs-masvs"])
+        self.assertEqual([g["subject"] for g in value["classification_gaps"]], ["functional_components:a"])
+        self.assertNotIn("made-up-lane", json.dumps(value["classification_gaps"][0]["reason"]))
+
+    def test_a_lane_list_with_no_known_lane_is_left_alone(self) -> None:
+        value = {"functional_components": [{"component_id": "a", "downstream_lanes": ["nope"]}], "classification_gaps": []}
+        cc._normalize_lanes(value)
+        self.assertEqual(value["functional_components"][0]["downstream_lanes"], ["nope"])
+        self.assertEqual(value["classification_gaps"], [])
+
+    def test_group_membership_is_derived_from_the_component_and_missing_groups_are_created(self) -> None:
+        value = {"functional_components": [
+                     {"component_id": "a", "parallel_review_group": "g1", "downstream_lanes": ["04-asvs-masvs"]},
+                     {"component_id": "b", "parallel_review_group": "g1", "downstream_lanes": ["05-native-memory"]},
+                     {"component_id": "c", "parallel_review_group": "g2", "downstream_lanes": ["04-asvs-masvs"]}],
+                 "parallel_review_groups": [{"group_id": "g1", "component_ids": ["a", "ghost"], "downstream_lanes": ["x"], "rationale": "r"}],
+                 "classification_gaps": []}
+        cc._normalize_references(value)
+        groups = {g["group_id"]: g for g in value["parallel_review_groups"]}
+        self.assertEqual(groups["g1"]["component_ids"], ["a", "b"])
+        self.assertEqual(groups["g2"]["component_ids"], ["c"])
+        self.assertEqual(groups["g2"]["downstream_lanes"], ["04-asvs-masvs"])
+        self.assertEqual([g["subject"] for g in value["classification_gaps"]], ["parallel_review_groups:g2"])
+
+    def test_unresolved_trigger_and_unknown_ids_are_removed_and_recorded(self) -> None:
+        value = {"functional_components": [{"component_id": "a"}],
+                 "code_scope_classification": [{"scope_id": "s"}],
+                 "rescope_triggers": [{"trigger_id": "t", "affected_scope_ids": ["s", "zz"], "affected_component_ids": ["a", "b"]}],
+                 "unknowns": [{"unknown_id": "u", "affected_component_ids": ["b"]}],
+                 "classification_gaps": []}
+        cc._normalize_references(value)
+        self.assertEqual(value["rescope_triggers"][0]["affected_scope_ids"], ["s"])
+        self.assertEqual(value["rescope_triggers"][0]["affected_component_ids"], ["a"])
+        self.assertEqual(value["unknowns"][0]["affected_component_ids"], [])
+        self.assertEqual(len(value["classification_gaps"]), 3)
+
+    def test_exact_duplicates_dropped_and_unknown_ownership_never_names_a_party(self) -> None:
+        component = {"component_id": "a", "ownership": {"kind": "unknown", "responsible_party": "Someone"}}
+        value = {"functional_components": [component, dict(component)], "classification_gaps": []}
+        cc._normalize_references(value)
+        self.assertEqual(len(value["functional_components"]), 1)
+        self.assertIsNone(value["functional_components"][0]["ownership"]["responsible_party"])
 
 
 class UnresolvedRelationshipTest(unittest.TestCase):
