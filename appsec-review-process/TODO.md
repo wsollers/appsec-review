@@ -448,6 +448,33 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       consumers should be UNKNOWN, not UNREACHABLE, once export facts exist.
 - [ ] `docs/report-examples/appsec-review-sample.{html,pdf}` predate sections 3A-3C; re-render in WSL.
 
+## L: shared formats and stricter validator (brief L, branch `formats-2`)
+
+- [x] `schema_validate.py` implements Draft 2020-12 assertions/applicators used or plausible here
+      (length, numeric bounds, maxItems/uniqueItems/contains/prefixItems, object keywords, allOf/anyOf/
+      oneOf/not/if-then-else, `format` date-time/date, `$ref` to `file#/pointer` and local `#/pointer`);
+      any other keyword, format or remote `$ref` raises `UnsupportedSchema`. Shared runtime: no fingerprint moves.
+      Previously ignored: minLength (335 uses), minimum (198), maxLength, maxItems, uniqueItems, maximum,
+      if/then, allOf, oneOf, format; `#/$defs/...` refs (binary-cfg, debug-symbol-index,
+      threat-model-reconciliation) crashed.
+- [x] `schema_keyword_lint.py`: keywords used vs supported, bad `$ref`, patterns that do not compile.
+- [x] `schemas/common/formats.schema.json` + `formats.py` (22 kinds); outside the hashed top-level schema set.
+- [x] `schema_format_lint.py` + `schemas/common/inline-format-baseline.json` (1,025 inline copies in 268
+      schemas, ratchet: new copies fail, converted copies must shrink the baseline).
+- [x] `contract_derive.py`: orchestrator-owned fields derived from final vs persona schema; matches
+      `attack_chain_derive._ORCHESTRATOR_KEYS` exactly. Not wired into any job.
+- [ ] William: `threat-model-reconciliation.schema.json` `$defs/citation/properties/path` pattern
+      `^[^/\\](?:[^\\]*[^/\\])?$` does not compile (the `\\]` escapes the bracket); validating any
+      citation path raises. Fix = `[^/\\\\]` in three places. Edits a top-level schema (every job's
+      definition hash moves). Allow-listed in `tests/test_schema_validate_keywords.py` until then.
+- [ ] William: convert the 1,025 inline copies to `$ref` (top-level schema edits: every job's definition
+      hash moves; `$`-anchored copies also start rejecting a trailing newline). One batch, then
+      `schema_format_lint.py --write-baseline`.
+- [ ] William: `_ORCHESTRATOR_KEYS` drift the schemas show (an echo costs a repair round, not a note):
+      `poc_fix_derive` misses `explanation_status`, `poc.reason`; `claim_review_derive` misses `citations`;
+      `hypothesis_hunt_derive` misses `drop_reason`. Fix edits the derive module (its job's fingerprint);
+      `tests/test_contract_derive.py` KNOWN_DRIFT tracks it.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).
