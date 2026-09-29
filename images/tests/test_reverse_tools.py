@@ -22,8 +22,9 @@ SHARED_PINS = (
     "ARG X64DBG_SNAPSHOT=snapshot_2026-05-27_12-11",
     "ARG X64DBG_SHA256=d41966dfc5b435a372798245300ca0ab7bb8e48bdbf48512c6fb20fcca427697",
 )
-WINE = {"audit-binary-analysis": "ARG WINE_VERSION=8.0~repack-4",
-        "audit-native": "ARG WINE_VERSION=9.0~repack-4build3"}
+WINE = {"audit-binary-analysis": ("ARG WINE_VERSION=8.0~repack-4", "ARG WINE_EXTRA_PACKAGES=\n"),
+        "audit-native": ("ARG WINE_VERSION=9.0~repack-4build3",
+                         'ARG WINE_EXTRA_PACKAGES="libasound2t64 libasound2t64:i386"')}
 
 
 def dockerfile(image: str) -> str:
@@ -38,7 +39,7 @@ class ReverseToolsContract(unittest.TestCase):
     def test_pins_are_identical_in_both_images(self) -> None:
         for image in IMAGES:
             text = dockerfile(image)
-            for pin in SHARED_PINS + (WINE[image],):
+            for pin in SHARED_PINS + WINE[image]:
                 self.assertIn(pin, text, f"{image}: missing {pin}")
 
     def test_every_new_download_is_checksummed(self) -> None:
