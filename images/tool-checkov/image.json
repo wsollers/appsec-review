@@ -62,10 +62,10 @@
         },
         {
           "kind": "download",
-          "url": "https://files.pythonhosted.org/packages/13/ac/19dbba27e891f39feb4170b884da449ee2699ef4ebb88eefeda364bbbbcf/asteval-1.0.6-py3-none-any.whl",
-          "dest": "downloads/wheels/asteval-1.0.6-py3-none-any.whl",
-          "sha256": "5e119ed306e39199fd99c881cea0e306b3f3807f050c9be79829fe274c6378dc",
-          "bytes": 22406
+          "url": "https://files.pythonhosted.org/packages/fe/d7/a71b12b625c44cfcb95d41397752edccc0a731903081609cffd6720f671d/asteval-1.0.9-py3-none-any.whl",
+          "dest": "downloads/wheels/asteval-1.0.9-py3-none-any.whl",
+          "sha256": "60513ea5d608d27bdb0cf3785dc993a6c3adeaee45f1bded0953a09e904e461f",
+          "bytes": 23320
         },
         {
           "kind": "download",

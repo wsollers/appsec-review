@@ -3,14 +3,14 @@
   "image_id": "tool-mobsfscan",
   "tool": "mobsfscan",
   "version": "1.0.1",
-  "pinned_at": "2026-09-26T16:15:01Z",
+  "pinned_at": "2026-09-29T06:34:45Z",
   "assets": [],
   "pip_lock": {
     "requirement": "mobsfscan==1.0.1",
     "python": "3.12",
     "platform": "x86_64-manylinux_2_36",
     "packages": 77,
-    "lock_sha256": "b9231d5a558e4152d9d20b12e8a9370eac2f695088a3261661f90e45a948b01b",
+    "lock_sha256": "920b45ff6394d46ce2f532391bf58913eb99ca086999051655321c6753d04451",
     "wheels": [
       {
         "name": "annotated_types-0.8.0-py3-none-any.whl",
@@ -216,11 +216,11 @@
         "dest": "downloads/wheels/markdown_it_py-4.2.0-py3-none-any.whl"
       },
       {
-        "name": "mcp-1.23.3-py3-none-any.whl",
-        "url": "https://files.pythonhosted.org/packages/32/c6/13c1a26b47b3f3a3b480783001ada4268917c9f42d78a079c336da2e75e5/mcp-1.23.3-py3-none-any.whl",
-        "sha256": "32768af4b46a1b4f7df34e2bfdf5c6011e7b63d7f1b0e321d0fdef4cd6082031",
-        "bytes": 231570,
-        "dest": "downloads/wheels/mcp-1.23.3-py3-none-any.whl"
+        "name": "mcp-1.28.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/e2/5e/d118fce19f87a2e7d8101c35c8ae0ec289098a4df0ff244cec23e415aca0/mcp-1.28.1-py3-none-any.whl",
+        "sha256": "2726bca5e7193f61c5dde8b12500a6de2d9acf6d1a1c0be9e8c2e706437991df",
+        "bytes": 222620,
+        "dest": "downloads/wheels/mcp-1.28.1-py3-none-any.whl"
       },
       {
         "name": "mdurl-0.1.2-py3-none-any.whl",

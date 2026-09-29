@@ -216,10 +216,10 @@
         },
         {
           "kind": "download",
-          "url": "https://files.pythonhosted.org/packages/32/c6/13c1a26b47b3f3a3b480783001ada4268917c9f42d78a079c336da2e75e5/mcp-1.23.3-py3-none-any.whl",
-          "dest": "downloads/wheels/mcp-1.23.3-py3-none-any.whl",
-          "sha256": "32768af4b46a1b4f7df34e2bfdf5c6011e7b63d7f1b0e321d0fdef4cd6082031",
-          "bytes": 231570
+          "url": "https://files.pythonhosted.org/packages/e2/5e/d118fce19f87a2e7d8101c35c8ae0ec289098a4df0ff244cec23e415aca0/mcp-1.28.1-py3-none-any.whl",
+          "dest": "downloads/wheels/mcp-1.28.1-py3-none-any.whl",
+          "sha256": "2726bca5e7193f61c5dde8b12500a6de2d9acf6d1a1c0be9e8c2e706437991df",
+          "bytes": 222620
         },
         {
           "kind": "download",

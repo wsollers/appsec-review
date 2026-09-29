@@ -476,7 +476,10 @@ def verify_asset(asset: dict[str, Any], version: str, path: Path, sha: str, fold
     return evidence
 
 
-def pin(folder: Path, version: str | None = None) -> dict[str, Any]:
+def pin(folder: Path, version: str | None = None, keep_lock: bool = False) -> dict[str, Any]:
+    """``keep_lock``: do not re-resolve the pip lock; download the wheels the committed lock names and
+    record its hash. Use it after a reviewed lock change (for example a Dependabot bump) so the pin
+    record follows the lock instead of a fresh resolution replacing it."""
     tool = load_tool(folder)
     if version:
         if not VERSION_RE.match(version):
@@ -504,7 +507,7 @@ def pin(folder: Path, version: str | None = None) -> dict[str, Any]:
                              "verification": evidence})
     lock = None
     if "pip_lock" in tool:
-        lock = lock_pip(folder, tool)
+        lock = lock_pip(folder, tool, keep_lock=keep_lock)
         steps += [{"kind": "download", "url": w["url"], "dest": w["dest"], "sha256": w["sha256"],
                    "bytes": w["bytes"]} for w in lock["wheels"]]
     build["prebuild"] = steps
@@ -527,31 +530,37 @@ PIP_WHEEL_PLATFORMS = (*(f"manylinux_2_{minor}_x86_64" for minor in range(36, 4,
                        "manylinux2014_x86_64", "manylinux2010_x86_64", "manylinux1_x86_64", "linux_x86_64", "any")
 
 
-def lock_pip(folder: Path, tool: dict[str, Any]) -> dict[str, Any]:
+def lock_pip(folder: Path, tool: dict[str, Any], keep_lock: bool = False) -> dict[str, Any]:
     """Resolve ``<pip_package>==<version>`` for the image's Python and platform into a lock with
     every distribution's sha256 (uv pip compile --generate-hashes). Wheels only: the Dockerfile
     installs with --only-binary=:all: --require-hashes, so an sdist-only dependency fails here,
     not silently at build time."""
-    if not shutil.which("uv"):
-        raise PinError("uv is required to lock a pip tool (https://docs.astral.sh/uv/) and is not on PATH")
     requirement = f"{tool['pip_package']}=={tool['version']}"
     lock_path = folder / tool["pip_lock"]
-    with tempfile.TemporaryDirectory(prefix="tool-lock-") as tmp:
-        source = Path(tmp, "requirements.in")
-        source.write_text(requirement + "\n", encoding="utf-8")
-        out = Path(tmp, "requirements.txt")
-        run_verifier(["uv", "pip", "compile", str(source), "--output-file", str(out), "--generate-hashes",
-                      "--python-version", PIP_PYTHON, "--python-platform", PIP_PLATFORM,
-                      "--only-binary", ":all:", "--no-header", "--no-annotate", "--quiet"])
-        body = out.read_text(encoding="utf-8")
-    header = (f"# {tool['image_id']}: {requirement} for Python {PIP_PYTHON} on {PIP_PLATFORM}.\n"
-              f"# Written by `python -B images/tool_pins.py pin {tool['image_id']}` (uv pip compile\n"
-              "# --generate-hashes); do not edit by hand. pip installs it with --require-hashes.\n")
-    lock_path.write_text(header + body, encoding="utf-8", newline="\n")
+    if keep_lock:
+        if not lock_path.is_file():
+            raise PinError("--keep-lock: the committed pip lock is missing")
+        header_body = lock_path.read_bytes().decode("utf-8")
+        header, body = "", header_body
+    else:
+        if not shutil.which("uv"):
+            raise PinError("uv is required to lock a pip tool (https://docs.astral.sh/uv/) and is not on PATH")
+        with tempfile.TemporaryDirectory(prefix="tool-lock-") as tmp:
+            source = Path(tmp, "requirements.in")
+            source.write_text(requirement + "\n", encoding="utf-8")
+            out = Path(tmp, "requirements.txt")
+            run_verifier(["uv", "pip", "compile", str(source), "--output-file", str(out), "--generate-hashes",
+                          "--python-version", PIP_PYTHON, "--python-platform", PIP_PLATFORM,
+                          "--only-binary", ":all:", "--no-header", "--no-annotate", "--quiet"])
+            body = out.read_text(encoding="utf-8")
+        header = (f"# {tool['image_id']}: {requirement} for Python {PIP_PYTHON} on {PIP_PLATFORM}.\n"
+                  f"# Written by `python -B images/tool_pins.py pin {tool['image_id']}` (uv pip compile\n"
+                  "# --generate-hashes); do not edit by hand. pip installs it with --require-hashes.\n")
+        lock_path.write_text(header + body, encoding="utf-8", newline="\n")
     packages = [line.split("==")[0] for line in body.splitlines() if re.match(r"^[A-Za-z0-9]", line)]
     wheels = download_wheels(folder, lock_path)
     return {"requirement": requirement, "python": PIP_PYTHON, "platform": PIP_PLATFORM,
-            "packages": len(packages), "lock_sha256": hashlib.sha256((header + body).encode()).hexdigest(),
+            "packages": len(packages), "lock_sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
             "wheels": wheels}
 
 
@@ -657,6 +666,8 @@ def main(argv: list[str] | None = None) -> int:
     p_pin = sub.add_parser("pin")
     p_pin.add_argument("image_id")
     p_pin.add_argument("--version")
+    p_pin.add_argument("--keep-lock", action="store_true",
+                       help="keep the committed pip lock (e.g. after a Dependabot bump); re-download and re-record its wheels")
     p_smoke = sub.add_parser("smoke")
     p_smoke.add_argument("image_id")
     p_smoke.add_argument("--target", type=Path)
@@ -679,7 +690,7 @@ def main(argv: list[str] | None = None) -> int:
                 failed += bool(errors)
             return 1 if failed else 0
         if args.command == "pin":
-            record = pin(folder_of(args.image_id), args.version)
+            record = pin(folder_of(args.image_id), args.version, args.keep_lock)
             for asset in record["assets"]:
                 print(f"{asset['name']}: {asset['sha256']} {asset['bytes']} bytes "
                       f"[{asset['verification']['kind']}]")
