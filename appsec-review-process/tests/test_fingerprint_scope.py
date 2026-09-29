@@ -48,5 +48,20 @@ class BuildDiscoveryScope(unittest.TestCase):
             self.assertIsNotNone(values['m.py'])
 
 
+class SharedRuntimeScope(unittest.TestCase):
+    """D-13(b): these lifecycles no longer hash shared runtime into their code record."""
+
+    def assertNoSharedRuntime(self, code, job):
+        self.assertFalse(set(code) & SHARED_RUNTIME, f'{job}: {sorted(set(code) & SHARED_RUNTIME)}')
+
+    def test_analysis_feature_lifecycle(self):
+        import analysis_feature_lifecycle as lifecycle
+        for job in lifecycle.JOBS:
+            code = lifecycle._code(job)
+            self.assertNoSharedRuntime(code, job)
+            self.assertIn('analysis_feature_lifecycle.py', code)
+            self.assertEqual('dependency_workers.py' in code, job == '06-cve-reachability')
+
+
 if __name__ == '__main__':
     unittest.main()
