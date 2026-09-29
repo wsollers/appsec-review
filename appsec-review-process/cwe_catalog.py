@@ -100,7 +100,7 @@ def _feed_catalog(feed_root: Any, now: datetime | None) -> tuple[dict[str, Any] 
         path = Path(identity["cwe_catalog_path"])
         if _sha(path) != "sha256:" + identity["cwe_catalog_sha256"]:
             raise CWEError("snapshot CWE catalog changed after it was resolved")
-        table = json.loads(path.read_text())
+        table = json.loads(path.read_text(encoding="utf-8"))
         if table.get("schema") != CATALOG_SCHEMA or not isinstance(table.get("entries"), list):
             raise CWEError("snapshot CWE catalog schema is not recognised")
     except (OSError, ValueError) as exc:

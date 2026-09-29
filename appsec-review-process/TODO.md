@@ -470,6 +470,12 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] Shell literals of the 14-day ceiling remain in `orchestrator/prepare-host.sh`, `orchestrator/stage-run.sh`
       and the operator guide (`--max-database-age-seconds 1209600`); read the tunable there if wanted.
 - [ ] Decision to confirm (William): stale/missing MITRE snapshot withholds tags as a gap (current) vs hard block.
+- [x] O1b: MITRE CWE catalog (`cwec_v4.19.xml.zip`) is a third feed source; `cwe_catalog.Catalog()` reads the
+      snapshot's full catalog and falls back to the committed curated one with `CWE_REFERENCE_MISSING` /
+      `CWE_REFERENCE_STALE` / `CWE_REFERENCE_INVALID`; judgments record `catalog`; `resolve(kinds=...)`.
+- [ ] Pin the CWE zip's sha256 in `mitre_feed.SOURCES["cwe"]` from the first WSL sync (the smoke script
+      prints it). cwe.mitre.org was blocked from the build sandbox, so the URL and 4.19 are unverified by fetch.
+- [ ] Verify the CWE terms-of-use text in `mitre_feed.NOTICE` against cwe.mitre.org/about/termsofuse.html.
 
 ## Breakage log
 

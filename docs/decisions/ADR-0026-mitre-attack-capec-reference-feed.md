@@ -57,6 +57,13 @@ a 14-day ceiling (`1209600` s) hard-coded in several places.
    composer link, checked against the link stage's tactics, rendered only in the attack-chain report
    section. Persona prompt files are unchanged; the prompt-side technique menu is follow-up work.
 
+6. **CWE joins the feed (brief O1b, decision log D-05).** The version-pinned MITRE CWE catalog
+   (`cwec_v4.19.xml.zip`) is a third source in the same snapshot with the same rules, derived into
+   `cwe-catalog.json` by `cwe_catalog`'s one parser. `cwe_catalog.Catalog()` reads it, falling back to
+   the committed curated catalog with `CWE_REFERENCE_MISSING` / `CWE_REFERENCE_STALE` /
+   `CWE_REFERENCE_INVALID` recorded, never a block. `resolve(kinds=...)` ages CWE and ATT&CK/CAPEC
+   independently. The rule map stays committed and hash-pinned.
+
 ## Consequences
 
 - A fresh host has no MITRE snapshot until the first sync: every tag is withheld as
@@ -64,4 +71,6 @@ a 14-day ceiling (`1209600` s) hard-coded in several places.
 - Each 2-hour sync publishes a new snapshot id even when the pinned bytes are unchanged (fresh
   `fetched_at`), but `reference.json` and so the 07 input binding stay identical.
 - Claim-level `mitre_refs` are not yet shown in the synthesis report (brief M owns that module).
-- Raising the ATT&CK/CAPEC release is a reviewed edit of `mitre_feed.SOURCES` (URL, version, sha256).
+- Raising the ATT&CK/CAPEC/CWE release is a reviewed edit of `mitre_feed.SOURCES` (URL, version, sha256).
+- Until the CWE feed syncs on a host, CWE validation uses the committed curated catalog and every
+  synthesis report lists `CWE_REFERENCE_MISSING`. The CWE zip's sha256 is not pinned yet (see TODO O).
