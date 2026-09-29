@@ -55,6 +55,7 @@ import claim_ledger
 import hypothesis_discovery
 import attack_chain_composition
 import attack_chain_refutation
+import poc_fix_worker
 import persona_tool_pool_lifecycle
 import control_feature_lifecycle
 import test_coverage_ingest as test_coverage_worker
@@ -828,6 +829,8 @@ def attack_chain_lifecycle_op(job_id, worker):
 
 attack_chain_composition_lifecycle_work = attack_chain_lifecycle_op('14-attack-chain-composition', attack_chain_composition)
 attack_chain_refutation_lifecycle_work = attack_chain_lifecycle_op('14-attack-chain-refutation', attack_chain_refutation)
+# Lane 12b (brief F) is an optional input of 10 as well: a failed or blocked pool never holds the report.
+poc_fix_lifecycle_work = attack_chain_lifecycle_op('12b-poc-and-fix', poc_fix_worker)
 
 
 @op(name='job_persona_tool_pool_dispatch_lifecycle',
@@ -1704,6 +1707,7 @@ LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
 LIFECYCLE_OPS['07-hypothesis-discovery']=hypothesis_discovery_lifecycle_work
 LIFECYCLE_OPS['14-attack-chain-composition']=attack_chain_composition_lifecycle_work
 LIFECYCLE_OPS['14-attack-chain-refutation']=attack_chain_refutation_lifecycle_work
+LIFECYCLE_OPS['12b-poc-and-fix']=poc_fix_lifecycle_work
 LIFECYCLE_OPS['claim-ledger-routing']=claim_ledger_lifecycle_work
 LIFECYCLE_OPS['persona-tool-pool-dispatch']=persona_tool_pool_lifecycle_work
 LIFECYCLE_OPS['deterministic-pool-merge']=deterministic_pool_merge_lifecycle_work

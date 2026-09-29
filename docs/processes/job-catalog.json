@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 71,
+  "lifecycle_jobs": 72,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2358,6 +2358,7 @@
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
         "job:14-attack-chain-refutation",
+        "job:12b-poc-and-fix",
         "job:11-remediation-proposal"
        ],
        "produces": [
@@ -2457,6 +2458,7 @@
        "job:13-fuzz-target-triage",
        "job:00-intake",
        "job:14-attack-chain-refutation",
+       "job:12b-poc-and-fix",
        "job:dynamic-rescope",
        "critical-findings-md"
       ],
@@ -2529,6 +2531,7 @@
      "buildenv-catalog",
      "buildenv-image",
      "job:14-attack-chain-refutation",
+     "job:12b-poc-and-fix",
      "critical-findings-md"
     ],
     "leaves": [
@@ -5115,6 +5118,38 @@
      }
     },
     {
+     "name": "12b-poc-and-fix",
+     "entries": [
+      {
+       "ref": "job:12b-poc-and-fix",
+       "id": "12b-poc-and-fix",
+       "name": "Light PoC and Proposed Fix",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:12-scoring-prioritization"
+       ],
+       "produces": [
+        "job:12b-poc-and-fix"
+       ],
+       "declared_inputs": [
+        "accepted 12-scoring-prioritization result"
+       ]
+      }
+     ],
+     "rollup": {
+      "enters": [
+       "job:12-scoring-prioritization"
+      ],
+      "leaves": [
+       "job:12b-poc-and-fix"
+      ],
+      "passes": [],
+      "declared_inputs": [
+       "accepted 12-scoring-prioritization result"
+      ]
+     }
+    },
+    {
      "name": "14-attack-chain",
      "entries": [
       {
@@ -5190,6 +5225,7 @@
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
         "job:14-attack-chain-refutation",
+        "job:12b-poc-and-fix",
         "job:11-remediation-proposal"
        ],
        "produces": [
@@ -5272,6 +5308,7 @@
        "job:09-independent-verification",
        "job:12-scoring-prioritization",
        "job:14-attack-chain-refutation",
+       "job:12b-poc-and-fix",
        "job:11-remediation-proposal",
        "job:evidence-qualified-quorum",
        "job:dynamic-rescope",
@@ -5378,6 +5415,7 @@
      "job:11-remediation-proposal",
      "job:remediation-retest-feedback",
      "job:12-scoring-prioritization",
+     "job:12b-poc-and-fix",
      "job:14-attack-chain-composition",
      "job:14-attack-chain-refutation",
      "job:10-synthesis-report",
@@ -5506,6 +5544,7 @@
      "verified claims and remediation proposals",
      "accepted independent-verification result",
      "accepted complete scoring persona/tool-pool merge when verifications exist",
+     "accepted 12-scoring-prioritization result",
      "accepted 09-independent-verification result (and its 08 upstream)",
      "accepted integrated threat model",
      "accepted 14-attack-chain-composition result and seeds",
@@ -8940,6 +8979,74 @@
    ]
   },
   {
+   "id": "12b-poc-and-fix",
+   "lane": "12b-poc-and-fix",
+   "name": "Light PoC and Proposed Fix",
+   "contract": "12b-poc-and-fix",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/poc_fix_worker.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "poc-fix-author",
+    "role_id": "poc-fix-coordinator",
+    "domain_id": "poc-and-fix",
+    "tooling_profile_id": "claim-review-static",
+    "output_contract_id": "12b-poc-and-fix"
+   },
+   "depends_on": [
+    {
+     "job": "12-scoring-prioritization",
+     "kind": "required",
+     "contract": "12-scoring-prioritization"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 12-scoring-prioritization result"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-code-property-graph and 02-ir-facts (reachability)"
+    },
+    {
+     "need": "optional",
+     "input": "inputs/reachability-entry-points.json"
+    },
+    {
+     "need": "optional",
+     "input": "projected source checkout (hashes, snippets)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/12b-poc-and-fix.json",
+   "output_dir": "runs/<run_id>/data/jobs/12b-poc-and-fix/",
+   "output_files": [
+    "poc-fix.json",
+    "poc-fix.md",
+    "poc-fix-pool-merge.json",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/12b-poc-and-fix.json",
+   "claim_class": "candidate_hypothesis",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:12-scoring-prioritization"
+   ],
+   "produces": [
+    "job:12b-poc-and-fix"
+   ]
+  },
+  {
    "id": "10-synthesis-report",
    "lane": "10-synthesis-report",
    "name": "Accepted Evidence-backed Draft Report Publisher",
@@ -9005,6 +9112,11 @@
      "job": "14-attack-chain-refutation",
      "kind": "optional",
      "contract": "14-attack-chain-refutation"
+    },
+    {
+     "job": "12b-poc-and-fix",
+     "kind": "optional",
+     "contract": "12b-poc-and-fix"
     },
     {
      "job": "11-remediation-proposal",
@@ -9078,6 +9190,7 @@
     "job:09-independent-verification",
     "job:12-scoring-prioritization",
     "job:14-attack-chain-refutation",
+    "job:12b-poc-and-fix",
     "job:11-remediation-proposal"
    ],
    "produces": [
@@ -11784,6 +11897,7 @@
   "09-independent-verification",
   "11-remediation-proposal",
   "12-scoring-prioritization",
+  "12b-poc-and-fix",
   "14-attack-chain",
   "10-synthesis-report"
  ],
@@ -13053,6 +13167,7 @@
     "job:12-scoring-prioritization"
    ],
    "consumed_by": [
+    "job:12b-poc-and-fix",
     "job:10-synthesis-report"
    ]
   },
@@ -13075,6 +13190,18 @@
    "about": "Accepted 14-attack-chain-refutation output of 14-attack-chain-refutation.",
    "produced_by": [
     "job:14-attack-chain-refutation"
+   ],
+   "consumed_by": [
+    "job:10-synthesis-report"
+   ]
+  },
+  "job:12b-poc-and-fix": {
+   "id": "job:12b-poc-and-fix",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/12b-poc-and-fix/",
+   "about": "Accepted 12b-poc-and-fix output of 12b-poc-and-fix.",
+   "produced_by": [
+    "job:12b-poc-and-fix"
    ],
    "consumed_by": [
     "job:10-synthesis-report"

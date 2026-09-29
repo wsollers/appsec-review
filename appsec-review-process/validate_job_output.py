@@ -233,6 +233,10 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "candidate_hypothesis",
         "allowed_assertions": {"attack-chain", "attack-chain-refutation", "coverage-gap"},
     },
+    "12b-poc-and-fix": {
+        "claim_class_id": "candidate_hypothesis",
+        "allowed_assertions": {"poc-and-fix-proposal", "coverage-gap"},
+    },
     "claim-ledger-core": {
         "claim_class_id": "candidate_claim_ledger",
         "allowed_assertions": {"candidate-hypothesis", "candidate-status", "proof-obligation",

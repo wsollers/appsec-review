@@ -29,6 +29,7 @@ flowchart TD
   j_12_scoring_prioritization["12-scoring-prioritization<br/>implemented_not_qualified"]
   j_14_attack_chain_composition["14-attack-chain-composition<br/>implemented_not_qualified"]
   j_14_attack_chain_refutation["14-attack-chain-refutation<br/>implemented_not_qualified"]
+  j_12b_poc_and_fix["12b-poc-and-fix<br/>implemented_not_qualified"]
   j_10_synthesis_report["10-synthesis-report<br/>implemented_not_qualified"]
   j_02_api_collection_intelligence_ingest["02-api-collection-intelligence-ingest<br/>implemented_not_qualified"]
   j_02_binary_intelligence_ingest["02-binary-intelligence-ingest<br/>implemented_not_qualified"]
@@ -159,6 +160,7 @@ flowchart TD
   j_03_threat_model_dfd_stride --> j_14_attack_chain_composition
   j_01_component_characterization --> j_14_attack_chain_composition
   j_14_attack_chain_composition --> j_14_attack_chain_refutation
+  j_12_scoring_prioritization --> j_12b_poc_and_fix
   j_01_component_characterization --> j_10_synthesis_report
   j_03_threat_model_dfd_stride --> j_10_synthesis_report
   j_03_threat_model_reconciliation --> j_10_synthesis_report
@@ -168,6 +170,7 @@ flowchart TD
   j_09_independent_verification --> j_10_synthesis_report
   j_12_scoring_prioritization --> j_10_synthesis_report
   j_14_attack_chain_refutation --> j_10_synthesis_report
+  j_12b_poc_and_fix --> j_10_synthesis_report
   j_11_remediation_proposal --> j_10_synthesis_report
   j_00_intake --> j_02_api_collection_intelligence_ingest
   j_02_binary_triage --> j_02_binary_intelligence_ingest

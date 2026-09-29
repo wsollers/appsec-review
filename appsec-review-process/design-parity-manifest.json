@@ -2736,6 +2736,74 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "12b-poc-and-fix",
+      "design_refs": [
+        "docs/agent-briefs/F-poc-and-fix.md",
+        "docs/decisions/ADR-0020-report-findings-severity-reachability.md",
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "12b-poc-and-fix",
+        "implemented": true,
+        "dependencies": [
+          "12-scoring-prioritization"
+        ]
+      },
+      "registry": {
+        "template": "12b-poc-and-fix",
+        "persona": "poc-fix-author",
+        "role": "poc-fix-coordinator",
+        "domain": "poc-and-fix",
+        "tooling_profile": "claim-review-static",
+        "output_contract": "12b-poc-and-fix"
+      },
+      "execution": {
+        "mode": "pool_coordinator",
+        "worker": "appsec-review-process/poc_fix_worker.py:run",
+        "validator": "appsec-review-process/poc_fix_worker.py:_validate_attempt"
+      },
+      "output": {
+        "contract": "12b-poc-and-fix",
+        "contract_file": "appsec-review-process/registry/output-contracts/12b-poc-and-fix.json",
+        "schema_file": "schemas/poc-fix.schema.json",
+        "claim_class": "candidate_hypothesis"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_poc_fix_denylist.py",
+          "appsec-review-process/tests/test_poc_fix_derive.py",
+          "appsec-review-process/tests/test_poc_fix_pool.py",
+          "appsec-review-process/tests/test_poc_fix_worker.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
       "id": "10-synthesis-report",
       "design_refs": [
         "docs/architecture/design-v3.md#152-verified-fact-graph-for-l14-synthesis",
@@ -2754,6 +2822,7 @@
           "09-independent-verification",
           "12-scoring-prioritization",
           "14-attack-chain-refutation",
+          "12b-poc-and-fix",
           "11-remediation-proposal"
         ]
       },
