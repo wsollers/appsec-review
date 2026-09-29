@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -21,6 +22,8 @@ import intake
 import run_process
 
 ROOT = state.ROOT
+# Never write into the repo: without PHASE1_TEST_DATA the fixtures live in a fresh temp folder.
+os.environ.setdefault('PHASE1_TEST_DATA', tempfile.mkdtemp(prefix='phase1-test-data-'))
 EVIDENCE = Path(os.environ['PHASE1_TEST_DATA']).resolve()
 EVIDENCE.mkdir(parents=True, exist_ok=True)
 

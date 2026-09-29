@@ -8,5 +8,5 @@
   "allowed_actions": ["read source", "run pinned clang-tidy, cppcheck and CSA through B13", "write run-owned immutable evidence"],
   "isolation": "B13 container with network none, read-only source and compile-database mounts, and one run-owned writable scratch mount.",
   "disallowed_actions": ["network access", "write target", "execute target programs", "link or run built binaries", "model calls"],
-  "claim_limits": {"allowed": ["static-analysis-lead", "coverage-gap", "source-citation"], "forbidden": ["verified-security-finding", "severity", "runtime-state"]}
+  "claim_limits": {"allowed": ["static_analysis_lead", "coverage_gap", "source_citation"], "forbidden": ["verified_security_finding", "severity", "runtime_state"]}
 }

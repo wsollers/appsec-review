@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 55 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 69 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -163,7 +163,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 55-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 69-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -225,6 +225,20 @@ graph job.
 | `02-dependency-lifecycle` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-binary-hardening` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-mobile-sast` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-full-review-input-assembly` | Implemented not qualified (see the generated readiness view) | Present |
+| `03-threat-model-reconciliation` | Implemented not qualified (see the generated readiness view) | Present |
+| `07-hypothesis-discovery` | Implemented not qualified (see the generated readiness view) | Present |
+| `claim-ledger-routing` | Implemented not qualified (see the generated readiness view) | Present |
+| `02-codeql-sast` | Implemented not qualified (see the generated readiness view) | Present |
+| `02-code-property-graph` | Implemented not qualified (see the generated readiness view) | Present |
+| `persona-tool-pool-dispatch` | Implemented not qualified (see the generated readiness view) | Present |
+| `deterministic-pool-merge` | Implemented not qualified (see the generated readiness view) | Present |
+| `evidence-qualified-quorum` | Implemented not qualified (see the generated readiness view) | Present |
+| `dynamic-rescope` | Implemented not qualified (see the generated readiness view) | Present |
+| `completeness-audit` | Implemented not qualified (see the generated readiness view) | Present |
+| `synthetic-hypothesis-resynthesis` | Implemented not qualified (see the generated readiness view) | Present |
+| `remediation-retest-feedback` | Implemented not qualified (see the generated readiness view) | Present |
+| `final-publication-gate` | Implemented not qualified (see the generated readiness view) | Present |
 
 ## Discovery hand-off gate (02-repository-partition-discovery, 02-dev-project-discovery)
 

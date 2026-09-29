@@ -188,7 +188,9 @@ class RegistryTests(Case):
         self.assertEqual(pi.validate_persona_registry(pi.REGISTRY_DIR), [])
         # Role `evidence-indexer` allows only evidence_index; its profile's claim_limits.allowed
         # list does not carry it, so the intersection is empty: never invocable (reported gap).
-        self.assertEqual(pi.not_invocable_templates(pi.REGISTRY_DIR), ["02-evidence-index"])
+        # The deterministic index/assembly jobs (no persona is ever invoked for them) share that gap.
+        self.assertEqual(pi.not_invocable_templates(pi.REGISTRY_DIR),
+                         ["02-evidence-index", "02-full-review-input-assembly", "02-semantic-recall-index"])
 
     def test_ceiling_is_the_role_narrowed_by_the_profile_and_the_baseline(self):
         limits = support.ceiling()
