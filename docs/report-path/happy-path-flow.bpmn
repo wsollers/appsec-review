@@ -15,6 +15,8 @@
         <bpmn:flowNodeRef>Task_ThreatInitial</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_ThreatReconcile</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Owasp</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReachCodeql</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReachIr</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_CveReach</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Stig</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Deployment</bpmn:flowNodeRef>
@@ -46,16 +48,33 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="Start_Run" name="Exact run generation ready"/>
     <bpmn:parallelGateway id="Gateway_EvidenceSplit" name="Run independent evidence branches"/>
-    <bpmn:task id="Task_CodeqlSast" name="02-codeql-&lt;lang&gt; (one node per language, ADR-0023): CodeQL leads and retained databases; leads to evidence assembly, claim ledger and 06-reachability-codeql"/>
+    <bpmn:task id="Task_CodeqlSast" name="02-codeql-&lt;lang&gt;, one node per language in parallel: CodeQL leads and a hash-bound database pointer">
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false"/>
+    </bpmn:task>
     <bpmn:task id="Task_Component" name="Validate accepted F03 component map"/>
     <bpmn:task id="Task_ThreatInitial" name="L6A deterministic DFD/STRIDE core plus threat workbench persona cells (waves 1-2)"/>
     <bpmn:task id="Task_ThreatReconcile" name="L6B reconcile threat model, conflicts and coverage"/>
     <bpmn:task id="Task_Owasp" name="Run OWASP worklist and publish ASVS/MASVS matrix"/>
-    <bpmn:task id="Task_CveReach" name="06-cve-reachability: dependency reachability per SCA match (CPG, CodeQL, LSP engines)"/>
+    <bpmn:task id="Task_ReachCodeql" name="06-reachability-codeql: reachability and taint packs per language over the retained databases">
+      <bpmn:dataInputAssociation id="DIA_Sca_Codeql"><bpmn:sourceRef>DataRef_Sca</bpmn:sourceRef></bpmn:dataInputAssociation>
+    </bpmn:task>
+    <bpmn:task id="Task_ReachIr" name="06-reachability-ir: CPG arbiter with LLVM IR facts (C/C++); the only engine that may say unreachable">
+      <bpmn:dataInputAssociation id="DIA_Sca_Ir"><bpmn:sourceRef>DataRef_Sca</bpmn:sourceRef></bpmn:dataInputAssociation>
+    </bpmn:task>
+    <bpmn:task id="Task_CveReach" name="06-cve-reachability: Python correlator per SCA match (reachable, unreachable, unknown, conflict)">
+      <bpmn:dataInputAssociation id="DIA_Sca_Cve"><bpmn:sourceRef>DataRef_Sca</bpmn:sourceRef></bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="DOA_Summary"><bpmn:targetRef>DataRef_Summary</bpmn:targetRef></bpmn:dataOutputAssociation>
+    </bpmn:task>
+    <bpmn:dataObject id="DataObj_Sca"/>
+    <bpmn:dataObjectReference id="DataRef_Sca" name="Accepted SCA matches and SBOM" dataObjectRef="DataObj_Sca"/>
+    <bpmn:dataObject id="DataObj_Summary"/>
+    <bpmn:dataObjectReference id="DataRef_Summary" name="cve-reachability.json, dependency-reachability.json and summary" dataObjectRef="DataObj_Summary"/>
     <bpmn:task id="Task_Stig" name="Run separate STIG/SRG validation worklist"/>
     <bpmn:task id="Task_Deployment" name="Assess deployment hardening from accepted worklist"/>
     <bpmn:parallelGateway id="Gateway_EvidenceJoin" name="Wait for exact accepted sources"/>
-    <bpmn:task id="Task_Admission" name="L01 admit threat, control, tool-lead and hunter candidates; record origin head"/>
+    <bpmn:task id="Task_Admission" name="L01 admit threat, control, tool-lead and hunter candidates; record origin head">
+      <bpmn:dataInputAssociation id="DIA_Summary_Ledger"><bpmn:sourceRef>DataRef_Summary</bpmn:sourceRef></bpmn:dataInputAssociation>
+    </bpmn:task>
     <bpmn:task id="Task_Red" name="07 record adversarial hypotheses"/>
     <bpmn:task id="Task_Blue" name="08 refute or narrow each hypothesis"/>
     <bpmn:task id="Task_Verify" name="09 independently verify, refute or block"/>
@@ -72,8 +91,7 @@
     <bpmn:task id="Task_Synthesis" name="10 publish hash-bound evidence-backed draft"/>
     <bpmn:task id="Task_Draft" name="Hash immutable DRAFT_EVIDENCE_BACKED package"/>
     <bpmn:endEvent id="End_Draft" name="Draft ready for human review; not final"/>
-    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Run" targetRef="Task_CodeqlSast"/>
-    <bpmn:sequenceFlow id="Flow_Codeql" sourceRef="Task_CodeqlSast" targetRef="Task_Component"/>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Run" targetRef="Task_Component"/>
     <bpmn:sequenceFlow id="Flow_02A" sourceRef="Task_Component" targetRef="Gateway_EvidenceSplit"/>
     <bpmn:sequenceFlow id="Flow_02B" sourceRef="Gateway_EvidenceSplit" targetRef="Task_Owasp"/>
     <bpmn:sequenceFlow id="Flow_02C" sourceRef="Gateway_EvidenceSplit" targetRef="Task_Stig"/>
@@ -81,7 +99,11 @@
     <bpmn:sequenceFlow id="Flow_ThreatB" sourceRef="Task_ThreatInitial" targetRef="Task_ThreatReconcile"/>
     <bpmn:sequenceFlow id="Flow_03A" sourceRef="Task_ThreatReconcile" targetRef="Gateway_EvidenceJoin"/>
     <bpmn:sequenceFlow id="Flow_03B" sourceRef="Task_Owasp" targetRef="Gateway_EvidenceJoin"/>
-    <bpmn:sequenceFlow id="Flow_CveA" sourceRef="Gateway_EvidenceSplit" targetRef="Task_CveReach"/>
+    <bpmn:sequenceFlow id="Flow_CveA" sourceRef="Gateway_EvidenceSplit" targetRef="Task_CodeqlSast"/>
+    <bpmn:sequenceFlow id="Flow_CveA2" sourceRef="Task_CodeqlSast" targetRef="Task_ReachCodeql"/>
+    <bpmn:sequenceFlow id="Flow_CveIr" sourceRef="Gateway_EvidenceSplit" targetRef="Task_ReachIr"/>
+    <bpmn:sequenceFlow id="Flow_CveA3" sourceRef="Task_ReachCodeql" targetRef="Task_CveReach"/>
+    <bpmn:sequenceFlow id="Flow_CveIr2" sourceRef="Task_ReachIr" targetRef="Task_CveReach"/>
     <bpmn:sequenceFlow id="Flow_CveB" sourceRef="Task_CveReach" targetRef="Gateway_EvidenceJoin"/>
     <bpmn:sequenceFlow id="Flow_StigDeploy" sourceRef="Task_Stig" targetRef="Task_Deployment"/>
     <bpmn:sequenceFlow id="Flow_03C" sourceRef="Task_Deployment" targetRef="Gateway_EvidenceJoin"/>
@@ -107,9 +129,9 @@
     <bpmn:textAnnotation id="Note_Standalone"><bpmn:text>L6A and L6B are executable and qualified. OWASP T03-T14 is qualified. OWASP, STIG/SRG and deployment hardening remain distinct processes.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Adapters"><bpmn:text>Component-derived full-review inputs are revalidated and first-wave requests dispatch automatically. SKIPPED_NA is explicit; reinvoke after SBOM, licence and SCA prerequisites for later dependency waves. Automatic OWASP dispatch-fact derivation remains open.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Final"><bpmn:text>The package is DRAFT_EVIDENCE_BACKED only. One real accepted end-to-end run and human final authorization are still required.</bpmn:text></bpmn:textAnnotation>
-    <bpmn:textAnnotation id="Note_Codeql"><bpmn:text>ADR-0017. Go and any language without a registered image are per-language gaps (OK_WITH_GAPS). Traced C/C++ (codeql-cpp-traced) exists in code but is not wired into full_review. Not live-qualified.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Codeql"><bpmn:text>ADR-0023. javascript, python, ruby after intake; java, csharp build-mode none; cpp waits for 02-native-build (traced rows per unit plus build-mode none). go and rust: OK_WITH_GAPS (language not built / not supported). Absent language: SKIPPED. A container timeout, OOM or non-zero exit is a gap, never a failure. Not live-qualified.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Chains"><bpmn:text>Chains are candidates, never findings. 10 reads the refuted ledger as an optional input and states SKIPPED or ABSENT with a reason. Unit-tested only; nothing has run live.</bpmn:text></bpmn:textAnnotation>
-    <bpmn:textAnnotation id="Note_Cve"><bpmn:text>ADR-0022. Model text never decides reachability; unreachable only from a complete CPG search; everything else unknown with a gap. Critical requires REACHABLE (ADR-0020).</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Cve"><bpmn:text>ADR-0022/0023. reachable needs a hash-bound witness from codeql or ir; unreachable only from ir with the dependency source analysed and no dynamic-dispatch escape; engines disagreeing = conflict (written as unknown in cve-reachability.json). LSP and tree-sitter are hints. No model decides. Summary feeds the ledger (reachable = P1), 07/08/09/12 and 10.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Poc"><bpmn:text>Optional input of 10: SKIPPED not-applicable-no-eligible-findings when nothing qualifies; a failed pool never holds the report. Unit-tested only.</bpmn:text></bpmn:textAnnotation>
     <bpmn:association id="Assoc_Cve" sourceRef="Note_Cve" targetRef="Task_CveReach"/>
     <bpmn:association id="Assoc_Poc" sourceRef="Note_Poc" targetRef="Task_PocFix"/>
@@ -121,23 +143,27 @@
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_ReportHappyPath">
     <bpmndi:BPMNPlane id="Plane_ReportHappyPath" bpmnElement="Process_ReportHappyPath">
-      <bpmndi:BPMNShape id="Shape_Lane_Evidence" bpmnElement="Lane_Evidence" isHorizontal="true"><dc:Bounds x="20" y="20" width="3600" height="340"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Claims" bpmnElement="Lane_Claims" isHorizontal="true"><dc:Bounds x="20" y="360" width="3600" height="180"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="720" width="3600" height="330"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Chains" bpmnElement="Lane_Chains" isHorizontal="true"><dc:Bounds x="20" y="540" width="3600" height="180"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_CodeqlSast" bpmnElement="Task_CodeqlSast"><dc:Bounds x="130" y="280" width="200" height="65"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ChainSplit" bpmnElement="Gateway_ChainSplit"><dc:Bounds x="2030" y="425" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ChainCompose" bpmnElement="Task_ChainCompose"><dc:Bounds x="2120" y="590" width="190" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ChainSeeds" bpmnElement="Gateway_ChainSeeds" isMarkerVisible="true"><dc:Bounds x="2350" y="605" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ChainRefute" bpmnElement="Task_ChainRefute"><dc:Bounds x="2440" y="590" width="170" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ChainMerge" bpmnElement="Gateway_ChainMerge" isMarkerVisible="true"><dc:Bounds x="2640" y="605" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ReportJoin" bpmnElement="Gateway_ReportJoin"><dc:Bounds x="2730" y="805" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Codeql" bpmnElement="Note_Codeql"><dc:Bounds x="400" y="885" width="440" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Chains" bpmnElement="Note_Chains"><dc:Bounds x="2150" y="885" width="440" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_CveReach" bpmnElement="Task_CveReach"><dc:Bounds x="430" y="280" width="200" height="65"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_PocFix" bpmnElement="Task_PocFix"><dc:Bounds x="2330" y="410" width="190" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Cve" bpmnElement="Note_Cve"><dc:Bounds x="20" y="975" width="520" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Poc" bpmnElement="Note_Poc"><dc:Bounds x="2640" y="975" width="440" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Evidence" bpmnElement="Lane_Evidence" isHorizontal="true"><dc:Bounds x="20" y="20" width="3900" height="440"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Claims" bpmnElement="Lane_Claims" isHorizontal="true"><dc:Bounds x="20" y="460" width="3900" height="180"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="820" width="3900" height="360"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Chains" bpmnElement="Lane_Chains" isHorizontal="true"><dc:Bounds x="20" y="640" width="3900" height="180"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_CodeqlSast" bpmnElement="Task_CodeqlSast"><dc:Bounds x="430" y="280" width="190" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReachCodeql" bpmnElement="Task_ReachCodeql"><dc:Bounds x="660" y="280" width="190" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReachIr" bpmnElement="Task_ReachIr"><dc:Bounds x="660" y="375" width="190" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_CveReach" bpmnElement="Task_CveReach"><dc:Bounds x="900" y="320" width="200" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DataRef_Sca" bpmnElement="DataRef_Sca"><dc:Bounds x="480" y="380" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DataRef_Summary" bpmnElement="DataRef_Summary"><dc:Bounds x="1140" y="380" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainSplit" bpmnElement="Gateway_ChainSplit"><dc:Bounds x="2330" y="525" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainCompose" bpmnElement="Task_ChainCompose"><dc:Bounds x="2420" y="690" width="190" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainSeeds" bpmnElement="Gateway_ChainSeeds" isMarkerVisible="true"><dc:Bounds x="2650" y="705" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainRefute" bpmnElement="Task_ChainRefute"><dc:Bounds x="2740" y="690" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ChainMerge" bpmnElement="Gateway_ChainMerge" isMarkerVisible="true"><dc:Bounds x="2940" y="705" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReportJoin" bpmnElement="Gateway_ReportJoin"><dc:Bounds x="3030" y="905" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Codeql" bpmnElement="Note_Codeql"><dc:Bounds x="400" y="985" width="600" height="75"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Chains" bpmnElement="Note_Chains"><dc:Bounds x="2450" y="985" width="440" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_PocFix" bpmnElement="Task_PocFix"><dc:Bounds x="2630" y="510" width="190" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Cve" bpmnElement="Note_Cve"><dc:Bounds x="60" y="1075" width="760" height="75"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Poc" bpmnElement="Note_Poc"><dc:Bounds x="2940" y="1075" width="440" height="60"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Start" bpmnElement="Start_Run"><dc:Bounds x="60" y="132" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Component" bpmnElement="Task_Component"><dc:Bounds x="130" y="110" width="160" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_EvidenceSplit" bpmnElement="Gateway_EvidenceSplit"><dc:Bounds x="330" y="125" width="50" height="50"/></bpmndi:BPMNShape>
@@ -146,59 +172,67 @@
       <bpmndi:BPMNShape id="Shape_Owasp" bpmnElement="Task_Owasp"><dc:Bounds x="540" y="117" width="180" height="65"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Stig" bpmnElement="Task_Stig"><dc:Bounds x="430" y="200" width="170" height="65"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Deployment" bpmnElement="Task_Deployment"><dc:Bounds x="650" y="200" width="180" height="65"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_EvidenceJoin" bpmnElement="Gateway_EvidenceJoin"><dc:Bounds x="880" y="125" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Admission" bpmnElement="Task_Admission"><dc:Bounds x="980" y="410" width="190" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Red" bpmnElement="Task_Red"><dc:Bounds x="1210" y="410" width="160" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Blue" bpmnElement="Task_Blue"><dc:Bounds x="1410" y="410" width="160" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Verify" bpmnElement="Task_Verify"><dc:Bounds x="1610" y="410" width="160" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Append" bpmnElement="Task_Append"><dc:Bounds x="1810" y="410" width="180" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Score" bpmnElement="Task_Score"><dc:Bounds x="2120" y="410" width="170" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_ReportInput" bpmnElement="Task_ReportInput"><dc:Bounds x="2820" y="770" width="180" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Synthesis" bpmnElement="Task_Synthesis"><dc:Bounds x="3040" y="770" width="170" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_Draft"><dc:Bounds x="3250" y="770" width="180" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_Draft"><dc:Bounds x="3500" y="792" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="1040" y="885" width="400" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Adapters" bpmnElement="Note_Adapters"><dc:Bounds x="1650" y="885" width="420" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Final" bpmnElement="Note_Final"><dc:Bounds x="3060" y="885" width="440" height="60"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Edge_01" bpmnElement="Flow_01"><di:waypoint x="78" y="168"/><di:waypoint x="78" y="312"/><di:waypoint x="130" y="312"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_EvidenceJoin" bpmnElement="Gateway_EvidenceJoin"><dc:Bounds x="1180" y="125" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Admission" bpmnElement="Task_Admission"><dc:Bounds x="1280" y="510" width="190" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Red" bpmnElement="Task_Red"><dc:Bounds x="1510" y="510" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Blue" bpmnElement="Task_Blue"><dc:Bounds x="1710" y="510" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Verify" bpmnElement="Task_Verify"><dc:Bounds x="1910" y="510" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Append" bpmnElement="Task_Append"><dc:Bounds x="2110" y="510" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Score" bpmnElement="Task_Score"><dc:Bounds x="2420" y="510" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReportInput" bpmnElement="Task_ReportInput"><dc:Bounds x="3120" y="870" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Synthesis" bpmnElement="Task_Synthesis"><dc:Bounds x="3340" y="870" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_Draft"><dc:Bounds x="3550" y="870" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_Draft"><dc:Bounds x="3800" y="892" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="1340" y="985" width="400" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Adapters" bpmnElement="Note_Adapters"><dc:Bounds x="1950" y="985" width="420" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Final" bpmnElement="Note_Final"><dc:Bounds x="3360" y="985" width="440" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_01" bpmnElement="Flow_01"><di:waypoint x="96" y="150"/><di:waypoint x="130" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_02A" bpmnElement="Flow_02A"><di:waypoint x="290" y="150"/><di:waypoint x="330" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_02B" bpmnElement="Flow_02B"><di:waypoint x="380" y="150"/><di:waypoint x="540" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_02C" bpmnElement="Flow_02C"><di:waypoint x="355" y="175"/><di:waypoint x="355" y="232"/><di:waypoint x="430" y="232"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_ThreatA" bpmnElement="Flow_ThreatA"><di:waypoint x="355" y="125"/><di:waypoint x="355" y="67"/><di:waypoint x="430" y="67"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_ThreatB" bpmnElement="Flow_ThreatB"><di:waypoint x="600" y="67"/><di:waypoint x="650" y="67"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_03A" bpmnElement="Flow_03A"><di:waypoint x="830" y="67"/><di:waypoint x="905" y="125"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_03B" bpmnElement="Flow_03B"><di:waypoint x="720" y="150"/><di:waypoint x="880" y="150"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03A" bpmnElement="Flow_03A"><di:waypoint x="830" y="67"/><di:waypoint x="1205" y="67"/><di:waypoint x="1205" y="125"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03B" bpmnElement="Flow_03B"><di:waypoint x="720" y="150"/><di:waypoint x="1180" y="150"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_StigDeploy" bpmnElement="Flow_StigDeploy"><di:waypoint x="600" y="232"/><di:waypoint x="650" y="232"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_03C" bpmnElement="Flow_03C"><di:waypoint x="830" y="232"/><di:waypoint x="905" y="175"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_03" bpmnElement="Flow_03"><di:waypoint x="930" y="150"/><di:waypoint x="950" y="150"/><di:waypoint x="950" y="450"/><di:waypoint x="980" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_04" bpmnElement="Flow_04"><di:waypoint x="1170" y="450"/><di:waypoint x="1210" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_05" bpmnElement="Flow_05"><di:waypoint x="1370" y="450"/><di:waypoint x="1410" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_06" bpmnElement="Flow_06"><di:waypoint x="1570" y="450"/><di:waypoint x="1610" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_07" bpmnElement="Flow_07"><di:waypoint x="1770" y="450"/><di:waypoint x="1810" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_08" bpmnElement="Flow_08"><di:waypoint x="1990" y="450"/><di:waypoint x="2030" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="2290" y="450"/><di:waypoint x="2330" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="3000" y="830"/><di:waypoint x="3040" y="830"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="3210" y="830"/><di:waypoint x="3250" y="830"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="3430" y="830"/><di:waypoint x="3500" y="830"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Standalone" bpmnElement="Assoc_Standalone"><di:waypoint x="1240" y="885"/><di:waypoint x="1290" y="490"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Adapters" bpmnElement="Assoc_Adapters"><di:waypoint x="1860" y="885"/><di:waypoint x="1900" y="490"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Final" bpmnElement="Assoc_Final"><di:waypoint x="3280" y="885"/><di:waypoint x="3340" y="850"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Codeql" bpmnElement="Flow_Codeql"><di:waypoint x="210" y="280"/><di:waypoint x="210" y="190"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_08B" bpmnElement="Flow_08B"><di:waypoint x="2080" y="450"/><di:waypoint x="2120" y="450"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Chain1" bpmnElement="Flow_Chain1"><di:waypoint x="2055" y="475"/><di:waypoint x="2055" y="630"/><di:waypoint x="2120" y="630"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Chain2" bpmnElement="Flow_Chain2"><di:waypoint x="2310" y="630"/><di:waypoint x="2350" y="630"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Chain3" bpmnElement="Flow_Chain3"><di:waypoint x="2400" y="630"/><di:waypoint x="2440" y="630"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Chain4" bpmnElement="Flow_Chain4"><di:waypoint x="2375" y="655"/><di:waypoint x="2375" y="700"/><di:waypoint x="2665" y="700"/><di:waypoint x="2665" y="655"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Chain5" bpmnElement="Flow_Chain5"><di:waypoint x="2610" y="630"/><di:waypoint x="2640" y="630"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Chain6" bpmnElement="Flow_Chain6"><di:waypoint x="2690" y="630"/><di:waypoint x="2755" y="630"/><di:waypoint x="2755" y="805"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_09B" bpmnElement="Flow_09B"><di:waypoint x="2780" y="830"/><di:waypoint x="2820" y="830"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Codeql" bpmnElement="Assoc_Codeql"><di:waypoint x="500" y="885"/><di:waypoint x="300" y="345"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Chains" bpmnElement="Assoc_Chains"><di:waypoint x="2400" y="885"/><di:waypoint x="2500" y="670"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03C" bpmnElement="Flow_03C"><di:waypoint x="830" y="232"/><di:waypoint x="1150" y="232"/><di:waypoint x="1150" y="150"/><di:waypoint x="1180" y="150"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03" bpmnElement="Flow_03"><di:waypoint x="1230" y="150"/><di:waypoint x="1250" y="150"/><di:waypoint x="1250" y="550"/><di:waypoint x="1280" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_04" bpmnElement="Flow_04"><di:waypoint x="1470" y="550"/><di:waypoint x="1510" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_05" bpmnElement="Flow_05"><di:waypoint x="1670" y="550"/><di:waypoint x="1710" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_06" bpmnElement="Flow_06"><di:waypoint x="1870" y="550"/><di:waypoint x="1910" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_07" bpmnElement="Flow_07"><di:waypoint x="2070" y="550"/><di:waypoint x="2110" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_08" bpmnElement="Flow_08"><di:waypoint x="2290" y="550"/><di:waypoint x="2330" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="2590" y="550"/><di:waypoint x="2630" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="3300" y="930"/><di:waypoint x="3340" y="930"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="3510" y="930"/><di:waypoint x="3550" y="930"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="3730" y="930"/><di:waypoint x="3800" y="930"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Standalone" bpmnElement="Assoc_Standalone"><di:waypoint x="1540" y="985"/><di:waypoint x="1590" y="590"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Adapters" bpmnElement="Assoc_Adapters"><di:waypoint x="2160" y="985"/><di:waypoint x="2200" y="590"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Final" bpmnElement="Assoc_Final"><di:waypoint x="3580" y="985"/><di:waypoint x="3640" y="950"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_08B" bpmnElement="Flow_08B"><di:waypoint x="2380" y="550"/><di:waypoint x="2420" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain1" bpmnElement="Flow_Chain1"><di:waypoint x="2355" y="575"/><di:waypoint x="2355" y="730"/><di:waypoint x="2420" y="730"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain2" bpmnElement="Flow_Chain2"><di:waypoint x="2610" y="730"/><di:waypoint x="2650" y="730"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain3" bpmnElement="Flow_Chain3"><di:waypoint x="2700" y="730"/><di:waypoint x="2740" y="730"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain4" bpmnElement="Flow_Chain4"><di:waypoint x="2675" y="755"/><di:waypoint x="2675" y="800"/><di:waypoint x="2965" y="800"/><di:waypoint x="2965" y="755"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain5" bpmnElement="Flow_Chain5"><di:waypoint x="2910" y="730"/><di:waypoint x="2940" y="730"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Chain6" bpmnElement="Flow_Chain6"><di:waypoint x="2990" y="730"/><di:waypoint x="3055" y="730"/><di:waypoint x="3055" y="905"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_09B" bpmnElement="Flow_09B"><di:waypoint x="3080" y="930"/><di:waypoint x="3120" y="930"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Codeql" bpmnElement="Assoc_Codeql"><di:waypoint x="600" y="985"/><di:waypoint x="525" y="345"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Chains" bpmnElement="Assoc_Chains"><di:waypoint x="2700" y="985"/><di:waypoint x="2800" y="770"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_CveA" bpmnElement="Flow_CveA"><di:waypoint x="355" y="175"/><di:waypoint x="355" y="312"/><di:waypoint x="430" y="312"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_CveB" bpmnElement="Flow_CveB"><di:waypoint x="630" y="312"/><di:waypoint x="870" y="312"/><di:waypoint x="870" y="160"/><di:waypoint x="880" y="150"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Poc" bpmnElement="Flow_Poc"><di:waypoint x="2520" y="450"/><di:waypoint x="2710" y="450"/><di:waypoint x="2710" y="830"/><di:waypoint x="2730" y="830"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Cve" bpmnElement="Assoc_Cve"><di:waypoint x="300" y="975"/><di:waypoint x="500" y="345"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_Assoc_Poc" bpmnElement="Assoc_Poc"><di:waypoint x="2700" y="975"/><di:waypoint x="2450" y="490"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveB" bpmnElement="Flow_CveB"><di:waypoint x="1100" y="360"/><di:waypoint x="1205" y="360"/><di:waypoint x="1205" y="175"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Poc" bpmnElement="Flow_Poc"><di:waypoint x="2820" y="550"/><di:waypoint x="3010" y="550"/><di:waypoint x="3010" y="930"/><di:waypoint x="3030" y="930"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Cve" bpmnElement="Assoc_Cve"><di:waypoint x="300" y="1075"/><di:waypoint x="1000" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Poc" bpmnElement="Assoc_Poc"><di:waypoint x="3000" y="1075"/><di:waypoint x="2750" y="590"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveA2" bpmnElement="Flow_CveA2"><di:waypoint x="620" y="312"/><di:waypoint x="660" y="312"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveIr" bpmnElement="Flow_CveIr"><di:waypoint x="355" y="175"/><di:waypoint x="355" y="450"/><di:waypoint x="640" y="450"/><di:waypoint x="640" y="407"/><di:waypoint x="660" y="407"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveA3" bpmnElement="Flow_CveA3"><di:waypoint x="850" y="312"/><di:waypoint x="875" y="312"/><di:waypoint x="875" y="345"/><di:waypoint x="900" y="345"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_CveIr2" bpmnElement="Flow_CveIr2"><di:waypoint x="850" y="407"/><di:waypoint x="875" y="407"/><di:waypoint x="875" y="375"/><di:waypoint x="900" y="375"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DIA_Sca_Codeql" bpmnElement="DIA_Sca_Codeql"><di:waypoint x="516" y="390"/><di:waypoint x="700" y="345"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DIA_Sca_Ir" bpmnElement="DIA_Sca_Ir"><di:waypoint x="516" y="410"/><di:waypoint x="660" y="420"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DIA_Sca_Cve" bpmnElement="DIA_Sca_Cve"><di:waypoint x="498" y="430"/><di:waypoint x="498" y="455"/><di:waypoint x="1000" y="455"/><di:waypoint x="1000" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DOA_Summary" bpmnElement="DOA_Summary"><di:waypoint x="1100" y="390"/><di:waypoint x="1140" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DIA_Summary_Ledger" bpmnElement="DIA_Summary_Ledger"><di:waypoint x="1176" y="410"/><di:waypoint x="1330" y="530"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

@@ -5,15 +5,19 @@ flowchart LR
 
   C[Accepted component characterization]:::qualified --> PLAN[Deterministically derived<br/>full-review launch plan]:::qualified
   PLAN --> ASM[02 full-review input assembly<br/>revalidate, bound, dispatch first wave]:::qualified
-  CQ[02-codeql-* (8 nodes)<br/>CodeQL leads, retained DBs, per-language gaps]:::open --> C
+  CQ[02-codeql-* x8 nodes, parallel<br/>CodeQL leads, retained DBs, per-language gaps]:::open
   C --> L6A[L6A DFD/STRIDE core<br/>+ threat workbench cells]:::open --> L6B[L6B threat reconciliation]:::qualified
   C --> OW[OWASP T03-T14<br/>component routing, validation, pagination]:::qualified
   C --> STIG[STIG/SRG worklist]:::qualified --> DEPLOY[Deployment hardening]:::qualified
   ASM --> FAM[First-wave analysis families<br/>plus explicit SKIPPED_NA]:::qualified
   FAM --> PREREQ[Accepted SBOM, licence and SCA prerequisites]:::qualified
-  PREREQ --> CVE[06 dependency reachability<br/>CPG, CodeQL, LSP engines]:::open
-  CQ --> CVE
+  CQ --> RC[06-reachability-codeql]:::open
+  PREREQ --> RC
+  PREREQ --> RI[06-reachability-ir<br/>CPG + LLVM IR]:::open
+  RC & RI --> CVE[06-cve-reachability correlator<br/>reachable, unreachable, unknown, conflict]:::open
+  PREREQ --> CVE
   CVE --> CLAIMS
+  CVE -->|summary| SYNTH
   PREREQ -->|reinvoke derivation| ASM
   FAM & L6B & OW & DEPLOY --> CLAIMS[Candidate ledger]:::qualified
   CLAIMS --> RED[07 red-team hypotheses]:::qualified --> BLUE[08 refutation]:::qualified
