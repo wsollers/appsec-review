@@ -1161,7 +1161,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`06-cve-reachability`](#job-06-cve-reachability) |
 | Consumes | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`run-owned-static-reachability-evidence`](#a-run-owned-static-reachability-evidence) |
 | Produces | [`06-cve-reachability`](#a-job-06-cve-reachability) |
-| Notes | Standalone deterministic static reachability transform. A version match alone never establishes reachability and all outputs remain evidence leads. Full-review input assembly remains a gap. |
+| Notes | Standalone deterministic static reachability transform over run-supplied evidence. A version match alone never establishes reachability and all outputs remain evidence leads. In full_review, 06-cve-reachability is instead the ADR-0023 correlator (lifecycle op) over 06-reachability-codeql and 06-reachability-ir; see docs/dependency-reachability.md. |
 
 <a id="step-b13-harmless-container"></a>
 
@@ -2437,7 +2437,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Contract | `threat-model-core` (claim class `threat_model_candidate`) |
 | Status | readiness `implemented_not_qualified`; execution `deterministic_python`; job-graph `implemented: true` |
 | Worker | `appsec-review-process/threat_model_core.py:run` |
-| Resource pool | `cpu` |
+| Resource pool | `persona_llm` |
 | Dagster | standalone: `threat_model_dfd_stride`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `threat-model-core`, tooling `threat-model-static-evidence` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |

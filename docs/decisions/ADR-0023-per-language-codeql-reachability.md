@@ -5,6 +5,12 @@ engine jobs, the correlator rules and "language-server and tree-sitter results a
 William's (brief G design, agreed 2026-09-29); names, schemas, the database store and the tier rule
 are the implementer's and need review.
 
+Implementation (2026-09-29): merged to `main` from `codeql-reach` (`1248b43`; follow-up `d3ef6b7` keeps
+the CodeQL nodes off `02-evidence-assembly`). 81 lifecycle jobs. Unit tests with fake runners only:
+the `audit-codeql` images need a rebuild and B16 records, the QL packs have not been compiled, and
+nothing has run live. The claim ledger records an engine `conflict` as a review obligation (decision 9
+names a `review_flags` entry). Open items: `appsec-review-process/TODO.md` section G.
+
 Supersedes: ADR-0017 decision 3 (one `02-codeql-sast` job) and decision 5 (one container per
 language inside that job); ADR-0022 decision 3's `lsp` strength (was "may prove `reachable`") and
 decision 4's join (a proof now needs a proof-capable engine, disagreement is `conflict`); ADR-0022

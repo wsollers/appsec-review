@@ -107,9 +107,9 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 | Hash-verified redacted snippets; 11 objectives + 12 PATCH_PROPOSED_UNVALIDATED remediation | DONE |
 | Persona prompt text for 07/09/12 mentions the new judgment fields | DONE (`claim-review-pool-task.md` "Judgement fields", hardening-b `323c022`) |
 
-- [x] **Claim ledger: CodeQL leads.** `02-codeql-sast` is in `claim_ledger.LEAD_PRODUCERS`, normalised like
-      `02-source-sast` (plus `language`, `rule_name`, `cwe`); `codeql-security-query` and the new source-SAST
-      categories are P1 (`f50caba`).
+- [x] **Claim ledger: CodeQL leads.** Every `02-codeql-<lang>` node is a row in `claim_ledger.LEAD_PRODUCERS`
+      (was `02-codeql-sast`, `f50caba`; per-language since ADR-0023, `1248b43`), normalised like `02-source-sast`
+      (plus `language`, `rule_name`, `cwe`); `codeql-security-query` and the new source-SAST categories are P1.
 - [ ] **audit-codeql image.** Rebuild (`image_build.py`, picks up `scripts/codeql-sast-lane.sh`) and
       register the B16 record; until then every language is an `UNAVAILABLE` gap. The .NET SDK for C#
       and the traced C/C++ tool id are in (branch `lang-servers`, see section C below); the traced lane
@@ -131,9 +131,11 @@ declared deployment zones, abuse scenarios and attack trees, plus `attack-trees.
 - [x] Claim ledger admits abuse scenarios and privacy threats as candidates (attack trees left to ADR-0016).
 - [ ] William: ADR-0019 open decisions (failed cell = gap; next cells; ledger load; report section; engine scale).
 - [ ] First live run on hello-autotools (5 model calls; 03 and everything downstream re-run: 03's code hash changed).
-- [ ] Integration owner: `design-parity-manifest.json` still lists 03 as `deterministic_python` / `cpu` and
-      `job-graph.json` has the old required artifacts (no `.mmd`, ranked scenarios, transcript); the Dagster op
-      is now `persona_llm` (checked 2026-09-29).
+- [x] `design-parity-manifest.json` 03 `resource_pool` is `persona_llm`, as the Dagster op runs it (docs-sync-G).
+- [ ] Controller-owned (do not edit from docs): 03 still describes the pre-workbench job in
+      `job-graph.json` `required_artifacts` (no `attack-trees.mmd`, `dfd.mmd`, `ranked-threat-scenarios.json`,
+      `intercom-transcript.jsonl`), the registry template model (`deterministic-python`) and
+      `threat_model_core.py` `worker_kind="deterministic_python"`; the manifest's `execution.mode` follows them.
 - [ ] Wave 3 challenge cell (different model family) and wave 4 responses; agent/native/mobile/cloud specialists.
 - [ ] Synthesis report: show `data_classes`, `privacy_threats`, `deployment_zones` (closed report schema).
 - [ ] After review-batch merges: confirm the cells use `supporting_evidence_menu` (fallback today: F02 intel manifest).
@@ -295,8 +297,8 @@ OPEN:
 - Build `audit-lsp-vendor`, then the 9 buildenv images and both CodeQL images; run
   `images/test/run-lsp-smoke.sh`; regenerate B16 records (now include `audit-codeql`,
   `audit-codeql-native`). Fix whatever the first build breaks (QL compile, offline servers).
-- Wire `codeql-cpp-traced`: `run_codeql_sast` must pass the accepted `02-native-build` root and
-  fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
+- [x] Wire `codeql-cpp-traced`: done by brief G (`1248b43`): `02-codeql-cpp` waits for `02-native-build`
+  and adds one traced row per replayable unit.
 - `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
 - [x] `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (Dependabot bumps): re-recorded with
   `tool_pins.py pin --keep-lock` (`1661f48`); 20 tests OK.
@@ -325,24 +327,24 @@ from reviewed map / OSV, engine per ecosystem, lattice, hash-bound witness), ada
 `codeql` (tables), `lsp` (incomingCalls chain), `treesitter` (hints only), CodeQL packs for
 Go/Java/C#/JS/Python in `data/codeql-reachability/` (pinned to bundle 2.27.0 libraries, symbols via
 generated data extension), and `06-cve-reachability` in `full_review` now derives its evidence
-instead of an empty file (new edges from `02-code-property-graph`, `02-codeql-sast`). This
+instead of an empty file (at merge: edges from `02-code-property-graph`, `02-codeql-sast`; since ADR-0023 06 is
+the correlator over the two engine jobs, see section G). This
 supersedes the "not yet wired into full_review" row under Report findings.
 OPEN:
 - WSL: `scripts/smoke_codeql_reachability.sh` (needs `audit-codeql:local`); expect QL compile
   fixes (packs written, not compiled). Go autobuild needs a Go toolchain in `audit-codeql`
   (image request for brief C's owner).
-- No job runs the CodeQL packs, the LSP incomingCalls walk or `treesitter_ast.py` in a run yet;
-  06 reads those only from `<run>/inputs/dependency-reachability/`. Needs a reachability mode
-  in the `audit-codeql` lane script or a 06 container step (controller decision).
+- [x] The CodeQL packs run in `06-reachability-codeql` (brief G, `1248b43`; image rebuild pending, section G).
+  The LSP incomingCalls walk and `treesitter_ast.py` still run outside the graph (section G).
 - OSV symbols exist mostly for Go; other ecosystems need `inputs/cve-reachability-functions.json`.
-- `codeql-cpp-traced` tables reach 06 only once C's `02-native-build -> 02-codeql-sast` wiring lands.
+- [x] `codeql-cpp-traced` tables reach 06 through `02-codeql-cpp` and `06-reachability-codeql` (brief G).
 - No Ruby or Rust CodeQL pack; PHP has no CodeQL extractor (lsp/treesitter only).
 
-## G: per-language CodeQL nodes and reachability engines (brief G, design agreed 2026-09-29)
+## G: per-language CodeQL nodes and reachability engines (ADR-0023, brief G, branch `codeql-reach`, merged `1248b43`)
 
 Design: per-language `02-codeql-<lang>` nodes (parallel; compiled languages gated on a successful build of that language, otherwise a gap, never a failure), engine jobs `06-reachability-codeql` and `06-reachability-ir` (same table shape), and `06-cve-reachability` becomes the Python correlator whose output feeds the report and the 07/08/09 red/blue lanes. See `docs/agent-briefs/G-per-language-codeql-reachability.md`.
 
-Done on branch `codeql-reach` (ADR-0023, `docs/dependency-reachability.md`): eight `02-codeql-<lang>`
+Merged (ADR-0023, `docs/dependency-reachability.md`; operator view in the happy-path operator guide): eight `02-codeql-<lang>`
 nodes replace `02-codeql-sast` (SKIPPED `not-applicable-language-absent`; cpp waits for
 `02-native-build` and adds traced rows per unit; Go/Rust are gaps; databases retained as hash-bound
 pointers); `dep_symbol_resolver.py` (PyPI, npm, Maven, Go, NuGet, Cargo, Packagist); engine jobs
@@ -380,11 +382,13 @@ OPEN (deferred, not in brief G's first cut):
 - [ ] Controller to confirm: node name `02-codeql-javascript` (CodeQL's `javascript` extractor, JS+TS);
       cpp always also runs build-mode none next to traced rows; `06-cve-reachability` now feeds
       `claim-ledger-routing` and `10-synthesis-report` directly (new required edges).
+- [ ] ADR-0023 decision 9 names a `review_flags` entry `reachability-conflict`; `claim_ledger.py` records an
+      engine conflict as a review obligation instead. Align the ADR or the code (controller).
 - [ ] Controller to confirm: the `02-codeql-<lang>` nodes are NOT edges of `02-evidence-assembly`
       (brief asked to move the edge; 34 producers would exceed `pool_groups_max` 32 in its persona
       pool). Ordering into the ledger holds via 06-reachability-codeql -> 06 -> claim-ledger-routing.
 
-## H: Ghidra and x64dbg in audit images (branch `image-reverse-tools`)
+## H: Ghidra and x64dbg in audit images (branch `image-reverse-tools`, merged `7690f90`)
 
 Both images now pin Ghidra 12.1.3, Temurin 21.0.12+8 and x64dbg 2026.05.27, with a sha256 check for
 each download. x64dbg runs under Wine and Xvfb. Details are in `docs/processes/tool-images.md`. The

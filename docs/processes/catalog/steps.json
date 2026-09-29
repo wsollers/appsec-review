@@ -215,7 +215,7 @@
     {"id": "cve-reachability", "name": "cve_reachability (Dagster job)", "kind": "dagster-job",
      "runs": "launch_job.py --run-id <run_id> --job cve_reachability --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait", "bpmn": [], "lifecycle": ["06-cve-reachability"],
      "consumes": ["job:02-sca-vulnerability-match", "run-owned-static-reachability-evidence"], "produces": ["job:06-cve-reachability"],
-     "notes": "Standalone deterministic static reachability transform. A version match alone never establishes reachability and all outputs remain evidence leads. Full-review input assembly remains a gap."},
+     "notes": "Standalone deterministic static reachability transform over run-supplied evidence. A version match alone never establishes reachability and all outputs remain evidence leads. In full_review, 06-cve-reachability is instead the ADR-0023 correlator (lifecycle op) over 06-reachability-codeql and 06-reachability-ir; see docs/dependency-reachability.md."},
     {"id": "b13-harmless-container", "name": "b13_harmless_container (Dagster qualification job)", "kind": "dagster-job",
      "runs": "launch_job.py --run-id <run_id> --job b13_harmless_container --wait", "bpmn": [],
      "consumes": ["artifact-manifest", "loaded-job-list", "docker-engine", "fixture-harmless-image", "b13-qualification-input"], "produces": ["b13-qualification-result"],

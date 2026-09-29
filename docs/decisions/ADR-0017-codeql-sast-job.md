@@ -7,10 +7,10 @@ single `02-codeql-sast` job and decision 5's containers-inside-one-job with one 
 the traced C/C++ lane is wired through `02-native-build -> 02-codeql-cpp`. Decisions 1, 2, 4 and 6 stand.
 
 Implementation (2026-09-29): merged to `main` from `ws-sast` (`fa5d37d`). The claim-ledger producer row of
-decision 3 is in (`f50caba`: CodeQL leads are P1). The later traced C/C++ tool id `codeql-cpp-traced`
-(image `audit-codeql-native`, merged from `lang-servers`, `955d797`) exists in `codeql_sast.py` but is not
-wired: `full_review` passes no native-build root and there is no `02-native-build -> 02-codeql-sast`
-edge, so runs use build-mode none only. The `audit-codeql` image now carries a .NET SDK for C#. No B16
+decision 3 is in (`f50caba`: CodeQL leads are P1). The traced C/C++ tool id `codeql-cpp-traced`
+(image `audit-codeql-native`, merged from `lang-servers`, `955d797`) is wired since ADR-0023 (`1248b43`):
+`02-codeql-cpp` waits for `02-native-build` and adds one traced row per replayable unit next to
+build-mode none. The `audit-codeql` image carries a .NET SDK for C#; it has no Go toolchain yet. No B16
 record is registered yet (every language is `UNAVAILABLE` until one is) and nothing has run live.
 
 ## Context
