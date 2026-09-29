@@ -230,6 +230,51 @@ verification (lane 09). Refuted hypotheses are kept for the record with priority
 \vspace{4pt}
 %% endfor
 
+%# ==== 3A ====
+%% set ac = attack_chains if attack_chains is defined else {'status': 'ABSENT', 'reason': 'not built', 'chains': [], 'appendix': [], 'refuted_count': 0, 'note': ''}
+\section{Attack chains}
+\VAR{ac.note|tex}
+
+\BLOCK{if ac.status != 'PUBLISHED'}\textbf{No chain composed.} \VAR{ac.status|tex}: \VAR{ac.reason|tex}
+
+\BLOCK{elif not ac.chains and not ac.appendix}\textbf{No chain reported.} \VAR{ac.reason|tex}
+
+\BLOCK{endif}
+\BLOCK{if ac.refuted_count}{\small\color{muted}\VAR{ac.refuted_count} composed chain(s) were broken by the refuter; they are counted, not listed.\par}
+\BLOCK{endif}
+%% for c in ac.chains
+\begin{tcolorbox}[enhanced,breakable,colback=white,colframe=rule,boxrule=0.5pt,arc=0pt,left=10pt,right=8pt,top=6pt,bottom=6pt]
+{\sffamily\mono{\#\VAR{c.rank} \VAR{c.chain_id|texpath}} \hfill \VAR{c.state|tex}}\\[2pt]
+{\sffamily\large\bfseries \VAR{c.objective|tex}}
+
+{\small
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}m{0.2\linewidth}>{\raggedright\arraybackslash}X@{}}
+\eyebrow{Impact} & \VAR{c.impact_kind|tex}\\
+\eyebrow{Weakest link} & \VAR{c.weakest.reason|tex}\\
+\eyebrow{Refutation} & \VAR{c.refutation.disposition|tex}\BLOCK{if c.refutation.mechanism}: \VAR{c.refutation.mechanism|tex}\BLOCK{endif} (\VAR{c.refutation.citations} citation(s))\\
+\end{tabularx}}
+
+\eyebrow{Stages}\\
+{\small
+%% for l in c.links
+\colorbox{panel}{\sffamily\scriptsize\bfseries \VAR{l.stage|tex}} \VAR{l.label|tex} \textcolor{muted}{(\VAR{l.link_state|tex}\BLOCK{if l.severity}, \VAR{l.severity|tex}\BLOCK{endif})}\BLOCK{if not loop.last}\quad$\rightarrow$ \textcolor{muted}{\VAR{c.edges[loop.index0].basis|tex}} $\rightarrow$\quad\BLOCK{endif}
+%% endfor
+}
+
+\VAR{c.narrative|tex}
+\end{tcolorbox}
+\vspace{4pt}
+%% endfor
+\BLOCK{if ac.appendix}
+{\small
+\begin{tabularx}{\linewidth}{@{}r l l l X@{}}
+Rank & Chain & State & Impact & Objective\\
+%% for c in ac.appendix
+\VAR{c.rank} & \mono{\VAR{c.chain_id|texpath}} & \VAR{c.state|tex} & \VAR{c.impact_kind|tex} & \VAR{c.objective|tex}\\
+%% endfor
+\end{tabularx}}
+\BLOCK{endif}
+
 %# ==== 4 ====
 \section{Coverage gaps}
 Each item below is an area the review did not fully examine. None of them may be read as ``no issues''.

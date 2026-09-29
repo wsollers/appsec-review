@@ -190,8 +190,17 @@ def _findings(report: dict[str, Any], evidence_ids: dict[str, str],
     return result
 
 
+def _attack_chains(section: dict[str, Any] | None) -> dict[str, Any]:
+    """The renderer's attack-chain section (ADR-0016 decision 9); absent input renders as a gap."""
+    if section is None:
+        return {"status": "ABSENT", "reason": "no attack-chain section was built", "chains": [], "appendix": [],
+                "refuted_count": 0, "note": ""}
+    return {key: section[key] for key in ("status", "reason", "chains", "appendix", "refuted_count", "note")}
+
+
 def build_review(report: dict[str, Any], trace: dict[str, Any],
-                 enrichment: dict[str, Any] | None = None) -> dict[str, Any]:
+                 enrichment: dict[str, Any] | None = None,
+                 attack_chains: dict[str, Any] | None = None) -> dict[str, Any]:
     if (report.get("schema") != "appsec-review/synthesis-report/1.0" or
             report.get("status") != "DRAFT_EVIDENCE_BACKED" or
             report.get("claim_limits", {}).get("final") is not False or
@@ -209,6 +218,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         report = {**report, "limitations": sorted(set(report["limitations"]) | set(enrichment["gaps"]))}
     if enrichment is not None and enrichment["run_id"] != report["run_id"]:
         raise Blocked("10-synthesis-report: finding enrichment belongs to another run")
+    if attack_chains is not None and attack_chains["run_id"] != report["run_id"]:
+        raise Blocked("10-synthesis-report: attack-chain section belongs to another run")
+    if attack_chains is not None and attack_chains["gaps"]:
+        report = {**report, "limitations": sorted(set(report["limitations"]) | set(attack_chains["gaps"]))}
     if report["limitations"]:
         processes.append({"id": "reported-limitations", "family": "limitations",
             "kind": "preserved synthesis limitations", "status": "OK_WITH_GAPS", "coverage": 0.0,
@@ -230,6 +243,7 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         "finding_scoring": "authoritative_retained_publication", "process_assurance": "not_asserted",
         "families": families, "processes": processes,
         "findings": _findings(report, evidence_ids, enrichment), "evidence": evidence,
+        "attack_chains": _attack_chains(attack_chains),
         "target_context": {"source_snapshot_sha256": report["scope"].get("source_snapshot_sha256", "not asserted"),
             "components": report["scope"]["components"],
             "relationships": report.get("component_relationships", []),
@@ -256,9 +270,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
 
 
 def render(report: dict[str, Any], trace: dict[str, Any], output_root: Path,
-           generator_sha256: str, enrichment: dict[str, Any] | None = None) -> dict[str, Any]:
+           generator_sha256: str, enrichment: dict[str, Any] | None = None,
+           attack_chains: dict[str, Any] | None = None) -> dict[str, Any]:
     output_root = Path(output_root)
-    review = build_review(report, trace, enrichment)
+    review = build_review(report, trace, enrichment, attack_chains)
     atomic_json(output_root / RENDER_INPUT, review)
     render_root = output_root / "presentation"
     _renderer().render(output_root / RENDER_INPUT, render_root)

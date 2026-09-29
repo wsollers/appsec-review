@@ -103,5 +103,22 @@ class ReportTests(Harness):
             chain_report.build(report(ledger_head_sha256="sha256:" + "0" * 64), self.run_root())
 
 
+class PresentationTests(unittest.TestCase):
+    def test_renderer_section_projection(self):
+        import synthesis_report_presentation as presentation
+        self.assertEqual(presentation._attack_chains(None)["status"], "ABSENT")
+        section = {"schema": chain_report.SCHEMA, "run_id": RUN, "status": "SKIPPED",
+                   "reason": "not-applicable-no-chain-seeds", "binding": None, "chains": [], "appendix": [],
+                   "refuted_count": 0, "coverage": {}, "gaps": [], "note": chain_report.NOTE}
+        self.assertEqual(presentation._attack_chains(section),
+                         {"status": "SKIPPED", "reason": "not-applicable-no-chain-seeds", "chains": [], "appendix": [],
+                          "refuted_count": 0, "note": chain_report.NOTE})
+
+    def test_worker_pins_the_lane_14_report_module(self):
+        import synthesis_report_worker as worker
+        self.assertIn("attack_chain_report.py", worker.CODE_FILES)
+        self.assertIn(chain_report.RESULT, worker.ARTIFACTS)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,9 @@
 # Attack-chain composition: implementation plan
 
 Status: plan for [ADR-0016](../../decisions/ADR-0016-attack-chain-composition.md) (Accepted).
-S1-S3 are built on branch `kill-chains` (brief D steps S1-S4); S4 (report), S5 and S6 are open. The
+S1-S4 are built on branch `kill-chains` (brief D steps S1-S5); S5 (live) and S6 are open. The report
+section is a separate `attack-chains.json` artifact of 10 (like `finding-enrichment.json`), not a
+`synthesis-report.schema.json` field. The
 core is split across `attack_chain_seeds.py`, `attack_chain_derive.py`, `attack_chain_refute.py`
 and `attack_chain_pool.py`, and the lane tunables live in the `14-attack-chain-composition` job
 template rather than `registry/tunables.json`. Prerequisite: branch `review-batch` (ADR-0015: tool leads as ledger

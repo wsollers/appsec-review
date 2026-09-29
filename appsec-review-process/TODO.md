@@ -249,8 +249,10 @@ build index/plan, discovery, standards corpus, review-stage claims).
       persona + `attack_chain_refute.py` + `attack_chain_pool.py`; S4 workers, graph nodes
       `14-attack-chain-composition` / `14-attack-chain-refutation`, Dagster ops, optional edge into 10.
       Unit tests only (stub invokers); nothing has run live.
-- [ ] Report section (plan slice S4 / brief S5): `attack_chains` in `synthesis-report.schema.json`,
-      report assembly, HTML/PDF templates. Until then 10 waits for lane 14 but does not render chains.
+- [x] Report section (brief S5): `attack_chain_report.py` -> `attack-chains.json` in the 10 attempt,
+      "Attack chains" section in the HTML/TeX templates (body up to `chains_reported_max`, appendix,
+      refuted count, SKIPPED/absent reason). HTML and TeX render locally; the PDF compile (Docker
+      `audit-report` image) is untested here: run a 10 publication in WSL.
 - [ ] First live run on appsec-multi-vuln (expect argv -> strcpy at `case-001/main.cpp:6-7`), then
       freeciv21; record chain counts by state, gaps and cost here; tune the lane-14 tunables.
 - [ ] Controller: confirm the refuter shares the composer's model family (only sonnet-5 and haiku are

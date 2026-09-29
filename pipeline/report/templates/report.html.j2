@@ -144,7 +144,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 <style>{{ katex_css|safe }}</style>
 
 <nav class="toc" aria-label="Sections">
-  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a>
+  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a><a href="#chains">3A Attack chains</a>
   <a href="#gaps">4 Gaps</a><a href="#method">5 Scoring</a><a href="#evidence">A Evidence</a><a href="#provenance">B Provenance</a><a href="#latex">LaTeX source</a>
 </nav>
 
@@ -240,6 +240,35 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
       <div class="block"><div class="eyebrow">Remediation</div><p>{{ f.remediation }}</p></div>
     </article>
     {% endfor %}
+  </section>
+
+  <section id="chains">
+    <h2><span class="n">3A</span>Attack chains</h2>
+    {% set ac = attack_chains if attack_chains is defined else {'status': 'ABSENT', 'reason': 'not built', 'chains': [], 'appendix': [], 'refuted_count': 0, 'note': ''} %}
+    <p>{{ ac.note }}</p>
+    {% if ac.status != 'PUBLISHED' %}<p><b>No chain composed.</b> {{ ac.status }}: {{ ac.reason }}</p>{% elif not ac.chains and not ac.appendix %}<p><b>No chain reported.</b> {{ ac.reason }}</p>{% endif %}
+    {% if ac.refuted_count %}<p class="muted">{{ ac.refuted_count }} composed chain(s) were broken by the refuter; they are counted, not listed.</p>{% endif %}
+    {% for c in ac.chains %}
+    <article class="finding" id="{{ c.chain_id }}">
+      <div class="top"><span class="mono">#{{ c.rank }} {{ c.chain_id }}</span><span class="chip">{{ c.state }}</span></div>
+      <h3>{{ c.objective }}</h3>
+      <div class="meta">
+        <span class="eyebrow">Impact</span><span>{{ c.impact_kind }}</span>
+        <span class="eyebrow">Weakest link</span><span>{{ c.weakest.reason }}</span>
+        <span class="eyebrow">Refutation</span><span>{{ c.refutation.disposition }}{% if c.refutation.mechanism %}: {{ c.refutation.mechanism }}{% endif %} ({{ c.refutation.citations }} citation(s))</span>
+        {% if c.boundaries_crossed %}<span class="eyebrow">Boundaries</span><span>{{ c.boundaries_crossed|join(', ') }}</span>{% endif %}
+      </div>
+      <div class="block"><div class="eyebrow">Stages</div>
+        <div class="trail">{% for l in c.links %}<span><span class="lane">{{ l.stage }}</span>{{ l.label }} <span class="muted">({{ l.link_state }}{% if l.severity %}, {{ l.severity }}{% endif %})</span></span>{% if not loop.last %}{% set e = c.edges[loop.index0] %}<span class="arrow" aria-hidden="true">→</span><span class="muted">{{ e.basis }}{% if e.downgraded_from %} (claimed {{ e.downgraded_from }}){% endif %}</span><span class="arrow" aria-hidden="true">→</span>{% endif %}{% endfor %}</div></div>
+      <p>{{ c.narrative }}</p>
+    </article>
+    {% endfor %}
+    {% if ac.appendix %}
+    <div class="tbl"><table>
+      <thead><tr><th>Rank</th><th>Chain</th><th>State</th><th>Impact</th><th>Objective</th></tr></thead>
+      <tbody>{% for c in ac.appendix %}<tr><td class="num">{{ c.rank }}</td><td class="mono">{{ c.chain_id }}</td><td>{{ c.state }}</td><td>{{ c.impact_kind }}</td><td>{{ c.objective }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
   </section>
 
   <section id="gaps">

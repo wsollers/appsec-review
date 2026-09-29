@@ -11,6 +11,7 @@ from typing import Any
 
 from execution_state import Blocked, ROOT, atomic_json, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
+import attack_chain_report as chain_report
 import finding_enrichment as enrichment_core
 import report_input_assembly as assembly
 from schema_validate import validate_document
@@ -23,13 +24,14 @@ STANDALONE_REGISTRY = ROOT / "registry"
 STANDALONE_GRAPH = ROOT / "job-graph.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthesis.APPENDIX,
-    synthesis.TRACE, synthesis.PUBLICATION, enrichment_core.RESULT, presentation.RENDER_INPUT,
+    synthesis.TRACE, synthesis.PUBLICATION, enrichment_core.RESULT, chain_report.RESULT, presentation.RENDER_INPUT,
     presentation.RENDER_MANIFEST,
     *(f"presentation/{name}" for name in presentation.RENDERED),
     "permission.json", "lineage.json", "status.json"]
 CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", "synthesis_report.py",
     "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py",
     "cvss4.py", "cwe_catalog.py", "code_snippets.py", "epss_kev_snapshot.py",
+    "attack_chain_report.py", "attack_chain_refute.py", "attack_chain_derive.py",
     "registry/output-contracts/synthesis-report-publication.json",
     "registry/job-templates/10-synthesis-report.json", "job-graph.json")
 RENDER_FILES = ("pipeline/report/render.py", "pipeline/report/templates/report.tex.j2",
@@ -61,7 +63,8 @@ def current_inputs(run_id: str, jobs_root: Path) -> dict[str, Any]:
         loaded = assembly.load_accepted(pointer, run_id=run_id, name=name)
         accepted[name] = loaded["reference"]
     return {"run_id": run_id, "accepted": accepted, "implementation": _code_hashes(),
-            "enrichment": enrichment_core.input_bindings(Path(jobs_root).parents[1])}
+            "enrichment": enrichment_core.input_bindings(Path(jobs_root).parents[1]),
+            "attack_chains": chain_report.input_binding(Path(jobs_root).parents[1])}
 
 
 def _generator_sha256() -> str:
@@ -98,7 +101,10 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any], jobs_root: Path) ->
     expected_enrichment = enrichment_core.build(report, Path(jobs_root).parents[1])
     if read_json(attempt / enrichment_core.RESULT) != expected_enrichment:
         raise Blocked(f"{JOB}: retained finding enrichment differs from deterministic enrichment")
-    expected_review = presentation.build_review(report, trace, expected_enrichment)
+    expected_chains = chain_report.build(report, Path(jobs_root).parents[1])
+    if read_json(attempt / chain_report.RESULT) != expected_chains:
+        raise Blocked(f"{JOB}: retained attack-chain section differs from the accepted lane-14 ledger")
+    expected_review = presentation.build_review(report, trace, expected_enrichment, expected_chains)
     if read_json(attempt / presentation.RENDER_INPUT) != expected_review:
         raise Blocked(f"{JOB}: retained renderer input differs from deterministic projection")
     render_manifest = read_json(attempt / presentation.RENDER_MANIFEST)
@@ -143,15 +149,18 @@ def run(run_root: Path, run_id: str, dagster_run_id: str, force: bool = False,
         report, trace = read_json(attempt / synthesis.REPORT_JSON), read_json(attempt / synthesis.TRACE)
         enrichment = enrichment_core.build(report, run_root)
         atomic_json(attempt / enrichment_core.RESULT, enrichment)
-        presentation.render(report, trace, attempt, _generator_sha256(), enrichment)
+        chains = chain_report.build(report, run_root)
+        atomic_json(attempt / chain_report.RESULT, chains)
+        presentation.render(report, trace, attempt, _generator_sha256(), enrichment, chains)
         permission, lineage = _receipts(inputs, attempt)
         atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
-        gaps = report["limitations"]
+        gaps = sorted(set(report["limitations"]) | set(chains["gaps"]))
         status_name = "OK_WITH_GAPS" if gaps or report["unresolved_candidates"] else "OK"
         status = {"process": JOB, "status": status_name,
             "verified_findings": len(report["verified_findings"]),
             "unresolved_candidates": len(report["unresolved_candidates"]),
-            "limitations": len(gaps), "final": False, "presentation": "HTML_LATEX_AND_PDF_RENDERED"}
+            "limitations": len(gaps), "attack_chains": len(chains["chains"]) + len(chains["appendix"]),
+            "final": False, "presentation": "HTML_LATEX_AND_PDF_RENDERED"}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_run_id, worker_kind="deterministic_python", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
