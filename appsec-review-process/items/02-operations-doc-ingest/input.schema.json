@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "items/02-operations-doc-ingest/input.schema.json",
+  "title": "02-operations-doc-ingest item input (redacted, as staged for the worker)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "job_id", "needs", "params"],
+  "properties": {
+    "schema": {"const": "appsec-review/item-input/1"},
+    "run_id": {"type": "string"},
+    "job_id": {"const": "02-operations-doc-ingest"},
+    "params": {"type": "object", "additionalProperties": false},
+    "needs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target_path", "source", "source_files"],
+          "properties": {
+            "target_path": {"type": "string"},
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["job_id", "attempt_id", "fingerprint", "source_fingerprint", "source_revision", "pointer_sha256"],
+              "properties": {
+                "job_id": {"const": "00-intake"},
+                "attempt_id": {"type": "string"},
+                "fingerprint": {"type": "string"},
+                "source_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "source_revision": {"type": ["string", "null"]},
+                "pointer_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+              }
+            },
+            "source_files": {"type": "object"}
+          }
+        }
+      }
+    }
+  }
+}

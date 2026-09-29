@@ -1767,6 +1767,10 @@ LIFECYCLE_OPS['02-build-classify']=build_classify_work
 LIFECYCLE_OPS['02-build-plan']=build_plan_work
 LIFECYCLE_OPS['02-build-resolution']=build_resolution_work
 LIFECYCLE_OPS['02-ossf-scorecard']=ossf_scorecard_lifecycle_work
+# ADR-0025: a job with an item under items/ runs through the one generic executor op instead
+# (its needs must equal its graph dependencies); without the item the legacy op above stays.
+import job_executor
+ITEM_JOBS=job_executor.register_item_ops(LIFECYCLE,LIFECYCLE_OPS,CPU_POOL)
 
 
 @job(resource_defs={'workflow_settings':workflow_settings},

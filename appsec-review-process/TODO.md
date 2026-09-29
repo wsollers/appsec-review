@@ -447,6 +447,39 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       default off) and CodeQL `EntryPoint` rows into the CPG engine; library functions shipped for other
       consumers should be UNKNOWN, not UNREACHABLE, once export facts exist.
 - [ ] `docs/report-examples/appsec-review-sample.{html,pdf}` predate sections 3A-3C; re-render in WSL.
+## I: dev-mode restart and generic executor (ADR-0025, brief I, branch `dev-executor`)
+
+- [x] I1 dev-mode restart policy (`dev_restart.py`): `APPSEC_RUN_MODE=dev|prod` (default prod), content +
+  shape hashes, REUSE/RERUN/REWIND, early cutoff, `--force <job>`, `launch_job.py --mode/--explain`,
+  guard rails (dev receipts never evidence; `final_publication.publish` refuses dev). Operator doc
+  `docs/dev-mode-restart.md`. Prod fingerprints unchanged (tests/test_dev_restart.py).
+- [x] I2 generic item executor (`job_executor.py`, `items/<job>/item.json` + `input.schema.json` +
+  `output.schema.json`): PRE resolve/validate/redact-stream/hash, PROCESS argv worker, POST validate,
+  coverage/gap record, receipt (mode, evidence_grade, resume_from, rerun_command), pass-through
+  normaliser, publication through `publish_job_output`. `02-operations-doc-ingest` ported; outputs
+  byte-identical to the legacy worker (tests/test_job_executor.py).
+- [ ] HOLD with I3: I2b registers item ops in `dagster_workflow.py` (`job_executor.register_item_ops`).
+  `workflow.py` hashes `dagster_workflow.py` into the workflow-preparation branch fingerprints, so this
+  one-line wiring reruns build discovery (and what follows it) once in prod.
+- [x] I3 fingerprint scope audit (HOLD until the hello-autotools baseline finishes): 502 files are
+  hashed by the per-job code lists; all are semantics (code, schemas, contracts, templates, prompts,
+  rule sets). The only docs were 3 files in `job_graph.definition_hash` (phase-1 implementation
+  spec, `00-intake-recovery/config.md` and `prompt.md`); removed. Only 00-intake's recorded
+  definition hash changes once. ADR-0013 item 8 already keeps it out of intake staleness, so no job
+  reruns.
+- [ ] Controller decision (relaunch tax, not docs): `workflow.py` hashes `dagster_workflow.py` into
+  every workflow-preparation branch, so any op wiring edit reruns build discovery and what follows.
+  Four modules (`analysis_feature_lifecycle`, `control_feature_lifecycle`, `joern_cpg`, `test_evidence`)
+  still hash SHARED_RUNTIME files (`publish_job_output.py` and others) without
+  `drop_shared_runtime` (ADR-0013). Together they cover 15 jobs.
+- [ ] Legacy lifecycles keep their prod fingerprint in dev too (no early cutoff: inputs pin upstream
+  attempt ids). The win arrives per job as jobs are ported to the item executor.
+- [ ] Container items: `job_executor.check_item` refuses `grants.container` until an item needs one
+  (route through `container_execution` then). Network grants likewise.
+- [ ] Brief K (registry move) must update the `registry/...` paths in `items/*/item.json`.
+- [ ] The legacy CLI `operations_doc_ingest.py validate` does not accept executor attempts (different
+  inputs record); consumers read `accepted.json` + `result.json` and are unaffected.
+- [ ] Not run live: needs the code location started with `APPSEC_RUN_MODE=dev` in WSL.
 
 ## Breakage log
 

@@ -149,9 +149,10 @@ def definition_hash(job):
     for name in sorted(templates):
         template=read_json(REGISTRY/'job-templates'/(name+'.json'))
         registry[name]={'template':template,'composition':composition(template)}
+    # Semantics only (brief I3): the phase-1 implementation spec and the lane's operator config.md /
+    # prompt.md are documentation; no worker reads them.
     paths = [ROOT / 'execution_state.py', ROOT / 'process_gate.py', ROOT / 'phase1.py', ROOT / 'intake.py',
-             ROOT / 'job_graph.py', ROOT / 'phase-1-implementation-prompt.md', ROOT / 'process-manifest.json',
-             ROOT / 'tooling/buildenv-catalog.json', ROOT / '00-intake-recovery/config.md', ROOT / '00-intake-recovery/prompt.md', GRAPH]
+             ROOT / 'job_graph.py', ROOT / 'process-manifest.json', ROOT / 'tooling/buildenv-catalog.json', GRAPH]
     paths += sorted((ROOT.parent / 'schemas').glob('*.schema.json'))
     orchestration = Path(os.environ.get('APPSEC_ORCHESTRATOR_ROOT', ROOT.parent / 'orchestrator/dagster'))
     runtime = {name:file_hash(orchestration/name) for name in ('definitions.py','Dockerfile','requirements.txt','requirements.lock.txt','compose.yaml','dagster.yaml')}
