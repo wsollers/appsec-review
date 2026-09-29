@@ -19,6 +19,7 @@ import poc_fix_select as select
 from claude_cli_invoker import InvokerOutputError
 from review_control_loops import deterministic_merge
 from schema_validate import validate_document
+from tests.test_poc_fix_denylist import HOSTILE
 from tests.test_report_finding_enrichment import SHA, write_run
 
 AUTHOR = {"job_id": "12b-poc-and-fix", "attempt_id": "c1", "persona_id": "poc-fix-author", "request_sha256": None}
@@ -90,6 +91,14 @@ class EligibilityTests(Run):
         self.assertEqual([step["function"] for step in document["reachability"]["witness"]][:2], ["main", "helper"])
         self.assertEqual(document["snippets"][0]["path"], "app/main.cpp")
         self.assertIn("    std::strcpy(buffer, s);", document["snippets"][0]["source"])
+
+    def test_dependency_finding_without_source_line_is_excluded(self):
+        row = priority("claim-dep", line=9)
+        row["citations"][0]["locator_json"] = json.dumps({"component_ref": "pkg:npm/left-pad@1.0.0",
+                                                         "aliases": ["CVE-2026-0001"], "lead_ref": "match-1"})
+        result = self.selected(row)
+        self.assertEqual(result["requests"], [])
+        self.assertEqual(result["excluded"][0]["reason"], "not-reachable")
 
     def test_cap_and_unpinnable_hash_are_gaps(self):
         result = self.selected(priority(REACH, line=9, score=9.5), priority("claim-reach-2", line=9, score=9.0),
@@ -168,6 +177,25 @@ class DeriveTests(Run):
         self.assertEqual(record["fix"]["status"], "PATCH_PROPOSED_UNVALIDATED")
         self.assertEqual(derive.rejected_parts(record), ["PoC text withheld by the denylist (process-spawn)"])
         self.assertEqual(derive.recheck(record, self.workspace), [])
+
+    def test_every_denylist_rule_withholds_a_hostile_poc_through_the_derive_step(self):
+        for rule, samples in HOSTILE.items():
+            for sample in samples:
+                reply = good_reply()
+                reply["poc"]["text"] = "helper(big);\n" + sample
+                with self.subTest(rule=rule, sample=sample):
+                    record, _ = derive.derive(self.workspace, reply, author=AUTHOR)
+                    self.assertEqual(record["poc"]["status"], "REJECTED_DENYLIST")
+                    self.assertIsNone(record["poc"]["text"])
+                    self.assertIn(rule, {hit["rule"] for hit in record["poc"]["denylist_hits"]})
+                    self.assertNotIn(sample, json.dumps(record))
+                    self.assertEqual(derive.recheck(record, self.workspace), [])
+
+    def test_prose_material_in_the_explanation_is_withheld(self):
+        reply = good_reply(explanation="helper() overflows; then run: cat input | sh")
+        record, _ = derive.derive(self.workspace, reply, author=AUTHOR)
+        self.assertEqual((record["explanation"], record["explanation_status"]), (None, "REJECTED_DENYLIST"))
+        self.assertEqual(derive.rejected_parts(record), ["explanation withheld by the denylist (interpreter-pipe)"])
 
     def test_denylisted_fix_addition_is_withheld(self):
         reply = good_reply(fix={"diff": "--- a/app/main.cpp\n+++ b/app/main.cpp\n@@ -9 +9 @@\n-    std::strcpy(buffer, s);\n"
