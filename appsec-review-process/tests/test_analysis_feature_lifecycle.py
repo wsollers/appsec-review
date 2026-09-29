@@ -8,7 +8,8 @@ import unittest
 from unittest import mock
 
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
-import analysis_feature_lifecycle as life  # noqa: E402
+import analysis_feature_lifecycle as life
+import dep_reachability  # noqa: E402
 from execution_state import Blocked, atomic_json, file_hash  # noqa: E402
 
 SHA="sha256:"+"1"*64
@@ -53,13 +54,18 @@ class LifecycleTests(unittest.TestCase):
                 skipped=life.run("run","dag","13-fuzz-target-triage")
                 self.assertEqual(skipped,{"status":"SKIPPED","reason":"not-applicable-no-fuzz-target"})
 
-    def test_cve_constructs_empty_run_owned_assessments_without_hand_input(self):
+    def test_cve_derives_run_owned_assessments_without_hand_input(self):
+        """ADR-0022: 06 derives its evidence rows and per-match document; nothing is hand-supplied."""
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder); pointer=base/"sca-accepted.json"; pointer.write_text("{}\n")
             inputs={"run_id":"run","job_id":"06-cve-reachability",
                 "source_generation":SHA,"sca":{"attempt_id":"s1","path":"x","sha256":SHA,"accepted_path":str(pointer)},
                 "sca_matches_sha256":SHA,"source_binding":{},"ir":None,
                 "generated_at":"2026-09-27T00:00:00Z","code":{}}
+            rows=[{"match_ref":"VM-000001","classification":"reachable",
+                   "evidence":[{"kind":"call","path":"app/main.c","sha256":SHA,"locator":"main@1"}]}]
+            document=dep_reachability.analyse(sca={"matches":[]},sbom={"components":[]},files={},
+                engine_set=dep_reachability.engines.EngineSet(),osv=None,osv_gap="osv-not-configured",reviewed=None)["document"]
             result={"schema":"appsec-review/cve-reachability/1.0","run_id":"run","job_id":"06-cve-reachability",
                 "attempt_id":"a1","source_snapshot_sha256":SHA,
                 "sca_binding":{"job_id":"02-sca-vulnerability-match","attempt_id":"s1",
@@ -67,15 +73,21 @@ class LifecycleTests(unittest.TestCase):
                 "assessments":[],"coverage_gaps":[],"claim_ceiling":"EVIDENCE_LEADS_ONLY"}
             def build(request,attempt_id):
                 evidence=json.loads(Path(request["reachability_evidence"]).read_text())
-                self.assertEqual(evidence,{"assessments":[]})
+                self.assertEqual(evidence,{"assessments":rows})
                 return {"outputs/cve-reachability.json":(json.dumps(result)+"\n").encode(),
                         "outputs/reachability-evidence-identity.json":b'{"path":"automatic","sha256":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}\n'},[]
             with mock.patch.object(life,"current_inputs",return_value=inputs), \
                  mock.patch.object(life,"data_path",side_effect=lambda _run,*parts:base.joinpath(*parts)), \
                  mock.patch.object(life,"coordinate_worker_lifecycle",side_effect=self.fake_coordinate), \
                  mock.patch.object(life,"record_terminal_current",side_effect=self.fake_record), \
+                 mock.patch.object(life,"_derive_reachability",return_value={"assessments":rows,"document":document}), \
                  mock.patch.object(life.dependency_workers,"build_reachability",side_effect=build):
                 self.assertEqual(life.run("run","dag","06-cve-reachability")["status"],"OK")
+            written=[path for path in base.rglob("dependency-reachability.json")]
+            self.assertEqual(len(written),1)
+            published=json.loads(written[0].read_text())
+            self.assertEqual(published["sca_binding"]["attempt_id"],"s1")
+            self.assertEqual(life.validate_document(published,"dependency-reachability.schema.json"),[])
 
     def test_skip_receipt_retains_canonical_reason_and_assembly_evidence(self):
         inputs={"run_id":"run","job_id":"13-fuzz-target-triage","source_generation":SHA,

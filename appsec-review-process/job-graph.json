@@ -579,9 +579,21 @@
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
+        },
+        {
+          "job": "02-code-property-graph",
+          "kind": "required",
+          "contract": "code-property-graph",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-codeql-sast",
+          "kind": "required",
+          "contract": "codeql-sast",
+          "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Deterministic static reachability classification over the exact accepted SCA matches and explicit hash-bound run-owned evidence. Version matches alone never establish reachability and outputs remain evidence leads.",
+      "planned_scope": "Deterministic language-aware reachability (ADR-0022) over the exact accepted SCA matches: advisory symbols from a reviewed map or the OSV index, engines by ecosystem (CPG/IR, CodeQL tables, language-server call hierarchy, tree-sitter hints) over hash-bound run evidence, joined into reachable/unreachable/unknown with a witness path. Version matches alone never establish reachability and outputs remain evidence leads.",
       "required_artifacts": [
         "result.json",
         "inputs.json",

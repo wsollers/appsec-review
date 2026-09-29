@@ -2001,7 +2001,9 @@
        "kind": "lifecycle",
        "consumes": [
         "job:02-sca-vulnerability-match",
-        "job:02-ir-facts"
+        "job:02-ir-facts",
+        "job:02-code-property-graph",
+        "job:02-codeql-sast"
        ],
        "produces": [
         "job:06-cve-reachability"
@@ -2076,6 +2078,8 @@
        "job:02-native-sast",
        "job:02-ir-facts",
        "job:02-sca-vulnerability-match",
+       "job:02-code-property-graph",
+       "job:02-codeql-sast",
        "job:02-iac-config-scan"
       ],
       "leaves": [
@@ -4683,7 +4687,9 @@
        "kind": "lifecycle",
        "consumes": [
         "job:02-sca-vulnerability-match",
-        "job:02-ir-facts"
+        "job:02-ir-facts",
+        "job:02-code-property-graph",
+        "job:02-codeql-sast"
        ],
        "produces": [
         "job:06-cve-reachability"
@@ -4697,7 +4703,9 @@
      "rollup": {
       "enters": [
        "job:02-sca-vulnerability-match",
-       "job:02-ir-facts"
+       "job:02-ir-facts",
+       "job:02-code-property-graph",
+       "job:02-codeql-sast"
       ],
       "leaves": [
        "job:06-cve-reachability"
@@ -8139,6 +8147,16 @@
      "job": "02-ir-facts",
      "kind": "required",
      "contract": "ir-facts"
+    },
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-codeql-sast",
+     "kind": "required",
+     "contract": "codeql-sast"
     }
    ],
    "declared_inputs": [
@@ -8153,6 +8171,22 @@
     {
      "need": "optional",
      "input": "accepted LLVM IR facts"
+    },
+    {
+     "need": "optional",
+     "input": "accepted code property graph"
+    },
+    {
+     "need": "optional",
+     "input": "accepted CodeQL SAST traced graph tables"
+    },
+    {
+     "need": "optional",
+     "input": "published OSV snapshot index"
+    },
+    {
+     "need": "optional",
+     "input": "run-supplied reviewed advisory-to-function map, entry points, CodeQL/LSP/tree-sitter documents"
     }
    ],
    "inputs_source": "registry/job-templates/06-cve-reachability.json",
@@ -8171,7 +8205,9 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-sca-vulnerability-match",
-    "job:02-ir-facts"
+    "job:02-ir-facts",
+    "job:02-code-property-graph",
+    "job:02-codeql-sast"
    ],
    "produces": [
     "job:06-cve-reachability"
@@ -13367,7 +13403,8 @@
     "job:02-codeql-sast"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-cve-reachability"
    ]
   },
   "job:02-code-property-graph": {
@@ -13379,7 +13416,8 @@
     "job:02-code-property-graph"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:06-cve-reachability"
    ]
   },
   "job:02-native-sast": {

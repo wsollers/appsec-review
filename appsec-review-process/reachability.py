@@ -96,6 +96,30 @@ class CallGraph:
         graph.identity = dict(identity or {})
         return graph
 
+    @classmethod
+    def from_tables(cls, functions: Iterable[dict[str, Any]], calls: Iterable[dict[str, Any]],
+                    coverage_gaps: Iterable[Any] = (), identity: dict[str, Any] | None = None) -> "CallGraph":
+        """A graph from language-neutral tables (CodeQL ``CallEdges``, ADR-0022) with CPG semantics.
+
+        ``functions``: ``{full_name, name, path, start_line, end_line, source_sha256}``;
+        ``calls``: ``{caller, callee, name, path, line, code}`` where ``callee`` is the target's
+        full name (defined or not). Rows are converted to CPG records so resolution, escapes and
+        the BFS are exactly the CPG ones.
+        """
+        records: list[dict[str, Any]] = []
+        for row in functions:
+            records.append({"kind": "symbol", "label": "METHOD", "full_name": row["full_name"],
+                            "name": row.get("name") or short_name(row["full_name"]),
+                            "source_path": row.get("path"), "start_line": row.get("start_line") or 0,
+                            "end_line": row.get("end_line") or row.get("start_line") or 0,
+                            "source_sha256": row.get("source_sha256")})
+        for row in calls:
+            records.append({"kind": "call", "label": "CALL", "caller": row["caller"],
+                            "full_name": row.get("callee") or "", "name": row.get("name"),
+                            "source_path": row.get("path"), "start_line": row.get("line") or 0,
+                            "code": row.get("code") or ""})
+        return cls.from_records(records, coverage_gaps, identity)
+
     def _add_call(self, record: dict[str, Any], identifiers: dict[str, set]) -> None:
         caller = record.get("caller") or ""
         path, line = record.get("source_path"), record.get("start_line") or 0
@@ -338,6 +362,61 @@ def cve_evidence(sca: dict[str, Any], vulnerable: dict[str, list[str]], graph: C
                     "evidence": [{"kind": "call", "path": target["file"], "sha256": sha,
                                   "locator": f"no-path-to:{target['function']}@{target['line']}"[:256]}]})
     return {"assessments": assessments, "witnesses": witnesses}
+
+
+def symbol_matches(full_name: str | None, symbol: str, package: str | None = None, context: str = "",
+                   name: str | None = None) -> bool:
+    """``full_name`` names ``symbol`` (``Name`` or ``Type.Name``) of ``package``.
+
+    The last segment of ``full_name`` must be the symbol's last segment; every qualifier segment of
+    the symbol (``Type`` in ``Type.Name``) and the package, when given, must appear in the full name
+    or ``context`` (the defining file path). Name-only matching is what the CPG can do for an
+    undefined callee; the package test removes most same-name collisions across dependencies.
+    """
+    parts = [part for part in re.split(r"[.:]+", symbol) if part]
+    if not full_name or not parts or (name or short_name(full_name)) != parts[-1]:
+        return False
+    text = full_name + " " + context
+    return all(part in text for part in parts[:-1]) and (not package or package in text)
+
+
+def assess_symbols(graph: CallGraph, symbols: Iterable[dict[str, Any]], entries: list[str],
+                   max_depth: int = MAX_DEPTH, max_nodes: int = MAX_NODES) -> dict[str, Any]:
+    """Best reachability of any listed dependency symbol (``{package, symbol}``) from ``entries``.
+
+    A symbol is either defined in the graph (vendored dependency analysed with the application;
+    the target is that function) or only called (the target is each calling function and the
+    witness ends at the call site). The strongest state wins (REACHABLE < UNREACHABLE < UNKNOWN in
+    ``STATES`` order); among equals the shortest witness, then the first in sorted order.
+    """
+    best = None
+    for item in sorted(symbols, key=lambda row: (row.get("package") or "", row["symbol"])):
+        symbol, package = item["symbol"], item.get("package")
+        name = re.split(r"[.:]+", symbol)[-1]
+        defined = sorted(full for full in graph.by_short.get(name, [])
+                         if symbol_matches(full, symbol, package, graph.methods[full]["path"] or "",
+                                          graph.methods[full]["name"]))
+        callers = {}
+        for caller, rows in sorted(graph.external.items()):
+            if caller not in graph.methods:
+                continue
+            hit = next((row for row in rows if row["symbol"] == name and
+                        symbol_matches(row["callee"] or row["symbol"], symbol, package, "", row["symbol"])), None)
+            if hit:
+                callers[caller] = hit
+        for target in sorted(set(defined) | set(callers)):
+            result = analyze(graph, target, entries, max_depth=max_depth, max_nodes=max_nodes)
+            if target in callers and target not in defined and result["state"] == REACHABLE:
+                call = callers[target]
+                result["witness"].append({"function": symbol, "file": call["path"], "line": call["line"],
+                                          "code": call["code"], "note": "call into the vulnerable dependency function"})
+            result = {**result, "vulnerable_function": symbol, "package": package}
+            rank = (STATES.index(result["state"]), len(result["witness"]))
+            if best is None or rank < (STATES.index(best["state"]), len(best["witness"])):
+                best = result
+    if best is None:
+        return {"state": UNKNOWN, "witness": [], "reason": "no listed vulnerable function appears in the analysed graph"}
+    return best
 
 
 def main(argv: list[str] | None = None) -> int:
