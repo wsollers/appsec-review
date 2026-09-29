@@ -21,6 +21,7 @@ ARG JAVA_DOWNLOAD_URL=https://github.com/adoptium/temurin21-binaries/releases/do
 ARG JAVA_SHA256=e4446ff06a276155697597cc0f1b15da004ff083f4964a35271ecee567177370
 # x64dbg under Wine (Debian bookworm wine 8.0; wine32:i386 for the PE32 x96dbg/x32dbg).
 ARG WINE_VERSION=8.0~repack-4
+ARG WINE_EXTRA_PACKAGES=
 ARG X64DBG_TAG=2026.05.27
 ARG X64DBG_SNAPSHOT=snapshot_2026-05-27_12-11
 ARG X64DBG_SHA256=d41966dfc5b435a372798245300ca0ab7bb8e48bdbf48512c6fb20fcca427697
@@ -97,11 +98,16 @@ RUN curl -fsSL "$JAVA_DOWNLOAD_URL" -o /tmp/jdk.tar.gz \
 # x64dbg is a Windows debugger; it runs here only under Wine. wine32:i386 (multiarch) is required:
 # x96dbg.exe and x32dbg.exe are PE32. Mono and Gecko are never installed (WINEDLLOVERRIDES), and the
 # MSVC runtime DLLs shipped with x64dbg load before Wine's builtins.
+# WINE_EXTRA_PACKAGES (per image) names the real ALSA library where a provider of the virtual
+# libasound2 that conflicts with wine32:i386 may already be installed; java -version proves
+# no JDK was removed to make room.
 RUN dpkg --add-architecture i386 \
     && apt-get update && apt-get install -y --no-install-recommends \
        "wine=${WINE_VERSION}" "wine64=${WINE_VERSION}" "wine32:i386=${WINE_VERSION}" xvfb xauth \
+       ${WINE_EXTRA_PACKAGES} \
     && rm -rf /var/lib/apt/lists/* \
-    && wine --version
+    && wine --version \
+    && java -version
 RUN cd /tmp \
     && curl -fsSL -o x64dbg.zip \
        "https://github.com/x64dbg/x64dbg/releases/download/${X64DBG_TAG}/${X64DBG_SNAPSHOT}.zip" \
