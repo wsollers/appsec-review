@@ -2344,6 +2344,40 @@
        ]
       },
       {
+       "ref": "job:14-attack-chain-composition",
+       "id": "14-attack-chain-composition",
+       "name": "Attack-chain Composition",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:09-independent-verification",
+        "job:03-threat-model-dfd-stride",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:14-attack-chain-composition"
+       ],
+       "declared_inputs": [
+        "accepted 09-independent-verification result (and its 08 upstream)",
+        "accepted integrated threat model",
+        "accepted component map"
+       ]
+      },
+      {
+       "ref": "job:14-attack-chain-refutation",
+       "id": "14-attack-chain-refutation",
+       "name": "Attack-chain Refutation and Ledger",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:14-attack-chain-composition"
+       ],
+       "produces": [
+        "job:14-attack-chain-refutation"
+       ],
+       "declared_inputs": [
+        "accepted 14-attack-chain-composition result and seeds"
+       ]
+      },
+      {
        "ref": "job:10-synthesis-report",
        "id": "10-synthesis-report",
        "name": "Accepted Evidence-backed Draft Report Publisher",
@@ -2456,7 +2490,6 @@
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
-       "job:14-attack-chain-refutation",
        "job:dynamic-rescope",
        "critical-findings-md"
       ],
@@ -2475,6 +2508,8 @@
        "job:11-remediation-proposal",
        "job:remediation-retest-feedback",
        "job:12-scoring-prioritization",
+       "job:14-attack-chain-composition",
+       "job:14-attack-chain-refutation",
        "job:10-synthesis-report",
        "job:completeness-audit",
        "job:synthetic-hypothesis-resynthesis"
@@ -2497,6 +2532,9 @@
        "verified claims and remediation proposals",
        "accepted independent-verification result",
        "accepted complete scoring persona/tool-pool merge when verifications exist",
+       "accepted 09-independent-verification result (and its 08 upstream)",
+       "accepted integrated threat model",
+       "accepted 14-attack-chain-composition result and seeds",
        "exact accepted synthesis-input manifest",
        "F03 component map",
        "S02 threat model",
@@ -2528,7 +2566,6 @@
      "llm-invoker",
      "buildenv-catalog",
      "buildenv-image",
-     "job:14-attack-chain-refutation",
      "critical-findings-md"
     ],
     "leaves": [
@@ -2623,6 +2660,8 @@
      "job:11-remediation-proposal",
      "job:remediation-retest-feedback",
      "job:12-scoring-prioritization",
+     "job:14-attack-chain-composition",
+     "job:14-attack-chain-refutation",
      "job:10-synthesis-report",
      "job:completeness-audit",
      "job:synthetic-hypothesis-resynthesis"
@@ -2745,6 +2784,9 @@
      "verified claims and remediation proposals",
      "accepted independent-verification result",
      "accepted complete scoring persona/tool-pool merge when verifications exist",
+     "accepted 09-independent-verification result (and its 08 upstream)",
+     "accepted integrated threat model",
+     "accepted 14-attack-chain-composition result and seeds",
      "exact accepted synthesis-input manifest",
      "F03 component map",
      "S02 threat model",

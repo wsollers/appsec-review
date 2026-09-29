@@ -59,7 +59,7 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | `docs/` | Design doc, review notes, ADRs, migration notes |
 | `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `docs/architecture/migration.md` |
 | `images/audit-native/` | Pinned native-analysis image for clang-tidy/cppcheck, compile feasibility, IR emit/link, `ir-facts`, and CSA/CTU. Runs only inside the hostile-build boundary. |
-| `images/audit-codeql/` | CodeQL bundle (pinned), offline; pre-engagement security-extended suites per language; license gate (ADR-0006) |
+| `images/audit-codeql/` | CodeQL bundle (pinned), offline; security-extended suites per language for the lifecycle job `02-codeql-sast` (ADR-0017) and pre-engagement runs; .NET SDK for C#; license gate (ADR-0006). `audit-codeql-native` adds the traced C/C++ lane (`docs/language-servers.md`) |
 | `images/audit-iac/` | Terraform/Kubernetes/Helm/Kustomize policy scanning (checkov, tfsec, trivy config, kube-linter) — split out of `audit-static` 2026-09-17 |
 | `images/audit-container/` | Dockerfile linting + base-image inventory (Hadolint, docker-base-images) — split out of `audit-static` 2026-09-17 |
 | `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see `appsec-review-process/TODO.md`) |
@@ -81,13 +81,16 @@ Top-level process docs now live under `docs/`:
 - [`docs/evidence/intelligence-sources-and-jobs.md`](docs/evidence/intelligence-sources-and-jobs.md)
 - [`docs/design-parity/design-parity-completion-plan.md`](docs/design-parity/design-parity-completion-plan.md)
 - [`docs/dagster/critical-findings-sarif-job.md`](docs/dagster/critical-findings-sarif-job.md)
+- [`docs/report-path/happy-path-operator-guide.md`](docs/report-path/happy-path-operator-guide.md) (run to a draft report; tail the run log)
+- [`docs/run-log.md`](docs/run-log.md), [`docs/osv-feed.md`](docs/osv-feed.md), [`docs/language-servers.md`](docs/language-servers.md)
 
 The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).
 Machine-readable implementation readiness lives in
 [`appsec-review-process/design-parity-manifest.json`](appsec-review-process/design-parity-manifest.json).
 Validate it with `python -B appsec-review-process/validate_design_parity.py`; generated stable
 views are the [parity report](docs/design-parity/design-parity-report.md),
-[lifecycle graph](docs/design-parity/full-review-workflow.mmd), and
+[lifecycle graph](docs/design-parity/full-review-workflow.mmd), the one-node-per-job
+[pipeline job graph](docs/design-parity/pipeline-job-graph.mermaid), and
 [operator readiness table](docs/design-parity/design-parity-readiness.md). The shared terminal result/state
 contract and read-only validation boundary are described in
 [the worker-result envelope](docs/adapters/worker-result-envelope.md).
