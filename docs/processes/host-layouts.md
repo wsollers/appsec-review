@@ -73,6 +73,8 @@ target runs.
 - The Windows clone is also visible here as `/mnt/f/repos/appsec-review`; runs use the distro
   clone `~/projects/appsec-review` (the Windows filesystem is slow from WSL and has different
   ownership).
+- `scripts/sync_wsl.sh [BRANCH]` (default `main`) resets that clone to `origin/BRANCH`. It
+  stashes local changes first; `git stash pop` brings them back.
 
 ## hal5000, Windows side
 
