@@ -453,3 +453,13 @@ OPEN:
 - OSV symbols exist mostly for Go; other ecosystems need `inputs/cve-reachability-functions.json`.
 - `codeql-cpp-traced` tables reach 06 only once C's `02-native-build -> 02-codeql-sast` wiring lands.
 - No Ruby or Rust CodeQL pack; PHP has no CodeQL extractor (lsp/treesitter only).
+
+## G: per-language CodeQL nodes and reachability engines (brief G, design agreed 2026-09-29)
+
+Design: per-language `02-codeql-<lang>` nodes (parallel; compiled languages gated on a successful build of that language, otherwise a gap, never a failure), engine jobs `06-reachability-codeql` and `06-reachability-ir` (same table shape), and `06-cve-reachability` becomes the Python correlator whose output feeds the report and the 07/08/09 red/blue lanes. See `docs/agent-briefs/G-per-language-codeql-reachability.md`.
+
+OPEN (deferred, not in brief G's first cut):
+- [ ] **Java bytecode reachability** in `06-reachability-ir`: a JVM call-graph engine over the built classes and the vendored dependency jars (for example Soot, WALA or ASM-based class-hierarchy/RTA analysis), including shaded/relocated jars, so a Java dependency can be `reachable`/`unreachable` without relying on CodeQL alone.
+- [ ] **.NET IL reachability** in `06-reachability-ir`: the same for C# assemblies (IL call graph over the built assemblies and the vendored NuGet packages, resolving assembly and namespace names to package ids).
+- [ ] Rust MIR/LLVM IR engine and Go SSA engine (same table shape) once the C/C++ LLVM IR + Joern path is qualified.
+- [ ] Reflection, dynamic dispatch, dependency injection and serialisation entry points: record a per-language "incomplete call graph" reason so `unreachable` is never asserted across them.
