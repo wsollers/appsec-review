@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, dependency-free JSON-Schema-subset validator for the schemas/ directory.
+"""Small, dependency-free JSON Schema (Draft 2020-12) validator for the schemas/ directory.
 
 Added 2026-09-19 as the "define schemas, place them centrally, write/wire in/test the schema
 validators" first step (see claude project TODO -- the common finding/evidence/interjob-transfer
@@ -9,10 +9,18 @@ record of hand-rolling a real, robust parser instead of trusting a generic libra
 what's needed (see review_cli.py's own budget-table markdown parser, added after a regex-based
 guess silently dropped the `full` tier -- bug #2 in the harness doc).
 
-Supports the subset actually used by schemas/*.schema.json: type (incl. a list of types for
-nullable fields), required, properties, additionalProperties, enum, const, pattern, items,
-minItems, and $ref (resolved against sibling files in the same schemas/ directory, one level --
-no remote $ref, no $ref chains through $defs, since none of our schemas need that yet).
+Keyword coverage (brief L): every keyword is either an assertion/applicator in
+``SUPPORTED_KEYWORDS``, an annotation in ``ANNOTATION_KEYWORDS`` (no effect on validity), or
+rejected: a schema node carrying any other keyword raises ``UnsupportedSchema`` instead of being
+silently ignored. ``schema_keyword_lint.py`` lists the keywords the repo's schemas use against
+these sets. ``format`` is asserted, and only the formats in ``FORMAT_CHECKERS`` are accepted.
+
+Three deliberate dialect points, all kept from the original subset so no schema changes meaning:
+``pattern`` uses Python ``re`` syntax (the schemas use ``\\Z``) and is matched with ``re.match``
+(anchored at the start of the string); ``$ref`` resolves a bare file name against schemas/ (or a
+sub-directory such as ``common/``), ``file#/json/pointer`` inside that file, and ``#/json/pointer``
+inside the document being validated. Remote references are rejected. ``const`` and ``enum`` use
+Python equality, so ``0`` satisfies ``const: false`` (``uniqueItems`` uses JSON equality).
 
 classification/classification_taxonomy cross-checking against verdict-taxonomies.json is NOT
 expressible as plain JSON Schema (it depends on a sibling field's value) and is handled by
@@ -20,6 +28,8 @@ expressible as plain JSON Schema (it depends on a sibling field's value) and is 
 """
 from __future__ import annotations
 
+import datetime
+import functools
 import json
 import re
 from pathlib import Path
@@ -53,6 +63,28 @@ class SchemaStore:
         return json.loads((self.dir / "verdict-taxonomies.json").read_text(encoding="utf-8"))
 
 
+# Assertion and applicator keywords this validator implements.
+SUPPORTED_KEYWORDS = frozenset({
+    "$ref", "type", "enum", "const",
+    "properties", "patternProperties", "additionalProperties", "required", "propertyNames",
+    "minProperties", "maxProperties", "dependentRequired",
+    "items", "prefixItems", "minItems", "maxItems", "uniqueItems", "contains", "minContains",
+    "maxContains",
+    "minLength", "maxLength", "pattern", "format",
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+    "allOf", "anyOf", "oneOf", "not", "if", "then", "else",
+})
+# Keywords with no effect on validity. $defs/definitions are containers reached through $ref.
+ANNOTATION_KEYWORDS = frozenset({
+    "$schema", "$id", "$comment", "$defs", "definitions", "title", "description", "default",
+    "examples", "deprecated", "readOnly", "writeOnly", "contentMediaType", "contentEncoding",
+})
+
+
+class UnsupportedSchema(ValueError):
+    """A schema uses a keyword, format or $ref this validator does not implement."""
+
+
 _TYPE_MAP = {
     "object": dict,
     "array": list,
@@ -69,7 +101,7 @@ def _check_type(value: Any, type_spec: Any) -> bool:
     for t in types:
         py_t = _TYPE_MAP.get(t)
         if py_t is None:
-            continue
+            raise UnsupportedSchema(f"unknown type {t!r}")
         # bool is a subclass of int in Python; only accept bool for "boolean" and int for "integer"/"number"
         if t == "boolean" and isinstance(value, bool):
             return True
@@ -80,14 +112,131 @@ def _check_type(value: Any, type_spec: Any) -> bool:
     return False
 
 
-def validate(instance: Any, schema: dict, store: SchemaStore, path: str = "$") -> list[str]:
-    """Returns a list of human-readable error strings. Empty list means valid."""
+def _json_key(value: Any) -> Any:
+    """A hashable key under which two values are equal exactly when JSON says they are
+    (1 == 1.0, but true != 1; object key order does not matter)."""
+    if isinstance(value, bool) or value is None:
+        return ("lit", value)
+    if isinstance(value, (int, float)):
+        return ("num", value)
+    if isinstance(value, str):
+        return ("str", value)
+    if isinstance(value, list):
+        return ("arr", tuple(_json_key(v) for v in value))
+    if isinstance(value, dict):
+        return ("obj", tuple(sorted((k, _json_key(v)) for k, v in value.items())))
+    return ("other", repr(value))
+
+
+def json_equal(left: Any, right: Any) -> bool:
+    return _json_key(left) == _json_key(right)
+
+
+_RFC3339 = re.compile(r"(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d+)?"
+                      r"([Zz]|[+-](\d{2}):(\d{2}))\Z")
+
+
+def _is_date(year: int, month: int, day: int) -> bool:
+    try:
+        datetime.date(year, month, day)
+        return True
+    except ValueError:
+        return False
+
+
+def _format_date_time(value: str) -> bool:
+    m = _RFC3339.match(value)
+    if not m:
+        return False
+    year, month, day, hour, minute, second = (int(m.group(i)) for i in range(1, 7))
+    if not _is_date(year, month, day) or hour > 23 or minute > 59 or second > 60:
+        return False
+    return m.group(9) is None or (int(m.group(9)) <= 23 and int(m.group(10)) <= 59)
+
+
+def _format_date(value: str) -> bool:
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})\Z", value)
+    return bool(m) and _is_date(*(int(g) for g in m.groups()))
+
+
+FORMAT_CHECKERS = {"date-time": _format_date_time, "date": _format_date}
+
+
+def check_format(name: str, value: str) -> bool:
+    checker = FORMAT_CHECKERS.get(name)
+    if checker is None:
+        raise UnsupportedSchema(f"unsupported format {name!r}")
+    return checker(value)
+
+
+@functools.lru_cache(maxsize=4096)
+def _regex(pattern: str) -> re.Pattern:
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise UnsupportedSchema(f"pattern {pattern!r} does not compile: {exc}") from None
+
+
+def _pointer(document: Any, fragment: str, ref: str) -> Any:
+    node = document
+    if fragment in ("", "/"):
+        return node
+    if not fragment.startswith("/"):
+        raise UnsupportedSchema(f"$ref {ref!r}: only JSON-pointer fragments are supported")
+    for token in fragment[1:].split("/"):
+        token = token.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, dict) and token in node:
+            node = node[token]
+        elif isinstance(node, list) and token.isdigit() and int(token) < len(node):
+            node = node[int(token)]
+        else:
+            raise UnsupportedSchema(f"$ref {ref!r} does not resolve")
+    return node
+
+
+def resolve_ref(ref: str, root: Any, store: "SchemaStore") -> tuple[Any, Any]:
+    """Returns (schema node, the root document it belongs to)."""
+    if "://" in ref or ref.startswith("/"):
+        raise UnsupportedSchema(f"remote or absolute $ref {ref!r} is not supported")
+    file_part, _, fragment = ref.partition("#")
+    document = store.load(file_part) if file_part else root
+    if document is None:
+        raise UnsupportedSchema(f"local $ref {ref!r} with no enclosing schema document")
+    return _pointer(document, fragment, ref), document
+
+
+def _number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def validate(instance: Any, schema: Any, store: SchemaStore, path: str = "$",
+             root: Any = None) -> list[str]:
+    """Returns a list of human-readable error strings. Empty list means valid.
+
+    ``root`` is the schema document local ``#/...`` references resolve against; it defaults to
+    ``schema`` itself. Raises ``UnsupportedSchema`` for a keyword, format or reference outside
+    SUPPORTED_KEYWORDS / ANNOTATION_KEYWORDS / FORMAT_CHECKERS."""
+    if schema is True:
+        return []
+    if schema is False:
+        return [f"{path}: no value is allowed here (schema false)"]
+    if not isinstance(schema, dict):
+        raise UnsupportedSchema(f"{path}: schema node is {type(schema).__name__}, not an object")
+    if root is None:
+        root = schema
+    unknown = set(schema) - SUPPORTED_KEYWORDS - ANNOTATION_KEYWORDS
+    if unknown:
+        raise UnsupportedSchema(f"{path}: unsupported schema keyword(s) {sorted(unknown)}")
+
     errors: list[str] = []
 
     if "$ref" in schema:
-        ref_schema = store.load(schema["$ref"])
-        return validate(instance, ref_schema, store, path)
+        target, target_root = resolve_ref(schema["$ref"], root, store)
+        errors.extend(validate(instance, target, store, path, target_root))
 
+    # const/enum keep Python equality (0 == false, 1 == true), as the original subset did: three
+    # tests (owasp_dispatch, evidence_index_metrics, pool_rendezvous) pin the later, named check
+    # that rejects a number for a boolean. JSON equality (json_equal) is an owner decision (TODO L).
     if "const" in schema:
         if instance != schema["const"]:
             errors.append(f"{path}: expected const {schema['const']!r}, got {instance!r}")
@@ -100,36 +249,136 @@ def validate(instance: Any, schema: dict, store: SchemaStore, path: str = "$") -
     if "enum" in schema and instance not in schema["enum"]:
         errors.append(f"{path}: {instance!r} not in enum {schema['enum']}")
 
-    if isinstance(instance, str) and "pattern" in schema:
-        if not re.match(schema["pattern"], instance):
+    pattern = _regex(schema["pattern"]) if "pattern" in schema else None  # compiles for any instance
+    if isinstance(instance, str):
+        if pattern is not None and not pattern.match(instance):
             errors.append(f"{path}: {instance!r} does not match pattern {schema['pattern']!r}")
+        if "minLength" in schema and len(instance) < schema["minLength"]:
+            errors.append(f"{path}: length {len(instance)} is below minLength {schema['minLength']}")
+        if "maxLength" in schema and len(instance) > schema["maxLength"]:
+            errors.append(f"{path}: length {len(instance)} is above maxLength {schema['maxLength']}")
+        if "format" in schema and not check_format(schema["format"], instance):
+            errors.append(f"{path}: {instance!r} is not a valid {schema['format']}")
+    elif "format" in schema:
+        check_format(schema["format"], "")  # an unknown format is rejected for any instance
+
+    if _number(instance):
+        if "minimum" in schema and instance < schema["minimum"]:
+            errors.append(f"{path}: {instance!r} is below minimum {schema['minimum']!r}")
+        if "maximum" in schema and instance > schema["maximum"]:
+            errors.append(f"{path}: {instance!r} is above maximum {schema['maximum']!r}")
+        if "exclusiveMinimum" in schema and instance <= schema["exclusiveMinimum"]:
+            errors.append(f"{path}: {instance!r} is not above exclusiveMinimum "
+                          f"{schema['exclusiveMinimum']!r}")
+        if "exclusiveMaximum" in schema and instance >= schema["exclusiveMaximum"]:
+            errors.append(f"{path}: {instance!r} is not below exclusiveMaximum "
+                          f"{schema['exclusiveMaximum']!r}")
+        if "multipleOf" in schema:
+            quotient = instance / schema["multipleOf"]
+            if not float(quotient).is_integer():
+                errors.append(f"{path}: {instance!r} is not a multiple of {schema['multipleOf']!r}")
 
     if isinstance(instance, dict):
         required = schema.get("required", [])
         for key in required:
             if key not in instance:
                 errors.append(f"{path}: missing required property {key!r}")
+        for key, needed in schema.get("dependentRequired", {}).items():
+            if key in instance:
+                for other in needed:
+                    if other not in instance:
+                        errors.append(f"{path}: property {key!r} requires property {other!r}")
+        if "minProperties" in schema and len(instance) < schema["minProperties"]:
+            errors.append(f"{path}: has {len(instance)} properties, minProperties is "
+                          f"{schema['minProperties']}")
+        if "maxProperties" in schema and len(instance) > schema["maxProperties"]:
+            errors.append(f"{path}: has {len(instance)} properties, maxProperties is "
+                          f"{schema['maxProperties']}")
         props = schema.get("properties", {})
+        pattern_props = schema.get("patternProperties", {})
+        additional = schema.get("additionalProperties", True)
         for key, value in instance.items():
+            matched = False
             if key in props:
-                errors.extend(validate(value, props[key], store, f"{path}.{key}"))
-            elif schema.get("additionalProperties", True) is False:
+                matched = True
+                errors.extend(validate(value, props[key], store, f"{path}.{key}", root))
+            for pattern, sub in pattern_props.items():
+                if _regex(pattern).search(key):
+                    matched = True
+                    errors.extend(validate(value, sub, store, f"{path}.{key}", root))
+            if matched:
+                continue
+            if additional is False:
                 errors.append(f"{path}: unexpected property {key!r} (additionalProperties: false)")
+            elif additional is not True:
+                errors.extend(validate(value, additional, store, f"{path}.{key}", root))
+        if "propertyNames" in schema:
+            for key in instance:
+                errors.extend(validate(key, schema["propertyNames"], store,
+                                       f"{path}[property name {key!r}]", root))
 
     if isinstance(instance, list):
         if "minItems" in schema and len(instance) < schema["minItems"]:
             errors.append(f"{path}: has {len(instance)} items, minItems is {schema['minItems']}")
-        if "items" in schema:
+        if "maxItems" in schema and len(instance) > schema["maxItems"]:
+            errors.append(f"{path}: has {len(instance)} items, maxItems is {schema['maxItems']}")
+        if schema.get("uniqueItems") is True:
+            seen: set = set()
             for i, item in enumerate(instance):
-                errors.extend(validate(item, schema["items"], store, f"{path}[{i}]"))
+                key = _json_key(item)
+                if key in seen:
+                    errors.append(f"{path}[{i}]: duplicate item (uniqueItems: true)")
+                seen.add(key)
+        prefix = schema.get("prefixItems", [])
+        for i, sub in enumerate(prefix[:len(instance)]):
+            errors.extend(validate(instance[i], sub, store, f"{path}[{i}]", root))
+        if "items" in schema:
+            if isinstance(schema["items"], list):
+                raise UnsupportedSchema(f"{path}: array-form items is not Draft 2020-12; use prefixItems")
+            for i, item in enumerate(instance[len(prefix):], start=len(prefix)):
+                errors.extend(validate(item, schema["items"], store, f"{path}[{i}]", root))
+        if "contains" in schema:
+            hits = sum(1 for item in instance
+                       if not validate(item, schema["contains"], store, path, root))
+            low = schema.get("minContains", 1)
+            if hits < low:
+                errors.append(f"{path}: {hits} item(s) match contains, at least {low} required")
+            if "maxContains" in schema and hits > schema["maxContains"]:
+                errors.append(f"{path}: {hits} item(s) match contains, at most "
+                              f"{schema['maxContains']} allowed")
+
+    for sub in schema.get("allOf", []):
+        errors.extend(validate(instance, sub, store, path, root))
+    if "anyOf" in schema:
+        branches = [validate(instance, sub, store, path, root) for sub in schema["anyOf"]]
+        if all(branches):
+            errors.append(f"{path}: matches none of anyOf: " +
+                          " | ".join("; ".join(b[:3]) for b in branches))
+    if "oneOf" in schema:
+        branches = [validate(instance, sub, store, path, root) for sub in schema["oneOf"]]
+        passing = sum(1 for b in branches if not b)
+        if passing == 0:
+            errors.append(f"{path}: matches none of oneOf: " +
+                          " | ".join("; ".join(b[:3]) for b in branches))
+        elif passing > 1:
+            errors.append(f"{path}: matches {passing} branches of oneOf, exactly one allowed")
+    if "not" in schema and not validate(instance, schema["not"], store, path, root):
+        errors.append(f"{path}: must not match the 'not' schema")
+    if "if" in schema:
+        if not validate(instance, schema["if"], store, path, root):
+            if "then" in schema:
+                errors.extend(validate(instance, schema["then"], store, path, root))
+        elif "else" in schema:
+            errors.extend(validate(instance, schema["else"], store, path, root))
 
     return errors
 
 
 def validate_document(instance: Any, schema_name: str, store: SchemaStore | None = None) -> list[str]:
+    """Validates against ``name.schema.json`` or ``name.schema.json#/json/pointer``."""
     store = store or SchemaStore()
-    schema = store.load(schema_name)
-    return validate(instance, schema, store, path="$")
+    schema, root = resolve_ref(schema_name, None, store)
+    return validate(instance, schema, store, path="$", root=root)
 
 
 def check_finding_taxonomy(finding: dict, store: SchemaStore | None = None) -> list[str]:

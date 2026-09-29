@@ -253,11 +253,26 @@ Evidence-index metrics (ADR-0010 G10 = B, task V15; consumed by `02-evidence-ind
   digest over one canonical byte form; projection, digest and snapshot binding are
   `evidence_store.check_metrics` responsibilities.
 
-Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
-engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
-plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json that
-plain JSON Schema can't express cleanly). No external `jsonschema` pip dependency, consistent with
-the rest of appsec-review-process/*.py.
+Validated by `appsec-review-process/schema_validate.py` (a small dependency-free Draft 2020-12
+engine, plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json
+that plain JSON Schema can't express cleanly). No external `jsonschema` pip dependency, consistent
+with the rest of appsec-review-process/*.py. Every keyword is either implemented
+(`SUPPORTED_KEYWORDS`), an annotation, or rejected with `UnsupportedSchema`; nothing is silently
+ignored. `format` is asserted (`date-time`, `date`). `pattern` is Python `re` syntax matched from the
+start of the string (use `\\Z` for end-of-string). `$ref` takes `file.schema.json`,
+`dir/file.schema.json#/json/pointer` or a local `#/json/pointer`. `schema_keyword_lint.py` lists the
+keywords in use against the supported set and fails on anything else, a bad `$ref` or a pattern that
+does not compile.
+
+Shared value formats (brief L): `common/formats.schema.json` defines each format used by many
+schemas once (SHA-256 forms, git SHA, 128-bit hex ids, UTC timestamp and date, run/job/attempt
+identifier, slug and dotted ids, semver, and the shared confidence/status/strength/tier enums).
+Reference a kind with `{"$ref": "common/formats.schema.json#/$defs/<kind>"}`;
+`appsec-review-process/formats.py` is the Python side. `schema_format_lint.py` fails on a new inline
+copy of a shared format; the copies that predate it are counted in
+`common/inline-format-baseline.json` and may only go down. The `common/` directory sits outside the
+top-level `*.schema.json` set hashed into every job's definition, so adding a kind does not
+invalidate accepted jobs; converting a top-level schema to a `$ref` does.
 
 Still stub-only, unrelated to this effort, pending the foundational orchestrator layer: `lane-contract`
 (per-lane YAML contract under contracts/), `component-purpose-map`, `index-manifest`,

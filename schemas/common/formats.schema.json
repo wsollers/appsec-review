@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common/formats.schema.json",
+  "title": "Shared value formats",
+  "description": "The one definition of each value format used by many schemas (brief L). A schema references a kind with {\"$ref\": \"common/formats.schema.json#/$defs/<kind>\"} instead of copying its pattern or enum; schema_format_lint.py fails on a new inline copy. Patterns use the validator's Python dialect: '\\\\Z' is end-of-string, so a trailing newline never passes. formats.py is the Python side and reads its patterns from this file.",
+  "$defs": {
+    "sha256_ref": {
+      "description": "SHA-256 digest with its algorithm prefix: sha256:<64 lowercase hex>.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "sha256_hex": {
+      "description": "Bare SHA-256 digest: 64 lowercase hex (execution_state.digest, envelope and pointer hashes).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "sha256_ref_or_hex": {
+      "description": "Reader-tolerant digest: sha256_ref or sha256_hex. Writers use one of the two.",
+      "type": "string",
+      "pattern": "^(sha256:)?[0-9a-f]{64}\\Z"
+    },
+    "git_sha1": {
+      "description": "Full git commit id: 40 lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}\\Z"
+    },
+    "hex128_id": {
+      "description": "uuid4().hex style id: 32 lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "utc_timestamp": {
+      "description": "UTC instant, whole seconds, Z suffix (formats.utc_now()).",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "utc_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\Z"
+    },
+    "identifier": {
+      "description": "Run/job/attempt identifier, the pattern of execution_state.identifier() (which also rejects Windows device names).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "run_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "job_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "attempt_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "slug": {
+      "description": "Registry id (persona, role, domain, profile): lowercase, hyphenated, 1-96 chars.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "dotted_id": {
+      "description": "Id with dots/underscores allowed, mixed case, 1-96 chars.",
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "lower_dotted_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "semver": {
+      "description": "MAJOR.MINOR.PATCH.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\Z"
+    },
+    "nonneg_int": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "confidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "confidence_or_unknown": {
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "unknown"
+      ]
+    },
+    "ok_status": {
+      "description": "Terminal success statuses of a published result.",
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS"
+      ]
+    },
+    "publishable_status": {
+      "description": "Statuses a job may publish.",
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED"
+      ]
+    },
+    "evidence_strength": {
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "budget_tier": {
+      "enum": [
+        "probe",
+        "standard",
+        "deep"
+      ]
+    }
+  }
+}
