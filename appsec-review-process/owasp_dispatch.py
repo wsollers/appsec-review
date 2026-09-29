@@ -44,6 +44,7 @@ from execution_state import (  # noqa: E402
     Blocked, Lock, atomic_bytes, beneath, data_path, digest, identifier, run_path,
 )
 import owasp_batching  # noqa: E402
+import owasp_validator_derive  # noqa: E402
 import owasp_validator_handoff  # noqa: E402
 import owasp_validator_result  # noqa: E402
 import permission_capabilities as pc  # noqa: E402
@@ -988,6 +989,23 @@ def reusable(accounting: Mapping[str, Any]) -> bool:
 
 
 # ---- the producer --------------------------------------------------------------------------------
+
+class CellInvoker:
+    """The live validator-cell invoker (B3, ADR-0013): renders the reduced reply schema and derives
+    the full T07 candidate (citation ids, hashes, pointers, freshness, result id) from the cell's
+    own pinned inputs before the unchanged final-schema validation."""
+    invoker_id = "claude-cli"
+
+    def __init__(self, *, effort: str, budget_usd: float | None = None) -> None:
+        self.effort, self.budget_usd = effort, budget_usd
+
+    def invoke(self, package: Any, *, output_root: Path, cancel: Any) -> None:
+        import claude_cli_invoker as cli
+        cli.ClaudeCliInvoker(effort=self.effort, budget_usd=self.budget_usd,
+                             fill_result=owasp_validator_derive.make_fill(package),
+                             persona_schema=owasp_validator_derive.PERSONA_SCHEMA).invoke(
+            package, output_root=output_root, cancel=cancel)
+
 
 def _validate_runtime(runtime: Any) -> None:
     if not isinstance(runtime, DispatchRuntime) or not isinstance(runtime.facts, DispatchFacts):
