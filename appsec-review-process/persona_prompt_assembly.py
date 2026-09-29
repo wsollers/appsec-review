@@ -148,26 +148,29 @@ def render_section(section: str, template: Mapping[str, Any], store: SchemaStore
     raise PromptAssemblyError(f"unknown prompt section {section!r}")
 
 
-def _with_persona(template: dict[str, Any], persona_id: str | None) -> dict[str, Any]:
-    """The template as rendered for one of its registry-declared ``persona_variants`` (ADR-0021)."""
-    if persona_id is None or persona_id == template["composition"]["persona_id"]:
+def _with_variant(template: dict[str, Any], section: str, record_id: str | None) -> dict[str, Any]:
+    """The template as rendered for one of its registry-declared ``persona_variants`` (ADR-0021)
+    or ``role_variants`` (ADR-0024)."""
+    key = section + "_id"
+    if record_id is None or record_id == template["composition"][key]:
         return template
-    variants = template.get("persona_variants") or []
-    if not isinstance(variants, list) or persona_id not in variants:
-        raise PromptAssemblyError("persona is not one of the job template's persona_variants")
-    return {**template, "composition": {**template["composition"], "persona_id": persona_id}}
+    variants = template.get(section + "_variants") or []
+    if not isinstance(variants, list) or record_id not in variants:
+        raise PromptAssemblyError(f"{section} is not one of the job template's {section}_variants")
+    return {**template, "composition": {**template["composition"], key: record_id}}
 
 
 def assemble_prompt_text(job_template_id: str, store: SchemaStore | None = None,
-                         persona_id: str | None = None) -> tuple[str, dict]:
+                         persona_id: str | None = None, role_id: str | None = None) -> tuple[str, dict]:
     """Pure: resolves the job template and renders every declared section in order. Returns
     (text, template). Raises PromptAssemblyError on anything missing, invalid, or unknown -- never
     writes, so a caller that only wants to preview or hash the prompt need not touch disk.
-    ``persona_id`` renders the persona section for one of the template's ``persona_variants``;
-    the returned template is the registry record, unchanged."""
+    ``persona_id`` renders the persona section for one of the template's ``persona_variants``,
+    ``role_id`` the role section for one of its ``role_variants``; the returned template is the
+    registry record, unchanged."""
     store = store or SchemaStore()
     registered = load_job_template(job_template_id, store)
-    template = _with_persona(registered, persona_id)
+    template = _with_variant(_with_variant(registered, "persona", persona_id), "role", role_id)
     sections = template.get("prompt_sections")
     if not isinstance(sections, list) or not sections:
         raise PromptAssemblyError(f"job template {job_template_id!r} declares no prompt_sections")
@@ -177,7 +180,7 @@ def assemble_prompt_text(job_template_id: str, store: SchemaStore | None = None,
 
 
 def assemble_outer_prompt(job_template_id: str, *, store: SchemaStore | None = None,
-                          persona_id: str | None = None) -> dict[str, Any]:
+                          persona_id: str | None = None, role_id: str | None = None) -> dict[str, Any]:
     """Assembles and writes the outer prompt for `job_template_id` to its cache path under
     ``PROMPT_CACHE_DIR`` (never under any run's ``attempts/`` tree -- see that constant's
     comment), and returns ``{path, sha256, bytes}`` -- ``path`` relative to ``PROMPT_ROOT``,
@@ -187,9 +190,11 @@ def assemble_outer_prompt(job_template_id: str, *, store: SchemaStore | None = N
     ``job_template_id`` regenerates the same cache file from the current registry state, so two
     attempts of the same job template share one outer_prompt file and its pin, and a registry
     edit is picked up on the next call without any stale per-attempt copy to invalidate."""
-    text, template = assemble_prompt_text(job_template_id, store, persona_id)
+    text, template = assemble_prompt_text(job_template_id, store, persona_id, role_id)
     data = text.encode("utf-8")
     folder = PROMPT_CACHE_DIR / identifier(job_template_id)
+    if role_id is not None and role_id != template["composition"]["role_id"]:
+        folder = folder / "roles" / identifier(role_id)   # one pinned prompt per role variant
     if persona_id is not None and persona_id != template["composition"]["persona_id"]:
         folder = folder / "personas" / identifier(persona_id)   # one pinned prompt per variant
     output_path = beneath(PROMPT_CACHE_DIR, folder / "outer_prompt.md")

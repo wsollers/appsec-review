@@ -359,6 +359,8 @@ def load_composition(registry_dir: Path, persona: Mapping[str, str], store: Sche
     for name, _, _, _ in COMPOSITION_KINDS[1:]:
         if name == "persona" and persona[name + "_id"] in persona_variants(records["job_template"]):
             continue   # a registry-declared persona variant of this template (ADR-0021)
+        if name == "role" and persona[name + "_id"] in role_variants(records["job_template"]):
+            continue   # a registry-declared role variant of this template (ADR-0024)
         if composed[name + "_id"] != persona[name + "_id"]:
             raise PersonaRequestError(f"persona.{name}_id is not what the named job template composes")
     errors = composition_errors(records)
@@ -377,6 +379,17 @@ def persona_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
     values = template.get("persona_variants") or []
     if not isinstance(values, list) or not all(isinstance(v, str) and _REG_RE.match(v) for v in values):
         raise PersonaRequestError("job template persona_variants must be a list of registry ids")
+    return tuple(values)
+
+
+def role_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
+    """The roles a job template lets one of its instances run as besides its composed role
+    (ADR-0024; the claim review pool's per-stage roles). Same rule as :func:`persona_variants`: a
+    request may name only a listed id, and that role record is loaded and hashed like any other,
+    so the claim ceiling is always derived from the role the instance actually runs as."""
+    values = template.get("role_variants") or []
+    if not isinstance(values, list) or not all(isinstance(v, str) and _REG_RE.match(v) for v in values):
+        raise PersonaRequestError("job template role_variants must be a list of registry ids")
     return tuple(values)
 
 
@@ -432,6 +445,13 @@ def _registry_survey(registry_dir: Path) -> tuple[list[str], list[str]]:
                     _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", variant, store)
                 except PersonaRequestError:
                     raise PersonaRequestError("a persona_variants id does not resolve to a valid persona record") from None
+            for variant in role_variants(template):
+                try:
+                    record = _load_record(registry_dir, "roles", "role.schema.json", "role_id", variant, store)
+                except PersonaRequestError:
+                    raise PersonaRequestError("a role_variants id does not resolve to a valid role record") from None
+                # The composition as that role must itself be invocable (errors, ceiling).
+                load_composition(registry_dir, {**block, "role_id": variant, "role_sha256": _sha(record)}, store)
         except PersonaRequestError as exc:
             errors.append(f"job-templates/{path.stem}: {exc}")
     return errors, denied

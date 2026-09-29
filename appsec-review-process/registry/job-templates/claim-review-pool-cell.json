@@ -123,6 +123,18 @@
       "product-owner"
     ]
   },
+  "role_variants": [
+    "red-team-adversary",
+    "blue-team-refuter",
+    "independent-verifier",
+    "scorer"
+  ],
+  "stage_roles": {
+    "07-red-team-adversarial": "red-team-adversary",
+    "08-blue-team-refutation": "blue-team-refuter",
+    "09-independent-verification": "independent-verifier",
+    "12-scoring-prioritization": "scorer"
+  },
   "tunables": {
     "claim_review_pool_instances": {
       "value": 3,

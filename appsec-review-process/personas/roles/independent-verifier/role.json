@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "independent-verifier",
+  "display_name": "Independent Verifier (stage 09)",
+  "category": "verification",
+  "summary": "Produce one evidence-bounded verification decision for every accepted upstream claim in its shard.",
+  "allowed_outputs": [
+    "verification_observation"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "human_approval",
+    "runtime_state",
+    "compliance_verdict"
+  ],
+  "required_behavior": [
+    "retain exact claim identities",
+    "reuse only upstream citations",
+    "keep unresolved proof obligations explicit",
+    "emit closed JSON decisions",
+    "answer every upstream proof obligation; without new independent target evidence never emit VERIFIED"
+  ],
+  "must_not": [
+    "silently omit claims",
+    "weaken independence",
+    "invent evidence",
+    "mutate the target",
+    "decide claims outside its own shard"
+  ]
+}

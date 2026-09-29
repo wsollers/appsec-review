@@ -14,6 +14,7 @@ import catalog_personas
 import claim_review_sharding as sharding
 import persona_invocation as pi
 import persona_prompt_assembly as ppa
+from claim_review_lifecycle import POOL_CLASSES
 from schema_validate import SchemaStore
 
 STRIDE = ("spoofing", "tampering", "repudiation", "information-disclosure", "denial-of-service",
@@ -179,6 +180,49 @@ class RegistryTests(unittest.TestCase):
                 with self.assertRaises(pi.PersonaRequestError):
                     pi.load_composition(pi.REGISTRY_DIR, changed, store)
 
+    def composition_block(self, store):
+        block = {"job_template_id": "claim-review-pool-cell", "job_template_sha256": pi._sha(TEMPLATE)}
+        for name, directory, schema, field in pi.COMPOSITION_KINDS[1:]:
+            record_id = TEMPLATE["composition"][name + "_id"]
+            block[name + "_id"] = record_id
+            block[name + "_sha256"] = pi._sha(pi._load_record(pi.REGISTRY_DIR, directory, schema, field, record_id, store))
+        return block
+
+    def test_each_stage_runs_as_its_own_registry_role_with_the_stage_claim_class(self):
+        store = SchemaStore()
+        self.assertEqual(set(TEMPLATE["stage_roles"]), set(TEMPLATE["stage_personas"]))
+        self.assertEqual(sorted(TEMPLATE["stage_roles"].values()), sorted(TEMPLATE["role_variants"]))
+        block = self.composition_block(store)
+        profile = pi._load_record(pi.REGISTRY_DIR, "tooling-profiles", "tooling-profile.schema.json",
+                                  "tooling_profile_id", TEMPLATE["composition"]["tooling_profile_id"], store)
+        for stage, role_id in TEMPLATE["stage_roles"].items():
+            with self.subTest(stage=stage):
+                role = pi._load_record(pi.REGISTRY_DIR, "roles", "role.schema.json", "role_id", role_id, store)
+                self.assertEqual(pi.claim_ceiling(role, profile)["allowed"], (POOL_CLASSES[stage],))
+                records = pi.load_composition(pi.REGISTRY_DIR, {**block, "role_id": role_id,
+                                                                "role_sha256": pi._sha(role)}, store)
+                self.assertEqual(records["role"]["role_id"], role_id)
+        other = pi._load_record(pi.REGISTRY_DIR, "roles", "role.schema.json", "role_id", "evidence-indexer", store)
+        with self.assertRaisesRegex(pi.PersonaRequestError, "role_id is not what the named job template composes"):
+            pi.load_composition(pi.REGISTRY_DIR, {**block, "role_id": "evidence-indexer",
+                                                  "role_sha256": pi._sha(other)}, store)
+        with self.assertRaises(ppa.PromptAssemblyError):
+            ppa.assemble_prompt_text("claim-review-pool-cell", store, role_id="evidence-indexer")
+
+    def test_a_stage_role_changes_only_the_role_section_of_the_prompt(self):
+        store = SchemaStore()
+
+        def sections(text):
+            return [part.split("\n", 1) for part in ("\n" + text).split("\n## ")[1:]]
+
+        generic, _ = ppa.assemble_prompt_text("claim-review-pool-cell", store, "defensive-skeptic")
+        staged, _ = ppa.assemble_prompt_text("claim-review-pool-cell", store, "defensive-skeptic",
+                                             "blue-team-refuter")
+        before, after = sections(generic), sections(staged)
+        self.assertEqual([heading for heading, _ in before if heading != "Role (claim-reviewer)"],
+                         [heading for heading, _ in after if heading != "Role (blue-team-refuter)"])
+        changed = [(a[0], b[0]) for a, b in zip(before, after) if a != b]
+        self.assertEqual(changed, [("Role (claim-reviewer)", "Role (blue-team-refuter)")])
 
 if __name__ == "__main__":
     unittest.main()
