@@ -335,6 +335,58 @@ Match & Advisory & Component & Verdict & Tier & Reason\\
 \end{tabularx}}
 \BLOCK{endif}
 
+%# ==== 3C ====
+%% set tw = threat_workbench if threat_workbench is defined else {'status': 'ABSENT', 'reason': 'not built', 'counts': {'data_classes': 0, 'privacy_threats': 0, 'deployment_zones': 0, 'attack_trees': 0}, 'data_classes': [], 'privacy_threats': [], 'deployment_zones': [], 'attack_trees': [], 'note': ''}
+\section{Threat model workbench}
+\VAR{tw.note|tex}
+
+\BLOCK{if tw.status != 'PUBLISHED'}\textbf{No threat workbench records.} \VAR{tw.status|tex}: \VAR{tw.reason|tex}
+
+\BLOCK{elif tw.reason}\textbf{No workbench records.} \VAR{tw.reason|tex}
+
+\BLOCK{endif}
+{\small\color{muted}data classes \VAR{tw.counts.data_classes}, privacy threats \VAR{tw.counts.privacy_threats}, deployment zones \VAR{tw.counts.deployment_zones}, attack trees \VAR{tw.counts.attack_trees}\par}
+\BLOCK{if tw.data_classes}
+\subsection*{Data classes}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X l@{}}
+Id & Category & Sensitivity & Stores / flows & Handling & Evidence\\
+%% for r in tw.data_classes
+\mono{\VAR{r.id|texpath}} & \VAR{r.category|tex} & \VAR{r.sensitivity|tex} & \VAR{r.stores|tex}\BLOCK{if r.flows} / \VAR{r.flows|tex}\BLOCK{endif} & \VAR{r.handling|tex} & \VAR{r.evidence|tex}\\
+%% endfor
+\end{tabularx}}
+\BLOCK{endif}
+\BLOCK{if tw.privacy_threats}
+\subsection*{Privacy threats (LINDDUN)}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X l@{}}
+Id & Category & Statement & Regulatory candidate notes & Evidence\\
+%% for r in tw.privacy_threats
+\mono{\VAR{r.id|texpath}} & \VAR{r.category|tex} & \VAR{r.statement|tex} & \VAR{r.regulatory_notes|tex} & \VAR{r.evidence|tex}\\
+%% endfor
+\end{tabularx}}
+\BLOCK{endif}
+\BLOCK{if tw.deployment_zones}
+\subsection*{Deployment zones}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l >{\raggedright\arraybackslash}X l l@{}}
+Id & Kind & Name & Exposure & Evidence\\
+%% for r in tw.deployment_zones
+\mono{\VAR{r.id|texpath}} & \VAR{r.kind|tex} & \VAR{r.name|tex} & \VAR{r.exposure|tex} & \VAR{r.evidence|tex}\\
+%% endfor
+\end{tabularx}}
+\BLOCK{endif}
+\BLOCK{if tw.attack_trees}
+\subsection*{Attack trees}
+{\small
+\begin{tabularx}{\linewidth}{@{}l >{\raggedright\arraybackslash}X l l l@{}}
+Tree & Objective & Nodes & Leaves (ev./ass./unres.) & Evidence\\
+%% for r in tw.attack_trees
+\mono{\VAR{r.id|texpath}} & \VAR{r.objective|tex} & \VAR{r.nodes} & \VAR{r.leaves} (\VAR{r.leaf_support.evidence}/\VAR{r.leaf_support.assumption}/\VAR{r.leaf_support.unresolved}) & \VAR{r.evidence|tex}\\
+%% endfor
+\end{tabularx}}
+\BLOCK{endif}
+
 %# ==== 4 ====
 \section{Coverage gaps}
 Each item below is an area the review did not fully examine. None of them may be read as ``no issues''.

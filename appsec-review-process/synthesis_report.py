@@ -351,8 +351,7 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
         "component_relationships": [json.dumps(item, sort_keys=True)
                                     for item in docs["component"].get("component_relationships", [])],
         "threat_model": {key: [json.dumps(item, sort_keys=True) for item in docs["threat"].get(key, [])]
-                         for key in ("elements", "flows", "trust_boundaries", "abuse_scenarios",
-                                     "attack_trees", "stride_hypotheses", "assumptions", "gaps")},
+                         for key in THREAT_MODEL_KEYS},
         "owasp_coverage": {"denominators": matrix["denominators"],
                            "applicability_counts": matrix["applicability_counts"],
                            "assessment_counts": matrix["assessment_counts"]},
@@ -377,6 +376,13 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
     errors = validate_document(trace, "evidence-trace-index.schema.json")
     if errors: raise Blocked(f"{JOB}: trace index fails its closed schema ({errors[0]})")
     return report, trace
+
+
+# 03 record families carried into the report (JSON strings, closed schema). data_classes,
+# privacy_threats and deployment_zones are the ADR-0019 workbench/L13 families.
+THREAT_MODEL_KEYS = ("elements", "flows", "trust_boundaries", "data_classes", "deployment_zones",
+                     "abuse_scenarios", "privacy_threats", "attack_trees", "stride_hypotheses",
+                     "assumptions", "gaps")
 
 
 TOOL_LEAD_PREFIX = "Tool lead ("  # claim_ledger.LEAD_HYPOTHESIS_PREFIX (deterministic, not model text)
@@ -420,6 +426,14 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
         what = "static-tool leads" + (f" or code-reading hypotheses ({hunted} from hunters)" if hunted else "")
         lines += [f"{len(tool_leads)} of them are {what} not independently verified "
                   f"(P1 {tiers['P1']}, P2 {tiers['P2']}, P3 {tiers['P3']}); see the appendix.", ""]
+    workbench = {key: [json.loads(item) for item in report.get("threat_model", {}).get(key, [])]
+                 for key in ("data_classes", "privacy_threats", "deployment_zones", "attack_trees")}
+    lines += ["## Threat model workbench", "",
+              "Candidate records from `03-threat-model-dfd-stride` (hypotheses for review, not findings): "
+              + ", ".join(f"{len(rows)} {key.replace('_', ' ')}" for key, rows in workbench.items()) + ".", ""]
+    if workbench["privacy_threats"]:
+        categories = sorted({item["linddun_category"] for item in workbench["privacy_threats"]})
+        lines += ["LINDDUN categories raised: " + ", ".join(categories) + ".", ""]
     lines += ["## Major limitations", ""]
     lines += [f"- {value}" for value in report["limitations"]] or ["- No additional limitation was supplied."]
     appendix = ["# Coverage and unresolved appendix", "", f"Status: `{STATUS}`", "",
@@ -431,6 +445,16 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
                      "| Tier | Source | Claim | Status | Lead |", "|---|---|---|---|---|"]
         appendix += [f"| {item['tier']} | {item['source']} | `{item['claim_id']}` | {item['status']} | "
                      f"{item['hypothesis'].replace('|', '/')} |" for item in tool_leads]
+    if any(workbench.values()):
+        appendix += ["", "## Threat model workbench records", "", "| Family | Id | Kind |", "|---|---|---|"]
+        appendix += [f"| data class | `{item['data_class_id']}` | {item['category']} / {item['sensitivity']} |"
+                     for item in workbench["data_classes"]]
+        appendix += [f"| privacy threat | `{item['privacy_threat_id']}` | {item['linddun_category']} |"
+                     for item in workbench["privacy_threats"]]
+        appendix += [f"| deployment zone | `{item['zone_id']}` | {item['kind']} ({item['exposure_label']}) |"
+                     for item in workbench["deployment_zones"]]
+        appendix += [f"| attack tree | `{item['tree_id']}` | {len(item.get('nodes', []))} nodes |"
+                     for item in workbench["attack_trees"]]
     appendix += ["", "## Dissent", ""] + ([f"- {item}" for item in report["dissent_ids"]] or ["- None recorded."])
     appendix += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]
     for text in ("\n".join(lines) + "\n", "\n".join(appendix) + "\n"):

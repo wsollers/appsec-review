@@ -59,8 +59,10 @@ Earlier accepted artifacts stay schema-valid: every new field is optional and ab
 
 ## Open
 
-- The CVSS macrovector table was transcribed; it is hash-pinned and checked against 16 published
-  calculator vectors, but should be diffed once against FIRST `cvss_lookup.js`.
+- Closed 2026-09-29 (brief M1): the CVSS macrovector table, maximal vectors and severity distances
+  were diffed entry by entry against FIRST `cvss-v4-calculator` at `c5b0d40` (270/270 equal) and
+  the scorer against `cvss_score.js` on 204,976 vectors (0 mismatches). Provenance:
+  `data/reference/cvss/`; offline regression sample in `tests/test_cvss4.py`.
 - The CWE catalog is a 96-entry curated subset until the full MITRE export is imported.
 - Entry points beyond `main` need a source: component-map exports, network handler detection, or
   the per-run entry-point file (currently manual).

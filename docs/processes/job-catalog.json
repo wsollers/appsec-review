@@ -8311,7 +8311,7 @@
    "contract": "threat-model-core",
    "implemented": true,
    "readiness": "implemented_not_qualified",
-   "execution_mode": "deterministic_python",
+   "execution_mode": "pool_coordinator",
    "worker": "appsec-review-process/threat_model_core.py:run",
    "resource_pool": "persona_llm",
    "dagster_jobs": [

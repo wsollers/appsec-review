@@ -77,5 +77,8 @@ substrate, and adds the smallest complete vertical slice of the ADR-0008 workben
 3. Should privacy threats and abuse scenarios enter the claim ledger (more 07/08/09 reviewer load)?
 4. Synthesis report: add `data_classes`, `privacy_threats`, `deployment_zones` to the report's
    closed `threat_model` section (schema change) so L13 output is visible in the report.
+   Implemented on `report-complete` (brief M2): the three families (and attack trees) are carried
+   as optional schema keys, summarised in `report.md` (counts and ids only) and rendered as report
+   section 3C "Threat model workbench"; pending William's acceptance of this ADR.
 5. Engine-scale targets: keep `workbench_pin_target_source` on (pool specs grow with file count) or
    switch to index-only lookup.

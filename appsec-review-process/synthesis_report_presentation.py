@@ -6,12 +6,15 @@ lifecycle scores and the deterministic ``finding-enrichment.json`` (CWE, pinned 
 reachability verdict and witness, reachability-capped severity, EPSS/KEV as of the pinned snapshot,
 verified snippets, remediation objectives/proposals; ADR-0020) and, under each Critical REACHABLE
 finding, the lane-12b PoC-and-fix block labelled as unvalidated static text (``poc_fix_report``; an
-absent block is stated as a gap).  It never computes a CVSS score,
+absent block is stated as a gap).  The ``threat_workbench`` section lists the 03 workbench records
+(data classes, LINDDUN privacy threats, deployment zones, attack-tree summaries; ADR-0019) as
+candidates, never findings.  It never computes a CVSS score,
 process assurance, final status, or remediation state itself.
 """
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import re
@@ -215,6 +218,63 @@ def _dependency_reachability(section: dict[str, Any] | None) -> dict[str, Any]:
     return {key: section[key] for key in ("status", "reason", "counts", "rows", "note")}
 
 
+WORKBENCH_NOTE = ("Candidate threat-model records from 03-threat-model-dfd-stride (ADR-0019 workbench and "
+                  "L13 privacy cell). They are hypotheses for review, not findings: exposure is declared, "
+                  "never observed, and regulatory notes are candidates, not a conclusion about compliance.")
+
+
+def _records(threat_model: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    return [json.loads(item) for item in threat_model.get(key, [])]
+
+
+def _ids(values: list[str] | None) -> str:
+    return ", ".join(values or [])
+
+
+def _tree_summary(tree: dict[str, Any]) -> dict[str, Any]:
+    nodes = tree.get("nodes", [])
+    leaves = [node for node in nodes if node.get("kind") == "leaf"]
+    support = {kind: sum(node.get("leaf_support") == kind for node in leaves)
+               for kind in ("evidence", "assumption", "unresolved")}
+    return {"id": tree["tree_id"], "objective": tree["objective"], "nodes": len(nodes),
+            "gates": sum(node.get("kind") in {"AND", "OR"} for node in nodes), "leaves": len(leaves),
+            "leaf_support": support, "evidence": tree.get("evidence_class"), "confidence": tree.get("confidence"),
+            "verification_items": sorted({item for node in nodes for item in node.get("verification_item_ids", [])})}
+
+
+def _threat_workbench(threat_model: dict[str, Any] | None) -> dict[str, Any]:
+    """The renderer's workbench section (ADR-0019 open decision 4); a pre-workbench report is a gap."""
+    empty = {"data_classes": 0, "privacy_threats": 0, "deployment_zones": 0, "attack_trees": 0}
+    if threat_model is None or not {"data_classes", "privacy_threats", "deployment_zones"} <= set(threat_model):
+        return {"status": "ABSENT", "reason": "the synthesis report carries no workbench record families",
+                "counts": empty, "data_classes": [], "privacy_threats": [], "deployment_zones": [],
+                "attack_trees": [], "note": WORKBENCH_NOTE}
+    data_classes = [{"id": item["data_class_id"], "category": item["category"], "sensitivity": item["sensitivity"],
+                     "stores": _ids(item.get("store_element_ids")), "flows": _ids(item.get("flow_ids")),
+                     "handling": "; ".join(f"{label}: {item[key]}" for label, key in
+                                          (("retention", "retention_hint"), ("export", "export_hint"),
+                                           ("delete", "delete_hint")) if item.get(key)),
+                     "evidence": item["evidence_class"], "confidence": item["confidence"]}
+                    for item in _records(threat_model, "data_classes")]
+    privacy = [{"id": item["privacy_threat_id"], "category": item["linddun_category"],
+                "statement": item["statement"],
+                "targets": _ids(item.get("target_element_ids", []) + item.get("target_flow_ids", [])),
+                "data_classes": _ids(item.get("data_class_ids")),
+                "regulatory_notes": "; ".join(item.get("regulatory_candidate_notes", [])),
+                "evidence": item["evidence_class"], "confidence": item["confidence"]}
+               for item in _records(threat_model, "privacy_threats")]
+    zones = [{"id": item["zone_id"], "kind": item["kind"], "name": item["name"], "exposure": item["exposure_label"],
+              "evidence": item["evidence_class"], "confidence": item["confidence"]}
+             for item in _records(threat_model, "deployment_zones")]
+    trees = [_tree_summary(item) for item in _records(threat_model, "attack_trees")]
+    counts = {"data_classes": len(data_classes), "privacy_threats": len(privacy),
+              "deployment_zones": len(zones), "attack_trees": len(trees)}
+    return {"status": "PUBLISHED", "reason": "" if any(counts.values()) else
+            "the threat workbench published no data class, privacy threat, deployment zone or attack tree",
+            "counts": counts, "data_classes": data_classes, "privacy_threats": privacy,
+            "deployment_zones": zones, "attack_trees": trees, "note": WORKBENCH_NOTE}
+
+
 def build_review(report: dict[str, Any], trace: dict[str, Any],
                  enrichment: dict[str, Any] | None = None,
                  attack_chains: dict[str, Any] | None = None,
@@ -272,12 +332,16 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         "findings": _findings(report, evidence_ids, enrichment, poc_fix), "evidence": evidence,
         "attack_chains": _attack_chains(attack_chains),
         "dependency_reachability": _dependency_reachability(dependency_reachability),
+        "threat_workbench": _threat_workbench(report.get("threat_model")),
         "target_context": {"source_snapshot_sha256": report["scope"].get("source_snapshot_sha256", "not asserted"),
             "components": report["scope"]["components"],
             "relationships": report.get("component_relationships", []),
             "elements": report.get("threat_model", {}).get("elements", []),
             "flows": report.get("threat_model", {}).get("flows", []),
             "trust_boundaries": report.get("threat_model", {}).get("trust_boundaries", []),
+            "data_classes": report.get("threat_model", {}).get("data_classes", []),
+            "deployment_zones": report.get("threat_model", {}).get("deployment_zones", []),
+            "privacy_threats": report.get("threat_model", {}).get("privacy_threats", []),
             "abuse_scenarios": report.get("threat_model", {}).get("abuse_scenarios", []),
             "attack_trees": report.get("threat_model", {}).get("attack_trees", []),
             "stride_hypotheses": report.get("threat_model", {}).get("stride_hypotheses", []),

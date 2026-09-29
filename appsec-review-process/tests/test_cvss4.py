@@ -6,6 +6,7 @@ specification's examples and common NVD CNA vectors); the full macrovector table
 from __future__ import annotations
 
 import itertools
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import cvss4
+import cvss4_reference_check
+
+FIRST_SAMPLE = ROOT / "tests" / "fixtures" / "cvss4-first-reference-sample.json"
+PROVENANCE = ROOT.parent / "data" / "reference" / "cvss" / "cvss4-lookup-provenance.json"
 
 VECTORS = {
     "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N": 9.3,
@@ -67,6 +72,40 @@ class CVSS4Tests(unittest.TestCase):
             cvss4.assess(metrics, {**rationale, "AV": " "})
         with self.assertRaisesRegex(cvss4.CVSSError, "VC"):
             cvss4.assess({**metrics, "VC": "X"}, rationale)
+
+    def test_matches_first_reference_calculator_sample(self):
+        # Results of FIRST cvss-v4-calculator (pinned commit in data/reference/cvss) for 1,500
+        # vectors, including threat, environmental and supplemental metrics.
+        sample = json.loads(FIRST_SAMPLE.read_text(encoding="utf-8"))
+        self.assertGreaterEqual(len(sample["vectors"]), 1000)
+        self.assertTrue(any("/E:" in v or "/MAV:" in v for v in sample["vectors"]))
+        for vector, (macrovector, expected) in sample["vectors"].items():
+            self.assertEqual(cvss4.macrovector(cvss4.parse(vector)), macrovector, vector)
+            self.assertEqual(cvss4.score(vector), expected, vector)
+
+    def test_provenance_pins_the_verified_table(self):
+        provenance = json.loads(PROVENANCE.read_text(encoding="utf-8"))
+        self.assertEqual(provenance["lookup_sha256"], cvss4.LOOKUP_SHA256)
+        self.assertEqual(len(provenance["reference"]["resolved_commit"]), 40)
+        result = provenance["result"]
+        self.assertEqual((result["lookup_mismatches"], result["score_mismatches"]), (0, 0))
+        sample = json.loads(FIRST_SAMPLE.read_text(encoding="utf-8"))
+        self.assertEqual(sample["reference_files"], provenance["reference"]["files"])
+
+    def test_reference_check_reports_every_mismatch(self):
+        vectors = cvss4_reference_check.candidate_vectors(0, 1)[:3]
+        reference = {
+            "lookup": {**cvss4.LOOKUP, "000000": 9.9},
+            "maxComposed": cvss4.MAX_COMPOSED, "maxSeverity": {**cvss4.MAX_SEVERITY, "eq1": {}},
+            "scores": [[cvss4.macrovector(cvss4.parse(cvss4_reference_check.vector_string(v))),
+                        cvss4.score(cvss4_reference_check.vector_string(v))] for v in vectors],
+        }
+        reference["scores"][1][1] += 0.1
+        result = cvss4_reference_check.compare(reference, vectors)
+        self.assertEqual([m["macrovector"] for m in result["lookup_mismatches"]], ["000000"])
+        self.assertEqual(len(result["score_mismatches"]), 1)
+        self.assertTrue(result["max_composed_equal"])
+        self.assertFalse(result["max_severity_equal"])
 
 
 if __name__ == "__main__":

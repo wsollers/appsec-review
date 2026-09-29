@@ -428,14 +428,14 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 "deployment_zones": len(model["deployment_zones"]), "abuse_scenarios": len(model["abuse_scenarios"]),
                 "attack_trees": len(model["attack_trees"]), "intercom_records": len(records)}}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
-            dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=CONTRACT,
+            dagster_run_id=dagster_id, worker_kind="pool_coordinator", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=status_name,
-            summary="Deterministic DFD and candidate STRIDE model produced.", status_record=status,
+            summary="DFD/STRIDE core and threat-workbench cell model produced.", status_record=status,
             artifact_paths=[RESULT, SUMMARY, "permission.json", "lineage.json", "status.json", *projections], gaps=gaps,
             pre_envelope_validate=lambda path, _status: _validate_attempt(path, inputs))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
-        worker_kind="deterministic_python", output_contract=CONTRACT, resume_command=resume,
+        worker_kind="pool_coordinator", output_contract=CONTRACT, resume_command=resume,
         derive_inputs=lambda: current_inputs(run_id), fingerprint_inputs=lambda value: "sha256:" + digest(value),
         execute_attempt=execute, preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes()}, force=force,

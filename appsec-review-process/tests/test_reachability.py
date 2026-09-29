@@ -74,6 +74,26 @@ class ReachabilityTests(unittest.TestCase):
         g = graph(twin)
         self.assertEqual(g.escapes["dead:void()"][0]["reason"], "ambiguous-name")
 
+    def test_windows_runtime_entries_are_program_entries(self):
+        """M5: code only WinMain/DllMain calls was UNREACHABLE through an unmodelled entry point."""
+        gui = [method("WinMain:int(void*,void*,char*,int)", "WinMain", "app/win.c", 1, 9),
+               call("WinMain:int(void*,void*,char*,int)", "dead:void()", "dead", "app/win.c", 4, "dead()")]
+        self.assertEqual(r.assess_location(graph(), "app/dead.c", 3)["state"], r.UNREACHABLE)
+        result = r.assess_location(graph(gui), "app/dead.c", 3)
+        self.assertEqual(result["state"], r.REACHABLE)
+        self.assertEqual(result["witness"][0]["function"], "WinMain")
+        dll = r.CallGraph.from_records([method("DllMain:int(void*,int,void*)", "DllMain", "d.c", 1, 5),
+                                        method("f:void()", "f", "d.c", 7, 9),
+                                        call("DllMain:int(void*,int,void*)", "f:void()", "f", "d.c", 3)])
+        self.assertEqual(r.assess_location(dll, "d.c", 8)["state"], r.REACHABLE)
+        # A fuzz harness is not a program entry: no REACHABLE witness from it.
+        fuzz = r.CallGraph.from_records([
+            method("LLVMFuzzerTestOneInput:int(uint8_t*,size_t)", "LLVMFuzzerTestOneInput", "fz.c", 1, 5),
+            method("f:void()", "f", "fz.c", 7, 9),
+            call("LLVMFuzzerTestOneInput:int(uint8_t*,size_t)", "f:void()", "f", "fz.c", 3)])
+        self.assertEqual(r.assess_location(fuzz, "fz.c", 8)["state"], r.UNKNOWN)
+        self.assertEqual(set(r.PROGRAM_ENTRY_NAMES), {"main", "wmain", "WinMain", "wWinMain", "DllMain"})
+
     def test_cve_evidence_links_vulnerable_function_to_app_path(self):
         sca = {"matches": [
             {"match_id": "VM-000001", "advisory_id": "GHSA-aaaa-bbbb-cccc", "aliases": ["CVE-2025-0001"]},

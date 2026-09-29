@@ -5,8 +5,9 @@
   "process": "03-threat-model-dfd-stride",
   "budget_default": "standard",
   "model": {
-    "model": "deterministic-python",
-    "effort": "none"
+    "model": "claude-sonnet-5",
+    "effort": "high",
+    "_note": "Persona-cell workbench job (ADR-0019): the DFD/STRIDE core and the join are deterministic Python; the model work is done by the threat-workbench-* cell templates (claude-sonnet-5/high), each resolved from its own template through a C01 pool. This entry describes the job; it is not a separate dispatch pin."
   },
   "composition": {
     "persona_id": "developer-engineer",

@@ -8,8 +8,11 @@ are the implementer's and need review.
 Implementation (2026-09-29): merged to `main` from `codeql-reach` (`1248b43`; follow-up `d3ef6b7` keeps
 the CodeQL nodes off `02-evidence-assembly`). 81 lifecycle jobs. Unit tests with fake runners only:
 the `audit-codeql` images need a rebuild and B16 records, the QL packs have not been compiled, and
-nothing has run live. The claim ledger records an engine `conflict` as a review obligation (decision 9
-names a `review_flags` entry). Open items: `appsec-review-process/TODO.md` section G.
+nothing has run live. Decision 9 was aligned to the code on 2026-09-29 (brief M4): the claim ledger
+records an engine `conflict` as a proof obligation on the candidate claim, not as a `review_flags`
+entry (the ledger has no such field; `tests/test_claim_ledger.py`
+`test_dependency_leads_carry_the_correlated_reachability_verdict`). Open items:
+`appsec-review-process/TODO.md` section G.
 
 Supersedes: ADR-0017 decision 3 (one `02-codeql-sast` job) and decision 5 (one container per
 language inside that job); ADR-0022 decision 3's `lsp` strength (was "may prove `reachable`") and
@@ -126,9 +129,15 @@ advisory ("package X, function Y") to the names a language uses was a single nam
 
 9. **Consumers.** `10-synthesis-report` renders the summary (`conflict` and `unknown` shown as
    such). `07`, `08`, `09` and `12` receive it through the supporting-evidence menu next to
-   `cve-reachability.json`. The claim ledger marks a dependency lead whose match is `reachable` as
-   P1 with `reachability: reachable`, and a `conflict` with a `review_flags` entry
-   `reachability-conflict`.
+   `cve-reachability.json`. The claim ledger (`claim_ledger._reachability_note`, fed from
+   `dependency-reachability-summary.json`) leaves the dependency lead's P1 route and ids unchanged
+   and records the verdict on the candidate claim: for a `reachable` match it appends
+   "Dependency reachability (06-cve-reachability): reachable for <match> [<tier>]; a P1 review
+   claim." to the hypothesis and raises confidence to `medium`; for a `conflict` it appends
+   "Reachability CONFLICT for <match>: the engines disagree; flagged for review (never resolved
+   silently)." and adds the review obligation "Resolve the conflicting reachability engine verdicts
+   for <match> (dependency-reachability-summary.json) before scoring." The ledger has no
+   `review_flags` field; the proof obligation is the review flag, so 07/08/09 must discharge it.
 
 ## Consequences
 
