@@ -46,7 +46,7 @@ MAX_LSP_NODES = 20_000
 # "codeql": the reasons each pack's EntryPoint class adds (handlers, routes, remote-input readers).
 # Every language also takes the hash-bound run file inputs/reachability-entry-points.json.
 ENTRY_POINT_SOURCES: dict[str, dict[str, tuple[str, ...]]] = {
-    "cpp": {"names": ("main", "wmain", "WinMain", "wWinMain", "DllMain", "LLVMFuzzerTestOneInput"),
+    "cpp": {"names": ("main", "wmain", "WinMain", "wWinMain", "DllMain"),
             "codeql": ("main", "no-internal-caller", "address-taken")},
     "go": {"names": ("main", "init", "ServeHTTP"), "codeql": ("main", "init", "remote-flow-source")},
     "java": {"names": ("main", "doGet", "doPost", "doPut", "doDelete", "service"),

@@ -1,6 +1,6 @@
 # ADR-0023: Per-language CodeQL nodes, reachability engines and the 06 correlator
 
-Status: **Proposed** (brief G, 2026-09-29). The node set, the build gating, "never a failure", the
+Status: **Accepted 2026-09-29** (controller confirmations resolved in `DECISION-LOG-2026-09-29.md`; brief G). The node set, the build gating, "never a failure", the
 engine jobs, the correlator rules and "language-server and tree-sitter results are hints only" are
 William's (brief G design, agreed 2026-09-29); names, schemas, the database store and the tier rule
 are the implementer's and need review.

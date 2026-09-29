@@ -23,7 +23,7 @@ severity cap treats UNREACHABLE and UNKNOWN alike (both cap at High), but the 06
 |---|---|---|
 | Method named `main` in the CPG | `reachability.CallGraph.entry_points` (finding enrichment, 06 IR engine) | Deterministic |
 | `inputs/reachability-entry-points.json` (run-supplied, hash-bound) | finding enrichment, `06-reachability-*` | Operator assertion; bound by hash, not verified |
-| `dep_reachability_engines.ENTRY_POINT_SOURCES[lang]["names"]` (`wmain`, `WinMain`, `wWinMain`, `DllMain`, `LLVMFuzzerTestOneInput`, `ServeHTTP`, servlet `do*`, ...) | dependency engines only | Name match; language-defined |
+| `dep_reachability_engines.ENTRY_POINT_SOURCES[lang]["names"]` (`wmain`, `WinMain`, `wWinMain`, `DllMain`, `ServeHTTP`, servlet `do*`, ...) | dependency engines only | Name match; language-defined |
 | CodeQL pack `EntryPoint` classes (routes, controller actions, `RemoteFlowSource`, address-taken, no-internal-caller) | `06-reachability-codeql` (never reports `unreachable`) | QL library model |
 
 Finding enrichment (ADR-0020) therefore sees fewer entries than the dependency engines for the same
@@ -36,7 +36,8 @@ C/C++ program.
    `METHOD` record whose `name` equals one of these. Deterministic and language-defined, so it is
    in `reachability.PROGRAM_ENTRY_NAMES` and always on. `LLVMFuzzerTestOneInput` is deliberately
    *not* included: it is a harness entry, and a path from a fuzz harness is not a path from the
-   shipped program, so it must not produce a REACHABLE witness that lifts the Critical cap.
+   shipped program, so it must not produce a REACHABLE witness that lifts the Critical cap. The dependency engines follow the same rule (decision D-01,
+   `docs/decisions/DECISION-LOG-2026-09-29.md`): a dependency reached only from a fuzz harness is not reachable from the shipped program.
 2. **Exported symbols of a shared library.** Correct source: the dynamic symbol table of the built
    artifact (`02-native-build` binaries, `02-binary-triage` exports) or linkage facts from
    `02-ir-facts` (external linkage, `visibility("default")`, not `static`, not in an anonymous

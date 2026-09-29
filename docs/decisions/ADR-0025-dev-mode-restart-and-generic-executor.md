@@ -1,6 +1,6 @@
 # ADR-0025: Dev-mode restart by data, and one generic item executor
 
-Status: **Proposed** (brief I, 2026-09-29, branch `dev-executor`). The rules, the guard rails and "one
+Status: **Accepted 2026-09-29** (deviations confirmed in `DECISION-LOG-2026-09-29.md`; brief I). The rules, the guard rails and "one
 generic executor until proven otherwise" come from brief I. The implementer chose the exact rewind
 interpretation, the item layout, which job to port and where the mode is read; these need review.
 

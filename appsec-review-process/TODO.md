@@ -596,3 +596,10 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-build-resolution` | BLOCKED `STALE_GRANT`: build grants bind to the hash of `artifact-manifest.json`, which intake rewrites on acceptance; the controls had been staged before intake | Operator order: run `phase1_intake` before `build_resolution`/`build_configure stage-control` (`stage-run.sh`, operator guide); this run's controls re-staged after intake |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |
+
+## Decisions 2026-09-29
+
+All outstanding ADR questions, the brief I/J/M confirmations and the fuzz-entry alignment are resolved in
+`docs/decisions/DECISION-LOG-2026-09-29.md` (controller decisions by William's delegation; he can override any row).
+OPEN items that log leaves: CWE in the MITRE feed, exported-symbol entry points, stage 12 `scorer` wording, sample 3C
+records and report re-render (WSL), image rebuild and smoke, brief N fingerprint-scope narrowing (D-13).

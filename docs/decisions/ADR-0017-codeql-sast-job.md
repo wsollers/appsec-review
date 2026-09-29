@@ -1,6 +1,6 @@
 # ADR-0017: CodeQL runs in its own job, always, with build-mode none
 
-Status: **Proposed** (decisions 1 and 2 are William's, 2026-09-28; 3 to 6 are the implementer's and need review)
+Status: **Accepted 2026-09-29** (decision log `DECISION-LOG-2026-09-29.md`: 1 and 2 William's 2026-09-28; 5 and 6 accepted; 3 and 4 superseded by ADR-0023)
 
 Superseded in part (2026-09-29, brief G): [ADR-0023](ADR-0023-per-language-codeql-reachability.md) replaces decision 3's
 single `02-codeql-sast` job and decision 5's containers-inside-one-job with one `02-codeql-<lang>` node per language;

@@ -1,6 +1,6 @@
 # ADR-0018: Code-reading hypothesis discovery feeds the claim ledger
 
-Status: **Proposed** (2026-09-28; awaiting William). Implementation: merged to `main` from `ws-hunt`
+Status: **Accepted 2026-09-29** (decision log `DECISION-LOG-2026-09-29.md`; proposed 2026-09-28). Implementation: merged to `main` from `ws-hunt`
 (`bcac6ba`, 2026-09-28); unit tests and a Python replay only, no live run yet.
 
 ## Context
