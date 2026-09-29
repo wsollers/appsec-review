@@ -3,24 +3,6 @@
 Repo: `wsollers/appsec-review`. Base: `main` at the commit that contains this file (all Phase 0 merges are in).
 Plan of record: `claude/batch-plan-2026-09-28.md` in the AppSec Review project (also summarised in each brief).
 
-## FOCUS MODE (William, 2026-09-29): fingerprint and test overhead is PARKED until he turns it back on
-Time has been going into fingerprint bookkeeping and test suites instead of features. This block overrides rules 6 and 8
-and every "report the fingerprints that move" / "golden-hash test" / "full suite" line in an individual brief:
-- **Fingerprints:** do NOT compute, compare or report before/after fingerprints, and do not write fingerprint comparison
-  tables. You may still add a new module to the job's implementation-file list when the job depends on it (one line, no
-  analysis). Do not narrow, restructure or "fix" fingerprint scope. Accepted runs rerunning after a change is expected and fine.
-- **Tests:** write ONE small focused test file for genuinely new logic (the happy path plus the one or two cases that
-  would hurt if wrong). Run only that file and the module directly next to your change. Do NOT run the full suite, do NOT
-  compare against baseline failures, do NOT write golden-hash / byte-identical-when-off tests, do NOT chase pre-existing
-  failures. "Default OFF" stays a design rule for new tunables; you do not need a test proving it.
-- **Checks that stay (they are quick):** `job_catalog.py --check`, `validate_design_parity.py --check-generated-views`,
-  `tunables.py check` when you touched those inputs. Regenerate, never hand-edit.
-- **Soundness rules in briefs still apply** (evidence first, an ambiguous join is an escape, gaps never read as clean,
-  ADR-0013). Only the measuring and re-measuring is parked.
-- **Final message:** commits, files changed, what you built, what is OPEN, decisions for the controller. No fingerprint
-  table, no full-suite result. Under 40 lines.
-Turning it back on: remove this section (decision log D-25).
-
 ## Working rules
 1. Work ONLY on your own branch, named in your brief, in your OWN git worktree (never edit the shared checkout).
    - Local (device VM) agents: `cd $HOME/mnt/appsec-review && git worktree add $HOME/wt-<name> -b <branch> main`, then work in `$HOME/wt-<name>` (fast disk; the mount is slow). Python: `$HOME/venv/bin/python` (3.12, has jsonschema, pyyaml, dagster).
