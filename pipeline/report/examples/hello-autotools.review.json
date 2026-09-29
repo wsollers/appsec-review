@@ -1150,5 +1150,66 @@
       ]
     ],
     "ledger_head": "sha256:6e1d…b38c"
+  },
+  "threat_workbench": {
+    "status": "PUBLISHED",
+    "reason": "",
+    "counts": {
+      "data_classes": 1,
+      "privacy_threats": 0,
+      "deployment_zones": 2,
+      "attack_trees": 1
+    },
+    "data_classes": [
+      {
+        "id": "dc-cli-arguments",
+        "category": "user_content",
+        "sensitivity": "internal",
+        "stores": "",
+        "flows": "flow-argv-to-greeting",
+        "handling": "",
+        "evidence": "STRONG_INFERENCE",
+        "confidence": "medium"
+      }
+    ],
+    "privacy_threats": [],
+    "deployment_zones": [
+      {
+        "id": "zone-local-host",
+        "kind": "client_device",
+        "name": "Local user shell running hello",
+        "exposure": "DECLARED_EXPOSURE",
+        "evidence": "STRONG_INFERENCE",
+        "confidence": "medium"
+      },
+      {
+        "id": "zone-build",
+        "kind": "build_release",
+        "name": "Autotools configure and make",
+        "exposure": "DECLARED_EXPOSURE",
+        "evidence": "DIRECT_EVIDENCE",
+        "confidence": "high"
+      }
+    ],
+    "attack_trees": [
+      {
+        "id": "tree-greeting-overflow",
+        "objective": "Corrupt memory through the greeting formatter",
+        "nodes": 3,
+        "gates": 1,
+        "leaves": 2,
+        "leaf_support": {
+          "evidence": 0,
+          "assumption": 1,
+          "unresolved": 1
+        },
+        "evidence": "WEAK_INFERENCE",
+        "confidence": "low",
+        "verification_items": [
+          "thr-greeting-tampering"
+        ]
+      }
+    ],
+    "note": "Candidate threat-model records from 03-threat-model-dfd-stride (ADR-0019 workbench and L13 privacy cell). They are hypotheses for review, not findings: exposure is declared, never observed, and regulatory notes are candidates, not a conclusion about compliance."
   }
 }

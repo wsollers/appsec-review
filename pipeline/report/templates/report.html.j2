@@ -144,7 +144,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 <style>{{ katex_css|safe }}</style>
 
 <nav class="toc" aria-label="Sections">
-  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a><a href="#chains">3A Attack chains</a><a href="#dependency-reachability">3B Dependency reachability</a>
+  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a><a href="#chains">3A Attack chains</a><a href="#dependency-reachability">3B Dependency reachability</a><a href="#threat-workbench">3C Threat workbench</a>
   <a href="#gaps">4 Gaps</a><a href="#method">5 Scoring</a><a href="#evidence">A Evidence</a><a href="#provenance">B Provenance</a><a href="#latex">LaTeX source</a>
 </nav>
 
@@ -306,6 +306,42 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
     <div class="tbl"><table>
       <thead><tr><th>Match</th><th>Advisory</th><th>Component</th><th>Verdict</th><th>Tier</th><th>Engines</th><th>Entry &rarr; call site</th><th>Reason</th></tr></thead>
       <tbody>{% for r in dr.rows %}<tr><td class="mono">{{ r.match_id }}</td><td class="mono">{{ r.advisory_id }}</td><td>{{ r.component }}</td><td><span class="chip">{{ r.verdict }}</span></td><td>{{ r.tier or '' }}</td><td>{{ r.engines }}</td><td class="mono">{% if r.entry %}{{ r.entry }} &rarr; {{ r.call_site }}{% endif %}</td><td>{{ r.reason }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+  </section>
+
+  <section id="threat-workbench">
+    <h2><span class="n">3C</span>Threat model workbench</h2>
+    {% set tw = threat_workbench if threat_workbench is defined else {'status': 'ABSENT', 'reason': 'not built', 'counts': {'data_classes': 0, 'privacy_threats': 0, 'deployment_zones': 0, 'attack_trees': 0}, 'data_classes': [], 'privacy_threats': [], 'deployment_zones': [], 'attack_trees': [], 'note': ''} %}
+    <p>{{ tw.note }}</p>
+    {% if tw.status != 'PUBLISHED' %}<p><b>No threat workbench records.</b> {{ tw.status }}: {{ tw.reason }}</p>{% elif tw.reason %}<p><b>No workbench records.</b> {{ tw.reason }}</p>{% endif %}
+    <p class="muted">data classes {{ tw.counts.data_classes }} &middot; privacy threats {{ tw.counts.privacy_threats }} &middot; deployment zones {{ tw.counts.deployment_zones }} &middot; attack trees {{ tw.counts.attack_trees }}</p>
+    {% if tw.data_classes %}
+    <h3>Data classes</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Id</th><th>Category</th><th>Sensitivity</th><th>Stores</th><th>Flows</th><th>Handling</th><th>Evidence</th></tr></thead>
+      <tbody>{% for r in tw.data_classes %}<tr><td class="mono">{{ r.id }}</td><td>{{ r.category }}</td><td><span class="chip">{{ r.sensitivity }}</span></td><td class="mono">{{ r.stores }}</td><td class="mono">{{ r.flows }}</td><td>{{ r.handling }}</td><td>{{ r.evidence }} ({{ r.confidence }})</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if tw.privacy_threats %}
+    <h3>Privacy threats (LINDDUN)</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Id</th><th>Category</th><th>Statement</th><th>Targets</th><th>Data classes</th><th>Regulatory candidate notes</th><th>Evidence</th></tr></thead>
+      <tbody>{% for r in tw.privacy_threats %}<tr><td class="mono">{{ r.id }}</td><td><span class="chip">{{ r.category }}</span></td><td>{{ r.statement }}</td><td class="mono">{{ r.targets }}</td><td class="mono">{{ r.data_classes }}</td><td>{{ r.regulatory_notes }}</td><td>{{ r.evidence }} ({{ r.confidence }})</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if tw.deployment_zones %}
+    <h3>Deployment zones</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Id</th><th>Kind</th><th>Name</th><th>Exposure</th><th>Evidence</th></tr></thead>
+      <tbody>{% for r in tw.deployment_zones %}<tr><td class="mono">{{ r.id }}</td><td>{{ r.kind }}</td><td>{{ r.name }}</td><td><span class="chip">{{ r.exposure }}</span></td><td>{{ r.evidence }} ({{ r.confidence }})</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if tw.attack_trees %}
+    <h3>Attack trees</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Tree</th><th>Objective</th><th>Nodes</th><th>Leaves (evidence / assumption / unresolved)</th><th>Verification items</th><th>Evidence</th></tr></thead>
+      <tbody>{% for r in tw.attack_trees %}<tr><td class="mono">{{ r.id }}</td><td>{{ r.objective }}</td><td>{{ r.nodes }} ({{ r.gates }} gates)</td><td>{{ r.leaves }} ({{ r.leaf_support.evidence }} / {{ r.leaf_support.assumption }} / {{ r.leaf_support.unresolved }})</td><td class="mono">{{ r.verification_items|join(', ') }}</td><td>{{ r.evidence }} ({{ r.confidence }})</td></tr>{% endfor %}</tbody>
     </table></div>
     {% endif %}
   </section>
