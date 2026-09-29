@@ -24,6 +24,7 @@ disposition (status `OK`); `02-build-resolution` is then the job that skips.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import posixpath
@@ -34,8 +35,9 @@ import build_classify
 import build_index
 from claude_cli_invoker import ClaudeCliInvoker
 import discovery_gate
-from execution_state import (ROOT, Blocked, atomic_bytes, atomic_json, data_path, digest, file_hash,
+from execution_state import (ROOT, Blocked, atomic_bytes, atomic_json, beneath, data_path, digest, file_hash,
                              identifier, now, read_json)
+import item_memo
 import model_version_registry as mvr
 import persona_dispatch as pd
 import persona_invocation as pi
@@ -74,7 +76,8 @@ CODE_FILES = ('build_plan.py', 'build_classify.py', 'build_index.py', 'discovery
               'persona_dispatch.py', 'persona_invocation.py', 'persona_prompt_assembly.py',
               'claude_cli_invoker.py', 'publish_job_output.py', 'validate_job_output.py',
               'registry/job-templates/02-build-plan.json', 'registry/output-contracts/build-plan.json',
-              '02-evidence-pregather/task-build-plan.md', 'tooling/buildenv-catalog.json')
+              '02-evidence-pregather/task-build-plan.md', 'tooling/buildenv-catalog.json',
+              'item_memo.py', 'tool_output_cache.py')
 
 # --- argv rules (build-resolution.md section 3; ADR-0012 Revision 3) ---------------------------------
 
@@ -412,6 +415,33 @@ def _stage_unit_upstreams(base, record, cpath, ipath, classification, unit_id):
     })
 
 
+# A unit id or root is named in the prompt only when it is plain path text (unit ids come from target
+# paths: anything else is referred to through plan-unit.json and never pasted into the prompt).
+_PROMPT_SAFE = re.compile(r'^[A-Za-z0-9._/:+@-]{1,200}$')
+
+
+def unit_prompt(unit):
+    """The per-unit outer prompt: the job template's prompt with the one unit to plan stated at the top
+    and again at the end (appsec-multi-vuln: haiku anchored on the first unit it read and planned
+    cpp/case-001 when asked for dotnet/case-050). Written under the prompt cache, never an attempt."""
+    base = ppa.assemble_outer_prompt(JOB)
+    text = (ppa.PROMPT_ROOT / base['path']).read_text(encoding='utf-8')
+    if _PROMPT_SAFE.match(unit['unit_id']) and _PROMPT_SAFE.match(unit['root']):
+        name = f'`{unit["unit_id"]}` (root `{unit["root"]}`)'
+    else:
+        name = 'the unit named in `plan-unit.json`'
+    data = (f'# This call plans exactly one unit: {name}\n\n'
+            'Plan only this unit, with `unit_id` and `root` exactly as `plan-unit.json` gives them. The other '
+            'units in the upstream artifacts are context; a plan for any other unit is rejected.\n\n'
+            + text + f'\n# Reminder\n\nThe one unit to plan in this call is {name}.\n').encode('utf-8')
+    sha = hashlib.sha256(data).hexdigest()
+    path = beneath(ppa.PROMPT_CACHE_DIR, ppa.PROMPT_CACHE_DIR / JOB / 'units' / sha[:24] / 'outer_prompt.md')
+    if not path.is_file() or file_hash(path) != sha:
+        atomic_bytes(path, data)
+    return {'path': path.resolve().relative_to(ppa.PROMPT_ROOT.resolve()).as_posix(),
+            'sha256': 'sha256:' + sha, 'bytes': len(data)}
+
+
 def _derive_plan_bookkeeping(plan, units):
     """ADR-0013: mechanical plan fields the model kept getting wrong (B4). ``root`` and ``class`` are the
     classification's for the unit the plan names (the unit id itself is never rewritten: a plan for
@@ -489,6 +519,7 @@ def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, cl
     request = pd.build_request(JOB, run_id=run_id, job_id=PERSONA_JOB_ID, attempt_id=persona_attempt_id,
                                target_root=target_root, source_snapshot_sha256=snapshot, now=clock(),
                                upstream_root=upstream_dir)
+    request['outer_prompt'] = unit_prompt(unit_request(classification, unit_id))
     model_identity = request['model']
     runtime = pi.PersonaRuntime(
         invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
@@ -509,6 +540,40 @@ def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, cl
     summary = (output_root / SUMMARY).read_text(encoding='utf-8')
     pinned = {e['path']: e['sha256'] for e in request['readable_inputs'] if e['root'] == pd.DEFAULT_READABLE_ROOT}
     return value, summary, pinned, persona_attempt_id, model_identity, result['result_sha256']
+
+
+# --- per-unit memo (brief N, ADR-0014 item 6) ---------------------------------------------------------
+# A unit whose own inputs are unchanged reuses the model's earlier plan for it across attempts and across
+# a fingerprint change that did not touch it. The memo stores pointers and hashes only; a hit re-reads
+# the persona attempt's bytes, re-applies the orchestrator fill, finalize and today's full validation.
+
+def unit_memo_material(run_id, record, classification, index, unit_id):
+    """The unit's own inputs: its plan-unit request, its classification and index entries, the
+    catalog, the per-unit prompt bytes (template, role, contract text), the contract and schema, the
+    run's pinned model, the source snapshot and the run. Nothing from a model or target output."""
+    unit = next(u for u in classification['units'] if u['unit_id'] == unit_id)
+    index_unit = next((u for u in index.get('units', []) if isinstance(u, dict)
+                       and u.get('unit_id') == unit.get('index_unit_id')), None)
+    template = ppa.load_job_template(JOB, SchemaStore())
+    model = mvr.model_identity_for(run_id, rc.resolve_model(JOB, template.get('budget_default'))['model'])
+    return {'job': JOB, 'run_id': run_id, 'unit_id': unit_id,
+            'unit_request': unit_request(classification, unit_id), 'classification_unit': unit,
+            'index_unit': index_unit, 'source_snapshot_sha256': record['source_snapshot_sha256'],
+            'source_revision': record['source_revision'], 'target_root': record['target_root'],
+            'catalog': record['catalog'], 'prompt_sha256': unit_prompt(unit_request(classification, unit_id))['sha256'],
+            'model': model, 'contract': file_hash(ROOT / 'registry' / 'output-contracts' / f'{CONTRACT}.json'),
+            'schema': file_hash(ROOT.parent / 'schemas' / 'build-plan.schema.json'),
+            'template': file_hash(ROOT / 'registry' / 'job-templates' / f'{JOB}.json')}
+
+
+def _memo_pointer(base, persona_attempt_id):
+    """The persona attempt's result and summary files, beneath this job's tree."""
+    output_root = base / 'persona-attempts' / identifier(persona_attempt_id) / 'outputs' / 'persona'
+    return beneath(base, output_root / RESULT), beneath(base, output_root / SUMMARY)
+
+
+def _target_pinned(target_root):
+    return {e['path']: e['sha256'] for e in pd._walk_target(Path(target_root), pd.DEFAULT_READABLE_ROOT)}
 
 
 def _validate_attempt(run_id, attempt, record):
@@ -545,11 +610,11 @@ def run(run_id, dagster_id, force=False, dispatch=None):
         unit_values, unit_summaries, pinned_all, persona = [], [], {}, []
         unplanned = []
 
-        def plan_unit(n, unit_id):
-            value, summary, pinned, persona_attempt_id, model_identity, result_sha = dispatch(
-                run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification)
-            if not isinstance(value, dict):
-                raise ValueError(f'{JOB}: the persona result for {unit_id} is not a JSON object')
+        memo = item_memo.Memo(JOB + ':unit')
+        target_pinned = {}
+
+        def accepted(value, unit_id, pinned):
+            """Today's acceptance of one unit's plan, fresh or memoised."""
             finalize(value, classification=classification, index_ref=index_ref,
                      classification_ref=classification_ref, source_revision=record['source_revision'],
                      pinned=pinned)
@@ -561,16 +626,62 @@ def run(run_id, dagster_id, force=False, dispatch=None):
             if errors:
                 raise ValueError(f'{JOB}: the plan for {unit_id} failed independent validation: '
                                  + '; '.join(errors[:20]))
-            return value, summary, pinned, persona_attempt_id, model_identity, result_sha
+
+        def from_memo(entry, unit_id):
+            result_path, summary_path = _memo_pointer(base, entry['persona_attempt_id'])
+            raw = result_path.read_bytes()
+            if 'sha256:' + hashlib.sha256(raw).hexdigest() != entry['result_file_sha256']:
+                raise ValueError('memoised persona result bytes changed')
+            summary = summary_path.read_text(encoding='utf-8')
+            if 'sha256:' + hashlib.sha256(summary.encode('utf-8')).hexdigest() != entry['summary_sha256']:
+                raise ValueError('memoised persona summary changed')
+            if not target_pinned:
+                target_pinned.update(_target_pinned(record['target_root']))
+            if 'sha256:' + digest(target_pinned) != entry['pinned_sha256']:
+                raise ValueError('the readable target differs from the memoised call')
+            value = json.loads(raw.decode('utf-8'))
+            _fill_known(classification)({'result': value}, 'result')
+            accepted(value, unit_id, target_pinned)
+            return value, summary, dict(target_pinned), entry['persona_attempt_id'], entry['model'], \
+                entry['persona_result_sha256']
+
+        def plan_unit(n, unit_id, material):
+            if material is not None:
+                hit = memo.lookup(material, lambda entry: from_memo(entry, unit_id))
+                if hit is not None:
+                    return hit, True
+            value, summary, pinned, persona_attempt_id, model_identity, result_sha = dispatch(
+                run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification)
+            if not isinstance(value, dict):
+                raise ValueError(f'{JOB}: the persona result for {unit_id} is not a JSON object')
+            accepted(value, unit_id, pinned)
+            if material is not None:
+                try:
+                    result_path, summary_path = _memo_pointer(base, persona_attempt_id)
+                    memo.record(material, {
+                        'unit_id': unit_id, 'persona_attempt_id': persona_attempt_id,
+                        'result_file_sha256': 'sha256:' + file_hash(result_path),
+                        'summary_sha256': 'sha256:' + file_hash(summary_path),
+                        'pinned_sha256': 'sha256:' + digest(pinned),
+                        'persona_result_sha256': result_sha, 'model': dict(model_identity)})
+                except (OSError, ValueError):
+                    pass   # nothing to point at (a test dispatch): the unit is simply not memoised
+            return (value, summary, pinned, persona_attempt_id, model_identity, result_sha), False
 
         for n, unit_id in enumerate(sorted(build_set)):
             # ADR-0013: one unit's bad plan is a gap for that unit, not the end of the job
             # (appsec-multi-vuln: haiku planned case-001 when asked for dotnet/case-050, after 18
             # good units). One retry with a fresh persona attempt, then a named gap.
-            outcome = None
+            outcome, reused = None, False
+            material = None
+            if memo.enabled:
+                try:
+                    material = unit_memo_material(run_id, record, classification, index, unit_id)
+                except Exception:   # noqa: BLE001 - no key, no memo: the unit is planned fresh
+                    material = None
             for tag in (n, f'{n}r'):
                 try:
-                    outcome = plan_unit(tag, unit_id)
+                    outcome, reused = plan_unit(tag, unit_id, material)
                     break
                 except Blocked:
                     raise
@@ -584,7 +695,8 @@ def run(run_id, dagster_id, force=False, dispatch=None):
             unit_summaries.append((unit_id, summary))
             pinned_all.update(pinned)
             persona.append({'unit_id': unit_id, 'persona_attempt_id': persona_attempt_id,
-                            'persona_result_sha256': result_sha, 'model': dict(model_identity)})
+                            'persona_result_sha256': result_sha, 'model': dict(model_identity),
+                            **({'reused_from': 'item-memo'} if reused else {})})
         value = merge(unit_values, classification=classification, index_ref=index_ref,
                       classification_ref=classification_ref, source_revision=record['source_revision'],
                       unplanned=unplanned)
