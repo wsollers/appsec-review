@@ -1,9 +1,9 @@
 # Language servers, tree-sitter and CodeQL on the compiler images
 
 Owner: brief C (`docs/agent-briefs/C-language-servers.md`, branch `lang-servers`).
-Status: Dockerfiles, locks, driver, AST builder, CodeQL traced lane and smoke script are written;
-**no image in this document has been built from this branch yet** (the author has no Docker). Every
-"verified" note below says what was checked and where.
+Status: Dockerfiles, locks, driver, AST builder, CodeQL traced lane, smoke script and skills are
+written; **no image in this document has been built from this branch yet** (the author has no
+Docker). Every "checked" note below says what was checked and where; §7 has the WSL commands.
 
 ## 1. Inventory (step 1)
 
@@ -202,6 +202,76 @@ Brief E owns reachability and any taint path queries built on
 reachability. The queries are written but **not compiled here** (no CodeQL in the authoring
 container); the smoke script compiles them.
 
-## 7. OPEN
+## 7. Build and smoke in WSL (the user runs these)
 
-- Nothing in this document has been built; the user builds and runs the smoke commands in WSL.
+From the repo root, after `git fetch && git checkout lang-servers`:
+
+```
+# 1. vendor image first (tree-sitter CLI build ~2 min, wheels download)
+python3 -B images/image_build.py build audit-lsp-vendor
+# 2. compiler images (audit-native:local must exist; the java build fetches the jdtls tarball
+#    and the codeql builds the 553 MB bundle via image.json prebuild, both sha256-checked)
+python3 -B images/image_build.py build audit-buildenv-cpp audit-buildenv-cpp-resolute \
+  audit-buildenv-dotnet audit-buildenv-go audit-buildenv-java audit-buildenv-php \
+  audit-buildenv-python audit-buildenv-rust audit-buildenv-typescript audit-codeql audit-codeql-native
+# 3. smoke every image (or pass image ids); one PASS/FAIL line per check, exit 1 on any FAIL
+images/test/run-lsp-smoke.sh
+scripts/smoke_lang_servers.sh --docker audit-buildenv-java        # one image
+# 4. register B16 records (now includes audit-codeql and audit-codeql-native)
+python3 -B images/registry_records.py generate && python3 -B images/registry_records.py check
+# 5. image sizes for the delta table below
+docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -E 'audit-(buildenv|codeql|lsp)'
+```
+
+`orchestrator/prepare-host.sh` does steps 1, 2 and 4 in its image stage (the vendor image is
+built first via `registry_records.BUILD_ONLY_IMAGE_IDS`).
+
+## 8. Smoke script
+
+`scripts/smoke_lang_servers.sh IMAGE_ID` runs inside the image (repo read-only at `/workspace`,
+`--docker` wraps `images/audit-buildenv-common/run.sh`). Per server it copies
+`images/test/lsp/<lang>` (a `helper` defined and called at known lines) to `/scratch`, asks
+`documentSymbol`, `definition`, `references`, `incomingCalls` through `lsp_driver.py`, and
+PASSes when `helper` is listed and its call site resolves to its definition line (references and
+call counts are printed; `gap` where the server lacks the capability). Then: tree-sitter CLI
+version and `treesitter_ast.py` over all fixtures (hash verifies, 8 helpers, no error nodes); on
+`audit-codeql` the CodeQL version/languages, the .NET SDK and a C# build-mode none database; on
+`audit-codeql-native` a compile check of the three graph queries and a traced lane run on the C++
+fixture (replay counts, CSV row counts).
+
+Checked in the authoring container with host installs of the same pinned versions: gopls,
+clangd, pylsp, typescript-language-server, vscode-json-language-server and Phpactor PASS, and
+tree-sitter + `treesitter_ast.py` PASS. jdtls, basedpyright, rust-analyzer, csharp-ls and every
+CodeQL check have **not** run yet.
+
+## 9. Image size deltas (estimates until step 5 above is run)
+
+| Image | Added | Removed | Estimated delta |
+|---|---|---|---|
+| every image | tree-sitter CLI (12 MB) + `/opt/treesitter` venv (~53 MB) | — | +65 MB |
+| buildenv-cpp | clangd 21.1.0 wheel venv (~85 MB) | apt `clangd-21` + deps | about +50 MB net |
+| buildenv-cpp-resolute | clangd venv | — | +150 MB |
+| buildenv-java | jdtls 1.61.0 milestone | jdtls snapshot (same size class) | +65 MB |
+| buildenv-php | Phpactor project install (no dev deps) | global require with dev stability | about +65 MB |
+| buildenv-python | locked pylsp/basedpyright | `python-lsp-server[all]` extras (pylint, yapf, rope, ...) | about +40 MB |
+| buildenv-rust | `rust-src` component (rust-analyzer needs the sysroot) | — | +110 MB |
+| buildenv-typescript | locked servers in `/opt/node-lsp` | global npm installs | about +65 MB |
+| audit-codeql | .NET SDK 9.0.318 (~750 MB) | — | about +820 MB |
+| audit-codeql-native | tree-sitter | — | +65 MB |
+
+## 10. OPEN
+
+- **Nothing here has been built.** Steps 1–5 of §7 are the user's; the first build may need
+  fixes (most likely: basedpyright or csharp-ls behaviour offline, QL compile errors in
+  `queries/appsec-graph-cpp`, rust-analyzer without network).
+- **`codeql-cpp-traced` is not wired into the graph.** `dagster_workflow.run_codeql_sast` must
+  pass the accepted `02-native-build` root and fingerprint (as `native_sast_lifecycle_work` does)
+  and the graph needs a `02-native-build → 02-codeql-sast` edge; until then the job runs
+  build-mode none only (plan unchanged). This is a graph/catalog change owned by the controller.
+- `treesitter_ast.py` is a CLI and module, not yet a graph job; the host venv has no
+  py-tree-sitter, so its parsing tests skip there (they run with `/opt/treesitter/bin/python`).
+- Other analysis images (`audit-native`, `audit-static*`, `audit-binary-analysis`, `audit-iac`,
+  `audit-container`, `audit-report`, `tool-*`) carry no language server or tree-sitter.
+- Floating inputs remain: Adoptium Temurin 25 and NodeSource Node 22 apt repositories, distro
+  packages, and the NuGet tools `dotnet-dump`/`dotnet-symbol`/`dotnet-trace` (not language servers).
+- Artifact repository for the vendored downloads (later, per William's decision).
