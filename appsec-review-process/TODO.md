@@ -458,8 +458,41 @@ OPEN:
 
 Design: per-language `02-codeql-<lang>` nodes (parallel; compiled languages gated on a successful build of that language, otherwise a gap, never a failure), engine jobs `06-reachability-codeql` and `06-reachability-ir` (same table shape), and `06-cve-reachability` becomes the Python correlator whose output feeds the report and the 07/08/09 red/blue lanes. See `docs/agent-briefs/G-per-language-codeql-reachability.md`.
 
+Done on branch `codeql-reach` (ADR-0023, `docs/dependency-reachability.md`): eight `02-codeql-<lang>`
+nodes replace `02-codeql-sast` (SKIPPED `not-applicable-language-absent`; cpp waits for
+`02-native-build` and adds traced rows per unit; Go/Rust are gaps; databases retained as hash-bound
+pointers); `dep_symbol_resolver.py` (PyPI, npm, Maven, Go, NuGet, Cargo, Packagist); engine jobs
+`06-reachability-codeql` (packs against the retained databases, parallel per language) and
+`06-reachability-ir` (CPG arbiter) with one table schema; `06-cve-reachability` is the Python
+correlator (`conflict` verdict, LSP/tree-sitter hints only) with the summary for 10 (section 3B),
+the claim ledger (reachable = P1 claim, conflict = review obligation) and 07/08/09/12 (evidence
+menu). This closes E's OPEN items "no job runs the CodeQL packs" (for Go/Java/C#/JS/Python, once the
+image is rebuilt) and "`codeql-cpp-traced` tables reach 06 only once ... wiring lands"; E's other
+OPEN items stand. 81 jobs.
+
 OPEN (deferred, not in brief G's first cut):
 - [ ] **Java bytecode reachability** in `06-reachability-ir`: a JVM call-graph engine over the built classes and the vendored dependency jars (for example Soot, WALA or ASM-based class-hierarchy/RTA analysis), including shaded/relocated jars, so a Java dependency can be `reachable`/`unreachable` without relying on CodeQL alone.
 - [ ] **.NET IL reachability** in `06-reachability-ir`: the same for C# assemblies (IL call graph over the built assemblies and the vendored NuGet packages, resolving assembly and namespace names to package ids).
 - [ ] Rust MIR/LLVM IR engine and Go SSA engine (same table shape) once the C/C++ LLVM IR + Joern path is qualified.
 - [ ] Reflection, dynamic dispatch, dependency injection and serialisation entry points: record a per-language "incomplete call graph" reason so `unreachable` is never asserted across them.
+- [ ] WSL: rebuild `audit-codeql` and `audit-codeql-native` (the lane script gained `keep-db`, the
+      new `codeql-reachability-lane.sh`, tool.json `reachability_script`), then
+      `python3 -B images/registry_records.py generate`, then `scripts/smoke_codeql_per_language.sh`.
+      Until then every `02-codeql-<lang>` node is `UNAVAILABLE` (gap) and every CodeQL reachability
+      row is `unknown`. Expect a QL compile round for `data/codeql-reachability/*` (never compiled here).
+- [ ] `02-codeql-go`: needs the Go toolchain in `audit-codeql` plus an offline Go build (vendored
+      `vendor/`) or a Go build step; until then Go is `language not built`. Image request.
+- [ ] `02-codeql-rust`: pin a rust suite in `images/audit-codeql/tool.json` once the bundle's Rust
+      extractor is qualified offline (and add `rust` to `BUILD_MODE_NONE`); Ruby and Rust
+      reachability packs do not exist (`no-pack`).
+- [ ] Java/C# build-mode none leaves dependency jars/assemblies unresolved; the `through-dependency`
+      tier needs vendored dependency sources in the database (artifact repository, per version).
+- [ ] Database store size: one retained database per language and traced unit per run under
+      `<run>/data/codeql-databases/`; no pruning of superseded attempts yet.
+- [ ] LSP incomingCalls walk and `treesitter_ast.py` still run outside the graph (hints are
+      run-supplied under `<run>/inputs/dependency-reachability/`).
+- [ ] NuGet namespaces come from assembly file names (heuristic, recorded as such); reading
+      assembly metadata would be exact.
+- [ ] Controller to confirm: node name `02-codeql-javascript` (CodeQL's `javascript` extractor, JS+TS);
+      cpp always also runs build-mode none next to traced rows; `06-cve-reachability` now feeds
+      `claim-ledger-routing` and `10-synthesis-report` directly (new required edges).

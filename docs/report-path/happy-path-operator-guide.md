@@ -161,10 +161,15 @@ repository into independently buildable projects and operational surfaces. The i
 runs with no network and imports only allowlisted artifacts. Analysis then publishes:
 
 - source SAST, including Go, Java and PHP;
-- CodeQL (`02-codeql-sast`, [ADR-0017](../decisions/ADR-0017-codeql-sast-job.md)): security-extended
-  queries per detected language in build mode none, one network-less container per language; Go and
-  any language whose image has no B16 record are per-language gaps, and the leads enter the claim
-  ledger as P1 candidates;
+- CodeQL (`02-codeql-<lang>`, one node per language, [ADR-0017](../decisions/ADR-0017-codeql-sast-job.md),
+  [ADR-0023](../decisions/ADR-0023-per-language-codeql-reachability.md)): security-extended queries in
+  build mode none (C/C++ also traced per native unit), network-less, in parallel; an absent language
+  is SKIPPED, Go, Rust and any language whose image has no B16 record are gaps; the leads enter the
+  claim ledger as P1 candidates and the retained databases feed `06-reachability-codeql`;
+- dependency reachability: `06-reachability-codeql` and `06-reachability-ir` publish one engine table
+  each and `06-cve-reachability` correlates them (`reachable` / `unreachable` / `conflict` /
+  `unknown`, [docs/dependency-reachability.md](../dependency-reachability.md)); the report shows it in
+  section 3B;
 - secrets, IaC, image, SBOM, offline SCA, licence and dependency-lifecycle evidence;
 - native SAST, LLVM IR, Joern AST/CPG, test and ELF hardening evidence;
 - literal/full-text and LanceDB semantic search projections; and

@@ -22,8 +22,8 @@ other analysis images are listed so the gap is visible.
 | `audit-buildenv-python` | `python:3.12-bookworm` | Python | pylsp, basedpyright |
 | `audit-buildenv-rust` | `rust:1.90.0-bookworm` | Rust | build, rust-analyzer |
 | `audit-buildenv-typescript` | `node:22-bookworm` | JS, TS, JSON | typescript-language-server, vscode-json-language-server |
-| `audit-codeql` | `ubuntu:24.04` | cpp, csharp, java, javascript, python, ruby (build-mode none) | `02-codeql-sast` |
-| `audit-codeql-native` | `audit-native:local` | C, C++ (traced replay) | `02-codeql-sast` tool `codeql-cpp-traced` |
+| `audit-codeql` | `ubuntu:24.04` | cpp, csharp, java, javascript, python, ruby (build-mode none) | `02-codeql-<lang>`, `06-reachability-codeql` (ADR-0023) |
+| `audit-codeql-native` | `audit-native:local` | C, C++ (traced replay) | `02-codeql-cpp` tool `codeql-cpp-traced` |
 | `audit-lsp-vendor` (new) | `rust:1.90.0-bookworm`, `python:3.12-bookworm` | none | build-only: vendored tree-sitter CLI + wheels |
 | `audit-native`, `audit-static`, `audit-static-opengrep`, `audit-binary-analysis`, `audit-iac`, `audit-container`, `audit-report`, `tool-*` | — | various | **not in scope** of this branch: no language server or tree-sitter added (see §7 OPEN) |
 
@@ -156,7 +156,7 @@ traced, Joern) for C/C++ claims.
 
 ## 6. CodeQL (step 6)
 
-`02-codeql-sast` (`appsec-review-process/codeql_sast.py`, ADR-0017) keeps its build-mode none lanes
+`02-codeql-cpp` (`appsec-review-process/codeql_sast.py`, ADR-0017, ADR-0023; formerly `02-codeql-sast`) keeps its build-mode none lane
 unchanged and gains a second tool id, **`codeql-cpp-traced`** (ADR-0017 decision 4 left this
 open):
 
@@ -264,10 +264,9 @@ CodeQL check have **not** run yet.
 - **Nothing here has been built.** Steps 1–5 of §7 are the user's; the first build may need
   fixes (most likely: basedpyright or csharp-ls behaviour offline, QL compile errors in
   `queries/appsec-graph-cpp`, rust-analyzer without network).
-- **`codeql-cpp-traced` is not wired into the graph.** `dagster_workflow.run_codeql_sast` must
-  pass the accepted `02-native-build` root and fingerprint (as `native_sast_lifecycle_work` does)
-  and the graph needs a `02-native-build → 02-codeql-sast` edge; until then the job runs
-  build-mode none only (plan unchanged). This is a graph/catalog change owned by the controller.
+- ~~`codeql-cpp-traced` is not wired into the graph.~~ Done by brief G (ADR-0023): `02-codeql-cpp`
+  depends on `02-native-build` and reads its accepted pointer itself; without a replayable unit it
+  records `language not built` and runs build-mode none only.
 - `treesitter_ast.py` is a CLI and module, not yet a graph job; the host venv has no
   py-tree-sitter, so its parsing tests skip there (they run with `/opt/treesitter/bin/python`).
 - Other analysis images (`audit-native`, `audit-static*`, `audit-binary-analysis`, `audit-iac`,

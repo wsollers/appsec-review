@@ -2,6 +2,10 @@
 
 Status: **Proposed** (decisions 1 and 2 are William's, 2026-09-28; 3 to 6 are the implementer's and need review)
 
+Superseded in part (2026-09-29, brief G): [ADR-0023](ADR-0023-per-language-codeql-reachability.md) replaces decision 3's
+single `02-codeql-sast` job and decision 5's containers-inside-one-job with one `02-codeql-<lang>` node per language;
+the traced C/C++ lane is wired through `02-native-build -> 02-codeql-cpp`. Decisions 1, 2, 4 and 6 stand.
+
 Implementation (2026-09-29): merged to `main` from `ws-sast` (`fa5d37d`). The claim-ledger producer row of
 decision 3 is in (`f50caba`: CodeQL leads are P1). The later traced C/C++ tool id `codeql-cpp-traced`
 (image `audit-codeql-native`, merged from `lang-servers`, `955d797`) exists in `codeql_sast.py` but is not

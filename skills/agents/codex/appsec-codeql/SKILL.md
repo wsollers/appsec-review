@@ -1,6 +1,6 @@
 ---
 name: appsec-codeql
-description: Use the pinned CodeQL bundle (02-codeql-sast) and its traced C/C++ lane and graph tables as evidence leads and locators, not as findings or reachability proof.
+description: Use the pinned CodeQL bundle (02-codeql-<lang> nodes, ADR-0023) and its traced C/C++ lane and graph tables as evidence leads and locators, not as findings or reachability proof.
 ---
 
 # AppSec CodeQL
@@ -8,7 +8,7 @@ description: Use the pinned CodeQL bundle (02-codeql-sast) and its traced C/C++ 
 Use when a review needs CodeQL's security-extended results or the C/C++ call-graph and flow-source
 tables. CodeQL 2.27.0 runs offline in `audit-codeql` (build-mode none: cpp, csharp with the .NET
 9.0.318 SDK, java, javascript/typescript, python, ruby) and `audit-codeql-native` (traced C/C++
-replay of the accepted native build, tool `codeql-cpp-traced`). Pipeline job: `02-codeql-sast`
+replay of the accepted native build, tool `codeql-cpp-traced`). Pipeline jobs: `02-codeql-<lang>` (formerly `02-codeql-sast`)
 (`appsec-review-process/codeql_sast.py`); details in
 [`docs/language-servers.md`](../../../../docs/language-servers.md) §6 and
 [`images/audit-codeql/README.md`](../../../../images/audit-codeql/README.md).
