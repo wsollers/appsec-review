@@ -1243,6 +1243,12 @@
           "allowed_skip_reasons": []
         },
         {
+          "job": "06-cve-reachability",
+          "kind": "required",
+          "contract": "cve-reachability",
+          "allowed_skip_reasons": []
+        },
+        {
           "job": "14-attack-chain-refutation",
           "kind": "optional",
           "contract": "14-attack-chain-refutation",

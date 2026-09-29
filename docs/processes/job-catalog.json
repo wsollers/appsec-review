@@ -2601,6 +2601,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
         "job:12b-poc-and-fix",
         "job:11-remediation-proposal"
@@ -5699,6 +5700,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
         "job:12b-poc-and-fix",
         "job:11-remediation-proposal"
@@ -5782,6 +5784,7 @@
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
        "job:12-scoring-prioritization",
+       "job:06-cve-reachability",
        "job:14-attack-chain-refutation",
        "job:12b-poc-and-fix",
        "job:11-remediation-proposal",
@@ -9898,6 +9901,11 @@
      "contract": "12-scoring-prioritization"
     },
     {
+     "job": "06-cve-reachability",
+     "kind": "required",
+     "contract": "cve-reachability"
+    },
+    {
      "job": "14-attack-chain-refutation",
      "kind": "optional",
      "contract": "14-attack-chain-refutation"
@@ -9951,6 +9959,7 @@
     "finding-enrichment.json",
     "attack-chains.json",
     "poc-fix-section.json",
+    "dependency-reachability-section.json",
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",
@@ -9979,6 +9988,7 @@
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
     "job:12-scoring-prioritization",
+    "job:06-cve-reachability",
     "job:14-attack-chain-refutation",
     "job:12b-poc-and-fix",
     "job:11-remediation-proposal"
@@ -14363,7 +14373,8 @@
     "step:fuzz-target-triage",
     "job:13-fuzz-target-triage",
     "job:claim-ledger-routing",
-    "job:07-red-team-adversarial"
+    "job:07-red-team-adversarial",
+    "job:10-synthesis-report"
    ]
   },
   "job:13-fuzz-target-triage": {

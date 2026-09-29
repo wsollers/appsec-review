@@ -314,6 +314,27 @@ Rank & Chain & State & Impact & Objective\\
 \end{tabularx}}
 \BLOCK{endif}
 
+%# ==== 3B ====
+%% set dr = dependency_reachability if dependency_reachability is defined else {'status': 'ABSENT', 'reason': 'not built', 'counts': {'reachable': 0, 'conflict': 0, 'unknown': 0, 'unreachable': 0}, 'rows': [], 'note': ''}
+\section{Dependency reachability}
+\VAR{dr.note|tex}
+
+\BLOCK{if dr.status != 'PUBLISHED'}\textbf{No dependency reachability.} \VAR{dr.status|tex}: \VAR{dr.reason|tex}
+
+\BLOCK{elif not dr.rows}\textbf{No dependency match.} \VAR{dr.reason|tex}
+
+\BLOCK{endif}
+{\small\color{muted}reachable \VAR{dr.counts.reachable}, conflict \VAR{dr.counts.conflict}, unknown \VAR{dr.counts.unknown}, unreachable \VAR{dr.counts.unreachable}\par}
+\BLOCK{if dr.rows}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l >{\raggedright\arraybackslash}X l l >{\raggedright\arraybackslash}X@{}}
+Match & Advisory & Component & Verdict & Tier & Reason\\
+%% for r in dr.rows
+\mono{\VAR{r.match_id|texpath}} & \mono{\VAR{r.advisory_id|texpath}} & \VAR{r.component|tex} & \VAR{r.verdict|tex} & \VAR{(r.tier or '')|tex} & \VAR{r.reason|tex}\BLOCK{if r.call_site} (\VAR{r.call_site|tex})\BLOCK{endif}\\
+%% endfor
+\end{tabularx}}
+\BLOCK{endif}
+
 %# ==== 4 ====
 \section{Coverage gaps}
 Each item below is an area the review did not fully examine. None of them may be read as ``no issues''.

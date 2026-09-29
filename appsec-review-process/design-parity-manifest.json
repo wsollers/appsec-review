@@ -2995,6 +2995,7 @@
           "08-blue-team-refutation",
           "09-independent-verification",
           "12-scoring-prioritization",
+          "06-cve-reachability",
           "14-attack-chain-refutation",
           "12b-poc-and-fix",
           "11-remediation-proposal"

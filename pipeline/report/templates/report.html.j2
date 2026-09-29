@@ -144,7 +144,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 <style>{{ katex_css|safe }}</style>
 
 <nav class="toc" aria-label="Sections">
-  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a><a href="#chains">3A Attack chains</a>
+  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a><a href="#chains">3A Attack chains</a><a href="#dependency-reachability">3B Dependency reachability</a>
   <a href="#gaps">4 Gaps</a><a href="#method">5 Scoring</a><a href="#evidence">A Evidence</a><a href="#provenance">B Provenance</a><a href="#latex">LaTeX source</a>
 </nav>
 
@@ -292,6 +292,20 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
     <div class="tbl"><table>
       <thead><tr><th>Rank</th><th>Chain</th><th>State</th><th>Impact</th><th>Objective</th></tr></thead>
       <tbody>{% for c in ac.appendix %}<tr><td class="num">{{ c.rank }}</td><td class="mono">{{ c.chain_id }}</td><td>{{ c.state }}</td><td>{{ c.impact_kind }}</td><td>{{ c.objective }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+  </section>
+
+  <section id="dependency-reachability">
+    <h2><span class="n">3B</span>Dependency reachability</h2>
+    {% set dr = dependency_reachability if dependency_reachability is defined else {'status': 'ABSENT', 'reason': 'not built', 'counts': {'reachable': 0, 'conflict': 0, 'unknown': 0, 'unreachable': 0}, 'rows': [], 'note': ''} %}
+    <p>{{ dr.note }}</p>
+    {% if dr.status != 'PUBLISHED' %}<p><b>No dependency reachability.</b> {{ dr.status }}: {{ dr.reason }}</p>{% elif not dr.rows %}<p><b>No dependency match.</b> {{ dr.reason }}</p>{% endif %}
+    <p class="muted">reachable {{ dr.counts.reachable }} &middot; conflict {{ dr.counts.conflict }} &middot; unknown {{ dr.counts.unknown }} &middot; unreachable {{ dr.counts.unreachable }}</p>
+    {% if dr.rows %}
+    <div class="tbl"><table>
+      <thead><tr><th>Match</th><th>Advisory</th><th>Component</th><th>Verdict</th><th>Tier</th><th>Engines</th><th>Entry &rarr; call site</th><th>Reason</th></tr></thead>
+      <tbody>{% for r in dr.rows %}<tr><td class="mono">{{ r.match_id }}</td><td class="mono">{{ r.advisory_id }}</td><td>{{ r.component }}</td><td><span class="chip">{{ r.verdict }}</span></td><td>{{ r.tier or '' }}</td><td>{{ r.engines }}</td><td class="mono">{% if r.entry %}{{ r.entry }} &rarr; {{ r.call_site }}{% endif %}</td><td>{{ r.reason }}</td></tr>{% endfor %}</tbody>
     </table></div>
     {% endif %}
   </section>
