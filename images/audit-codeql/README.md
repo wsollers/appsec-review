@@ -3,7 +3,7 @@
 CodeQL CLI + bundled query packs, run offline, for **pre-engagement evidence gathering**
 (ADR-0006). Not the native memory-safety substrate (that is `audit-native`, ADR-0001).
 
-## Pipeline job (ADR-0017)
+## Pipeline nodes (ADR-0017, ADR-0023)
 
 The `02-codeql-<lang>` nodes (`appsec-review-process/codeql_sast.py`, ADR-0023) run this image through B13, one
 node per language, with `/opt/scripts/codeql-sast-lane.sh LANG none SUITE THREADS RAM_MB keep-db`: database
@@ -20,13 +20,34 @@ container per native unit runs the same lane script in `audit-codeql-native` as
 Details: [`docs/language-servers.md`](../../docs/language-servers.md) §6. The image also carries the
 .NET 9.0.318 SDK (C# build-mode none) and tree-sitter.
 
+Per node (`02-codeql-<lang>`, run in parallel in the Docker pool; an absent language is `SKIPPED`
+`not-applicable-language-absent`):
+
+| Node | Mode in the pipeline | Gate |
+|---|---|---|
+| `02-codeql-javascript` (JS and TS), `02-codeql-python`, `02-codeql-ruby` | `--build-mode none` | intake |
+| `02-codeql-java`, `02-codeql-csharp` | `--build-mode none` (fidelity gap recorded) | intake |
+| `02-codeql-cpp` | `--build-mode none` always, plus one traced row per replayable unit in `audit-codeql-native` | `02-native-build` (may be SKIPPED non-native) |
+| `02-codeql-go` | not run: `OK_WITH_GAPS`, `language not built` (no build-mode none, no Go toolchain in this image) | intake |
+| `02-codeql-rust` | not run: `OK_WITH_GAPS`, no rust suite pinned in `tool.json` | intake |
+
+Each completed lane keeps its database (`keep-db`); the worker moves it to
+`<run>/data/codeql-databases/<job>/<attempt>/<key>/` and publishes a hash-bound pointer
+(`database_id`, language, build mode, unit, bundle version, `tool.json` sha256, image digest, source
+snapshot sha256, `tree_sha256`) in `codeql-language.json`. `06-reachability-codeql` re-hashes the
+store (a mismatch is the gap `codeql-db-changed`, never a rebuild) and runs
+`/opt/scripts/codeql-reachability-lane.sh LANGUAGE THREADS RAM_MB` (go, java, csharp, javascript,
+python) with the `data/codeql-reachability/<lang>` pack against it; C/C++ reachability uses the traced
+graph tables instead. Details: [`docs/dependency-reachability.md`](../../docs/dependency-reachability.md).
+Both scripts are COPYed into the image: rebuild it and regenerate the B16 records after changing them.
+
 ## License basis
 
 `ghas` — GitHub Advanced Security via Microsoft (ZeniMax). Set as the image default and
 recorded in `run-manifest.json` on every run; override with `CODEQL_LICENSE_BASIS` if an
 engagement is run under a different basis (`oss`, `academic`).
 
-## What it produces
+## What it produces (manual `run-codeql.sh`)
 
 `/scratch/codeql/`: one database per language, `<lang>.sarif` (+ `.csv`), per-step logs,
 and `run-manifest.json` (CodeQL version, bundle, license basis, suite, source-tree hash,
@@ -34,12 +55,12 @@ per-language extraction mode and finding count, query-pack path). All of that go
 the orchestrator's run manifest — query packs are versioned with the bundle, so reruns
 can distinguish code changes from query changes (design §14).
 
-## Languages and extraction modes
+## Languages and extraction modes (manual `run-codeql.sh`; the pipeline table is above)
 
 | Language | Mode | Note |
 |---|---|---|
 | javascript/typescript, python, ruby | interpreted | no build needed |
-| go | buildless | |
+| go | autobuild | needs a Go toolchain and module sources in the image; the pipeline does not run it |
 | java, csharp | `--build-mode none` | no build; lower fidelity than a traced build; C# resolves references with the bundled .NET 9 SDK |
 | cpp | `--build-mode none` (default) | no compiler; **no** build-driven macro/template resolution. Use for breadth, not for memory-safety claims. |
 | cpp, `--traced-cpp compile_commands.json` | traced clang-cl replay | experimental; CodeQL documents clang-cl support as *preliminary*; needs clang-cl + `/msvc` in the same image |

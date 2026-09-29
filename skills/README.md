@@ -33,4 +33,4 @@ Pins: [`docs/language-servers.md`](../docs/language-servers.md).
 | `appsec-lsp-csharp-ls` | csharp-ls 0.20.0 (C#, `audit-buildenv-dotnet`) |
 | `appsec-lsp-phpactor` | Phpactor 2026.07.22.0 (PHP, `audit-buildenv-php`) |
 | `appsec-tree-sitter` | tree-sitter 0.26.13 CLI and `treesitter_ast.py` (every compiler image) |
-| `appsec-codeql` | CodeQL 2.27.0 leads, traced C/C++ lane and brief-E graph tables (`audit-codeql`, `audit-codeql-native`) |
+| `appsec-codeql` | CodeQL 2.27.0 per-language nodes `02-codeql-<lang>` (leads, retained databases), traced C/C++ lane and graph tables, reachability packs of `06-reachability-codeql` (`audit-codeql`, `audit-codeql-native`) |
