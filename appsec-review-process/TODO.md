@@ -668,3 +668,17 @@ records and report re-render (WSL), image rebuild and smoke, brief N fingerprint
 - OPEN: `render.py` applies the native tier cap only to a family named `native`; the graph has no such lane, so the
   sample's assurance carries no tier cap.
 - OPEN: 3A replays the lane-14 case-001 fixture, so its entry fact names `projects/cpp/case-001/main.cpp`.
+## Q: exported-symbol entry points (brief Q, `entry_exports.py`, tunables default off)
+
+- [x] Q1 `binary-summary` records `dynamic_exports` (ELF `.dynsym`, PE export directory; binding, visibility,
+      version-hidden, `c++filt`-demangled, artifact kind, `complete`); `entry_exports` reads it hash-bound from the
+      accepted `02-binary-triage` attempt and joins it uniquely to the CPG (`exported-symbol` roots,
+      `ambiguous-export` escapes, not-in-CPG / unjoinable / incomplete-table gaps keep UNKNOWN). Finding enrichment
+      uses it when `reachability_export_entries` is on. One entry-name table (`ENTRY_POINT_SOURCES["cpp"]["names"]`
+      is `reachability.PROGRAM_ENTRY_NAMES`). Replaces the M5 open item for source 2.
+- [x] Q2 `join_codeql_entries` (`(path, start_line)`, same snapshot, framework reasons only) and `CpgEngine(extra=)`,
+      canned tables only (`reachability_codeql_entries`).
+- [ ] Q3 WSL: rebuild `audit-binary-analysis`, run `bash scripts/smoke_entry_exports.sh`, then William decides the
+      `reachability_export_entries` default.
+- [ ] Exported-symbol roots for `06-reachability-ir` (needs a `02-binary-triage` input edge); source 3 live consumer
+      (non-native `EntryPoints` tables); Mach-O exports; IR linkage facts for stripped binaries.

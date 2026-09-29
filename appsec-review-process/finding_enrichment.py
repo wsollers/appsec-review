@@ -8,7 +8,9 @@ accepted inputs only, the report-template fields the draft used to leave blank:
   (07/09/12, carried by the lifecycle), all validated against the pinned CWE catalog;
 * CVSS v4.0 -- the vector/score the 12 lifecycle computed from the reviewer's base metrics;
 * reachability -- the call-graph analyser over the accepted CPG (+ IR facts); code findings get a
-  witness path, SCA findings take the accepted 06-cve-reachability classification;
+  witness path, SCA findings take the accepted 06-cve-reachability classification; with the
+  ``reachability_export_entries`` tunable on, a shipped library's exported functions are roots too
+  (``entry_exports``, from the accepted 02-binary-triage evidence);
 * severity -- the lifecycle severity, capped by reachability: Critical requires REACHABLE,
   UNKNOWN and UNREACHABLE cap at High (and say so);
 * EPSS / KEV -- from the dated, hash-pinned offline snapshot for SCA findings, else "not assessed";
@@ -28,6 +30,7 @@ from typing import Any
 import code_snippets
 import cvss4
 import cwe_catalog
+import entry_exports
 import epss_kev_snapshot
 import reachability
 
@@ -72,6 +75,10 @@ def input_bindings(run_root: Path) -> dict[str, Any]:
             bindings[name] = None
     entry = Path(run_root) / ENTRY_POINTS
     bindings["entry_points"] = _sha_file(entry) if entry.is_file() and not entry.is_symlink() else None
+    if entry_exports.enabled("reachability_export_entries"):
+        # Only when on: with the tunable off the bindings (and so the fingerprint) are unchanged.
+        found = _accepted_attempt(run_root, entry_exports.TRIAGE_JOB)
+        bindings["export_entries"] = {**found[1], **entry_exports.triage_binding(found[0])} if found else None
     lock = epss_kev_snapshot.SNAPSHOT_DIR / epss_kev_snapshot.LOCK
     bindings["epss_kev_lock"] = _sha_file(lock) if lock.is_file() else None
     bindings["cwe"] = cwe_catalog.Catalog().identity
@@ -101,7 +108,14 @@ class Context:
             if self.bindings["ir"]:
                 ir = _accepted_attempt(self.run_root, OPTIONAL_JOBS["ir"][0])[0] / OPTIONAL_JOBS["ir"][1]
             self.graph = reachability.load_cpg(attempt, ir)
-        else:
+        self.extra: reachability.ExtraEntries | None = None
+        if self.graph is not None and "export_entries" in self.bindings:
+            tables, gaps = [], [f"export-facts-missing:{entry_exports.TRIAGE_JOB}"]
+            if self.bindings["export_entries"]:
+                tables, gaps = entry_exports.tables_from_triage(
+                    _accepted_attempt(self.run_root, entry_exports.TRIAGE_JOB)[0])
+            self.extra = entry_exports.join_exports(self.graph, tables, gaps)
+        if self.graph is None:
             self.gaps.append("REACHABILITY_UNKNOWN: no accepted 02-code-property-graph; every code finding is UNKNOWN")
         self.remediation: dict[str, dict[str, Any]] = {}
         if self.bindings["remediation"]:
@@ -196,7 +210,7 @@ def _reachability(ctx: Context, code: list[dict[str, Any]], dependency: list[dic
                 "reason": "no accepted code property graph"}
     best = None
     for row in code:
-        result = reachability.assess_location(ctx.graph, row["path"], row["line"], ctx.entry_points)
+        result = reachability.assess_location(ctx.graph, row["path"], row["line"], ctx.entry_points, extra=ctx.extra)
         if best is None or reachability.STATES.index(result["state"]) < reachability.STATES.index(best["state"]):
             best = result
     best = {key: value for key, value in best.items() if key != "graph"}

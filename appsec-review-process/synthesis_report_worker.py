@@ -32,7 +32,7 @@ ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthe
     *(f"presentation/{name}" for name in presentation.RENDERED),
     "permission.json", "lineage.json", "status.json"]
 CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", "synthesis_report.py",
-    "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py",
+    "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py", "entry_exports.py",
     "cvss4.py", "cwe_catalog.py", "code_snippets.py", "epss_kev_snapshot.py",
     "attack_chain_report.py", "attack_chain_refute.py", "attack_chain_derive.py",
     "poc_fix_report.py", "poc_fix_denylist.py", "dependency_reachability_report.py",
