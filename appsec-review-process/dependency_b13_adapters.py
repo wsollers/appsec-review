@@ -17,9 +17,10 @@ import threading
 from typing import Any
 
 import container_execution as ce
-from execution_state import atomic_bytes
+from execution_state import atomic_bytes, atomic_json, beneath, data_path, digest, identifier
 import permission_capabilities as pc
 import dependency_snapshot_registry as snapshots
+import tool_output_cache
 
 PINNED_RECEIPT_SCHEMA = "appsec-review/pinned-tool-evidence/1.0"
 SPECS = {
@@ -175,7 +176,11 @@ def request(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
 
 def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_sha256: str,
             attempt_root: Path, target: Path | None = None, sbom_root: Path | None = None,
-            database_root: Path | None = None, supplied_runtime: ce.ContainerRuntime | None = None) -> dict[str, Any]:
+            database_root: Path | None = None, supplied_runtime: ce.ContainerRuntime | None = None,
+            input_identities: dict[str, str] | None = None) -> dict[str, Any]:
+    """Run one pinned tool through B13, or reuse a cached verified attempt (``tool_output_cache``).
+    ``input_identities`` names a mount by a content identity already re-hashed by the offline
+    snapshot registry (its container path -> identity) instead of hashing that tree again."""
     spec = SPECS[kind]; rt = supplied_runtime or runtime(source_snapshot_sha256)
     try:
         registry = ce.load_image_registry(rt.images_dir)
@@ -190,6 +195,13 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
     attempt_root = Path(attempt_root)
     if not attempt_root.is_absolute() or not attempt_root.is_dir() or attempt_root.is_symlink():
         raise AdapterBlocked(f"{spec['job']}: adapter attempt root must already be an absolute real directory")
+    cache = _cache_context(kind, req, rt, run_id=run_id, attempt_root=attempt_root,
+                           source_snapshot_sha256=source_snapshot_sha256, input_identities=input_identities)
+    if cache is not None:
+        reused = _reuse(kind, cache, req=req, rt=rt, image=image, run_id=run_id,
+                        source_snapshot_sha256=source_snapshot_sha256, attempt_root=attempt_root)
+        if reused is not None:
+            return reused
     terminal = ce.run_container(rt, run_id=run_id, job_id=spec["job"], attempt_id=adapter_attempt_id,
                                 attempt_root=attempt_root, request=req)
     expected_result_sha256 = terminal["result_sha256"]  # caller-held, never loaded back from the attempt
@@ -202,9 +214,7 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
     except ce.ContainerRequestError as exc:
         raise AdapterBlocked(f"{spec['job']}: B13 result failed independent re-verification") from exc
     finding_exit = exit_accepted(kind, verified, attempt_root)
-    host_binding = {"images_dir": str(rt.images_dir), "host_flavor": rt.host_flavor,
-        "docker_host": rt.docker_host, "docker_executable": str(rt.docker_executable),
-        "container_user": rt.container_user}
+    host_binding = _host_binding(rt)
     if verified["execution_status"] != "OK" and not finding_exit:
         gap = tool_gap(kind, verified, attempt_root)
         if gap is None:
@@ -213,10 +223,9 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
         # worker re-verifies the same B13 attempt and re-derives the same gap.
         binding = {"attempt_root": str(attempt_root), "expected_result_sha256": expected_result_sha256,
             "expected_output_sha256": None, "request": req, **host_binding}
-        return {"tool_output": None, "tool_receipt": None, "tool_gap": gap,
-                "expected_tool": {"tool_id": spec["tool"], "image_id": image["image_id"],
-                                  "image_digest": image["digest"], "boundary_sha256": ce.boundary_sha256()},
-                "expected_result_sha256": expected_result_sha256, "request": req, "b13_attempt": binding}
+        if cache is not None and verified["cause"] in tool_output_cache.CACHEABLE_GAP_CAUSES:
+            _remember(cache, req, rt, input_identities, outcome="GAP", binding=binding, gap=gap)
+        return _gap_result(spec, image, gap, binding)
     output = attempt_root / "scratch" / spec["output"]
     if not output.is_file() or output.is_symlink():
         raise AdapterBlocked(f"{spec['job']}: pinned tool did not emit its required output")
@@ -229,13 +238,163 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
     receipt_path = attempt_root / "pinned-tool-evidence.json"
     atomic_bytes(receipt_path, (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode())
     binding = {"attempt_root": str(attempt_root), "expected_result_sha256": expected_result_sha256,
-        "expected_output_sha256": receipt["result_sha256"],
-        "request": req, "images_dir": str(rt.images_dir), "host_flavor": rt.host_flavor,
-        "docker_host": rt.docker_host, "docker_executable": str(rt.docker_executable),
-        "container_user": rt.container_user}
+        "expected_output_sha256": receipt["result_sha256"], "request": req, **host_binding}
+    if cache is not None:
+        _remember(cache, req, rt, input_identities, outcome="OUTPUT", binding=binding, gap=None)
+    return _output_result(receipt, binding, output, receipt_path)
+
+
+def _gap_result(spec: dict[str, Any], image: dict[str, Any], gap: str, binding: dict[str, Any]) -> dict[str, Any]:
+    return {"tool_output": None, "tool_receipt": None, "tool_gap": gap,
+            "expected_tool": {"tool_id": spec["tool"], "image_id": image["image_id"],
+                              "image_digest": image["digest"], "boundary_sha256": ce.boundary_sha256()},
+            "expected_result_sha256": binding["expected_result_sha256"], "request": binding["request"],
+            "b13_attempt": binding}
+
+
+def _output_result(receipt: dict[str, Any], binding: dict[str, Any], output: Path,
+                   receipt_path: Path) -> dict[str, Any]:
     return {"tool_output": str(output), "tool_receipt": str(receipt_path),
             "expected_tool": {key: receipt[key] for key in ("tool_id", "image_id", "image_digest", "boundary_sha256")},
-            "expected_result_sha256": expected_result_sha256, "request": req, "b13_attempt": binding}
+            "expected_result_sha256": binding["expected_result_sha256"], "request": binding["request"],
+            "b13_attempt": binding}
+
+
+# --- tool-output cache (brief N) --------------------------------------------------------------------
+# The cache is a pointer to an earlier verified B13 attempt of the same run and job. A hit is reused
+# only after the full independent re-verification below; dependency_workers re-verifies it again.
+REUSE_SCHEMA = "appsec-review/tool-output-reuse/1"
+_BINDING_FIELDS = frozenset({"attempt_root", "expected_result_sha256", "expected_output_sha256", "request",
+                             "images_dir", "host_flavor", "docker_host", "docker_executable", "container_user"})
+_STATIC_REQUEST_FIELDS = ("schema", "run_id", "job_id", "image", "argv", "environment", "scratch_path",
+                          "log_path", "network", "limits")
+
+
+def _host_binding(rt: ce.ContainerRuntime) -> dict[str, Any]:
+    return {"images_dir": str(rt.images_dir), "host_flavor": rt.host_flavor, "docker_host": rt.docker_host,
+            "docker_executable": str(rt.docker_executable), "container_user": rt.container_user}
+
+
+def _input_digests(req: dict[str, Any], input_identities: dict[str, str] | None) -> dict[str, str]:
+    """Content identity of every mount: a registry-verified snapshot identity, else a tree digest
+    computed here over the mounted bytes. Never a value read from the mounted content."""
+    identities = input_identities or {}
+    return {mount["container_path"]: identities.get(mount["container_path"])
+            or tool_output_cache.tree_digest(Path(mount["host_path"])) for mount in req["target_mounts"]}
+
+
+def _cache_context(kind: str, req: dict[str, Any], rt: ce.ContainerRuntime, *, run_id: str, attempt_root: Path,
+                   source_snapshot_sha256: str, input_identities: dict[str, str] | None) -> dict[str, Any] | None:
+    """The cache key material, or None when the cache is off or cannot be used safely here. Only
+    run-owned attempts (beneath the run's jobs/<job> tree) take part."""
+    mode = tool_output_cache.run_mode()
+    if not tool_output_cache.enabled(mode):
+        return None
+    try:
+        owner = data_path(run_id, "jobs", req["job_id"])
+        beneath(owner, attempt_root)
+        inputs = _input_digests(req, input_identities)
+    except (ValueError, OSError):
+        return None
+    material = {"mode": mode, "kind": kind, "run_id": run_id, "source_snapshot_sha256": source_snapshot_sha256,
+                **{field: req[field] for field in _STATIC_REQUEST_FIELDS},
+                "container_paths": [mount["container_path"] for mount in req["target_mounts"]],
+                "inputs": inputs, "boundary_sha256": ce.boundary_sha256(), "host": _host_binding(rt)}
+    return {"material": material, "key": tool_output_cache.key_of(material), "owner": str(owner)}
+
+
+def _remember(cache: dict[str, Any], req: dict[str, Any], rt: ce.ContainerRuntime,
+              input_identities: dict[str, str] | None, *, outcome: str, binding: dict[str, Any],
+              gap: str | None) -> None:
+    """Store a verified outcome, but only if the mounted bytes are still the ones keyed before the
+    run (a tree that changed during the run is never cached)."""
+    try:
+        if _input_digests(req, input_identities) != cache["material"]["inputs"]:
+            return
+    except (ValueError, OSError):
+        return
+    tool_output_cache.store().put(cache["key"], cache["material"],
+        {"kind": cache["material"]["kind"], "run_id": req["run_id"], "job_id": req["job_id"],
+         "outcome": outcome, "tool_gap": gap, "b13_attempt": binding})
+
+
+def _reuse(kind: str, cache: dict[str, Any], *, req: dict[str, Any], rt: ce.ContainerRuntime, image: dict[str, Any],
+           run_id: str, source_snapshot_sha256: str, attempt_root: Path) -> dict[str, Any] | None:
+    """A cache hit, re-verified end to end, or None (miss). A hit that fails any check is
+    invalidated so the caller runs the tool fresh."""
+    store = tool_output_cache.store()
+    entry = store.get(cache["key"], cache["material"])
+    if entry is None:
+        return None
+    try:
+        result = _reverify_entry(kind, entry, req=req, rt=rt, image=image, run_id=run_id,
+                                 source_snapshot_sha256=source_snapshot_sha256, owner=Path(cache["owner"]))
+    except (AdapterBlocked, ce.ContainerRequestError, OSError, KeyError, TypeError, ValueError) as exc:
+        store.invalidate(cache["key"], f"re-verification failed: {exc}"[:500])
+        return None
+    binding = result["b13_attempt"]
+    reused_from = {"attempt_root": binding["attempt_root"], "attempt_id": binding["request"]["attempt_id"],
+                   "expected_result_sha256": binding["expected_result_sha256"],
+                   "expected_output_sha256": binding["expected_output_sha256"],
+                   "cache_key": cache["key"], "cached_at": entry["created_at"]}
+    atomic_json(Path(attempt_root) / "tool-output-reuse.json",
+                {"schema": REUSE_SCHEMA, "run_id": run_id, "job_id": req["job_id"],
+                 "attempt_id": req["attempt_id"], "tool_id": SPECS[kind]["tool"], "outcome": entry["outcome"],
+                 "reused_from": reused_from, "reverified_at": rt.clock()})
+    return {**result, "reused_from": reused_from}
+
+
+def _reverify_entry(kind: str, entry: dict[str, Any], *, req: dict[str, Any], rt: ce.ContainerRuntime,
+                    image: dict[str, Any], run_id: str, source_snapshot_sha256: str, owner: Path) -> dict[str, Any]:
+    spec = SPECS[kind]
+    binding = entry["b13_attempt"]
+    if not isinstance(binding, dict) or set(binding) != _BINDING_FIELDS or entry.get("kind") != kind:
+        raise AdapterBlocked("cached binding shape is not the adapter binding")
+    if {key: binding[key] for key in _host_binding(rt)} != _host_binding(rt):
+        raise AdapterBlocked("cached attempt was verified under a different host binding")
+    cached_root = beneath(owner, Path(binding["attempt_root"]))
+    if not cached_root.is_dir() or cached_root.is_symlink():
+        raise AdapterBlocked("cached attempt root is absent or linked")
+    cached_req = binding["request"]
+    if not isinstance(cached_req, dict) or set(cached_req) != set(req):
+        raise AdapterBlocked("cached request shape differs")
+    if any(cached_req[field] != req[field] for field in _STATIC_REQUEST_FIELDS):
+        raise AdapterBlocked("cached request differs from the fixed adapter request")
+    if [m.get("container_path") for m in cached_req["target_mounts"]] != [m["container_path"] for m in req["target_mounts"]]:
+        raise AdapterBlocked("cached request mounts differ")
+    cached_attempt_id = identifier(cached_req["attempt_id"])
+    evaluated_at = cached_req["permission"]["decision"]["evaluated_at"]
+    if cached_req["permission"] != _permission(run_id, spec["job"], source_snapshot_sha256, evaluated_at):
+        raise AdapterBlocked("cached permission decision is not the exact offline decision")
+    # The mandatory independent B13 re-verification, against the result hash retained at store time.
+    verified = ce.load_verified_result(cached_root, run_id=run_id, job_id=spec["job"], attempt_id=cached_attempt_id,
+        request=cached_req, images_dir=rt.images_dir, host_flavor=rt.host_flavor, docker_host=rt.docker_host,
+        docker_executable=rt.docker_executable, container_user=rt.container_user,
+        expected_result_sha256=binding["expected_result_sha256"])
+    if entry["outcome"] == "GAP":
+        gap = tool_gap(kind, verified, cached_root)
+        if (verified["cause"] not in tool_output_cache.CACHEABLE_GAP_CAUSES or gap is None
+                or gap != entry.get("tool_gap") or binding["expected_output_sha256"] is not None):
+            raise AdapterBlocked("cached gap does not re-derive from the verified attempt")
+        return _gap_result(spec, image, gap, binding)
+    if entry["outcome"] != "OUTPUT":
+        raise AdapterBlocked("cached outcome is unknown")
+    if verified["execution_status"] != "OK" and not exit_accepted(kind, verified, cached_root):
+        raise AdapterBlocked("cached attempt did not complete successfully")
+    output = cached_root / "scratch" / spec["output"]
+    if not output.is_file() or output.is_symlink() or _hash_file(output) != binding["expected_output_sha256"]:
+        raise AdapterBlocked("cached tool output differs from the retained hash")
+    receipt_path = cached_root / "pinned-tool-evidence.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    expected_receipt = {"schema": PINNED_RECEIPT_SCHEMA, "run_id": run_id, "job_id": spec["job"],
+        "attempt_id": cached_attempt_id, "tool_id": spec["tool"], "image_id": image["image_id"],
+        "image_digest": image["digest"], "result_sha256": binding["expected_output_sha256"],
+        "source_snapshot_sha256": source_snapshot_sha256, "completed_at": verified["finished_at"],
+        "boundary_sha256": ce.boundary_sha256(), "network_mode": "none",
+        "target_read_only": True, "scratch_writable": True}
+    if receipt != expected_receipt:
+        raise AdapterBlocked("cached receipt was not derived from the verified attempt")
+    return _output_result(receipt, binding, output, receipt_path)
 
 
 def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: int,
@@ -258,9 +417,12 @@ def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: i
                                           now=datetime.fromisoformat(rt.clock().replace("Z", "+00:00")))
     except (snapshots.SnapshotBlocked, snapshots.SnapshotStale, snapshots.SnapshotInvalid) as exc:
         raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot changed during resolution") from exc
+    # The registry re-hashed the snapshot: its identity keys the database mount in the cache.
+    database_path = "/inputs/" + ("grype-db" if kind == "grype" else "osv-db")
     result = execute(kind, run_id=run_id, adapter_attempt_id=adapter_attempt_id,
         source_snapshot_sha256=source_snapshot_sha256, attempt_root=attempt_root,
-        sbom_root=sbom_root, database_root=Path(full_identity["data_root"]), supplied_runtime=rt)
+        sbom_root=sbom_root, database_root=Path(full_identity["data_root"]), supplied_runtime=rt,
+        input_identities={database_path: "snapshot:" + digest(identity)})
     if any(full_identity[key] != identity[key] for key in identity):
         raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot changed during resolution")
     result.update(resolved)
