@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "dependency-reachability.schema.json",
-  "title": "Per-match dependency reachability (06-cve-reachability outputs/dependency-reachability.json, ADR-0022)",
+  "title": "Per-match dependency reachability (06-cve-reachability outputs/dependency-reachability.json, ADR-0022, ADR-0023)",
   "description": "One record per accepted SCA match: the advisory symbols used (with their source), each engine's state, the joined verdict and, for reachable, a hash-bound witness from an entry point to the call into the vulnerable dependency symbol. Everything is derived by dep_reachability.py; there is no free-text judgement field. unknown is never 'not vulnerable'.",
   "type": "object",
   "additionalProperties": false,
@@ -94,6 +94,10 @@
           "minimum": 0
         },
         "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflict": {
           "type": "integer",
           "minimum": 0
         }

@@ -158,9 +158,12 @@ class LatticeTests(unittest.TestCase):
                         **({"witness_hint": [{"file": "a"}]} if hint else {}))
 
     def test_any_proof_wins_and_hints_never_prove(self):
+        # ADR-0023: the language-server call hierarchy is a hint and never proves reachable.
         verdict, best, _ = d.join("go", [self.row("codeql", "unknown"), self.row("lsp", "reachable", witness=[{}]),
                                           self.row("treesitter", "unknown", hint=True)])
-        self.assertEqual((verdict, best["engine"]), ("reachable", "lsp"))
+        self.assertEqual((verdict, best), ("unknown", None))
+        verdict, best, _ = d.join("go", [self.row("codeql", "reachable", witness=[{}]), self.row("lsp", "reachable", witness=[{}])])
+        self.assertEqual((verdict, best["engine"]), ("reachable", "codeql"))
         self.assertEqual(d.join("go", [self.row("treesitter", "reachable")])[0], "unknown")
 
     def test_unreachable_needs_the_strongest_graph_engine_and_quiet_others(self):

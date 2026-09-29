@@ -133,9 +133,6 @@ flowchart TD
   06_cve_reachability_pre --> 06_cve_reachability["06-cve-reachability: work or reuse"]
   06_cve_reachability --> 06_cve_reachability_post["06-cve-reachability: post-validation and publish"]
   02_sca_vulnerability_match_post -->|required| 06_cve_reachability_config
-  02_ir_facts_post -->|required| 06_cve_reachability_config
-  02_code_property_graph_post -->|required| 06_cve_reachability_config
-  02_codeql_cpp_post -->|required| 06_cve_reachability_config
   06_reachability_codeql_post -->|required| 06_cve_reachability_config
   06_reachability_ir_post -->|required| 06_cve_reachability_config
   13_fuzz_target_triage_config["13-fuzz-target-triage: resolve job configuration"] --> 13_fuzz_target_triage_pre["13-fuzz-target-triage: pre-validation"]
@@ -164,6 +161,7 @@ flowchart TD
   03_threat_model_reconciliation_post -->|required| claim_ledger_routing_config
   04_asvs_masvs_post -->|required| claim_ledger_routing_config
   07_hypothesis_discovery_post -->|required| claim_ledger_routing_config
+  06_cve_reachability_post -->|required| claim_ledger_routing_config
   07_red_team_adversarial_config["07-red-team-adversarial: resolve job configuration"] --> 07_red_team_adversarial_pre["07-red-team-adversarial: pre-validation"]
   07_red_team_adversarial_pre --> 07_red_team_adversarial["07-red-team-adversarial: work or reuse"]
   07_red_team_adversarial --> 07_red_team_adversarial_post["07-red-team-adversarial: post-validation and publish"]

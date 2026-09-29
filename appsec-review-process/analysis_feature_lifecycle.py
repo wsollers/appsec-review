@@ -10,7 +10,6 @@ import bounded_analysis_workers as bounded
 import dependency_workers
 import dep_reachability_lifecycle
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json, run_path
-import ir_evidence
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 from worker_result import validate_worker_result
@@ -134,21 +133,6 @@ def _sca(run_id: str) -> tuple[dict[str, Any], dict[str, str], str]:
     return result, binding, envelope["finished_at"]
 
 
-def _optional_ir(run_id: str, source: str) -> dict[str, Any] | None:
-    base = data_path(run_id, "jobs", "02-ir-facts")
-    if not base.exists(): return None
-    try: attempt = ir_evidence.validate(run_id, "02-ir-facts")
-    except Exception as exc: raise Blocked("06-cve-reachability: present IR facts are not current accepted evidence") from exc
-    result = read_json(attempt / "ir-facts.json")
-    if result["status"] == "SKIPPED":
-        return None   # ADR-0014: nothing was built, so there are no IR facts to use
-    if result["source_snapshot_sha256"] != source:
-        raise Blocked("06-cve-reachability: IR facts and SCA have mixed source lineage")
-    return {"job_id":"02-ir-facts","attempt_id":attempt.name,"artifact_path":"ir-facts.json",
-            "artifact_sha256":"sha256:" + file_hash(attempt / "ir-facts.json"),
-            "accepted_pointer_sha256":"sha256:" + file_hash(base / "accepted.json")}
-
-
 def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     if job not in JOBS: raise Blocked("analysis lifecycle: unsupported job")
     if job != "06-cve-reachability": return _bounded_inputs(run_id, job)
@@ -161,8 +145,8 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     sbom, _ = automatic._accepted_binding(run_id, "02-sbom-inventory")
     return {"run_id":run_id,"job_id":job,"source_generation":source,"sca":binding,
         "sca_matches_sha256":_sha(sca["matches"]),"source_binding":source_binding,
-        "ir":_optional_ir(run_id, source),"generated_at":generated,"code":_code(job),
-        "sbom":sbom,"reachability":dep_reachability_lifecycle.bindings(run_id, source, generated)}
+        "generated_at":generated,"code":_code(job),
+        "sbom":sbom,"reachability":dep_reachability_lifecycle.bindings(run_id, source, generated, binding["attempt_id"])}
 
 
 def _derive_reachability(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -176,6 +160,17 @@ def _derive_reachability(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
                                                  files=files, generated_at=inputs["generated_at"])
     except dep_reachability_lifecycle.Stale as exc:
         raise Blocked(f"06-cve-reachability: {exc}") from exc
+
+
+def _reachability_summary(run_id: str, attempt_id: str, inputs: dict[str, Any], derived: dict[str, Any]) -> dict[str, Any]:
+    """ADR-0023: the correlated summary the report and lanes 07-12 read."""
+    summary = derived["summary"]
+    result = {"schema": summary["schema"], "run_id": run_id, "job_id": "06-cve-reachability", "attempt_id": attempt_id,
+              "source_snapshot_sha256": inputs["source_generation"],
+              **{key: value for key, value in summary.items() if key != "schema"}}
+    if validate_document(result, "dependency-reachability-summary.schema.json"):
+        raise Blocked("06-cve-reachability: dependency-reachability summary violates its schema")
+    return result
 
 
 def _reachability_document(run_id: str, attempt_id: str, inputs: dict[str, Any], derived: dict[str, Any]) -> dict[str, Any]:
@@ -210,6 +205,10 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
             raise Blocked(f"{job}: automatic evidence input changed")
         if read_json(attempt/dep_reachability_lifecycle.RESULT)!=_reachability_document(run_id,attempt.name,inputs,derived):
             raise Blocked(f"{job}: dependency-reachability document differs from its inputs")
+        summary=_reachability_summary(run_id,attempt.name,inputs,derived)
+        if (read_json(attempt/dep_reachability_lifecycle.SUMMARY_JSON)!=summary or
+                (attempt/dep_reachability_lifecycle.SUMMARY_MD).read_text(encoding="utf-8")!=dep_reachability_lifecycle.correlator.render_markdown(summary)):
+            raise Blocked(f"{job}: dependency-reachability summary differs from its inputs")
         request={"run_id":run_id,"source_snapshot_sha256":inputs["source_generation"],
             "generated_at":inputs["generated_at"],"output_root":str(data_path(run_id,"jobs")),
             "sca":inputs["sca"],"reachability_evidence":str(evidence),
@@ -250,6 +249,9 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dic
             result=read_json(attempt/result_name)
             document=_reachability_document(run_id,allocation["attempt_id"],inputs,derived)
             (attempt/"outputs").mkdir(parents=True,exist_ok=True); atomic_json(attempt/dep_reachability_lifecycle.RESULT,document)
+            summary=_reachability_summary(run_id,allocation["attempt_id"],inputs,derived)
+            atomic_json(attempt/dep_reachability_lifecycle.SUMMARY_JSON,summary)
+            (attempt/dep_reachability_lifecycle.SUMMARY_MD).write_text(dep_reachability_lifecycle.correlator.render_markdown(summary),encoding="utf-8")
             result["coverage_gaps"]=sorted(set(result["coverage_gaps"])|set(document["coverage_gaps"]))
         if job_id!="06-cve-reachability":
             if inputs["mode"]=="SKIPPED_NA":
@@ -264,7 +266,8 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dic
             "attempt_id":allocation["attempt_id"]}
         atomic_json(attempt/"status.json",status_doc)
         paths=[result_name,"permission-receipt.json","lineage-receipt.json","status.json",APPLICABILITY]
-        if job_id=="06-cve-reachability": paths += ["outputs/reachability-evidence-identity.json","automatic-reachability-evidence.json",dep_reachability_lifecycle.RESULT]
+        if job_id=="06-cve-reachability": paths += ["outputs/reachability-evidence-identity.json","automatic-reachability-evidence.json",dep_reachability_lifecycle.RESULT,
+                                                     dep_reachability_lifecycle.SUMMARY_JSON,dep_reachability_lifecycle.SUMMARY_MD]
         if job_id=="06-cve-reachability": paths += ["inputs.json"]
         skip=SKIPS.get(job_id) if status=="SKIPPED" else None
         return record_terminal_current(base,attempt,run_id=run_id,job_id=job_id,dagster_run_id=dagster_run_id,

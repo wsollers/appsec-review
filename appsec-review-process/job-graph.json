@@ -760,29 +760,6 @@
           "allowed_skip_reasons": []
         },
         {
-          "job": "02-ir-facts",
-          "kind": "required",
-          "contract": "ir-facts",
-          "allowed_skip_reasons": [
-            "not-applicable-non-native",
-            "not-applicable-no-native-binaries"
-          ]
-        },
-        {
-          "job": "02-code-property-graph",
-          "kind": "required",
-          "contract": "code-property-graph",
-          "allowed_skip_reasons": []
-        },
-        {
-          "job": "02-codeql-cpp",
-          "kind": "required",
-          "contract": "codeql-language",
-          "allowed_skip_reasons": [
-            "not-applicable-language-absent"
-          ]
-        },
-        {
           "job": "06-reachability-codeql",
           "kind": "required",
           "contract": "engine-reachability",
@@ -795,12 +772,13 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Deterministic language-aware reachability (ADR-0022) over the exact accepted SCA matches: advisory symbols from a reviewed map or the OSV index, engines by ecosystem (CPG/IR, CodeQL tables, language-server call hierarchy, tree-sitter hints) over hash-bound run evidence, joined into reachable/unreachable/unknown with a witness path. Version matches alone never establish reachability and outputs remain evidence leads.",
+      "planned_scope": "Deterministic Python correlator (ADR-0023) over the exact accepted SCA matches and the engine tables of 06-reachability-codeql and 06-reachability-ir: reachable needs a hash-bound witness from a proof-capable engine, unreachable only from the complete IR/CPG engine with the dependency source present, disagreement is conflict (listed, never resolved silently), language-server and tree-sitter results are hints only. Publishes cve-reachability.json in its existing contract, the per-match dependency-reachability.json and the summary for the report and lanes 07-12. Version matches alone never establish reachability and outputs remain evidence leads.",
       "required_artifacts": [
         "result.json",
         "inputs.json",
         "outputs/cve-reachability.json",
-        "outputs/reachability-evidence-identity.json"
+        "outputs/reachability-evidence-identity.json",
+        "outputs/dependency-reachability-summary.json"
       ]
     },
     "13-fuzz-target-triage": {
@@ -955,6 +933,12 @@
           "job": "07-hypothesis-discovery",
           "kind": "required",
           "contract": "hypothesis-discovery",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "06-cve-reachability",
+          "kind": "required",
+          "contract": "cve-reachability",
           "allowed_skip_reasons": []
         }
       ],

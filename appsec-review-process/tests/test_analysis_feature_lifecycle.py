@@ -60,7 +60,7 @@ class LifecycleTests(unittest.TestCase):
             base=Path(folder); pointer=base/"sca-accepted.json"; pointer.write_text("{}\n")
             inputs={"run_id":"run","job_id":"06-cve-reachability",
                 "source_generation":SHA,"sca":{"attempt_id":"s1","path":"x","sha256":SHA,"accepted_path":str(pointer)},
-                "sca_matches_sha256":SHA,"source_binding":{},"ir":None,
+                "sca_matches_sha256":SHA,"source_binding":{},
                 "generated_at":"2026-09-27T00:00:00Z","code":{}}
             rows=[{"match_ref":"VM-000001","classification":"reachable",
                    "evidence":[{"kind":"call","path":"app/main.c","sha256":SHA,"locator":"main@1"}]}]
@@ -80,7 +80,8 @@ class LifecycleTests(unittest.TestCase):
                  mock.patch.object(life,"data_path",side_effect=lambda _run,*parts:base.joinpath(*parts)), \
                  mock.patch.object(life,"coordinate_worker_lifecycle",side_effect=self.fake_coordinate), \
                  mock.patch.object(life,"record_terminal_current",side_effect=self.fake_record), \
-                 mock.patch.object(life,"_derive_reachability",return_value={"assessments":rows,"document":document}), \
+                 mock.patch.object(life,"_derive_reachability",return_value={"assessments":rows,"document":document,
+                     "summary":life.dep_reachability_lifecycle.correlator.summary(document,{"components":[]},{"codeql":None,"ir":None})}), \
                  mock.patch.object(life.dependency_workers,"build_reachability",side_effect=build):
                 self.assertEqual(life.run("run","dag","06-cve-reachability")["status"],"OK")
             written=[path for path in base.rglob("dependency-reachability.json")]
@@ -88,6 +89,9 @@ class LifecycleTests(unittest.TestCase):
             published=json.loads(written[0].read_text())
             self.assertEqual(published["sca_binding"]["attempt_id"],"s1")
             self.assertEqual(life.validate_document(published,"dependency-reachability.schema.json"),[])
+            summary=json.loads(next(base.rglob("dependency-reachability-summary.json")).read_text())
+            self.assertEqual(life.validate_document(summary,"dependency-reachability-summary.schema.json"),[])
+            self.assertEqual(summary["counts"],{"reachable":0,"unreachable":0,"conflict":0,"unknown":0})
 
     def test_skip_receipt_retains_canonical_reason_and_assembly_evidence(self):
         inputs={"run_id":"run","job_id":"13-fuzz-target-triage","source_generation":SHA,

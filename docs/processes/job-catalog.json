@@ -2190,9 +2190,6 @@
        "kind": "lifecycle",
        "consumes": [
         "job:02-sca-vulnerability-match",
-        "job:02-ir-facts",
-        "job:02-code-property-graph",
-        "job:02-codeql-cpp",
         "job:06-reachability-codeql",
         "job:06-reachability-ir"
        ],
@@ -2201,7 +2198,9 @@
        ],
        "declared_inputs": [
         "accepted SCA match evidence",
-        "accepted source projection"
+        "accepted source projection",
+        "accepted 06-reachability-codeql engine table",
+        "accepted 06-reachability-ir engine table"
        ]
       },
       {
@@ -2321,6 +2320,8 @@
        "accepted source projection",
        "B16 audit-codeql record",
        "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+       "accepted 06-reachability-codeql engine table",
+       "accepted 06-reachability-ir engine table",
        "accepted component/native evidence",
        "candidate entrypoints",
        "accepted deployment configuration evidence",
@@ -2390,7 +2391,8 @@
        "consumes": [
         "job:03-threat-model-reconciliation",
         "job:04-asvs-masvs",
-        "job:07-hypothesis-discovery"
+        "job:07-hypothesis-discovery",
+        "job:06-cve-reachability"
        ],
        "produces": [
         "job:claim-ledger-routing"
@@ -2693,9 +2695,9 @@
        "job:02-native-sast",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
+       "job:06-cve-reachability",
        "job:03-threat-model-dfd-stride",
        "job:05-native-memory",
-       "job:06-cve-reachability",
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
@@ -2982,6 +2984,8 @@
      "accepted SCA match evidence",
      "accepted source projection",
      "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+     "accepted 06-reachability-codeql engine table",
+     "accepted 06-reachability-ir engine table",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -5132,9 +5136,6 @@
        "kind": "lifecycle",
        "consumes": [
         "job:02-sca-vulnerability-match",
-        "job:02-ir-facts",
-        "job:02-code-property-graph",
-        "job:02-codeql-cpp",
         "job:06-reachability-codeql",
         "job:06-reachability-ir"
        ],
@@ -5143,7 +5144,9 @@
        ],
        "declared_inputs": [
         "accepted SCA match evidence",
-        "accepted source projection"
+        "accepted source projection",
+        "accepted 06-reachability-codeql engine table",
+        "accepted 06-reachability-ir engine table"
        ]
       }
      ],
@@ -5174,7 +5177,9 @@
        "accepted SBOM",
        "accepted source projection",
        "B16 audit-codeql record",
-       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)"
+       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+       "accepted 06-reachability-codeql engine table",
+       "accepted 06-reachability-ir engine table"
       ]
      }
     },
@@ -5307,7 +5312,8 @@
        "consumes": [
         "job:03-threat-model-reconciliation",
         "job:04-asvs-masvs",
-        "job:07-hypothesis-discovery"
+        "job:07-hypothesis-discovery",
+        "job:06-cve-reachability"
        ],
        "produces": [
         "job:claim-ledger-routing"
@@ -5378,9 +5384,9 @@
        "job:02-native-sast",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
+       "job:06-cve-reachability",
        "job:03-threat-model-dfd-stride",
        "job:05-native-memory",
-       "job:06-cve-reachability",
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake"
@@ -6000,6 +6006,8 @@
      "accepted SCA match evidence",
      "accepted source projection",
      "authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)",
+     "accepted 06-reachability-codeql engine table",
+     "accepted 06-reachability-ir engine table",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -8893,21 +8901,6 @@
      "contract": "sca-vulnerability-match"
     },
     {
-     "job": "02-ir-facts",
-     "kind": "required",
-     "contract": "ir-facts"
-    },
-    {
-     "job": "02-code-property-graph",
-     "kind": "required",
-     "contract": "code-property-graph"
-    },
-    {
-     "job": "02-codeql-cpp",
-     "kind": "required",
-     "contract": "codeql-language"
-    },
-    {
      "job": "06-reachability-codeql",
      "kind": "required",
      "contract": "engine-reachability"
@@ -8928,24 +8921,20 @@
      "input": "accepted source projection"
     },
     {
-     "need": "optional",
-     "input": "accepted LLVM IR facts"
+     "need": "required",
+     "input": "accepted 06-reachability-codeql engine table"
+    },
+    {
+     "need": "required",
+     "input": "accepted 06-reachability-ir engine table"
     },
     {
      "need": "optional",
-     "input": "accepted code property graph"
+     "input": "published OSV snapshot identity"
     },
     {
      "need": "optional",
-     "input": "accepted CodeQL SAST traced graph tables"
-    },
-    {
-     "need": "optional",
-     "input": "published OSV snapshot index"
-    },
-    {
-     "need": "optional",
-     "input": "run-supplied reviewed advisory-to-function map, entry points, CodeQL/LSP/tree-sitter documents"
+     "input": "run-supplied entry points and language-server / tree-sitter hint documents"
     }
    ],
    "inputs_source": "registry/job-templates/06-cve-reachability.json",
@@ -8964,9 +8953,6 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-sca-vulnerability-match",
-    "job:02-ir-facts",
-    "job:02-code-property-graph",
-    "job:02-codeql-cpp",
     "job:06-reachability-codeql",
     "job:06-reachability-ir"
    ],
@@ -9243,6 +9229,11 @@
      "job": "07-hypothesis-discovery",
      "kind": "required",
      "contract": "hypothesis-discovery"
+    },
+    {
+     "job": "06-cve-reachability",
+     "kind": "required",
+     "contract": "cve-reachability"
     }
    ],
    "declared_inputs": [
@@ -9278,7 +9269,8 @@
    "consumes": [
     "job:03-threat-model-reconciliation",
     "job:04-asvs-masvs",
-    "job:07-hypothesis-discovery"
+    "job:07-hypothesis-discovery",
+    "job:06-cve-reachability"
    ],
    "produces": [
     "job:claim-ledger-routing"
@@ -14370,6 +14362,7 @@
    "consumed_by": [
     "step:fuzz-target-triage",
     "job:13-fuzz-target-triage",
+    "job:claim-ledger-routing",
     "job:07-red-team-adversarial"
    ]
   },
@@ -14690,8 +14683,7 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:06-reachability-codeql",
-    "job:06-cve-reachability"
+    "job:06-reachability-codeql"
    ]
   },
   "job:02-codeql-csharp": {
@@ -14795,8 +14787,7 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:06-reachability-ir",
-    "job:06-cve-reachability"
+    "job:06-reachability-ir"
    ]
   },
   "job:02-native-sast": {
@@ -14848,8 +14839,7 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:05-native-memory",
-    "job:06-reachability-ir",
-    "job:06-cve-reachability"
+    "job:06-reachability-ir"
    ]
   },
   "job:02-debug-symbol-index": {

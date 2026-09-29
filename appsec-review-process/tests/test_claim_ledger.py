@@ -321,6 +321,30 @@ class ClaimLedgerTests(unittest.TestCase):
                 self.lead_source("02-secrets-inventory", "secrets-inventory",
                                  "outputs/secrets-inventory.redacted.json", secrets, "e")]
 
+    def test_dependency_leads_carry_the_correlated_reachability_verdict(self):
+        """ADR-0023: a reachable match is a P1 review claim; a conflict is flagged, never resolved."""
+        sca = ledger.normalize_leads("02-sca-vulnerability-match", {"matches": [
+            {"match_id": "VM-000001", "tool_id": "grype", "advisory_id": "GHSA-8q59-q68h-6hv4",
+             "component_ref": "SC-000001", "aliases": []},
+            {"match_id": "VM-000002", "tool_id": "grype", "advisory_id": "CVE-2022-37434",
+             "component_ref": "SC-000002", "aliases": []}]})
+        source = self.lead_source("02-sca-vulnerability-match", "sca-vulnerability-match",
+                                  "outputs/sca-vulnerability-match.json", sca, "f")
+        verdicts = {"attempt_id": "r1", "artifact_sha256": "sha256:" + "9" * 64, "matches": {
+            "VM-000001": {"verdict": "reachable", "tier": "direct", "deciding_engines": ["codeql"]},
+            "VM-000002": {"verdict": "conflict", "tier": None, "deciding_engines": ["codeql", "ir"]}}}
+        plain = ledger.lead_candidates([source])
+        claims = ledger.lead_candidates([source], reachability=verdicts)
+        self.assertEqual([item["route_id"] for item in plain], [item["route_id"] for item in claims])
+        self.assertTrue(all(item["route_id"].startswith("tool-lead:P1:") for item in claims))
+        reachable = next(item for item in claims if "VM-000001" in item["hypothesis"] and "reachable for" in item["hypothesis"])
+        self.assertIn("a P1 review claim", reachable["hypothesis"])
+        self.assertEqual(reachable["confidence"], "medium")
+        conflict = next(item for item in claims if "Reachability CONFLICT for VM-000002" in item["hypothesis"])
+        self.assertTrue(any("conflicting reachability engine verdicts for VM-000002" in row["statement"]
+                            for row in conflict["proof_obligations"]))
+        self.assertFalse(any("CONFLICT" in item["hypothesis"] for item in plain))
+
     def test_tool_leads_merge_across_tools_tier_and_order_last(self):
         components = [{"component_id": "native", "path_patterns": ["src/**"], "aliases": []}]
         leads = ledger.lead_candidates(self.lead_sources(), components)

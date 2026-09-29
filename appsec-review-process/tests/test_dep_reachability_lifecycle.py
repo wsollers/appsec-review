@@ -1,4 +1,4 @@
-"""06 lifecycle bindings for dependency reachability (ADR-0022 decision 9): hash-bound, re-derivable, gaps not blocks."""
+"""06 correlator bindings (ADR-0023 decision 8): engine tables hash-bound, re-derivable, gaps not blocks."""
 from __future__ import annotations
 
 import json
@@ -11,19 +11,37 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import dep_reachability_engines as e
 import dep_reachability_lifecycle as lc
 from execution_state import file_hash, tree_hashes
+from schema_validate import validate_document
 
 SOURCE = "sha256:" + "5" * 64
 GENERATED = "2026-09-28T12:00:00Z"
 FILES = {"cmd/main.go": "sha256:" + "1" * 64, "web/serve.go": "sha256:" + "2" * 64}
 SCA = {"matches": [{"match_id": "VM-000001", "component_ref": "SC-000001", "advisory_id": "GO-2022-0001", "aliases": []}]}
-SBOM = {"components": [{"component_id": "SC-000001", "name": "golang.org/x/net", "ecosystem": "golang"}]}
+SBOM = {"components": [{"component_id": "SC-000001", "name": "golang.org/x/net", "version": "v0.1.0",
+                        "ecosystem": "golang"}]}
 
 
-def csv_text(columns, rows):
-    return "\n".join([",".join(columns)] + [",".join(str(v) for v in row) for row in rows]) + "\n"
+def table(engine, verdict="reachable", sca_attempt="sca-1", source=SOURCE, **row):
+    witness = [{"function": "main", "file": "cmd/main.go", "line": 5, "sha256": FILES["cmd/main.go"]},
+               {"function": "Serve", "file": "web/serve.go", "line": 9, "sha256": FILES["web/serve.go"],
+                "note": "call into the vulnerable dependency function"}] if verdict == "reachable" else []
+    base = {"match_id": "VM-000001", "component_ref": "SC-000001", "advisory_id": "GO-2022-0001",
+            "ecosystem": "golang", "language": "go", "verdict": verdict,
+            "tier": "direct" if verdict == "reachable" else None,
+            "symbols": [{"package": "golang.org/x/net/html", "symbol": "Parse", "source": "reviewed-map"}],
+            "resolved": [{"package": "golang.org/x/net/html", "symbol": "Parse", "via": "import path"}],
+            "resolution": ["go golang.org/x/net: not vendored; call sites only"], "witness": witness,
+            "taint_paths": [], "target": None, "database_ids": [], "reason": f"{engine} said {verdict}",
+            "gaps": [] if engine == "codeql" else ["engine-not-applicable:ir:go"], **row}
+    return {"schema": "appsec-review/engine-reachability/1", "run_id": "run",
+            "job_id": {"codeql": "06-reachability-codeql", "ir": "06-reachability-ir"}[engine], "attempt_id": "a1",
+            "engine": engine, "source_snapshot_sha256": source,
+            "sca_binding": {"job_id": "02-sca-vulnerability-match", "attempt_id": sca_attempt, "sha256": SOURCE},
+            "status": "OK", "languages": [], "rows": [base],
+            "counts": {"reachable": int(verdict == "reachable"), "unreachable": int(verdict == "unreachable"),
+                       "unknown": int(verdict == "unknown")}, "coverage_gaps": [], "claim_ceiling": "EVIDENCE_LEADS_ONLY"}
 
 
 class LifecycleBindingTests(unittest.TestCase):
@@ -39,45 +57,6 @@ class LifecycleBindingTests(unittest.TestCase):
             self.addCleanup(patch.stop)
         self.addCleanup(self.folder.cleanup)
 
-    def supply_go(self):
-        folder = self.run / "inputs" / lc.SUPPLIED / "codeql" / "go"
-        folder.mkdir(parents=True)
-        (folder / "CallEdges.csv").write_text(csv_text(e.CALL_EDGE_COLUMNS, [
-            ("example.com/app.main", "cmd/main.go", 5, "cmd/main.go", 7, "example.com/app/web.Serve", "web/serve.go", 3, "yes"),
-            ("example.com/app/web.Serve", "web/serve.go", 3, "web/serve.go", 9, "golang.org/x/net/html.Parse", "", 0, "no")]))
-        (folder / "EntryPoints.csv").write_text(csv_text(e.ENTRY_COLUMNS, [("example.com/app.main", "cmd/main.go", 5, "main")]))
-        (self.run / "inputs" / lc.REVIEWED_MAP).write_text(json.dumps(
-            {"GO-2022-0001": [{"package": "golang.org/x/net/html", "symbol": "Parse"}]}))
-
-    def test_absent_sources_are_gaps_and_the_result_is_honest_unknown(self):
-        bound = lc.bindings("run", SOURCE, GENERATED)
-        self.assertIsNone(bound["cpg"]); self.assertIsNone(bound["codeql"])
-        self.assertIn("engine-input-absent:02-code-property-graph", bound["gaps"])
-        self.assertTrue(bound["osv_gap"].startswith("osv-"))
-        derived = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
-        self.assertEqual(derived["assessments"], [])
-        self.assertIn("ENGINE_INPUT:engine-input-absent:02-codeql-cpp", derived["document"]["coverage_gaps"])
-        self.assertEqual(derived["document"]["matches"][0]["verdict"], "unknown")
-
-    def test_supplied_codeql_tables_and_reviewed_map_prove_reachable_and_rederive_identically(self):
-        self.supply_go()
-        bound = lc.bindings("run", SOURCE, GENERATED)
-        self.assertEqual(set(bound["supplied"]["codeql"]["go"]), {"CallEdges", "EntryPoints"})
-        first = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
-        second = lc.derive("run", lc.bindings("run", SOURCE, GENERATED), sca=SCA, sbom=SBOM, files=FILES,
-                           generated_at=GENERATED)
-        self.assertEqual(first, second)
-        self.assertEqual(first["assessments"][0]["classification"], "reachable")
-        self.assertEqual(first["document"]["matches"][0]["symbols"][0]["source"], "reviewed-map")
-
-    def test_a_bound_file_changed_before_derivation_is_stale(self):
-        self.supply_go()
-        bound = lc.bindings("run", SOURCE, GENERATED)
-        (self.run / "inputs" / lc.SUPPLIED / "codeql" / "go" / "CallEdges.csv").write_text(
-            csv_text(e.CALL_EDGE_COLUMNS, []))
-        with self.assertRaises(lc.Stale):
-            lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
-
     def publish(self, job, result, document):
         base = self.run / "data" / "jobs" / job
         attempt = base / "attempts" / "a1"
@@ -89,6 +68,50 @@ class LifecycleBindingTests(unittest.TestCase):
             "envelope_path": "result.json", "envelope_sha256": file_hash(attempt / "result.json")}))
         return attempt
 
+    def test_absent_engine_tables_are_gaps_and_the_result_is_honest_unknown(self):
+        bound = lc.bindings("run", SOURCE, GENERATED, "sca-1")
+        self.assertEqual(bound["tables"], {"codeql": None, "ir": None})
+        self.assertEqual(bound["gaps"], ["engine-input-absent:06-reachability-codeql",
+                                         "engine-input-absent:06-reachability-ir"])
+        self.assertTrue(bound["osv_gap"].startswith("osv-"))
+        derived = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
+        self.assertEqual(derived["assessments"], [])
+        self.assertIn("ENGINE_INPUT:engine-input-absent:06-reachability-codeql", derived["document"]["coverage_gaps"])
+        self.assertEqual(derived["document"]["matches"][0]["verdict"], "unknown")
+        self.assertEqual(derived["summary"]["engines"][0]["status"], "ABSENT")
+
+    def test_engine_tables_prove_reachable_and_rederive_identically(self):
+        self.publish("06-reachability-codeql", lc.ENGINE_RESULT, table("codeql"))
+        self.publish("06-reachability-ir", lc.ENGINE_RESULT, table("ir", "unknown"))
+        bound = lc.bindings("run", SOURCE, GENERATED, "sca-1")
+        self.assertEqual(bound["gaps"], [])
+        first = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
+        second = lc.derive("run", lc.bindings("run", SOURCE, GENERATED, "sca-1"), sca=SCA, sbom=SBOM, files=FILES,
+                           generated_at=GENERATED)
+        self.assertEqual(first, second)
+        self.assertEqual(first["assessments"][0]["classification"], "reachable")
+        record = first["document"]["matches"][0]
+        self.assertEqual((record["verdict"], record["tier"], record["deciding_engines"]), ("reachable", "direct", ["codeql"]))
+        self.assertEqual(record["symbols"][0]["source"], "reviewed-map")
+        self.assertEqual(validate_document(record, "dependency-reachability-match.schema.json"), [])
+        self.assertEqual(first["summary"]["review"]["p1_match_ids"], ["VM-000001"])
+
+    def test_stale_or_mixed_tables_are_not_used(self):
+        attempt = self.publish("06-reachability-codeql", lc.ENGINE_RESULT, table("codeql", sca_attempt="sca-0"))
+        self.assertIn("engine-input-stale:06-reachability-codeql", lc.bindings("run", SOURCE, GENERATED, "sca-1")["gaps"])
+        self.assertIn("engine-input-mixed-lineage:06-reachability-codeql",
+                      lc.bindings("run", "sha256:" + "6" * 64, GENERATED, "sca-0")["gaps"])
+        (attempt / "extra.txt").write_text("tamper")
+        self.assertIn("engine-input-not-current:06-reachability-codeql",
+                      lc.bindings("run", SOURCE, GENERATED, "sca-0")["gaps"])
+
+    def test_a_bound_table_changed_before_derivation_is_stale(self):
+        attempt = self.publish("06-reachability-codeql", lc.ENGINE_RESULT, table("codeql"))
+        bound = lc.bindings("run", SOURCE, GENERATED, "sca-1")
+        (attempt / lc.ENGINE_RESULT).write_text(json.dumps(table("codeql", "unknown")))
+        with self.assertRaises(lc.Stale):
+            lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
+
     def test_accepted_publications_are_verified_and_lineage_checked(self):
         attempt = self.publish(lc.CPG_JOB, lc.CPG_RESULT, {"source_snapshot_sha256": SOURCE, "status": "OK",
                                                            "records_file": {"path": "r.jsonl", "sha256": "sha256:" + "0" * 64}})
@@ -97,22 +120,6 @@ class LifecycleBindingTests(unittest.TestCase):
         self.assertEqual(lc._cpg("run", "sha256:" + "6" * 64)[1], ["engine-input-mixed-lineage:02-code-property-graph"])
         (attempt / "extra.txt").write_text("tamper")
         self.assertEqual(lc._cpg("run", SOURCE)[1], ["engine-input-not-current:02-code-property-graph"])
-
-    def test_codeql_traced_tables_come_from_receipts(self):
-        attempt = self.publish(lc.CODEQL_JOB, lc.CODEQL_RESULT, {"source_snapshot_sha256": SOURCE})
-        graph = attempt / "tools" / "codeql-cpp-traced-u1" / "scratch" / "graph"
-        graph.mkdir(parents=True)
-        (graph / "CallEdges.csv").write_text(csv_text(e.CALL_EDGE_COLUMNS, []))
-        (attempt / lc.CODEQL_RECEIPTS).write_text(json.dumps({"tools": [{
-            "trial_path": "tools/codeql-cpp-traced-u1", "unit_id": "u1",
-            "graph_outputs": {"CallEdges.ql": "sha256:" + file_hash(graph / "CallEdges.csv"), "EntryPoints.ql": None,
-                              "FlowSources.ql": None}}]}))
-        pointer = json.loads((attempt.parents[1] / "accepted.json").read_text())
-        pointer["hashes"] = tree_hashes(attempt)
-        (attempt.parents[1] / "accepted.json").write_text(json.dumps(pointer))
-        codeql, gaps = lc._codeql("run", SOURCE)
-        self.assertEqual([row["table"] for row in codeql["cpp_tables"]], ["CallEdges"])
-        self.assertEqual(gaps, ["codeql-table-absent:cpp:EntryPoints:u1"])
 
 
 if __name__ == "__main__":

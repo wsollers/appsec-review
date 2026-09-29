@@ -43,6 +43,8 @@ MENU = (
     ("02-ir-link", "native", "Linked IR modules per unit", ["ir-link.json"]),
     ("02-source-sast", "tool-leads", "Source SAST leads (artifact cited by tool-lead claims)", ["source-sast.json"]),
     ("02-native-sast", "tool-leads", "Native SAST leads per build unit (artifact cited by tool-lead claims)", ["native-sast.json"]),
+    *((f"02-codeql-{language}", "tool-leads", f"CodeQL {language} leads (artifact cited by tool-lead claims, ADR-0023)",
+       ["codeql-language.json"]) for language in ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")),
     ("02-secrets-inventory", "tool-leads", "Redacted secret and key-material locations", ["outputs/secrets-inventory.redacted.json"]),
     ("02-mobile-sast", "tool-leads", "Mobile SAST rule hits", ["outputs/mobile-sast.json"]),
     ("07-hypothesis-discovery", "tool-leads", "Code-reading hunter hypotheses (artifact cited by hunter claims)",
@@ -72,7 +74,8 @@ MENU = (
      ["outputs/sca-vulnerability-match.json", "outputs/sca-coverage-gaps.json"]),
     ("02-dependency-lifecycle", "dependency", "Dependency lifecycle and end-of-life status", ["outputs/dependency-lifecycle.json"]),
     ("02-license-scan", "dependency", "License inventory", ["outputs/license-inventory.json"]),
-    ("06-cve-reachability", "dependency", "CVE reachability evidence", ["outputs/cve-reachability.json"]),
+    ("06-cve-reachability", "dependency", "CVE reachability evidence and the correlated per-engine summary (ADR-0023)",
+     ["outputs/cve-reachability.json", "outputs/dependency-reachability-summary.json"]),
     ("02-iac-config-scan", "config", "IaC and Dockerfile rule hits, base images",
      ["outputs/iac-config-evidence.json", "outputs/base-image-inventory.json"]),
     ("02-container-image-inventory", "config", "Container image inventory", ["outputs/container-image-inventory.json"]),
@@ -95,6 +98,8 @@ PROFILES = {
     "architecture": ("architecture", "build", "docs", "test", "dependency", "config", "native", "binary", "tool-leads", "index"),
 }
 PRODUCER_PROFILE = {"02-source-sast": "code", "02-native-sast": "code", "02-mobile-sast": "code",
+                    **{f"02-codeql-{language}": "code" for language in
+                       ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")},
                     "02-secrets-inventory": "secret", "02-sca-vulnerability-match": "dependency",
                     "02-iac-config-scan": "config", "07-hypothesis-discovery": "code"}
 _POINTER_KEYS = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint", "envelope_path",

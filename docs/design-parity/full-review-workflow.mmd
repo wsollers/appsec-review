@@ -155,9 +155,6 @@ flowchart TD
   j_02_code_property_graph --> j_06_reachability_ir
   j_02_ir_facts --> j_06_reachability_ir
   j_02_sca_vulnerability_match --> j_06_cve_reachability
-  j_02_ir_facts --> j_06_cve_reachability
-  j_02_code_property_graph --> j_06_cve_reachability
-  j_02_codeql_cpp --> j_06_cve_reachability
   j_06_reachability_codeql --> j_06_cve_reachability
   j_06_reachability_ir --> j_06_cve_reachability
   j_01_component_characterization --> j_13_fuzz_target_triage
@@ -174,6 +171,7 @@ flowchart TD
   j_03_threat_model_reconciliation --> j_claim_ledger_routing
   j_04_asvs_masvs --> j_claim_ledger_routing
   j_07_hypothesis_discovery --> j_claim_ledger_routing
+  j_06_cve_reachability --> j_claim_ledger_routing
   j_claim_ledger_routing --> j_07_red_team_adversarial
   j_01_component_characterization --> j_07_red_team_adversarial
   j_03_threat_model_dfd_stride --> j_07_red_team_adversarial

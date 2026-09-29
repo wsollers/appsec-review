@@ -389,9 +389,47 @@ def lead_locations(sources: dict[str, Any] | Iterable[dict[str, Any]]) -> dict[t
     return {(where, line): tier for (tier, where, line) in _lead_menu(sources) if tier != "P3" and line}
 
 
+REACHABILITY_JOB = "06-cve-reachability"
+REACHABILITY_SUMMARY = "outputs/dependency-reachability-summary.json"
+
+
+def reachability_verdicts(run_id: str) -> dict[str, Any] | None:
+    """ADR-0023: the accepted 06 correlated verdict per SCA match (hash-verified), or None when absent."""
+    pointer = data_path(run_id, "jobs", REACHABILITY_JOB, "accepted.json")
+    if not pointer.is_file():
+        return None
+    summary, binding = bounded_analysis_workers.load_accepted(pointer, run_id=run_id, job_id=REACHABILITY_JOB,
+        contract="cve-reachability", artifact=REACHABILITY_SUMMARY, schema="dependency-reachability-summary.schema.json")
+    return {"attempt_id": binding["attempt_id"], "artifact_sha256": binding["artifact_sha256"],
+            "matches": {row["match_id"]: {"verdict": row["verdict"], "tier": row["tier"],
+                                          "deciding_engines": row["deciding_engines"]} for row in summary["matches"]}}
+
+
+def _reachability_note(members: list[tuple[dict[str, Any], dict[str, Any]]],
+                       reachability: dict[str, Any] | None) -> tuple[str, list[str], bool]:
+    """(hypothesis suffix, extra obligations, reachable) for the dependency leads of one claim."""
+    if not reachability:
+        return "", [], False
+    rows = {lead["lead_ref"]: reachability["matches"].get(lead["lead_ref"])
+            for _source, lead in members if lead["kind"] == "dependency"}
+    reachable = sorted(ref for ref, row in rows.items() if row and row["verdict"] == "reachable")
+    conflict = sorted(ref for ref, row in rows.items() if row and row["verdict"] == "conflict")
+    text, obligations = "", []
+    if reachable:
+        text += (f" Dependency reachability (06-cve-reachability): reachable for {', '.join(reachable)} "
+                 f"[{', '.join(sorted({str(rows[ref]['tier']) for ref in reachable}))}]; a P1 review claim.")
+    if conflict:
+        text += (f" Reachability CONFLICT for {', '.join(conflict)}: the engines disagree; flagged for review "
+                 "(never resolved silently).")
+        obligations.append(f"Resolve the conflicting reachability engine verdicts for {', '.join(conflict)} "
+                           f"({REACHABILITY_SUMMARY}) before scoring.")
+    return text, obligations, bool(reachable)
+
+
 def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
                     components: list[dict[str, Any]] | None = None,
-                    corroboration: dict[tuple[str, int], list[dict[str, Any]]] | None = None) -> list[dict[str, Any]]:
+                    corroboration: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
+                    reachability: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Admit every accepted tool lead as a candidate claim (no model; deterministic text and ids).
 
     Leads at the same (path, start_line) are merged across tools into one claim listing every tool
@@ -419,6 +457,8 @@ def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
             f"analysis lead(s) from {len(tools)} tool(s) at {location} [{'; '.join(shown)}]. Candidate: the "
             "flagged code or configuration is reachable from an attacker-influenced input or trust boundary "
             "and weakens a security property; unreviewed until adversarial review and independent verification.")
+        note, extra_obligations, reachable = _reachability_note(members, reachability)
+        hypothesis += note
         hunted = corroboration.get((where, line), []) if tier != "P3" and line else []
         if hunted:
             classes = sorted({item["label"] for item in hunted})
@@ -432,13 +472,13 @@ def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
         for item in hunted:
             if item["citation"]["citation_id"] not in seen:
                 seen.add(item["citation"]["citation_id"]); citations.append(item["citation"])
-        statements = [text.format(where=location) for kind in kinds for text in OBLIGATIONS[kind]]
+        statements = [text.format(where=location) for kind in kinds for text in OBLIGATIONS[kind]] + extra_obligations
         obligations = [{"obligation_id": "obligation-" + digest({"route": route_id, "text": text})[:24],
                         "statement": text} for text in statements]
         paths = {lead["path"] for _source, lead in members}
         component_ids = sorted({cid for path in paths for cid in _components_for(path, components)})
         candidates.append({"route_id": route_id, "hypothesis": hypothesis,
-            "confidence": "medium" if len(tools) > 1 or hunted else "low", "component_ids": component_ids,
+            "confidence": "medium" if len(tools) > 1 or hunted or reachable else "low", "component_ids": component_ids,
             "citations": citations, "proof_obligations": obligations, "dissent_ids": [],
             "causal_route_ids": [], "source": primary,
             "order": (1, TIERS.index(tier), where, line or 0)})
@@ -991,7 +1031,8 @@ def current_inputs(run_id: str) -> dict[str, Any]:
             if component_binding["attempt_id"] == artifact["component_map_attempt_id"]:
                 components = lead_components(component_map)
     return {"run_id": run_id, "sources": sources, "lead_components": components,
-            "lead_coverage": coverage, "code": _code_hashes()}
+            "lead_coverage": coverage, "reachability": reachability_verdicts(run_id) if leads else None,
+            "code": _code_hashes()}
 
 
 def _receipts(inputs: dict[str, Any], ledger: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1030,7 +1071,8 @@ def _candidates(inputs: dict[str, Any]) -> list[dict[str, Any]]:
         values.extend(standalone)
         for key, rows in attached.items():
             corroboration.setdefault(key, []).extend(rows)
-    if leads: values.extend(lead_candidates(leads, inputs.get("lead_components", []), corroboration))
+    if leads: values.extend(lead_candidates(leads, inputs.get("lead_components", []), corroboration,
+                                            inputs.get("reachability")))
     return values
 
 
