@@ -186,5 +186,13 @@ class SymbolMatchTests(unittest.TestCase):
         self.assertEqual(rejected, 3)
 
 
+class HostileTextTests(unittest.TestCase):
+    def test_names_from_target_code_are_control_stripped(self):
+        witness, _ = d.bind_witness([{"function": "evil\x1b[31m\nname", "file": "app/main.c", "line": 1,
+                                      "note": "a\x00b"}], FILES)
+        self.assertEqual(witness[0]["function"], "evil [31m name")
+        self.assertEqual(witness[0]["note"], "a b")
+
+
 if __name__ == "__main__":
     unittest.main()

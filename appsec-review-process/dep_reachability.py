@@ -31,6 +31,12 @@ MAX_WITNESS = 32
 MAX_SYMBOLS = 64
 SYMBOL = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$.:<>~-]{0,199}\Z")
 PACKAGE = re.compile(r"^[A-Za-z0-9@_][A-Za-z0-9@._+~/:-]{0,199}\Z")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def clean_text(value: Any, limit: int = 200) -> str:
+    """Names from target code (CodeQL/LSP/tree-sitter) are data: control characters stripped, truncated."""
+    return _CONTROL.sub(" ", str(value if value is not None else ""))[:limit]
 
 # SBOM ecosystem -> (analysis language, OSV ecosystem name or None).
 ECOSYSTEMS: dict[str, tuple[str, str | None]] = {
@@ -143,11 +149,11 @@ def bind_witness(witness: list[dict[str, Any]], files: dict[str, str]) -> tuple[
         sha = files.get(path) if isinstance(path, str) else None
         if sha is None:
             complete = False
-        hop = {"function": str(step.get("function") or "")[:200], "file": path, "line": int(step.get("line") or 0),
+        hop = {"function": clean_text(step.get("function")), "file": path, "line": int(step.get("line") or 0),
                "sha256": sha}
         for key in ("calls_next_at", "resolution", "note"):
             if step.get(key):
-                hop[key] = str(step[key])[:200]
+                hop[key] = clean_text(step[key])
         bound.append(hop)
     return bound, complete and len(witness) <= MAX_WITNESS
 
@@ -225,13 +231,15 @@ def analyse(*, sca: dict[str, Any], sbom: dict[str, Any], files: dict[str, str],
             else:
                 deciding = {**deciding, "target": {**target, "sha256": sha}}
         record["engines"] = [{"engine": row["engine"], "ran": row["ran"], "state": row["state"],
-                              "reason": row["reason"][:512], "witness_length": len(row["witness"])}
+                              "reason": clean_text(row["reason"], 512), "witness_length": len(row["witness"])}
                              for row in results]
         for row in results:
             record["gaps"] += [_gap(match_id, item) for item in row["gaps"]]
             record["witness_hints"] += row.get("witness_hint", [])
-        record["witness_hints"] = record["witness_hints"][:MAX_WITNESS]
-        record.update(verdict=verdict, reason=reason[:1024], witness=witness if verdict == REACHABLE else [])
+        record["witness_hints"] = [{**hint, "callee": clean_text(hint["callee"]),
+                                    "function": clean_text(hint["function"]) if hint["function"] is not None else None}
+                                   for hint in record["witness_hints"][:MAX_WITNESS]]
+        record.update(verdict=verdict, reason=clean_text(reason, 1024), witness=witness if verdict == REACHABLE else [])
         if verdict == UNKNOWN:
             record["gaps"].append(_gap(match_id, "undecided"))
         row = _assessment(match, verdict, witness, deciding)
