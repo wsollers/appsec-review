@@ -5,6 +5,7 @@ verifies each is a readable zip of JSON advisories, and publishes an immutable s
 
     <root>/snapshots/<snapshot_id>/manifest.json
     <root>/snapshots/<snapshot_id>/NOTICE.txt
+    <root>/snapshots/<snapshot_id>/index.sqlite     (lookup index, hash-listed in the manifest)
     <root>/snapshots/<snapshot_id>/db/osv-scanner/<ecosystem>/all.zip
 
 ``db/`` is what OSV-Scanner's offline mode wants as its cache root (``<db>/osv-scanner/<eco>/all.zip``).
@@ -32,6 +33,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 
+import osv_index
 from execution_state import Blocked, Lock, atomic_json, beneath, event, file_hash, now, read_json
 
 
@@ -265,11 +267,12 @@ def sync(root=None, coordinator_id=None, clock=utcnow, fetch_file=download,
             if not usable:
                 raise RuntimeError("no OSV ecosystem produced a usable archive: "
                                    + "; ".join(f"{n}: {e.get('error')}" for n, e in entries.items()))
+            index = _build_index(staging, entries)
             manifest = {
                 "schema": SCHEMA, "feed_id": FEED_ID, "captured_at": timestamp(started),
                 "parent_snapshot_id": current["snapshot_id"] if current else None,
                 "source_base_url": BASE_URL, "ecosystems": entries,
-                "data_timestamp": min(entries[n]["fetched_at"] for n in usable),
+                "data_timestamp": min(entries[n]["fetched_at"] for n in usable), "index": index,
                 "gaps": sorted(n for n, e in entries.items() if e["status"] == "FAILED"),
                 "licences": _licences(entries),
                 "redistribution": "Do not redistribute outside the run/host cache; see NOTICE.txt.",
@@ -303,6 +306,22 @@ def sync(root=None, coordinator_id=None, clock=utcnow, fetch_file=download,
         except BaseException as diagnostic:      # post-commit housekeeping never recasts a publish as a failure
             print(f"OSV_POST_PUBLICATION_DIAGNOSTIC_FAILURE: {diagnostic}", file=sys.stderr, flush=True)
         return {**pointer, "gaps": manifest["gaps"]}
+
+
+def _build_index(staging, entries):
+    """SQLite/FTS5 lookup index over the staged archives (justified by docs/osv-index-measurement.md).
+    A failure to index never blocks publication of the scanner data; it is recorded instead."""
+    archives = {name: staging / "db" / "osv-scanner" / name / "all.zip"
+                for name, entry in entries.items() if entry["status"] != "FAILED"}
+    target = staging / osv_index.INDEX_NAME
+    started = time.monotonic()
+    try:
+        counts = osv_index.build(archives, target)
+    except Exception as exc:
+        return {"status": "FAILED", "error": f"{type(exc).__name__}: {exc}"[:300]}
+    return {"status": "OK", "path": osv_index.INDEX_NAME, "schema_version": osv_index.SCHEMA_VERSION,
+            "sha256": _sha256(target), "size_bytes": target.stat().st_size, "counts": counts,
+            "build_seconds": round(time.monotonic() - started, 2)}
 
 
 def _events(root):
@@ -383,8 +402,13 @@ def verify(root=None):
         path = directory / "db" / "osv-scanner" / ecosystem / "all.zip"
         if _sha256(path) != entry["sha256"] or path.stat().st_size != entry["size_bytes"]:
             raise ValueError(f"OSV archive integrity mismatch: {ecosystem}")
+    index = manifest.get("index") or {}
+    if index.get("status") == "OK":
+        path = directory / index["path"]
+        if _sha256(path) != index["sha256"] or path.stat().st_size != index["size_bytes"]:
+            raise ValueError("OSV index integrity mismatch")
     return {"snapshot_id": current["snapshot_id"], "data_timestamp": manifest["data_timestamp"],
-            "gaps": manifest["gaps"]}
+            "gaps": manifest["gaps"], "index": index.get("status", "ABSENT")}
 
 
 def main(argv=None):

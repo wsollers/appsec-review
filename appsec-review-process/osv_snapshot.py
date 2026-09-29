@@ -42,6 +42,7 @@ REASONS = {
     "SNAPSHOT_ID_MISMATCH": FAILED,
     "ARCHIVE_MISSING": FAILED,
     "ARCHIVE_HASH_MISMATCH": FAILED,
+    "INDEX_HASH_MISMATCH": FAILED,
     "TIMESTAMP_IN_FUTURE": FAILED,
     "NO_USABLE_ECOSYSTEM": FAILED,
     "READ_ERROR": FAILED,
@@ -66,6 +67,7 @@ class Resolution:
     identity: dict | None
     mount_dir: str | None
     gaps: tuple
+    index_path: str | None = None    # verified lookup index, when the publisher built one
 
     def __post_init__(self):
         if self.outcome not in (OK, BLOCKED, FAILED) or REASONS.get(self.reason) != self.outcome:
@@ -205,6 +207,16 @@ def _resolve(root, max_age, now):
         oldest = fetched if oldest is None or fetched < oldest else oldest
         ecosystems[name] = {"status": entry["status"], "sha256": entry["sha256"], "size_bytes": entry["size_bytes"],
                             "record_count": entry.get("record_count"), "fetched_at": _stamp(fetched)}
+    index_path = None
+    index = manifest.get("index")
+    if isinstance(index, dict) and index.get("status") == "OK":
+        candidate = directory / str(index.get("path"))
+        if (not _SHA256.fullmatch(str(index.get("sha256"))) or _absent(candidate)):
+            raise _Stop("INDEX_HASH_MISMATCH", "the lookup index is missing or its manifest entry is invalid")
+        _contained(root, candidate)
+        if not candidate.is_file() or candidate.stat().st_size != index.get("size_bytes") or _hash_file(candidate) != index["sha256"]:
+            raise _Stop("INDEX_HASH_MISMATCH", "the lookup index does not match the manifest")
+        index_path = str(candidate)
     if oldest is None:
         raise _Stop("NO_USABLE_ECOSYSTEM", "the snapshot holds no usable ecosystem archive")
     age = int((now - oldest).total_seconds())
@@ -216,8 +228,8 @@ def _resolve(root, max_age, now):
     identity = {"schema": IDENTITY_SCHEMA, "database_kind": "osv", "snapshot_id": pointer["snapshot_id"],
                 "manifest_sha256": manifest_sha, "data_timestamp": _stamp(oldest), "age_seconds": age,
                 "max_age_seconds": int(max_age.total_seconds()), "ecosystems": ecosystems,
-                "gaps": gaps, "match_basis": "purl"}
+                "gaps": gaps, "index": "OK" if index_path else "ABSENT", "match_basis": "purl"}
     return Resolution(OK, "VERIFIED_WITHIN_LIMIT",
                       f"snapshot {pointer['snapshot_id']} verified offline; oldest ecosystem data is {age} seconds old"
                       + (f"; {len(gaps)} ecosystem gap(s)" if gaps else ""),
-                      identity, str(db), tuple(g["ecosystem"] for g in gaps))
+                      identity, str(db), tuple(g["ecosystem"] for g in gaps), index_path)
