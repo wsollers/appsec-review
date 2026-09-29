@@ -16,6 +16,7 @@ import native_build
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "11-remediation-proposal"
 CONTRACT = "11-remediation-proposal"
@@ -35,7 +36,7 @@ def _sha(value: Any) -> str:
 def _code_hashes() -> dict[str, str]:
     names = ("remediation_proposal.py", "claim_lifecycle_core.py", "native_build.py",
              "build_replay.py", "publish_job_output.py", "validate_job_output.py",
-             "registry/output-contracts/11-remediation-proposal.json")
+             registry_paths.contract_rel("11-remediation-proposal"))
     result = {name: file_hash(ROOT / name) for name in names}
     result["schemas/remediation-proposal.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "remediation-proposal.schema.json")

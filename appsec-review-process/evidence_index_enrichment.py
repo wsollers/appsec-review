@@ -18,6 +18,7 @@ from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_result import validate_worker_result
+import registry_paths
 
 SELECTION = "evidence-index-producers.json"
 RESULT = "evidence-index-enrichment.json"
@@ -135,7 +136,7 @@ def _producer_root(run_id: str, job: str) -> Path:
 
 
 def _template_permissions(job: str) -> list[str]:
-    value = read_json(ROOT / "registry/job-templates" / f"{job}.json").get("permissions")
+    value = read_json(registry_paths.template(job)).get("permissions")
     if not isinstance(value, list) or len(value) != len(set(value)):
         raise Blocked(f"02-evidence-index: selected producer {job} has invalid canonical permissions")
     return value

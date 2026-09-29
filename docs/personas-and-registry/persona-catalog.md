@@ -4,7 +4,7 @@
 
 This catalog defines reusable personas for the AppSec review process. The composable model
 (persona + role + domain + tooling profile + output contract = job template) is defined by
-[`appsec-review-process/registry/README.md`](../../appsec-review-process/registry/README.md);
+[`appsec-review-process/pipeline/README.md`](../../appsec-review-process/pipeline/README.md);
 this file lists the persona library in human-readable form.
 
 Personas are grouped by the kind of value they provide:

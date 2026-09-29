@@ -24,12 +24,13 @@ import execution_state as state
 from schema_validate import SCHEMAS_DIR, validate_document
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_result import artifact_records, terminal_envelope
+import registry_paths
 
 # Located the way the worker locates them, never by the repository's directory names: in the Linux
 # code-server this tree is mounted as /opt/process beside /opt/schemas, and a path built from
 # '<repo>/appsec-review-process' made this module fail to import there (found by the requalification).
 SCHEMA = json.loads((SCHEMAS_DIR / store.METRICS_SCHEMA_FILE).read_text(encoding='utf-8'))
-CONTRACT = json.loads((store.ROOT / 'registry' / 'output-contracts' / 'evidence-index.json')
+CONTRACT = json.loads((store.registry_paths.contract("evidence-index"))
                       .read_text(encoding='utf-8'))
 FINGERPRINT = hashlib.sha256(b'v15 fixture source').hexdigest()
 SUPPORTED_KEYWORDS = {'$schema', '$id', 'title', 'description', 'type', 'required', 'properties',

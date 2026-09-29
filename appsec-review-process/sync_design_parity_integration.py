@@ -6,11 +6,12 @@ import json
 from pathlib import Path
 
 from validate_design_parity import _registry_for
+import registry_paths
 
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent
-GRAPH = ROOT / "job-graph.json"
+GRAPH = registry_paths.JOB_GRAPH
 MANIFEST = ROOT / "design-parity-manifest.json"
 
 WORKERS = {
@@ -82,12 +83,12 @@ def pool(job_id: str, record: dict) -> str:
 
 def output_record(node: dict, prior: dict) -> dict:
     contract_id = node["contract"]
-    contract_path = ROOT / "registry" / "output-contracts" / f"{contract_id}.json"
+    contract_path = registry_paths.contract(contract_id)
     contract = load(contract_path)
     result_schema = contract.get("result_schema") or {}
     claim = contract.get("claim_class") or {}
     return {"contract": contract_id,
-            "contract_file": f"appsec-review-process/registry/output-contracts/{contract_id}.json",
+            "contract_file": registry_paths.repo_rel(registry_paths.contract_rel(contract_id)),
             "schema_file": (f"schemas/{result_schema['schema_file']}" if result_schema else None),
             "claim_class": claim.get("claim_class_id", prior.get("claim_class", "control_decision"))}
 
@@ -121,7 +122,7 @@ def main() -> int:
         record["graph"] = {"node": job_id, "implemented": bool(node["implemented"]),
                            "dependencies": [row["job"] for row in node["dependencies"]]}
         record["registry"] = _registry_for(node, REPO)
-        template = load(ROOT / "registry" / "job-templates" / f"{node['template']}.json")
+        template = load(registry_paths.JOB_TEMPLATES_DIR / f"{node['template']}.json")
         record["permissions"] = template.get("permissions", [])
         record["output"] = output_record(node, record.get("output", {}))
         if job_id in WORKERS:

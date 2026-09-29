@@ -24,6 +24,7 @@ from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, ben
                              read_json, tree_hashes)
 import phase1
 from schema_validate import validate_document
+import registry_paths
 
 LIMITS = {name: tunables.value('02-evidence-index', key) for name, key in (
     ('max_files', 'index_max_files'), ('max_file_bytes', 'index_max_file_bytes'),
@@ -297,7 +298,7 @@ def root(run_id):
 
 
 def canonical_permissions(plan):
-    expected = read_json(ROOT / 'registry/job-templates/02-evidence-index.json').get('permissions')
+    expected = read_json(registry_paths.template("02-evidence-index")).get('permissions')
     supplied = plan.get('template', {}).get('permissions') if 'template' in plan else expected
     if not isinstance(expected, list) or len(expected) != len(set(expected)) or supplied != expected:
         raise Blocked('evidence index permissions differ from the canonical job template')
@@ -308,7 +309,7 @@ def inputs(run_id):
     if file_hash(ROOT / 'evidence_store.py') != LOADED_WORKER_SHA256:
         raise Blocked('index implementation changed in a running worker; start a new launch')
     from job_graph import composition
-    template = read_json(ROOT / 'registry/job-templates/02-evidence-index.json')
+    template = read_json(registry_paths.template("02-evidence-index"))
     records = composition(template)
     upstream = phase1.accepted(run_id, fresh=True)
     if not upstream or upstream['status'] != 'OK':

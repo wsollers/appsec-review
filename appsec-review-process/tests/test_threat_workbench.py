@@ -13,6 +13,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state as state
 import persona_invocation as pi
@@ -496,7 +497,7 @@ class RegistryTests(unittest.TestCase):
         errors = [e for e in pi.validate_persona_registry(pi.REGISTRY_DIR) if "threat-workbench" in e]
         self.assertEqual(errors, [])
         for cell in tw.WORKCELLS:
-            template = json.loads((ROOT / f"registry/job-templates/{cell.template_id}.json").read_text())
+            template = json.loads((ROOT / registry_paths.template_rel(cell.template_id)).read_text())
             self.assertEqual(template["composition"]["persona_id"], cell.persona_id)
             records = pi.load_composition(pi.REGISTRY_DIR, pd._composition_block(cell.template_id, template, store), store)
             ceiling = pi.claim_ceiling(records["role"], records["tooling_profile"])

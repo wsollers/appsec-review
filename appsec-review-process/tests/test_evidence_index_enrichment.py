@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import evidence_index_enrichment as enrichment
 import evidence_store as store
@@ -212,7 +213,7 @@ class EvidenceIndexEnrichmentTests(unittest.TestCase):
         plan = {
             "producers": [{"kind": "intake", "pointer": {"attempt_id": "producer"}}],
             "derived": selected,
-            "template": json.loads((ROOT / "registry/job-templates/02-evidence-index.json").read_text()),
+            "template": json.loads((registry_paths.template("02-evidence-index")).read_text()),
         }
         attempt = Path(self.temp.name) / "index-attempt"
         attempt.mkdir()

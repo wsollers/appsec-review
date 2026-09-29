@@ -50,6 +50,7 @@ from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_
 import permission_capabilities as pc
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 # One node per CodeQL language (ADR-0023 decision 1). Order is the graph and catalog order.
 LANGUAGES = ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")
@@ -76,7 +77,7 @@ CATEGORY = "codeql-security-query"
 CODE_FILES = (
     "codeql_sast.py", "container_execution.py", "permission_capabilities.py",
     "publish_job_output.py", "validate_job_output.py", "native_sast.py", "native_sast_adapters.py",
-    f"registry/output-contracts/{CONTRACT}.json",
+    registry_paths.contract_rel(CONTRACT),
 )
 # Suffixes per CodeQL extractor.
 LANGUAGE_SUFFIXES = {
@@ -131,7 +132,7 @@ def language_of(job: str) -> str:
 
 
 def template_path(language: str) -> Path:
-    return ROOT / "registry" / "job-templates" / f"{job_id(language)}.json"
+    return registry_paths.template(job_id(language))
 
 
 def root(run_id: str, language: str) -> Path:
@@ -339,7 +340,7 @@ def build_plan(languages: list[str], registry: dict[str, dict[str, Any]], metada
 
 def _code_hashes(language: str) -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
-    template = f"registry/job-templates/{job_id(language)}.json"
+    template = registry_paths.template_rel(job_id(language))
     values[template] = file_hash(ROOT / template)
     for name in (SCHEMA_FILE, "codeql-database-pointer.schema.json"):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)

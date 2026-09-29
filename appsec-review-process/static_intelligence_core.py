@@ -20,6 +20,7 @@ import size_log
 import phase1
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 SPECS = {
     "02-doc-intelligence-ingest": ("doc-intelligence", "doc-intelligence.json", "doc-intelligence.schema.json"),
@@ -48,7 +49,7 @@ def _hash(value: Any) -> str:
 
 
 def _permissions(job: str) -> list[str]:
-    value = read_json(ROOT / "registry/job-templates" / f"{job}.json").get("permissions")
+    value = read_json(registry_paths.template(job)).get("permissions")
     if not isinstance(value, list) or not value or len(value) != len(set(value)):
         raise Blocked(f"{job}: canonical template permissions are absent or invalid")
     return value
@@ -58,7 +59,7 @@ def _code_hashes(job: str) -> dict[str, str]:
     contract, _result, schema = SPECS[job]
     wrapper = job[3:].replace("-", "_") + ".py"
     names = ["static_intelligence_core.py", wrapper, "evidence_redaction.py",
-             f"registry/job-templates/{job}.json", f"registry/output-contracts/{contract}.json"]
+             registry_paths.template_rel(job), registry_paths.contract_rel(contract)]
     values = {name: file_hash(ROOT / name) for name in names}
     values["schemas/" + schema] = file_hash(ROOT.parent / "schemas" / schema)
     values["schemas/static-intelligence-record.schema.json"] = file_hash(

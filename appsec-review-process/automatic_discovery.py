@@ -20,6 +20,7 @@ import discovery_gate as discovery
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, file_hash, now, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 JOBS = (discovery.ADOPTED_JOB, discovery.CONSUMER_JOB, discovery.DEVOPS_JOB, discovery.SRE_JOB)
 
@@ -31,7 +32,7 @@ def root(run_id: str, job_id: str) -> Path:
 
 
 def _template(job_id: str) -> dict[str, Any]:
-    value = read_json(ROOT / "registry" / "job-templates" / f"{job_id}.json")
+    value = read_json(registry_paths.template(job_id))
     composition = value.get("composition")
     if not isinstance(composition, dict):
         raise Blocked(f"{job_id}: registry template lacks a composition")

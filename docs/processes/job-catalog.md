@@ -416,7 +416,7 @@ The ops inside the engagement_workflow Dagster job. Source: `docs/dagster/dagste
 
 ## Lifecycle graph (full_review, job-graph.json)
 
-All current lifecycle nodes, grouped by lane in process-manifest.json order. Source: `appsec-review-process/job-graph.json`.
+All current lifecycle nodes, grouped by lane in process-manifest.json order. Source: `appsec-review-process/pipeline/job-graph.json`.
 
 | Rolled up for the model | Artifacts |
 |---|---|
@@ -1404,9 +1404,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `phase1_intake`; lifecycle binding: `actual_worker` |
 | Composition | persona `intake-coordinator`, role `intake-coordinator`, tooling `read-only-intake` |
 | Consumes (graph) | [`artifact-manifest`](#a-artifact-manifest) (graph root) |
-| Declared inputs (registry/job-templates/00-intake.json) | target path<br>source identity<br>scope<br>permissions<br>hashed imports *(optional)* |
+| Declared inputs (pipeline/job-templates/00-intake.json) | target path<br>source identity<br>scope<br>permissions<br>hashed imports *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/00-intake/` |
-| Output files (registry/output-contracts/intake.json) | outputs/intake.json<br>outputs/build-discovery.md<br>status.json |
+| Output files (pipeline/output-contracts/intake.json) | outputs/intake.json<br>outputs/build-discovery.md<br>status.json |
 | Consumed by | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-codeql-cpp`](#job-02-codeql-cpp)<br>[`02-codeql-csharp`](#job-02-codeql-csharp)<br>[`02-codeql-go`](#job-02-codeql-go)<br>[`02-codeql-java`](#job-02-codeql-java)<br>[`02-codeql-javascript`](#job-02-codeql-javascript)<br>[`02-codeql-python`](#job-02-codeql-python)<br>[`02-codeql-ruby`](#job-02-codeql-ruby)<br>[`02-codeql-rust`](#job-02-codeql-rust)<br>[`02-code-property-graph`](#job-02-code-property-graph)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-mobile-sast`](#job-02-mobile-sast)<br>[`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch)<br>[`dynamic-rescope`](#job-dynamic-rescope) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1425,9 +1425,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `ossf_scorecard`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `scorecard-results-ingestor`, tooling `authorized-scorecard-api` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-ossf-scorecard.json) | inputs/ossf-scorecard-projects.json when requested<br>network:api.scorecard.dev permission when requested<br>40-hex commit pin per repository *(optional)* |
+| Declared inputs (pipeline/job-templates/02-ossf-scorecard.json) | inputs/ossf-scorecard-projects.json when requested<br>network:api.scorecard.dev permission when requested<br>40-hex commit pin per repository *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-ossf-scorecard/` |
-| Output files (registry/output-contracts/ossf-scorecard-results.json) | manifest.json<br>outputs/scorecard-results.json<br>outputs/summary.md<br>status.json |
+| Output files (pipeline/output-contracts/ossf-scorecard-results.json) | manifest.json<br>outputs/scorecard-results.json<br>outputs/summary.md<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1444,9 +1444,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `repository_partition_discovery`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `repository-partition-mapper`, tooling `static-repo-project-inspector` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-repository-partition-discovery.json) | target repository path<br>repository file inventory including hidden CI/configuration paths<br>language build environment image catalog<br>existing project inventory *(optional)*<br>static evidence summary *(optional)*<br>API definitions *(optional)*<br>IaC and deployment manifests *(optional)*<br>CI/CD workflows *(optional)*<br>runbooks and service catalog *(optional)*<br>existing component map *(optional)* |
+| Declared inputs (pipeline/job-templates/02-repository-partition-discovery.json) | target repository path<br>repository file inventory including hidden CI/configuration paths<br>language build environment image catalog<br>existing project inventory *(optional)*<br>static evidence summary *(optional)*<br>API definitions *(optional)*<br>IaC and deployment manifests *(optional)*<br>CI/CD workflows *(optional)*<br>runbooks and service catalog *(optional)*<br>existing component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-repository-partition-discovery/` |
-| Output files (registry/output-contracts/repository-partition-map.json) | repository-partition-map.json<br>repository-partition-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/repository-partition-map.json) | repository-partition-map.json<br>repository-partition-summary.md<br>status.json |
 | Consumed by | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`devops-analysis`](#step-devops-analysis)<br>[`sre_operations_topology`](#step-sre-operations-topology)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery)<br>[`02-build-index`](#job-02-build-index) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1463,9 +1463,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `dev_project_discovery`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `repo-project-discoverer`, tooling `static-repo-project-inspector` |
 | Consumes (graph) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`) |
-| Declared inputs (registry/job-templates/02-dev-project-discovery.json) | target repository path<br>language build environment image catalog<br>developer docs *(optional)*<br>CI workflow files *(optional)*<br>existing component map *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
+| Declared inputs (pipeline/job-templates/02-dev-project-discovery.json) | target repository path<br>language build environment image catalog<br>developer docs *(optional)*<br>CI workflow files *(optional)*<br>existing component map *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-dev-project-discovery/` |
-| Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
 | Consumed by | [`build-index`](#step-build-index)<br>[`02-build-index`](#job-02-build-index)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1482,9 +1482,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `devops_project_discovery`; lifecycle binding: `actual_worker` |
 | Composition | persona `devops-engineer`, role `repo-project-discoverer`, tooling `static-repo-project-inspector` |
 | Consumes (graph) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`) |
-| Declared inputs (registry/job-templates/02-devops-project-discovery.json) | target repository path<br>CI/CD and deployment artifact inventory<br>Dockerfiles *(optional)*<br>IaC *(optional)*<br>environment templates *(optional)*<br>build logs *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
+| Declared inputs (pipeline/job-templates/02-devops-project-discovery.json) | target repository path<br>CI/CD and deployment artifact inventory<br>Dockerfiles *(optional)*<br>IaC *(optional)*<br>environment templates *(optional)*<br>build logs *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-devops-project-discovery/` |
-| Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
 | Consumed by | [`sre_operations_topology`](#step-sre-operations-topology)<br>[`sre-analysis`](#step-sre-analysis)<br>[`build-index`](#step-build-index)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-build-index`](#job-02-build-index)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1501,9 +1501,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `sre_operations_topology`; lifecycle binding: `actual_worker` |
 | Composition | persona `sre-engineer`, role `operations-topology-mapper`, tooling `static-ops-topology-inspector` |
 | Consumes (graph) | [`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`) |
-| Declared inputs (registry/job-templates/02-sre-operations-topology.json) | target repository path<br>deployment and operations artifact inventory<br>runbooks *(optional)*<br>smoke tests *(optional)*<br>monitoring and alerting config *(optional)*<br>service catalog *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
+| Declared inputs (pipeline/job-templates/02-sre-operations-topology.json) | target repository path<br>deployment and operations artifact inventory<br>runbooks *(optional)*<br>smoke tests *(optional)*<br>monitoring and alerting config *(optional)*<br>service catalog *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-sre-operations-topology/` |
-| Output files (registry/output-contracts/operations-topology.json) | service-inventory.json<br>operations-topology-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/operations-topology.json) | service-inventory.json<br>operations-topology-summary.md<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1520,9 +1520,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `build_index`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `build-indexer`, tooling `static-build-indexer` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) (required, contract `project-discovery`)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`) |
-| Declared inputs (registry/job-templates/02-build-index.json) | fresh accepted intake<br>accepted repository partition map<br>accepted developer project discovery (cross-check context)<br>accepted devops project discovery (cross-check context)<br>staged target checkout |
+| Declared inputs (pipeline/job-templates/02-build-index.json) | fresh accepted intake<br>accepted repository partition map<br>accepted developer project discovery (cross-check context)<br>accepted devops project discovery (cross-check context)<br>staged target checkout |
 | Produces | `runs/<run_id>/data/jobs/02-build-index/` |
-| Output files (registry/output-contracts/build-index.json) | build-index.json<br>build-index.md<br>status.json |
+| Output files (pipeline/output-contracts/build-index.json) | build-index.json<br>build-index.md<br>status.json |
 | Consumed by | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1540,9 +1540,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `build_classify`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `build-unit-classifier`, tooling `static-repo-project-inspector` |
 | Consumes (graph) | [`02-build-index`](#job-02-build-index) (required, contract `build-index`) |
-| Declared inputs (registry/job-templates/02-build-classify.json) | target repository path<br>accepted build-index.json from 02-build-index |
+| Declared inputs (pipeline/job-templates/02-build-classify.json) | target repository path<br>accepted build-index.json from 02-build-index |
 | Produces | `runs/<run_id>/data/jobs/02-build-classify/` |
-| Output files (registry/output-contracts/build-classification.json) | build-classification.json<br>build-classification-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/build-classification.json) | build-classification.json<br>build-classification-summary.md<br>status.json |
 | Consumed by | [`build-plan`](#step-build-plan)<br>[`02-build-plan`](#job-02-build-plan) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1560,9 +1560,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `build_plan`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `build-planner`, tooling `static-repo-project-inspector` |
 | Consumes (graph) | [`02-build-classify`](#job-02-build-classify) (required, contract `build-classification`) |
-| Declared inputs (registry/job-templates/02-build-plan.json) | target repository path<br>accepted build-index.json from 02-build-index<br>accepted build-classification.json from 02-build-classify<br>buildenv-catalog.json (the base images a plan may choose)<br>plan-unit.json (the one build-set unit this call plans; written by the orchestrator) |
+| Declared inputs (pipeline/job-templates/02-build-plan.json) | target repository path<br>accepted build-index.json from 02-build-index<br>accepted build-classification.json from 02-build-classify<br>buildenv-catalog.json (the base images a plan may choose)<br>plan-unit.json (the one build-set unit this call plans; written by the orchestrator) |
 | Produces | `runs/<run_id>/data/jobs/02-build-plan/` |
-| Output files (registry/output-contracts/build-plan.json) | build-plan.json<br>build-plan-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/build-plan.json) | build-plan.json<br>build-plan-summary.md<br>status.json |
 | Consumed by | [`02-build-resolution`](#job-02-build-resolution) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1580,9 +1580,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `build_resolution`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `build-resolver`, tooling `pinned-build-resolver` |
 | Consumes (graph) | [`02-build-plan`](#job-02-build-plan) (required, contract `build-plan`) |
-| Declared inputs (registry/job-templates/02-build-resolution.json) | accepted build-plan.json<br>staged target checkout<br>B16 base-image record<br>explicit permission grants |
+| Declared inputs (pipeline/job-templates/02-build-resolution.json) | accepted build-plan.json<br>staged target checkout<br>B16 base-image record<br>explicit permission grants |
 | Produces | `runs/<run_id>/data/jobs/02-build-resolution/` |
-| Output files (registry/output-contracts/build-resolution.json) | build-resolution.json<br>build-lock.json<br>b13-receipts.json<br>build-resolution-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/build-resolution.json) | build-resolution.json<br>build-lock.json<br>b13-receipts.json<br>build-resolution-summary.md<br>status.json |
 | Consumed by | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -1599,9 +1599,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
 | Consumes (graph) | [`02-dev-project-discovery`](#job-02-dev-project-discovery) (required, contract `project-discovery`)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) (required, contract `operations-topology`)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) (required, contract `api-collection-intelligence`)<br>[`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) (required, contract `binary-intelligence`)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) (required, contract `doc-intelligence`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest) (required, contract `test-intelligence`)<br>[`02-source-sast`](#job-02-source-sast) (required, contract `source-sast`)<br>[`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`)<br>[`02-test-result-ingest`](#job-02-test-result-ingest) (required, contract `test-result-intelligence`)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) (required, contract `test-coverage-intelligence`)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest) (required, contract `operations-doc-intelligence`)<br>[`02-evidence-index`](#job-02-evidence-index) (required, contract `evidence-index`)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) (required, contract `ossf-scorecard-results`)<br>[`02-secrets-inventory`](#job-02-secrets-inventory) (required, contract `secrets-inventory`)<br>[`02-iac-config-scan`](#job-02-iac-config-scan) (required, contract `iac-config-evidence`)<br>[`02-container-image-inventory`](#job-02-container-image-inventory) (required, contract `container-image-inventory`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`)<br>[`02-license-scan`](#job-02-license-scan) (required, contract `license-inventory`)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) (required, contract `dependency-lifecycle`)<br>[`02-binary-hardening`](#job-02-binary-hardening) (required, contract `binary-hardening`)<br>[`02-mobile-sast`](#job-02-mobile-sast) (required, contract `mobile-sast`) |
-| Declared inputs (registry/job-templates/02-evidence-assembly.json) | assembly-supply.json<br>terminal-instances.json<br>all graph-required producer accepted pointers and envelopes |
+| Declared inputs (pipeline/job-templates/02-evidence-assembly.json) | assembly-supply.json<br>terminal-instances.json<br>all graph-required producer accepted pointers and envelopes |
 | Produces | `runs/<run_id>/data/jobs/02-evidence-assembly/` |
-| Output files (registry/output-contracts/pregather.json) | intel-manifest.json<br>status.json |
+| Output files (pipeline/output-contracts/pregather.json) | intel-manifest.json<br>status.json |
 | Consumed by | [`01-component-characterization`](#job-01-component-characterization)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1619,9 +1619,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `qa-test-validator`, role `api-collection-intelligence-extractor`, tooling `static-api-collection-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-api-collection-intelligence-ingest.json) | collection path<br>collection format<br>environment path *(optional)*<br>OpenAPI spec *(optional)*<br>route inventory *(optional)*<br>component map *(optional)* |
+| Declared inputs (pipeline/job-templates/02-api-collection-intelligence-ingest.json) | collection path<br>collection format<br>environment path *(optional)*<br>OpenAPI spec *(optional)*<br>route inventory *(optional)*<br>component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/` |
-| Output files (registry/output-contracts/api-collection-intelligence.json) | api-collection-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/api-collection-intelligence.json) | api-collection-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1639,9 +1639,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-binary-cfg`](#job-02-binary-cfg) (required, contract `binary-cfg`) |
-| Declared inputs (registry/job-templates/02-binary-intelligence-ingest.json) | accepted native-build binary lineage<br>accepted binary-triage result<br>accepted binary-cfg result<br>source component map *(optional)*<br>deterministically derived normalized binary leads *(optional)* |
+| Declared inputs (pipeline/job-templates/02-binary-intelligence-ingest.json) | accepted native-build binary lineage<br>accepted binary-triage result<br>accepted binary-cfg result<br>source component map *(optional)*<br>deterministically derived normalized binary leads *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-binary-intelligence-ingest/` |
-| Output files (registry/output-contracts/binary-intelligence.json) | binary-intelligence.json<br>status.json<br>permission.json<br>lineage.json<br>applicability-receipt.json |
+| Output files (pipeline/output-contracts/binary-intelligence.json) | binary-intelligence.json<br>status.json<br>permission.json<br>lineage.json<br>applicability-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1659,9 +1659,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `functional-design-doc-consumer`, role `doc-intelligence-extractor`, tooling `static-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-doc-intelligence-ingest.json) | document source path<br>source type<br>redaction policy<br>existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json *(optional)*<br>component map *(optional)*<br>product glossary *(optional)* |
+| Declared inputs (pipeline/job-templates/02-doc-intelligence-ingest.json) | document source path<br>source type<br>redaction policy<br>existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json *(optional)*<br>component map *(optional)*<br>product glossary *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-doc-intelligence-ingest/` |
-| Output files (registry/output-contracts/doc-intelligence.json) | doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/doc-intelligence.json) | doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1679,9 +1679,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `standards-reference-curator`, role `standards-source-ingestor`, tooling `standards-source-static-ingest` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-standards-source-ingest.json) | exact accepted intake source identity<br>run-owned standards-source-binding.json<br>repository-pinned data/reference/source-lock.json and selected snapshots |
+| Declared inputs (pipeline/job-templates/02-standards-source-ingest.json) | exact accepted intake source identity<br>run-owned standards-source-binding.json<br>repository-pinned data/reference/source-lock.json and selected snapshots |
 | Produces | `runs/<run_id>/data/jobs/02-standards-source-ingest/` |
-| Output files (registry/output-contracts/standards-source-extract.json) | standards-source.json<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/standards-source-extract.json) | standards-source.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1699,9 +1699,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `test-coverage-indexer`, role `test-intelligence-extractor`, tooling `static-test-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-test-intelligence-ingest.json) | tests path<br>test type or auto<br>coverage report *(optional)*<br>component map *(optional)*<br>route inventory *(optional)*<br>CI test metadata *(optional)* |
+| Declared inputs (pipeline/job-templates/02-test-intelligence-ingest.json) | tests path<br>test type or auto<br>coverage report *(optional)*<br>component map *(optional)*<br>route inventory *(optional)*<br>CI test metadata *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-test-intelligence-ingest/` |
-| Output files (registry/output-contracts/test-intelligence.json) | test-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/test-intelligence.json) | test-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1719,9 +1719,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `build_configure`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `build-resolver`, tooling `pinned-build-resolver` |
 | Consumes (graph) | [`02-build-resolution`](#job-02-build-resolution) (required, contract `build-resolution`) |
-| Declared inputs (registry/job-templates/02-build-configure.json) | accepted build lock<br>catalogued build image<br>staged target checkout<br>target-execution grant |
+| Declared inputs (pipeline/job-templates/02-build-configure.json) | accepted build lock<br>catalogued build image<br>staged target checkout<br>target-execution grant |
 | Produces | `runs/<run_id>/data/jobs/02-build-configure/` |
-| Output files (registry/output-contracts/configured-build.json) | configured-build.json<br>b13-receipts.json<br>configured-build-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/configured-build.json) | configured-build.json<br>b13-receipts.json<br>configured-build-summary.md<br>status.json |
 | Consumed by | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1739,9 +1739,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `native_build`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `build-resolver`, tooling `pinned-build-resolver` |
 | Consumes (graph) | [`02-build-configure`](#job-02-build-configure) (required, contract `configured-build`) |
-| Declared inputs (registry/job-templates/02-native-build.json) | accepted build lock<br>accepted configured build<br>catalogued build image<br>staged target checkout<br>target-execution grant |
+| Declared inputs (pipeline/job-templates/02-native-build.json) | accepted build lock<br>accepted configured build<br>catalogued build image<br>staged target checkout<br>target-execution grant |
 | Produces | `runs/<run_id>/data/jobs/02-native-build/` |
-| Output files (registry/output-contracts/native-build.json) | native-build.json<br>b13-receipts.json<br>native-build-summary.md<br>status.json |
+| Output files (pipeline/output-contracts/native-build.json) | native-build.json<br>b13-receipts.json<br>native-build-summary.md<br>status.json |
 | Consumed by | [`02-codeql-cpp`](#job-02-codeql-cpp)<br>[`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution)<br>[`02-binary-hardening`](#job-02-binary-hardening) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1759,9 +1759,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `source_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-source-sast.json) | fresh accepted intake<br>staged target checkout<br>B16 tool-semgrep record<br>repository-owned hashed ruleset |
+| Declared inputs (pipeline/job-templates/02-source-sast.json) | fresh accepted intake<br>staged target checkout<br>B16 tool-semgrep record<br>repository-owned hashed ruleset |
 | Produces | `runs/<run_id>/data/jobs/02-source-sast/` |
-| Output files (registry/output-contracts/source-sast.json) | source-sast.json<br>b13-receipts.json<br>source-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/source-sast.json) | source-sast.json<br>b13-receipts.json<br>source-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1779,9 +1779,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-codeql-cpp.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json)<br>accepted 02-native-build (traced replay per unit; B16 audit-codeql-native record) *(optional)* |
+| Declared inputs (pipeline/job-templates/02-codeql-cpp.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json)<br>accepted 02-native-build (traced replay per unit; B16 audit-codeql-native record) *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-cpp/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1799,9 +1799,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-csharp.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-csharp.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-csharp/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1819,9 +1819,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-go.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-go.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-go/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1839,9 +1839,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-java.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-java.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-java/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1859,9 +1859,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-javascript.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-javascript.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-javascript/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1879,9 +1879,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-python.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-python.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-python/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1899,9 +1899,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-ruby.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-ruby.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-ruby/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1919,9 +1919,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-codeql-rust.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
+| Declared inputs (pipeline/job-templates/02-codeql-rust.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-rust/` |
-| Output files (registry/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/codeql-language.json) | codeql-language.json<br>b13-receipts.json<br>codeql-language-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1939,9 +1939,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `code_property_graph`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-code-property-graph.json) | accepted source snapshot<br>pinned audit-native image<br>hash-bound Joern exporter |
+| Declared inputs (pipeline/job-templates/02-code-property-graph.json) | accepted source snapshot<br>pinned audit-native image<br>hash-bound Joern exporter |
 | Produces | `runs/<run_id>/data/jobs/02-code-property-graph/` |
-| Output files (registry/output-contracts/code-property-graph.json) | code-property-graph.json<br>b13-receipt.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/code-property-graph.json) | code-property-graph.json<br>b13-receipt.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-reachability-ir`](#job-06-reachability-ir) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1959,9 +1959,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `native-sast-curator`, tooling `pinned-native-sast` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-native-sast.json) | exact accepted 02-native-build publication<br>caller-held native-build fingerprint<br>B16 audit-native record<br>tracked native-SAST configuration |
+| Declared inputs (pipeline/job-templates/02-native-sast.json) | exact accepted 02-native-build publication<br>caller-held native-build fingerprint<br>B16 audit-native record<br>tracked native-SAST configuration |
 | Produces | `runs/<run_id>/data/jobs/02-native-sast/` |
-| Output files (registry/output-contracts/native-sast.json) | native-sast.json<br>b13-receipts.json<br>native-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/native-sast.json) | native-sast.json<br>b13-receipts.json<br>native-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) |
 | Gaps | `pinned_image_live_qualification_missing`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1979,9 +1979,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `ir_capture`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-ir-capture.json) | accepted native build<br>clang compile database |
+| Declared inputs (pipeline/job-templates/02-ir-capture.json) | accepted native build<br>clang compile database |
 | Produces | `runs/<run_id>/data/jobs/02-ir-capture/` |
-| Output files (registry/output-contracts/ir-capture.json) | ir-capture.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/ir-capture.json) | ir-capture.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-ir-link`](#job-02-ir-link) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1999,9 +1999,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `ir_link`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-ir-capture`](#job-02-ir-capture) (required, contract `ir-capture`) |
-| Declared inputs (registry/job-templates/02-ir-link.json) | accepted IR capture |
+| Declared inputs (pipeline/job-templates/02-ir-link.json) | accepted IR capture |
 | Produces | `runs/<run_id>/data/jobs/02-ir-link/` |
-| Output files (registry/output-contracts/ir-link.json) | ir-link.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/ir-link.json) | ir-link.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-ir-facts`](#job-02-ir-facts) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2019,9 +2019,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `ir_facts`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-ir-link`](#job-02-ir-link) (required, contract `ir-link`) |
-| Declared inputs (registry/job-templates/02-ir-facts.json) | accepted linked LLVM module |
+| Declared inputs (pipeline/job-templates/02-ir-facts.json) | accepted linked LLVM module |
 | Produces | `runs/<run_id>/data/jobs/02-ir-facts/` |
-| Output files (registry/output-contracts/ir-facts.json) | ir-facts.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/ir-facts.json) | ir-facts.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2039,9 +2039,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
+| Declared inputs (pipeline/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-debug-symbol-index/` |
-| Output files (registry/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json<br>debug-symbol-index.records.jsonl |
+| Output files (pipeline/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json<br>debug-symbol-index.records.jsonl |
 | Consumed by | [`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2059,9 +2059,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-binary-triage.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
+| Declared inputs (pipeline/job-templates/02-binary-triage.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-binary-triage/` |
-| Output files (registry/output-contracts/binary-triage.json) | binary-triage-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
+| Output files (pipeline/output-contracts/binary-triage.json) | binary-triage-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
 | Consumed by | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2079,9 +2079,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (required, contract `debug-symbol-index`) |
-| Declared inputs (registry/job-templates/02-binary-cfg.json) | accepted native-build binary lineage<br>accepted debug-symbol-index<br>accepted binary-triage<br>registered audit-binary-analysis image |
+| Declared inputs (pipeline/job-templates/02-binary-cfg.json) | accepted native-build binary lineage<br>accepted debug-symbol-index<br>accepted binary-triage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-binary-cfg/` |
-| Output files (registry/output-contracts/binary-cfg.json) | cfg-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
+| Output files (pipeline/output-contracts/binary-cfg.json) | cfg-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
 | Consumed by | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2099,9 +2099,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `qa-test-validator`, role `test-evidence-producer`, tooling `bounded-test-evidence` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-test-execution.json) | accepted native build<br>trusted bounded test plan<br>target-execution grant |
+| Declared inputs (pipeline/job-templates/02-test-execution.json) | accepted native build<br>trusted bounded test plan<br>target-execution grant |
 | Produces | `runs/<run_id>/data/jobs/02-test-execution/` |
-| Output files (registry/output-contracts/test-execution.json) | test-execution.json<br>b13-receipt.json<br>test-execution-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/test-execution.json) | test-execution.json<br>b13-receipt.json<br>test-execution-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-test-result-ingest`](#job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2119,9 +2119,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `qa-test-validator`, role `test-evidence-producer`, tooling `bounded-test-evidence` |
 | Consumes (graph) | [`02-test-execution`](#job-02-test-execution) (required, contract `test-execution`) |
-| Declared inputs (registry/job-templates/02-test-result-ingest.json) | accepted test execution |
+| Declared inputs (pipeline/job-templates/02-test-result-ingest.json) | accepted test execution |
 | Produces | `runs/<run_id>/data/jobs/02-test-result-ingest/` |
-| Output files (registry/output-contracts/test-result-intelligence.json) | test-results.json<br>test-result-intelligence-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/test-result-intelligence.json) | test-results.json<br>test-result-intelligence-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2139,9 +2139,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `test-coverage-indexer`, role `test-evidence-producer`, tooling `bounded-test-evidence` |
 | Consumes (graph) | [`02-test-execution`](#job-02-test-execution) (required, contract `test-execution`) |
-| Declared inputs (registry/job-templates/02-test-coverage-ingest.json) | accepted test execution |
+| Declared inputs (pipeline/job-templates/02-test-coverage-ingest.json) | accepted test execution |
 | Produces | `runs/<run_id>/data/jobs/02-test-coverage-ingest/` |
-| Output files (registry/output-contracts/test-coverage-intelligence.json) | test-coverage.json<br>test-coverage-intelligence-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/test-coverage-intelligence.json) | test-coverage.json<br>test-coverage-intelligence-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2159,9 +2159,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `functional-design-doc-consumer`, role `doc-intelligence-extractor`, tooling `static-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-operations-doc-ingest.json) | exact accepted intake source inventory |
+| Declared inputs (pipeline/job-templates/02-operations-doc-ingest.json) | exact accepted intake source inventory |
 | Produces | `runs/<run_id>/data/jobs/02-operations-doc-ingest/` |
-| Output files (registry/output-contracts/operations-doc-intelligence.json) | operations-doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/operations-doc-intelligence.json) | operations-doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2179,9 +2179,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `evidence_index`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-indexer`, tooling `local-evidence-retrieval` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-evidence-index.json) | fresh accepted intake<br>accepted build discovery |
+| Declared inputs (pipeline/job-templates/02-evidence-index.json) | fresh accepted intake<br>accepted build discovery |
 | Produces | `runs/<run_id>/data/jobs/02-evidence-index/` |
-| Output files (registry/output-contracts/evidence-index.json) | manifest.json<br>index.sqlite<br>ssdeep.csv<br>evidence-index-enrichment.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/evidence-index.json) | manifest.json<br>index.sqlite<br>ssdeep.csv<br>evidence-index-enrichment.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`lane-handoffs`](#step-lane-handoffs)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `derived_producer_selection_not_orchestrated`, `common_worker_envelope_migration_missing`, `live_enrichment_requalification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2199,9 +2199,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `secrets_inventory`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-secrets-inventory.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
+| Declared inputs (pipeline/job-templates/02-secrets-inventory.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-secrets-inventory/` |
-| Output files (registry/output-contracts/secrets-inventory.json) | manifest.json<br>status.json<br>outputs/secrets-inventory.redacted.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/secrets-inventory.json) | manifest.json<br>status.json<br>outputs/secrets-inventory.redacted.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_docker_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2219,9 +2219,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `iac_config_scan`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-iac-config-scan.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
+| Declared inputs (pipeline/job-templates/02-iac-config-scan.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-iac-config-scan/` |
-| Output files (registry/output-contracts/iac-config-evidence.json) | manifest.json<br>status.json<br>outputs/iac-config-evidence.json<br>outputs/base-image-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json<br>outputs/applicability-probe-receipt.json |
+| Output files (pipeline/output-contracts/iac-config-evidence.json) | manifest.json<br>status.json<br>outputs/iac-config-evidence.json<br>outputs/base-image-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json<br>outputs/applicability-probe-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | Gaps | `no_live_docker_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2239,9 +2239,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `container_image_inventory`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-container-image-inventory.json) | fresh run artifact manifest<br>explicit run inputs root<br>B16 scanner image records |
+| Declared inputs (pipeline/job-templates/02-container-image-inventory.json) | fresh run artifact manifest<br>explicit run inputs root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-container-image-inventory/` |
-| Output files (registry/output-contracts/container-image-inventory.json) | manifest.json<br>status.json<br>outputs/container-image-inventory.json<br>outputs/container-image-applicability.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/container-image-inventory.json) | manifest.json<br>status.json<br>outputs/container-image-inventory.json<br>outputs/container-image-applicability.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_docker_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2259,9 +2259,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `sbom_inventory`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-build-index`](#job-02-build-index) (required, contract `build-index`) |
-| Declared inputs (registry/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>accepted 02-build-index generation<br>B16 Syft image record |
+| Declared inputs (pipeline/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>accepted 02-build-index generation<br>B16 Syft image record |
 | Produces | `runs/<run_id>/data/jobs/02-sbom-inventory/` |
-| Output files (registry/output-contracts/sbom-inventory.json) | manifest.json<br>status.json<br>outputs/sbom.cdx.json<br>outputs/sbom-manifest.json<br>outputs/build-index-vendored-members.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/sbom-inventory.json) | manifest.json<br>status.json<br>outputs/sbom.cdx.json<br>outputs/sbom-manifest.json<br>outputs/build-index-vendored-members.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`license-scan`](#step-license-scan)<br>[`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-reachability-codeql`](#job-06-reachability-codeql)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
 | Gaps | `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2279,9 +2279,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `sca_vulnerability_match`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`) |
-| Declared inputs (registry/job-templates/02-sca-vulnerability-match.json) | accepted SBOM<br>B16 Grype and OSV images<br>supplied current offline Grype and OSV snapshot registry<br>explicit database age ceiling |
+| Declared inputs (pipeline/job-templates/02-sca-vulnerability-match.json) | accepted SBOM<br>B16 Grype and OSV images<br>supplied current offline Grype and OSV snapshot registry<br>explicit database age ceiling |
 | Produces | `runs/<run_id>/data/jobs/02-sca-vulnerability-match/` |
-| Output files (registry/output-contracts/sca-vulnerability-match.json) | manifest.json<br>status.json<br>outputs/sca-vulnerability-match.json<br>outputs/vulnerability-database-identities.json<br>outputs/osv-applicability-receipt.json<br>outputs/sca-coverage-gaps.json<br>outputs/coverage-gap-summary.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/sca-vulnerability-match.json) | manifest.json<br>status.json<br>outputs/sca-vulnerability-match.json<br>outputs/vulnerability-database-identities.json<br>outputs/osv-applicability-receipt.json<br>outputs/sca-coverage-gaps.json<br>outputs/coverage-gap-summary.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`cve-reachability`](#step-cve-reachability)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-reachability-codeql`](#job-06-reachability-codeql)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`06-cve-reachability`](#job-06-cve-reachability) |
 | Gaps | `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2299,9 +2299,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `license_scan`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`) |
-| Declared inputs (registry/job-templates/02-license-scan.json) | accepted SBOM<br>explicit staged target path<br>B16 ScanCode image record |
+| Declared inputs (pipeline/job-templates/02-license-scan.json) | accepted SBOM<br>explicit staged target path<br>B16 ScanCode image record |
 | Produces | `runs/<run_id>/data/jobs/02-license-scan/` |
-| Output files (registry/output-contracts/license-inventory.json) | manifest.json<br>status.json<br>outputs/license-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/license-inventory.json) | manifest.json<br>status.json<br>outputs/license-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
 | Gaps | `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2319,9 +2319,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `dependency_lifecycle`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-license-scan`](#job-02-license-scan) (required, contract `license-inventory`) |
-| Declared inputs (registry/job-templates/02-dependency-lifecycle.json) | accepted SBOM<br>accepted license inventory<br>identified run-owned lifecycle reference table<br>explicit table age ceiling |
+| Declared inputs (pipeline/job-templates/02-dependency-lifecycle.json) | accepted SBOM<br>accepted license inventory<br>identified run-owned lifecycle reference table<br>explicit table age ceiling |
 | Produces | `runs/<run_id>/data/jobs/02-dependency-lifecycle/` |
-| Output files (registry/output-contracts/dependency-lifecycle.json) | manifest.json<br>status.json<br>outputs/dependency-lifecycle.json<br>outputs/reference-table-identity.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/dependency-lifecycle.json) | manifest.json<br>status.json<br>outputs/dependency-lifecycle.json<br>outputs/reference-table-identity.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2339,9 +2339,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `binary_hardening`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
-| Declared inputs (registry/job-templates/02-binary-hardening.json) | fresh run artifact manifest<br>accepted 02-native-build binary projection<br>B16 scanner image records |
+| Declared inputs (pipeline/job-templates/02-binary-hardening.json) | fresh run artifact manifest<br>accepted 02-native-build binary projection<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-binary-hardening/` |
-| Output files (registry/output-contracts/binary-hardening.json) | manifest.json<br>status.json<br>outputs/binary-hardening.json<br>outputs/binary-hardening-applicability.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/binary-hardening.json) | manifest.json<br>status.json<br>outputs/binary-hardening.json<br>outputs/binary-hardening-applicability.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2358,9 +2358,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `mobile_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-mobile-sast.json) | fresh run artifact manifest<br>explicit manifest-declared source root<br>B16 scanner image records |
+| Declared inputs (pipeline/job-templates/02-mobile-sast.json) | fresh run artifact manifest<br>explicit manifest-declared source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-mobile-sast/` |
-| Output files (registry/output-contracts/mobile-sast.json) | manifest.json<br>status.json<br>outputs/mobile-applicability.json<br>outputs/mobile-sast.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (pipeline/output-contracts/mobile-sast.json) | manifest.json<br>status.json<br>outputs/mobile-applicability.json<br>outputs/mobile-sast.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `no_live_docker_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2380,9 +2380,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `component_characterization`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `component-characterizer`, tooling `component-evidence-router` |
 | Consumes (graph) | [`02-evidence-assembly`](#job-02-evidence-assembly) (required, contract `pregather`) |
-| Declared inputs (registry/job-templates/01-component-characterization.json) | target repository path<br>accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts<br>repository partition map *(optional)*<br>symbol and semantic indexes *(optional)*<br>build, source-SAST and operations evidence *(optional)* |
+| Declared inputs (pipeline/job-templates/01-component-characterization.json) | target repository path<br>accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts<br>repository partition map *(optional)*<br>symbol and semantic indexes *(optional)*<br>build, source-SAST and operations evidence *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/01-component-characterization/` |
-| Output files (registry/output-contracts/component-map.json) | component-purpose-map.json<br>component-purpose-map.md<br>status.json |
+| Output files (pipeline/output-contracts/component-map.json) | component-purpose-map.json<br>component-purpose-map.md<br>status.json |
 | Consumed by | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`threat-model-reconciliation-active`](#step-threat-model-reconciliation-active)<br>[`02-full-review-input-assembly`](#job-02-full-review-input-assembly)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`14-attack-chain-composition`](#job-14-attack-chain-composition)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Gaps | `blocked_on_02-evidence-assembly`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2400,9 +2400,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `full_review_input_assembly`; lifecycle binding: `actual_worker` |
 | Composition | persona `intake-coordinator`, role `evidence-assembler`, tooling `local-evidence-retrieval` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/02-full-review-input-assembly.json) | run artifact manifest<br>current accepted component map<br>operator-supplied closed launch plan *(optional)*<br>current accepted SBOM/license/SCA producers for later waves *(optional)* |
+| Declared inputs (pipeline/job-templates/02-full-review-input-assembly.json) | run artifact manifest<br>current accepted component map<br>operator-supplied closed launch plan *(optional)*<br>current accepted SBOM/license/SCA producers for later waves *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-full-review-input-assembly/` |
-| Output files (registry/output-contracts/full-review-input-assembly.json) | full-review-input-assembly.json<br>status.json |
+| Output files (pipeline/output-contracts/full-review-input-assembly.json) | full-review-input-assembly.json<br>status.json |
 | Consumed by | -- |
 | Gaps | `later_dependency_waves_require_reinvocation_after_prerequisites_publish` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2420,9 +2420,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `dynamic_rescope`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/dynamic-rescope.json) | run-owned dependency and changed-node request<br>accepted predecessor reference *(optional)* |
+| Declared inputs (pipeline/job-templates/dynamic-rescope.json) | run-owned dependency and changed-node request<br>accepted predecessor reference *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/dynamic-rescope/` |
-| Output files (registry/output-contracts/bounded-rescope-plan.json) | bounded-rescope-plan.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/bounded-rescope-plan.json) | bounded-rescope-plan.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`final-publication-gate`](#job-final-publication-gate) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2441,9 +2441,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `threat_model_dfd_stride`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `threat-model-core`, tooling `threat-model-static-evidence` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/03-threat-model-dfd-stride.json) | current accepted F03 component map<br>exact F02 evidence assembly and dereferenced artifact cited through F03 |
+| Declared inputs (pipeline/job-templates/03-threat-model-dfd-stride.json) | current accepted F03 component map<br>exact F02 evidence assembly and dereferenced artifact cited through F03 |
 | Produces | `runs/<run_id>/data/jobs/03-threat-model-dfd-stride/` |
-| Output files (registry/output-contracts/threat-model-core.json) | integrated-threat-model.json<br>threat-model-summary.md<br>attack-trees.mmd<br>dfd.mmd<br>ranked-threat-scenarios.json<br>intercom-transcript.jsonl<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/threat-model-core.json) | integrated-threat-model.json<br>threat-model-summary.md<br>attack-trees.mmd<br>dfd.mmd<br>ranked-threat-scenarios.json<br>intercom-transcript.jsonl<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`threat-model-reconciliation-active`](#step-threat-model-reconciliation-active)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`14-attack-chain-composition`](#job-14-attack-chain-composition)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `freeciv_live_qualification_pending` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2461,9 +2461,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `threat_model_reconciliation`; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `threat-model-reconciler`, tooling `threat-model-reconciliation` |
 | Consumes (graph) | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) (required, contract `pregather`) |
-| Declared inputs (registry/job-templates/03-threat-model-reconciliation.json) | accepted reproducible L6A model<br>current accepted F03 component map and F02 evidence generation<br>bounded reviewer/model reconciliation input control *(optional)* |
+| Declared inputs (pipeline/job-templates/03-threat-model-reconciliation.json) | accepted reproducible L6A model<br>current accepted F03 component map and F02 evidence generation<br>bounded reviewer/model reconciliation input control *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/03-threat-model-reconciliation/` |
-| Output files (registry/output-contracts/threat-model-reconciliation.json) | threat-model-reconciliation.json<br>threat-model-reconciliation-summary.md<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/threat-model-reconciliation.json) | threat-model-reconciliation.json<br>threat-model-reconciliation-summary.md<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`claim-ledger-routing`](#job-claim-ledger-routing)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `freeciv_live_qualification_pending` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2483,9 +2483,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `owasp_join_report`; lifecycle binding: `actual_worker` |
 | Composition | persona `owasp-validator`, role `standards-control-validator`, tooling `owasp-join-reporter` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation) (required, contract `threat-model-reconciliation`)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) (required, contract `owasp-validation-worklist`) |
-| Declared inputs (registry/job-templates/04-asvs-masvs.json) | exact accepted OWASP dispatch accounting<br>hash-verified applicability and assessment artifacts |
+| Declared inputs (pipeline/job-templates/04-asvs-masvs.json) | exact accepted OWASP dispatch accounting<br>hash-verified applicability and assessment artifacts |
 | Produces | `runs/<run_id>/data/jobs/04-asvs-masvs/` |
-| Output files (registry/output-contracts/owasp-join-report.json) | owasp-control-status-matrix-manifest.json<br>owasp-coverage-gaps.json<br>owasp-candidate-promotion-routes.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/owasp-join-report.json) | owasp-control-status-matrix-manifest.json<br>owasp-coverage-gaps.json<br>owasp-candidate-promotion-routes.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`claim-ledger-routing`](#job-claim-ledger-routing)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2502,9 +2502,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `owasp_validation_worklist`; lifecycle binding: `actual_worker` |
 | Composition | persona `owasp-validator`, role `standards-control-validator`, tooling `owasp-worklist-builder` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`) |
-| Declared inputs (registry/job-templates/04-owasp-validation-worklist-core.json) | accepted standards source<br>accepted applicability evidence |
+| Declared inputs (pipeline/job-templates/04-owasp-validation-worklist-core.json) | accepted standards source<br>accepted applicability evidence |
 | Produces | `runs/<run_id>/data/jobs/04-owasp-validation-worklist/` |
-| Output files (registry/output-contracts/owasp-validation-worklist.json) | owasp-validation-worklist.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/owasp-validation-worklist.json) | owasp-validation-worklist.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
 | Consumed by | [`04-asvs-masvs`](#job-04-asvs-masvs) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2524,9 +2524,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `native_memory_analysis`; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `native-sast-curator`, tooling `pinned-native-sast` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`) |
-| Declared inputs (registry/job-templates/05-native-memory.json) | accepted native SAST/IR evidence<br>hash-bound citations |
+| Declared inputs (pipeline/job-templates/05-native-memory.json) | accepted native SAST/IR evidence<br>hash-bound citations |
 | Produces | `runs/<run_id>/data/jobs/05-native-memory/` |
-| Output files (registry/output-contracts/native-memory-analysis.json) | native-memory-analysis.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json<br>applicability-receipt.json |
+| Output files (pipeline/output-contracts/native-memory-analysis.json) | native-memory-analysis.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json<br>applicability-receipt.json |
 | Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2546,9 +2546,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-codeql-cpp`](#job-02-codeql-cpp) (required, contract `codeql-language`)<br>[`02-codeql-csharp`](#job-02-codeql-csharp) (required, contract `codeql-language`)<br>[`02-codeql-go`](#job-02-codeql-go) (required, contract `codeql-language`)<br>[`02-codeql-java`](#job-02-codeql-java) (required, contract `codeql-language`)<br>[`02-codeql-javascript`](#job-02-codeql-javascript) (required, contract `codeql-language`)<br>[`02-codeql-python`](#job-02-codeql-python) (required, contract `codeql-language`)<br>[`02-codeql-ruby`](#job-02-codeql-ruby) (required, contract `codeql-language`)<br>[`02-codeql-rust`](#job-02-codeql-rust) (required, contract `codeql-language`) |
-| Declared inputs (registry/job-templates/06-reachability-codeql.json) | accepted SCA match evidence<br>accepted SBOM<br>accepted source projection<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)<br>accepted 02-codeql-<lang> database pointers *(optional)*<br>accepted 02-codeql-cpp traced graph tables *(optional)*<br>published OSV snapshot index *(optional)*<br>run-supplied reviewed advisory-to-function map and entry points *(optional)* |
+| Declared inputs (pipeline/job-templates/06-reachability-codeql.json) | accepted SCA match evidence<br>accepted SBOM<br>accepted source projection<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json reachability_script)<br>accepted 02-codeql-<lang> database pointers *(optional)*<br>accepted 02-codeql-cpp traced graph tables *(optional)*<br>published OSV snapshot index *(optional)*<br>run-supplied reviewed advisory-to-function map and entry points *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/06-reachability-codeql/` |
-| Output files (registry/output-contracts/engine-reachability.json) | engine-reachability.json<br>engine-reachability-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/engine-reachability.json) | engine-reachability.json<br>engine-reachability-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-cve-reachability`](#job-06-cve-reachability) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2566,9 +2566,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`) |
-| Declared inputs (registry/job-templates/06-reachability-ir.json) | accepted SCA match evidence<br>accepted SBOM<br>accepted source projection<br>accepted code property graph *(optional)*<br>accepted LLVM IR facts *(optional)*<br>published OSV snapshot index *(optional)*<br>run-supplied reviewed advisory-to-function map and entry points *(optional)* |
+| Declared inputs (pipeline/job-templates/06-reachability-ir.json) | accepted SCA match evidence<br>accepted SBOM<br>accepted source projection<br>accepted code property graph *(optional)*<br>accepted LLVM IR facts *(optional)*<br>published OSV snapshot index *(optional)*<br>run-supplied reviewed advisory-to-function map and entry points *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/06-reachability-ir/` |
-| Output files (registry/output-contracts/engine-reachability.json) | engine-reachability.json<br>engine-reachability-summary.md<br>status.json<br>permission.json<br>lineage.json |
+| Output files (pipeline/output-contracts/engine-reachability.json) | engine-reachability.json<br>engine-reachability-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`06-cve-reachability`](#job-06-cve-reachability) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2586,9 +2586,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `cve_reachability`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`)<br>[`06-reachability-codeql`](#job-06-reachability-codeql) (required, contract `engine-reachability`)<br>[`06-reachability-ir`](#job-06-reachability-ir) (required, contract `engine-reachability`) |
-| Declared inputs (registry/job-templates/06-cve-reachability.json) | accepted SCA match evidence<br>accepted source projection<br>accepted 06-reachability-codeql engine table<br>accepted 06-reachability-ir engine table<br>published OSV snapshot identity *(optional)*<br>run-supplied entry points and language-server / tree-sitter hint documents *(optional)* |
+| Declared inputs (pipeline/job-templates/06-cve-reachability.json) | accepted SCA match evidence<br>accepted source projection<br>accepted 06-reachability-codeql engine table<br>accepted 06-reachability-ir engine table<br>published OSV snapshot identity *(optional)*<br>run-supplied entry points and language-server / tree-sitter hint documents *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/06-cve-reachability/` |
-| Output files (registry/output-contracts/cve-reachability.json) | inputs.json<br>outputs/cve-reachability.json<br>outputs/reachability-evidence-identity.json<br>applicability-receipt.json |
+| Output files (pipeline/output-contracts/cve-reachability.json) | inputs.json<br>outputs/cve-reachability.json<br>outputs/reachability-evidence-identity.json<br>applicability-receipt.json |
 | Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`claim-ledger-routing`](#job-claim-ledger-routing)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2608,9 +2608,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `fuzz_target_triage`; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `native-sast-curator`, tooling `pinned-native-sast` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`) |
-| Declared inputs (registry/job-templates/13-fuzz-target-triage.json) | accepted component/native evidence<br>candidate entrypoints |
+| Declared inputs (pipeline/job-templates/13-fuzz-target-triage.json) | accepted component/native evidence<br>candidate entrypoints |
 | Produces | `runs/<run_id>/data/jobs/13-fuzz-target-triage/` |
-| Output files (registry/output-contracts/fuzz-target-triage.json) | fuzz-target-triage.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json<br>applicability-receipt.json |
+| Output files (pipeline/output-contracts/fuzz-target-triage.json) | fuzz-target-triage.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json<br>applicability-receipt.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2630,9 +2630,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `deployment_hardening`; lifecycle binding: `actual_worker` |
 | Composition | persona `sre-engineer`, role `platform-hardening-validator`, tooling `stig-worklist-builder` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-iac-config-scan`](#job-02-iac-config-scan) (required, contract `iac-config-evidence`)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) (required, contract `stig-srg-validation-worklist`) |
-| Declared inputs (registry/job-templates/15-deployment-hardening.json) | accepted deployment configuration evidence<br>accepted STIG/SRG worklist |
+| Declared inputs (pipeline/job-templates/15-deployment-hardening.json) | accepted deployment configuration evidence<br>accepted STIG/SRG worklist |
 | Produces | `runs/<run_id>/data/jobs/15-deployment-hardening/` |
-| Output files (registry/output-contracts/deployment-hardening.json) | deployment-hardening.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/deployment-hardening.json) | deployment-hardening.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2650,9 +2650,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `stig_srg_validation_worklist`; lifecycle binding: `actual_worker` |
 | Composition | persona `nsa-stig-platform-engineer`, role `platform-hardening-validator`, tooling `stig-worklist-builder` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`) |
-| Declared inputs (registry/job-templates/15-stig-srg-validation-worklist-core.json) | accepted STIG/SRG source records<br>accepted platform inventory |
+| Declared inputs (pipeline/job-templates/15-stig-srg-validation-worklist-core.json) | accepted STIG/SRG source records<br>accepted platform inventory |
 | Produces | `runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/` |
-| Output files (registry/output-contracts/stig-srg-validation-worklist.json) | stig-srg-validation-worklist.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/stig-srg-validation-worklist.json) | stig-srg-validation-worklist.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
 | Consumed by | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2672,9 +2672,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `general-red-team-hunter`, role `hypothesis-hunt-coordinator`, tooling `hypothesis-hunt-static` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) (required, contract `pregather`)<br>[`02-source-sast`](#job-02-source-sast) (required, contract `source-sast`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`) |
-| Declared inputs (registry/job-templates/07-hypothesis-discovery.json) | accepted component map<br>target checkout matching its source snapshot<br>accepted tool-lead producers (source/native SAST, secrets, IaC, mobile) *(optional)*<br>supporting-evidence menu *(optional)* |
+| Declared inputs (pipeline/job-templates/07-hypothesis-discovery.json) | accepted component map<br>target checkout matching its source snapshot<br>accepted tool-lead producers (source/native SAST, secrets, IaC, mobile) *(optional)*<br>supporting-evidence menu *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/07-hypothesis-discovery/` |
-| Output files (registry/output-contracts/hypothesis-discovery.json) | hypothesis-discovery.json<br>hypothesis-discovery.md<br>hunt-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/hypothesis-discovery.json) | hypothesis-discovery.json<br>hypothesis-discovery.md<br>hunt-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
 | Consumed by | [`claim-ledger-routing`](#job-claim-ledger-routing) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2692,9 +2692,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `developer-engineer`, role `claim-ledger-custodian`, tooling `hash-linked-claim-ledger` |
 | Consumes (graph) | [`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation) (required, contract `threat-model-reconciliation`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) (required, contract `hypothesis-discovery`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`) |
-| Declared inputs (registry/job-templates/claim-ledger-routing.json) | current accepted S02 and/or OWASP candidate-route artifacts<br>accepted prior ledger *(optional)*<br>authorized decision events *(optional)* |
+| Declared inputs (pipeline/job-templates/claim-ledger-routing.json) | current accepted S02 and/or OWASP candidate-route artifacts<br>accepted prior ledger *(optional)*<br>authorized decision events *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/claim-ledger-routing/` |
-| Output files (registry/output-contracts/claim-ledger-core.json) | claim-decision-ledger.json<br>claim-ledger-work-routing.json<br>claim-ledger-summary.md<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/claim-ledger-core.json) | claim-decision-ledger.json<br>claim-ledger-work-routing.json<br>claim-ledger-summary.md<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2712,9 +2712,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
 | Consumes (graph) | [`claim-ledger-routing`](#job-claim-ledger-routing) (required, contract `claim-ledger-core`)<br>[`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `fuzz-target-triage`) |
-| Declared inputs (registry/job-templates/07-red-team-adversarial.json) | accepted claim-ledger routing<br>accepted complete red-team persona/tool-pool merge when candidates exist |
+| Declared inputs (pipeline/job-templates/07-red-team-adversarial.json) | accepted claim-ledger routing<br>accepted complete red-team persona/tool-pool merge when candidates exist |
 | Produces | `runs/<run_id>/data/jobs/07-red-team-adversarial/` |
-| Output files (registry/output-contracts/07-red-team-adversarial.json) | red-team-adversarial.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/07-red-team-adversarial.json) | red-team-adversarial.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2732,9 +2732,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `persona_tool_pool_dispatch`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/persona-tool-pool-dispatch.json) | newest accepted intake and run artifact-manifest context |
+| Declared inputs (pipeline/job-templates/persona-tool-pool-dispatch.json) | newest accepted intake and run artifact-manifest context |
 | Produces | `runs/<run_id>/data/jobs/persona-tool-pool-dispatch/` |
-| Output files (registry/output-contracts/persona-tool-pool-dispatch.json) | persona-tool-pool-dispatch.json<br>pool-context.json<br>deterministic-merge-request.json<br>permission.json<br>lineage.json<br>applicability.json<br>status.json |
+| Output files (pipeline/output-contracts/persona-tool-pool-dispatch.json) | persona-tool-pool-dispatch.json<br>pool-context.json<br>deterministic-merge-request.json<br>permission.json<br>lineage.json<br>applicability.json<br>status.json |
 | Consumed by | [`deterministic-pool-merge`](#job-deterministic-pool-merge) |
 | Gaps | `no_live_persona_pool_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2752,9 +2752,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `deterministic_pool_merge`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch) (required, contract `persona-tool-pool-dispatch`) |
-| Declared inputs (registry/job-templates/deterministic-pool-merge.json) | reverified C02 terminal manifest |
+| Declared inputs (pipeline/job-templates/deterministic-pool-merge.json) | reverified C02 terminal manifest |
 | Produces | `runs/<run_id>/data/jobs/deterministic-pool-merge/` |
-| Output files (registry/output-contracts/deterministic-pool-merge.json) | deterministic-pool-merge.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/deterministic-pool-merge.json) | deterministic-pool-merge.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`evidence-qualified-quorum`](#job-evidence-qualified-quorum) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2773,9 +2773,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
 | Consumes (graph) | [`07-red-team-adversarial`](#job-07-red-team-adversarial) (required, contract `07-red-team-adversarial`)<br>[`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/08-blue-team-refutation.json) | accepted red-team result<br>accepted complete blue-team persona/tool-pool merge when hypotheses exist |
+| Declared inputs (pipeline/job-templates/08-blue-team-refutation.json) | accepted red-team result<br>accepted complete blue-team persona/tool-pool merge when hypotheses exist |
 | Produces | `runs/<run_id>/data/jobs/08-blue-team-refutation/` |
-| Output files (registry/output-contracts/08-blue-team-refutation.json) | blue-team-refutation.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/08-blue-team-refutation.json) | blue-team-refutation.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2795,9 +2795,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
 | Consumes (graph) | [`07-red-team-adversarial`](#job-07-red-team-adversarial) (required, contract `07-red-team-adversarial`)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation) (required, contract `08-blue-team-refutation`) |
-| Declared inputs (registry/job-templates/09-independent-verification.json) | accepted blue-team result<br>accepted complete verifier persona/tool-pool merge when reviews exist |
+| Declared inputs (pipeline/job-templates/09-independent-verification.json) | accepted blue-team result<br>accepted complete verifier persona/tool-pool merge when reviews exist |
 | Produces | `runs/<run_id>/data/jobs/09-independent-verification/` |
-| Output files (registry/output-contracts/09-independent-verification.json) | independent-verification.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/09-independent-verification.json) | independent-verification.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`11-remediation-proposal`](#job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`14-attack-chain-composition`](#job-14-attack-chain-composition)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`remediation-retest-feedback`](#job-remediation-retest-feedback) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2815,9 +2815,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `evidence_qualified_quorum`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`deterministic-pool-merge`](#job-deterministic-pool-merge) (required, contract `deterministic-pool-merge`) |
-| Declared inputs (registry/job-templates/evidence-qualified-quorum.json) | current accepted deterministic merge reference |
+| Declared inputs (pipeline/job-templates/evidence-qualified-quorum.json) | current accepted deterministic merge reference |
 | Produces | `runs/<run_id>/data/jobs/evidence-qualified-quorum/` |
-| Output files (registry/output-contracts/evidence-qualified-quorum.json) | evidence-qualified-quorum.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/evidence-qualified-quorum.json) | evidence-qualified-quorum.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`final-publication-gate`](#job-final-publication-gate) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2836,9 +2836,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
 | Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`) |
-| Declared inputs (registry/job-templates/11-remediation-proposal.json) | current accepted independent verification<br>current accepted native build environment |
+| Declared inputs (pipeline/job-templates/11-remediation-proposal.json) | current accepted independent verification<br>current accepted native build environment |
 | Produces | `runs/<run_id>/data/jobs/11-remediation-proposal/` |
-| Output files (registry/output-contracts/11-remediation-proposal.json) | remediation-proposal.json<br>remediation-proposal-summary.md<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/11-remediation-proposal.json) | remediation-proposal.json<br>remediation-proposal-summary.md<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`10-synthesis-report`](#job-10-synthesis-report)<br>[`remediation-retest-feedback`](#job-remediation-retest-feedback) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2855,9 +2855,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `remediation_retest_feedback`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`11-remediation-proposal`](#job-11-remediation-proposal) (required, contract `11-remediation-proposal`) |
-| Declared inputs (registry/job-templates/remediation-retest-feedback.json) | verified claims and remediation proposals<br>same-environment retests *(optional)* |
+| Declared inputs (pipeline/job-templates/remediation-retest-feedback.json) | verified claims and remediation proposals<br>same-environment retests *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/remediation-retest-feedback/` |
-| Output files (registry/output-contracts/remediation-retest-feedback.json) | remediation-retest.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/remediation-retest-feedback.json) | remediation-retest.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`final-publication-gate`](#job-final-publication-gate) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -2876,9 +2876,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
 | Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `deployment-hardening`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`) |
-| Declared inputs (registry/job-templates/12-scoring-prioritization.json) | accepted independent-verification result<br>accepted complete scoring persona/tool-pool merge when verifications exist |
+| Declared inputs (pipeline/job-templates/12-scoring-prioritization.json) | accepted independent-verification result<br>accepted complete scoring persona/tool-pool merge when verifications exist |
 | Produces | `runs/<run_id>/data/jobs/12-scoring-prioritization/` |
-| Output files (registry/output-contracts/12-scoring-prioritization.json) | scoring-prioritization.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/12-scoring-prioritization.json) | scoring-prioritization.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`12b-poc-and-fix`](#job-12b-poc-and-fix)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2898,9 +2898,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `poc-fix-author`, role `poc-fix-coordinator`, tooling `claim-review-static` |
 | Consumes (graph) | [`12-scoring-prioritization`](#job-12-scoring-prioritization) (required, contract `12-scoring-prioritization`) |
-| Declared inputs (registry/job-templates/12b-poc-and-fix.json) | accepted 12-scoring-prioritization result<br>accepted 02-code-property-graph and 02-ir-facts (reachability) *(optional)*<br>inputs/reachability-entry-points.json *(optional)*<br>projected source checkout (hashes, snippets) *(optional)* |
+| Declared inputs (pipeline/job-templates/12b-poc-and-fix.json) | accepted 12-scoring-prioritization result<br>accepted 02-code-property-graph and 02-ir-facts (reachability) *(optional)*<br>inputs/reachability-entry-points.json *(optional)*<br>projected source checkout (hashes, snippets) *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/12b-poc-and-fix/` |
-| Output files (registry/output-contracts/12b-poc-and-fix.json) | poc-fix.json<br>poc-fix.md<br>poc-fix-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/12b-poc-and-fix.json) | poc-fix.json<br>poc-fix.md<br>poc-fix-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
 | Consumed by | [`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2920,9 +2920,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `attack-chain-composer`, role `attack-chain-coordinator`, tooling `claim-review-static` |
 | Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/14-attack-chain-composition.json) | accepted 09-independent-verification result (and its 08 upstream)<br>accepted integrated threat model<br>accepted component map<br>supporting-evidence menu: CPG records and IR facts *(optional)* |
+| Declared inputs (pipeline/job-templates/14-attack-chain-composition.json) | accepted 09-independent-verification result (and its 08 upstream)<br>accepted integrated threat model<br>accepted component map<br>supporting-evidence menu: CPG records and IR facts *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/14-attack-chain-composition/` |
-| Output files (registry/output-contracts/14-attack-chain-composition.json) | attack-chain-composition.json<br>attack-chain-seeds.json<br>attack-chain-composition.md<br>chain-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/14-attack-chain-composition.json) | attack-chain-composition.json<br>attack-chain-seeds.json<br>attack-chain-composition.md<br>chain-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
 | Consumed by | [`14-attack-chain-refutation`](#job-14-attack-chain-refutation) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2940,9 +2940,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `attack-chain-refuter`, role `attack-chain-coordinator`, tooling `claim-review-static` |
 | Consumes (graph) | [`14-attack-chain-composition`](#job-14-attack-chain-composition) (required, contract `14-attack-chain-composition`) |
-| Declared inputs (registry/job-templates/14-attack-chain-refutation.json) | accepted 14-attack-chain-composition result and seeds<br>supporting-evidence menu *(optional)* |
+| Declared inputs (pipeline/job-templates/14-attack-chain-refutation.json) | accepted 14-attack-chain-composition result and seeds<br>supporting-evidence menu *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/14-attack-chain-refutation/` |
-| Output files (registry/output-contracts/14-attack-chain-refutation.json) | attack-chain-ledger.json<br>attack-chain-ledger.md<br>refutation-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
+| Output files (pipeline/output-contracts/14-attack-chain-refutation.json) | attack-chain-ledger.json<br>attack-chain-ledger.md<br>refutation-pool-merge.json<br>permission.json<br>lineage.json<br>pool-receipt.json<br>status.json |
 | Consumed by | [`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2962,9 +2962,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `synthesis_report`; lifecycle binding: `actual_worker` |
 | Composition | persona `synthesis-report-drafter`, role `synthesis-report-drafter`, tooling `synthesis-report-static` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation) (required, contract `threat-model-reconciliation`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) (required, contract `07-red-team-adversarial`)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation) (required, contract `08-blue-team-refutation`)<br>[`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) (required, contract `12-scoring-prioritization`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`)<br>[`14-attack-chain-refutation`](#job-14-attack-chain-refutation) (optional, contract `14-attack-chain-refutation`)<br>[`12b-poc-and-fix`](#job-12b-poc-and-fix) (optional, contract `12b-poc-and-fix`)<br>[`11-remediation-proposal`](#job-11-remediation-proposal) (optional, contract `11-remediation-proposal`) |
-| Declared inputs (registry/job-templates/10-synthesis-report.json) | exact accepted synthesis-input manifest<br>F03 component map<br>S02 threat model<br>OWASP matrix/gaps/routes<br>L01 ledger<br>L08 verification/scoring |
+| Declared inputs (pipeline/job-templates/10-synthesis-report.json) | exact accepted synthesis-input manifest<br>F03 component map<br>S02 threat model<br>OWASP matrix/gaps/routes<br>L01 ledger<br>L08 verification/scoring |
 | Produces | `runs/<run_id>/data/jobs/10-synthesis-report/` |
-| Output files (registry/output-contracts/synthesis-report-publication.json) | synthesis-input.json<br>report.json<br>report.md<br>coverage-unresolved-appendix.md<br>evidence-trace-index.json<br>publication-manifest.json<br>finding-enrichment.json<br>attack-chains.json<br>poc-fix-section.json<br>dependency-reachability-section.json<br>report.review.json<br>render-publication-manifest.json<br>presentation/report.tex<br>presentation/report.pdf<br>presentation/report.html<br>presentation/report.fragment.html<br>presentation/workbench.html<br>presentation/workbench.fragment.html<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/synthesis-report-publication.json) | synthesis-input.json<br>report.json<br>report.md<br>coverage-unresolved-appendix.md<br>evidence-trace-index.json<br>publication-manifest.json<br>finding-enrichment.json<br>attack-chains.json<br>poc-fix-section.json<br>dependency-reachability-section.json<br>report.review.json<br>render-publication-manifest.json<br>presentation/report.tex<br>presentation/report.pdf<br>presentation/report.html<br>presentation/report.fragment.html<br>presentation/workbench.html<br>presentation/workbench.fragment.html<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`completeness-audit`](#job-completeness-audit)<br>[`final-publication-gate`](#job-final-publication-gate) |
 | Gaps | `real_accepted_upstream_chain_pending`, `final_human_approval_and_publication_remain_separate` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2982,9 +2982,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `completeness_audit`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`10-synthesis-report`](#job-10-synthesis-report) (required, contract `synthesis-report-publication`) |
-| Declared inputs (registry/job-templates/completeness-audit.json) | evidence-bound obligation inventory |
+| Declared inputs (pipeline/job-templates/completeness-audit.json) | evidence-bound obligation inventory |
 | Produces | `runs/<run_id>/data/jobs/completeness-audit/` |
-| Output files (registry/output-contracts/completeness-audit.json) | completeness-audit.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/completeness-audit.json) | completeness-audit.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis)<br>[`final-publication-gate`](#job-final-publication-gate) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -3001,9 +3001,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `synthetic_hypothesis_resynthesis`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`completeness-audit`](#job-completeness-audit) (required, contract `completeness-audit`) |
-| Declared inputs (registry/job-templates/synthetic-hypothesis-resynthesis.json) | completeness audit and registered routes<br>accepted predecessor reference *(optional)* |
+| Declared inputs (pipeline/job-templates/synthetic-hypothesis-resynthesis.json) | completeness audit and registered routes<br>accepted predecessor reference *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/synthetic-hypothesis-resynthesis/` |
-| Output files (registry/output-contracts/synthetic-hypothesis-resynthesis.json) | synthetic-hypothesis-resynthesis.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (pipeline/output-contracts/synthetic-hypothesis-resynthesis.json) | synthetic-hypothesis-resynthesis.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`final-publication-gate`](#job-final-publication-gate) |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -3020,9 +3020,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `final_publication_gate`; lifecycle binding: `actual_worker` |
 | Composition | persona `report-artifact-publisher`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`10-synthesis-report`](#job-10-synthesis-report) (required, contract `synthesis-report-publication`)<br>[`completeness-audit`](#job-completeness-audit) (required, contract `completeness-audit`)<br>[`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis) (required, contract `synthetic-hypothesis-resynthesis`)<br>[`evidence-qualified-quorum`](#job-evidence-qualified-quorum) (required, contract `evidence-qualified-quorum`)<br>[`dynamic-rescope`](#job-dynamic-rescope) (required, contract `bounded-rescope-plan`)<br>[`remediation-retest-feedback`](#job-remediation-retest-feedback) (required, contract `remediation-retest-feedback`) |
-| Declared inputs (registry/job-templates/final-publication-gate.json) | draft publication<br>accepted completeness audit<br>accepted terminal resynthesis<br>current evidence-qualified quorum<br>current bounded rescope plan<br>current remediation/retest feedback or evidence-supported non-applicable skip<br>authorized human signoff ledger |
+| Declared inputs (pipeline/job-templates/final-publication-gate.json) | draft publication<br>accepted completeness audit<br>accepted terminal resynthesis<br>current evidence-qualified quorum<br>current bounded rescope plan<br>current remediation/retest feedback or evidence-supported non-applicable skip<br>authorized human signoff ledger |
 | Produces | `runs/<run_id>/data/jobs/final-publication-gate/` |
-| Output files (registry/output-contracts/final-publication-package.json) | report.json<br>evidence-trace-index.json<br>critical-findings.sarif<br>human-signoff-ledger.json<br>completion/completeness-audit.json<br>completion/synthetic-hypothesis-resynthesis.json<br>completion/publication-preparation.json<br>completion/accepted-bindings.json<br>final-publication.json |
+| Output files (pipeline/output-contracts/final-publication-package.json) | report.json<br>evidence-trace-index.json<br>critical-findings.sarif<br>human-signoff-ledger.json<br>completion/completeness-audit.json<br>completion/synthetic-hypothesis-resynthesis.json<br>completion/publication-preparation.json<br>completion/accepted-bindings.json<br>final-publication.json |
 | Consumed by | -- |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 
@@ -3087,18 +3087,18 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-configured-build"></a>`configured-build` | file | runs/<run_id>/data/jobs/02-build-configure/attempts/<attempt_id>/configured-build.json, configuration.json, b13-receipts.json | [`build-configure`](#step-build-configure) | [`native-build`](#step-native-build) |
 | <a id="a-native-build"></a>`native-build` | file | runs/<run_id>/data/jobs/02-native-build/attempts/<attempt_id>/native-build.json, compile_commands.json, binaries/, b13-receipts.json | [`native-build`](#step-native-build) | -- |
 | <a id="a-source-sast-rules"></a>`source-sast-rules` | file | data/source-sast/rules-v1.yml | -- | [`source-sast`](#step-source-sast) |
-| <a id="a-semgrep-image"></a>`semgrep-image` | record | appsec-review-process/registry/container-images/tool-semgrep.json | -- | [`source-sast`](#step-source-sast) |
+| <a id="a-semgrep-image"></a>`semgrep-image` | record | appsec-review-process/pipeline/container-images/tool-semgrep.json | -- | [`source-sast`](#step-source-sast) |
 | <a id="a-source-sast-leads"></a>`source-sast-leads` | file | runs/<run_id>/data/jobs/02-source-sast/attempts/<attempt_id>/source-sast.json, source-sast-summary.md, b13-receipts.json | [`source-sast`](#step-source-sast) | -- |
-| <a id="a-syft-image"></a>`syft-image` | record | appsec-review-process/registry/container-images/tool-syft.json | -- | [`sbom-inventory`](#step-sbom-inventory) |
-| <a id="a-grype-image"></a>`grype-image` | record | appsec-review-process/registry/container-images/tool-grype.json | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
-| <a id="a-osv-image"></a>`osv-image` | record | appsec-review-process/registry/container-images/tool-osv-scanner.json | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
-| <a id="a-scancode-image"></a>`scancode-image` | record | appsec-review-process/registry/container-images/scancode-toolkit.json | -- | [`license-scan`](#step-license-scan) |
+| <a id="a-syft-image"></a>`syft-image` | record | appsec-review-process/pipeline/container-images/tool-syft.json | -- | [`sbom-inventory`](#step-sbom-inventory) |
+| <a id="a-grype-image"></a>`grype-image` | record | appsec-review-process/pipeline/container-images/tool-grype.json | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
+| <a id="a-osv-image"></a>`osv-image` | record | appsec-review-process/pipeline/container-images/tool-osv-scanner.json | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
+| <a id="a-scancode-image"></a>`scancode-image` | record | appsec-review-process/pipeline/container-images/scancode-toolkit.json | -- | [`license-scan`](#step-license-scan) |
 | <a id="a-supplied-offline-grype-snapshot"></a>`supplied-offline-grype-snapshot` | record | operator-supplied dependency snapshot registry: snapshots/grype-db/<snapshot_id>/ | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
 | <a id="a-supplied-offline-osv-snapshot"></a>`supplied-offline-osv-snapshot` | record | operator-supplied dependency snapshot registry: snapshots/osv/<snapshot_id>/ | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
 | <a id="a-run-owned-lifecycle-reference-table"></a>`run-owned-lifecycle-reference-table` | file | runs/<run_id>/inputs/<dependency-lifecycle-reference>.json | -- | [`dependency-lifecycle`](#step-dependency-lifecycle) |
 | <a id="a-run-owned-static-reachability-evidence"></a>`run-owned-static-reachability-evidence` | file | runs/<run_id>/inputs/<reachability-evidence>.json | -- | [`cve-reachability`](#step-cve-reachability) |
 | <a id="a-threat-model-reconciliation-planned"></a>`threat-model-reconciliation-planned` | file | runs/<run_id>/data/jobs/03-threat-model-reconciliation/attempts/<attempt_id>/threat-model-reconciliation.json | [`threat-model-reconciliation-active`](#step-threat-model-reconciliation-active) | -- |
-| <a id="a-fixture-harmless-image"></a>`fixture-harmless-image` | record | appsec-review-process/registry/container-images/fixture-harmless.json | -- | [`b13-harmless-container`](#step-b13-harmless-container) |
+| <a id="a-fixture-harmless-image"></a>`fixture-harmless-image` | record | appsec-review-process/pipeline/container-images/fixture-harmless.json | -- | [`b13-harmless-container`](#step-b13-harmless-container) |
 | <a id="a-b13-qualification-input"></a>`b13-qualification-input` | file | runs/<run_id>/inputs/b13-harmless-qualification.json | -- | [`b13-harmless-container`](#step-b13-harmless-container) |
 | <a id="a-b13-qualification-result"></a>`b13-qualification-result` | file | runs/<run_id>/data/jobs/b13-harmless-container/accepted.json and attempts/<attempt_id>/result.json | [`b13-harmless-container`](#step-b13-harmless-container) | -- |
 | <a id="a-lane-handoff"></a>`lane-handoff` | file | runs/<run_id>/ lane hand-off files (create_handoff.py) | [`lane-handoffs`](#step-lane-handoffs) | -- |

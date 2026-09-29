@@ -28,6 +28,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import evidence_redaction as redaction
 from schema_validate import SchemaStore, validate_document
@@ -41,7 +42,7 @@ IAC_SCHEMA = "iac-config-evidence.schema.json"
 HIT_SCHEMA = "iac-config-rule-hit.schema.json"
 BASE_SCHEMA = "iac-config-base-image-inventory.schema.json"
 ALL_SCHEMAS = [SECRETS_SCHEMA, ENTRY_SCHEMA, IAC_SCHEMA, HIT_SCHEMA, BASE_SCHEMA]
-CONTRACT_DIR = ROOT / "registry" / "output-contracts"
+CONTRACT_DIR = registry_paths.OUTPUT_CONTRACTS_DIR
 PROPOSAL = REPO / "docs" / "proposals" / "vendor-prepass" / "job-nodes.proposal.json"
 SKIP_REASON = "not-applicable-no-matching-inputs"
 POLICY = "refuse"

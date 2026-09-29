@@ -142,7 +142,7 @@ def parse_time(value):
 
 
 def default_max_age_seconds():
-    """The one reference-snapshot ceiling (OSV, NVD-derived checks, this feed): registry/tunables.json."""
+    """The one reference-snapshot ceiling (OSV, NVD-derived checks, this feed): pipeline/tunables.json."""
     return int(tunables.shared("reference_snapshot_max_age_seconds"))
 
 

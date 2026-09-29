@@ -15,7 +15,7 @@ here; that is V14, and only after the requalification below is completed.
 | `metrics_sha256` | sha256 of the document's one canonical byte form (`evidence_store.metrics_bytes`) |
 
 No existing manifest member changes and no file is added to the attempt. The contract
-(`registry/output-contracts/evidence-index.json`) declares the member under `member_schemas` and
+(`pipeline/output-contracts/evidence-index.json`) declares the member under `member_schemas` and
 adds validation rules; its `required_files` are unchanged.
 
 Why inside `manifest.json` and not a sibling `metrics.json`: `job_graph.composition` requires a

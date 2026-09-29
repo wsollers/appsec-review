@@ -17,6 +17,7 @@ import threat_workbench as tw
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "03-threat-model-dfd-stride"
 DAGSTER_JOB = "threat_model_dfd_stride"
@@ -43,10 +44,10 @@ PROHIBITED_TEXT = (
 )
 CODE_FILES = (
     "threat_model_core.py", "component_characterization.py", "publish_job_output.py",
-    "validate_job_output.py", "registry/job-templates/03-threat-model-dfd-stride.json",
-    "personas/roles/threat-model-core/role.json", "registry/domains/threat-model-core.json",
-    "registry/tooling-profiles/threat-model-static-evidence.json",
-    "registry/output-contracts/threat-model-core.json",
+    "validate_job_output.py", registry_paths.template_rel("03-threat-model-dfd-stride"),
+    "personas/roles/threat-model-core/role.json", registry_paths.rel(registry_paths.DOMAINS, "threat-model-core"),
+    registry_paths.rel(registry_paths.TOOLING_PROFILES, "threat-model-static-evidence"),
+    registry_paths.contract_rel("threat-model-core"),
     "03-threat-model-dfd-stride/task-threat-model-core.md",
 )
 

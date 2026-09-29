@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import build_index as bi
 import discovery_gate
@@ -500,7 +501,7 @@ class Worker(WorkerFixture):
         import validate_job_output as vjo
         pointer = bi.run(self.run_id, 'dagster-1')
         attempt = bi.root(self.run_id) / 'attempts' / pointer['attempt_id']
-        contract = read_json(ROOT / 'registry' / 'output-contracts' / 'build-index.json')
+        contract = read_json(registry_paths.contract("build-index"))
         self.assertEqual(vjo.validate_contract_result(attempt, contract, run_id=self.run_id), [])
         index = read_json(attempt / 'build-index.json')
         index['signals'][0]['excerpt'] = 'FROM evil'

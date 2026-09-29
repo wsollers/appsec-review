@@ -74,7 +74,7 @@ outcomes instead.
 
 ## Age ceiling and the staleness rule
 
-One tunable, `reference_snapshot_max_age_seconds` (1,209,600 s = 14 days, `registry/tunables.json`),
+One tunable, `reference_snapshot_max_age_seconds` (1,209,600 s = 14 days, `pipeline/tunables.json`),
 is the ceiling for OSV, the OSV SCA registry binding and this feed. Age is measured from the OLDEST
 usable source's original `fetched_at`.
 

@@ -20,6 +20,7 @@ import phase1
 import job_graph
 import intake
 import run_process
+import registry_paths
 
 ROOT = state.ROOT
 # Never write into the repo: without PHASE1_TEST_DATA the fixtures live in a fresh temp folder.
@@ -94,7 +95,7 @@ class Phase1Tests(unittest.TestCase):
             api.assert_not_called()
 
     def test_dagster_worker_arguments_are_registry_controlled(self):
-        job=state.read_json(ROOT/'registry/job-templates/00-intake.json')
+        job=state.read_json(registry_paths.template("00-intake"))
         self.assertEqual(phase1.worker_argv(job,self.root)[-1],str(self.root))
         job['execution']['worker']='../../target/run.py'
         with self.assertRaises(state.Blocked): phase1.worker_argv(job,self.root)
@@ -110,7 +111,7 @@ class Phase1Tests(unittest.TestCase):
 
     def test_A03_registry_and_semantic_rejection(self):
         for name in ('00-intake','00-validation'):
-            job = state.read_json(ROOT/'registry/job-templates'/f'{name}.json')
+            job = state.read_json(registry_paths.template(name))
             self.assertEqual(len(job_graph.composition(job)),5)
         bad = copy.deepcopy(job); bad['composition']['role_id']='missing-role'
         with self.assertRaises(FileNotFoundError): job_graph.composition(bad)

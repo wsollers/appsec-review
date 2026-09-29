@@ -12,7 +12,7 @@ against), and writes its canonical JSON form. What the persona reads and what pe
 pins can never drift apart, because they are read from the same file.
 
 Two sections are literal file bytes, not a registry record: ``governing_rules``
-(``registry/prompt-fragments/governing-rules.md``, shared by every future job template that lists
+(``pipeline/prompt-fragments/governing-rules.md``, shared by every future job template that lists
 it) and ``buildenv_catalog`` (``tooling/buildenv-catalog.json``). One section, ``task``, is the
 literal bytes of the job template's own ``task_prompt`` file.
 
@@ -33,9 +33,10 @@ import hashlib
 import persona_registry
 from execution_state import atomic_bytes, beneath, identifier
 from schema_validate import SchemaStore, validate_document
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
-REGISTRY_DIR = ROOT / "registry"
+REGISTRY_DIR = registry_paths.REGISTRY
 PROMPT_ROOT = ROOT  # matches persona_invocation.PROMPT_ROOT: paths are named relative to this tree
 GOVERNING_RULES_PATH = REGISTRY_DIR / "prompt-fragments" / "governing-rules.md"
 BUILDENV_CATALOG_PATH = ROOT / "tooling" / "buildenv-catalog.json"

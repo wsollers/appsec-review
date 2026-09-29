@@ -21,5 +21,5 @@ APPSEC_LIVE_DOCKER_TESTS=1 python3 -B -m unittest \
 
 `image_build.py` fingerprints this folder and the immutable local image ID of
 `audit-native:local`. Its successful state under `images/.build-state/` and the
-B16 registry record under `appsec-review-process/registry/container-images/`
+B16 registry record under `appsec-review-process/pipeline/container-images/`
 are host-local generated data and must not be committed.

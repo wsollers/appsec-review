@@ -5,6 +5,7 @@ from execution_state import Blocked, atomic_json, read_json
 from review_control_loops import synthetic_feedback
 import control_process_worker
 import synthesis_report
+import registry_paths
 
 JOB="synthetic-hypothesis-resynthesis"; RESULT="synthetic-hypothesis-resynthesis.json"; CONTRACT="synthetic-hypothesis-resynthesis"
 
@@ -13,7 +14,7 @@ def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
     return lifecycle_run(run_id, dagster_run_id, JOB, force)
 
 def _routes(routes):
-    registered={path.stem for path in (Path(__file__).resolve().parent/"registry"/"job-templates").glob("*.json")}
+    registered={path.stem for path in registry_paths.JOB_TEMPLATES_DIR.glob("*.json")}
     if any(job not in registered for job in routes.values()): raise Blocked("synthetic resynthesis: route is not registered")
 
 def run(source:Path,output:Path):

@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claim_lifecycle_core as core
 from execution_state import Blocked, atomic_json, file_hash, tree_hashes
@@ -162,7 +163,7 @@ class ClaimLifecycleTests(unittest.TestCase):
             "12-scoring-prioritization": scoring,
         }
         for contract_id, document in documents.items():
-            contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
+            contract = json.loads((ROOT / registry_paths.contract_rel(contract_id)).read_text())
             schema = contract["result_schema"]["schema_file"]
             self.assertEqual(validate_document(document, schema), [])
             hostile = copy.deepcopy(document)
@@ -362,8 +363,8 @@ class AcceptedLedgerTests(unittest.TestCase):
 class RegistryAndSchemaTests(unittest.TestCase):
     def test_four_distinct_nominal_registry_contracts(self):
         for job, (_upstream_contract, _artifact, _upstream_schema, schema, result) in core.STAGES.items():
-            template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
-            contract = json.loads((ROOT / f"registry/output-contracts/{job}.json").read_text())
+            template = json.loads((ROOT / registry_paths.template_rel(job)).read_text())
+            contract = json.loads((ROOT / registry_paths.contract_rel(job)).read_text())
             self.assertTrue(template["implemented"])
             self.assertEqual(template["execution"], {
                 "worker": "claim_review_lifecycle.py", "arguments": ["--stage", job]})

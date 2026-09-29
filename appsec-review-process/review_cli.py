@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import pipeline_log
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
 RUNS = ROOT / "runs"
@@ -68,7 +69,7 @@ def load_model_config() -> dict[str, Any]:
 
 
 def load_job_template(lane: str) -> dict[str, Any]:
-    return load_json(ROOT / "registry" / "job-templates" / f"{lane}.json")
+    return load_json(registry_paths.template(lane))
 
 
 def resolve_model(lane: str, budget: str, model_override: str = "", effort_override: str = "") -> dict[str, Any]:

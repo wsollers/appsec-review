@@ -143,7 +143,7 @@ Two things implement this table today, and neither is this document:
 - The **lane folders** under `appsec-review-process/` (`00`-`15`, each with `config.md`, `prompt.md`
   and usually `subprompts.md`) are the tracked LLM prompt harness. The mapping from a lane folder to
   the design lanes above is fixed and recorded here.
-- The **Dagster job graph** (`appsec-review-process/job-graph.json`, 66 jobs) and the design-parity
+- The **Dagster job graph** (`appsec-review-process/pipeline/job-graph.json`, 66 jobs) and the design-parity
   manifest are the authoritative record of which of those lanes is a real, qualified worker. Read
   `docs/design-parity/design-parity-readiness.md` (generated) for build status; do not infer it from
   this section.

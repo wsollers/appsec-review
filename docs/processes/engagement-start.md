@@ -154,6 +154,6 @@ Per-job inputs and outputs, and their rollup per process model, are in the gener
 Sources: `docs/dagster/dagster-launching.md`, `docs/dagster/run-data-and-job-execution.md`,
 `docs/dagster/operations.md`, `docs/build-discovery/build-discovery-integration.md`,
 `appsec-review-process/00-intake-recovery/config.md`, `pipeline/README.md`,
-`appsec-review-process/job-graph.json` and the generated
+`appsec-review-process/pipeline/job-graph.json` and the generated
 [`design-parity-readiness.md`](../design-parity/design-parity-readiness.md), which is authoritative
 for current per-job worker and qualification status.

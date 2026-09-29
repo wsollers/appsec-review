@@ -15,6 +15,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import attack_chain_derive as compose
 import attack_chain_pool as pool
@@ -42,7 +43,7 @@ def package(kind: str, document: dict) -> SimpleNamespace:
     template = pool.COMPOSER_TEMPLATE if kind == "compose" else pool.REFUTER_TEMPLATE
     root = compose.WORKSPACE_ROOT_ID if kind == "compose" else refute.BATCH_ROOT_ID
     key = "cluster_id" if kind == "compose" else "batch_id"
-    contract = json.loads((ROOT / "registry/output-contracts/attack-chain-candidates.json").read_text())
+    contract = json.loads((registry_paths.contract("attack-chain-candidates")).read_text())
     job = "14-attack-chain-composition" if kind == "compose" else "14-attack-chain-refutation"
     persona = "attack-chain-composer" if kind == "compose" else "attack-chain-refuter"
     return SimpleNamespace(composition={"output_contract": contract}, prompt=b"OUTER",

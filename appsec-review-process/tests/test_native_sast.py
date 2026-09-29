@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 FIXTURE = ROOT / "tests/fixtures/native-sast"
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import native_sast as worker  # noqa: E402
 import native_sast_adapters as adapters  # noqa: E402
@@ -317,8 +318,8 @@ class NativeSastTests(unittest.TestCase):
             self.assertNotIn("make", command)
 
     def test_result_schema_and_registry_are_nominal_not_executable_or_qualified(self):
-        template = json.loads((ROOT / "registry/job-templates/02-native-sast.json").read_text())
-        contract = json.loads((ROOT / "registry/output-contracts/native-sast.json").read_text())
+        template = json.loads((registry_paths.template("02-native-sast")).read_text())
+        contract = json.loads((registry_paths.contract("native-sast")).read_text())
         self.assertFalse(template["implemented"])
         self.assertEqual(template["composition"]["output_contract_id"], contract["contract_id"])
         self.assertEqual(contract["claim_class"], {
@@ -360,7 +361,7 @@ class NativeSastTests(unittest.TestCase):
                 "tools_run": list(worker.TOOLS), "leads": 3, "network": "none",
                 "qualification": "implemented_not_qualified"}
             atomic_json(attempt / "status.json", status)
-            permissions = json.loads((ROOT / "registry/job-templates/02-native-sast.json").read_text())["permissions"]
+            permissions = json.loads((registry_paths.template("02-native-sast")).read_text())["permissions"]
             atomic_json(attempt / "permission.json", {"schema": worker.PERMISSION_SCHEMA,
                 "run_id": "run-e03", "job_id": worker.JOB,
                 "source_snapshot_sha256": result["source_snapshot_sha256"],
@@ -386,7 +387,7 @@ class NativeSastTests(unittest.TestCase):
                              permissions)
 
     def test_claim_ceiling_rejects_finding_promotion(self):
-        contract_path = ROOT / "registry/output-contracts/native-sast.json"
+        contract_path = registry_paths.contract("native-sast")
         contract = json.loads(contract_path.read_text())
         self.assertNotIn("claim_types", contract)
         from validate_job_output import _claim_class_errors
@@ -451,7 +452,7 @@ class NativeSastTests(unittest.TestCase):
 
     def test_permissions_come_from_canonical_template(self):
         canonical = worker._permissions()
-        self.assertEqual(canonical, json.loads((ROOT / "registry/job-templates/02-native-sast.json").read_text())["permissions"])
+        self.assertEqual(canonical, json.loads((registry_paths.template("02-native-sast")).read_text())["permissions"])
         self.assertNotIn("execute-container-static-analysis", canonical)
 
 

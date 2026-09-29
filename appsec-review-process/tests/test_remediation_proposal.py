@@ -8,6 +8,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claim_lifecycle_core as claims
 from execution_state import Blocked, read_json
@@ -118,8 +119,8 @@ class RemediationProposalTests(unittest.TestCase):
                 self.assertTrue(read_json(attempt / "status.json")["no_op"])
 
     def test_registry_declares_the_real_worker_and_closed_contract(self):
-        template = read_json(ROOT / "registry/job-templates/11-remediation-proposal.json")
-        contract = read_json(ROOT / "registry/output-contracts/11-remediation-proposal.json")
+        template = read_json(registry_paths.template("11-remediation-proposal"))
+        contract = read_json(registry_paths.contract("11-remediation-proposal"))
         self.assertTrue(template["implemented"])
         self.assertEqual(template["execution"]["worker"], "remediation_proposal.py")
         self.assertEqual(template["composition"]["output_contract_id"], worker.CONTRACT)

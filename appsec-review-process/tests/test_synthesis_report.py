@@ -10,6 +10,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state
 from execution_state import Blocked
@@ -210,7 +211,7 @@ class SynthesisReportTests(unittest.TestCase):
             ("output-contracts/synthesis-report-draft.json","output-contract.schema.json"),
             ("job-templates/10-synthesis-report.json","job-template.schema.json"))
         for relative,schema in records:
-            value=json.loads((ROOT/"registry"/relative).read_text())
+            value=json.loads((registry_paths.REGISTRY/relative).read_text())
             self.assertEqual(validate_document(value,schema,store),[],relative)
         def closed(value,path="$",store=None):
             if isinstance(value,dict):

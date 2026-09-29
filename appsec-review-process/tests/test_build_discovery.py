@@ -6,6 +6,7 @@ import execution_state as state
 import phase1
 import workflow
 import job_graph
+import registry_paths
 
 
 class BuildDiscoveryTests(unittest.TestCase):
@@ -57,7 +58,7 @@ class BuildDiscoveryTests(unittest.TestCase):
 
     def test_all_registry_jobs_have_lifecycle_nodes(self):
         graph=job_graph.load_graph()['jobs']
-        templates={path.stem for path in (state.ROOT/'registry/job-templates').glob('*.json')}
+        templates={path.stem for path in (state.registry_paths.JOB_TEMPLATES_DIR).glob('*.json')}
         self.assertLessEqual(self.STANDALONE_TEMPLATES,templates)
         for name in sorted(templates-self.STANDALONE_TEMPLATES): self.assertIn(name,graph)
         for name in sorted(self.STANDALONE_TEMPLATES): self.assertNotIn(name,graph)

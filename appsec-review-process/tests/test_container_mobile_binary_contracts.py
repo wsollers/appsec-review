@@ -27,6 +27,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 from schema_validate import SchemaStore, validate_document
 import container_mobile_binary_contracts as contracts
@@ -35,7 +36,7 @@ import evidence_redaction
 import tool_instance_shapes as shapes
 
 FIXTURES = ROOT / "tests" / "fixtures" / "container-mobile-binary-contracts"
-REGISTRY = ROOT / "registry" / "output-contracts"
+REGISTRY = registry_paths.OUTPUT_CONTRACTS_DIR
 PROPOSAL = REPO / "docs" / "proposals" / "vendor-prepass" / "job-nodes.proposal.json"
 
 CONTAINER, MOBILE, BINARY = "container-image-inventory", "mobile-sast", "binary-hardening"

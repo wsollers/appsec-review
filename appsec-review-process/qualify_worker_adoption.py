@@ -12,6 +12,7 @@ from execution_state import (ROOT, atomic_json, data_path, execute, file_hash, n
                              run_path, tree_hashes)
 from launch_job import launch
 from publish_job_output import ACCEPTED_SCHEMA, NONCURRENT_SCHEMA
+import registry_paths
 
 
 def partition_fixture(valid: bool = True) -> dict:
@@ -281,9 +282,9 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / "dagster_workflow.py", ROOT.parent / "schemas/project-discovery.schema.json",
             ROOT.parent / "schemas/ossf-scorecard-results.schema.json",
             ROOT.parent / "schemas/worker-result-envelope.schema.json",
-            ROOT / "registry/output-contracts/ossf-scorecard-results.json",
-            ROOT / "registry/output-contracts/repository-partition-map.json",
-            ROOT / "registry/output-contracts/project-discovery.json",
+            registry_paths.contract("ossf-scorecard-results"),
+            registry_paths.contract("repository-partition-map"),
+            registry_paths.contract("project-discovery"),
         ]
         report.update(
             status="PASS",

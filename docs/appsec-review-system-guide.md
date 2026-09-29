@@ -5,7 +5,7 @@ system. The opening of each section is written for an executive reader; the deta
 for an operator or technical leader. Current implementation status is taken from the generated
 [lifecycle readiness view](design-parity/design-parity-readiness.md), not inferred from the design.
 The machine authorities remain
-[`job-graph.json`](../appsec-review-process/job-graph.json),
+[`job-graph.json`](../appsec-review-process/pipeline/job-graph.json),
 [`design-parity-manifest.json`](../appsec-review-process/design-parity-manifest.json), the registry,
 schemas, and accepted run artifacts.
 
@@ -181,7 +181,7 @@ tooling, reference data, and presentation cannot silently override one another.
 |---|---|---|
 | Engagement | staged `inputs/artifact-manifest.json` | target revision/path, business goal, target platforms, includes/excludes, budget, execution environment, permissions |
 | Lifecycle | `job-graph.json`, design-parity manifest | job dependencies, implementation binding, resource-pool state, readiness and gaps |
-| Job composition | `registry/job-templates/` plus persona, role, domain, tooling-profile, and output-contract records | who/what performs a job, required inputs, allowed outputs, timeout, retry, applicability |
+| Job composition | `pipeline/job-templates/` plus persona, role, domain, tooling-profile, and output-contract records | who/what performs a job, required inputs, allowed outputs, timeout, retry, applicability |
 | Pool specification | C01 pool specification and B15 limits | persona/tool groups, cardinality, budget class, timeout, writable/readable roots, worker kind, deterministic expansion |
 | Authority | staged grant records evaluated by B11 | exact capabilities allowed for this run, job, source generation, destination, path, and time window |
 | Tool identity | `images/*`, B16 build-state/registry records | exact local image identity and available tool version; workers do not pull opportunistically |
