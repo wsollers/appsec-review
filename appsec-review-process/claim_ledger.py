@@ -124,6 +124,43 @@ def threat_candidates(source: dict[str, Any]) -> list[dict[str, Any]]:
             "dissent_ids": sorted({dissent[item["threat_id"]]["challenge_record_id"]}
                                   if item["threat_id"] in dissent else set()),
             "causal_route_ids": [], "source": source})
+    candidates.extend(workbench_candidates(source, elements, dissent))
+    return candidates
+
+
+def workbench_candidates(source: dict[str, Any], elements: dict[str, Any],
+                         dissent: dict[str, Any]) -> list[dict[str, Any]]:
+    """ADR-0019: threat-workbench abuse scenarios and LINDDUN privacy threats are ledger candidates
+    like STRIDE hypotheses. Attack trees are not (ADR-0016 chain composition reads them from the
+    model by their stable ids); a record that names no modeled component cannot be routed and is
+    left to the model's own gaps."""
+    value = source["artifact"]
+    flows = {item["flow_id"]: item for item in value["flows"]}
+    rows = []
+    for item in value.get("abuse_scenarios", []):
+        obligations = ([f"Establish from source whether this precondition holds: {text}" for text in item["preconditions"]] +
+                       [f"Determine whether this control is present: {text}" for text in item["missing_controls"]]) or [
+                       f"Determine from source whether {item['actor']} can reach this objective."]
+        rows.append((item["scenario_id"], f"{item['actor']} could {item['attacker_objective']}: {item['harm']}",
+                     item["target_element_ids"], item, obligations))
+    for item in value.get("privacy_threats", []):
+        targets = set(item["target_element_ids"]) | {endpoint for flow_id in item["target_flow_ids"]
+            for endpoint in (flows[flow_id]["source_element_id"], flows[flow_id]["destination_element_id"])}
+        rows.append((item["privacy_threat_id"], f"Privacy ({item['linddun_category'].replace('_', ' ')}): {item['statement']}",
+                     sorted(targets), item, item["proof_obligations"]))
+    candidates = []
+    for route_id, hypothesis, targets, item, statements in sorted(rows, key=lambda row: row[0]):
+        component_ids = sorted({elements[key]["component_id"] for key in targets
+                                if key in elements and elements[key]["component_id"]})
+        if not component_ids:
+            continue
+        candidates.append({"route_id": route_id, "hypothesis": hypothesis, "confidence": item["confidence"],
+            "component_ids": component_ids,
+            "citations": [_citation(source, citation, "citation-" + digest(citation)[:24]) for citation in item["citations"]],
+            "proof_obligations": [{"obligation_id": "obligation-" + digest({"route": route_id, "text": text})[:24],
+                                   "statement": text} for text in statements],
+            "dissent_ids": sorted({dissent[route_id]["challenge_record_id"]} if route_id in dissent else set()),
+            "causal_route_ids": [], "source": source})
     return candidates
 
 

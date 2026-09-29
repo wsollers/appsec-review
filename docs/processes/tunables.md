@@ -460,6 +460,22 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `shard_groups` | 3 count | resource | Hunter shard groups: component shards are packed into this many groups by size, P1/P2-lead-heavy components first. | Pool size = shard_groups x modes_per_group; each instance is one claude -p call capped at budget_max_usd_per_call[standard] (2.0 USD today). |
 | `target_pin_bytes_max` | 8 MiB | window | Target bytes pinned per instance (also capped at half the cell's persona input byte budget); files beyond it stay reachable through evidence_search / evidence_read. | Grows with component size; large repositories need more shard_groups rather than a larger window. |
 
+### `03-threat-model-dfd-stride`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `workbench_budget_class` | standard id | resource | ADR-0008 budget class (probe, standard, deep); selects the concurrent-cell limit below. |  |
+| `workbench_cell_budget` | standard id | resource | Persona budget tier (probe, standard, full) for each workbench cell invocation. |  |
+| `workbench_concurrent_cells_deep` | 3 count | resource | Workbench cells run at once under the deep budget class (ADR-0008 Decision 6). |  |
+| `workbench_concurrent_cells_probe` | 1 count | resource | Workbench cells run at once under the probe budget class (ADR-0008 Decision 6). |  |
+| `workbench_concurrent_cells_standard` | 2 count | resource | Workbench cells run at once under the standard budget class (ADR-0008 Decision 6). |  |
+| `workbench_enabled` | True flag | resource | Run the ADR-0008/0019 threat-workbench persona cells after the deterministic DFD/STRIDE core. Off: the deterministic core publishes alone and every cell is recorded omitted. |  |
+| `workbench_menu_file_pin_max_bytes` | 32 MiB | resource | Largest single menu file pinned for the cells. |  |
+| `workbench_menu_pin_max_bytes` | 64 MiB | resource | Total bytes of supporting-evidence menu files pinned for the cells; later files are listed unpinned. | Grows with evidence volume; lookup tools serve pinned files, so this bounds hashing, not the prompt. |
+| `workbench_pin_target_source` | True flag | resource | Pin every target file as a readable input of each cell (lookup mode serves them), so cells can cite code by path and line. | Pool specs grow with file count: ~6,100 files for freeciv21. Turn off at engine scale; cells then cite menu evidence only. |
+| `workbench_records_per_cell_max` | 60 count | window | Most records of one family the join takes from one cell reply; the rest is recorded as a gap. |  |
+| `workbench_wave_timeout_seconds` | 5400 s (90 min) | resource | Wait-all limit for one workbench wave pool. | Cells run concurrently; raise with slow models, not with target size (lookup tools keep calls small). |
+
 ### `10-critical-findings-sarif`
 
 | Tunable | Value | Kind | What it does | Scale |

@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "abuse-modeler",
+  "display_name": "Threat Workbench Abuse Modeler",
+  "category": "discovery",
+  "summary": "Adds attacker-objective abuse scenarios keyed to base DFD and wave-1 data-class ids.",
+  "allowed_outputs": [
+    "candidate_only"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict",
+    "remediation_status",
+    "malicious_intent"
+  ],
+  "required_behavior": [
+    "state actor, capability, harm and preconditions",
+    "cite evidence refs for every scenario",
+    "record unknowns as notes or gaps"
+  ],
+  "must_not": [
+    "promote a candidate to a finding",
+    "assign severity",
+    "claim compliance",
+    "invent evidence"
+  ]
+}

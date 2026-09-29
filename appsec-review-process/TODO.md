@@ -116,6 +116,29 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
       register the B16 record, add a .NET SDK for C# build-mode none. Optional later: a traced C/C++
       tool id replaying the locked build (ADR-0017 decision 4).
 
+## Threat workbench (ADR-0008 slice 1 + privacy L13)
+
+[ADR-0019](../docs/decisions/ADR-0019-threat-workbench-slice-1-and-privacy.md), branch `ws-workbench`.
+`03-threat-model-dfd-stride` now runs persona cells over the deterministic DFD/STRIDE core as C01/C02
+wave pools (`threat_workbench.py`) and publishes non-empty data classes, LINDDUN privacy threats,
+declared deployment zones, abuse scenarios and attack trees, plus `attack-trees.mmd`, `dfd.mmd`,
+`ranked-threat-scenarios.json` and the intercom transcript. Tunables: `workbench_*` in
+`registry/job-templates/03-threat-model-dfd-stride.json`.
+
+- [x] T05 wave runner (pool per wave, budget-class concurrency), T07 deterministic join, T08 overlay
+      validator, T06 intercom bus wired (cell notes -> transcript -> assumptions/gaps).
+- [x] L13 privacy cell: data-class/PII inventory, personal-data flows, LINDDUN threats, candidate
+      regulatory notes only.
+- [x] Claim ledger admits abuse scenarios and privacy threats as candidates (attack trees left to ADR-0016).
+- [ ] William: ADR-0019 open decisions (failed cell = gap; next cells; ledger load; report section; engine scale).
+- [ ] First live run on hello-autotools (5 model calls; 03 and everything downstream re-run: 03's code hash changed).
+- [ ] Integration owner: `job-graph.json`/`design-parity-manifest.json` still list 03 as `cpu` with the
+      old required artifacts; the Dagster op is now `persona_llm`.
+- [ ] Wave 3 challenge cell (different model family) and wave 4 responses; agent/native/mobile/cloud specialists.
+- [ ] Synthesis report: show `data_classes`, `privacy_threats`, `deployment_zones` (closed report schema).
+- [ ] After review-batch merges: confirm the cells use `supporting_evidence_menu` (fallback today: F02 intel manifest).
+- [ ] ADR-0016 chain composition: consume `attack_trees` (ids are content-derived and stable across replays).
+
 ## Native lane granularity
 
 [ADR-0014](../docs/decisions/ADR-0014-native-lane-granularity.md): native analysis is per clang

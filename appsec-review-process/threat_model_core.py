@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 import component_characterization as cc
+import threat_workbench as tw
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
@@ -63,6 +64,7 @@ def _code_hashes() -> dict[str, str]:
         "threat-model-assumption.schema.json", "threat-model-gap.schema.json",
     ):
         values[f"schemas/{name}"] = file_hash(ROOT.parent / "schemas" / name)
+    values.update(tw.code_hashes())
     return values
 
 
@@ -107,7 +109,7 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     if (not evidence_file.is_file() or evidence_file.is_symlink() or
             "sha256:" + file_hash(evidence_file) != evidence["sha256"]):
         raise Blocked(f"{JOB}: cited F02 evidence artifact changed")
-    return {
+    result = {
         "run_id": run_id,
         "source_snapshot_sha256": component_map["source_snapshot_sha256"],
         "component_attempt_id": component_pointer["attempt_id"],
@@ -122,6 +124,9 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         "component_map": component_map,
         "code": _code_hashes(),
     }
+    # ADR-0019: the threat workbench (persona overlays over this deterministic core).
+    result["workbench"] = tw.current_inputs(run_id, result)
+    return result
 
 
 def _citations(inputs: dict[str, Any]) -> list[dict[str, Any]]:
@@ -234,7 +239,7 @@ def build_model(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
         "job_id": JOB, "attempt_id": attempt_id, "source_snapshot": inputs["source_snapshot_sha256"],
         "component_map_attempt_id": inputs["component_attempt_id"], "budget_class": "standard",
         "elements": elements, "flows": flows, "trust_boundaries": boundaries, "data_classes": [],
-        "deployment_zones": [], "abuse_scenarios": [], "attack_trees": [],
+        "deployment_zones": [], "abuse_scenarios": [], "attack_trees": [], "privacy_threats": [],
         "stride_hypotheses": hypotheses, "stride_coverage": coverage, "assumptions": assumptions,
         "gaps": gaps, "rescope_triggers": triggers,
         "coverage": {"unmodeled_components": [], "workcells": [{"workcell_id": "deterministic-dfd-core",
@@ -273,6 +278,8 @@ def validate_model(value: dict[str, Any], inputs: dict[str, Any] | None = None) 
     records = [*value["elements"], *value["flows"], *value["trust_boundaries"],
                *value["stride_hypotheses"], *value["assumptions"], *value["gaps"]]
     for record in records:
+        if record.get("originating_workcell_id") not in tw.DETERMINISTIC_CELLS:
+            continue   # workbench records cite their own resolved evidence (validated below)
         if expected_citations is not None and record["citations"] != expected_citations:
             errors.append("record citations do not match exact accepted F03/F02 lineage")
     for flow in value["flows"]:
@@ -292,6 +299,7 @@ def validate_model(value: dict[str, Any], inputs: dict[str, Any] | None = None) 
                 errors.append(f"{flow_id}: {category} hypothesis decision has no candidate threat")
             if decision == "unresolved" and not any(flow_id in item["affected_record_ids"] for item in value["gaps"]):
                 errors.append(f"{flow_id}: {category} unresolved decision has no explicit gap")
+    errors.extend(tw.validate_overlays(value))
     if inputs is not None:
         expected_components = {item["component_id"] for item in inputs["component_map"]["functional_components"]}
         modeled = {item["component_id"] for item in value["elements"] if item["component_id"] is not None}
@@ -301,21 +309,52 @@ def validate_model(value: dict[str, Any], inputs: dict[str, Any] | None = None) 
     return errors
 
 
+def _workbench_record(attempt: Path, inputs: dict[str, Any]) -> dict[str, Any] | None:
+    if "workbench" not in inputs:
+        return None
+    record = read_json(attempt / tw.WORKDIR / tw.MANIFEST)
+    wb = inputs["workbench"]
+    if (record.get("schema") != tw.RECORD_SCHEMA or record.get("selection") != wb["selection"]
+            or record.get("traits") != wb["traits"] or record.get("enabled") != wb["settings"]["enabled"]
+            or record.get("menu_root") != wb["menu"]["root_id"]):
+        raise Blocked(f"{JOB}: workbench record does not match the immutable inputs")
+    return record
+
+
+def expected_model(inputs: dict[str, Any], attempt: Path) -> tuple[dict[str, Any], dict[str, Any] | None, list]:
+    """Replay: the deterministic core, then (ADR-0019) the workbench join over the retained,
+    hash-checked cell replies. No model is called."""
+    base = build_model(inputs, attempt.name)
+    record = _workbench_record(attempt, inputs)
+    if record is None:
+        return base, None, []
+    outputs = tw.load_outputs(attempt, record)
+    if record["wave_1_model_sha256"] != tw.wave_one_sha256(base, record, outputs):
+        raise Blocked(f"{JOB}: the wave-1 model wave 2 read is not the join of the retained wave-1 replies")
+    model, records = tw.join_with_intercom(base, record, outputs)
+    return model, record, records
+
+
 def _validate_attempt(attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable inputs changed")
     value = read_json(attempt / RESULT)
-    if value != build_model(inputs, attempt.name):
+    expected, record, records = expected_model(inputs, attempt)
+    if value != expected:
         raise Blocked(f"{JOB}: result differs from deterministic immutable inputs")
     errors = validate_model(value, inputs)
     if errors:
         raise Blocked(f"{JOB}: threat model validation failed ({len(errors)} errors)")
-    permission, lineage = _receipts(inputs)
+    if record is not None:
+        errors = tw.check_projections(attempt, value, record, records, inputs["run_id"])
+        if errors:
+            raise Blocked(f"{JOB}: workbench projections failed validation: {errors[0]}")
+    permission, lineage = _receipts(inputs, record)
     if read_json(attempt / "permission.json") != permission or read_json(attempt / "lineage.json") != lineage:
         raise Blocked(f"{JOB}: permission or lineage receipt differs from canonical immutable inputs")
 
 
-def _receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _receipts(inputs: dict[str, Any], record: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     permission = {"schema": "appsec-review/producer-permission-receipt/1.0",
         "run_id": inputs["run_id"], "job_id": JOB,
         "source_snapshot_sha256": inputs["source_snapshot_sha256"], "permissions": PERMISSIONS}
@@ -324,8 +363,32 @@ def _receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         "source_snapshot_sha256": inputs["source_snapshot_sha256"],
         "build_lineage_sha256": "sha256:" + digest({"component_pointer": inputs["component_pointer_sha256"],
             "component_envelope": inputs["component_envelope_sha256"],
-            "component_map": inputs["component_map_sha256"], "f02": inputs["evidence_manifest_sha256"]})}
+            "component_map": inputs["component_map_sha256"], "f02": inputs["evidence_manifest_sha256"],
+            **({"workbench": digest(record)} if record is not None else {})})}
     return permission, lineage
+
+
+# Tests inject a fake cell runtime here (``lambda run_id: tw.CellRuntime(...)``); None = live Claude CLI.
+WORKBENCH_RUNTIME = None
+
+
+def _summary(model: dict[str, Any], record: dict[str, Any]) -> str:
+    cells = ", ".join(f"{row['workcell_id']} {row['terminal_status']}" for row in record["cells"]) or "none ran"
+    privacy = model.get("privacy_threats", [])
+    personal = [item for item in model["data_classes"] if item["category"] in tw.PERSONAL]
+    return ("# Threat model\n\n"
+            f"{len(model['elements'])} elements, {len(model['flows'])} flows, "
+            f"{len(model['stride_hypotheses'])} candidate STRIDE hypotheses.\n\n"
+            f"Threat workbench (ADR-0019, budget class {record['budget_class']}): {cells}.\n\n"
+            f"- data classes: {len(model['data_classes'])} ({len(personal)} personal/credential)\n"
+            f"- privacy threats (LINDDUN): {len(privacy)}\n"
+            f"- deployment zones: {len(model['deployment_zones'])} (declared exposure only)\n"
+            f"- abuse scenarios: {len(model['abuse_scenarios'])}\n"
+            f"- attack trees: {len(model['attack_trees'])}\n"
+            f"- gaps: {len(model['gaps'])}, assumptions: {len(model['assumptions'])}\n\n"
+            "Hypotheses, scenarios, trees and privacy threats are candidates that require downstream verification; "
+            "they are not findings or severity assessments. Regulatory notes are candidate mappings, not compliance "
+            "verdicts. ranked-threat-scenarios.json is a prioritization aid, not a severity.\n")
 
 
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
@@ -336,28 +399,39 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
         attempt, attempt_id = allocation["attempt"], allocation["attempt_id"]
-        model = build_model(inputs, attempt_id)
+        core_model = build_model(inputs, attempt_id)
+        record = tw.execute(run_id, inputs, attempt, attempt_id, core_model, runtime=(
+            WORKBENCH_RUNTIME(run_id) if WORKBENCH_RUNTIME is not None else None))
+        if record is None:   # inputs without a workbench block (pre-ADR-0019 callers)
+            model, records = core_model, []
+        else:
+            model, records = tw.join_with_intercom(core_model, record, tw.load_outputs(attempt, record))
         errors = validate_model(model, inputs)
         if errors:
             raise ValueError("; ".join(errors))
         atomic_json(attempt / RESULT, model)
+        shown = record if record is not None else tw.EMPTY_RECORD
+        projections = tw.write_projections(attempt, model, shown, records, run_id)
         gaps = [item["statement"] for item in model["gaps"]] + [item["statement"] for item in model["assumptions"]]
         status_name = "OK_WITH_GAPS" if gaps else "OK"
-        atomic_bytes(attempt / SUMMARY, ("# Threat model\n\n"
-            f"{len(model['elements'])} elements, {len(model['flows'])} flows, "
-            f"{len(model['stride_hypotheses'])} candidate STRIDE hypotheses.\n\n"
-            "Hypotheses require downstream verification and are not findings or severity assessments.\n").encode())
-        permission, lineage = _receipts(inputs)
+        atomic_bytes(attempt / SUMMARY, _summary(model, shown).encode())
+        permission, lineage = _receipts(inputs, record)
         atomic_json(attempt / "permission.json", permission)
         atomic_json(attempt / "lineage.json", lineage)
+        cells = shown["cells"]
         status = {"process": JOB, "status": status_name, "elements": len(model["elements"]),
             "flows": len(model["flows"]), "candidate_hypotheses": len(model["stride_hypotheses"]),
-            "coverage_gaps": len(gaps), "claim_limit": "candidate-hypotheses-only"}
+            "coverage_gaps": len(gaps), "claim_limit": "candidate-hypotheses-only",
+            "workbench": {"enabled": shown["enabled"], "budget_class": shown["budget_class"],
+                "cells": {row["workcell_id"]: row["terminal_status"] for row in cells},
+                "data_classes": len(model["data_classes"]), "privacy_threats": len(model["privacy_threats"]),
+                "deployment_zones": len(model["deployment_zones"]), "abuse_scenarios": len(model["abuse_scenarios"]),
+                "attack_trees": len(model["attack_trees"]), "intercom_records": len(records)}}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=status_name,
             summary="Deterministic DFD and candidate STRIDE model produced.", status_record=status,
-            artifact_paths=[RESULT, SUMMARY, "permission.json", "lineage.json", "status.json"], gaps=gaps,
+            artifact_paths=[RESULT, SUMMARY, "permission.json", "lineage.json", "status.json", *projections], gaps=gaps,
             pre_envelope_validate=lambda path, _status: _validate_attempt(path, inputs))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,

@@ -46,6 +46,7 @@
     "data_classes": [],
     "deployment_zones": [],
     "abuse_scenarios": [],
+    "privacy_threats": [],
     "attack_trees": [],
     "stride_hypotheses": [
       {

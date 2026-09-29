@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "data-flow-modeler",
+  "display_name": "Threat Workbench Data And Deployment Modeler",
+  "category": "discovery",
+  "summary": "Adds data-class, personal-data-flow, LINDDUN privacy and deployment-zone overlays keyed to base DFD ids.",
+  "allowed_outputs": [
+    "candidate_only"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict",
+    "remediation_status",
+    "malicious_intent"
+  ],
+  "required_behavior": [
+    "key every record to base DFD element and flow ids",
+    "cite evidence refs for every record",
+    "record unknowns as notes or gaps"
+  ],
+  "must_not": [
+    "promote a candidate to a finding",
+    "assign severity",
+    "claim compliance",
+    "invent evidence"
+  ]
+}

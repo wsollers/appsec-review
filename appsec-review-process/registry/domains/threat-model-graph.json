@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "threat-model-graph",
+  "display_name": "Threat Workbench Model Graph Overlays",
+  "surfaces": [
+    "data classes and personal data flows",
+    "LINDDUN privacy threats",
+    "deployment zones and trust boundaries",
+    "abuse scenarios",
+    "attack trees"
+  ],
+  "common_failure_modes": [
+    "overlay references an id not in the base DFD",
+    "unsupported evidence leaf",
+    "compliance verdict in place of a candidate note",
+    "observed exposure claimed from static evidence"
+  ],
+  "preferred_standards": [
+    "STRIDE",
+    "LINDDUN privacy threat categories",
+    "ADR-0008 canonical model"
+  ],
+  "required_evidence_hints": [
+    "target-repository file refs with line ranges",
+    "supporting-evidence menu refs",
+    "base DFD element and flow ids"
+  ]
+}

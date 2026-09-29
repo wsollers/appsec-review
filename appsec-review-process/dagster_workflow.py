@@ -492,12 +492,12 @@ def component_characterization():
     component_characterization_standalone_work(build_execution_config())
 
 
-@op(name='job_03_threat_model_dfd_stride', ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+@op(name='job_03_threat_model_dfd_stride', ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
 def threat_model_dfd_stride_work(context, configured, upstream):
     return run_common_python_worker(context, configured, threat_model_worker)
 
 
-@op(pool=CPU_POOL)
+@op(pool=PERSONA_POOL)
 def threat_model_dfd_stride_standalone_work(context, configured):
     return run_common_python_worker(context, configured, threat_model_worker)
 

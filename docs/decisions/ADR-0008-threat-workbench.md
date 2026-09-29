@@ -4,6 +4,9 @@ Status: Accepted 2026-09-20 (see Decisions). This closes the G01 design gate onl
 schema, registry record, graph edge, or readiness claim follows from this document; S02 remains
 blocked on its prerequisites.
 
+Implementation (2026-09-28): slice 1 (wave runner, join, validator, intercom caller, four cells
+plus the L13 privacy cell) is described in [ADR-0019](ADR-0019-threat-workbench-slice-1-and-privacy.md).
+
 Date: 2026-09-20 (drafted); 2026-09-20 (review refinement and gate decisions, see Revision Notes)
 
 Backlog: `TODO.md` G01 (`HUMAN_GATE`, now decided), S02 (`BLOCKED(G01, F03, B14, M01)` — M01

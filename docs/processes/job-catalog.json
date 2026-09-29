@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 68,
+  "lifecycle_jobs": 69,
   "steps": 66,
   "artifacts": 69,
   "models": 5
