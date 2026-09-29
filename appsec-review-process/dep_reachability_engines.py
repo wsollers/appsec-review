@@ -177,9 +177,6 @@ class CodeqlEngine:
             entries = sorted(set(roots) | set(graph.entry_points([*ENTRY_POINTS.get(query.language, ()),
                                                                   *query.entry_points])))
             found = reachability.assess_symbols(graph, query.symbols, entries)
-            for step in found["witness"]:
-                if isinstance(step.get("function"), str):
-                    step["function"] = step["function"].split("|", 1)[0]
         wanted = {(item.get("package") or "", item["symbol"]) for item in query.symbols}
         direct = sorted((row for row in tables.get("Reachability", [])
                          if (row["package"], row["symbol"]) in wanted and row["entry_file"] and row["call_file"]),
