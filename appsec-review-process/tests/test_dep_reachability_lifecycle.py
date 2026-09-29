@@ -56,7 +56,7 @@ class LifecycleBindingTests(unittest.TestCase):
         self.assertTrue(bound["osv_gap"].startswith("osv-"))
         derived = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
         self.assertEqual(derived["assessments"], [])
-        self.assertIn("ENGINE_INPUT:engine-input-absent:02-codeql-sast", derived["document"]["coverage_gaps"])
+        self.assertIn("ENGINE_INPUT:engine-input-absent:02-codeql-cpp", derived["document"]["coverage_gaps"])
         self.assertEqual(derived["document"]["matches"][0]["verdict"], "unknown")
 
     def test_supplied_codeql_tables_and_reviewed_map_prove_reachable_and_rederive_identically(self):

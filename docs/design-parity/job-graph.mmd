@@ -53,7 +53,14 @@ flowchart TD
   02_standards_source_ingest_post -->|required| 02_evidence_assembly_config
   02_test_intelligence_ingest_post -->|required| 02_evidence_assembly_config
   02_source_sast_post -->|required| 02_evidence_assembly_config
-  02_codeql_sast_post -->|required| 02_evidence_assembly_config
+  02_codeql_cpp_post -->|required| 02_evidence_assembly_config
+  02_codeql_csharp_post -->|required| 02_evidence_assembly_config
+  02_codeql_go_post -->|required| 02_evidence_assembly_config
+  02_codeql_java_post -->|required| 02_evidence_assembly_config
+  02_codeql_javascript_post -->|required| 02_evidence_assembly_config
+  02_codeql_python_post -->|required| 02_evidence_assembly_config
+  02_codeql_ruby_post -->|required| 02_evidence_assembly_config
+  02_codeql_rust_post -->|required| 02_evidence_assembly_config
   02_code_property_graph_post -->|required| 02_evidence_assembly_config
   02_native_sast_post -->|required| 02_evidence_assembly_config
   02_ir_facts_post -->|required| 02_evidence_assembly_config
@@ -108,7 +115,7 @@ flowchart TD
   02_sca_vulnerability_match_post -->|required| 06_cve_reachability_config
   02_ir_facts_post -->|required| 06_cve_reachability_config
   02_code_property_graph_post -->|required| 06_cve_reachability_config
-  02_codeql_sast_post -->|required| 06_cve_reachability_config
+  02_codeql_cpp_post -->|required| 06_cve_reachability_config
   13_fuzz_target_triage_config["13-fuzz-target-triage: resolve job configuration"] --> 13_fuzz_target_triage_pre["13-fuzz-target-triage: pre-validation"]
   13_fuzz_target_triage_pre --> 13_fuzz_target_triage["13-fuzz-target-triage: work or reuse"]
   13_fuzz_target_triage --> 13_fuzz_target_triage_post["13-fuzz-target-triage: post-validation and publish"]
@@ -237,10 +244,39 @@ flowchart TD
   02_source_sast_pre --> 02_source_sast["02-source-sast: work or reuse"]
   02_source_sast --> 02_source_sast_post["02-source-sast: post-validation and publish"]
   00_intake_post -->|required| 02_source_sast_config
-  02_codeql_sast_config["02-codeql-sast: resolve job configuration"] --> 02_codeql_sast_pre["02-codeql-sast: pre-validation"]
-  02_codeql_sast_pre --> 02_codeql_sast["02-codeql-sast: work or reuse"]
-  02_codeql_sast --> 02_codeql_sast_post["02-codeql-sast: post-validation and publish"]
-  00_intake_post -->|required| 02_codeql_sast_config
+  02_codeql_cpp_config["02-codeql-cpp: resolve job configuration"] --> 02_codeql_cpp_pre["02-codeql-cpp: pre-validation"]
+  02_codeql_cpp_pre --> 02_codeql_cpp["02-codeql-cpp: work or reuse"]
+  02_codeql_cpp --> 02_codeql_cpp_post["02-codeql-cpp: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_cpp_config
+  02_native_build_post -->|required| 02_codeql_cpp_config
+  02_codeql_csharp_config["02-codeql-csharp: resolve job configuration"] --> 02_codeql_csharp_pre["02-codeql-csharp: pre-validation"]
+  02_codeql_csharp_pre --> 02_codeql_csharp["02-codeql-csharp: work or reuse"]
+  02_codeql_csharp --> 02_codeql_csharp_post["02-codeql-csharp: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_csharp_config
+  02_codeql_go_config["02-codeql-go: resolve job configuration"] --> 02_codeql_go_pre["02-codeql-go: pre-validation"]
+  02_codeql_go_pre --> 02_codeql_go["02-codeql-go: work or reuse"]
+  02_codeql_go --> 02_codeql_go_post["02-codeql-go: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_go_config
+  02_codeql_java_config["02-codeql-java: resolve job configuration"] --> 02_codeql_java_pre["02-codeql-java: pre-validation"]
+  02_codeql_java_pre --> 02_codeql_java["02-codeql-java: work or reuse"]
+  02_codeql_java --> 02_codeql_java_post["02-codeql-java: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_java_config
+  02_codeql_javascript_config["02-codeql-javascript: resolve job configuration"] --> 02_codeql_javascript_pre["02-codeql-javascript: pre-validation"]
+  02_codeql_javascript_pre --> 02_codeql_javascript["02-codeql-javascript: work or reuse"]
+  02_codeql_javascript --> 02_codeql_javascript_post["02-codeql-javascript: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_javascript_config
+  02_codeql_python_config["02-codeql-python: resolve job configuration"] --> 02_codeql_python_pre["02-codeql-python: pre-validation"]
+  02_codeql_python_pre --> 02_codeql_python["02-codeql-python: work or reuse"]
+  02_codeql_python --> 02_codeql_python_post["02-codeql-python: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_python_config
+  02_codeql_ruby_config["02-codeql-ruby: resolve job configuration"] --> 02_codeql_ruby_pre["02-codeql-ruby: pre-validation"]
+  02_codeql_ruby_pre --> 02_codeql_ruby["02-codeql-ruby: work or reuse"]
+  02_codeql_ruby --> 02_codeql_ruby_post["02-codeql-ruby: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_ruby_config
+  02_codeql_rust_config["02-codeql-rust: resolve job configuration"] --> 02_codeql_rust_pre["02-codeql-rust: pre-validation"]
+  02_codeql_rust_pre --> 02_codeql_rust["02-codeql-rust: work or reuse"]
+  02_codeql_rust --> 02_codeql_rust_post["02-codeql-rust: post-validation and publish"]
+  00_intake_post -->|required| 02_codeql_rust_config
   02_code_property_graph_config["02-code-property-graph: resolve job configuration"] --> 02_code_property_graph_pre["02-code-property-graph: pre-validation"]
   02_code_property_graph_pre --> 02_code_property_graph["02-code-property-graph: work or reuse"]
   02_code_property_graph --> 02_code_property_graph_post["02-code-property-graph: post-validation and publish"]

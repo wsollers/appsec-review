@@ -1,7 +1,7 @@
 {
   "schema": "appsec-review/job-template/0.1",
-  "job_template_id": "02-codeql-sast",
-  "display_name": "CodeQL SAST",
+  "job_template_id": "02-codeql-cpp",
+  "display_name": "CodeQL C/C++",
   "process": "02-evidence-pregather",
   "budget_default": "probe",
   "composition": {
@@ -9,7 +9,7 @@
     "role_id": "source-sast-curator",
     "domain_id": "repo-project-discovery",
     "tooling_profile_id": "pinned-source-sast",
-    "output_contract_id": "codeql-sast"
+    "output_contract_id": "codeql-language"
   },
   "inputs": {
     "required": [
@@ -18,14 +18,16 @@
       "B16 audit-codeql record",
       "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
     ],
-    "optional": []
+    "optional": [
+      "accepted 02-native-build (traced replay per unit; B16 audit-codeql-native record)"
+    ]
   },
   "outputs": {
-    "directory": "data/jobs/02-codeql-sast/attempts/<attempt_id>",
+    "directory": "data/jobs/02-codeql-cpp/attempts/<attempt_id>",
     "files": [
-      "codeql-sast.json",
+      "codeql-language.json",
       "b13-receipts.json",
-      "codeql-sast-summary.md",
+      "codeql-language-summary.md",
       "status.json",
       "permission.json",
       "lineage.json"
@@ -42,7 +44,8 @@
   "execution": {
     "worker": "codeql_sast.py",
     "arguments": [
-      "{run_id}"
+      "{run_id}",
+      "cpp"
     ]
   },
   "retry": {
@@ -50,7 +53,7 @@
     "transient_reasons": [],
     "side_effect_free": true
   },
-  "applicability": "all staged source checkouts; languages with a CodeQL build-mode none extractor (cpp, csharp, java, javascript/typescript, python, ruby); Go and undetected languages are gaps",
+  "applicability": "checkouts with C/C++ sources; --build-mode none always, plus one traced replay per replayable unit of the accepted 02-native-build (audit-codeql-native); no unit is a 'language not built' gap; SKIPPED not-applicable-language-absent when the checkout has no source of this language",
   "permissions": [
     "read-source",
     "write-run-data"
@@ -61,49 +64,49 @@
       "value": 3600,
       "unit": "seconds",
       "kind": "resource",
-      "description": "Wall-clock limit for one CodeQL language container (database create + analyze). A TIMEOUT is a coverage gap for that language (ADR-0013).",
+      "description": "Wall-clock limit for one CodeQL cpp container (database create + analyze). A TIMEOUT is a coverage gap (ADR-0013).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_memory_bytes": {
       "value": 8589934592,
       "unit": "bytes",
       "kind": "resource",
-      "description": "Memory limit for the container (CodeQL, per language).",
+      "description": "Memory limit for the container (CodeQL cpp).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_cpu_millis": {
       "value": 4000,
       "unit": "millicpu",
       "kind": "resource",
-      "description": "CPU quota (1000 = one core) (CodeQL, per language).",
+      "description": "CPU quota (1000 = one core) (CodeQL cpp).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_pids": {
       "value": 1024,
       "unit": "count",
       "kind": "resource",
-      "description": "Process/thread limit (CodeQL, per language).",
+      "description": "Process/thread limit (CodeQL cpp).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_tmpfs_bytes": {
       "value": 1073741824,
       "unit": "bytes",
       "kind": "resource",
-      "description": "Size of the in-memory /tmp (CodeQL, per language).",
+      "description": "Size of the in-memory /tmp (CodeQL cpp).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_stdout_limit_bytes": {
       "value": 8388608,
       "unit": "bytes",
       "kind": "resource",
-      "description": "Captured stdout; beyond this the log is truncated (CodeQL, per language).",
+      "description": "Captured stdout; beyond this the log is truncated (CodeQL cpp).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_stderr_limit_bytes": {
       "value": 8388608,
       "unit": "bytes",
       "kind": "resource",
-      "description": "Captured stderr; beyond this the log is truncated (CodeQL, per language).",
+      "description": "Captured stderr; beyond this the log is truncated (CodeQL cpp).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "codeql_threads": {

@@ -22,7 +22,7 @@ import reachability
 
 RESULT = "outputs/dependency-reachability.json"
 CPG_JOB, CPG_RESULT = "02-code-property-graph", "code-property-graph.json"
-CODEQL_JOB, CODEQL_RESULT, CODEQL_RECEIPTS = "02-codeql-sast", "codeql-sast.json", "b13-receipts.json"
+CODEQL_JOB, CODEQL_RESULT, CODEQL_RECEIPTS = "02-codeql-cpp", "codeql-language.json", "b13-receipts.json"
 REVIEWED_MAP = "cve-reachability-functions.json"
 ENTRY_POINTS = "reachability-entry-points.json"
 SUPPLIED = "dependency-reachability"          # <run>/inputs/dependency-reachability/{codeql,lsp,treesitter-ast.json}
@@ -74,7 +74,7 @@ def _cpg(run_id: str, source: str) -> tuple[dict[str, Any] | None, list[str]]:
 
 
 def _codeql(run_id: str, source: str) -> tuple[dict[str, Any] | None, list[str]]:
-    """Traced C/C++ graph tables recorded in the accepted 02-codeql-sast receipts."""
+    """Traced C/C++ graph tables recorded in the accepted 02-codeql-cpp receipts."""
     binding, gap = _accepted(run_id, CODEQL_JOB, CODEQL_RESULT, source)
     if binding is None:
         return None, [gap]

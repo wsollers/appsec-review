@@ -87,9 +87,12 @@ class Lane(unittest.TestCase):
                       '--stats /scratch/replay.json"', text)
         for query in ("CallEdges", "EntryPoints", "FlowSources"):
             self.assertIn(query, text)
-        completed = subprocess.run(["bash", str(LANE), "cpp", "bogus", "s", "1", "1"],
-                                   capture_output=True, text=True, timeout=30)
-        self.assertEqual(completed.returncode, 2)
+        for argv in (["cpp", "bogus", "s", "1", "1", "keep-db"], ["cpp", "none", "s", "1", "1"],
+                     ["cpp", "none", "s", "1", "1", "keep-maybe"], ["python", "traced", "s", "1", "1", "keep-db", "c"]):
+            with self.subTest(argv=argv):
+                completed = subprocess.run(["bash", str(LANE), *argv], capture_output=True, text=True, timeout=30)
+                self.assertEqual(completed.returncode, 2)
+        self.assertIn('if [ "$keep" = drop-db ]; then rm -rf /scratch/db; fi', text)
 
 
 if __name__ == "__main__":

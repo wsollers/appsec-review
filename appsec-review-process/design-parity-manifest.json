@@ -221,9 +221,16 @@
       {
         "job": "codeql_sast",
         "lifecycle_jobs": [
-          "02-codeql-sast"
+          "02-codeql-cpp",
+          "02-codeql-csharp",
+          "02-codeql-go",
+          "02-codeql-java",
+          "02-codeql-javascript",
+          "02-codeql-python",
+          "02-codeql-ruby",
+          "02-codeql-rust"
         ],
-        "relationship": "standalone and lifecycle-wired offline CodeQL security suites per language through B13 (ADR-0017); tool failures remain explicit per-language gaps"
+        "relationship": "standalone Dagster job running every 02-codeql-<lang> node in parallel (ADR-0023); each node is lifecycle-wired in full_review through B13; tool failures and unbuildable languages remain explicit gaps"
       },
       {
         "job": "component_characterization",
@@ -387,7 +394,14 @@
           "02-build-configure",
           "02-native-build",
           "02-source-sast",
-          "02-codeql-sast",
+          "02-codeql-cpp",
+          "02-codeql-csharp",
+          "02-codeql-go",
+          "02-codeql-java",
+          "02-codeql-javascript",
+          "02-codeql-python",
+          "02-codeql-ruby",
+          "02-codeql-rust",
           "02-code-property-graph",
           "02-native-sast",
           "02-ir-capture",
@@ -1430,7 +1444,14 @@
           "02-standards-source-ingest",
           "02-test-intelligence-ingest",
           "02-source-sast",
-          "02-codeql-sast",
+          "02-codeql-cpp",
+          "02-codeql-csharp",
+          "02-codeql-go",
+          "02-codeql-java",
+          "02-codeql-javascript",
+          "02-codeql-python",
+          "02-codeql-ruby",
+          "02-codeql-rust",
           "02-code-property-graph",
           "02-native-sast",
           "02-ir-facts",
@@ -1940,7 +1961,7 @@
           "02-sca-vulnerability-match",
           "02-ir-facts",
           "02-code-property-graph",
-          "02-codeql-sast"
+          "02-codeql-cpp"
         ]
       },
       "registry": {
@@ -3578,25 +3599,27 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
-      "id": "02-codeql-sast",
+      "id": "02-codeql-cpp",
       "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
         "docs/decisions/ADR-0017-codeql-sast-job.md",
         "docs/decisions/ADR-0006-codeql-pre-engagement.md"
       ],
       "graph": {
-        "node": "02-codeql-sast",
+        "node": "02-codeql-cpp",
         "implemented": true,
         "dependencies": [
-          "00-intake"
+          "00-intake",
+          "02-native-build"
         ]
       },
       "registry": {
-        "template": "02-codeql-sast",
+        "template": "02-codeql-cpp",
         "persona": "evidence-custodian",
         "role": "source-sast-curator",
         "domain": "repo-project-discovery",
         "tooling_profile": "pinned-source-sast",
-        "output_contract": "codeql-sast"
+        "output_contract": "codeql-language"
       },
       "execution": {
         "mode": "pinned_container",
@@ -3604,9 +3627,499 @@
         "validator": "appsec-review-process/codeql_sast.py:validate"
       },
       "output": {
-        "contract": "codeql-sast",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-sast.json",
-        "schema_file": "schemas/codeql-sast.schema.json",
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-csharp",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-csharp",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-csharp",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-go",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-go",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-go",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-java",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-java",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-java",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-javascript",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-javascript",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-javascript",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-python",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-python",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-python",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-ruby",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-ruby",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-ruby",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "codeql_sast",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-rust",
+      "design_refs": [
+        "docs/decisions/ADR-0023-per-language-codeql-reachability.md",
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-rust",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-rust",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-language"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-language",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
       "permissions": [

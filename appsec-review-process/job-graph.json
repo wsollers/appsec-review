@@ -243,10 +243,68 @@
           "allowed_skip_reasons": []
         },
         {
-          "job": "02-codeql-sast",
+          "job": "02-codeql-cpp",
           "kind": "required",
-          "contract": "codeql-sast",
-          "allowed_skip_reasons": []
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-csharp",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-go",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-java",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-javascript",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-python",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-ruby",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-rust",
+          "kind": "required",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
         },
         {
           "job": "02-code-property-graph",
@@ -587,10 +645,12 @@
           "allowed_skip_reasons": []
         },
         {
-          "job": "02-codeql-sast",
+          "job": "02-codeql-cpp",
           "kind": "required",
-          "contract": "codeql-sast",
-          "allowed_skip_reasons": []
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
         }
       ],
       "planned_scope": "Deterministic language-aware reachability (ADR-0022) over the exact accepted SCA matches: advisory symbols from a reviewed map or the OSV index, engines by ecosystem (CPG/IR, CodeQL tables, language-server call hierarchy, tree-sitter hints) over hash-bound run evidence, joined into reachable/unreachable/unknown with a witness path. Version matches alone never establish reachability and outputs remain evidence leads.",
@@ -1309,12 +1369,41 @@
         "b13-receipts.json"
       ]
     },
-    "02-codeql-sast": {
+    "02-codeql-cpp": {
       "lane": "02-evidence-pregather",
-      "contract": "codeql-sast",
-      "template": "02-codeql-sast",
+      "contract": "codeql-language",
+      "template": "02-codeql-cpp",
       "implemented": true,
-      "namespace": "02-codeql-sast",
+      "namespace": "02-codeql-cpp",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        }
+      ],
+      "planned_scope": "CodeQL C/C++ (ADR-0023): --build-mode none always, plus one traced replay (audit-codeql-native) per replayable unit of the accepted 02-native-build; without units the node records 'language not built'. Security-extended SARIF becomes normalized leads; each completed database is retained as a hash-bound pointer for 06-reachability-codeql; timeouts and failures are gaps.",
+      "required_artifacts": [
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-csharp": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-csharp",
+      "implemented": true,
+      "namespace": "02-codeql-csharp",
       "dependencies": [
         {
           "job": "00-intake",
@@ -1323,9 +1412,129 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Pinned offline CodeQL bundle (audit-codeql) creates one --build-mode none database per detected language (cpp, csharp, java, javascript/typescript, python, ruby) and runs the bundled security-extended suite; SARIF results become normalized evidence leads; tool timeouts and failures are per-language coverage gaps.",
+      "planned_scope": "CodeQL csharp (ADR-0023): pinned offline audit-codeql creates a --build-mode none database and runs the bundled csharp-security-extended suite; SARIF results become normalized leads; the database is retained as a hash-bound pointer for 06-reachability-codeql; SKIPPED when the checkout has no csharp source; timeouts and failures are gaps.",
       "required_artifacts": [
-        "codeql-sast.json",
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-go": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-go",
+      "implemented": true,
+      "namespace": "02-codeql-go",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CodeQL Go (ADR-0023): Go has no build-mode none and the pipeline has no Go build step, so a checkout with Go publishes OK_WITH_GAPS 'language not built' and no database; SKIPPED when no Go source exists. Never a failure.",
+      "required_artifacts": [
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-java": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-java",
+      "implemented": true,
+      "namespace": "02-codeql-java",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CodeQL java (ADR-0023): pinned offline audit-codeql creates a --build-mode none database and runs the bundled java-security-extended suite; SARIF results become normalized leads; the database is retained as a hash-bound pointer for 06-reachability-codeql; SKIPPED when the checkout has no java source; timeouts and failures are gaps.",
+      "required_artifacts": [
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-javascript": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-javascript",
+      "implemented": true,
+      "namespace": "02-codeql-javascript",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CodeQL javascript (ADR-0023): pinned offline audit-codeql creates a --build-mode none database and runs the bundled javascript-security-extended suite; SARIF results become normalized leads; the database is retained as a hash-bound pointer for 06-reachability-codeql; SKIPPED when the checkout has no javascript source; timeouts and failures are gaps.",
+      "required_artifacts": [
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-python": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-python",
+      "implemented": true,
+      "namespace": "02-codeql-python",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CodeQL python (ADR-0023): pinned offline audit-codeql creates a --build-mode none database and runs the bundled python-security-extended suite; SARIF results become normalized leads; the database is retained as a hash-bound pointer for 06-reachability-codeql; SKIPPED when the checkout has no python source; timeouts and failures are gaps.",
+      "required_artifacts": [
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-ruby": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-ruby",
+      "implemented": true,
+      "namespace": "02-codeql-ruby",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CodeQL ruby (ADR-0023): pinned offline audit-codeql creates a --build-mode none database and runs the bundled ruby-security-extended suite; SARIF results become normalized leads; the database is retained as a hash-bound pointer for 06-reachability-codeql; SKIPPED when the checkout has no ruby source; timeouts and failures are gaps.",
+      "required_artifacts": [
+        "codeql-language.json",
+        "b13-receipts.json"
+      ]
+    },
+    "02-codeql-rust": {
+      "lane": "02-evidence-pregather",
+      "contract": "codeql-language",
+      "template": "02-codeql-rust",
+      "implemented": true,
+      "namespace": "02-codeql-rust",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CodeQL Rust (ADR-0023): the pinned CodeQL metadata has no rust suite, so a checkout with Rust publishes OK_WITH_GAPS and no database; SKIPPED when no Rust source exists. Never a failure.",
+      "required_artifacts": [
+        "codeql-language.json",
         "b13-receipts.json"
       ]
     },

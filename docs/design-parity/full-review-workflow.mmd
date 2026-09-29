@@ -41,7 +41,14 @@ flowchart TD
   j_02_build_configure["02-build-configure<br/>implemented_and_qualified"]
   j_02_native_build["02-native-build<br/>implemented_and_qualified"]
   j_02_source_sast["02-source-sast<br/>implemented_and_qualified"]
-  j_02_codeql_sast["02-codeql-sast<br/>implemented_not_qualified"]
+  j_02_codeql_cpp["02-codeql-cpp<br/>implemented_not_qualified"]
+  j_02_codeql_csharp["02-codeql-csharp<br/>implemented_not_qualified"]
+  j_02_codeql_go["02-codeql-go<br/>implemented_not_qualified"]
+  j_02_codeql_java["02-codeql-java<br/>implemented_not_qualified"]
+  j_02_codeql_javascript["02-codeql-javascript<br/>implemented_not_qualified"]
+  j_02_codeql_python["02-codeql-python<br/>implemented_not_qualified"]
+  j_02_codeql_ruby["02-codeql-ruby<br/>implemented_not_qualified"]
+  j_02_codeql_rust["02-codeql-rust<br/>implemented_not_qualified"]
   j_02_code_property_graph["02-code-property-graph<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>implemented_not_qualified"]
   j_02_ir_capture["02-ir-capture<br/>implemented_not_qualified"]
@@ -93,7 +100,14 @@ flowchart TD
   j_02_standards_source_ingest --> j_02_evidence_assembly
   j_02_test_intelligence_ingest --> j_02_evidence_assembly
   j_02_source_sast --> j_02_evidence_assembly
-  j_02_codeql_sast --> j_02_evidence_assembly
+  j_02_codeql_cpp --> j_02_evidence_assembly
+  j_02_codeql_csharp --> j_02_evidence_assembly
+  j_02_codeql_go --> j_02_evidence_assembly
+  j_02_codeql_java --> j_02_evidence_assembly
+  j_02_codeql_javascript --> j_02_evidence_assembly
+  j_02_codeql_python --> j_02_evidence_assembly
+  j_02_codeql_ruby --> j_02_evidence_assembly
+  j_02_codeql_rust --> j_02_evidence_assembly
   j_02_code_property_graph --> j_02_evidence_assembly
   j_02_native_sast --> j_02_evidence_assembly
   j_02_ir_facts --> j_02_evidence_assembly
@@ -127,7 +141,7 @@ flowchart TD
   j_02_sca_vulnerability_match --> j_06_cve_reachability
   j_02_ir_facts --> j_06_cve_reachability
   j_02_code_property_graph --> j_06_cve_reachability
-  j_02_codeql_sast --> j_06_cve_reachability
+  j_02_codeql_cpp --> j_06_cve_reachability
   j_01_component_characterization --> j_13_fuzz_target_triage
   j_03_threat_model_dfd_stride --> j_13_fuzz_target_triage
   j_05_native_memory --> j_13_fuzz_target_triage
@@ -187,7 +201,15 @@ flowchart TD
   j_02_build_resolution --> j_02_build_configure
   j_02_build_configure --> j_02_native_build
   j_00_intake --> j_02_source_sast
-  j_00_intake --> j_02_codeql_sast
+  j_00_intake --> j_02_codeql_cpp
+  j_02_native_build --> j_02_codeql_cpp
+  j_00_intake --> j_02_codeql_csharp
+  j_00_intake --> j_02_codeql_go
+  j_00_intake --> j_02_codeql_java
+  j_00_intake --> j_02_codeql_javascript
+  j_00_intake --> j_02_codeql_python
+  j_00_intake --> j_02_codeql_ruby
+  j_00_intake --> j_02_codeql_rust
   j_00_intake --> j_02_code_property_graph
   j_02_native_build --> j_02_native_sast
   j_02_native_build --> j_02_ir_capture

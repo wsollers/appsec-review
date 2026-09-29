@@ -55,6 +55,7 @@
     "no-debug-symbols",
     "not-applicable-after-partition-review",
     "not-applicable-no-chain-seeds",
+    "not-applicable-language-absent",
     "not-applicable-no-eligible-findings",
     "not-applicable-no-matching-inputs",
     "not-applicable-no-native-binaries",

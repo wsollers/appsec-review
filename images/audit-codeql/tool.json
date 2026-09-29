@@ -3,9 +3,14 @@
   "image_id": "audit-codeql",
   "tool": "codeql",
   "version": "2.27.0",
-  "purpose": "CodeQL CLI bundle with the codeql/<lang>-queries packs, run offline by 02-codeql-sast: one container per language with --build-mode none (audit-codeql) and, when an accepted 02-native-build is wired in, one traced C/C++ replay per native unit (audit-codeql-native).",
+  "purpose": "CodeQL CLI bundle with the codeql/<lang>-queries packs, run offline by the 02-codeql-<lang> nodes (ADR-0023): one container per language node with --build-mode none (audit-codeql) and, when the accepted 02-native-build has units, one traced C/C++ replay per unit (audit-codeql-native); completed databases are kept (keep-db) for 06-reachability-codeql.",
   "feeds": [
-    "02-codeql-sast"
+    "02-codeql-cpp",
+    "02-codeql-csharp",
+    "02-codeql-java",
+    "02-codeql-javascript",
+    "02-codeql-python",
+    "02-codeql-ruby"
   ],
   "executable": "/opt/codeql/codeql",
   "version_argv": [

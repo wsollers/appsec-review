@@ -5,15 +5,16 @@ CodeQL CLI + bundled query packs, run offline, for **pre-engagement evidence gat
 
 ## Pipeline job (ADR-0017)
 
-`02-codeql-sast` (`appsec-review-process/codeql_sast.py`) runs this image through B13, one container
-per detected language, with `/opt/scripts/codeql-sast-lane.sh LANG none SUITE THREADS RAM_MB`: database
+The `02-codeql-<lang>` nodes (`appsec-review-process/codeql_sast.py`, ADR-0023) run this image through B13, one
+node per language, with `/opt/scripts/codeql-sast-lane.sh LANG none SUITE THREADS RAM_MB keep-db`: database
 create with `--build-mode none`, analyze with `codeql/<lang>-queries:codeql-suites/<lang>-security-extended.qls`
-to `/scratch/codeql.sarif`, database removed. `tool.json` is the metadata the job authenticates. The job
+to `/scratch/codeql.sarif`; `keep-db` leaves the finalized database at `/scratch/db`, which the worker retains
+for `06-reachability-codeql` (`drop-db` removes it). `tool.json` is the metadata the job authenticates. The job
 has no license gate (William, 2026-09-28); `run-codeql.sh` below is the manual path.
 
-Traced C/C++ (`codeql-cpp-traced`, brief C): with an accepted `02-native-build` wired in, one
+Traced C/C++ (`codeql-cpp-traced`, brief C): when the accepted `02-native-build` has units, one
 container per native unit runs the same lane script in `audit-codeql-native` as
-`codeql-sast-lane.sh cpp traced SUITE THREADS RAM_MB /inputs/codeql-db/<unit>/compile_commands.json
+`codeql-sast-lane.sh cpp traced SUITE THREADS RAM_MB keep-db /inputs/codeql-db/<unit>/compile_commands.json
 /inputs/codeql-queries`, replaying only the adapted compiler invocations under the tracer
 (`replay_compile_commands.py`) and then running the `queries/appsec-graph-cpp` tables for brief E.
 Details: [`docs/language-servers.md`](../../docs/language-servers.md) §6. The image also carries the

@@ -192,7 +192,9 @@ def owasp_candidates(source: dict[str, Any]) -> list[dict[str, Any]]:
 # absent or SKIPPED contributes no candidates and is recorded as lead coverage, never a failure.
 LEAD_PRODUCERS = (
     ("02-source-sast", "source-sast", "source-sast.json", "source-sast.schema.json"),
-    ("02-codeql-sast", "codeql-sast", "codeql-sast.json", "codeql-sast.schema.json"),
+    # ADR-0023: one producer row per CodeQL language node (replaces 02-codeql-sast).
+    *((f"02-codeql-{language}", "codeql-language", "codeql-language.json", "codeql-language.schema.json")
+      for language in ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")),
     ("02-native-sast", "native-sast", "native-sast.json", "native-sast.schema.json"),
     ("02-secrets-inventory", "secrets-inventory", "outputs/secrets-inventory.redacted.json",
      "secrets-inventory.schema.json"),
@@ -203,6 +205,7 @@ LEAD_PRODUCERS = (
     ("02-mobile-sast", "mobile-sast", "outputs/mobile-sast.json", "mobile-sast.schema.json"),
 )
 LEAD_CONTRACTS = frozenset(row[1] for row in LEAD_PRODUCERS)
+CODEQL_PRODUCERS = frozenset(row[0] for row in LEAD_PRODUCERS if row[1] == "codeql-language")
 LEAD_ORDER = {row[0]: index for index, row in enumerate(LEAD_PRODUCERS)}
 LEAD_ROUTE_PREFIX = "tool-lead:"
 LEAD_HYPOTHESIS_PREFIX = "Tool lead ("
@@ -263,9 +266,9 @@ def normalize_leads(job_id: str, document: dict[str, Any]) -> list[dict[str, Any
             "rule_id": _clean(item["rule_id"]), "category": item["category"], "path": item["path"],
             "start_line": item["start_line"], "end_line": item.get("end_line", item["start_line"]),
             "source_sha256": item.get("source_sha256"), **extra}
-    if job_id in ("02-source-sast", "02-codeql-sast"):
+    if job_id == "02-source-sast" or job_id in CODEQL_PRODUCERS:
         rows = [code(item, **({k: item[k] for k in ("language", "rule_name", "cwe") if k in item}
-                             if job_id == "02-codeql-sast" else {}))
+                             if job_id in CODEQL_PRODUCERS else {}))
                 for item in document.get("leads", [])]
     elif job_id == "02-native-sast":
         rows = [code(item, unit_id=item.get("unit_id"), start_column=item.get("start_column"))

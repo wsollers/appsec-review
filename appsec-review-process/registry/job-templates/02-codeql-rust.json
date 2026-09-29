@@ -1,0 +1,125 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-codeql-rust",
+  "display_name": "CodeQL Rust",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "codeql-language"
+  },
+  "inputs": {
+    "required": [
+      "fresh accepted intake",
+      "staged target checkout",
+      "B16 audit-codeql record",
+      "authenticated CodeQL tool metadata (images/audit-codeql/tool.json)"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-codeql-rust/attempts/<attempt_id>",
+    "files": [
+      "codeql-language.json",
+      "b13-receipts.json",
+      "codeql-language-summary.md",
+      "status.json",
+      "permission.json",
+      "lineage.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 3600,
+  "execution": {
+    "worker": "codeql_sast.py",
+    "arguments": [
+      "{run_id}",
+      "rust"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "checkouts with Rust sources; the pinned CodeQL metadata has no rust suite, so a present language is a gap (OK_WITH_GAPS), never a failure; SKIPPED not-applicable-language-absent when the checkout has no source of this language",
+  "permissions": [
+    "read-source",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "container_timeout_seconds": {
+      "value": 3600,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for one CodeQL rust container (database create + analyze). A TIMEOUT is a coverage gap (ADR-0013).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_memory_bytes": {
+      "value": 8589934592,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (CodeQL rust).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_cpu_millis": {
+      "value": 4000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (CodeQL rust).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_pids": {
+      "value": 1024,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (CodeQL rust).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_tmpfs_bytes": {
+      "value": 1073741824,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (CodeQL rust).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stdout_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (CodeQL rust).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stderr_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (CodeQL rust).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "codeql_threads": {
+      "value": 4,
+      "unit": "count",
+      "kind": "resource",
+      "description": "codeql --threads for database create and analyze; keep at or below container_cpu_millis / 1000.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "codeql_ram_bytes": {
+      "value": 6442450944,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "codeql --ram (JVM and evaluator budget, passed in MiB); must stay below container_memory_bytes (CodeQL otherwise sizes itself from host memory and is OOM-killed).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    }
+  }
+}

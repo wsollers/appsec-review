@@ -445,30 +445,44 @@ def source_sast():
     source_sast_standalone_work(build_execution_config())
 
 
-def run_codeql_sast(context, configured):
-    result = codeql_sast_worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
-    path = codeql_sast_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+def run_codeql_language(context, configured, language):
+    # ADR-0023: one graph node per CodeQL language (02-codeql-<lang>), parallel in the Docker pool.
+    result = codeql_sast_worker.run(configured['engagement_run_id'], context.run_id, language, configured['force'])
+    path = codeql_sast_worker.root(configured['engagement_run_id'], language) / 'attempts' / result['attempt_id']
     context.add_output_metadata({'output': MetadataValue.path(str(path / codeql_sast_worker.RESULT)),
                                  'envelope': MetadataValue.path(str(path / 'result.json')),
                                  'attempt_id': result['attempt_id']})
     return result
 
 
-@op(name='job_02_codeql_sast',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
-def codeql_sast_work(context, configured, upstream):
-    return run_codeql_sast(context, configured)
+def codeql_language_op(language):
+    @op(name='job_' + codeql_sast_worker.job_id(language).replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=DOCKER_POOL)
+    def codeql_language_work(context, configured, upstream):
+        return run_codeql_language(context, configured, language)
+    return codeql_language_work
 
 
-@op(pool=DOCKER_POOL)
-def codeql_sast_standalone_work(context, configured):
-    return run_codeql_sast(context, configured)
+def codeql_language_standalone_op(language):
+    @op(name='codeql_' + language + '_standalone_work', ins={'configured': In(dict)}, pool=DOCKER_POOL)
+    def codeql_language_standalone_work(context, configured):
+        return run_codeql_language(context, configured, language)
+    return codeql_language_standalone_work
+
+
+CODEQL_LANGUAGE_OPS = {language: codeql_language_op(language) for language in codeql_sast_worker.LANGUAGES}
+CODEQL_STANDALONE_OPS = {language: codeql_language_standalone_op(language)
+                         for language in codeql_sast_worker.LANGUAGES}
 
 
 @job(resource_defs={'workflow_settings': workflow_settings},
-     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     executor_def=multiprocess_executor.configured({'max_concurrent': 3}),
      op_retry_policy=RetryPolicy(max_retries=0))
 def codeql_sast():
-    codeql_sast_standalone_work(build_execution_config())
+    # Every 02-codeql-<lang> node in parallel (bounded by the executor and the Docker pool).
+    configured = build_execution_config()
+    for language in codeql_sast_worker.LANGUAGES:
+        CODEQL_STANDALONE_OPS[language](configured)
 
 
 def run_common_python_worker(context, configured, worker):
@@ -1647,7 +1661,7 @@ def b13_harmless_container():
 from job_graph import load_graph
 LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
-                if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast','02-codeql-sast',
+                if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
                                  '01-component-characterization','02-full-review-input-assembly','03-threat-model-dfd-stride','03-threat-model-reconciliation','04-asvs-masvs','10-synthesis-report',
                                  '02-binary-hardening',
                                  '02-ir-capture','02-ir-link','02-ir-facts',
@@ -1660,7 +1674,14 @@ LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-evidence-assembly']=evidence_assembly_lifecycle_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
-LIFECYCLE_OPS['02-codeql-sast']=codeql_sast_work
+LIFECYCLE_OPS['02-codeql-cpp']=CODEQL_LANGUAGE_OPS['cpp']
+LIFECYCLE_OPS['02-codeql-csharp']=CODEQL_LANGUAGE_OPS['csharp']
+LIFECYCLE_OPS['02-codeql-go']=CODEQL_LANGUAGE_OPS['go']
+LIFECYCLE_OPS['02-codeql-java']=CODEQL_LANGUAGE_OPS['java']
+LIFECYCLE_OPS['02-codeql-javascript']=CODEQL_LANGUAGE_OPS['javascript']
+LIFECYCLE_OPS['02-codeql-python']=CODEQL_LANGUAGE_OPS['python']
+LIFECYCLE_OPS['02-codeql-ruby']=CODEQL_LANGUAGE_OPS['ruby']
+LIFECYCLE_OPS['02-codeql-rust']=CODEQL_LANGUAGE_OPS['rust']
 LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
 LIFECYCLE_OPS['02-full-review-input-assembly']=full_review_input_assembly_work
 LIFECYCLE_OPS['03-threat-model-dfd-stride']=threat_model_dfd_stride_work
