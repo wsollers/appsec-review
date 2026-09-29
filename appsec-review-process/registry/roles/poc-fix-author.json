@@ -1,0 +1,29 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "poc-fix-author",
+  "display_name": "PoC-and-fix Author",
+  "category": "remediation",
+  "summary": "For one verified, Critical, reachable finding, write a light static PoC that shows how the defect happens and a proposed fix.",
+  "allowed_outputs": [
+    "candidate_only"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict",
+    "human_approval"
+  ],
+  "required_behavior": [
+    "cite only workspace files and line windows",
+    "keep the PoC to a minimal input, call or short test that triggers the crash, overflow or faulty control flow",
+    "explain the code path from source to sink in plain language",
+    "propose a fix as a unified diff of the cited files"
+  ],
+  "must_not": [
+    "write hostile material (shellcode, persistence, exfiltration, credentials, network callbacks, destructive actions, obfuscation)",
+    "copy orchestrator bookkeeping (ids, hashes, labels, statuses)",
+    "claim the PoC ran or the fix is verified"
+  ]
+}

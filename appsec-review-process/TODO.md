@@ -404,3 +404,21 @@ OPEN:
   fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
 - `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
 - Pre-existing `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (dependabot bumps) are not this branch's.
+
+## F-poc-fix (agent brief F, branch `poc-fix`)
+
+- [x] Lane `12b-poc-and-fix` after 12: `poc_fix_select.py` (verified + CRITICAL + REACHABLE via the
+      report's enrichment code), `poc_fix_derive.py`, `poc_fix_denylist.py`, `poc_fix_pool.py`,
+      `poc_fix_worker.py`; persona `poc-fix-author`, graph node, optional edge into 10, Dagster op,
+      catalogs. Unit tests only (fake persona replies); nothing has run live.
+- [x] Report: `poc_fix_report.py` -> `poc-fix-section.json` in the 10 attempt; HTML/TeX block under
+      each Critical REACHABLE finding. HTML and TeX render locally; the PDF compile (Docker
+      `audit-report`) is untested here: run a 10 publication in WSL.
+- [ ] First live run on appsec-multi-vuln (expect one request for the argv -> strcpy finding at
+      `case-001/main.cpp:7` if 12 scores it CRITICAL). Record PoC/fix/denylist counts and cost; tune
+      `poc_findings_max` and `poc_citation_window_lines`.
+- [ ] Denylist false positives (`connect(`, `bind(`, `remove("...")`, `token`-like names) cost a PoC,
+      never publish one; review the rejected-rule counts after the first runs.
+- [ ] Merge rule: 10's fingerprint changes (new optional input, new modules); merge when no run is
+      past 12, then reload Dagster.
+

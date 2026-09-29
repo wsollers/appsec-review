@@ -484,6 +484,15 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `stderr_limit_bytes` | 1 MiB | resource | Captured stderr. |  |
 | `stdout_limit_bytes` | 1 MiB | resource | Captured stdout. |  |
 
+### `12b-poc-and-fix`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_parallel` | 2 count | resource | poc-and-fix cells dispatched concurrently (the persona_llm pool bounds it too). |  |
+| `poc_citation_window_lines` | 20 lines | window | Lines either side of each finding location and witness call site that a PoC or fix may cite. |  |
+| `poc_findings_max` | 12 count | resource | Eligible findings (verified, CRITICAL, REACHABLE) that get a poc-and-fix cell, highest 12 score first; the rest are recorded as a gap. | Each cell is one claude -p call capped at budget_max_usd_per_call[standard]. |
+| `rendezvous_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock wait for every cell of the lane-12b pool. |  |
+
 ### `14-attack-chain-composition`
 
 | Tunable | Value | Kind | What it does | Scale |

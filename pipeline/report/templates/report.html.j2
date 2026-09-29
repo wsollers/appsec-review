@@ -238,6 +238,31 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
       <div class="block"><div class="eyebrow">Evidence</div>
         <ul class="evlist">{% for eid in f.evidence %}{% set e = evidence_by_id[eid] %}<li><a class="mono" href="#{{ eid }}">{{ eid }}</a> {{ e.producer }}: <span class="mono">{{ e.artifact }}</span></li>{% endfor %}</ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>{{ f.remediation }}</p></div>
+      {% if f.poc_fix is defined and f.poc_fix %}{% set pf = f.poc_fix %}
+      <div class="block pocfix"><div class="eyebrow">Light PoC and proposed fix · {{ pf.label }}</div>
+        <p class="muted">{{ pf.label_text }}</p>
+        {% if pf.poc.lines %}
+        <figure class="snippet">
+          <figcaption><span>PoC ({{ pf.poc.kind }}, {{ pf.poc.language }}); expected effect: {{ pf.poc.expected_effect }}</span><span>UNVALIDATED static text</span></figcaption>
+          <pre class="code">{% for ln in pf.poc.lines %}<span class="l"><span class="n">{{ loop.index }}</span>{{ ln }}</span>{% endfor %}</pre>
+        </figure>
+        {% endif %}
+        {% if pf.poc.note %}<p>{{ pf.poc.note }}</p>{% endif %}
+        {% if pf.poc.trigger_condition %}<p><b>Trigger condition.</b> {{ pf.poc.trigger_condition }}</p>{% endif %}
+        <p><b>How it happens (source to sink).</b> {{ pf.explanation }}</p>
+        <ul class="evlist">{% for c in pf.cited_lines %}<li class="mono">{{ c.display }}</li>{% endfor %}</ul>
+        {% if pf.fix.lines %}
+        <figure class="snippet">
+          <figcaption><span>Proposed fix: {{ pf.fix.files|join(', ') }}</span><span>PATCH_PROPOSED_UNVALIDATED</span></figcaption>
+          <pre class="code">{% for ln in pf.fix.lines %}<span class="l"><span class="n">{{ loop.index }}</span>{{ ln }}</span>{% endfor %}</pre>
+        </figure>
+        {% endif %}
+        {% if pf.fix.rationale %}<p>{{ pf.fix.rationale }}</p>{% endif %}
+        {% if pf.fix.note %}<p>{{ pf.fix.note }}</p>{% endif %}
+      </div>
+      {% elif f.poc_fix_note is defined %}
+      <div class="block"><div class="eyebrow">Light PoC and proposed fix</div><p>{{ f.poc_fix_note }}</p></div>
+      {% endif %}
     </article>
     {% endfor %}
   </section>

@@ -31,6 +31,8 @@ flowchart TD
   V --> K[14 attack-chain composition and refutation]
   Q --> X[10 synthesis report publication]
   K -.->|optional| X
+  Q --> P[12b light PoC and proposed fix]
+  P -.->|optional| X
   X --> A[Completeness and final-publication controls]
 ```
 
@@ -121,6 +123,34 @@ with their reason and publishes the hash-linked `attack-chain-ledger.json`. A ch
 `supported` and never a verified finding. The lane is an optional input of 10: a SKIPPED lane
 (`not-applicable-no-chain-seeds`) or a lane failure is a recorded gap, not a report failure. The
 report's "Attack chains" section is the next slice.
+
+## Light PoC and proposed fix (lane 12b)
+
+Agent brief F adds `12b-poc-and-fix` after 12. It runs only for findings that are independently
+verified (12 records `verification_status` VERIFIED), scored CRITICAL by 12, and REACHABLE by the
+ADR-0020 call-graph analyser; `poc_fix_select.py` uses the report's own enrichment code
+(`finding_enrichment`) for reachability and the Critical cap, so 12b and 10 agree on eligibility.
+Python builds one request workspace per eligible finding (at most `poc_findings_max`): finding
+locations, the reachability witness, the citable files with pinned `source_sha256` and line windows
+(`poc_citation_window_lines` around each location and witness call site) and hash-verified,
+redacted snippets. One `poc-fix-author` persona cell per finding writes a light static PoC (a
+minimal input, call or short test that triggers the crash or overflow, or shows the faulty control
+flow), a source-to-sink explanation, the cited ranges and a proposed fix as a unified diff.
+
+`poc_fix_derive.py` keeps the books (ADR-0013): ids, hashes and labels are derived; a citation
+outside the workspace windows, a fix touching another file or an oversize PoC goes back through the
+invoker repair loop. `poc_fix_denylist.py` scans the PoC, trigger, the lines the fix adds and (for
+material only) the prose: process spawn or exec, network, file writes outside a temp name,
+destructive actions, encoded blobs, pipes into interpreters and `eval`, credentials, persistence,
+code injection and obfuscation. A hit withholds the text, keeps only rule ids, lines and a hash, and
+records a gap; it is never re-asked. The pipeline never executes a PoC or applies a fix: every PoC is
+`UNVALIDATED` and every fix `PATCH_PROPOSED_UNVALIDATED`.
+
+10 reads the accepted 12b result as an optional input (`poc_fix_report.py` -> `poc-fix-section.json`)
+and renders the block under each Critical REACHABLE finding after Remediation, labelled as
+unvalidated static text that was never executed. An absent, failed or stale lane, an eligible
+finding without a record, and every withheld text are report limitations and a note under the
+finding. With no eligible finding the lane is SKIPPED `not-applicable-no-eligible-findings`.
 
 ## Reporting and remaining gates
 

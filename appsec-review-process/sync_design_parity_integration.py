@@ -22,6 +22,8 @@ WORKERS = {
                                     "appsec-review-process/attack_chain_composition.py:_validate_attempt"),
     "14-attack-chain-refutation": ("pool_coordinator", "appsec-review-process/attack_chain_refutation.py:run",
                                    "appsec-review-process/attack_chain_refutation.py:_validate_attempt"),
+    "12b-poc-and-fix": ("pool_coordinator", "appsec-review-process/poc_fix_worker.py:run",
+                        "appsec-review-process/poc_fix_worker.py:_validate_attempt"),
     "11-remediation-proposal": ("deterministic_python", "appsec-review-process/remediation_proposal.py:run",
                                  "appsec-review-process/remediation_proposal.py:_validate_attempt"),
 }

@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "12b-poc-and-fix",
+  "display_name": "Light PoC and Proposed Fix (unvalidated static text)",
+  "required_files": [
+    "poc-fix.json",
+    "poc-fix.md",
+    "poc-fix-pool-merge.json",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "records",
+    "gaps",
+    "claim_limit"
+  ],
+  "result_schema": {
+    "artifact": "poc-fix.json",
+    "schema_file": "poc-fix.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "candidate_hypothesis",
+    "allowed_assertions": [
+      "poc-and-fix-proposal",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "only findings that are verified, scored CRITICAL by 12 and REACHABLE get a request",
+    "every cited range lies in a workspace citable window; Python attaches the pinned source hash",
+    "PoC, trigger, fix additions and prose pass the lane-12b denylist; a hit withholds the text and is a gap",
+    "labelled UNVALIDATED / PATCH_PROPOSED_UNVALIDATED; nothing executed, applied or verified"
+  ]
+}
