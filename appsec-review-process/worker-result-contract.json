@@ -54,6 +54,7 @@
   "skip_reasons": [
     "no-debug-symbols",
     "not-applicable-after-partition-review",
+    "not-applicable-no-chain-seeds",
     "not-applicable-no-matching-inputs",
     "not-applicable-no-native-binaries",
     "not-applicable-no-test-plan",

@@ -1,0 +1,127 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "process": "14-attack-chain",
+  "budget_default": "standard",
+  "model": {
+    "model": "deterministic-python",
+    "effort": "none"
+  },
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "output_contract"
+  ],
+  "implemented": true,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator",
+  "job_template_id": "14-attack-chain-composition",
+  "display_name": "Attack-chain Composition",
+  "composition": {
+    "persona_id": "attack-chain-composer",
+    "role_id": "attack-chain-coordinator",
+    "domain_id": "attack-chain-lifecycle",
+    "tooling_profile_id": "claim-review-static",
+    "output_contract_id": "14-attack-chain-composition"
+  },
+  "inputs": {
+    "required": [
+      "accepted 09-independent-verification result (and its 08 upstream)",
+      "accepted integrated threat model",
+      "accepted component map"
+    ],
+    "optional": [
+      "supporting-evidence menu: CPG records and IR facts"
+    ]
+  },
+  "outputs": {
+    "directory": "outputs/14-attack-chain-composition",
+    "files": [
+      "attack-chain-composition.json",
+      "attack-chain-seeds.json",
+      "attack-chain-composition.md",
+      "chain-pool-merge.json",
+      "permission.json",
+      "lineage.json",
+      "pool-receipt.json",
+      "status.json"
+    ]
+  },
+  "applicability": "every full review after 09; SKIPPED not-applicable-no-chain-seeds when no cluster has an entry seed and a P1 or verified claim",
+  "timeout_seconds": 7200,
+  "tunables": {
+    "chain_clusters_max": {
+      "value": 24,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Composer cells per run; clusters beyond it are ranked (P1 count, verified count, boundary crossings) and the rest recorded as a gap (ADR-0016 decision 8).",
+      "scale": "Each cell is one claude -p call capped at budget_max_usd_per_call[standard]."
+    },
+    "chain_cluster_claims_max": {
+      "value": 40,
+      "unit": "count",
+      "kind": "window",
+      "description": "Claims (and as many entry facts) per cluster request; excess P3 claims are dropped first and recorded.",
+      "scale": ""
+    },
+    "chain_links_max": {
+      "value": 6,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Links per chain; a longer chain goes back to the composer for repair.",
+      "scale": ""
+    },
+    "chains_per_cluster_max": {
+      "value": 4,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Chains one composer cell may return for its cluster.",
+      "scale": ""
+    },
+    "chains_refuted_max": {
+      "value": 48,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Chains sent to refutation (ranked); the rest keep their composed state with refutation not run and a gap.",
+      "scale": ""
+    },
+    "chain_refutation_batch": {
+      "value": 6,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Chains per refuter cell.",
+      "scale": ""
+    },
+    "chains_reported_max": {
+      "value": 20,
+      "unit": "count",
+      "kind": "window",
+      "description": "Chains in the report body; the rest go to an appendix table (S4 report slice).",
+      "scale": ""
+    },
+    "max_parallel": {
+      "value": 2,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Composer or refuter cells dispatched concurrently (the persona_llm pool bounds it too).",
+      "scale": ""
+    },
+    "rendezvous_timeout_seconds": {
+      "value": 5400,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock wait for every cell of one lane-14 pool.",
+      "scale": ""
+    }
+  }
+}

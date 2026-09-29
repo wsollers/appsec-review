@@ -1,7 +1,10 @@
 # ADR-0016: Attack chains are composed from reviewed claims after verification
 
-Status: **Proposed** (branch `adr-kill-chains`, 2026-09-28; awaiting William). Builds on ADR-0015
-(branch `review-batch`), which must merge first.
+Status: **Accepted** (2026-09-29, William, recommended defaults: lane 14 parallel to 12, `supported`
+ceiling, optional input of 10, default bounds, job names as below). **Implemented** on branch
+`kill-chains`: seeding, composer and refuter pools, derive and merge rules, attack-chain ledger, job
+graph and Dagster wiring (plan slices S1-S3). **Open:** report section (plan S4), live acceptance (S5),
+later slices (S6). Builds on ADR-0015.
 
 Implementation plan: [`docs/proposals/attack-chains/implementation-plan.md`](../proposals/attack-chains/implementation-plan.md).
 

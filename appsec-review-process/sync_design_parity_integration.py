@@ -18,6 +18,10 @@ WORKERS = {
                               "appsec-review-process/claim_ledger.py:validate_ledger"),
     "07-hypothesis-discovery": ("pool_coordinator", "appsec-review-process/hypothesis_discovery.py:run",
                                 "appsec-review-process/hypothesis_discovery.py:_validate_attempt"),
+    "14-attack-chain-composition": ("pool_coordinator", "appsec-review-process/attack_chain_composition.py:run",
+                                    "appsec-review-process/attack_chain_composition.py:_validate_attempt"),
+    "14-attack-chain-refutation": ("pool_coordinator", "appsec-review-process/attack_chain_refutation.py:run",
+                                   "appsec-review-process/attack_chain_refutation.py:_validate_attempt"),
     "11-remediation-proposal": ("deterministic_python", "appsec-review-process/remediation_proposal.py:run",
                                  "appsec-review-process/remediation_proposal.py:_validate_attempt"),
 }

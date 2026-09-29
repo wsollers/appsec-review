@@ -229,6 +229,21 @@ build index/plan, discovery, standards corpus, review-stage claims).
 - [ ] Per-stage registry roles (red-team-adversary, blue-team-refuter, independent-verifier, scorer)
       instead of the generic `claim-reviewer` role.
 
+## Attack chains (ADR-0016, brief D, branch `kill-chains`)
+
+- [x] S1 seeding `attack_chain_seeds.py`; S2 composer persona + `attack_chain_derive.py`; S3 refuter
+      persona + `attack_chain_refute.py` + `attack_chain_pool.py`; S4 workers, graph nodes
+      `14-attack-chain-composition` / `14-attack-chain-refutation`, Dagster ops, optional edge into 10.
+      Unit tests only (stub invokers); nothing has run live.
+- [ ] Report section (plan slice S4 / brief S5): `attack_chains` in `synthesis-report.schema.json`,
+      report assembly, HTML/PDF templates. Until then 10 waits for lane 14 but does not render chains.
+- [ ] First live run on appsec-multi-vuln (expect argv -> strcpy at `case-001/main.cpp:6-7`), then
+      freeciv21; record chain counts by state, gaps and cost here; tune the lane-14 tunables.
+- [ ] Controller: confirm the refuter shares the composer's model family (only sonnet-5 and haiku are
+      configured) and the lane-14 Dagster ops returning instead of raising (optional input of 10).
+- [ ] Merge rule: 10's fingerprint changes (new dependency); merge when no run is past 09, then reload
+      Dagster.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).

@@ -1,7 +1,10 @@
 # Attack-chain composition: implementation plan
 
-Status: plan for [ADR-0016](../../decisions/ADR-0016-attack-chain-composition.md) (Proposed).
-Nothing here is built. Prerequisite: branch `review-batch` (ADR-0015: tool leads as ledger
+Status: plan for [ADR-0016](../../decisions/ADR-0016-attack-chain-composition.md) (Accepted).
+S1-S3 are built on branch `kill-chains` (brief D steps S1-S4); S4 (report), S5 and S6 are open. The
+core is split across `attack_chain_seeds.py`, `attack_chain_derive.py`, `attack_chain_refute.py`
+and `attack_chain_pool.py`, and the lane tunables live in the `14-attack-chain-composition` job
+template rather than `registry/tunables.json`. Prerequisite: branch `review-batch` (ADR-0015: tool leads as ledger
 candidates, `supporting_evidence_menu.py`, `claim_review_derive.py`) is merged to `main`.
 
 Working method is ADR-0013: build a slice, run it on a real target, fix what breaks. Each slice

@@ -47,6 +47,12 @@ def _clip(text: Any, limit: int) -> str:
     return chains_derive._clip(text, limit)
 
 
+def boundaries(chain: dict[str, Any], facts: dict[str, dict[str, Any]]) -> set[str]:
+    """Trust boundaries the chain's model_flow hops cross (threat-model flow facts)."""
+    return {boundary for edge in chain["edges"] for ref in edge["fact_refs"]
+            for boundary in (facts.get(ref) or {}).get("boundary_ids", [])}
+
+
 def rank(chains: Iterable[dict[str, Any]], *, facts: dict[str, dict[str, Any]] | None = None,
          severities: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """Decision 9: state, impact kind (code_execution first), highest 12 severity among verified
@@ -56,8 +62,7 @@ def rank(chains: Iterable[dict[str, Any]], *, facts: dict[str, dict[str, Any]] |
     def key(chain: dict[str, Any]) -> tuple:
         verified = [link["claim_id"] for link in chain["links"] if link["claim_id"] and link["link_state"] == "verified"]
         severity = max((SEVERITY_RANK.get(severities.get(claim_id), 0) for claim_id in verified), default=0)
-        crossed = {boundary for edge in chain["edges"] for ref in edge["fact_refs"]
-                   for boundary in (facts.get(ref) or {}).get("boundary_ids", [])}
+        crossed = boundaries(chain, facts) if facts else set(chain.get("boundaries_crossed") or [])
         return (STATE_RANK[chain["state"]], chains_derive.IMPACT_KINDS.index(chain["impact_kind"]), -severity,
                 -len(crossed), len(chain["links"]), chain["chain_id"])
     return sorted(chains, key=key)
@@ -310,7 +315,9 @@ def ledger(run_id: str, *, claim_ledger_head_sha256: str | None, verification_po
     ranked = rank(published, facts=facts, severities=severities)
     document = {"schema": LEDGER_SCHEMA_ID, "run_id": run_id, "claim_ledger_head_sha256": claim_ledger_head_sha256,
                 "verification_pointer_sha256": verification_pointer_sha256, "entries": entries, "head_hash": previous,
-                "chains": [{**chain, "rank": position + 1} for position, chain in enumerate(ranked)],
+                "chains": [{**chain, "rank": position + 1,
+                            "boundaries_crossed": sorted(boundaries(chain, facts or {}))}
+                           for position, chain in enumerate(ranked)],
                 "dropped": sorted(dropped, key=lambda row: row["chain_id"]),
                 "gaps": sorted(gaps, key=lambda row: (row["scope"], row["id"], row["reason"])),
                 "coverage": coverage, "claim_limits": dict(chains_derive.CLAIM_LIMITS),
@@ -319,7 +326,8 @@ def ledger(run_id: str, *, claim_ledger_head_sha256: str | None, verification_po
     store = store or SchemaStore()
     problems = validate_document(document, LEDGER_SCHEMA, store)
     for chain in document["chains"]:
-        problems += validate_document({key: value for key, value in chain.items() if key != "rank"},
+        problems += validate_document({key: value for key, value in chain.items()
+                                       if key not in {"rank", "boundaries_crossed"}},
                                       chains_derive.RECORD_SCHEMA, store)
     if problems:
         raise Blocked(f"attack-chain ledger fails its closed schema ({problems[0]})")

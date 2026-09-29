@@ -32,7 +32,10 @@
       ]
     },
     "verification_pointer_sha256": {
-      "type": "string",
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "entries": {
@@ -97,7 +100,8 @@
           "links",
           "edges",
           "weakest",
-          "refutation"
+          "refutation",
+          "boundaries_crossed"
         ],
         "properties": {
           "rank": {
@@ -109,6 +113,12 @@
               "plausible",
               "hypothesis"
             ]
+          },
+          "boundaries_crossed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

@@ -164,6 +164,16 @@ flowchart TD
   09_independent_verification_post -->|required| 12_scoring_prioritization_config
   15_deployment_hardening_post -->|required| 12_scoring_prioritization_config
   03_threat_model_dfd_stride_post -->|required| 12_scoring_prioritization_config
+  14_attack_chain_composition_config["14-attack-chain-composition: resolve job configuration"] --> 14_attack_chain_composition_pre["14-attack-chain-composition: pre-validation"]
+  14_attack_chain_composition_pre --> 14_attack_chain_composition["14-attack-chain-composition: work or reuse"]
+  14_attack_chain_composition --> 14_attack_chain_composition_post["14-attack-chain-composition: post-validation and publish"]
+  09_independent_verification_post -->|required| 14_attack_chain_composition_config
+  03_threat_model_dfd_stride_post -->|required| 14_attack_chain_composition_config
+  01_component_characterization_post -->|required| 14_attack_chain_composition_config
+  14_attack_chain_refutation_config["14-attack-chain-refutation: resolve job configuration"] --> 14_attack_chain_refutation_pre["14-attack-chain-refutation: pre-validation"]
+  14_attack_chain_refutation_pre --> 14_attack_chain_refutation["14-attack-chain-refutation: work or reuse"]
+  14_attack_chain_refutation --> 14_attack_chain_refutation_post["14-attack-chain-refutation: post-validation and publish"]
+  14_attack_chain_composition_post -->|required| 14_attack_chain_refutation_config
   10_synthesis_report_config["10-synthesis-report: resolve job configuration"] --> 10_synthesis_report_pre["10-synthesis-report: pre-validation"]
   10_synthesis_report_pre --> 10_synthesis_report["10-synthesis-report: work or reuse"]
   10_synthesis_report --> 10_synthesis_report_post["10-synthesis-report: post-validation and publish"]
@@ -175,6 +185,7 @@ flowchart TD
   08_blue_team_refutation_post -->|required| 10_synthesis_report_config
   09_independent_verification_post -->|required| 10_synthesis_report_config
   12_scoring_prioritization_post -->|required| 10_synthesis_report_config
+  14_attack_chain_refutation_post -->|optional| 10_synthesis_report_config
   11_remediation_proposal_post -->|optional| 10_synthesis_report_config
   02_api_collection_intelligence_ingest_config["02-api-collection-intelligence-ingest: resolve job configuration"] --> 02_api_collection_intelligence_ingest_pre["02-api-collection-intelligence-ingest: pre-validation"]
   02_api_collection_intelligence_ingest_pre --> 02_api_collection_intelligence_ingest["02-api-collection-intelligence-ingest: work or reuse"]

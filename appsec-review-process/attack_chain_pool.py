@@ -67,6 +67,7 @@ def code_hashes() -> dict[str, str]:
              "pool_rendezvous.py", "pool_specification.py", "supporting_evidence_menu.py",
              "registry/personas/attack-chain-composer.json", "registry/personas/attack-chain-refuter.json",
              "registry/roles/chain-composer.json", "registry/roles/chain-refuter.json",
+             "registry/roles/attack-chain-coordinator.json",
              "registry/domains/attack-chain-lifecycle.json", "registry/tooling-profiles/claim-review-static.json",
              "registry/output-contracts/attack-chain-candidates.json",
              f"registry/job-templates/{COMPOSER_TEMPLATE}.json", f"registry/job-templates/{REFUTER_TEMPLATE}.json",
