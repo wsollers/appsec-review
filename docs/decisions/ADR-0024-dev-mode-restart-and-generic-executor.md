@@ -4,6 +4,11 @@ Status: **Proposed** (brief I, 2026-09-29, branch `dev-executor`). The rules, th
 generic executor until proven otherwise" come from brief I. The implementer chose the exact rewind
 interpretation, the item layout, which job to port and where the mode is read; these need review.
 
+Implementation (2026-09-29, branch `dev-executor`): `dev_restart.py`, `launch_job.py --mode/--explain/
+--force <job>`, `job_executor.py`, `items/02-operations-doc-ingest/`. Unit tests only
+(`tests/test_dev_restart.py`, `tests/test_job_executor.py`). Nothing has run under a live Dagster code
+location. Open items: `appsec-review-process/TODO.md` section I.
+
 ## Context
 
 Prod fingerprints (ADR-0013) hash every job's code, contract and upstream attempt. That is right

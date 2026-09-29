@@ -423,8 +423,18 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
   shape hashes, REUSE/RERUN/REWIND, early cutoff, `--force <job>`, `launch_job.py --mode/--explain`,
   guard rails (dev receipts never evidence; `final_publication.publish` refuses dev). Operator doc
   `docs/dev-mode-restart.md`. Prod fingerprints unchanged (tests/test_dev_restart.py).
+- [x] I2 generic item executor (`job_executor.py`, `items/<job>/item.json` + `input.schema.json` +
+  `output.schema.json`): PRE resolve/validate/redact-stream/hash, PROCESS argv worker, POST validate,
+  coverage/gap record, receipt (mode, evidence_grade, resume_from, rerun_command), pass-through
+  normaliser, publication through `publish_job_output`. `02-operations-doc-ingest` ported; outputs
+  byte-identical to the legacy worker (tests/test_job_executor.py).
 - [ ] Legacy lifecycles keep their prod fingerprint in dev too (no early cutoff: inputs pin upstream
   attempt ids). The win arrives per job as jobs are ported to the item executor.
+- [ ] Container items: `job_executor.check_item` refuses `grants.container` until an item needs one
+  (route through `container_execution` then). Network grants likewise.
+- [ ] Brief K (registry move) must update the `registry/...` paths in `items/*/item.json`.
+- [ ] The legacy CLI `operations_doc_ingest.py validate` does not accept executor attempts (different
+  inputs record); consumers read `accepted.json` + `result.json` and are unaffected.
 - [ ] Not run live: needs the code location started with `APPSEC_RUN_MODE=dev` in WSL.
 
 ## Breakage log
