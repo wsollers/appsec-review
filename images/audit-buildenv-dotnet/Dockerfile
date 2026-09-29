@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-FROM mcr.microsoft.com/dotnet/sdk:9.0
+# C# build/LSP environment. Pins and install methods: docs/language-servers.md (needs audit-lsp-vendor:local).
+FROM mcr.microsoft.com/dotnet/sdk:9.0.318@sha256:01fabc4758d1d74e39eda700c8463dae6241a61481f973683692ddcb59a5eeb7
 
 ARG NODE_MAJOR=22
 ARG CSHARP_LS_VERSION=0.20.0
@@ -20,7 +21,16 @@ RUN mkdir -p /opt/dotnet-tools \
     && ln -s /opt/dotnet-tools/dotnet-symbol /usr/local/bin/dotnet-symbol \
     && ln -s /opt/dotnet-tools/dotnet-trace /usr/local/bin/dotnet-trace \
     && chmod -R a+rx /opt/dotnet-tools \
-    && npm install -g @modelcontextprotocol/server-filesystem @modelcontextprotocol/server-memory
+    && npm install -g @modelcontextprotocol/server-filesystem@2026.8.31 @modelcontextprotocol/server-memory@2026.8.31
+
+# --- tree-sitter CLI + py-tree-sitter/grammars, vendored in audit-lsp-vendor (docs/language-servers.md §3).
+RUN --mount=type=bind,from=audit-lsp-vendor:local,source=/opt/lsp-vendor,target=/mnt/lsp-vendor \
+    install -m 0755 /mnt/lsp-vendor/bin/tree-sitter /usr/local/bin/tree-sitter \
+    && python3 -m venv /opt/treesitter \
+    && /opt/treesitter/bin/pip install --no-cache-dir --no-index --find-links /mnt/lsp-vendor/wheels \
+         --require-hashes -r /mnt/lsp-vendor/requirements/treesitter.txt \
+    && /opt/treesitter/bin/python -c "import tree_sitter, tree_sitter_c, tree_sitter_python, tree_sitter_php" \
+    && tree-sitter --version | grep -F "tree-sitter 0.26.13"
 
 RUN useradd -m -u 10001 -s /bin/bash worker && mkdir -p /workspace /scratch && chown worker:worker /scratch
 USER worker

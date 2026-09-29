@@ -1,0 +1,3 @@
+interface:
+  display_name: "AppSec CodeQL"
+  short_description: "Read CodeQL leads and graph tables safely"

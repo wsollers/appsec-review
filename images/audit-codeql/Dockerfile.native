@@ -17,8 +17,16 @@ USER root
 # tarball ships clang-cl as a symlink to clang, so it mimicked clang and parsed cl-style
 # flags as GNU ones - 346/346 failed (2026-09-12). A real file fixes it.
 RUN rm /opt/llvm/bin/clang-cl && cp /opt/llvm/bin/clang-21 /opt/llvm/bin/clang-cl
-RUN apt-get update && apt-get install -y --no-install-recommends zstd openjdk-21-jre-headless \
+RUN apt-get update && apt-get install -y --no-install-recommends zstd openjdk-21-jre-headless python3-venv \
     && rm -rf /var/lib/apt/lists/*
+# --- tree-sitter CLI + py-tree-sitter/grammars, vendored in audit-lsp-vendor (docs/language-servers.md §3).
+RUN --mount=type=bind,from=audit-lsp-vendor:local,source=/opt/lsp-vendor,target=/mnt/lsp-vendor \
+    install -m 0755 /mnt/lsp-vendor/bin/tree-sitter /usr/local/bin/tree-sitter \
+    && python3 -m venv /opt/treesitter \
+    && /opt/treesitter/bin/pip install --no-cache-dir --no-index --find-links /mnt/lsp-vendor/wheels \
+         --require-hashes -r /mnt/lsp-vendor/requirements/treesitter.txt \
+    && /opt/treesitter/bin/python -c "import tree_sitter, tree_sitter_c, tree_sitter_python, tree_sitter_php" \
+    && tree-sitter --version | grep -F "tree-sitter 0.26.13"
 COPY codeql-bundle-linux64.tar.zst /opt/bundle.tar.zst
 RUN cd /opt \
     && echo "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a  bundle.tar.zst" | sha256sum -c - \
@@ -30,7 +38,7 @@ ENV CODEQL_LICENSE_BASIS=ghas \
     CODEQL_BUNDLE=codeql-bundle-v2.27.0
 # --- Repo-owned scripts, kept LAST so editing them rebuilds only this layer.
 COPY scripts/ /opt/scripts/
-RUN chmod +x /opt/scripts/run-codeql.sh /opt/scripts/replay_compile_commands.py /opt/scripts/smoke-test.sh
+RUN chmod +x /opt/scripts/*
 
 USER worker
 WORKDIR /scratch

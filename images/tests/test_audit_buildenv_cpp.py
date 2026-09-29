@@ -25,7 +25,7 @@ class DeclaredContract(unittest.TestCase):
         dockerfile = (IMAGE / "Dockerfile").read_text(encoding="utf-8")
         build = json.loads((IMAGE / "image.json").read_text(encoding="utf-8"))["builds"][0]
         self.assertIn("FROM audit-native:local", dockerfile)
-        self.assertEqual(build["requires_images"], ["audit-native:local"])
+        self.assertEqual(build["requires_images"], ["audit-native:local", "audit-lsp-vendor:local"])
 
     def test_compiler_and_autotools_contract_is_fail_closed(self):
         dockerfile = (IMAGE / "Dockerfile").read_text(encoding="utf-8")

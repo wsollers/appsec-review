@@ -16,14 +16,34 @@
 # Pins (verified 2026-09-12): codeql-bundle-v2.27.0 (github/codeql-action releases,
 # linux64, 553 MB zst; bundle == CLI + codeql/*-queries packs at matching versions).
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CODEQL_BUNDLE=codeql-bundle-v2.27.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl zstd git python3 python3-pip \
-      openjdk-21-jre-headless nodejs \
+      ca-certificates curl zstd git python3 python3-pip python3-venv \
+      openjdk-21-jre-headless nodejs libicu74 \
     && rm -rf /var/lib/apt/lists/*
+
+# .NET SDK for C# --build-mode none (CodeQL resolves references with `dotnet`; ADR-0017 consequence 2).
+# Copied from the digest-pinned Microsoft SDK image for the same Ubuntu release (noble).
+COPY --from=mcr.microsoft.com/dotnet/sdk:9.0.318-noble@sha256:0f97a4002de8050867e7e55e03a0487aea4f4a933158fe1d2cc35f570fc81a0d \
+     /usr/share/dotnet /usr/share/dotnet
+ENV DOTNET_ROOT=/usr/share/dotnet \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+RUN ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
+    && HOME=/tmp dotnet --list-sdks | grep -E '^9\.0\.318 '
+
+# --- tree-sitter CLI + py-tree-sitter/grammars, vendored in audit-lsp-vendor (docs/language-servers.md §3).
+RUN --mount=type=bind,from=audit-lsp-vendor:local,source=/opt/lsp-vendor,target=/mnt/lsp-vendor \
+    install -m 0755 /mnt/lsp-vendor/bin/tree-sitter /usr/local/bin/tree-sitter \
+    && python3 -m venv /opt/treesitter \
+    && /opt/treesitter/bin/pip install --no-cache-dir --no-index --find-links /mnt/lsp-vendor/wheels \
+         --require-hashes -r /mnt/lsp-vendor/requirements/treesitter.txt \
+    && /opt/treesitter/bin/python -c "import tree_sitter, tree_sitter_c, tree_sitter_python, tree_sitter_php" \
+    && tree-sitter --version | grep -F "tree-sitter 0.26.13"
 
 # The bundle is downloaded on the host and COPY'd in — an in-build curl of 553 MB has no
 # progress and one dropped connection fails the layer (2026-09-12). Host side:

@@ -3,7 +3,7 @@
   "image_id": "audit-codeql",
   "tool": "codeql",
   "version": "2.27.0",
-  "purpose": "CodeQL CLI bundle with the codeql/<lang>-queries packs, run offline by 02-codeql-sast (one container per language, --build-mode none).",
+  "purpose": "CodeQL CLI bundle with the codeql/<lang>-queries packs, run offline by 02-codeql-sast: one container per language with --build-mode none (audit-codeql) and, when an accepted 02-native-build is wired in, one traced C/C++ replay per native unit (audit-codeql-native).",
   "feeds": [
     "02-codeql-sast"
   ],
@@ -32,7 +32,7 @@
     "python": "codeql/python-queries:codeql-suites/python-security-extended.qls",
     "ruby": "codeql/ruby-queries:codeql-suites/ruby-security-extended.qls"
   },
-  "notes": "Not a tool-* image: images/tool_pins.py does not manage it. Authenticity: the bundle sha256 here must equal image.json prebuild and the Dockerfile sha256sum line (codeql_sast.tool_metadata checks all three); the lane script is COPYed from scripts/ and hashed into the job's inputs.",
+  "notes": "Not a tool-* image: images/tool_pins.py does not manage it. Authenticity: the bundle sha256 here must equal image.json prebuild and the Dockerfile sha256sum line (codeql_sast.tool_metadata checks all three); the lane script is COPYed from scripts/ and hashed into the job's inputs. The traced lane runs the same lane script in audit-codeql-native (Dockerfile.native pins the same bundle sha256); its replay script is COPYed from scripts/ as well and hashed into the plan, and the repo query pack queries/appsec-graph-cpp is mounted read-only at run time (never copied into the image).",
   "smoke": [
     {
       "name": "version",
@@ -42,5 +42,25 @@
         "--format=terse"
       ]
     }
-  ]
+  ],
+  "traced": {
+    "tool_id": "codeql-cpp-traced",
+    "image_id": "audit-codeql-native",
+    "dockerfile": "Dockerfile.native",
+    "languages": [
+      "cpp"
+    ],
+    "replay_script": {
+      "path": "/opt/scripts/replay_compile_commands.py",
+      "source": "scripts/replay_compile_commands.py"
+    },
+    "graph_pack": {
+      "source": "queries/appsec-graph-cpp",
+      "queries": [
+        "CallEdges.ql",
+        "EntryPoints.ql",
+        "FlowSources.ql"
+      ]
+    }
+  }
 }

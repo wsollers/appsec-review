@@ -7,8 +7,18 @@
       "dockerfile": "Dockerfile",
       "context": ".",
       "build_args": {},
-      "requires_images": [],
-      "prebuild": [],
+      "requires_images": [
+        "audit-lsp-vendor:local"
+      ],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://download.eclipse.org/jdtls/milestones/1.61.0/jdt-language-server-1.61.0-202609031315.tar.gz",
+          "dest": "jdtls.tar.gz",
+          "sha256": "338e7e73d61836651ba2453919a0d34fa763eb4e7c03342092309bffb8934c64",
+          "bytes": 51037522
+        }
+      ],
       "timeout_seconds": 3600
     }
   ]

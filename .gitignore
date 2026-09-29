@@ -28,6 +28,7 @@ __pycache__/
 Thumbs.db
 # CodeQL bundle: downloaded on the host, COPY'd into audit-codeql
 images/audit-codeql/codeql-bundle-linux64.tar.zst
+images/audit-buildenv-java/jdtls.tar.gz
 # per-target scratch outputs (databases, bitcode, logs) — never committed
 /scratch*/
 /targets*/

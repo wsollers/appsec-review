@@ -14,6 +14,14 @@ the per-target build image, and never executes a target build. The cost is fidel
 build-driven macro, include or template resolution), recorded as a coverage gap. Go has no
 build-mode none in CodeQL and stays a gap (gosec covers Go in 02-source-sast).
 
+Traced C/C++ (brief C, ADR-0017 decision 4's "second tool id"): when the caller passes an accepted
+``02-native-build`` publication, each native unit's adapted compile database (the same
+revalidation and flag screening ``02-native-sast`` uses) is replayed under CodeQL's tracer in the
+pinned ``audit-codeql-native`` image as tool ``codeql-cpp-traced``. Only compiler invocations run;
+no target build script does. The lane also runs the ``queries/appsec-graph-cpp`` call-graph and
+flow-source tables for brief E (raw CSV kept in the attempt, hashed in the receipt, not promoted).
+Without a native build the plan is unchanged (build-mode none only).
+
 ADR-0013: a language whose container times out, runs out of memory or exits non-zero is a
 coverage gap; the job publishes OK_WITH_GAPS. Integrity failures still block.
 """
@@ -53,7 +61,7 @@ SARIF = "scratch/codeql.sarif"
 CATEGORY = "codeql-security-query"
 CODE_FILES = (
     "codeql_sast.py", "container_execution.py", "permission_capabilities.py",
-    "publish_job_output.py", "validate_job_output.py",
+    "publish_job_output.py", "validate_job_output.py", "native_sast.py", "native_sast_adapters.py",
     "registry/output-contracts/codeql-sast.json", "registry/job-templates/02-codeql-sast.json",
 )
 # Suffixes per CodeQL extractor. Order is the execution order.
@@ -78,6 +86,14 @@ FIDELITY_GAPS = {
     "java": "CodeQL java ran with --build-mode none: unresolved dependencies lower recall.",
 }
 GAP_CAUSES = ("TIMEOUT", "OOM_KILLED", "CONTAINER_EXIT_NONZERO")
+TRACED_TOOL_ID = "codeql-cpp-traced"
+TRACED_IMAGE_ID = "audit-codeql-native"
+GRAPH_PACK = ROOT.parent / "queries" / "appsec-graph-cpp"
+GRAPH_QUERIES = ("CallEdges.ql", "EntryPoints.ql", "FlowSources.ql")
+DB_MOUNT, QUERY_MOUNT = "/inputs/codeql-db", "/inputs/codeql-queries"
+REPLAY = "scratch/replay.json"
+TRACED_NO_UNITS = ("CodeQL cpp traced replay not run: the accepted 02-native-build has no replayable C/C++ "
+                   "translation unit.")
 _CWE = re.compile(r"external/cwe/cwe-0*([1-9][0-9]{0,5})\Z")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
 
@@ -151,7 +167,38 @@ def tool_metadata() -> tuple[dict[str, Any], str]:
             lane["path"] != "/opt/scripts/" + PurePosixPath(lane["source"]).name or
             not script.is_file() or script.is_symlink() or "COPY scripts/ /opt/scripts/" not in dockerfile):
         raise Blocked(f"{JOB}: CodeQL lane script metadata is invalid")
-    return {**value, "lane_script_sha256": "sha256:" + file_hash(script)}, "sha256:" + file_hash(TOOL_METADATA)
+    traced = value.get("traced")
+    native = IMAGE_ROOT / "Dockerfile.native"
+    replay = IMAGE_ROOT / "scripts" / "replay_compile_commands.py"
+    try:
+        native_text = native.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise Blocked(f"{JOB}: traced CodeQL image definition is unavailable") from exc
+    native_pins = [step.get("sha256") for row in build.get("builds", []) if row.get("image_id") == TRACED_IMAGE_ID
+                   for step in row.get("prebuild", [])]
+    if (not isinstance(traced, dict) or traced.get("tool_id") != TRACED_TOOL_ID or
+            traced.get("image_id") != TRACED_IMAGE_ID or traced.get("languages") != ["cpp"] or
+            traced.get("replay_script") != {"path": "/opt/scripts/replay_compile_commands.py",
+                                            "source": "scripts/replay_compile_commands.py"} or
+            traced.get("graph_pack") != {"source": "queries/appsec-graph-cpp", "queries": list(GRAPH_QUERIES)} or
+            native_pins != [bundle["sha256"]] or
+            f'echo "{bundle["sha256"]}  bundle.tar.zst" | sha256sum -c -' not in native_text or
+            "COPY scripts/ /opt/scripts/" not in native_text or not replay.is_file() or replay.is_symlink()):
+        raise Blocked(f"{JOB}: traced CodeQL metadata is invalid or differs from the pinned native image build")
+    return ({**value, "lane_script_sha256": "sha256:" + file_hash(script),
+             "replay_script_sha256": "sha256:" + file_hash(replay)}, "sha256:" + file_hash(TOOL_METADATA))
+
+
+def graph_pack_sha256() -> str:
+    """Digest of the mounted query pack (qlpack.yml, Common.qll and the three queries)."""
+    names = ("qlpack.yml", "Common.qll", *GRAPH_QUERIES)
+    try:
+        hashes = {name: file_hash(GRAPH_PACK / name) for name in names}
+    except OSError as exc:
+        raise Blocked(f"{JOB}: CodeQL graph query pack is incomplete") from exc
+    if any((GRAPH_PACK / name).is_symlink() for name in names):
+        raise Blocked(f"{JOB}: CodeQL graph query pack contains a link")
+    return "sha256:" + digest(hashes)
 
 
 def detected_languages(paths: list[str]) -> list[str]:
@@ -177,6 +224,42 @@ def _analysis_tunables() -> dict[str, int]:
             ram < 1024 * 1024 or ram >= memory):
         raise Blocked(f"{JOB}: codeql_ram_bytes must be at least 1 MiB and below container_memory_bytes")
     return {"threads": threads, "ram_mb": ram // (1024 * 1024)}
+
+
+def plan_key(row: dict[str, Any]) -> str:
+    """Receipt/outcome key: the language for build-mode none, tool id and unit for traced rows."""
+    return row.get("plan_key", row["language"])
+
+
+def traced_plan(native_units: list[dict[str, Any]], registry: dict[str, dict[str, Any]], metadata: dict[str, Any],
+                metadata_sha256: str, analysis: dict[str, int], graph_sha256: str) -> list[dict[str, Any]]:
+    """One ``codeql-cpp-traced`` row per replayable native unit (see load_native_units)."""
+    image = registry.get(TRACED_IMAGE_ID)
+    image_digest = image.get("digest") if isinstance(image, dict) else None
+    ready = (isinstance(image_digest, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", image_digest) is not None and
+             image.get("image_id") == TRACED_IMAGE_ID)
+    base = {"language": "cpp", "tool_id": TRACED_TOOL_ID, "version": metadata["version"],
+            "image_id": TRACED_IMAGE_ID, "image_digest": image_digest if ready else None,
+            "tool_metadata_sha256": metadata_sha256, "lane_script_sha256": metadata["lane_script_sha256"],
+            "replay_script_sha256": metadata["replay_script_sha256"], "graph_pack_sha256": graph_sha256,
+            "build_mode": None, "query_suite": None, "argv": [], "status": "READY", "gap": None}
+    if not native_units:
+        return [{**base, "plan_key": TRACED_TOOL_ID, "unit_id": None, "status": "NO_UNITS", "gap": TRACED_NO_UNITS}]
+    rows = []
+    suite = metadata["query_suites"]["cpp"]
+    for unit in native_units:
+        key = unit["key"]
+        row = {**base, "plan_key": f"{TRACED_TOOL_ID}:{key}", "unit_id": unit["unit_id"],
+               "compile_database_sha256": unit["adapted_sha256"], "compile_database_entries": len(unit["adapted"])}
+        if not ready:
+            row.update(status="UNAVAILABLE", gap=f"CodeQL cpp traced unavailable: authenticated pinned image "
+                                                 f"{TRACED_IMAGE_ID} has no current B16 record.")
+        else:
+            row.update(build_mode="traced", query_suite=suite,
+                       argv=[metadata["lane_script"]["path"], "cpp", "traced", suite, str(analysis["threads"]),
+                             str(analysis["ram_mb"]), f"{DB_MOUNT}/{key}/compile_commands.json", QUERY_MOUNT])
+        rows.append(row)
+    return rows
 
 
 def build_plan(languages: list[str], registry: dict[str, dict[str, Any]], metadata: dict[str, Any],
@@ -221,7 +304,25 @@ def _permission(run_id: str, source: str, at: str) -> dict[str, Any]:
     return {"requirement": requirement, "grants": [], "decision": decision}
 
 
-def current_inputs(run_id: str) -> dict[str, Any]:
+def load_native_units(native_build_root: Path, run_id: str, fingerprint: str,
+                      target: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Revalidate the accepted 02-native-build exactly as 02-native-sast does (its adapter refuses
+    compile databases that could load or wrap compiler code) and return (binding, units)."""
+    import native_sast  # deferred: only the traced mode depends on the native-build lineage
+    try:
+        upstream = native_sast.load_native_build(native_build_root, run_id=run_id, expected_fingerprint=fingerprint)
+    except native_sast.Blocked as exc:
+        raise Blocked(f"{JOB}: accepted native build failed revalidation ({exc})") from exc
+    if upstream["target"] != target:
+        raise Blocked(f"{JOB}: accepted native build is for another checkout")
+    units = [{"unit_id": unit["unit_id"], "key": digest(unit["unit_id"])[:16],
+              "adapted_sha256": unit["compile_database"]["adapted_sha256"], "adapted": unit["adapted"]}
+             for unit in upstream["units"]]
+    return upstream["binding"], units
+
+
+def current_inputs(run_id: str, *, native_build_root: Path | None = None,
+                   native_build_fingerprint: str | None = None) -> dict[str, Any]:
     source = _source_snapshot(run_id)
     target = _target(run_id)
     metadata, metadata_sha256 = tool_metadata()
@@ -229,14 +330,25 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     paths = [path.relative_to(target).as_posix() for path in target.rglob("*")
              if path.is_file() and not path.is_symlink()]
     analysis = _analysis_tunables()
-    return {
+    languages = detected_languages(paths)
+    extra: dict[str, Any] = {}
+    plan = build_plan(languages, registry, metadata, metadata_sha256, analysis)
+    if native_build_root is not None:
+        if not isinstance(native_build_fingerprint, str):
+            raise Blocked(f"{JOB}: a native build root needs its caller-held fingerprint")
+        binding, units = load_native_units(Path(native_build_root), run_id, native_build_fingerprint, target)
+        extra = {"native_build": binding, "native_build_root": str(Path(native_build_root).resolve()),
+                 "native_units": units}
+        if "cpp" in languages:
+            plan += traced_plan(units, registry, metadata, metadata_sha256, analysis, graph_pack_sha256())
+    return {**extra,
         "job": JOB, "run_id": run_id, "source_snapshot_sha256": source, "target_path": str(target),
         "tool_metadata_sha256": metadata_sha256,
         "permission_fingerprint_sha256": pc.input_fingerprint_component(
             _permission(run_id, source, _utc_now())["decision"]),
         "boundary_sha256": ce.boundary_sha256(),
         "limits": _limits(), "analysis": analysis,
-        "plan": build_plan(detected_languages(paths), registry, metadata, metadata_sha256, analysis),
+        "plan": plan,
         "code": _code_hashes(),
     }
 
@@ -256,15 +368,22 @@ def _host(runtime: ce.ContainerRuntime) -> dict[str, Any]:
             "docker_executable": runtime.docker_executable, "container_user": runtime.container_user}
 
 
-def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[str, Any],
+             database_root: Path | None = None) -> dict[str, Any]:
     if plan.get("status") != "READY":
         raise Blocked(f"{JOB}: CodeQL {plan.get('language')} is not ready for execution")
+    mounts = [{"host_path": inputs["target_path"], "container_path": "/workspace"}]
+    if plan.get("build_mode") == "traced":
+        if database_root is None:
+            raise Blocked(f"{JOB}: traced CodeQL needs the adapted compile databases")
+        mounts += [{"host_path": str(database_root), "container_path": DB_MOUNT},
+                   {"host_path": str(GRAPH_PACK), "container_path": QUERY_MOUNT}]
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": adapter_id,
             "image": {"image_id": plan["image_id"], "digest": plan["image_digest"]},
             "argv": list(plan["argv"]),
             "environment": [{"name": "LANG", "value": "C.UTF-8"}, {"name": "LC_ALL", "value": "C.UTF-8"},
                             {"name": "NO_COLOR", "value": "1"}, {"name": "XDG_CACHE_HOME", "value": "/tmp/cache"}],
-            "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
+            "target_mounts": mounts,
             "scratch_path": "scratch", "log_path": "logs/container",
             "network": {"mode": "none", "destinations": []},
             "permission": _permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
@@ -331,7 +450,8 @@ def _cwe(rule: dict[str, Any]) -> list[str]:
     return [f"CWE-{number}" for number in sorted(found)]
 
 
-def normalize_sarif(language: str, content: bytes, target: Path) -> tuple[list[dict[str, Any]], int]:
+def normalize_sarif(language: str, content: bytes, target: Path,
+                    tool_id: str | None = None) -> tuple[list[dict[str, Any]], int]:
     """SARIF -> leads. Results that cite no regular checkout file line are dropped and counted
     (ADR-0013); a document that is not CodeQL SARIF raises."""
     try:
@@ -341,7 +461,7 @@ def normalize_sarif(language: str, content: bytes, target: Path) -> tuple[list[d
     runs = document.get("runs") if isinstance(document, dict) else None
     if not isinstance(runs, list):
         raise RuntimeError(f"{JOB}: CodeQL {language} SARIF has no runs")
-    tool_id = f"codeql-{language}"
+    tool_id = tool_id or f"codeql-{language}"
     leads: dict[str, dict[str, Any]] = {}
     dropped = 0
     hashes: dict[Path, tuple[str, int]] = {}
@@ -399,27 +519,36 @@ def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
     if not plan:
         gaps.append("No CodeQL-supported source language was detected in the checkout.")
     for row in plan:
-        language = row["language"]
+        language, key = row["language"], plan_key(row)
         if row["status"] != "READY":
             gaps.append(row["gap"])
             continue
-        outcome = outcomes.get(language)
+        outcome = outcomes.get(key)
         if outcome is None:
-            raise Blocked(f"{JOB}: CodeQL {language} has no receipt")
+            raise Blocked(f"{JOB}: CodeQL {key} has no receipt")
         if outcome["gap"] is not None:
             gaps.append(outcome["gap"])
             continue
         leads.extend(outcome["leads"])
-        tools.append({"tool_id": row["tool_id"], "tool": "codeql", "version": row["version"],
-                      "language": language, "build_mode": row["build_mode"], "query_suite": row["query_suite"],
-                      "image_id": row["image_id"], "image_digest": row["image_digest"],
-                      "tool_metadata_sha256": row["tool_metadata_sha256"],
-                      "lane_script_sha256": row["lane_script_sha256"], "records": len(outcome["leads"]),
-                      "dropped_records": outcome["dropped"]})
-        if language in FIDELITY_GAPS:
+        tool = {"tool_id": row["tool_id"], "tool": "codeql", "version": row["version"],
+                "language": language, "build_mode": row["build_mode"], "query_suite": row["query_suite"],
+                "image_id": row["image_id"], "image_digest": row["image_digest"],
+                "tool_metadata_sha256": row["tool_metadata_sha256"],
+                "lane_script_sha256": row["lane_script_sha256"], "records": len(outcome["leads"]),
+                "dropped_records": outcome["dropped"]}
+        if row["build_mode"] == "traced":
+            replay = outcome.get("replay")
+            tool.update(unit_id=row["unit_id"], replay=replay)
+            if replay is None:
+                gaps.append(f"codeql-traced-replay-stats-missing:{key}")
+            elif replay["failed"] or replay["refused"]:
+                gaps.append(f"codeql-traced-replay-incomplete:{key}:ok={replay['ok']}:failed={replay['failed']}:"
+                            f"refused={replay['refused']}:total={replay['total']}")
+        elif language in FIDELITY_GAPS:
             gaps.append(FIDELITY_GAPS[language])
+        tools.append(tool)
         if outcome["dropped"]:
-            gaps.append(f"codeql-results-outside-checkout:{language}:{outcome['dropped']}")
+            gaps.append(f"codeql-results-outside-checkout:{key}:{outcome['dropped']}")
     leads.sort(key=lambda row: (row["path"], row["start_line"], row["tool_id"], row["rule_id"], row["lead_id"]))
     return {"schema": SCHEMA, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
             "source_snapshot_sha256": inputs["source_snapshot_sha256"],
@@ -427,16 +556,50 @@ def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
             "coverage_gaps": gaps}
 
 
-def _outcome(language: str, trial: Path, terminal: Any, target: Path) -> tuple[dict[str, Any], str | None]:
-    gap = terminal_gap(language, terminal)
+def _label(row: dict[str, Any]) -> str:
+    return row["language"] if row.get("build_mode") != "traced" else f"cpp traced unit {plan_key(row).split(':')[1]}"
+
+
+def read_replay(trial: Path) -> dict[str, int] | None:
+    """The replay counts the traced lane wrote, or None when absent or malformed."""
+    path = trial.joinpath(*REPLAY.split("/"))
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > 4096:
+        return None
+    try:
+        value = json.loads(path.read_bytes())
+    except (ValueError, UnicodeDecodeError):
+        return None
+    keys = ("failed", "ok", "refused", "total")
+    if (not isinstance(value, dict) or set(value) != set(keys) or
+            any(isinstance(value[k], bool) or not isinstance(value[k], int) or value[k] < 0 for k in keys) or
+            value["ok"] + value["failed"] + value["refused"] != value["total"]):
+        return None
+    return {key: value[key] for key in keys}
+
+
+def graph_outputs(trial: Path) -> dict[str, str | None]:
+    """sha256 of each decoded graph table the traced lane produced (None when it did not)."""
+    found = {}
+    for query in GRAPH_QUERIES:
+        path = trial / "scratch" / "graph" / (query[:-3] + ".csv")
+        found[query] = "sha256:" + file_hash(path) if path.is_file() and not path.is_symlink() else None
+    return found
+
+
+def _outcome(row: dict[str, Any], trial: Path, terminal: Any, target: Path) -> tuple[dict[str, Any], str | None]:
+    label = _label(row)
+    gap = terminal_gap(label, terminal)
     if gap is not None:
         return {"gap": gap, "leads": [], "dropped": 0}, None
     raw = trial.joinpath(*SARIF.split("/"))
     if not raw.is_file() or raw.is_symlink():
-        return {"gap": f"CodeQL {language} completed without SARIF output; no CodeQL leads for {language}.",
+        return {"gap": f"CodeQL {label} completed without SARIF output; no CodeQL leads for {label}.",
                 "leads": [], "dropped": 0}, None
-    leads, dropped = normalize_sarif(language, raw.read_bytes(), target)
-    return {"gap": None, "leads": leads, "dropped": dropped}, "sha256:" + file_hash(raw)
+    leads, dropped = normalize_sarif(row["language"], raw.read_bytes(), target, tool_id=row["tool_id"])
+    outcome = {"gap": None, "leads": leads, "dropped": dropped}
+    if row.get("build_mode") == "traced":
+        outcome["replay"] = read_replay(trial)
+    return outcome, "sha256:" + file_hash(raw)
 
 
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
@@ -447,27 +610,31 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         raise Blocked(f"{JOB}: result schema validation failed")
     receipt = read_json(attempt / RECEIPTS)
     records = receipt.get("tools") if isinstance(receipt, dict) else None
-    ready = {row["language"]: row for row in inputs["plan"] if row["status"] == "READY"}
-    if not isinstance(records, list) or sorted(row.get("language") for row in records) != sorted(ready):
+    ready = {plan_key(row): row for row in inputs["plan"] if row["status"] == "READY"}
+    if (not isinstance(records, list) or
+            sorted(row.get("plan_key", row.get("language")) for row in records) != sorted(ready)):
         raise Blocked(f"{JOB}: B13 receipt set does not match the READY plan")
     runtime = _runtime(inputs["source_snapshot_sha256"])
     outcomes = {}
     for record in records:
-        language = record["language"]
+        key = record.get("plan_key", record["language"])
+        row = ready[key]
         trial = attempt.joinpath(*record["trial_path"].split("/"))
         request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
-        if request.get("argv") != ready[language]["argv"] or request.get("limits") != inputs["limits"]:
-            raise Blocked(f"{JOB}: CodeQL {language} request differs from the pinned plan")
+        if request.get("argv") != row["argv"] or request.get("limits") != inputs["limits"]:
+            raise Blocked(f"{JOB}: CodeQL {key} request differs from the pinned plan")
         try:
             terminal = ce.load_verified_result(trial, run_id=run_id, job_id=JOB,
                 attempt_id=record["adapter_attempt_id"], request=request, images_dir=runtime.images_dir,
                 expected_result_sha256=record["expected_result_sha256"], **_host(runtime))
         except ce.ContainerRequestError as exc:
-            raise Blocked(f"{JOB}: B13 evidence failed re-verification for codeql-{language}") from exc
-        outcome, raw_sha = _outcome(language, trial, terminal, Path(inputs["target_path"]))
+            raise Blocked(f"{JOB}: B13 evidence failed re-verification for {key}") from exc
+        outcome, raw_sha = _outcome(row, trial, terminal, Path(inputs["target_path"]))
         if raw_sha != record["raw_result_sha256"]:
-            raise Blocked(f"{JOB}: CodeQL {language} SARIF differs from its receipt")
-        outcomes[language] = outcome
+            raise Blocked(f"{JOB}: CodeQL {key} SARIF differs from its receipt")
+        if row["build_mode"] == "traced" and record.get("graph_outputs") != graph_outputs(trial):
+            raise Blocked(f"{JOB}: CodeQL {key} graph tables differ from their receipt")
+        outcomes[key] = outcome
     if result != assemble(run_id=run_id, attempt_id=attempt.name, inputs=inputs, outcomes=outcomes):
         raise Blocked(f"{JOB}: normalized result no longer matches immutable CodeQL evidence")
     permission, lineage = _producer_receipts(inputs)
@@ -475,8 +642,12 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         raise Blocked(f"{JOB}: canonical producer receipts changed")
 
 
-def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
+def run(run_id: str, dagster_id: str, force: bool = False, *, native_build_root: Path | None = None,
+        native_build_fingerprint: str | None = None) -> dict[str, Any]:
+    """``native_build_root``/``native_build_fingerprint`` (the accepted 02-native-build) enable the
+    traced C/C++ rows; without them the job is build-mode none only."""
     base = root(run_id)
+    native = {"native_build_root": native_build_root, "native_build_fingerprint": native_build_fingerprint}
     resume = f"python -B appsec-review-process/launch_job.py --run-id {run_id} --job {DAGSTER_JOB} --wait"
 
     def execute(allocation: dict[str, Any], inputs: dict[str, Any], fingerprint: str) -> dict[str, Any]:
@@ -486,28 +657,40 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         runtime = _runtime(inputs["source_snapshot_sha256"])
         target = Path(inputs["target_path"])
         receipts, outcomes = [], {}
+        database_root = None
+        if any(row["status"] == "READY" and row["build_mode"] == "traced" for row in inputs["plan"]):
+            database_root = attempt / "adapted-inputs"
+            for unit in inputs["native_units"]:
+                folder = database_root / unit["key"]
+                folder.mkdir(parents=True)
+                atomic_json(folder / "compile_commands.json", unit["adapted"])
         for plan in inputs["plan"]:
             if plan["status"] != "READY":
                 continue
-            adapter_id = plan["tool_id"] + "-" + allocation["attempt_id"][:12]
-            trial = attempt / "tools" / plan["tool_id"]
+            key = plan_key(plan)
+            name = plan["tool_id"] if plan["build_mode"] != "traced" else f"{TRACED_TOOL_ID}-{key.split(':')[1]}"
+            adapter_id = name[:40] + "-" + allocation["attempt_id"][:12]
+            trial = attempt / "tools" / name
             trial.mkdir(parents=True)
-            request = _request(run_id, adapter_id, inputs, plan)
+            request = _request(run_id, adapter_id, inputs, plan, database_root)
             terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
                                         attempt_root=trial, request=request)
             expected = terminal["result_sha256"]
             verified = ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
                 request=request, images_dir=runtime.images_dir, expected_result_sha256=expected, **_host(runtime))
-            outcome, raw_sha = _outcome(plan["language"], trial, verified, target)
-            outcomes[plan["language"]] = outcome
+            outcome, raw_sha = _outcome(plan, trial, verified, target)
+            outcomes[key] = outcome
             # A killed or failed lane leaves its database behind; it is not evidence (the verified
             # B13 logs and terminal are), and it can be gigabytes, so it is not published.
             leftover = trial / "scratch" / "db"
             if leftover.is_dir() and not leftover.is_symlink():
                 shutil.rmtree(leftover)
-            receipts.append({"tool_id": plan["tool_id"], "language": plan["language"],
-                             "adapter_attempt_id": adapter_id, "trial_path": trial.relative_to(attempt).as_posix(),
-                             "expected_result_sha256": expected, "raw_path": SARIF, "raw_result_sha256": raw_sha})
+            receipt = {"tool_id": plan["tool_id"], "language": plan["language"],
+                       "adapter_attempt_id": adapter_id, "trial_path": trial.relative_to(attempt).as_posix(),
+                       "expected_result_sha256": expected, "raw_path": SARIF, "raw_result_sha256": raw_sha}
+            if plan["build_mode"] == "traced":
+                receipt.update(plan_key=key, unit_id=plan["unit_id"], graph_outputs=graph_outputs(trial))
+            receipts.append(receipt)
         result = assemble(run_id=run_id, attempt_id=allocation["attempt_id"], inputs=inputs, outcomes=outcomes)
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, {"tools": receipts})
@@ -535,7 +718,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
 
     return coordinate_worker_lifecycle(
         base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id, worker_kind="pinned_container",
-        output_contract=CONTRACT, resume_command=resume, derive_inputs=lambda: current_inputs(run_id),
+        output_contract=CONTRACT, resume_command=resume, derive_inputs=lambda: current_inputs(run_id, **native),
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes()},
@@ -544,10 +727,12 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         failed_summary="CodeQL SAST did not publish; no older success may be used.")
 
 
-def validate(run_id: str, pointer: dict[str, Any] | None = None) -> Path:
+def validate(run_id: str, pointer: dict[str, Any] | None = None, *, native_build_root: Path | None = None,
+             native_build_fingerprint: str | None = None) -> Path:
     base = root(run_id)
     pointer = pointer or read_json(base / "accepted.json")
-    inputs = current_inputs(run_id)
+    inputs = current_inputs(run_id, native_build_root=native_build_root,
+                            native_build_fingerprint=native_build_fingerprint)
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
                                     expected_run_id=run_id, expected_job_id=JOB)
     _validate_attempt(run_id, attempt, inputs)

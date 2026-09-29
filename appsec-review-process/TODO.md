@@ -389,3 +389,18 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | Idle watchdog in `review_cli._dispatch_streaming` (warn default, kill off by default) | DONE |
 | Workers other than `review_cli` / `claim_reviewer_pool` do not yet log their own progress lines; only step start/finish + those two | OPEN |
 | Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | OPEN |
+
+## C: language servers, tree-sitter, CodeQL traced (branch `lang-servers`)
+
+Done on the branch, not yet built (details and WSL commands: `docs/language-servers.md` §7):
+pinned servers on every `audit-buildenv-*` image, vendored tree-sitter (`audit-lsp-vendor`),
+`lsp_driver.py`, `treesitter_ast.py` (+ schema), `codeql-cpp-traced` in `codeql_sast.py`,
+`queries/appsec-graph-cpp`, .NET SDK in `audit-codeql`, `scripts/smoke_lang_servers.sh`, skills.
+OPEN:
+- Build `audit-lsp-vendor`, then the 9 buildenv images and both CodeQL images; run
+  `images/test/run-lsp-smoke.sh`; regenerate B16 records (now include `audit-codeql`,
+  `audit-codeql-native`). Fix whatever the first build breaks (QL compile, offline servers).
+- Wire `codeql-cpp-traced`: `run_codeql_sast` must pass the accepted `02-native-build` root and
+  fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
+- `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
+- Pre-existing `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (dependabot bumps) are not this branch's.

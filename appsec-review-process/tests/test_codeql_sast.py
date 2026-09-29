@@ -141,6 +141,96 @@ class CodeqlSastUnitTests(unittest.TestCase):
             worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes={})
 
 
+UNITS = [{"unit_id": "unit-a", "key": "0123456789abcdef", "adapted_sha256": "sha256:" + "c" * 64,
+          "adapted": [{"file": "/workspace/vuln.c", "directory": "/workspace",
+                       "arguments": ["/opt/llvm/bin/clang", "-c", "/workspace/vuln.c"]}]}]
+NATIVE = {worker.TRACED_IMAGE_ID: {"image_id": worker.TRACED_IMAGE_ID, "digest": "sha256:" + "d" * 64}}
+
+
+def _traced(units=UNITS, registry=NATIVE):
+    metadata, sha = worker.tool_metadata()
+    return worker.traced_plan(units, registry, metadata, sha, {"threads": 2, "ram_mb": 2048},
+                              worker.graph_pack_sha256())
+
+
+class CodeqlTracedUnitTests(unittest.TestCase):
+    def test_metadata_binds_the_native_image_replay_script_and_graph_pack(self):
+        metadata, _ = worker.tool_metadata()
+        self.assertEqual(metadata["traced"]["image_id"], "audit-codeql-native")
+        self.assertRegex(metadata["replay_script_sha256"], r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(worker.graph_pack_sha256(), r"^sha256:[0-9a-f]{64}$")
+        with tempfile.TemporaryDirectory() as folder:
+            copy = Path(folder, "audit-codeql"); shutil.copytree(worker.IMAGE_ROOT, copy)
+            native = copy / "Dockerfile.native"
+            native.write_text(native.read_text().replace("5e0f04bc", "00000000"))
+            with mock.patch.object(worker, "IMAGE_ROOT", copy), mock.patch.object(worker, "TOOL_METADATA", copy / "tool.json"):
+                with self.assertRaisesRegex(worker.Blocked, "pinned native image build"):
+                    worker.tool_metadata()
+
+    def test_traced_plan_rows(self):
+        row = _traced()[0]
+        self.assertEqual((row["status"], row["build_mode"], row["plan_key"]),
+                         ("READY", "traced", "codeql-cpp-traced:0123456789abcdef"))
+        self.assertEqual(row["argv"], ["/opt/scripts/codeql-sast-lane.sh", "cpp", "traced",
+            "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls", "2", "2048",
+            "/inputs/codeql-db/0123456789abcdef/compile_commands.json", "/inputs/codeql-queries"])
+        self.assertEqual(row["compile_database_entries"], 1)
+        self.assertEqual(_traced(units=[])[0]["status"], "NO_UNITS")
+        self.assertEqual(_traced(units=[])[0]["gap"], worker.TRACED_NO_UNITS)
+        missing = _traced(registry={})[0]
+        self.assertEqual(missing["status"], "UNAVAILABLE")
+        self.assertIn("audit-codeql-native has no current B16 record", missing["gap"])
+
+    def test_traced_request_mounts_the_databases_and_the_query_pack_read_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            inputs = {"target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64,
+                      "limits": {"timeout_seconds": 60, "memory_bytes": 4 << 30, "cpu_millis": 2000, "pids": 256,
+                                 "tmpfs_bytes": 1 << 28, "stdout_limit_bytes": 1 << 20, "stderr_limit_bytes": 1 << 20}}
+            with self.assertRaisesRegex(worker.Blocked, "adapted compile databases"):
+                worker._request("run", "codeql-cpp-traced-a", inputs, _traced()[0])
+            request = worker._request("run", "codeql-cpp-traced-a", inputs, _traced()[0], Path(folder) / "db")
+        self.assertEqual([m["container_path"] for m in request["target_mounts"]],
+                         ["/workspace", "/inputs/codeql-db", "/inputs/codeql-queries"])
+        self.assertEqual(request["target_mounts"][2]["host_path"], str(worker.GRAPH_PACK))
+        self.assertEqual(request["image"]["image_id"], "audit-codeql-native")
+        self.assertEqual(validate_document(request, "pinned-container-request.schema.json"), [])
+        self.assertEqual(ce.request_errors(request, run_id="run", job_id=worker.JOB, attempt_id="codeql-cpp-traced-a"), [])
+
+    def test_replay_stats_are_validated(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trial = Path(folder); (trial / "scratch").mkdir()
+            self.assertIsNone(worker.read_replay(trial))
+            for value, expected in (({"total": 3, "ok": 2, "failed": 1, "refused": 0}, True),
+                                    ({"total": 3, "ok": 2, "failed": 0, "refused": 0}, False),
+                                    ({"total": 1, "ok": True, "failed": 0, "refused": 0}, False),
+                                    ({"total": 1, "ok": 1, "failed": 0, "refused": 0, "x": 1}, False)):
+                (trial / "scratch" / "replay.json").write_text(json.dumps(value))
+                self.assertEqual(worker.read_replay(trial) is not None, expected, value)
+
+    def test_assemble_reports_traced_tools_and_replay_gaps(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder).resolve()
+            shutil.copy(FIXTURE / "source-sast-c" / "vuln.c", target / "vuln.c")
+            leads, dropped = worker.normalize_sarif("cpp", SARIF.read_bytes(), target, tool_id="codeql-cpp-traced")
+        self.assertTrue(all(row["tool_id"] == "codeql-cpp-traced" for row in leads))
+        plan = _plan() + _traced()
+        inputs = {"source_snapshot_sha256": "sha256:" + "b" * 64, "plan": plan}
+        replay = {"total": 4, "ok": 3, "failed": 1, "refused": 0}
+        outcomes = {"cpp": {"gap": None, "leads": [], "dropped": 0},
+                    "codeql-cpp-traced:0123456789abcdef": {"gap": None, "leads": leads, "dropped": dropped,
+                                                           "replay": replay}}
+        result = worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes=outcomes)
+        self.assertEqual(validate_document(result, "codeql-sast.schema.json"), [])
+        traced = [row for row in result["tools"] if row["build_mode"] == "traced"][0]
+        self.assertEqual((traced["unit_id"], traced["replay"], traced["image_id"]),
+                         ("unit-a", replay, "audit-codeql-native"))
+        self.assertIn("codeql-traced-replay-incomplete:codeql-cpp-traced:0123456789abcdef:ok=3:failed=1:refused=0:total=4",
+                      result["coverage_gaps"])
+        self.assertEqual(result["coverage_gaps"].count(worker.FIDELITY_GAPS["cpp"]), 1)
+        with self.assertRaisesRegex(worker.Blocked, "codeql-cpp-traced:0123456789abcdef has no receipt"):
+            worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes={"cpp": outcomes["cpp"]})
+
+
 class CodeqlSastScriptedPublishTests(unittest.TestCase):
     """run() end to end with scripted docker: cpp returns the recorded SARIF, python times out."""
 
@@ -209,6 +299,70 @@ class CodeqlSastScriptedPublishTests(unittest.TestCase):
         sarif.write_bytes(sarif.read_bytes().replace(b"cpp/double-free", b"cpp/double-freX"))
         with self.assertRaises(worker.Blocked):
             worker.validate("run-codeql")
+
+
+class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
+    """run() with an accepted native build wired in: build-mode none cpp plus one traced unit."""
+
+    def setUp(self):
+        super().setUp()
+        record = {**json.loads((self.images / "audit-codeql.json").read_text()), "image_id": worker.TRACED_IMAGE_ID,
+                  "repository": "docker.io/library/audit-codeql-native"}
+        (self.images / "audit-codeql-native.json").write_text(json.dumps(record))
+        self.native_root = Path(self.temporary.name).resolve() / "native-build"
+        self.native_root.mkdir()
+        binding = {"job_id": "02-native-build", "attempt_id": "a1", "fingerprint": "sha256:" + "e" * 64}
+        self.loader = mock.patch.object(worker, "load_native_units", return_value=(binding, UNITS))
+        self.loader.start()
+        (Path(self.temporary.name).resolve() / "target" / "tool.py").unlink()
+
+    def tearDown(self):
+        self.loader.stop()
+        super().tearDown()
+
+    def wired(self):
+        return {"native_build_root": self.native_root, "native_build_fingerprint": "sha256:" + "e" * 64}
+
+    def test_publishes_ok_with_gaps_and_revalidates(self):
+        original_outcome = worker._outcome
+
+        def outcome(row, trial, terminal, target):
+            # Stand in for the traced lane's replay counts and one decoded graph table.
+            if row.get("build_mode") == "traced":
+                scratch = trial / "scratch"
+                scratch.mkdir(exist_ok=True)
+                if not (scratch / "replay.json").exists():
+                    (scratch / "replay.json").write_text(json.dumps({"total": 1, "ok": 1, "failed": 0, "refused": 0}))
+                    (scratch / "graph").mkdir(exist_ok=True)
+                    (scratch / "graph" / "CallEdges.csv").write_text('"caller_name"\n"main"\n')
+            return original_outcome(row, trial, terminal, target)
+
+        with mock.patch.object(worker, "_outcome", side_effect=outcome):
+            envelope = worker.run("run-codeql", "dagster-1", **self.wired())
+        self.assertEqual(envelope["status"], "OK_WITH_GAPS")
+        attempt = worker.root("run-codeql") / "attempts" / envelope["attempt_id"]
+        result = json.loads((attempt / worker.RESULT).read_text())
+        self.assertEqual([row["tool_id"] for row in result["tools"]], ["codeql-cpp", "codeql-cpp-traced"])
+        traced = result["tools"][1]
+        self.assertEqual((traced["unit_id"], traced["replay"]), ("unit-a", {"total": 1, "ok": 1, "failed": 0, "refused": 0}))
+        self.assertEqual({row["tool_id"] for row in result["leads"]}, {"codeql-cpp", "codeql-cpp-traced"})
+        adapted = attempt / "adapted-inputs" / "0123456789abcdef" / "compile_commands.json"
+        self.assertEqual(json.loads(adapted.read_text()), UNITS[0]["adapted"])
+        receipts = {row.get("plan_key", row["language"]): row for row in
+                    json.loads((attempt / worker.RECEIPTS).read_text())["tools"]}
+        graph = receipts["codeql-cpp-traced:0123456789abcdef"]["graph_outputs"]
+        self.assertIsNotNone(graph["CallEdges.ql"])
+        self.assertIsNone(graph["EntryPoints.ql"])
+        request = json.loads((attempt / "tools" / "codeql-cpp-traced-0123456789abcdef" / "logs" / "container" /
+                              ce.REQUEST_FILE).read_text())
+        self.assertEqual(request["image"]["image_id"], "audit-codeql-native")
+        self.assertEqual(worker.validate("run-codeql", **self.wired()), attempt)
+        csv = attempt / "tools" / "codeql-cpp-traced-0123456789abcdef" / "scratch" / "graph" / "CallEdges.csv"
+        csv.write_text('"caller_name"\n"other"\n')
+        with self.assertRaises(worker.Blocked):
+            worker.validate("run-codeql", **self.wired())
+        with self.assertRaisesRegex(worker.Blocked, "graph tables differ"):
+            worker._validate_attempt("run-codeql", attempt, worker.current_inputs("run-codeql", **self.wired()))
 
 
 if __name__ == "__main__":

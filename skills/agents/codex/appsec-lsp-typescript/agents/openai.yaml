@@ -1,0 +1,3 @@
+interface:
+  display_name: "AppSec typescript-language-server"
+  short_description: "Navigate JavaScript and TypeScript code with typescript-language-server via lsp_driver.py"

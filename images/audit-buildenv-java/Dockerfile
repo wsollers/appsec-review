@@ -1,8 +1,10 @@
 # syntax=docker/dockerfile:1
-FROM ubuntu:24.04
+# Java build/LSP environment. Pins and install methods: docs/language-servers.md (needs audit-lsp-vendor:local).
+FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG NODE_MAJOR=22
+ARG JDTLS_VERSION=1.61.0-202609031315
 ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,12 +24,27 @@ RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gp
 
 ENV JAVA_HOME=/usr/lib/jvm/temurin-25-jdk-amd64
 
-RUN mkdir -p /opt/jdtls \
-    && cd /tmp \
-    && curl -fsSL -o jdtls.tgz "https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz" \
-    && tar -xzf jdtls.tgz -C /opt/jdtls \
-    && rm jdtls.tgz \
-    && npm install -g @modelcontextprotocol/server-filesystem @modelcontextprotocol/server-memory
+# Eclipse JDT LS milestone, vendored by image.json's prebuild download (host side, sha256-checked
+# there and again here). Host fetch if building by hand:
+#   curl -L -o images/audit-buildenv-java/jdtls.tar.gz \
+#     https://download.eclipse.org/jdtls/milestones/1.61.0/jdt-language-server-1.61.0-202609031315.tar.gz
+COPY jdtls.tar.gz /tmp/jdtls.tar.gz
+RUN echo "338e7e73d61836651ba2453919a0d34fa763eb4e7c03342092309bffb8934c64  /tmp/jdtls.tar.gz" | sha256sum -c - \
+    && mkdir -p /opt/jdtls \
+    && tar -xzf /tmp/jdtls.tar.gz -C /opt/jdtls \
+    && rm /tmp/jdtls.tar.gz \
+    && chmod -R a+rX /opt/jdtls \
+    && test -x /opt/jdtls/bin/jdtls \
+    && npm install -g @modelcontextprotocol/server-filesystem@2026.8.31 @modelcontextprotocol/server-memory@2026.8.31
+
+# --- tree-sitter CLI + py-tree-sitter/grammars, vendored in audit-lsp-vendor (docs/language-servers.md §3).
+RUN --mount=type=bind,from=audit-lsp-vendor:local,source=/opt/lsp-vendor,target=/mnt/lsp-vendor \
+    install -m 0755 /mnt/lsp-vendor/bin/tree-sitter /usr/local/bin/tree-sitter \
+    && python3 -m venv /opt/treesitter \
+    && /opt/treesitter/bin/pip install --no-cache-dir --no-index --find-links /mnt/lsp-vendor/wheels \
+         --require-hashes -r /mnt/lsp-vendor/requirements/treesitter.txt \
+    && /opt/treesitter/bin/python -c "import tree_sitter, tree_sitter_c, tree_sitter_python, tree_sitter_php" \
+    && tree-sitter --version | grep -F "tree-sitter 0.26.13"
 
 RUN useradd -m -u 10001 -s /bin/bash worker && mkdir -p /workspace /scratch && chown worker:worker /scratch
 USER worker

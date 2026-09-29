@@ -30,11 +30,15 @@ images/audit-buildenv-common/run.sh audit-buildenv-python:local images/test/pyth
 images/audit-buildenv-common/run.sh audit-buildenv-rust:local images/test/rust scratch/buildenv-smoke/rust -- bash -lc 'cd /workspace && cargo test --target-dir /scratch/target && cargo run --target-dir /scratch/target'
 ```
 
-Run LSP initialization smoke tests from the repo root:
+Run the language-server, tree-sitter and CodeQL smoke (brief C; fixtures in `lsp/`, one per
+language with a `helper` defined and called at known lines) from the repo root:
 
 ```bash
-images/test/run-lsp-smoke.sh
+images/test/run-lsp-smoke.sh                       # every compiler image
+scripts/smoke_lang_servers.sh --docker audit-buildenv-go   # one image
 ```
+
+Each check prints `PASS`, `FAIL` or `INFO`; see `docs/language-servers.md` §8.
 
 Run the binary-analysis smoke test from the repo root:
 
