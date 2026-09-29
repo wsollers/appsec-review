@@ -41,7 +41,7 @@ import os
 import sys
 from pathlib import Path
 
-AMBIENT = ['orchestrator/dagster/.host/**', 'data/feeds/nvd/**']
+AMBIENT = ['orchestrator/dagster/.host/**', 'data/feeds/nvd/**', 'data/feeds/osv/**']
 SKIP_DIRS = {'.git', '__pycache__', 'node_modules', '.pytest_cache'}
 
 

@@ -239,7 +239,7 @@ build index/plan, discovery, standards corpus, review-stage claims).
       OSV-Scanner offline against an SBOM with npm, Go and PyPI components; see `scripts/smoke_osv_feed.sh`.
 - [ ] Verify the licence-by-prefix table in `osv_feed.py` against OSV's current documentation.
 - [ ] Wave 3 reachability: only Go advisories carry affected symbols today (`docs/osv-index-measurement.md`).
-- [ ] `APPSEC_OSV_ROOT` is not in `scripts/sat_contract.py` AMBIENT (`data/feeds/nvd/**` is); add `data/feeds/osv/**` there.
+- [x] `APPSEC_OSV_ROOT` is not in `scripts/sat_contract.py` AMBIENT (`data/feeds/nvd/**` is); done 2026-09-29.
 - [ ] Pre-existing, not touched: 4 failures and 1 error in `tests.test_resource_pools_dagster` on baseline
       (`rp.PERSONA` missing, pinned Dagster version); the `osv_sync_work` pool assertion added there cannot run past it.
 
@@ -283,7 +283,7 @@ operator guide (tailing, `APPSEC_*` settings).
 | `pipeline_log` JSON lines, one file per run, banner at intake/resume, context from Dagster ops, `orchestrator/tail-run-log.sh` | DONE (`docs/run-log.md`) |
 | Idle watchdog in `review_cli._dispatch_streaming` (warn default, kill off by default) | DONE |
 | Workers other than `review_cli` / `claim_reviewer_pool` do not yet log their own progress lines; only step start/finish + those two | OPEN |
-| Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | OPEN (nothing sets it yet) |
+| Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | Not needed: `proc` defaults to the process name (argv[0] basename), so the daemon and webserver are named by what they run; setting it globally in `code-location.sh` would rename every step process. Set `APPSEC_LOG_PROC` only for a process whose default name is unhelpful. |
 
 ## C: language servers, tree-sitter, CodeQL traced (branch `lang-servers`, merged `955d797`)
 
