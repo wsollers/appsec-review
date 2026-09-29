@@ -38,14 +38,25 @@ STRENGTH = {"cpg": "complete", "codeql": "graph", "lsp": "hierarchy", "treesitte
 MAX_HINTS = 32
 MAX_LSP_NODES = 20_000
 
-# Name-based entry points per analysis language (ADR-0022 decision 7). Framework handlers and
-# routes come from the CodeQL EntryPoints queries; a run can add names through the hash-bound
-# inputs/reachability-entry-points.json.
-ENTRY_POINTS: dict[str, tuple[str, ...]] = {
-    "cpp": ("main", "wmain", "WinMain", "wWinMain", "DllMain", "LLVMFuzzerTestOneInput"),
-    "go": ("main", "init"), "java": ("main",), "csharp": ("Main",), "python": ("main", "__main__"),
-    "javascript": ("main",), "rust": ("main",), "php": (), "ruby": (),
+# Entry-point sources per analysis language (ADR-0022 decision 7; docs/dependency-reachability.md §3).
+# "names": roots matched by function name in the CPG, CodeQL tables and LSP call hierarchy --
+# program entries plus methods only a framework calls (servlet do*/service, http.Handler.ServeHTTP).
+# "codeql": the reasons each pack's EntryPoint class adds (handlers, routes, remote-input readers).
+# Every language also takes the hash-bound run file inputs/reachability-entry-points.json.
+ENTRY_POINT_SOURCES: dict[str, dict[str, tuple[str, ...]]] = {
+    "cpp": {"names": ("main", "wmain", "WinMain", "wWinMain", "DllMain", "LLVMFuzzerTestOneInput"),
+            "codeql": ("main", "no-internal-caller", "address-taken")},
+    "go": {"names": ("main", "init", "ServeHTTP"), "codeql": ("main", "init", "remote-flow-source")},
+    "java": {"names": ("main", "doGet", "doPost", "doPut", "doDelete", "service"),
+             "codeql": ("main", "servlet", "request-mapping", "remote-flow-source")},
+    "csharp": {"names": ("Main",), "codeql": ("main", "controller-action", "remote-flow-source")},
+    "javascript": {"names": ("main",), "codeql": ("module-top-level", "route-handler", "remote-flow-source")},
+    "python": {"names": ("main", "__main__"), "codeql": ("module-body", "main", "remote-flow-source")},
+    "rust": {"names": ("main",), "codeql": ()},
+    "php": {"names": (), "codeql": ()},
+    "ruby": {"names": (), "codeql": ()},
 }
+ENTRY_POINTS: dict[str, tuple[str, ...]] = {lang: row["names"] for lang, row in ENTRY_POINT_SOURCES.items()}
 TREESITTER_LANGUAGES = {
     "cpp": ("c", "cpp"), "go": ("go",), "java": ("java",), "csharp": ("c_sharp",),
     "javascript": ("javascript", "typescript", "tsx"), "python": ("python",), "rust": ("rust",),

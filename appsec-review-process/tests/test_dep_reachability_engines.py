@@ -174,5 +174,27 @@ class CodeqlPackTests(unittest.TestCase):
         self.assertTrue(q.pack_sha256("go").startswith("sha256:"))
 
 
+class EntryPointTests(unittest.TestCase):
+    def test_every_language_has_a_documented_source_row(self):
+        self.assertEqual(set(e.ENTRY_POINT_SOURCES), set(d.ENGINES_BY_LANGUAGE))
+        for language, row in e.ENTRY_POINT_SOURCES.items():
+            self.assertEqual(set(row), {"names", "codeql"}, language)
+
+    def test_codeql_reasons_match_the_packs(self):
+        for language in q.PACK_PINS:
+            common = (q.PACK_ROOT / language / "Common.qll").read_text()
+            for reason in e.ENTRY_POINT_SOURCES[language]["codeql"]:
+                self.assertIn(f'reason = "{reason}"', common, (language, reason))
+
+    def test_framework_invoked_methods_are_roots_beyond_main(self):
+        edges = [("app.Handler.ServeHTTP", "web/h.go", 3, "web/h.go", 5, "golang.org/x/net/html.Parse", "", 0, "no")]
+        found = e.CodeqlEngine(tables(edges=edges, entries=[])).assess(query())
+        self.assertEqual(found["state"], "reachable")
+        self.assertEqual(found["witness"][0]["function"], "ServeHTTP")
+        found = e.CodeqlEngine(tables(edges=[("app.helper", "a.go", 1, "a.go", 2, "golang.org/x/net/html.Parse", "", 0, "no")],
+                                      entries=[])).assess(query(entries=["helper"]))
+        self.assertEqual(found["state"], "reachable")  # run-supplied entry point
+
+
 if __name__ == "__main__":
     unittest.main()
