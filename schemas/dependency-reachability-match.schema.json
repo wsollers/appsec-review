@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency-reachability-match.schema.json",
+  "title": "One SCA match's dependency reachability record (ADR-0022)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "match_id",
+    "component_ref",
+    "advisory_id",
+    "ecosystem",
+    "language",
+    "symbols",
+    "engines",
+    "verdict",
+    "reason",
+    "witness",
+    "witness_hints",
+    "gaps"
+  ],
+  "properties": {
+    "match_id": {
+      "type": "string",
+      "pattern": "^VM-[0-9]{6}\\Z"
+    },
+    "component_ref": {
+      "type": "string",
+      "pattern": "^SC-[0-9]{6}\\Z"
+    },
+    "advisory_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]{1,15}-[0-9A-Za-z][0-9A-Za-z-]{0,47}\\Z"
+    },
+    "ecosystem": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "language": {
+      "enum": [
+        null,
+        "cpp",
+        "go",
+        "java",
+        "csharp",
+        "javascript",
+        "python",
+        "ruby",
+        "rust",
+        "php"
+      ]
+    },
+    "symbols": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "package",
+          "symbol",
+          "source"
+        ],
+        "properties": {
+          "package": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9@_][A-Za-z0-9@._+~/:-]{0,199}\\Z"
+          },
+          "symbol": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z0-9_$.:<>~-]{0,199}\\Z"
+          },
+          "source": {
+            "enum": [
+              "reviewed-map",
+              "osv"
+            ]
+          }
+        }
+      }
+    },
+    "engines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "ran",
+          "state",
+          "reason",
+          "witness_length"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "cpg",
+              "codeql",
+              "lsp",
+              "treesitter"
+            ]
+          },
+          "ran": {
+            "type": "boolean"
+          },
+          "state": {
+            "enum": [
+              "reachable",
+              "unreachable",
+              "unknown"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "witness_length": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "verdict": {
+      "enum": [
+        "reachable",
+        "unreachable",
+        "unknown"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 1024
+    },
+    "witness": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "function",
+          "file",
+          "line",
+          "sha256"
+        ],
+        "properties": {
+          "function": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          },
+          "calls_next_at": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "resolution": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "witness_hints": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "line",
+          "callee",
+          "symbol",
+          "function"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "callee": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "function": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 512
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "reachable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "witness": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "enum": [
+              "unreachable",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "witness": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}
