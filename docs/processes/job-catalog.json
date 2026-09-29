@@ -9161,6 +9161,7 @@
     "publication-manifest.json",
     "finding-enrichment.json",
     "attack-chains.json",
+    "poc-fix-section.json",
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",
