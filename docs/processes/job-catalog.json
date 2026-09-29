@@ -9048,6 +9048,7 @@
     "evidence-trace-index.json",
     "publication-manifest.json",
     "finding-enrichment.json",
+    "attack-chains.json",
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",

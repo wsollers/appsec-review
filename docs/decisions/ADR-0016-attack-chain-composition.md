@@ -3,8 +3,8 @@
 Status: **Accepted** (2026-09-29, William, recommended defaults: lane 14 parallel to 12, `supported`
 ceiling, optional input of 10, default bounds, job names as below). **Implemented** on branch
 `kill-chains`: seeding, composer and refuter pools, derive and merge rules, attack-chain ledger, job
-graph and Dagster wiring (plan slices S1-S3). **Open:** report section (plan S4), live acceptance (S5),
-later slices (S6). Builds on ADR-0015.
+graph and Dagster wiring (plan slices S1-S3) and the report section (plan S4, as a separate
+`attack-chains.json` artifact of 10). **Open:** live acceptance (S5), later slices (S6). Builds on ADR-0015.
 
 Implementation plan: [`docs/proposals/attack-chains/implementation-plan.md`](../proposals/attack-chains/implementation-plan.md).
 
