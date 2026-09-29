@@ -438,6 +438,10 @@
       "required_artifacts": [
         "integrated-threat-model.json",
         "threat-model-summary.md",
+        "attack-trees.mmd",
+        "dfd.mmd",
+        "ranked-threat-scenarios.json",
+        "intercom-transcript.jsonl",
         "status.json",
         "permission.json",
         "lineage.json"

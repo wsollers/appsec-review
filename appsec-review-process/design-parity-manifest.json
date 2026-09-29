@@ -1677,7 +1677,7 @@
         "output_contract": "threat-model-core"
       },
       "execution": {
-        "mode": "deterministic_python",
+        "mode": "pool_coordinator",
         "worker": "appsec-review-process/threat_model_core.py:run",
         "validator": "appsec-review-process/threat_model_core.py:validate"
       },
