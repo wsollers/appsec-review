@@ -81,7 +81,8 @@ fi
 
 # ---- 3. images -------------------------------------------------------------------------------------
 step "3. images needed by the B13 registry"
-mapfile -t REQUIRED < <(python3 -B -c 'import sys; sys.path.insert(0, "images"); import registry_records as r; print("\n".join(r.STEP4_IMAGE_IDS))')
+# Build-only images (audit-lsp-vendor) come first: the compiler images mount them at build time.
+mapfile -t REQUIRED < <(python3 -B -c 'import sys; sys.path.insert(0, "images"); import registry_records as r; print("\n".join(r.BUILD_ONLY_IMAGE_IDS + r.STEP4_IMAGE_IDS))')
 if [[ $BUILDENVS -eq 1 ]]; then
     for d in images/audit-buildenv-*/; do [[ -f "$d/image.json" ]] && REQUIRED+=("$(basename "$d")"); done
 fi

@@ -8,7 +8,8 @@
       "context": ".",
       "build_args": {},
       "requires_images": [
-        "audit-native:local"
+        "audit-native:local",
+        "audit-lsp-vendor:local"
       ],
       "prebuild": [],
       "timeout_seconds": 3600

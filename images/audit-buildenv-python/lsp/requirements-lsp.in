@@ -1,0 +1,5 @@
+python-lsp-server==1.15.0
+basedpyright==1.40.1
+debugpy==1.8.22
+ruff==0.16.9
+pytest==9.1.1

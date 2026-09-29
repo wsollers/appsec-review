@@ -133,13 +133,22 @@ class PureRecords(Workspace):
 
 
 class DeclaredSet(unittest.TestCase):
-    def test_b16_set_is_the_seven_shared_images_and_sixteen_per_tool_images(self):
+    def test_b16_set_is_the_shared_images_sixteen_tool_images_and_two_codeql_images(self):
         self.assertEqual(len(rr.TOOL_IMAGE_IDS), 16)
-        self.assertEqual(len(rr.STEP4_IMAGE_IDS), 23)
+        self.assertEqual(rr.CODEQL_IMAGE_IDS, ("audit-codeql", "audit-codeql-native"))
+        self.assertEqual(len(rr.STEP4_IMAGE_IDS), 6 + len(rr.BUILDENV_IMAGE_IDS) + 16 + 2)
         self.assertEqual(len(rr.STEP4_IMAGE_IDS), len(set(rr.STEP4_IMAGE_IDS)))
         builds = __import__("image_build").load_builds(IMAGES)
         self.assertEqual(set(rr.STEP4_IMAGE_IDS) - set(builds), set())
         self.assertNotIn("audit-static", rr.STEP4_IMAGE_IDS)
+
+    def test_build_only_vendor_image_is_declared_but_never_registered(self):
+        builds = __import__("image_build").load_builds(IMAGES)
+        self.assertEqual(rr.BUILD_ONLY_IMAGE_IDS, ("audit-lsp-vendor",))
+        self.assertIn("audit-lsp-vendor", builds)
+        self.assertFalse(set(rr.BUILD_ONLY_IMAGE_IDS) & set(rr.STEP4_IMAGE_IDS))
+        script = (rr.REPO / "orchestrator" / "prepare-host.sh").read_text(encoding="utf-8")
+        self.assertIn("BUILD_ONLY_IMAGE_IDS", script)
 
     def test_code_location_generates_before_starting_dagster(self):
         script = (rr.REPO / "orchestrator" / "dagster" / "code-location.sh").read_text(encoding="utf-8")
@@ -168,7 +177,7 @@ class LiveDocker(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             records = rr.collect_records()
-            self.assertEqual(len(records), 20)
+            self.assertEqual(len(records), len(rr.STEP4_IMAGE_IDS))
             rr.write_records(records, output)
             rr.check_records(rr.collect_records(), output)
 

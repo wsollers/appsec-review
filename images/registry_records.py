@@ -42,10 +42,15 @@ BUILDENV_IMAGE_IDS = (
     "audit-buildenv-cpp", "audit-buildenv-cpp-resolute", "audit-buildenv-dotnet", "audit-buildenv-go", "audit-buildenv-java",
     "audit-buildenv-php", "audit-buildenv-python", "audit-buildenv-rust", "audit-buildenv-typescript",
 )
+# 02-codeql-sast: build-mode none lanes and the traced C/C++ replay (ADR-0017, docs/language-servers.md).
+CODEQL_IMAGE_IDS = ("audit-codeql", "audit-codeql-native")
 STEP4_IMAGE_IDS = (
     "audit-native", "audit-binary-analysis", "audit-container", "audit-iac",
-    "audit-report", "scancode-toolkit", *BUILDENV_IMAGE_IDS, *TOOL_IMAGE_IDS,
+    "audit-report", "scancode-toolkit", *BUILDENV_IMAGE_IDS, *TOOL_IMAGE_IDS, *CODEQL_IMAGE_IDS,
 )
+# Built before the images above and read only at their build time (RUN --mount); never executed
+# against a target, so no B16 record.
+BUILD_ONLY_IMAGE_IDS = ("audit-lsp-vendor",)
 
 
 class RegistryRecordError(RuntimeError):

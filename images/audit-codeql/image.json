@@ -7,7 +7,9 @@
       "dockerfile": "Dockerfile",
       "context": ".",
       "build_args": {},
-      "requires_images": [],
+      "requires_images": [
+        "audit-lsp-vendor:local"
+      ],
       "prebuild": [
         {
           "kind": "download",
@@ -26,7 +28,8 @@
       "context": ".",
       "build_args": {},
       "requires_images": [
-        "audit-native:local"
+        "audit-native:local",
+        "audit-lsp-vendor:local"
       ],
       "prebuild": [
         {

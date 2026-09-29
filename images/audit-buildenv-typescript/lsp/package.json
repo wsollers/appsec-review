@@ -1,0 +1,11 @@
+{
+  "name": "appsec-review-node-language-servers",
+  "private": true,
+  "description": "Pinned JS/TS language servers for audit-buildenv-typescript (npm ci from package-lock.json).",
+  "dependencies": {
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-language-server": "5.3.0",
+    "vscode-langservers-extracted": "4.10.0"
+  }
+}

@@ -7,7 +7,9 @@
       "dockerfile": "Dockerfile",
       "context": ".",
       "build_args": {},
-      "requires_images": [],
+      "requires_images": [
+        "audit-lsp-vendor:local"
+      ],
       "prebuild": [],
       "timeout_seconds": 3600
     }
