@@ -373,6 +373,8 @@
           "09-independent-verification",
           "11-remediation-proposal",
           "12-scoring-prioritization",
+          "14-attack-chain-composition",
+          "14-attack-chain-refutation",
           "10-synthesis-report",
           "02-api-collection-intelligence-ingest",
           "02-binary-intelligence-ingest",
