@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "chain-composer",
+  "display_name": "Attack-chain Composer",
+  "category": "discovery",
+  "summary": "Propose how the reviewed claims and entry facts of one cluster combine into ordered attack chains.",
+  "allowed_outputs": [
+    "candidate_only"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict",
+    "human_approval"
+  ],
+  "required_behavior": [
+    "cite only workspace claim ids and fact refs",
+    "give each link a stage in the closed order",
+    "name the fact ref that justifies each hop or mark it synthetic",
+    "name the chain's claim ids in the narrative"
+  ],
+  "must_not": [
+    "invent links, edges or evidence",
+    "promote a chain to a finding",
+    "copy orchestrator bookkeeping (ids, states, hashes)",
+    "write exploit code or payloads"
+  ]
+}

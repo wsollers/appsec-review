@@ -82,7 +82,7 @@
           "confidence",
           "component_ids",
           "locations",
-          "citation_ids",
+          "citations",
           "entry"
         ],
         "properties": {
@@ -163,15 +163,15 @@
               }
             }
           },
-          "citation_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
           "entry": {
             "type": "boolean"
+          },
+          "citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "claim-lifecycle-citation.schema.json"
+            }
           }
         }
       }

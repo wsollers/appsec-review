@@ -108,7 +108,8 @@ class LinkCandidateTests(unittest.TestCase):
                          {"claim-a": "verified", "claim-b": "open", "claim-c": "narrowed", "claim-e": "open"})
         self.assertEqual(excluded, [{"claim_id": "claim-d", "reason": "refuted"},
                                     {"claim_id": "claim-f", "reason": "superseded"}])
-        self.assertEqual(candidates[0]["citation_ids"], ["citation-claim-a", "citation-claim-a-v"])
+        self.assertEqual([c["citation_id"] for c in candidates[0]["citations"]],
+                         ["citation-claim-a", "citation-claim-a-v"])
         self.assertEqual(candidates[0]["tier"], "P1")
         self.assertEqual(candidates[0]["locations"], [{"path": MAIN, "start_line": 7}])
 

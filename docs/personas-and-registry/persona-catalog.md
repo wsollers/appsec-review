@@ -317,6 +317,17 @@ proposing candidate-only hypotheses. Role `vulnerability-hypothesis-hunter`, dom
 
 Must not cite a file or line it did not read, rate severity, or claim a confirmed finding.
 
+### attack-chain-composer
+
+Composer cell of `14-attack-chain-composition` (ADR-0016): reads one cluster workspace (reviewed claims,
+CPG/IR and threat-model facts, seeded adjacency) and proposes ordered attack chains (entry -> execution ->
+privilege_gain -> persistence | lateral_movement -> impact) whose links cite only workspace claim ids or
+fact refs, or an explicit no-chain reason. Uses `14-attack-chain/task-attack-chain-composition-cell.md`.
+Role `chain-composer`, domain `attack-chain-lifecycle`, tooling profile `claim-review-static`.
+
+Must not cite a claim, fact, file or line outside the workspace, rate severity, call a chain verified, or
+write exploit code or payloads.
+
 ## Domain Specialist Personas
 
 ### nginx-rest-api-specialist
@@ -925,7 +936,7 @@ Outputs:
 Feeds:
 
 - threat model
-- red-team kill-chain scenarios
+- lane-14 attack-chain composition (ADR-0016)
 - QA validation plan
 - synthesis limitations
 

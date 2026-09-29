@@ -99,6 +99,15 @@ def _locations(record: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def claim_citations(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """The claim's own citations then its 09 verification citations, canonical objects, by id once."""
+    rows, seen = [], set()
+    for citation in list(record.get("citations") or []) + list(record.get("verification_citations") or []):
+        if citation["citation_id"] not in seen:
+            seen.add(citation["citation_id"]); rows.append(citation)
+    return rows
+
+
 def link_candidates(verification: dict[str, Any], ledger_states: dict[str, str] | None = None
                     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """(link candidates, excluded claims) from the accepted 09 result."""
@@ -118,10 +127,7 @@ def link_candidates(verification: dict[str, Any], ledger_states: dict[str, str] 
             "tier": tier, "link_state": state, "verification_status": status,
             "hypothesis": _clip(record["hypothesis"], TEXT_CHARS), "confidence": record["confidence"],
             "component_ids": sorted(record["component_ids"]), "locations": _locations(record),
-            "citation_ids": [item["citation_id"] for item in record["citations"]] +
-                            [item["citation_id"] for item in record.get("verification_citations") or []
-                             if item["citation_id"] not in {x["citation_id"] for x in record["citations"]}],
-            "entry": False})
+            "citations": claim_citations(record), "entry": False})
     return candidates, excluded
 
 

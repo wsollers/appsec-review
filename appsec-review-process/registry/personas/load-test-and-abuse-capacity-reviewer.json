@@ -8,7 +8,7 @@
     "posture": "Consumes load, stress, soak, and performance test artifacts to identify security-relevant capacity and abuse gaps.",
     "feeds": [
       "threat model",
-      "red-team kill-chain scenarios",
+      "lane-14 attack-chain composition (ADR-0016)",
       "QA validation plan",
       "synthesis limitations"
     ],
