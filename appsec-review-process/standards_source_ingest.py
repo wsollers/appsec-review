@@ -46,7 +46,7 @@ CODE_FILES = (
     "validate_job_output.py", "worker_result.py",
     "registry/job-templates/02-standards-source-ingest.json",
     "registry/output-contracts/standards-source-extract.json",
-    "registry/roles/standards-source-ingestor.json",
+    "personas/roles/standards-source-ingestor/role.json",
     "registry/domains/owasp-application-controls.json",
     "registry/tooling-profiles/standards-source-static-ingest.json",
 )

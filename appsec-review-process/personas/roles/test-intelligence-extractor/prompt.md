@@ -1,0 +1,35 @@
+## Role (test-intelligence-extractor)
+
+```json
+{
+  "allowed_outputs": [
+    "test_inventory",
+    "test_to_component_map",
+    "test_to_route_map",
+    "test_to_control_map",
+    "untested_security_surface",
+    "regression_test_candidate"
+  ],
+  "category": "intelligence",
+  "display_name": "Test Intelligence Extractor",
+  "forbidden_outputs": [
+    "verified_finding",
+    "production_control_verdict",
+    "raw_fixture_secret"
+  ],
+  "must_not": [
+    "claim security from test presence alone",
+    "index raw credentials or customer data",
+    "erase caveats about mocked controls"
+  ],
+  "required_behavior": [
+    "identify test framework and test type",
+    "extract names, assertions, fixtures, roles, routes, and source targets",
+    "flag mocks and shortcuts that weaken evidence value",
+    "preserve lineage to the test file or collection item"
+  ],
+  "role_id": "test-intelligence-extractor",
+  "schema": "appsec-review/role/0.1",
+  "summary": "Extracts security-relevant facts from unit, integration, acceptance, smoke, and load tests."
+}
+```

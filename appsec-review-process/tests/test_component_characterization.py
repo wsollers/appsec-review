@@ -57,9 +57,9 @@ class ComponentCharacterizationTests(unittest.TestCase):
             "job_template_sha256": pi._sha(template),
             **{name + "_id": template["composition"][name + "_id"]
                for name, *_rest in pi.COMPOSITION_KINDS if name != "job_template"},
-            **{name + "_sha256": pi._sha(json.loads((ROOT / "registry" / directory /
-                (template["composition"][name + "_id"] + ".json")).read_text(encoding="utf-8")))
-               for name, directory, _schema, _field in pi.COMPOSITION_KINDS if name != "job_template"},
+            **{name + "_sha256": pi._sha(pi._load_record(ROOT / "registry", directory, schema, field,
+                template["composition"][name + "_id"], store))
+               for name, directory, schema, field in pi.COMPOSITION_KINDS if name != "job_template"},
         }, store)
         ceiling = pi.claim_ceiling(records["role"], records["tooling_profile"])
         expected_ceiling = {

@@ -45,7 +45,7 @@ PROHIBITED_TEXT = tuple(re.compile(value, re.I) for value in (
     r"\b(?:is|has been)\s+(?:fixed|remediated)\b", r"\bobserved\s+runtime\b"))
 CODE_FILES = ("synthesis_report.py","10-synthesis-report/task-synthesis-report-core.md",
     "registry/job-templates/10-synthesis-report.json","registry/output-contracts/synthesis-report-draft.json",
-    "registry/personas/synthesis-report-drafter.json","registry/roles/synthesis-report-drafter.json",
+    "personas/personas/synthesis-report-drafter/persona.json","personas/roles/synthesis-report-drafter/role.json",
     "registry/domains/synthesis-report-core.json","registry/tooling-profiles/synthesis-report-static.json")
 SCHEMA_FILES = ("synthesis-artifact-ref.schema.json","synthesis-owasp-ref.schema.json",
     "synthesis-input.schema.json","synthesis-citation.schema.json","synthesis-proof-obligation.schema.json",

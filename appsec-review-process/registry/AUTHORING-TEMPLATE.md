@@ -26,14 +26,16 @@ scope and boundaries fit. Create only the records needed for a distinct review c
 
 | Directory | Identity field | Schema filename |
 |---|---|---|
-| `personas/` | `persona_id` | `persona.schema.json` |
-| `roles/` | `role_id` | `role.schema.json` |
+| `../personas/personas/<id>/` | `persona_id` | `persona.schema.json` (in `../personas/`) |
+| `../personas/roles/<id>/` | `role_id` | `role.schema.json` (in `../personas/`) |
 | `domains/` | `domain_id` | `domain.schema.json` |
 | `tooling-profiles/` | `tooling_profile_id` | `tooling-profile.schema.json` |
 | `output-contracts/` | `contract_id` | `output-contract.schema.json` |
 | `job-templates/` | `job_template_id` | `job-template.schema.json` |
 
-- Save each record as `<id>.json`, with two-space indentation and a final newline.
+- Save each record as `<id>.json`, with two-space indentation and a final newline. Personas and
+  roles are folders instead: `<id>/persona.json` or `<id>/role.json` plus `<id>/prompt.md` (see
+  [the personas folder](../../docs/personas-and-registry/README.md)).
 - IDs must start with a lowercase ASCII letter or digit and contain only lowercase letters,
   digits, and hyphens: `^[a-z0-9][a-z0-9-]*$`. The job schema uses the equivalent
   `^[0-9a-z][0-9a-z-]*$`. Prefer readable kebab-case without repeated or trailing hyphens.
@@ -88,7 +90,7 @@ record instead of copying a skeleton when appropriate.
 
 ### Persona: reviewer stance
 
-File: `personas/example-project-reviewer.json`
+File: `../personas/personas/example-project-reviewer/persona.json`
 
 ```json
 {
@@ -104,11 +106,14 @@ File: `personas/example-project-reviewer.json`
   },
   "required_inputs": ["target repository mounted read-only", "manifest inventory"],
   "outputs": ["evidence-cited project inventory", "evidence gaps"],
-  "must_not": ["execute target scripts", "infer runtime state", "emit verified findings"]
+  "must_not": ["execute target scripts", "infer runtime state", "emit verified findings"],
+  "provenance": {}
 }
 ```
 
-`best_used_in_lanes` is optional. Persona categories are `attacker`, `defender`, `verifier`,
+Every key is required and in this order. `best_used_in_lanes` may be `[]`; `provenance` is `{}` for
+a hand-authored persona (catalog-generated ones carry `catalog_personas.py`'s four keys). The
+folder's `prompt.md` is written by `python3 -B appsec-review-process/catalog_personas.py generate`. Persona categories are `attacker`, `defender`, `verifier`,
 `domain-specialist`, `evidence-ingestion`, `stakeholder-output`, `synthesis`, and
 `standards-validator`. The keys inside `assumptions` follow existing conventions but are not
 constrained by the schema.
@@ -122,7 +127,7 @@ Checklist:
 
 ### Role: bounded work function
 
-File: `roles/example-project-inventory-builder.json`
+File: `../personas/roles/example-project-inventory-builder/role.json`
 
 ```json
 {
@@ -372,7 +377,10 @@ store = SchemaStore()
 errors = []
 count = 0
 for directory, (kind, id_field) in record_types.items():
-    paths = sorted((registry / directory).glob("*.json"))
+    if directory in ("personas", "roles"):
+        paths = sorted((registry.parent / "personas" / directory).glob(f"*/{kind}.json"))
+    else:
+        paths = sorted((registry / directory).glob("*.json"))
     if not paths:
         errors.append(f"{directory}: no records found; check working directory")
     for path in paths:
@@ -384,8 +392,9 @@ for directory, (kind, id_field) in record_types.items():
             continue
         errors.extend(f"{path}: {error}" for error in
                       validate_document(record, f"{kind}.schema.json", store))
-        if isinstance(record, dict) and record.get(id_field) != path.stem:
-            errors.append(f"{path}: filename must match {id_field}")
+        name = path.parent.name if directory in ("personas", "roles") else path.stem
+        if isinstance(record, dict) and record.get(id_field) != name:
+            errors.append(f"{path}: file or folder name must match {id_field}")
 for error in errors:
     print(error)
 print(f"Checked {count} records; {len(errors)} errors")
@@ -397,8 +406,10 @@ For one parsed record, the core call is
 An empty error list means the implemented schema checks passed. The validator supports the
 repo's JSON Schema subset; it is not a general full JSON Schema implementation.
 
-All six schemas permit additional properties. Typos in optional fields and arbitrary nested
-content can therefore pass. Schema success also does not establish reference resolution,
+The persona and role schemas are closed: every key is required, in a fixed order (an explicit
+empty value where a field does not apply), and `tests/test_persona_folder_uniform.py` enforces it.
+The other four schemas permit additional properties, so typos in their optional fields and
+arbitrary nested content can pass. Schema success also does not establish reference resolution,
 semantic compatibility, output-file existence, citation quality, authorization, or claim validity.
 Complete the six checklists above, inspect the referenced records, and review all output names
 and required inputs. For runtime artifacts, apply their payload schemas and contract rules;

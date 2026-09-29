@@ -12,6 +12,7 @@ from typing import Any
 from execution_state import (ROOT, atomic_json, beneath, digest, file_hash, identifier, now,
                              read_json, run_path)
 from job_graph import KINDS, REGISTRY, composition
+import persona_registry
 
 SCHEMA = "appsec-review/job-handoff/1.0"
 MAX_INPUTS = 64
@@ -104,7 +105,7 @@ def build_handoff(run_id: str, job_id: str, input_paths: list[str], scope_id: st
     records: dict[str, Any] = {}
     for key, (directory, _schema, _field) in KINDS.items():
         record_id = template["composition"][key]
-        path = REGISTRY / directory / f"{record_id}.json"
+        path = persona_registry.record_path(REGISTRY, directory, record_id)[1]
         records[key] = _source_record(path, resolved[key])
     result_schema = _result_schema_record(resolved["output_contract_id"])
     claim_class = _claim_class_record(resolved["output_contract_id"])

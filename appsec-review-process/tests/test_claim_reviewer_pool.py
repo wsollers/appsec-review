@@ -307,6 +307,9 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                              ["shard-00.json", "shard-01.json"])
             self.assertEqual(len({r["persona"]["persona_id"] for r in requests}), 2)
             self.assertEqual(len({r["outer_prompt"]["sha256"] for r in requests}), 2)
+            # Every 07 reviewer runs as the stage's registry role, whose ceiling is the stage class.
+            self.assertEqual({r["persona"]["role_id"] for r in requests}, {"red-team-adversary"})
+            self.assertEqual({tuple(r["allowed_claim_classes"]) for r in requests}, {("candidate_only",)})
 
     def test_sharded_merge_publishes_with_full_coverage(self):
         value = self._sharded()

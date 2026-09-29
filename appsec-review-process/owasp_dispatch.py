@@ -49,6 +49,7 @@ import owasp_validator_handoff  # noqa: E402
 import owasp_validator_result  # noqa: E402
 import permission_capabilities as pc  # noqa: E402
 import persona_invocation as pi  # noqa: E402
+import persona_registry  # noqa: E402
 import pool_rendezvous as pr  # noqa: E402
 import pool_specification as ps  # noqa: E402
 import resource_pools as rp  # noqa: E402
@@ -289,7 +290,8 @@ def _composition(facts: DispatchFacts, config: Mapping[str, Any]) -> tuple:
         record_id = template["composition"][name + "_id"]
         if not isinstance(record_id, str) or not pi._REG_RE.match(record_id):
             raise ValueError("composition id")
-        record = ps.parse_document(_read_regular(registry, registry / directory / (record_id + ".json")))
+        record = persona_registry.loaded(directory, ps.parse_document(
+            _read_regular(*persona_registry.record_path(registry, directory, record_id))))
         block[name + "_id"], block[name + "_sha256"] = record_id, pi._sha(record)
     records = pi.load_composition(registry, block, SchemaStore())
     if block["persona_id"] != config["persona_id"]:

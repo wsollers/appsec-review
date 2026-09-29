@@ -59,7 +59,7 @@ CODE_FILES = (
     "component_characterization.py", "persona_dispatch.py", "persona_invocation.py",
     "persona_prompt_assembly.py", "claude_cli_invoker.py", "publish_job_output.py",
     "validate_job_output.py", "registry/job-templates/01-component-characterization.json",
-    "registry/roles/component-characterizer.json", "registry/domains/component-characterization.json",
+    "personas/roles/component-characterizer/role.json", "registry/domains/component-characterization.json",
     "registry/tooling-profiles/component-evidence-router.json",
     "registry/output-contracts/component-map.json",
     "01-component-characterization/task-component-characterization.md",

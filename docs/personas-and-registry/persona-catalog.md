@@ -22,7 +22,7 @@ that matches the target, evidence package, decision gate, and budget.
 ## Persona Shape
 
 A persona that an enabled job uses is a JSON record under
-`appsec-review-process/registry/personas/<persona_id>.json` (schema `appsec-review/persona/0.1`).
+`appsec-review-process/personas/personas/<persona_id>/persona.json` (schema `appsec-review/persona/0.1`).
 The keys, taken from `owasp-validator.json`:
 
 ```json

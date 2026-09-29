@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 from execution_state import atomic_bytes, beneath  # noqa: E402
 import size_log
 import permission_capabilities as pc  # noqa: E402
+import persona_registry  # noqa: E402
 from schema_validate import SchemaStore, validate_document  # noqa: E402
 from tool_instance_shapes import output_path_errors  # noqa: E402
 
@@ -332,13 +333,13 @@ def composition_errors(records: Mapping[str, Mapping[str, Any]]) -> list[str]:
 def _load_record(registry_dir: Path, directory: str, schema: str, field: str, record_id: str,
                  store: SchemaStore) -> dict[str, Any]:
     try:
-        path = beneath(registry_dir, registry_dir / directory / (record_id + ".json"))
+        path = beneath(*persona_registry.record_path(registry_dir, directory, record_id))
         record = json.loads(path.read_bytes().decode("utf-8"))
     except (OSError, ValueError):
         raise PersonaRequestError(f"a {directory} record named by the request is missing, linked or unreadable") from None
     if validate_document(record, schema, store) or record.get(field) != record_id:
         raise PersonaRequestError(f"a {directory} record named by the request is invalid or misnamed")
-    return record
+    return persona_registry.loaded(directory, record)
 
 
 def load_composition(registry_dir: Path, persona: Mapping[str, str], store: SchemaStore
@@ -358,6 +359,8 @@ def load_composition(registry_dir: Path, persona: Mapping[str, str], store: Sche
     for name, _, _, _ in COMPOSITION_KINDS[1:]:
         if name == "persona" and persona[name + "_id"] in persona_variants(records["job_template"]):
             continue   # a registry-declared persona variant of this template (ADR-0021)
+        if name == "role" and persona[name + "_id"] in role_variants(records["job_template"]):
+            continue   # a registry-declared role variant of this template (ADR-0024)
         if composed[name + "_id"] != persona[name + "_id"]:
             raise PersonaRequestError(f"persona.{name}_id is not what the named job template composes")
     errors = composition_errors(records)
@@ -376,6 +379,17 @@ def persona_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
     values = template.get("persona_variants") or []
     if not isinstance(values, list) or not all(isinstance(v, str) and _REG_RE.match(v) for v in values):
         raise PersonaRequestError("job template persona_variants must be a list of registry ids")
+    return tuple(values)
+
+
+def role_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
+    """The roles a job template lets one of its instances run as besides its composed role
+    (ADR-0024; the claim review pool's per-stage roles). Same rule as :func:`persona_variants`: a
+    request may name only a listed id, and that role record is loaded and hashed like any other,
+    so the claim ceiling is always derived from the role the instance actually runs as."""
+    values = template.get("role_variants") or []
+    if not isinstance(values, list) or not all(isinstance(v, str) and _REG_RE.match(v) for v in values):
+        raise PersonaRequestError("job template role_variants must be a list of registry ids")
     return tuple(values)
 
 
@@ -401,14 +415,14 @@ def _registry_survey(registry_dir: Path) -> tuple[list[str], list[str]]:
     store = SchemaStore()
     errors: list[str] = []
     denied: list[str] = []
-    personas = sorted((registry_dir / "personas").glob("*.json"))
+    personas = persona_registry.record_ids(registry_dir, "personas")
     if not personas:
         return ["persona registry is missing or empty"], denied
-    for path in personas:
+    for persona_id in personas:
         try:
-            _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", path.stem, store)
+            _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", persona_id, store)
         except PersonaRequestError:
-            errors.append(f"personas/{path.stem}: invalid, unreadable or misnamed")
+            errors.append(f"personas/{persona_id}: invalid, unreadable or misnamed")
     for path in sorted((registry_dir / "job-templates").glob("*.json")):
         try:
             template = _load_record(registry_dir, "job-templates", "job-template.schema.json",
@@ -431,6 +445,13 @@ def _registry_survey(registry_dir: Path) -> tuple[list[str], list[str]]:
                     _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", variant, store)
                 except PersonaRequestError:
                     raise PersonaRequestError("a persona_variants id does not resolve to a valid persona record") from None
+            for variant in role_variants(template):
+                try:
+                    record = _load_record(registry_dir, "roles", "role.schema.json", "role_id", variant, store)
+                except PersonaRequestError:
+                    raise PersonaRequestError("a role_variants id does not resolve to a valid role record") from None
+                # The composition as that role must itself be invocable (errors, ceiling).
+                load_composition(registry_dir, {**block, "role_id": variant, "role_sha256": _sha(record)}, store)
         except PersonaRequestError as exc:
             errors.append(f"job-templates/{path.stem}: {exc}")
     return errors, denied

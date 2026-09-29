@@ -44,7 +44,7 @@ PROHIBITED_TEXT = (
 CODE_FILES = (
     "threat_model_core.py", "component_characterization.py", "publish_job_output.py",
     "validate_job_output.py", "registry/job-templates/03-threat-model-dfd-stride.json",
-    "registry/roles/threat-model-core.json", "registry/domains/threat-model-core.json",
+    "personas/roles/threat-model-core/role.json", "registry/domains/threat-model-core.json",
     "registry/tooling-profiles/threat-model-static-evidence.json",
     "registry/output-contracts/threat-model-core.json",
     "03-threat-model-dfd-stride/task-threat-model-core.md",

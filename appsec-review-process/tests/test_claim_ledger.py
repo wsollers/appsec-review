@@ -452,7 +452,7 @@ class ClaimLedgerTests(unittest.TestCase):
         self.assertEqual(lineage["source_snapshot_sha256"], value["source_generation"])
         store = SchemaStore()
         records = (("job-templates/claim-ledger-routing.json", "job-template.schema.json"),
-            ("roles/claim-ledger-custodian.json", "role.schema.json"),
+            ("../personas/roles/claim-ledger-custodian/role.json", "role.schema.json"),
             ("domains/claim-ledger-lifecycle.json", "domain.schema.json"),
             ("tooling-profiles/hash-linked-claim-ledger.json", "tooling-profile.schema.json"),
             ("output-contracts/claim-ledger-core.json", "output-contract.schema.json"))

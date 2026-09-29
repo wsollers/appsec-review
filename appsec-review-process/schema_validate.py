@@ -26,6 +26,9 @@ from pathlib import Path
 from typing import Any
 
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
+# The persona and role schemas live with the records they describe (appsec-review-process/personas/).
+FOLDER_SCHEMAS = {name: Path(__file__).resolve().parent / "personas" / name
+                  for name in ("persona.schema.json", "role.schema.json")}
 
 
 class SchemaStore:
@@ -39,6 +42,8 @@ class SchemaStore:
         name = name.split("#", 1)[0]
         if name not in self._cache:
             path = self.dir / name
+            if not path.exists() and name in FOLDER_SCHEMAS:
+                path = FOLDER_SCHEMAS[name]
             if not path.exists():
                 raise FileNotFoundError(f"schema not found: {path}")
             self._cache[name] = json.loads(path.read_text(encoding="utf-8"))

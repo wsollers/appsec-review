@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import persona_invocation as pi  # noqa: E402
+import persona_registry  # noqa: E402
 import persona_invocation_support as support  # noqa: E402
 from persona_invocation_support import MARKER, Rewriting, relist  # noqa: E402
 from schema_validate import SCHEMAS_DIR, validate_document  # noqa: E402
@@ -179,7 +180,7 @@ class RegistryTests(Case):
         return support.copy_registry(self.base / "registry")
 
     def edit(self, registry: Path, directory: str, name: str, change) -> None:
-        path = registry / directory / (name + ".json")
+        path = persona_registry.record_path(registry, directory, name)[1]
         record = json.loads(path.read_text(encoding="utf-8"))
         change(record)
         path.write_text(json.dumps(record), encoding="utf-8")
@@ -245,9 +246,12 @@ class RegistryTests(Case):
 
     def test_a_persona_record_outside_any_template_is_still_validated(self):
         registry = self.copy_registry()
-        (registry / "personas" / "stray.json").write_text(json.dumps({"persona_id": "stray"}), encoding="utf-8")
+        stray = persona_registry.record_path(registry, "personas", "stray")[1]
+        stray.parent.mkdir()
+        stray.write_text(json.dumps({"persona_id": "stray"}), encoding="utf-8")
         self.assertIn("personas/stray: invalid, unreadable or misnamed", pi.validate_persona_registry(registry))
-        self.assertEqual(pi.validate_persona_registry(self.base / "absent"), ["persona registry is missing or empty"])
+        self.assertEqual(pi.validate_persona_registry(self.base / "absent" / "registry"),
+                         ["persona registry is missing or empty"])
 
 
 # ---- request pins: each bound, each edited alone ----------------------------------------------------
@@ -301,15 +305,15 @@ class RequestPinTests(Case):
         for name, other in swaps.items():
             with self.subTest(swapped=name):
                 edited = deepcopy(golden)
-                directory = next(d for n, d, _, _ in pi.COMPOSITION_KINDS if n == name)
-                record = json.loads((pi.REGISTRY_DIR / directory / (other + ".json")).read_text(encoding="utf-8"))
+                directory, schema, field = next((d, s, f) for n, d, s, f in pi.COMPOSITION_KINDS if n == name)
+                record = pi._load_record(pi.REGISTRY_DIR, directory, schema, field, other, pi.SchemaStore())
                 edited["persona"][name + "_id"], edited["persona"][name + "_sha256"] = other, pi._sha(record)
                 self.rejected(edited, f"persona.{name}_id is not what the named job template composes")
 
     def test_a_registry_record_edited_after_the_request_was_built_is_refused(self):
         registry = support.copy_registry(self.base / "registry")
         request = self.ws.request()
-        path = registry / "personas" / "owasp-validator.json"
+        path = persona_registry.record_path(registry, "personas", "owasp-validator")[1]
         record = json.loads(path.read_text(encoding="utf-8"))
         record["must_not"] = []
         path.write_text(json.dumps(record), encoding="utf-8")

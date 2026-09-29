@@ -58,7 +58,7 @@ PROHIBITED_TEXT = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\b(?:is|are)\s+(?:compliant|certified)\b", r"\b(?:is|has been)\s+(?:fixed|remediated)\b"))
 CODE_FILES = (
     "claim_ledger.py", "threat_model_core.py", "publish_job_output.py", "validate_job_output.py",
-    "registry/job-templates/claim-ledger-routing.json", "registry/roles/claim-ledger-custodian.json",
+    "registry/job-templates/claim-ledger-routing.json", "personas/roles/claim-ledger-custodian/role.json",
     "registry/domains/claim-ledger-lifecycle.json", "registry/tooling-profiles/hash-linked-claim-ledger.json",
     "registry/output-contracts/claim-ledger-core.json", "claim-ledger-routing/task-claim-ledger-core.md",
 )

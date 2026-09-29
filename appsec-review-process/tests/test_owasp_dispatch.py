@@ -26,6 +26,7 @@ import owasp_validator_handoff  # noqa: E402
 import owasp_validator_result  # noqa: E402
 import persona_invocation as pi  # noqa: E402
 import persona_invocation_support as b14  # noqa: E402
+import persona_registry  # noqa: E402
 import pool_rendezvous as pr  # noqa: E402
 import pool_specification as ps  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
@@ -608,7 +609,7 @@ class ReuseTests(DispatchCase):
 
     def test_a_changed_registry_record_is_not_reused_and_the_older_attempt_stops_verifying(self):
         first = self.dispatch()
-        path = self.registry / "personas" / "owasp-validator.json"
+        path = persona_registry.record_path(self.registry, "personas", "owasp-validator")[1]
         record = json.loads(path.read_text(encoding="utf-8"))
         record["display_name"] += " (edited)"
         path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")

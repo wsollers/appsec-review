@@ -1,19 +1,24 @@
 # Persona and role assignment of model-calling jobs
 
-Audit of 2026-09-28 (branch `ws-personas`, [ADR-0021](../decisions/ADR-0021-sharded-claim-review-personas.md)).
+Audit of 2026-09-28 (branch `ws-personas`, [ADR-0021](../decisions/ADR-0021-sharded-claim-review-personas.md)),
+updated 2026-09-29 for the personas folder and per-stage review roles (brief J,
+[ADR-0024](../decisions/ADR-0024-per-stage-review-roles.md)).
 Every model call goes through `claude_cli_invoker` with a persona request whose composition
 (persona, role, domain, tooling profile, output contract) comes from a registry job template; the
 registry decides, the request only repeats it. A template may also list `persona_variants`
-(ADR-0021) that one instance can run as instead of its composed persona.
+(ADR-0021) and `role_variants` (ADR-0024) that one instance can run as instead of its composed
+persona or role.
 
 ## Registry records
 
 All 54 personas in [persona-catalog.md](persona-catalog.md) now have a record under
-`appsec-review-process/registry/personas/`. 48 were generated from the catalog text by
+`appsec-review-process/personas/personas/<id>/persona.json` (one folder per persona and per role; see
+[README](README.md)). 48 were generated from the catalog text by
 `appsec-review-process/catalog_personas.py generate` and carry
 `provenance: {generated_by: catalog_personas.py, reviewed: false}`; six (reverse-engineer,
 nsa-stig-platform-engineer, owasp-validator, qa-test-validator, test-coverage-indexer,
-functional-design-doc-consumer) were already hand-authored. `catalog_personas.py check` fails when a
+functional-design-doc-consumer) were already hand-authored (a hand-authored record now carries
+`provenance: {}`). `catalog_personas.py check` fails when a
 catalog persona has no record or a generated record is stale. Persona records reference no role,
 domain or tooling profile; those are bound by job templates, so no new role/domain/tooling records
 were needed for the generated personas.
@@ -22,10 +27,12 @@ were needed for the generated personas.
 
 `claim_reviewer_pool.py` shards each stage's claims across `claim_review_pool_instances` instances
 (default 3) and gives each instance its own persona from `claim-review-pool-cell.stage_personas`
-(see [the pool doc](../pools/pool-specification.md#claim-review-sharding-adr-0021)). Role, domain,
-tooling profile and output contract stay `claim-reviewer` / `claim-review-lifecycle` /
-`claim-review-static` / `claim-review-pool-candidates`; the stage role (`red-team-adversary`,
-`blue-team-refuter`, `independent-verifier`) is in the trusted runtime block and the decision actor.
+(see [the pool doc](../pools/pool-specification.md#claim-review-sharding-adr-0021)). Each instance runs
+as the stage's registry role from `claim-review-pool-cell.stage_roles` (ADR-0024): `red-team-adversary`
+(07), `blue-team-refuter` (08), `independent-verifier` (09), `scorer` (12), each allowing only the
+stage's claim class. Domain, tooling profile and output contract stay `claim-review-lifecycle` /
+`claim-review-static` / `claim-review-pool-candidates`; the template's composed role stays the generic
+`claim-reviewer`. The 07/08/09 role is also the decision actor, as before.
 
 | Stage | Persona pool (in rotation order) |
 |---|---|

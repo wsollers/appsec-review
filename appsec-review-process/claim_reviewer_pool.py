@@ -4,7 +4,8 @@
 The stage's accepted claims are sharded across ``claim_review_pool_instances`` reviewer instances
 (claim_review_sharding, ADR-0021): each claim is reviewed exactly once per stage, each instance
 reads only its own shard of the upstream document and runs as its own registry persona chosen from
-the job template's ``stage_personas``. The shard outputs are merged by the deterministic pool merge
+the job template's ``stage_personas``, under the stage's registry role from ``stage_roles`` (ADR-0024:
+red-team-adversary, blue-team-refuter, independent-verifier, scorer). The shard outputs are merged by the deterministic pool merge
 and the full population is then checked by the stage's lifecycle rules exactly as before.
 """
 from __future__ import annotations
@@ -188,14 +189,17 @@ def _code_hashes() -> dict[str, str]:
              "pool_launcher.py", "pool_rendezvous.py", "pool_specification.py",
              "registry/job-templates/claim-review-pool-cell.json",
              "registry/output-contracts/claim-review-pool-candidates.json",
-             "registry/personas/claim-reviewer.json", "registry/roles/claim-reviewer.json",
+             "personas/personas/claim-reviewer/persona.json", "personas/roles/claim-reviewer/role.json",
              "registry/domains/claim-review-lifecycle.json",
              "registry/tooling-profiles/claim-review-static.json", "claim-review-pool-task.md"]
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")
     for persona_id in sorted({item for ids in _stage_personas().values() for item in ids}):
-        path = f"registry/personas/{persona_id}.json"
+        path = f"personas/personas/{persona_id}/persona.json"
+        result[path] = file_hash(ROOT / path)
+    for role_id in sorted(set(_stage_roles().values())):
+        path = f"personas/roles/{role_id}/role.json"
         result[path] = file_hash(ROOT / path)
     result["schemas/claim-review-pool-candidates.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-pool-candidates.schema.json")
@@ -229,6 +233,14 @@ def _stage_personas() -> dict[str, list[str]]:
     return value
 
 
+def _stage_roles() -> dict[str, str]:
+    """The registry role each stage's reviewers run as (ADR-0024), one of the template's role_variants."""
+    value = _template().get("stage_roles")
+    if not isinstance(value, dict) or set(value) != set(lifecycle.STAGES):
+        raise Blocked("claim reviewer pool: job template stage_roles must name every review stage")
+    return value
+
+
 def _persona_records(ids: list[str]) -> dict[str, dict[str, Any]]:
     store = SchemaStore()
     return {persona_id: persona_invocation._load_record(persona_invocation.REGISTRY_DIR, "personas",
@@ -243,12 +255,18 @@ def _request_template(run_id: str, stage: str, upstream_path: Path,
     ``upstream_bytes`` when it is not on disk yet); ``persona_id`` one of the template's variants."""
     store = SchemaStore()
     template = persona_prompt_assembly.load_job_template(TEMPLATE, store)
-    outer = persona_prompt_assembly.assemble_outer_prompt(TEMPLATE, store=store, persona_id=persona_id)
+    role_id = _stage_roles()[stage]
+    outer = persona_prompt_assembly.assemble_outer_prompt(TEMPLATE, store=store, persona_id=persona_id,
+                                                          role_id=role_id)
     composition = persona_dispatch._composition_block(TEMPLATE, template, store)
     if persona_id is not None and persona_id != composition["persona_id"]:
         record = _persona_records([persona_id])[persona_id]
         composition = {**composition, "persona_id": persona_id,
                        "persona_sha256": persona_invocation._sha(record)}
+    if role_id != composition["role_id"]:
+        record = persona_invocation._load_record(persona_invocation.REGISTRY_DIR, "roles", "role.schema.json",
+                                                 "role_id", role_id, store)
+        composition = {**composition, "role_id": role_id, "role_sha256": persona_invocation._sha(record)}
     records = persona_invocation.load_composition(persona_invocation.REGISTRY_DIR, composition, store)
     ceiling = persona_invocation.claim_ceiling(records["role"], records["tooling_profile"])
     if CLASS[stage] not in ceiling["allowed"]:

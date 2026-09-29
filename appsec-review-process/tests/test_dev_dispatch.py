@@ -117,7 +117,7 @@ class TopologyClaimBuilderTests(unittest.TestCase):
     def test_the_topology_claim_classes_are_inside_the_registry_ceiling(self):
         import persona_invocation as pi
         registry = ROOT / "registry"
-        role = json.loads((registry / "roles" / "operations-topology-mapper.json").read_text(encoding="utf-8"))
+        role = json.loads((ROOT / "personas/roles/operations-topology-mapper/role.json").read_text(encoding="utf-8"))
         profile = json.loads((registry / "tooling-profiles" / "static-ops-topology-inspector.json")
                              .read_text(encoding="utf-8"))
         allowed = pi.claim_ceiling(role, profile)["allowed"]

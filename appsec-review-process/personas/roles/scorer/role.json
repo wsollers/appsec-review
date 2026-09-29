@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "scorer",
+  "display_name": "Scorer (stage 12)",
+  "category": "synthesis",
+  "summary": "Produce one evidence-bounded scoring decision for every accepted upstream claim in its shard.",
+  "allowed_outputs": [
+    "verification_observation"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "human_approval",
+    "runtime_state",
+    "compliance_verdict"
+  ],
+  "required_behavior": [
+    "retain exact claim identities",
+    "reuse only upstream citations",
+    "keep unresolved proof obligations explicit",
+    "emit closed JSON decisions",
+    "leave factors null unless the accepted upstream status is VERIFIED; otherwise score each factor 0..4"
+  ],
+  "must_not": [
+    "silently omit claims",
+    "weaken independence",
+    "invent evidence",
+    "mutate the target",
+    "decide claims outside its own shard"
+  ]
+}

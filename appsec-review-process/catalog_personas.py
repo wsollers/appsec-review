@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """Registry persona records derived from ``docs/personas-and-registry/persona-catalog.md``.
 
-The catalog is the human-readable source; ``registry/personas/<id>.json`` is what jobs load. This
+The catalog is the human-readable source; ``personas/personas/<id>/persona.json`` is what jobs load. This
 tool turns each catalog ``### <persona-id>`` section that has no registry record into one
 (``appsec-review/persona/0.1``) and marks it with a ``provenance`` block so a reviewer can tell a
 catalog-derived record from a hand-authored one. It never rewrites a hand-authored record (one
-without ``provenance.generated_by == GENERATOR``).
+without ``provenance.generated_by == GENERATOR``; a hand-owned record keeps ``"provenance": {}``).
 
-    python3 -B appsec-review-process/catalog_personas.py generate   # write missing/generated records
-    python3 -B appsec-review-process/catalog_personas.py check      # every catalog persona has a record
+It also keeps every persona and role folder's ``prompt.md`` equal to the prompt section
+``persona_prompt_assembly`` renders for that record, so the folder shows what the model reads.
+
+    python3 -B appsec-review-process/catalog_personas.py generate   # write missing/generated records, prompt.md
+    python3 -B appsec-review-process/catalog_personas.py check      # every catalog persona has a record;
+                                                                    # every prompt.md is current
 
 Content is taken from the catalog text: the lead sentence becomes ``primary_failure_mode_caught``,
 ``Inputs``/``Consumes`` become ``required_inputs``, ``Outputs`` become ``outputs``, ``Must not``
@@ -24,9 +28,12 @@ import re
 import sys
 from pathlib import Path
 
+import persona_registry
+from persona_prompt_assembly import render_record_section
+
 ROOT = Path(__file__).resolve().parent
 CATALOG = ROOT.parent / "docs" / "personas-and-registry" / "persona-catalog.md"
-PERSONAS = ROOT / "registry" / "personas"
+PERSONAS = persona_registry.FOLDER_ROOT / "personas"
 GENERATOR = "catalog_personas.py"
 SCHEMA = "appsec-review/persona/0.1"
 
@@ -159,8 +166,7 @@ def record(persona_id: str, section: dict) -> dict:
         assumptions["notes"] = notes
     value = {"schema": SCHEMA, "persona_id": persona_id, "display_name": _display(persona_id),
              "category": category, "primary_failure_mode_caught": lead}
-    if lanes:
-        value["best_used_in_lanes"] = lanes
+    value["best_used_in_lanes"] = lanes or []
     value.update({"assumptions": assumptions,
                   "required_inputs": inputs or [NO_INPUTS],
                   "outputs": outputs or [NO_OUTPUTS],
@@ -182,29 +188,58 @@ def _hand_authored(path: Path) -> bool:
     return (value.get("provenance") or {}).get("generated_by") != GENERATOR
 
 
+def prompt_text(folder: Path, directory: str) -> str:
+    """The prompt section for the record in one persona or role folder (its prompt.md)."""
+    file_name, _, field = persona_registry.KINDS[directory]
+    record = json.loads((folder / file_name).read_text(encoding="utf-8"))
+    section = directory[:-1]   # personas -> persona, roles -> role
+    return render_record_section(section, record[field], persona_registry.loaded(directory, record))
+
+
+def _folders(root: Path) -> list[tuple[str, Path]]:
+    return [(directory, folder) for directory in persona_registry.KINDS
+            for folder in sorted((root / directory).iterdir()) if folder.is_dir()]
+
+
 def generate(catalog: Path = CATALOG, personas: Path = PERSONAS) -> list[str]:
     written = []
     for persona_id, section in sorted(parse(catalog.read_text(encoding="utf-8")).items()):
-        path = personas / f"{persona_id}.json"
+        path = personas / persona_id / "persona.json"
         if path.exists() and _hand_authored(path):
             continue
         data = json.dumps(record(persona_id, section), indent=2, ensure_ascii=False) + "\n"
         if not path.exists() or path.read_text(encoding="utf-8") != data:
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(data, encoding="utf-8", newline="\n")
             written.append(persona_id)
+    for directory, folder in _folders(personas.parent):
+        path = folder / persona_registry.PROMPT_FILE
+        text = prompt_text(folder, directory)
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
+            path.write_text(text, encoding="utf-8", newline="\n")
+            written.append(f"{directory}/{folder.name}/{persona_registry.PROMPT_FILE}")
     return written
 
 
 def check(catalog: Path = CATALOG, personas: Path = PERSONAS) -> list[str]:
     errors = []
     for persona_id, section in sorted(parse(catalog.read_text(encoding="utf-8")).items()):
-        path = personas / f"{persona_id}.json"
+        path = personas / persona_id / "persona.json"
         if not path.is_file():
             errors.append(f"catalog persona {persona_id} has no registry record")
         elif not _hand_authored(path):
             expected = json.dumps(record(persona_id, section), indent=2, ensure_ascii=False) + "\n"
             if path.read_text(encoding="utf-8") != expected:
                 errors.append(f"generated persona {persona_id} is stale; run catalog_personas.py generate")
+    for directory, folder in _folders(personas.parent):
+        path = folder / persona_registry.PROMPT_FILE
+        try:
+            current = path.read_text(encoding="utf-8") == prompt_text(folder, directory)
+        except (OSError, ValueError, KeyError):
+            current = False
+        if not current:
+            errors.append(f"{directory}/{folder.name}/{persona_registry.PROMPT_FILE} is missing or stale; "
+                          "run catalog_personas.py generate")
     return errors
 
 

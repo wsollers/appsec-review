@@ -228,8 +228,8 @@ build index/plan, discovery, standards corpus, review-stage claims).
 - [ ] William: partial stage publication with explicit `UNREVIEWED` decisions when one shard fails
       (today the pool attempt fails naming the claims; rerun reuses cached shards).
 - [ ] Decide persona variants for OWASP validator cells (by chapter) and the intake review pool.
-- [ ] Per-stage registry roles (red-team-adversary, blue-team-refuter, independent-verifier, scorer)
-      instead of the generic `claim-reviewer` role.
+- [x] Per-stage registry roles (red-team-adversary, blue-team-refuter, independent-verifier, scorer)
+      instead of the generic `claim-reviewer` role (brief J, ADR-0024).
 
 ## OSV feed (brief A, branch `osv-feed`, merged `aafbe53`)
 
@@ -407,6 +407,22 @@ OPEN:
       Candidates: `02-binary-triage` or `02-binary-cfg` (PE triage), and `buildenv-catalog.json` tool
       lists. Qualify live x64dbg debugging (it needs ptrace, so the `DEBUG_CAPS` profile) before any
       job relies on it.
+
+## J: personas and roles folder (brief J, branch `personas-folder`, ADR-0024)
+
+- [x] `personas/personas/<id>/{persona.json,prompt.md}` and `personas/roles/<id>/{role.json,prompt.md}`
+      replace `registry/personas|roles`; closed schemas in `personas/`; `persona_registry.py` resolves
+      paths; `tests/test_persona_folder_uniform.py` enforces the shape. Prompts and record hashes unchanged.
+- [x] Stage roles red-team-adversary / blue-team-refuter / independent-verifier / scorer via
+      `role_variants` + `claim-review-pool-cell.stage_roles`.
+- [ ] William: confirm `prompt.md` as the rendered prompt section (generated) rather than hand-written
+      prose, and the persona key set (the brief's role/jobs/model/budget/contract keys live on job
+      templates and were not copied into personas).
+- [ ] Add `persona_registry.py` to `execution_state.SHARED_RUNTIME` (brief I owns that file).
+- [ ] No `hypothesis-hunter` role: the hunters already run as `vulnerability-hypothesis-hunter` (rename
+      would change the hunter prompts; ADR-0024 open question).
+- [ ] First live 07/08/09/12 pool run with the stage roles (each stage re-runs once: fingerprint moved).
+
 ## Retire legacy runners (ADR-0010 task V14, branch `retire-legacy-runners`)
 
 Retired and deleted the legacy monolithic static prepass runners `pipeline/Invoke-VendorAuditPrePass.ps1` and `pipeline/Invoke-VendorAuditPrePass.sh` per ADR-0010 task V14:

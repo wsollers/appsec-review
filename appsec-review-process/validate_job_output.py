@@ -19,6 +19,7 @@ from evidence_redaction import DEFAULT_LIMITS
 from execution_state import ROOT, beneath, file_hash, identifier, read_json, tree_hashes
 import sbom_family_contracts as _v05
 from sca_nvd_snapshot import NO_AGE_LIMIT
+import persona_registry
 from schema_validate import SchemaStore, validate_document
 import secrets_iac_contracts as _v04
 from tool_instance_shapes import HEADER_FIELDS, NODE_STATUSES
@@ -661,7 +662,7 @@ def _partition_errors(value: Any, registry_root: Path, source_root: Path | None)
             errors.append(f"$.partitions[{index}]: primary/supporting persona IDs must be unique")
         for persona in personas:
             if (not isinstance(persona, str) or
-                    not (registry_root / "personas" / f"{persona}.json").is_file()):
+                    not persona_registry.record_path(registry_root, "personas", persona)[1].is_file()):
                 errors.append(f"$.partitions[{index}]: unknown registry persona ID")
         for relation_index, relationship in enumerate(partition.get("relationships", [])):
             if relationship.get("target_partition_id") not in known:

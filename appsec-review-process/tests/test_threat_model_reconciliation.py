@@ -132,7 +132,7 @@ class ThreatModelReconciliationTests(unittest.TestCase):
         store=SchemaStore()
         for relative,schema in (("job-templates/03-threat-model-reconciliation.json","job-template.schema.json"),
                 ("output-contracts/threat-model-reconciliation.json","output-contract.schema.json"),
-                ("roles/threat-model-reconciler.json","role.schema.json"),
+                ("../personas/roles/threat-model-reconciler/role.json","role.schema.json"),
                 ("domains/threat-model-reconciliation.json","domain.schema.json"),
                 ("tooling-profiles/threat-model-reconciliation.json","tooling-profile.schema.json")):
             value=json.loads((ROOT/"registry"/relative).read_text())
@@ -141,7 +141,7 @@ class ThreatModelReconciliationTests(unittest.TestCase):
         policy=output_validator.CLAIM_CLASS_POLICIES[tr.CONTRACT]
         self.assertEqual(policy["claim_class_id"],contract["claim_class"]["claim_class_id"])
         self.assertEqual(policy["allowed_assertions"],set(contract["claim_class"]["allowed_assertions"]))
-        role=json.loads((ROOT/"registry/roles/threat-model-reconciler.json").read_text())
+        role=json.loads((ROOT/"personas/roles/threat-model-reconciler/role.json").read_text())
         tooling=json.loads((ROOT/"registry/tooling-profiles/threat-model-reconciliation.json").read_text())
         self.assertEqual(set(role["allowed_outputs"]),set(tooling["claim_limits"]["allowed"]))
 
