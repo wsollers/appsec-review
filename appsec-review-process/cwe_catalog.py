@@ -125,8 +125,12 @@ class Catalog:
         """Report line for a feed catalog that was sought and not used (None when the feed was used)."""
         if not self.gap:
             return None
+        reason = {GAP_MISSING: "no usable MITRE CWE snapshot is published on this host",
+                  GAP_STALE: "the MITRE CWE snapshot is older than the reference age ceiling",
+                  GAP_INVALID: "the MITRE CWE snapshot failed verification"}.get(self.gap["code"], "feed not used")
+        # Fixed wording only: the gap detail may carry host paths or exception text.
         return (f"{self.gap['code']}: CWE ids validated against the committed curated catalog "
-                f"({self.version}), not the full MITRE catalog; {self.gap.get('detail', '')}".rstrip("; "))
+                f"({self.version}), not the full MITRE catalog; {reason}")
 
     def for_lead(self, tool_id: str, rule_id: str, tags: Iterable[str] = ()) -> tuple[list[str], list[str]]:
         """(CWE ids, limitations) for one tool lead from the pinned map and the lead's own tags."""
