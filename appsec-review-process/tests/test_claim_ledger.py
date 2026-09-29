@@ -385,7 +385,7 @@ class ClaimLedgerTests(unittest.TestCase):
             sources, coverage = ledger.lead_sources("run1", "sha256:" + "1" * 64, "component-1")
         self.assertEqual(sources, [])
         self.assertEqual({row["job_id"]: row["status"] for row in coverage},
-            {"02-source-sast": "SKIPPED", "02-native-sast": "ABSENT", "02-secrets-inventory": "ABSENT",
+            {"02-source-sast": "SKIPPED", "02-codeql-sast": "ABSENT", "02-native-sast": "ABSENT", "02-secrets-inventory": "ABSENT",
              "02-sca-vulnerability-match": "ABSENT", "02-iac-config-scan": "ABSENT", "02-mobile-sast": "SKIPPED"})
         self.assertEqual(ledger.lead_candidates([]), [])
 

@@ -473,7 +473,9 @@ class WaveRunnerTests(unittest.TestCase):
                  "producer_attempt_id": "sbom-1", "sha256": "sha256:" + "b" * 64}]},
             {"job_id": "02-standards-source-ingest", "attempt_id": "s", "execution_status": "OK", "artifacts": []},
             {"job_id": "02-mobile-sast", "attempt_id": "m", "execution_status": "SKIPPED", "artifacts": []}]})
+        # supporting_evidence_menu (ADR-0015) is now importable; this test pins the F02-manifest fallback.
         with mock.patch.object(tw, "run_path", return_value=run_root), \
+                mock.patch.dict(sys.modules, {"supporting_evidence_menu": None}), \
                 mock.patch.object(tw, "data_path", side_effect=lambda _run, *parts: run_root / "data" / Path(*parts)):
             value = tw.current_inputs("run1", self.inputs)
         items = {item["item_id"]: item for item in value["menu"]["items"]}
