@@ -1,6 +1,6 @@
 # AppSec review - implemented process flow
 
-Snapshot: 2026-09-27. The machine-readable authorities are
+Snapshot: 2026-09-27 (diagram updated 2026-09-29 for ADR-0023). The machine-readable authorities are
 [`job-graph.json`](../appsec-review-process/job-graph.json),
 [`design-parity-manifest.json`](../appsec-review-process/design-parity-manifest.json), and the
 registry contracts. The generated [job and artifact catalog](processes/job-catalog.md) is the exact
@@ -15,6 +15,15 @@ flowchart TD
   D --> B[Isolated build replay and native build]
   B --> N[Native SAST, LLVM IR, Joern CPG, tests and ELF hardening]
   S & N & D --> E[Accepted evidence assembly and searchable index]
+  I --> CQ[02-codeql-lang: eight per-language CodeQL nodes in parallel]
+  B -->|cpp only| CQ
+  CQ --> RC[06-reachability-codeql]
+  N --> RI[06-reachability-ir: CPG and LLVM IR]
+  S --> RC & RI
+  RC & RI --> CR[06-cve-reachability correlator]
+  S --> CR
+  CR --> L
+  CR -->|summary| X
   E --> C[01 component characterization]
   C --> P[02 full-review input assembly]
   C --> T1[L6A initial DFD and STRIDE model]
@@ -31,8 +40,8 @@ flowchart TD
   V --> K[14 attack-chain composition and refutation]
   Q --> X[10 synthesis report publication]
   K -.->|optional| X
-  Q --> P[12b light PoC and proposed fix]
-  P -.->|optional| X
+  Q --> PF[12b light PoC and proposed fix]
+  PF -.->|optional| X
   X --> A[Completeness and final-publication controls]
 ```
 
@@ -74,6 +83,16 @@ lifecycle, ELF binary hardening, mobile SAST, and Go/Java/PHP source SAST. Offli
 matching binds exact Grype/OSV snapshot bytes and records age; snapshot refresh is an out-of-band
 maintenance job and a stale or missing snapshot becomes a coverage gap. Native binaries produced by
 the build lane are routed to Checksec and retained with the build identity.
+
+CodeQL runs as eight per-language nodes `02-codeql-<lang>` in parallel
+([ADR-0023](decisions/ADR-0023-per-language-codeql-reachability.md)): interpreted languages after
+intake, Java and C# in build-mode none, C/C++ after the native build (traced rows per unit); Go and
+Rust are recorded gaps and an absent language is SKIPPED, never a failure. Each node publishes P1
+leads and a hash-bound pointer to its retained database. Dependency reachability then runs two
+engines that write one table (`06-reachability-codeql` over those databases, `06-reachability-ir`
+over the CPG and LLVM IR), and `06-cve-reachability` correlates them per SCA match into
+`reachable`, `unreachable`, `unknown` or `conflict`; its summary feeds the claim ledger, lanes
+07/08/09/12 and the report. Details: [`dependency-reachability.md`](dependency-reachability.md).
 
 ## Threat modeling and standards processes
 
