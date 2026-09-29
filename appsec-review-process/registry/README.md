@@ -16,8 +16,10 @@ Other compositions are plans until an executor and validated output contract are
 this along with the staged run configuration before pre-validation; arbitrary target commands
 are rejected. Its timeout/retry/composition fields govern the worker invocation.
 
-- `personas/` define reviewer stance, assumptions, inputs, outputs, and hard boundaries.
-- `roles/` define work function and allowed output shape.
+- `../personas/personas/<id>/` define reviewer stance, assumptions, inputs, outputs, and hard boundaries.
+- `../personas/roles/<id>/` define work function and allowed output shape.
+  (Personas and roles live in one folder per record beside this directory; see
+  [personas-and-registry](../../docs/personas-and-registry/README.md).)
 - `domains/` define the reviewed surface and evidence hints.
 - `tooling-profiles/` define evidence and action boundaries.
 - `output-contracts/` define required files, status fields, and validation rules.
@@ -55,7 +57,7 @@ A job template may list `persona_variants`: registry personas one of its instanc
 instead of the composed persona (ADR-0021). `persona_invocation.load_composition` accepts only a
 listed id and still pins that persona record's hash. `claim-review-pool-cell` uses this with
 `stage_personas` to give each 07/08/09/12 reviewer shard its own persona. Catalog personas are
-generated into `personas/` by `../catalog_personas.py` (see
+generated into `../personas/personas/` by `../catalog_personas.py` (see
 [persona-catalog.md](../../docs/personas-and-registry/persona-catalog.md)).
 
 Design rules:

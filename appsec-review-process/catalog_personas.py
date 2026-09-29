@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Registry persona records derived from ``docs/personas-and-registry/persona-catalog.md``.
 
-The catalog is the human-readable source; ``registry/personas/<id>.json`` is what jobs load. This
+The catalog is the human-readable source; ``personas/personas/<id>/persona.json`` is what jobs load. This
 tool turns each catalog ``### <persona-id>`` section that has no registry record into one
 (``appsec-review/persona/0.1``) and marks it with a ``provenance`` block so a reviewer can tell a
 catalog-derived record from a hand-authored one. It never rewrites a hand-authored record (one
@@ -26,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 CATALOG = ROOT.parent / "docs" / "personas-and-registry" / "persona-catalog.md"
-PERSONAS = ROOT / "registry" / "personas"
+PERSONAS = ROOT / "personas" / "personas"
 GENERATOR = "catalog_personas.py"
 SCHEMA = "appsec-review/persona/0.1"
 
@@ -185,11 +185,12 @@ def _hand_authored(path: Path) -> bool:
 def generate(catalog: Path = CATALOG, personas: Path = PERSONAS) -> list[str]:
     written = []
     for persona_id, section in sorted(parse(catalog.read_text(encoding="utf-8")).items()):
-        path = personas / f"{persona_id}.json"
+        path = personas / persona_id / "persona.json"
         if path.exists() and _hand_authored(path):
             continue
         data = json.dumps(record(persona_id, section), indent=2, ensure_ascii=False) + "\n"
         if not path.exists() or path.read_text(encoding="utf-8") != data:
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(data, encoding="utf-8", newline="\n")
             written.append(persona_id)
     return written
@@ -198,7 +199,7 @@ def generate(catalog: Path = CATALOG, personas: Path = PERSONAS) -> list[str]:
 def check(catalog: Path = CATALOG, personas: Path = PERSONAS) -> list[str]:
     errors = []
     for persona_id, section in sorted(parse(catalog.read_text(encoding="utf-8")).items()):
-        path = personas / f"{persona_id}.json"
+        path = personas / persona_id / "persona.json"
         if not path.is_file():
             errors.append(f"catalog persona {persona_id} has no registry record")
         elif not _hand_authored(path):

@@ -320,7 +320,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
 
         worklist = json.loads((registry / "tooling-profiles/owasp-worklist-builder.json").read_text())
         validator = json.loads((registry / "tooling-profiles/owasp-control-validator.json").read_text())
-        role = json.loads((registry / "roles/standards-control-validator.json").read_text())
+        role = json.loads((PROCESS / "personas/roles/standards-control-validator/role.json").read_text())
         self.assertNotIn("control_verdict", persona_invocation.claim_ceiling(role, worklist)["allowed"])
         ceiling = persona_invocation.claim_ceiling(role, validator)
         self.assertEqual(set(ceiling["allowed"]), {

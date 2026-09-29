@@ -26,6 +26,7 @@ def code_identity():
     paths = list(ROOT.glob('*.py')) + [ROOT/'job-graph.json',ROOT/'process-manifest.json',ROOT/'phase-1-implementation-prompt.md',
         ROOT/'00-intake-recovery/config.md',ROOT/'00-intake-recovery/prompt.md',ROOT/'tooling/buildenv-catalog.json']
     paths += list((ROOT/'registry').rglob('*.json')) + list((REPO/'schemas').glob('*.json')) + list((ROOT/'tests').glob('*.py'))
+    paths += [p for p in (ROOT/'personas').rglob('*') if p.is_file()]
     paths += [REPO/'orchestrator/dagster'/name for name in ('definitions.py','compose.yaml','Dockerfile','requirements.txt','requirements.lock.txt','dagster.yaml','workspace.yaml','code-location.sh')]
     paths += [REPO/'pipeline/engagement_job.ps1',REPO/'pipeline/engagement_job.sh',REPO/'docs/design-parity/job-graph.mmd']
     return {'base_revision':subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip(),
@@ -54,6 +55,7 @@ def containers(project):
 
 def contracts():
     from job_graph import composition,load_graph,mermaid
+    import persona_registry
     from schema_validate import validate_document
     from validate_design_parity import validate_manifest
     kinds={'personas':('persona','persona_id'),'roles':('role','role_id'),'domains':('domain','domain_id'),
@@ -61,9 +63,10 @@ def contracts():
            'job-templates':('job-template','job_template_id'),'container-images':('container-image','image_id')}
     count=0
     for folder,(schema,field) in kinds.items():
-        for path in (ROOT/'registry'/folder).glob('*.json'):
+        for rid in persona_registry.record_ids(ROOT/'registry',folder):
+            path=persona_registry.record_path(ROOT/'registry',folder,rid)[1]
             record=read_json(path); errors=validate_document(record,schema+'.schema.json')
-            if errors or record[field] != path.stem: raise ValueError(str(path)+': '+str(errors))
+            if errors or record[field] != rid: raise ValueError(str(path)+': '+str(errors))
             if folder=='job-templates': composition(record)
             count+=1
     graph=load_graph()

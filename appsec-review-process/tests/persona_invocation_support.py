@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 import permission_capabilities as pc  # noqa: E402
 import persona_invocation as pi  # noqa: E402
+import persona_registry  # noqa: E402
 
 RUN, JOB, ATTEMPT = "run-b14", "job-b14", "attempt-b14"
 IDS = {"run_id": RUN, "job_id": JOB, "attempt_id": ATTEMPT}
@@ -59,6 +60,12 @@ def copy_registry(target: Path, source: Path = pi.REGISTRY_DIR) -> Path:
         copy = target / path.relative_to(source)
         copy.parent.mkdir(parents=True, exist_ok=True)
         copy.write_bytes(path.read_bytes())
+    # Persona and role folders sit beside the registry directory (persona_registry.folder_root).
+    folders, copies = persona_registry.folder_root(source), persona_registry.folder_root(target)
+    for path in sorted(p for p in folders.rglob("*") if p.is_file()):
+        copy = copies / path.relative_to(folders)
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(path.read_bytes())
     return target
 
 
@@ -99,7 +106,8 @@ def composition_block(template_id: str = TEMPLATE, registry_dir: Path = pi.REGIS
     block = {"job_template_id": template_id, "job_template_sha256": pi._sha(template)}
     for name, directory, _, _ in pi.COMPOSITION_KINDS[1:]:
         record_id = template["composition"][name + "_id"]
-        record = json.loads((registry_dir / directory / (record_id + ".json")).read_text(encoding="utf-8"))
+        path = persona_registry.record_path(registry_dir, directory, record_id)[1]
+        record = persona_registry.loaded(directory, json.loads(path.read_text(encoding="utf-8")))
         block[name + "_id"], block[name + "_sha256"] = record_id, pi._sha(record)
     return block
 

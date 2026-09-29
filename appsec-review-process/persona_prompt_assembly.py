@@ -30,6 +30,7 @@ from typing import Any, Mapping
 
 import hashlib
 
+import persona_registry
 from execution_state import atomic_bytes, beneath, identifier
 from schema_validate import SchemaStore, validate_document
 
@@ -102,14 +103,20 @@ def _render_record(section: str, composition: Mapping[str, str], store: SchemaSt
     record_id = composition.get(composition_key)
     if not isinstance(record_id, str) or not record_id:
         raise PromptAssemblyError(f"job template composition is missing {composition_key}")
-    path = REGISTRY_DIR / directory / f"{identifier(record_id)}.json"
-    text = _read_utf8(path, REGISTRY_DIR, f"{section} record {record_id!r}")
+    root, path = persona_registry.record_path(REGISTRY_DIR, directory, identifier(record_id))
+    text = _read_utf8(path, root, f"{section} record {record_id!r}")
     try:
         record = json.loads(text)
     except ValueError:
         raise PromptAssemblyError(f"{section} record {record_id!r} is not valid JSON") from None
     if validate_document(record, schema, store) or record.get(record_field) != record_id:
         raise PromptAssemblyError(f"{section} record {record_id!r} is invalid or misnamed")
+    return render_record_section(section, record_id, persona_registry.loaded(directory, record))
+
+
+def render_record_section(section: str, record_id: str, record: Mapping[str, Any]) -> str:
+    """The exact prompt section for one loaded registry record (a persona or role folder's
+    ``prompt.md`` is this text; ``catalog_personas.py check`` keeps the two equal)."""
     body = json.dumps(record, indent=2, sort_keys=True)
     heading = section.replace("_", " ").title()
     return f"## {heading} ({record_id})\n\n```json\n{body}\n```\n"

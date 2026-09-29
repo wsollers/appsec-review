@@ -206,7 +206,7 @@ tooling profile and output contract. Use these references before adding or dispa
 
 - [persona catalog](../personas-and-registry/persona-catalog.md) for human-readable reviewer stances
 - [registry README](../../appsec-review-process/registry/README.md) for record types and dispatch rules
-- `appsec-review-process/registry/personas/` for machine persona records
+- `appsec-review-process/personas/` for machine persona and role records (one folder each)
 - `appsec-review-process/registry/job-templates/` for registered job compositions
 - [intelligence sources and jobs](../evidence/intelligence-sources-and-jobs.md) for doc/API/test/binary
   intelligence ingestion

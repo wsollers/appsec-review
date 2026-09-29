@@ -105,12 +105,12 @@ def _code_hashes() -> dict[str, str]:
              "registry/job-templates/07-hypothesis-discovery.json",
              "registry/output-contracts/hypothesis-discovery.json",
              "registry/output-contracts/hypothesis-hunt-candidates.json",
-             "registry/roles/vulnerability-hypothesis-hunter.json",
-             "registry/roles/hypothesis-hunt-coordinator.json",
+             "personas/roles/vulnerability-hypothesis-hunter/role.json",
+             "personas/roles/hypothesis-hunt-coordinator/role.json",
              "registry/domains/vulnerability-hypothesis-discovery.json",
              "registry/tooling-profiles/hypothesis-hunt-static.json"]
     for mode, template in sorted(TEMPLATES.items()):
-        paths += [f"registry/job-templates/{template}.json", f"registry/personas/{derive.MODES[mode]}.json",
+        paths += [f"registry/job-templates/{template}.json", f"personas/personas/{derive.MODES[mode]}/persona.json",
                   f"07-red-team-adversarial/task-{template}.md"]
     paths += [f"07-red-team-adversarial/{name}" for name in sorted({n for v in GUIDE_FILES.values() for n in v})]
     values = {path: file_hash(ROOT / path) for path in paths}

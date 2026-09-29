@@ -151,10 +151,10 @@ MENU_DESCRIPTIONS = {
 CODE_FILES = (
     "threat_workbench.py", "threat_workbench_intercom.py",
     *(f"registry/job-templates/{cell.template_id}.json" for cell in WORKCELLS),
-    *(f"registry/personas/{cell.persona_id}.json" for cell in WORKCELLS),
+    *(f"personas/personas/{cell.persona_id}/persona.json" for cell in WORKCELLS),
     *(f"03-threat-model-dfd-stride/cells/{cell.workcell_id}.md" for cell in WORKCELLS),
-    "registry/roles/data-flow-modeler.json", "registry/roles/abuse-modeler.json",
-    "registry/roles/attack-modeler.json", "registry/domains/threat-model-graph.json",
+    "personas/roles/data-flow-modeler/role.json", "personas/roles/abuse-modeler/role.json",
+    "personas/roles/attack-modeler/role.json", "registry/domains/threat-model-graph.json",
     "registry/tooling-profiles/threat-workbench-static-evidence.json",
     "registry/output-contracts/threat-workbench-cell-output.json",
 )

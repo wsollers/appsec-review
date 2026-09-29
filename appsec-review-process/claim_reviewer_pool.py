@@ -188,14 +188,14 @@ def _code_hashes() -> dict[str, str]:
              "pool_launcher.py", "pool_rendezvous.py", "pool_specification.py",
              "registry/job-templates/claim-review-pool-cell.json",
              "registry/output-contracts/claim-review-pool-candidates.json",
-             "registry/personas/claim-reviewer.json", "registry/roles/claim-reviewer.json",
+             "personas/personas/claim-reviewer/persona.json", "personas/roles/claim-reviewer/role.json",
              "registry/domains/claim-review-lifecycle.json",
              "registry/tooling-profiles/claim-review-static.json", "claim-review-pool-task.md"]
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")
     for persona_id in sorted({item for ids in _stage_personas().values() for item in ids}):
-        path = f"registry/personas/{persona_id}.json"
+        path = f"personas/personas/{persona_id}/persona.json"
         result[path] = file_hash(ROOT / path)
     result["schemas/claim-review-pool-candidates.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-pool-candidates.schema.json")

@@ -26,14 +26,16 @@ scope and boundaries fit. Create only the records needed for a distinct review c
 
 | Directory | Identity field | Schema filename |
 |---|---|---|
-| `personas/` | `persona_id` | `persona.schema.json` |
-| `roles/` | `role_id` | `role.schema.json` |
+| `../personas/personas/<id>/` | `persona_id` | `persona.schema.json` (in `../personas/`) |
+| `../personas/roles/<id>/` | `role_id` | `role.schema.json` (in `../personas/`) |
 | `domains/` | `domain_id` | `domain.schema.json` |
 | `tooling-profiles/` | `tooling_profile_id` | `tooling-profile.schema.json` |
 | `output-contracts/` | `contract_id` | `output-contract.schema.json` |
 | `job-templates/` | `job_template_id` | `job-template.schema.json` |
 
-- Save each record as `<id>.json`, with two-space indentation and a final newline.
+- Save each record as `<id>.json`, with two-space indentation and a final newline. Personas and
+  roles are folders instead: `<id>/persona.json` or `<id>/role.json` plus `<id>/prompt.md` (see
+  [the personas folder](../../docs/personas-and-registry/README.md)).
 - IDs must start with a lowercase ASCII letter or digit and contain only lowercase letters,
   digits, and hyphens: `^[a-z0-9][a-z0-9-]*$`. The job schema uses the equivalent
   `^[0-9a-z][0-9a-z-]*$`. Prefer readable kebab-case without repeated or trailing hyphens.
@@ -88,7 +90,7 @@ record instead of copying a skeleton when appropriate.
 
 ### Persona: reviewer stance
 
-File: `personas/example-project-reviewer.json`
+File: `../personas/personas/example-project-reviewer/persona.json`
 
 ```json
 {
@@ -122,7 +124,7 @@ Checklist:
 
 ### Role: bounded work function
 
-File: `roles/example-project-inventory-builder.json`
+File: `../personas/roles/example-project-inventory-builder/role.json`
 
 ```json
 {
@@ -372,7 +374,10 @@ store = SchemaStore()
 errors = []
 count = 0
 for directory, (kind, id_field) in record_types.items():
-    paths = sorted((registry / directory).glob("*.json"))
+    if directory in ("personas", "roles"):
+        paths = sorted((registry.parent / "personas" / directory).glob(f"*/{kind}.json"))
+    else:
+        paths = sorted((registry / directory).glob("*.json"))
     if not paths:
         errors.append(f"{directory}: no records found; check working directory")
     for path in paths:
@@ -384,8 +389,9 @@ for directory, (kind, id_field) in record_types.items():
             continue
         errors.extend(f"{path}: {error}" for error in
                       validate_document(record, f"{kind}.schema.json", store))
-        if isinstance(record, dict) and record.get(id_field) != path.stem:
-            errors.append(f"{path}: filename must match {id_field}")
+        name = path.parent.name if directory in ("personas", "roles") else path.stem
+        if isinstance(record, dict) and record.get(id_field) != name:
+            errors.append(f"{path}: file or folder name must match {id_field}")
 for error in errors:
     print(error)
 print(f"Checked {count} records; {len(errors)} errors")

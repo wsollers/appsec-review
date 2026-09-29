@@ -44,7 +44,7 @@ CODE_FILES = (
     "validate_job_output.py", "worker_result.py", "pool_rendezvous.py", "pool_specification.py",
     "worker_adapters.py", "container_execution.py", "persona_invocation.py",
     "registry/job-templates/02-evidence-assembly.json",
-    "registry/output-contracts/pregather.json", "registry/roles/evidence-assembler.json",
+    "registry/output-contracts/pregather.json", "personas/roles/evidence-assembler/role.json",
     "registry/domains/evidence-assembly.json",
     "registry/tooling-profiles/hash-bound-evidence-assembly.json",
 )

@@ -148,7 +148,7 @@ class RegistryTests(unittest.TestCase):
                       "12-scoring-prioritization": {"synthesis", "stakeholder-output"}}
         for stage, ids in TEMPLATE["stage_personas"].items():
             for persona_id in ids:
-                record = json.loads((ROOT / f"registry/personas/{persona_id}.json").read_text())
+                record = json.loads((ROOT / f"personas/personas/{persona_id}/persona.json").read_text())
                 self.assertIn(record["category"], categories[stage], (stage, persona_id))
 
     def test_registry_survey_accepts_the_new_records_and_variants(self):

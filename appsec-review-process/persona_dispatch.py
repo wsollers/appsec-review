@@ -52,6 +52,7 @@ from typing import Any
 import model_version_registry as mvr
 import persona_invocation as pi
 import persona_prompt_assembly as ppa
+import persona_registry
 import permission_capabilities as pc
 import review_cli as rc
 from execution_state import beneath, identifier
@@ -99,9 +100,9 @@ def _composition_block(job_template_id: str, template: dict[str, Any], store: Sc
         record_id = template["composition"].get(name + "_id")
         if not isinstance(record_id, str) or not record_id:
             raise RequestBuildError(f"job template composition is missing {name}_id")
-        path = REGISTRY_DIR / directory / f"{identifier(record_id)}.json"
+        path = persona_registry.record_path(REGISTRY_DIR, directory, identifier(record_id))[1]
         try:
-            record = json.loads(path.read_text(encoding="utf-8"))
+            record = persona_registry.loaded(directory, json.loads(path.read_text(encoding="utf-8")))
         except OSError:
             raise RequestBuildError(f"{name} record {record_id!r} is missing") from None
         except ValueError:

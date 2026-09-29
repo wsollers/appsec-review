@@ -26,7 +26,7 @@ CODE_FILES = (
     "publish_job_output.py", "validate_job_output.py",
     "registry/job-templates/03-threat-model-reconciliation.json",
     "registry/output-contracts/threat-model-reconciliation.json",
-    "registry/roles/threat-model-reconciler.json",
+    "personas/roles/threat-model-reconciler/role.json",
     "registry/domains/threat-model-reconciliation.json",
     "registry/tooling-profiles/threat-model-reconciliation.json",
 )

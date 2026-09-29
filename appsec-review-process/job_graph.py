@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 from execution_state import ROOT, identifier, read_json, file_hash, digest, Blocked
 from schema_validate import validate_document
+import persona_registry
 
 REGISTRY = ROOT / 'registry'
 GRAPH = ROOT / 'job-graph.json'
@@ -19,8 +20,9 @@ def composition(job, registry=REGISTRY):
     records = {}
     for key, (directory, schema, field) in KINDS.items():
         rid = identifier(job['composition'][key])
-        record = read_json(registry / directory / (rid + '.json'))
+        record = read_json(persona_registry.record_path(registry, directory, rid)[1])
         errors += validate_document(record, schema + '.schema.json')
+        record = persona_registry.loaded(directory, record)
         if record.get(field) != rid:
             errors.append('registry identity mismatch: ' + rid)
         records[key] = record

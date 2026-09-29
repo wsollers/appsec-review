@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 from execution_state import atomic_bytes, beneath  # noqa: E402
 import size_log
 import permission_capabilities as pc  # noqa: E402
+import persona_registry  # noqa: E402
 from schema_validate import SchemaStore, validate_document  # noqa: E402
 from tool_instance_shapes import output_path_errors  # noqa: E402
 
@@ -332,13 +333,13 @@ def composition_errors(records: Mapping[str, Mapping[str, Any]]) -> list[str]:
 def _load_record(registry_dir: Path, directory: str, schema: str, field: str, record_id: str,
                  store: SchemaStore) -> dict[str, Any]:
     try:
-        path = beneath(registry_dir, registry_dir / directory / (record_id + ".json"))
+        path = beneath(*persona_registry.record_path(registry_dir, directory, record_id))
         record = json.loads(path.read_bytes().decode("utf-8"))
     except (OSError, ValueError):
         raise PersonaRequestError(f"a {directory} record named by the request is missing, linked or unreadable") from None
     if validate_document(record, schema, store) or record.get(field) != record_id:
         raise PersonaRequestError(f"a {directory} record named by the request is invalid or misnamed")
-    return record
+    return persona_registry.loaded(directory, record)
 
 
 def load_composition(registry_dir: Path, persona: Mapping[str, str], store: SchemaStore
@@ -401,14 +402,14 @@ def _registry_survey(registry_dir: Path) -> tuple[list[str], list[str]]:
     store = SchemaStore()
     errors: list[str] = []
     denied: list[str] = []
-    personas = sorted((registry_dir / "personas").glob("*.json"))
+    personas = persona_registry.record_ids(registry_dir, "personas")
     if not personas:
         return ["persona registry is missing or empty"], denied
-    for path in personas:
+    for persona_id in personas:
         try:
-            _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", path.stem, store)
+            _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", persona_id, store)
         except PersonaRequestError:
-            errors.append(f"personas/{path.stem}: invalid, unreadable or misnamed")
+            errors.append(f"personas/{persona_id}: invalid, unreadable or misnamed")
     for path in sorted((registry_dir / "job-templates").glob("*.json")):
         try:
             template = _load_record(registry_dir, "job-templates", "job-template.schema.json",

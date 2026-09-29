@@ -203,8 +203,8 @@ class SynthesisReportTests(unittest.TestCase):
 
     def test_owned_registry_records_and_schemas_are_closed(self):
         store = SchemaStore()
-        records = (("personas/synthesis-report-drafter.json","persona.schema.json"),
-            ("roles/synthesis-report-drafter.json","role.schema.json"),
+        records = (("../personas/personas/synthesis-report-drafter/persona.json","persona.schema.json"),
+            ("../personas/roles/synthesis-report-drafter/role.json","role.schema.json"),
             ("domains/synthesis-report-core.json","domain.schema.json"),
             ("tooling-profiles/synthesis-report-static.json","tooling-profile.schema.json"),
             ("output-contracts/synthesis-report-draft.json","output-contract.schema.json"),

@@ -52,7 +52,7 @@ class ThreatModelCoreTests(unittest.TestCase):
         self.assertIn("bounded to 1 round", first["rescope_triggers"][0]["statement"])
         self.assertEqual(sorted({item["stride_category"] for item in first["stride_hypotheses"]}),
                          expected["stride_categories"])
-        role = json.loads((ROOT / "registry/roles/threat-model-core.json").read_text())
+        role = json.loads((ROOT / "personas/roles/threat-model-core/role.json").read_text())
         tooling = json.loads((ROOT / "registry/tooling-profiles/threat-model-static-evidence.json").read_text())
         self.assertEqual(set(role["allowed_outputs"]), set(tooling["claim_limits"]["allowed"]))
         self.assertTrue({"finding", "severity", "runtime_state"} <= set(role["forbidden_outputs"]))
@@ -198,7 +198,7 @@ class ThreatModelCoreTests(unittest.TestCase):
     def test_owned_registry_records_are_schema_valid(self):
         store = SchemaStore()
         records = (("job-templates/03-threat-model-dfd-stride.json", "job-template.schema.json"),
-            ("roles/threat-model-core.json", "role.schema.json"),
+            ("../personas/roles/threat-model-core/role.json", "role.schema.json"),
             ("domains/threat-model-core.json", "domain.schema.json"),
             ("tooling-profiles/threat-model-static-evidence.json", "tooling-profile.schema.json"),
             ("output-contracts/threat-model-core.json", "output-contract.schema.json"))
