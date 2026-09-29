@@ -38,7 +38,7 @@ ENV CODEQL_LICENSE_BASIS=ghas \
     CODEQL_BUNDLE=codeql-bundle-v2.27.0
 # --- Repo-owned scripts, kept LAST so editing them rebuilds only this layer.
 COPY scripts/ /opt/scripts/
-RUN chmod +x /opt/scripts/run-codeql.sh /opt/scripts/replay_compile_commands.py /opt/scripts/smoke-test.sh
+RUN chmod +x /opt/scripts/*
 
 USER worker
 WORKDIR /scratch

@@ -156,7 +156,51 @@ traced, Joern) for C/C++ claims.
 
 ## 6. CodeQL (step 6)
 
-See §6 detail in the CodeQL commit.
+`02-codeql-sast` (`appsec-review-process/codeql_sast.py`, ADR-0017) keeps its build-mode none lanes
+unchanged and gains a second tool id, **`codeql-cpp-traced`** (ADR-0017 decision 4 left this
+open):
+
+- **Input.** The caller passes the accepted `02-native-build` publication
+  (`run(..., native_build_root=, native_build_fingerprint=)`, same pair `02-native-sast` takes).
+  `load_native_units` revalidates it with `native_sast.load_native_build`, so the traced lane
+  replays exactly the adapted compile databases `02-native-sast` analyses, after the same screening
+  (in-image `/opt/llvm` clang only; no response files, `-Xclang`, plugins, `--config`, `-specs=`).
+  Without that input the plan is byte-for-byte the build-mode none plan.
+- **Execution.** One B13 container per native unit in `audit-codeql-native` (the CodeQL bundle on
+  `audit-native`, same LLVM 21.1.0): `codeql-sast-lane.sh cpp traced <suite> <threads> <ram>
+  /inputs/codeql-db/<unit>/compile_commands.json /inputs/codeql-queries`. CodeQL traces
+  `replay_compile_commands.py`, which runs only the recorded compiler invocations (objects to
+  `/scratch/obj`, dependency files dropped, a second screen refusing `-B`, `--gcc-toolchain` and
+  the plugin flags) and writes `{total, ok, failed, refused}` to `/scratch/replay.json`. No target
+  build script, configure step or test runs. Network none, `/workspace` read-only.
+- **Output.** Leads with `tool_id: codeql-cpp-traced` from the same `cpp-security-extended` suite;
+  the tool row carries `unit_id` and the replay counts; a unit with failed or refused TUs adds
+  `codeql-traced-replay-incomplete:<key>:ok=..:failed=..:refused=..:total=..`; a unit that fails
+  as a whole is the usual per-lane gap. The build-mode none fidelity gap stays on the none row.
+- **Other compiled languages.** Java and C# stay build-mode none: a traced Maven/Gradle/MSBuild
+  build needs dependency downloads the offline boundary forbids. C# now has the .NET SDK
+  (9.0.318) in `audit-codeql`, which removes ADR-0017's "C# fails, no dotnet" gap. Go stays a gap
+  (no build-mode none; autobuild needs module downloads).
+
+### 6.1 Queries for brief E (names are the contract)
+
+`queries/appsec-graph-cpp` (pack `appsec/cpp-graph-queries`), mounted read-only at run time (not
+copied into the image) and hashed into each traced plan row (`graph_pack_sha256`). The traced lane
+runs them on the traced database after the security suite and decodes to
+`tools/codeql-cpp-traced-<unit>/scratch/graph/<Query>.csv`; each CSV's sha256 is in the receipt
+(`graph_outputs`) and re-verified by `validate`. A failing graph query is logged
+(`graph/<Query>.log`) and its CSV is absent (`null` in the receipt); it does not fail the lane.
+
+| Query | Library | Columns |
+|---|---|---|
+| `CallEdges.ql` | `cpp` (`Call.getTarget()`) | caller_name, caller_file, caller_line, call_file, call_line, callee_name, callee_file, callee_line, callee_defined |
+| `EntryPoints.ql` | `cpp` | name, file, line, reason (`main` / `no-internal-caller` / `address-taken`) |
+| `FlowSources.ql` | `semmle.code.cpp.security.FlowSources` | source_type, file, line, function |
+
+Brief E owns reachability and any taint path queries built on
+`semmle.code.cpp.dataflow.new.TaintTracking` with these sources; this branch does not implement
+reachability. The queries are written but **not compiled here** (no CodeQL in the authoring
+container); the smoke script compiles them.
 
 ## 7. OPEN
 

@@ -62,7 +62,7 @@
         "properties": {
           "tool_id": {
             "type": "string",
-            "pattern": "^codeql-[a-z]+\\Z"
+            "pattern": "^codeql-[a-z]+(-traced)?\\Z"
           },
           "tool": {
             "const": "codeql"
@@ -82,14 +82,20 @@
             ]
           },
           "build_mode": {
-            "const": "none"
+            "enum": [
+              "none",
+              "traced"
+            ]
           },
           "query_suite": {
             "type": "string",
             "pattern": "^codeql/[a-z]+-queries:codeql-suites/[a-z]+-security-extended\\.qls\\Z"
           },
           "image_id": {
-            "const": "audit-codeql"
+            "enum": [
+              "audit-codeql",
+              "audit-codeql-native"
+            ]
           },
           "image_digest": {
             "type": "string",
@@ -110,6 +116,41 @@
           "dropped_records": {
             "type": "integer",
             "minimum": 0
+          },
+          "unit_id": {
+            "type": "string",
+            "pattern": "^[^\\x00-\\x1f\\x7f]{1,256}\\Z"
+          },
+          "replay": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "ok",
+              "failed",
+              "refused"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ok": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refused": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         }
       }
@@ -137,7 +178,7 @@
           },
           "tool_id": {
             "type": "string",
-            "pattern": "^codeql-[a-z]+\\Z"
+            "pattern": "^codeql-[a-z]+(-traced)?\\Z"
           },
           "rule_id": {
             "type": "string",

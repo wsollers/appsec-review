@@ -11,6 +11,14 @@ create with `--build-mode none`, analyze with `codeql/<lang>-queries:codeql-suit
 to `/scratch/codeql.sarif`, database removed. `tool.json` is the metadata the job authenticates. The job
 has no license gate (William, 2026-09-28); `run-codeql.sh` below is the manual path.
 
+Traced C/C++ (`codeql-cpp-traced`, brief C): with an accepted `02-native-build` wired in, one
+container per native unit runs the same lane script in `audit-codeql-native` as
+`codeql-sast-lane.sh cpp traced SUITE THREADS RAM_MB /inputs/codeql-db/<unit>/compile_commands.json
+/inputs/codeql-queries`, replaying only the adapted compiler invocations under the tracer
+(`replay_compile_commands.py`) and then running the `queries/appsec-graph-cpp` tables for brief E.
+Details: [`docs/language-servers.md`](../../docs/language-servers.md) §6. The image also carries the
+.NET 9.0.318 SDK (C# build-mode none) and tree-sitter.
+
 ## License basis
 
 `ghas` — GitHub Advanced Security via Microsoft (ZeniMax). Set as the image default and
@@ -31,7 +39,7 @@ can distinguish code changes from query changes (design §14).
 |---|---|---|
 | javascript/typescript, python, ruby | interpreted | no build needed |
 | go | buildless | |
-| java, csharp | `--build-mode none` | no build; lower fidelity than a traced build |
+| java, csharp | `--build-mode none` | no build; lower fidelity than a traced build; C# resolves references with the bundled .NET 9 SDK |
 | cpp | `--build-mode none` (default) | no compiler; **no** build-driven macro/template resolution. Use for breadth, not for memory-safety claims. |
 | cpp, `--traced-cpp compile_commands.json` | traced clang-cl replay | experimental; CodeQL documents clang-cl support as *preliminary*; needs clang-cl + `/msvc` in the same image |
 | php | — | **not supported by CodeQL.** Stays with `audit-static` (Psalm/PHPStan/Semgrep). |
