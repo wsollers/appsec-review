@@ -10,6 +10,7 @@
     pipeline/permission-capabilities/     capability definitions
     pipeline/container-images/<id>.json   pinned tool images
     pipeline/prompt-fragments/            shared prompt text
+    pipeline/prompt-fragments/tool-guides/  one guide per model lookup tool or family (brief U4)
 
 ``appsec-review-process/pipeline/`` is not the repository-root ``pipeline/`` (the Layer 1 evidence
 scripts). Personas and roles live in ``personas/`` beside it; ``persona_registry`` owns those paths.
@@ -45,6 +46,7 @@ TOOLING_PROFILES_DIR = REGISTRY / TOOLING_PROFILES
 PERMISSION_CAPABILITIES_DIR = REGISTRY / PERMISSION_CAPABILITIES
 CONTAINER_IMAGES_DIR = REGISTRY / CONTAINER_IMAGES
 PROMPT_FRAGMENTS_DIR = REGISTRY / PROMPT_FRAGMENTS
+TOOL_GUIDES_DIR = PROMPT_FRAGMENTS_DIR / "tool-guides"
 
 
 def record(kind: str, record_id: str, registry_dir: Path = REGISTRY) -> Path:

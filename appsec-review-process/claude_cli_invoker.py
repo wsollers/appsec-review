@@ -209,14 +209,46 @@ def _inline_input_limit(cfg: dict) -> int:
     return value if isinstance(value, int) and value > 0 else INLINE_INPUT_BYTES_DEFAULT
 
 
-def _input_tool_names() -> list[str]:
+def _input_tool_names(code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
+    """``--allowedTools``: the base lookup tools plus exactly the granted structural query tools."""
+    return [f"mcp__{INPUT_MCP_SERVER}__{name}" for name in granted_tool_names(code_tools)]
+
+
+def granted_tool_names(code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
+    """Every tool an indexed-mode job may call, in order: the base lookups, then its code tools.
+    The prompt's tool guides, the input server's tools/list and ``--allowedTools`` all come from
+    this one list, so what the prompt describes and what the CLI grants cannot disagree (brief U3)."""
     import input_mcp
-    return [f"mcp__{INPUT_MCP_SERVER}__{tool['name']}" for tool in input_mcp.TOOLS]
+    return [tool["name"] for tool in input_mcp.BASE_TOOLS] + list(code_tools)
 
 
-def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None) -> Path:
+def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
+    """(pinned code-index.json ref, granted code_* tools) for this invocation (ADR-0032).
+
+    A job gets a structural query tool only when its tooling profile lists it (``allowed_actions``
+    entry ``query tool: <name>``), its tunable family is on, and its OWN pinned inputs include an
+    accepted code index whose recorded capabilities can answer it. Otherwise nothing changes."""
+    import code_query_mcp
+    profile = dict(package.composition.get("tooling_profile") or {})
+    if not code_query_mcp.profile_tools(profile):
+        return None, ()
+    by_ref = {f"{item.root}:{item.path}": item for item in package.inputs}
+    ref = code_query_mcp.summary_ref(list(by_ref))
+    if ref is None:
+        return None, ()
+    try:
+        summary = json.loads(by_ref[ref].data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None, ()
+    tools = tuple(code_query_mcp.grantable(profile, summary.get("capabilities") if isinstance(summary, dict) else None))
+    return (ref, tools) if tools else (None, ())
+
+
+def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
+                          code: tuple[str | None, tuple[str, ...]] = (None, ())) -> Path:
     """Write the package's pinned bytes to a private folder for ``input_mcp.py`` and return the
-    MCP config path. Outside the attempt tree, like the other diagnostics."""
+    MCP config path. Outside the attempt tree, like the other diagnostics. ``code`` is the
+    ``code_query_grant``: the server serves exactly those code tools over that pinned index."""
     folder = scratch / "inputs"
     (folder / "files").mkdir(parents=True, exist_ok=True)
     entries = []
@@ -231,6 +263,8 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
                        "--run-id", package.request["run_id"], "--inputs", str(folder),
                        "--job-id", str(package.request.get("job_id")),
                        "--attempt-id", str(package.request.get("attempt_id")),
+                       "--usage-file", str(scratch / "tool-usage.json"),
+                       *(["--code-index", code[0], "--code-tools", ",".join(code[1])] if code[1] else []),
                        *(["--output-root", str(output_root)] if output_root else [])]}
     config = scratch / "mcp-config.json"
     config.write_text(json.dumps({"mcpServers": {INPUT_MCP_SERVER: server}}), encoding="utf-8")
@@ -238,6 +272,15 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
 
 
 INVENTORY_ROWS_MAX = tunables.shared("invoker_inventory_rows_max")   # above this, summarise by folder
+
+
+def _tool_usage(scratch: Path) -> dict[str, int]:
+    """Per-tool call counts the input server wrote for this invocation (empty when none)."""
+    try:
+        counts = json.loads((scratch / "tool-usage.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): v for k, v in counts.items() if isinstance(v, int)} if isinstance(counts, dict) else {}
 
 
 def _inventory_section(items: list, root_label: str) -> list[str]:
@@ -337,7 +380,8 @@ def _render_readable_inputs(inputs: tuple) -> str:
 
 
 def build_prompt_text(package: Any, output_contract: dict[str, Any], store: SchemaStore,
-                      indexed: bool = False, persona_schema: str | None = None) -> str:
+                      indexed: bool = False, persona_schema: str | None = None,
+                      tool_guides_text: str = "") -> str:
     """The assembled outer prompt (governing rules, persona, role, domain, tooling profile,
     buildenv catalog, task, output contract -- already rendered by
     ``persona_prompt_assembly.assemble_outer_prompt`` and pinned by
@@ -374,6 +418,8 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
         schema_sections.append(_render_json_schema(
             persona_schema or output_contract["result_schema"]["schema_file"], store))
     parts = [outer, (_render_input_inventory if indexed else _render_readable_inputs)(package.inputs)]
+    if indexed and tool_guides_text:
+        parts.append(tool_guides_text.rstrip())
     if schema_sections:
         parts.append("## Required Output Schema(s)\n\n" + "\n".join(schema_sections))
     parts.append(ENVELOPE_INSTRUCTIONS.format(envelope_keys=envelope_keys))
@@ -418,7 +464,8 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
 
 
 def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, timeout_seconds: int,
-                   binary: str, mcp_config: Path | None = None) -> list[str]:
+                   binary: str, mcp_config: Path | None = None,
+                   code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
     """`binary` is the caller's already-resolved, real absolute claude CLI path (see
     ``claude_binary_resolver.py`` -- resolved and pinned once per run by whichever job dispatches
     first, normally ``model_version_registry.resolve_run_model_versions``). This function never
@@ -436,7 +483,7 @@ def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, time
     else:
         # Indexed mode: no built-in tools (no shell, no filesystem); only the read-only input server.
         argv += ["--tools", "", "--mcp-config", str(mcp_config), "--strict-mcp-config",
-                 "--allowedTools", ",".join(_input_tool_names())]
+                 "--allowedTools", ",".join(_input_tool_names(code_tools))]
     return argv
 
 
@@ -1113,9 +1160,16 @@ class ClaudeCliInvoker:
         fields = _envelope_fields(output_contract)
         cfg = rc.load_model_config()
         inline_bytes = sum(len(item.data) for item in package.inputs)
-        indexed = inline_bytes > _inline_input_limit(cfg)
+        code_grant = code_query_grant(package)
+        # Structural query tools exist only in indexed mode (the input server); a job granted them
+        # is served that way even when its inputs would fit inline.
+        indexed = inline_bytes > _inline_input_limit(cfg) or bool(code_grant[1])
+        guides_text, guides = "", []
+        if indexed:
+            import tool_guides
+            guides_text, guides = tool_guides.render(granted_tool_names(code_grant[1]))
         prompt_text = build_prompt_text(package, output_contract, store, indexed=indexed,
-                                        persona_schema=self._persona_schema)
+                                        persona_schema=self._persona_schema, tool_guides_text=guides_text)
         model_alias = package.request["model"]["family"]
         # Reuses the run's already-pinned binary path when the run's first job (normally
         # model_version_registry.resolve_run_model_versions) already resolved one; resolves and
@@ -1137,7 +1191,8 @@ class ClaudeCliInvoker:
         # structurally testing this module: the first draft wrote them under
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
-        mcp_config = _stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root)) if indexed else None
+        mcp_config = (_stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root), code_grant)
+                      if indexed else None)
         size_log.observe(package.request.get("run_id"), package.request.get("job_id"), "prompt_input_mode",
                          inline_bytes, _inline_input_limit(cfg), mode="indexed" if indexed else "inline",
                          inputs=len(package.inputs), prompt_chars=len(prompt_text))
@@ -1212,7 +1267,7 @@ class ClaudeCliInvoker:
             rounds = reused or _dispatch_until_accepted(
                 dispatch_fn=self._dispatch_fn, accept=accept, prompt_text=prompt_text,
                 argv_for=lambda budget: _dispatch_argv(model_alias, self.effort, budget, self.timeout_seconds,
-                                                       binary, mcp_config),
+                                                       binary, mcp_config, code_grant[1]),
                 budget_usd=self.budget_usd, timeout_seconds=self.timeout_seconds,
                 repair_attempts=_repair_attempts(cfg),
                 input_unit_limit=(package.request.get("budget") or {}).get("input_unit_limit"),
@@ -1250,6 +1305,18 @@ class ClaudeCliInvoker:
                                f"(persona cache {cache_key[:16]}, first answered in attempt "
                                f"{reused.get('cached_from')} at {reused.get('cached_at')}); no model call"]
             limitations.extend(fill_notes)
+            if indexed:
+                # Reproducibility (brief U4/U5): which lookup tools and guides this prompt carried,
+                # and how often the model called each tool (counted by the input server).
+                limitations.append("lookup tools granted: " + ", ".join(granted_tool_names(code_grant[1]))
+                                   + (f" (code index {code_grant[0]})" if code_grant[0] else ""))
+                if guides:
+                    limitations.append("tool guides: " + ", ".join(
+                        f"{g['guide']}@v{g['version']}:{g['sha256'][7:23]}" for g in guides))
+                usage_counts = _tool_usage(diagnostics_dir)
+                if usage_counts:
+                    limitations.append("tool use: " + ", ".join(f"{name} {count}"
+                                                                for name, count in sorted(usage_counts.items())))
             if rounds["rejected"]:
                 limitations.append(f"schema repair retry: {rounds['rejected']} rejected response(s) before "
                                    f"this one; the rejected responses and reasons are kept in the run's "
