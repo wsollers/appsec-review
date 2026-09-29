@@ -316,5 +316,33 @@ class ClaimPathTests(Base):
         self.assertEqual(ok["cwe_catalog"], "committed-curated")
 
 
+    def test_lifecycle_binds_the_catalog_only_for_cwe_judged_decisions(self):
+        import claim_review_lifecycle as lifecycle
+        self.assertTrue(lifecycle._cwe_judged({"decisions": [{"claim_id": "a", "cwe": {}}]}))
+        self.assertFalse(lifecycle._cwe_judged({"decisions": [{"claim_id": "a"}]}))
+        self.assertIn("cwe_catalog.py", lifecycle._code_hashes("09-independent-verification", True))
+        self.assertNotIn("cwe_catalog.py", lifecycle._code_hashes("09-independent-verification", False))
+        self.assertNotIn("cwe_catalog.py", lifecycle._code_hashes("08-blue-team-refutation", True))
+        seen = {}
+        with unittest.mock.patch.object(lifecycle.core, "verify", lambda *a, **k: seen.update(k) or "ok"):
+            lifecycle.build_result({"stage": "09-independent-verification", "upstream": {}, "upstream_binding": {},
+                                    "decisions": {}, "cwe_catalog": {"catalog_source": "committed-curated"}}, "a1")
+        self.assertEqual(seen, {"cwe_binding": {"catalog_source": "committed-curated"}})
+
+
+class EnrichmentTests(Base):
+    def test_judgment_the_bound_catalog_cannot_validate_is_dropped_with_a_gap(self):
+        import finding_enrichment
+        ctx = unittest.mock.Mock(catalog=cwe_catalog.Catalog(gap={"code": "CWE_REFERENCE_STALE", "detail": "old"}))
+        finding = {"cwe_judgments": [
+            {"stage": "07-red-team-adversarial", "cwe_id": OUTSIDE, "cwe_name": "x", "rationale": "r"},
+            {"stage": "09-independent-verification", "cwe_id": "CWE-120", "cwe_name": "y", "rationale": "r"}]}
+        result = finding_enrichment._cwe(ctx, finding, [])
+        self.assertEqual(result["primary"], "CWE-120")
+        self.assertEqual([row["cwe_id"] for row in result["ids"]], ["CWE-120"])
+        self.assertTrue(any(OUTSIDE in gap and "dropped" in gap for gap in result["gaps"]))
+        self.assertIn("CWE_REFERENCE_STALE", ctx.catalog.limitation())
+
+
 if __name__ == "__main__":
     unittest.main()
