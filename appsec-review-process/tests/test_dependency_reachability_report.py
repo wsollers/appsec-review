@@ -95,6 +95,7 @@ class SectionTests(unittest.TestCase):
         for variant in (projected, None):
             with self.subTest(section=variant is not None), tempfile.TemporaryDirectory() as out:
                 document = copy.deepcopy(data)
+                document.pop("dependency_reachability", None)   # the sample carries its own 3B section
                 if variant is not None:
                     document["dependency_reachability"] = variant
                 source = Path(out) / "review.json"

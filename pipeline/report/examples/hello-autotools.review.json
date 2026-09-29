@@ -1,14 +1,14 @@
 {
-  "_comment": "SAMPLE DATA. Illustrative values shaped like a hello-autotools SAT run. Replace with the real run's aggregates (tool-results.json, coverage.json, lane outputs, lane-12 scores). Math fields are LaTeX and render verbatim in both the PDF and the KaTeX preview.",
+  "_comment": "SAMPLE DATA. Illustrative hello-autotools review; not evidence of a live scan. The cover, findings and evidence register are hand-kept illustrations. families, processes, scoring.family_weight, report.pipeline_commit, attack_chains (3A), dependency_reachability (3B), threat_workbench (3C) and each finding's exploit_signal and lane-12 trail row are produced by pipeline/report/sample_data.py through the real code paths (job-graph.json, threat_workbench.join over canned cell replies, the lane-14 and 06 report builders, cvss4.py); run `python3 pipeline/report/sample_data.py` after changing them and never hand-edit those blocks. Math fields are LaTeX and render verbatim in both the PDF and the KaTeX preview.",
   "report": {
     "title": "Application Security Review",
     "target": "hello-autotools",
     "target_commit": "e3ad863",
-    "engagement": "SAT fixture - system acceptance",
-    "run_id": "20260927T141502Z-7a3e91",
+    "engagement": "SAMPLE - hello-autotools fixture (illustrative)",
+    "run_id": "sample-hello-autotools",
     "sat_id": "20260927T141440Z",
-    "pipeline_commit": "report-template (from origin/main b3b87de2)",
-    "report_date": "2026-09-27",
+    "pipeline_commit": "sample; job-graph.json sha256:877934e0f3e8 (81 jobs)",
+    "report_date": "2026-09-29",
     "classification": "Internal - sample",
     "native_tier": "A",
     "native_tier_note": "clang compiled 6/6 project TUs plus vendored cJSON; IR, CSA/CTU and SVF substrate available (ADR-0001).",
@@ -46,12 +46,23 @@
       "SKIPPED_NA": null
     },
     "family_weight": {
-      "intake": 1,
-      "build": 2,
-      "scan": 3,
-      "native": 3,
-      "lanes": 4,
-      "design-gap": 1
+      "00-intake-recovery": 1,
+      "01-component-characterization": 3,
+      "02-evidence-pregather": 48,
+      "03-threat-model-dfd-stride": 2,
+      "04-asvs-masvs": 2,
+      "05-native-memory": 1,
+      "06-cve-reachability": 3,
+      "07-red-team-adversarial": 5,
+      "08-blue-team-refutation": 1,
+      "09-independent-verification": 2,
+      "10-synthesis-report": 4,
+      "11-remediation-proposal": 2,
+      "12-scoring-prioritization": 1,
+      "12b-poc-and-fix": 1,
+      "13-fuzz-target-triage": 1,
+      "14-attack-chain": 2,
+      "15-deployment-hardening": 2
     },
     "tier_cap": {
       "A": 1.0,
@@ -64,395 +75,733 @@
   },
   "families": [
     {
-      "id": "intake",
-      "name": "Intake and discovery",
-      "note": "00-intake plus D01-D04 persona discovery."
+      "id": "00-intake-recovery",
+      "name": "Lane 00: intake recovery",
+      "note": "1 job(s) whose job-graph.json lane is 00-intake-recovery."
     },
     {
-      "id": "build",
-      "name": "Build resolution",
-      "note": "Build index, plan, resolution and hostile native build."
+      "id": "01-component-characterization",
+      "name": "Lane 01: component characterization",
+      "note": "3 job(s) whose job-graph.json lane is 01-component-characterization."
     },
     {
-      "id": "scan",
-      "name": "Deterministic scan jobs",
-      "note": "One graph node per evidence family, one attempt-bearing instance per tool (ADR-0010)."
+      "id": "02-evidence-pregather",
+      "name": "Lane 02: evidence pregather",
+      "note": "48 job(s) whose job-graph.json lane is 02-evidence-pregather."
     },
     {
-      "id": "native",
-      "name": "Native analysis substrate",
-      "note": "Compile DB, IR, CSA/CTU, CodeQL, correlation and deep confirmation."
+      "id": "03-threat-model-dfd-stride",
+      "name": "Lane 03: threat model dfd stride",
+      "note": "2 job(s) whose job-graph.json lane is 03-threat-model-dfd-stride."
     },
     {
-      "id": "lanes",
-      "name": "LLM review lanes",
-      "note": "Hypothesis, refutation, verification, scoring and synthesis."
+      "id": "04-asvs-masvs",
+      "name": "Lane 04: asvs masvs",
+      "note": "2 job(s) whose job-graph.json lane is 04-asvs-masvs."
     },
     {
-      "id": "design-gap",
-      "name": "Designed, not built",
-      "note": "Design-v3 lanes with no evidence-gathering step yet. Counted as gaps."
+      "id": "05-native-memory",
+      "name": "Lane 05: native memory",
+      "note": "1 job(s) whose job-graph.json lane is 05-native-memory."
+    },
+    {
+      "id": "06-cve-reachability",
+      "name": "Lane 06: cve reachability",
+      "note": "3 job(s) whose job-graph.json lane is 06-cve-reachability."
+    },
+    {
+      "id": "07-red-team-adversarial",
+      "name": "Lane 07: red team adversarial",
+      "note": "5 job(s) whose job-graph.json lane is 07-red-team-adversarial."
+    },
+    {
+      "id": "08-blue-team-refutation",
+      "name": "Lane 08: blue team refutation",
+      "note": "1 job(s) whose job-graph.json lane is 08-blue-team-refutation."
+    },
+    {
+      "id": "09-independent-verification",
+      "name": "Lane 09: independent verification",
+      "note": "2 job(s) whose job-graph.json lane is 09-independent-verification."
+    },
+    {
+      "id": "10-synthesis-report",
+      "name": "Lane 10: synthesis report",
+      "note": "4 job(s) whose job-graph.json lane is 10-synthesis-report."
+    },
+    {
+      "id": "11-remediation-proposal",
+      "name": "Lane 11: remediation proposal",
+      "note": "2 job(s) whose job-graph.json lane is 11-remediation-proposal."
+    },
+    {
+      "id": "12-scoring-prioritization",
+      "name": "Lane 12: scoring prioritization",
+      "note": "1 job(s) whose job-graph.json lane is 12-scoring-prioritization."
+    },
+    {
+      "id": "12b-poc-and-fix",
+      "name": "Lane 12b: poc and fix",
+      "note": "1 job(s) whose job-graph.json lane is 12b-poc-and-fix."
+    },
+    {
+      "id": "13-fuzz-target-triage",
+      "name": "Lane 13: fuzz target triage",
+      "note": "1 job(s) whose job-graph.json lane is 13-fuzz-target-triage."
+    },
+    {
+      "id": "14-attack-chain",
+      "name": "Lane 14: attack chain",
+      "note": "2 job(s) whose job-graph.json lane is 14-attack-chain."
+    },
+    {
+      "id": "15-deployment-hardening",
+      "name": "Lane 15: deployment hardening",
+      "note": "2 job(s) whose job-graph.json lane is 15-deployment-hardening."
     }
   ],
   "processes": [
     {
       "id": "00-intake",
-      "family": "intake",
-      "kind": "deterministic",
+      "family": "00-intake-recovery",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "intake.py",
+      "tools": "read-only-intake (intake.py:write_intake)",
       "evidence": [
         "E-001"
       ]
     },
     {
-      "id": "02-repository-partition-discovery",
-      "family": "intake",
+      "id": "01-component-characterization",
+      "family": "01-component-characterization",
       "kind": "persona",
       "status": "OK",
-      "tools": "developer-engineer / D01",
+      "tools": "component-evidence-router (component_characterization.py:run)"
+    },
+    {
+      "id": "02-full-review-input-assembly",
+      "family": "01-component-characterization",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "local-evidence-retrieval (full_review_input_assembly.py:assemble)"
+    },
+    {
+      "id": "dynamic-rescope",
+      "family": "01-component-characterization",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "verified-control-lifecycle (dynamic_rescope.py:run_attempt)"
+    },
+    {
+      "id": "02-ossf-scorecard",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "authorized-scorecard-api (ossf_scorecard.py:run)",
+      "evidence": [
+        "E-015"
+      ]
+    },
+    {
+      "id": "02-repository-partition-discovery",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "static-repo-project-inspector (automatic_discovery.py:run)",
       "evidence": [
         "E-002"
       ]
     },
     {
       "id": "02-dev-project-discovery",
-      "family": "intake",
-      "kind": "persona",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "developer-engineer / D02"
+      "tools": "static-repo-project-inspector (automatic_discovery.py:run)"
     },
     {
       "id": "02-devops-project-discovery",
-      "family": "intake",
-      "kind": "persona",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "devops-engineer / D03"
+      "tools": "static-repo-project-inspector (automatic_discovery.py:run)"
     },
     {
       "id": "02-sre-operations-topology",
-      "family": "intake",
-      "kind": "persona",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
       "status": "OK_WITH_GAPS",
+      "tools": "static-ops-topology-inspector (automatic_discovery.py:run)",
       "coverage": 0.7,
-      "tools": "sre-engineer / D04",
-      "gap": "No runbooks or monitoring config in target; topology inferred from Dockerfile only."
+      "gap": "No runbooks or monitoring configuration in the target; topology inferred from the Dockerfile only."
     },
     {
       "id": "02-build-index",
-      "family": "build",
-      "kind": "deterministic",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "build_index.py",
+      "tools": "static-build-indexer (build_index.py:run)",
       "evidence": [
         "E-003"
       ]
     },
     {
-      "id": "02-build-plan",
-      "family": "build",
+      "id": "02-build-classify",
+      "family": "02-evidence-pregather",
       "kind": "persona",
       "status": "OK",
-      "tools": "haiku / build planner"
+      "tools": "static-repo-project-inspector (build_classify.py:run)"
+    },
+    {
+      "id": "02-build-plan",
+      "family": "02-evidence-pregather",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "static-repo-project-inspector (build_plan.py:run)"
     },
     {
       "id": "02-build-resolution",
-      "family": "build",
-      "kind": "persona",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
       "status": "OK",
-      "tools": "repair loop, 1 retry"
+      "tools": "pinned-build-resolver (build_resolution.py:run)"
     },
     {
-      "id": "native-build",
-      "family": "build",
-      "kind": "container",
+      "id": "02-evidence-assembly",
+      "family": "02-evidence-pregather",
+      "kind": "join_controller",
       "status": "OK",
-      "tools": "audit-native (network none)",
+      "tools": "hash-bound-evidence-assembly (evidence_assembly.py:run)"
+    },
+    {
+      "id": "02-api-collection-intelligence-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "static-api-collection-parser (api_collection_intelligence_ingest.py:run)"
+    },
+    {
+      "id": "02-binary-intelligence-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "binary-intel-static-analysis (binary_intelligence_ingest.py:run)"
+    },
+    {
+      "id": "02-doc-intelligence-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "static-doc-parser (doc_intelligence_ingest.py:run)"
+    },
+    {
+      "id": "02-standards-source-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "standards-source-static-ingest (standards_source_ingest.py:run)"
+    },
+    {
+      "id": "02-test-intelligence-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "static-test-doc-parser (test_intelligence_ingest.py:run)"
+    },
+    {
+      "id": "02-build-configure",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-build-resolver (build_configure.py:run)"
+    },
+    {
+      "id": "02-native-build",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-build-resolver (native_build.py:run)",
       "evidence": [
         "E-004"
       ]
     },
     {
-      "id": "02-secrets-inventory",
-      "family": "scan",
-      "kind": "container",
+      "id": "02-source-sast",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
       "status": "OK",
-      "tools": "gitleaks, key-material-file-inventory",
+      "tools": "pinned-source-sast (source_sast.py:run)",
+      "evidence": [
+        "E-014"
+      ]
+    },
+    {
+      "id": "02-codeql-cpp",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "evidence": [
+        "E-023"
+      ]
+    },
+    {
+      "id": "02-codeql-csharp",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-codeql-go",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-codeql-java",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-codeql-javascript",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-codeql-python",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-codeql-ruby",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-codeql-rust",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-source-sast (codeql_sast.py:run)",
+      "receipt": "not-applicable-language-absent"
+    },
+    {
+      "id": "02-code-property-graph",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-source-sast (joern_cpg.py:run)",
+      "evidence": [
+        "E-024"
+      ]
+    },
+    {
+      "id": "02-native-sast",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-native-sast (native_sast.py:run)",
+      "evidence": [
+        "E-020",
+        "E-022"
+      ]
+    },
+    {
+      "id": "02-ir-capture",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "llvm-ir-evidence (ir_evidence.py:run_job)"
+    },
+    {
+      "id": "02-ir-link",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "llvm-ir-evidence (ir_evidence.py:run_job)"
+    },
+    {
+      "id": "02-ir-facts",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "llvm-ir-evidence (ir_evidence.py:run_job)",
+      "evidence": [
+        "E-021"
+      ]
+    },
+    {
+      "id": "02-debug-symbol-index",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "binary-intel-static-analysis (debug_symbol_index.py:run)"
+    },
+    {
+      "id": "02-binary-triage",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "binary-intel-static-analysis (binary_triage.py:run)"
+    },
+    {
+      "id": "02-binary-cfg",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "binary-intel-static-analysis (binary_cfg.py:run)"
+    },
+    {
+      "id": "02-test-execution",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "bounded-test-evidence (test_execution.py:run)",
+      "receipt": "not-applicable-no-test-plan"
+    },
+    {
+      "id": "02-test-result-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK_WITH_GAPS",
+      "tools": "bounded-test-evidence (test_result_ingest.py:run)",
+      "coverage": 0.0,
+      "gap": "No test plan and no test results: nothing to ingest (explicit gap)."
+    },
+    {
+      "id": "02-test-coverage-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK_WITH_GAPS",
+      "tools": "bounded-test-evidence (test_coverage_ingest.py:run)",
+      "coverage": 0.0,
+      "gap": "No instrumented test run: coverage is missing (explicit gap)."
+    },
+    {
+      "id": "02-operations-doc-ingest",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "static-doc-parser (operations_doc_ingest.py:run)"
+    },
+    {
+      "id": "02-evidence-index",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "local-evidence-retrieval (evidence_store.py:run)"
+    },
+    {
+      "id": "02-secrets-inventory",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-vendor-static-evidence (secrets_inventory.py:build)",
       "evidence": [
         "E-010"
       ]
     },
     {
       "id": "02-iac-config-scan",
-      "family": "scan",
-      "kind": "container",
-      "status": "OK_WITH_GAPS",
-      "coverage": 0.6,
-      "tools": "checkov, trivy-config, hadolint (tfsec, kube-linter BLOCKED: no image)",
-      "gap": "tfsec and kube-linter declared but no pinned image; 2 of 5 scanner instances did not run.",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-vendor-static-evidence (iac_config_scan.py:build)",
       "evidence": [
         "E-011"
       ]
     },
     {
+      "id": "02-container-image-inventory",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-vendor-static-evidence (container_image_inventory.py:build)",
+      "receipt": "not-applicable-no-matching-inputs"
+    },
+    {
       "id": "02-sbom-inventory",
-      "family": "scan",
-      "kind": "container",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
       "status": "OK_WITH_GAPS",
+      "tools": "pinned-dependency-analysis (dependency_workers.py:run)",
       "coverage": 0.5,
-      "tools": "syft-directory",
-      "gap": "syft found 0 components; vendored cJSON has no manifest. Second source (build index vendored members) not yet wired.",
+      "gap": "Syft found no package manifest; vendored cJSON 1.7.18 was added from the accepted build-index vendored members without a purl or CPE (inferred component kept as an explicit gap).",
       "evidence": [
         "E-012"
       ]
     },
     {
       "id": "02-sca-vulnerability-match",
-      "family": "scan",
-      "kind": "container",
-      "status": "BLOCKED",
-      "tools": "grype",
-      "gap": "Blocked on V16/V18 offline vulnerability DB mirror. No CVE matching was performed."
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK_WITH_GAPS",
+      "tools": "pinned-dependency-analysis (dependency_workers.py:run)",
+      "coverage": 0.5,
+      "gap": "Grype ran and matched nothing; OSV was SKIPPED_NA per tool because no component carries a purl. Vendored cJSON was not matched against any advisory."
     },
     {
       "id": "02-license-scan",
-      "family": "scan",
-      "kind": "container",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
       "status": "OK",
-      "tools": "scancode-toolkit",
+      "tools": "pinned-dependency-analysis (dependency_workers.py:run)",
       "evidence": [
         "E-013"
       ]
     },
     {
       "id": "02-dependency-lifecycle",
-      "family": "scan",
-      "kind": "deterministic",
-      "status": "BLOCKED",
-      "tools": "dependency-lifecycle-transform",
-      "gap": "EOL reference table unowned. Lifecycle of cJSON 1.7.18 reported unknown."
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK_WITH_GAPS",
+      "tools": "pinned-dependency-analysis (dependency_workers.py:run)",
+      "coverage": 0.5,
+      "gap": "cJSON 1.7.18 is not in the pinned lifecycle reference table; its lifecycle is reported unknown."
     },
     {
       "id": "02-binary-hardening",
-      "family": "scan",
-      "kind": "container",
-      "status": "BLOCKED",
-      "tools": "binskim",
-      "gap": "M02 unresolved; no ELF hardening check ran on the built binary."
-    },
-    {
-      "id": "02-container-image-inventory",
-      "family": "scan",
-      "kind": "container",
-      "status": "SKIPPED_NA",
-      "tools": "oci-archive-inventory",
-      "receipt": "applicability-probe: no OCI archive in inputs"
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-vendor-static-evidence (vendor_evidence_orchestration.py:execute_binary_from_native)"
     },
     {
       "id": "02-mobile-sast",
-      "family": "scan",
-      "kind": "container",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
       "status": "SKIPPED_NA",
-      "tools": "mobsfscan",
-      "receipt": "applicability-probe: no Android/iOS markers"
-    },
-    {
-      "id": "02-source-sast",
-      "family": "scan",
-      "kind": "container",
-      "status": "OK",
-      "tools": "semgrep (vendored packs), gosec/php* N/A",
-      "evidence": [
-        "E-014"
-      ]
-    },
-    {
-      "id": "ossf-scorecard",
-      "family": "scan",
-      "kind": "container",
-      "status": "OK",
-      "tools": "scorecard (offline mode)",
-      "evidence": [
-        "E-015"
-      ]
-    },
-    {
-      "id": "compile-db + clang-tidy/cppcheck",
-      "family": "native",
-      "kind": "container",
-      "status": "OK",
-      "tools": "audit-native",
-      "evidence": [
-        "E-020"
-      ]
-    },
-    {
-      "id": "llvm-ir + ir-facts + svf",
-      "family": "native",
-      "kind": "container",
-      "status": "OK",
-      "tools": "audit-native",
-      "evidence": [
-        "E-021"
-      ]
-    },
-    {
-      "id": "csa-ctu",
-      "family": "native",
-      "kind": "container",
-      "status": "OK",
-      "tools": "clang static analyzer + CTU",
-      "evidence": [
-        "E-022"
-      ]
-    },
-    {
-      "id": "codeql (security-extended + mythos-cpp)",
-      "family": "native",
-      "kind": "container",
-      "status": "OK",
-      "tools": "audit-codeql (breadth only, ADR-0006)",
-      "evidence": [
-        "E-023"
-      ]
-    },
-    {
-      "id": "correlation + deep-confirmation",
-      "family": "native",
-      "kind": "deterministic",
-      "status": "OK",
-      "tools": "correlate, deep_confirm",
-      "evidence": [
-        "E-024"
-      ]
-    },
-    {
-      "id": "01-component-characterization",
-      "family": "lanes",
-      "kind": "persona",
-      "status": "OK",
-      "tools": "component cloud"
+      "tools": "pinned-vendor-static-evidence (mobile_sast.py:build)",
+      "receipt": "not-applicable-no-matching-inputs"
     },
     {
       "id": "03-threat-model-dfd-stride",
-      "family": "lanes",
-      "kind": "persona",
+      "family": "03-threat-model-dfd-stride",
+      "kind": "pool_coordinator",
       "status": "OK",
-      "tools": "DFD + STRIDE",
+      "tools": "threat-model-static-evidence (threat_model_core.py:run)",
       "evidence": [
         "E-030"
       ]
     },
     {
+      "id": "03-threat-model-reconciliation",
+      "family": "03-threat-model-dfd-stride",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "threat-model-reconciliation (threat_model_reconciliation.py:run)"
+    },
+    {
       "id": "04-asvs-masvs",
-      "family": "lanes",
-      "kind": "persona",
-      "status": "SKIPPED_NA",
-      "tools": "ASVS 5.0",
-      "receipt": "no web/API surface; CLI only"
+      "family": "04-asvs-masvs",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "owasp-join-reporter (owasp_join_publisher.py:run)"
+    },
+    {
+      "id": "04-owasp-validation-worklist",
+      "family": "04-asvs-masvs",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "owasp-worklist-builder (owasp_validation_worklist.py:build)"
     },
     {
       "id": "05-native-memory",
-      "family": "lanes",
-      "kind": "persona",
+      "family": "05-native-memory",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "IR + CSA + CodeQL review"
+      "tools": "pinned-native-sast (bounded_analysis_workers.py:native_memory)"
+    },
+    {
+      "id": "06-reachability-codeql",
+      "family": "06-cve-reachability",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-dependency-analysis (reachability_engine_jobs.py:run_codeql)"
+    },
+    {
+      "id": "06-reachability-ir",
+      "family": "06-cve-reachability",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "pinned-dependency-analysis (reachability_engine_jobs.py:run_ir)"
     },
     {
       "id": "06-cve-reachability",
-      "family": "lanes",
-      "kind": "persona",
-      "status": "OK_WITH_GAPS",
-      "coverage": 0.4,
-      "tools": "inventory + reachability",
-      "gap": "No SCA matches to triage (02-sca BLOCKED); inventory from build index only."
+      "family": "06-cve-reachability",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "pinned-dependency-analysis (dependency_workers.py:run)"
     },
     {
-      "id": "13-fuzz-target-triage",
-      "family": "lanes",
-      "kind": "persona",
+      "id": "07-hypothesis-discovery",
+      "family": "07-red-team-adversarial",
+      "kind": "pool_coordinator",
       "status": "OK",
-      "tools": "target ranking"
+      "tools": "hypothesis-hunt-static (hypothesis_discovery.py:run)"
     },
     {
-      "id": "15-deployment-hardening",
-      "family": "lanes",
-      "kind": "persona",
+      "id": "claim-ledger-routing",
+      "family": "07-red-team-adversarial",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "container/Dockerfile persona"
+      "tools": "hash-linked-claim-ledger (claim_ledger.py:run)"
     },
     {
       "id": "07-red-team-adversarial",
-      "family": "lanes",
-      "kind": "persona",
+      "family": "07-red-team-adversarial",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "general + known-list + kill-chain"
+      "tools": "hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)"
+    },
+    {
+      "id": "persona-tool-pool-dispatch",
+      "family": "07-red-team-adversarial",
+      "kind": "pool_coordinator",
+      "status": "OK",
+      "tools": "verified-control-lifecycle (pool_launcher.py:launch)"
+    },
+    {
+      "id": "deterministic-pool-merge",
+      "family": "07-red-team-adversarial",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "verified-control-lifecycle (deterministic_pool_merge.py:run_verified_attempt)"
     },
     {
       "id": "08-blue-team-refutation",
-      "family": "lanes",
-      "kind": "persona",
+      "family": "08-blue-team-refutation",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "refutation"
+      "tools": "hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)"
     },
     {
       "id": "09-independent-verification",
-      "family": "lanes",
-      "kind": "persona",
+      "family": "09-independent-verification",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "evidence-only verifier",
+      "tools": "hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)",
       "evidence": [
         "E-040"
       ]
     },
     {
-      "id": "11-remediation-proposal",
-      "family": "lanes",
-      "kind": "persona",
+      "id": "evidence-qualified-quorum",
+      "family": "09-independent-verification",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "patch + retest in audit-native"
-    },
-    {
-      "id": "12-scoring-prioritization",
-      "family": "lanes",
-      "kind": "deterministic",
-      "status": "OK",
-      "tools": "CVSS 4.0 + EPSS/KEV"
+      "tools": "verified-control-lifecycle (evidence_quorum.py:run_verified_attempt)"
     },
     {
       "id": "10-synthesis-report",
-      "family": "lanes",
-      "kind": "persona",
+      "family": "10-synthesis-report",
+      "kind": "deterministic_python",
+      "status": "OK_WITH_GAPS",
+      "tools": "synthesis-report-static (synthesis_report_worker.py:run)",
+      "coverage": 0.9,
+      "gap": "EPSS/KEV not assessed: no pinned offline snapshot has been imported; every exploit signal reads 'not assessed'."
+    },
+    {
+      "id": "completeness-audit",
+      "family": "10-synthesis-report",
+      "kind": "deterministic_python",
       "status": "OK",
-      "tools": "this document"
+      "tools": "verified-control-lifecycle (completeness_audit.py:run_attempt)"
     },
     {
-      "id": "L6B threat-model reconciliation",
-      "family": "design-gap",
-      "kind": "none",
-      "status": "NOT_BUILT",
-      "gap": "Designed in design-v3, no lane."
+      "id": "synthetic-hypothesis-resynthesis",
+      "family": "10-synthesis-report",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "verified-control-lifecycle (synthetic_hypothesis_resynthesis.py:run_attempt)"
     },
     {
-      "id": "L10 protocol/parser analysis",
-      "family": "design-gap",
-      "kind": "none",
-      "status": "NOT_BUILT",
-      "gap": "Designed in design-v3, no lane."
+      "id": "final-publication-gate",
+      "family": "10-synthesis-report",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "verified-control-lifecycle (final_publication.py:publish)"
     },
     {
-      "id": "L12 supply-chain / provenance",
-      "family": "design-gap",
-      "kind": "none",
-      "status": "NOT_BUILT",
-      "gap": "Tier B scripts exist, not wired."
+      "id": "11-remediation-proposal",
+      "family": "11-remediation-proposal",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "hash-bound-evidence-assembly (remediation_proposal.py:run)"
     },
     {
-      "id": "L13 privacy / data protection",
-      "family": "design-gap",
-      "kind": "none",
-      "status": "NOT_BUILT",
-      "gap": "Designed in design-v3, no lane."
+      "id": "remediation-retest-feedback",
+      "family": "11-remediation-proposal",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "verified-control-lifecycle (remediation_retest.py:run_attempt)"
+    },
+    {
+      "id": "12-scoring-prioritization",
+      "family": "12-scoring-prioritization",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)"
+    },
+    {
+      "id": "12b-poc-and-fix",
+      "family": "12b-poc-and-fix",
+      "kind": "pool_coordinator",
+      "status": "SKIPPED_NA",
+      "tools": "claim-review-static (poc_fix_worker.py:run)",
+      "receipt": "not-applicable-no-eligible-findings"
+    },
+    {
+      "id": "13-fuzz-target-triage",
+      "family": "13-fuzz-target-triage",
+      "kind": "deterministic_python",
+      "status": "SKIPPED_NA",
+      "tools": "pinned-native-sast (bounded_analysis_workers.py:fuzz_triage)",
+      "receipt": "not-applicable-no-fuzz-target"
+    },
+    {
+      "id": "14-attack-chain-composition",
+      "family": "14-attack-chain",
+      "kind": "pool_coordinator",
+      "status": "OK",
+      "tools": "claim-review-static (attack_chain_composition.py:run)"
+    },
+    {
+      "id": "14-attack-chain-refutation",
+      "family": "14-attack-chain",
+      "kind": "pool_coordinator",
+      "status": "OK",
+      "tools": "claim-review-static (attack_chain_refutation.py:run)"
+    },
+    {
+      "id": "15-deployment-hardening",
+      "family": "15-deployment-hardening",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "stig-worklist-builder (bounded_analysis_workers.py:deployment_hardening)"
+    },
+    {
+      "id": "15-stig-srg-validation-worklist",
+      "family": "15-deployment-hardening",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "stig-worklist-builder (stig_srg_validation_worklist.py:build)"
     }
   ],
   "findings": [
@@ -491,7 +840,7 @@
       "trail": [
         [
           "tool",
-          "semgrep insecure-use-strcpy, CSA, CodeQL"
+          "semgrep strcpy, native-sast CSA, CodeQL cpp"
         ],
         [
           "07",
@@ -503,15 +852,15 @@
         ],
         [
           "09",
-          "VERIFIED: ASan stack-buffer-overflow at greet.cpp:18"
+          "VERIFIED: copy length is argv-controlled and the buffer is 32 bytes (static)"
         ],
         [
           "11",
-          "patch: bounded copy, retest OK"
+          "remediation objective: bounded copy (proposal, not validated)"
         ],
         [
           "12",
-          "scored"
+          "CVSS 8.5 HIGH (pinned cvss4.py)"
         ]
       ],
       "evidence": [
@@ -521,7 +870,8 @@
         "E-040"
       ],
       "summary": "The greeting \"Hello, \" + name + \"!\" is copied into char buf[32] with strcpy. A name of 24 or more characters overflows buf. Reached on every run. A hardened distro build aborts via _FORTIFY_SOURCE; an unhardened or ASan build shows the corruption.",
-      "remediation": "Return the std::string directly, or use a bounded copy and reject oversize names."
+      "remediation": "Return the std::string directly, or use a bounded copy and reject oversize names.",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     },
     {
       "id": "AR-002",
@@ -570,11 +920,11 @@
         ],
         [
           "09",
-          "VERIFIED: '%x %x %x %x' leaks stack words"
+          "VERIFIED: CLI-derived text reaches the printf format argument (static)"
         ],
         [
           "12",
-          "scored"
+          "CVSS 7.0 HIGH (pinned cvss4.py)"
         ]
       ],
       "evidence": [
@@ -583,7 +933,8 @@
         "E-040"
       ],
       "summary": "log_message() passes the greeting, which embeds the CLI name, straight to printf as the format. Conversion specifiers in the name are interpreted.",
-      "remediation": "std::printf(\"%s\\n\", message.c_str());"
+      "remediation": "std::printf(\"%s\\n\", message.c_str());",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     },
     {
       "id": "AR-003",
@@ -645,7 +996,7 @@
         ],
         [
           "05",
-          "data flow argv -> name -> cmd confirmed in IR"
+          "data flow argv -> name -> cmd recorded in IR facts"
         ],
         [
           "07",
@@ -657,11 +1008,11 @@
         ],
         [
           "09",
-          "VERIFIED: --report 'x\";touch /tmp/pwned;echo \"' creates the file"
+          "VERIFIED: name is concatenated into the system() command without quoting (static)"
         ],
         [
           "12",
-          "scored"
+          "CVSS 8.5 HIGH (pinned cvss4.py)"
         ]
       ],
       "evidence": [
@@ -671,7 +1022,8 @@
         "E-040"
       ],
       "summary": "With --report, the CLI name is spliced into an echo command and passed to system(). A double quote breaks out of the quoted argument and runs arbitrary shell commands with the process's privileges.",
-      "remediation": "Write the log line with file I/O instead of a shell, or use execve with an argv array."
+      "remediation": "Write the log line with file I/O instead of a shell, or use execve with an argv array.",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     },
     {
       "id": "AR-004",
@@ -732,7 +1084,7 @@
       "trail": [
         [
           "tool",
-          "stock CodeQL: 0 hits; mythos-cpp: 1 hit; semgrep: 0 hits"
+          "CodeQL cpp: 0 hits; semgrep: 0 hits; IR facts: memcpy size from input"
         ],
         [
           "05",
@@ -748,11 +1100,11 @@
         ],
         [
           "09",
-          "VERIFIED_PRIMITIVE"
+          "VERIFIED"
         ],
         [
           "12",
-          "scored"
+          "CVSS 7.3 HIGH (pinned cvss4.py)"
         ]
       ],
       "evidence": [
@@ -762,11 +1114,12 @@
         "E-040"
       ],
       "summary": "STORE_INTO expands to copy_into_fixed<16>, which memcpys the whole name into a 16-byte stack slot. Only the tools that see through macro expansion and template instantiation report it; this is the fixture's control for that capability.",
-      "remediation": "Check src.size() < N before the copy, or truncate explicitly."
+      "remediation": "Check src.size() < N before the copy, or truncate explicitly.",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     },
     {
       "id": "AR-005",
-      "title": "Vendored cJSON 1.7.18 missing from SBOM; CVE match not performed",
+      "title": "Vendored cJSON 1.7.18 has no purl or CPE; advisory matching could not cover it",
       "cwe": "CWE-1104",
       "location": "vendor/cJSON-1.7.18/",
       "component": "supply chain",
@@ -781,15 +1134,19 @@
       "trail": [
         [
           "tool",
-          "syft: 0 components; build index: vendored member"
+          "syft: no manifest; build index: vendored member (inferred, no purl)"
+        ],
+        [
+          "02",
+          "SCA: grype no match, OSV SKIPPED_NA (no purl)"
         ],
         [
           "06",
-          "inventory mismatch flagged; affected-API use not found in src/"
+          "no SCA match to decide"
         ],
         [
           "09",
-          "UNRESOLVED: 02-sca-vulnerability-match BLOCKED"
+          "UNRESOLVED: the component has no advisory identity"
         ]
       ],
       "evidence": [
@@ -797,8 +1154,9 @@
         "E-012",
         "E-013"
       ],
-      "summary": "The build links a vendored cJSON that no manifest declares, so the SBOM omits it and no vulnerability match ran. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it until SCA runs. Lane 06 found no call to the JSON-pointer API in project code.",
-      "remediation": "Feed build-index vendored members into the SBOM and unblock 02-sca-vulnerability-match (V16/V18)."
+      "summary": "The build links a vendored cJSON that no manifest declares. 02-sbom-inventory adds it from the accepted build-index vendored members, but without a purl or CPE, so Grype matched nothing and OSV was not applicable. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it. Section 3B has no dependency match to decide, and lane 06 found no call to the JSON-pointer API in project code.",
+      "remediation": "Give the vendored cJSON a package identity (purl or CPE) so SCA matching covers it, or replace it with a declared dependency.",
+      "exploit_signal": "EPSS/KEV not assessed (no pinned snapshot imported)"
     },
     {
       "id": "AR-006",
@@ -848,14 +1206,15 @@
         ],
         [
           "12",
-          "scored"
+          "CVSS 2.0 LOW (pinned cvss4.py)"
         ]
       ],
       "evidence": [
         "E-011"
       ],
       "summary": "Both stages use debian:bookworm-slim by tag, and the runtime stage has no USER instruction, so the binary runs as root. Three scanners agree.",
-      "remediation": "Pin FROM by digest and add a non-root USER before ENTRYPOINT."
+      "remediation": "Pin FROM by digest and add a non-root USER before ENTRYPOINT.",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     },
     {
       "id": "AR-007",
@@ -895,7 +1254,7 @@
       "trail": [
         [
           "tool",
-          "CSA core.NonNullParamChecker"
+          "native-sast CSA core.NonNullParamChecker"
         ],
         [
           "07",
@@ -907,18 +1266,19 @@
         ],
         [
           "09",
-          "UNRESOLVED: not reproducible without fault injection"
+          "UNRESOLVED: the allocation-failure path needs dynamic evidence the pipeline does not collect"
         ],
         [
           "12",
-          "scored"
+          "CVSS 2.0 LOW (pinned cvss4.py)"
         ]
       ],
       "evidence": [
         "E-022"
       ],
       "summary": "cJSON_PrintUnformatted returns NULL when allocation fails, and std::string(nullptr) is undefined behavior. Only reachable with --json under memory pressure.",
-      "remediation": "Check rendered for NULL before constructing the string."
+      "remediation": "Check rendered for NULL before constructing the string.",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     },
     {
       "id": "AR-008",
@@ -970,13 +1330,18 @@
         [
           "09",
           "concurs"
+        ],
+        [
+          "12",
+          "CVSS 4.8 MEDIUM (pinned cvss4.py)"
         ]
       ],
       "evidence": [
         "E-014"
       ],
       "summary": "The scanner assumed a C++ allocation. cJSON allocates with malloc by default and the project never installs custom hooks, so free() is correct.",
-      "remediation": "None required."
+      "remediation": "None required.",
+      "exploit_signal": "EPSS/KEV not applicable (not a dependency finding)"
     }
   ],
   "evidence": [
@@ -990,112 +1355,112 @@
     {
       "id": "E-002",
       "producer": "02-repository-partition-discovery",
-      "artifact": "attempt-1/repository-partition-map.json",
+      "artifact": "repository-partition-map.json",
       "sha256": "a41be20977c3",
-      "kind": "persona output"
+      "kind": "deterministic"
     },
     {
       "id": "E-003",
       "producer": "02-build-index",
-      "artifact": "data/jobs/02-build-index/build-index.json#vendored[0]",
+      "artifact": "build-index.json#vendored[0]",
       "sha256": "0c7d55e1a9f2",
       "kind": "deterministic"
     },
     {
       "id": "E-004",
-      "producer": "native-build",
-      "artifact": "compile_commands.json (6 project TUs + cJSON.c)",
+      "producer": "02-native-build",
+      "artifact": "data/jobs/02-native-build/attempts/<id>/compile_commands.json (project TUs + cJSON.c)",
       "sha256": "e8812fd04b6a",
-      "kind": "build log"
+      "kind": "build output"
     },
     {
       "id": "E-010",
-      "producer": "gitleaks",
-      "artifact": "02-secrets-inventory/gitleaks/outputs/findings.json (0 hits) + redaction-receipt.json",
+      "producer": "02-secrets-inventory",
+      "artifact": "outputs/secrets-inventory.redacted.json (0 hits) + redaction-receipt.json",
       "sha256": "5b2e0a7713cd",
       "kind": "scan"
     },
     {
       "id": "E-011",
-      "producer": "hadolint, checkov, trivy-config",
-      "artifact": "02-iac-config-scan/tool-results.json",
+      "producer": "02-iac-config-scan",
+      "artifact": "outputs/iac-config-evidence.json (hadolint, checkov, trivy config)",
       "sha256": "91d0c3e6fa28",
       "kind": "scan"
     },
     {
       "id": "E-012",
-      "producer": "syft-directory",
-      "artifact": "02-sbom-inventory/syft-directory/outputs/sbom.cdx.json (0 components)",
+      "producer": "02-sbom-inventory",
+      "artifact": "outputs/sbom.cdx.json + build-index-vendored-members.json (cJSON inferred, no purl)",
       "sha256": "77ac21b90e14",
       "kind": "scan"
     },
     {
       "id": "E-013",
-      "producer": "scancode-toolkit",
-      "artifact": "02-license-scan/outputs/scancode.json#vendor/cJSON-1.7.18 (MIT)",
+      "producer": "02-license-scan",
+      "artifact": "outputs/license-inventory.json#vendor/cJSON-1.7.18 (MIT)",
       "sha256": "c2f9084d6e5a",
       "kind": "scan"
     },
     {
       "id": "E-014",
-      "producer": "semgrep",
-      "artifact": "02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)",
+      "producer": "02-source-sast",
+      "artifact": "source-sast.json (semgrep: greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)",
       "sha256": "4ae6f19c0d73",
       "kind": "scan"
     },
     {
       "id": "E-015",
-      "producer": "ossf-scorecard",
-      "artifact": "ossf-scorecard/scorecard.json (aggregate 4.1)",
+      "producer": "02-ossf-scorecard",
+      "artifact": "ossf-scorecard-results.json (aggregate 4.1)",
       "sha256": "d03b8e2c91f6",
       "kind": "scan"
     },
     {
       "id": "E-020",
-      "producer": "clang-tidy, cppcheck",
-      "artifact": "native/clang-tidy.sarif, cppcheck.xml",
+      "producer": "02-native-sast",
+      "artifact": "native-sast.json (clang-tidy, cppcheck)",
       "sha256": "12fe7a09c4b8",
       "kind": "native"
     },
     {
       "id": "E-021",
-      "producer": "ir-facts / component IR slice",
-      "artifact": "native/ir-slices/*.json (memcpy@store.h:30 N=16; system@runner.cpp:18)",
+      "producer": "02-ir-facts",
+      "artifact": "ir-facts.json (memcpy@store.h:30 N=16; system@runner.cpp:18)",
       "sha256": "6d8b03e5a1c9",
       "kind": "native"
     },
     {
       "id": "E-022",
-      "producer": "csa-ctu",
-      "artifact": "native/csa/*.plist (greet.cpp:18, jsonreport.cpp:17)",
+      "producer": "02-native-sast",
+      "artifact": "native-sast.json#csa (greet.cpp:18, jsonreport.cpp:17)",
       "sha256": "b90c4e17d2a3",
       "kind": "native"
     },
     {
       "id": "E-023",
-      "producer": "codeql",
-      "artifact": "codeql/security-extended.sarif + mythos-cpp.sarif",
+      "producer": "02-codeql-cpp",
+      "artifact": "codeql-language.json (cpp security-extended SARIF leads)",
       "sha256": "f15a2d8c6e04",
       "kind": "native"
     },
     {
       "id": "E-024",
-      "producer": "deep-confirmation",
-      "artifact": "deep-confirmation.json cluster C-007",
+      "producer": "02-code-property-graph",
+      "artifact": "code-property-graph.json (call path main -> store_into -> memcpy)",
       "sha256": "280e6b4fd917",
       "kind": "native"
     },
     {
       "id": "E-030",
       "producer": "03-threat-model-dfd-stride",
-      "artifact": "outputs/03/dfd.json, stride.json",
+      "artifact": "integrated-threat-model.json, dfd.mmd",
       "sha256": "8c4f1a93be20",
       "kind": "lane output"
     },
     {
       "id": "E-040",
       "producer": "09-independent-verification",
-      "artifact": "outputs/09/verification.json (ASan logs attached)",
+      "artifact": "verification record (static source review; no runtime claim)",
       "sha256": "ee07b6d235a1",
       "kind": "lane output"
     }
@@ -1137,6 +1502,14 @@
       [
         "audit-codeql",
         "sha256:4b7a…02e1"
+      ],
+      [
+        "tool-grype",
+        "sha256:5d0e…3b71"
+      ],
+      [
+        "tool-osv-scanner",
+        "sha256:c4a8…9e12"
       ]
     ],
     "models": [
@@ -1155,25 +1528,54 @@
     "status": "PUBLISHED",
     "reason": "",
     "counts": {
-      "data_classes": 1,
-      "privacy_threats": 0,
+      "data_classes": 2,
+      "privacy_threats": 1,
       "deployment_zones": 2,
       "attack_trees": 1
     },
     "data_classes": [
       {
-        "id": "dc-cli-arguments",
+        "id": "data-cli-name",
         "category": "user_content",
         "sensitivity": "internal",
         "stores": "",
-        "flows": "flow-argv-to-greeting",
+        "flows": "",
         "handling": "",
+        "evidence": "STRONG_INFERENCE",
+        "confidence": "medium"
+      },
+      {
+        "id": "data-json-report",
+        "category": "user_content",
+        "sensitivity": "internal",
+        "stores": "element-hello-cli",
+        "flows": "",
+        "handling": "retention: kept until the user deletes the file",
         "evidence": "STRONG_INFERENCE",
         "confidence": "medium"
       }
     ],
-    "privacy_threats": [],
+    "privacy_threats": [
+      {
+        "id": "privacy-dd-a181a39c5e",
+        "category": "data_disclosure",
+        "statement": "The --report option writes the user-supplied name to a JSON file whose permissions follow the process umask, so other local accounts may be able to read it.",
+        "targets": "element-hello-cli",
+        "data_classes": "data-cli-name, data-json-report",
+        "regulatory_notes": "GDPR Art. 5(1)(f) confidentiality may apply if the name is personal data (candidate)",
+        "evidence": "STRONG_INFERENCE",
+        "confidence": "low"
+      }
+    ],
     "deployment_zones": [
+      {
+        "id": "zone-build",
+        "kind": "build_release",
+        "name": "Autotools configure and make",
+        "exposure": "DECLARED_EXPOSURE",
+        "evidence": "STRONG_INFERENCE",
+        "confidence": "high"
+      },
       {
         "id": "zone-local-host",
         "kind": "client_device",
@@ -1181,35 +1583,92 @@
         "exposure": "DECLARED_EXPOSURE",
         "evidence": "STRONG_INFERENCE",
         "confidence": "medium"
-      },
-      {
-        "id": "zone-build",
-        "kind": "build_release",
-        "name": "Autotools configure and make",
-        "exposure": "DECLARED_EXPOSURE",
-        "evidence": "DIRECT_EVIDENCE",
-        "confidence": "high"
       }
     ],
     "attack_trees": [
       {
-        "id": "tree-greeting-overflow",
+        "id": "tree-corrupt-memory-through-the-greeting-form-c52a1743",
         "objective": "Corrupt memory through the greeting formatter",
-        "nodes": 3,
-        "gates": 1,
-        "leaves": 2,
+        "nodes": 5,
+        "gates": 2,
+        "leaves": 3,
         "leaf_support": {
-          "evidence": 0,
+          "evidence": 1,
           "assumption": 1,
           "unresolved": 1
         },
-        "evidence": "WEAK_INFERENCE",
+        "evidence": "STRONG_INFERENCE",
         "confidence": "low",
-        "verification_items": [
-          "thr-greeting-tampering"
-        ]
+        "verification_items": []
       }
     ],
     "note": "Candidate threat-model records from 03-threat-model-dfd-stride (ADR-0019 workbench and L13 privacy cell). They are hypotheses for review, not findings: exposure is declared, never observed, and regulatory notes are candidates, not a conclusion about compliance."
+  },
+  "attack_chains": {
+    "status": "PUBLISHED",
+    "reason": null,
+    "chains": [
+      {
+        "rank": 1,
+        "chain_id": "chain-3fefbf49de14f56a742ca4e5",
+        "state": "supported",
+        "impact_kind": "code_execution",
+        "objective": "Run attacker-chosen code through the hello command line",
+        "narrative": "argv[1] reaches the unbounded copy of claim-000000000000000000case01 into a fixed-size stack buffer.",
+        "weakest": {
+          "index": 0,
+          "kind": "link",
+          "reason": "link 0 (entry) is verified"
+        },
+        "links": [
+          {
+            "index": 0,
+            "stage": "entry",
+            "ref": "02-code-property-graph#cpg_a02000000000000000000000",
+            "label": "argv read in main at projects/cpp/case-001/main.cpp:6",
+            "link_state": "verified",
+            "severity": null
+          },
+          {
+            "index": 1,
+            "stage": "impact",
+            "ref": "claim-000000000000000000case01",
+            "label": "Stack buffer overflow: strcpy of CLI name into 32-byte buffer",
+            "link_state": "verified",
+            "severity": "HIGH"
+          }
+        ],
+        "edges": [
+          {
+            "from": 0,
+            "to": 1,
+            "basis": "code_fact",
+            "downgraded_from": null
+          }
+        ],
+        "boundaries_crossed": [],
+        "refutation": {
+          "disposition": "holds",
+          "target": null,
+          "mechanism": null,
+          "citations": 0
+        }
+      }
+    ],
+    "appendix": [],
+    "refuted_count": 0,
+    "note": "Attack chains are prioritisation context composed from reviewed claims: each is at most 'supported' (composed from verified parts along tool-recorded edges and not broken by an adversarial reviewer), never a verified finding, and assigns no severity."
+  },
+  "dependency_reachability": {
+    "status": "PUBLISHED",
+    "reason": "06-cve-reachability had no SCA match to decide",
+    "counts": {
+      "reachable": 0,
+      "conflict": 0,
+      "unknown": 0,
+      "unreachable": 0
+    },
+    "rows": [],
+    "note": "Dependency reachability is decided by deterministic engines, never by a model: reachable needs a hash-bound witness from CodeQL or the IR/CPG engine; unreachable only from the complete IR/CPG engine with the dependency source analysed; conflict means the engines disagree and is left for review; unknown is a coverage gap, not 'not vulnerable'. A Critical dependency finding requires reachable (ADR-0020)."
   }
 }

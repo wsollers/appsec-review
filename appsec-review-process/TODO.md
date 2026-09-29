@@ -603,3 +603,15 @@ All outstanding ADR questions, the brief I/J/M confirmations and the fuzz-entry 
 `docs/decisions/DECISION-LOG-2026-09-29.md` (controller decisions by William's delegation; he can override any row).
 OPEN items that log leaves: CWE in the MITRE feed, exported-symbol entry points, stage 12 `scorer` wording, sample 3C
 records and report re-render (WSL), image rebuild and smoke, brief N fingerprint-scope narrowing (D-13).
+
+## P: sample report refresh (brief P, branch `claude/sweet-mccarthy-zb4at6`)
+
+- DONE: `pipeline/report/sample_data.py` regenerates the sample's processes (81 jobs, 17 lane families),
+  3A attack chains, 3B dependency reachability, 3C workbench records (real `threat_workbench.join` over
+  `examples/hello-autotools.workbench-replies.json`), EPSS/KEV lines and lane-12 CVSS rows; `--check` and
+  `tests/test_sample_report_data.py` guard drift. HTML re-rendered.
+- OPEN: re-render `docs/report-examples/appsec-review-sample.pdf` in WSL (`bash pipeline/report/render-in-docker.sh`,
+  then copy `build/report.pdf`); the README marks it stale until then.
+- OPEN: `render.py` applies the native tier cap only to a family named `native`; the graph has no such lane, so the
+  sample's assurance carries no tier cap.
+- OPEN: 3A replays the lane-14 case-001 fixture, so its entry fact names `projects/cpp/case-001/main.cpp`.
