@@ -91,7 +91,9 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
       deserialization) and publishes per-file/per-directory tags with citations; feed them to
       partition discovery and `01-component-characterization` as an upstream.
 
-- [ ] `tests.test_persona_invocation.RegistryTests.test_tracked_registry_passes_as_is_and_the_default_denied_set_is_pinned` fails on `main` (registry validation reports a problem with `job-templates/02-native-sast`); also `test_vendor_prepass_graph` (16 failures). Pre-existing, not blocking runs.
+- [x] `tests.test_persona_invocation` registry failure on `job-templates/02-native-sast`: passes on `main`
+      since hardening-b (`6f4f0c2`, underscore claim ids; 86 tests OK 2026-09-29).
+- [ ] `test_vendor_prepass_graph` (16 failures). Pre-existing, not blocking runs.
 
 ## Report findings: CWE, CVSS, reachability, EPSS/KEV (ADR-0020, branch ws-report)
 
@@ -103,22 +105,19 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 | 06 CVE reachability from vulnerable function -> app call path (`reachability.py cve-evidence`) | DONE as an offline command; needs a reviewed advisory->function map per run, not yet wired into full_review |
 | EPSS/KEV dated snapshot (`epss_kev_snapshot.py intake`), "as of" in report, "not assessed" gap | DONE; no snapshot imported yet |
 | Hash-verified redacted snippets; 11 objectives + 12 PATCH_PROPOSED_UNVALIDATED remediation | DONE |
-| Persona prompt text for 07/09/12 mentions the new judgment fields | OPEN (runtime block lists them; prompt fragments unchanged) |
+| Persona prompt text for 07/09/12 mentions the new judgment fields | DONE (`claim-review-pool-task.md` "Judgement fields", hardening-b `323c022`) |
 
-- [ ] **Claim ledger: CodeQL leads.** On merge with `review-batch`, add
-      `("02-codeql-sast", "codeql-sast", "codeql-sast.json", "codeql-sast.schema.json")` to
-      `claim_ledger.LEAD_PRODUCERS` and treat it like `02-source-sast` in `normalize_leads`
-      (`if job_id in ("02-source-sast", "02-codeql-sast")`; its leads have the same keys plus
-      `language`, `rule_name`, `cwe`). For tiering, add category `codeql-security-query` and the new
-      source-SAST categories `unsafe-input`, `memory-lifetime`, `sensitive-memory-clear`,
-      `resource-exhaustion` to `P1_CATEGORIES`.
-- [ ] **audit-codeql image.** Rebuild (`image_build.py`, picks up `scripts/codeql-sast-lane.sh`),
-      register the B16 record, add a .NET SDK for C# build-mode none. Optional later: a traced C/C++
-      tool id replaying the locked build (ADR-0017 decision 4).
+- [x] **Claim ledger: CodeQL leads.** `02-codeql-sast` is in `claim_ledger.LEAD_PRODUCERS`, normalised like
+      `02-source-sast` (plus `language`, `rule_name`, `cwe`); `codeql-security-query` and the new source-SAST
+      categories are P1 (`f50caba`).
+- [ ] **audit-codeql image.** Rebuild (`image_build.py`, picks up `scripts/codeql-sast-lane.sh`) and
+      register the B16 record; until then every language is an `UNAVAILABLE` gap. The .NET SDK for C#
+      and the traced C/C++ tool id are in (branch `lang-servers`, see section C below); the traced lane
+      is not wired yet.
 
 ## Threat workbench (ADR-0008 slice 1 + privacy L13)
 
-[ADR-0019](../docs/decisions/ADR-0019-threat-workbench-slice-1-and-privacy.md), branch `ws-workbench`.
+[ADR-0019](../docs/decisions/ADR-0019-threat-workbench-slice-1-and-privacy.md), branch `ws-workbench`, merged `35fca25`.
 `03-threat-model-dfd-stride` now runs persona cells over the deterministic DFD/STRIDE core as C01/C02
 wave pools (`threat_workbench.py`) and publishes non-empty data classes, LINDDUN privacy threats,
 declared deployment zones, abuse scenarios and attack trees, plus `attack-trees.mmd`, `dfd.mmd`,
@@ -132,8 +131,9 @@ declared deployment zones, abuse scenarios and attack trees, plus `attack-trees.
 - [x] Claim ledger admits abuse scenarios and privacy threats as candidates (attack trees left to ADR-0016).
 - [ ] William: ADR-0019 open decisions (failed cell = gap; next cells; ledger load; report section; engine scale).
 - [ ] First live run on hello-autotools (5 model calls; 03 and everything downstream re-run: 03's code hash changed).
-- [ ] Integration owner: `job-graph.json`/`design-parity-manifest.json` still list 03 as `cpu` with the
-      old required artifacts; the Dagster op is now `persona_llm`.
+- [ ] Integration owner: `design-parity-manifest.json` still lists 03 as `deterministic_python` / `cpu` and
+      `job-graph.json` has the old required artifacts (no `.mmd`, ranked scenarios, transcript); the Dagster op
+      is now `persona_llm` (checked 2026-09-29).
 - [ ] Wave 3 challenge cell (different model family) and wave 4 responses; agent/native/mobile/cloud specialists.
 - [ ] Synthesis report: show `data_classes`, `privacy_threats`, `deployment_zones` (closed report schema).
 - [ ] After review-batch merges: confirm the cells use `supporting_evidence_menu` (fallback today: F02 intel manifest).
@@ -162,8 +162,8 @@ Slice 1 (branch `adr14-slice1`):
 - [x] Test execution with built units but no staged control: SKIPPED `not-applicable-no-test-plan`
   (new reason, edges to both ingests and evidence assembly).
 - [x] 06-cve-reachability accepts a native-less ir-facts skip.
-- [ ] Native SAST: one unit's analyzer failure is a gap for that unit, not the job (receipt count is
-  2 per unit today).
+- [x] Native SAST: one unit's analyzer failure (timeout/OOM/tool error) is a gap for that unit, not the job
+  (hardening-b B1, `61ac5b8`).
 - [x] Binary hardening with no binaries: empty staged input root; the worker probe finds no
   candidates and skips `not-applicable-no-matching-inputs` (branch `slice2`).
 - [ ] Records JSONL + index for per-invocation IR/SAST outputs (ADR-0014 item 5).
@@ -213,7 +213,7 @@ All tunables are in config (`docs/processes/tunables.md`, `tunables.py check`). 
 plan: the scale audit's "Indexing coverage" table (source/native SAST findings, vendor tools, SBOM/SCA,
 build index/plan, discovery, standards corpus, review-stage claims).
 
-## Personas and reviewer pools (ADR-0021, branch `ws-personas`)
+## Personas and reviewer pools (ADR-0021, branch `ws-personas`, merged `195683f`)
 
 - [x] Registry records for the 48 catalog personas that had none (`catalog_personas.py generate`,
       `provenance.reviewed: false`); `check` guards missing/stale records.
@@ -229,7 +229,7 @@ build index/plan, discovery, standards corpus, review-stage claims).
 - [ ] Per-stage registry roles (red-team-adversary, blue-team-refuter, independent-verifier, scorer)
       instead of the generic `claim-reviewer` role.
 
-## A-osv-feed (branch `osv-feed`)
+## OSV feed (brief A, branch `osv-feed`, merged `aafbe53`)
 
 - [x] `osv_feed.py` / `osv_snapshot.py`, Dagster `osv_sync_work` in `nvd_reference_sync`, SCA registry bridge
       (`register_osv_feed`), measured SQLite index, `osv_lookup.py`, skills; see `docs/osv-feed.md`.
@@ -243,7 +243,7 @@ build index/plan, discovery, standards corpus, review-stage claims).
 - [ ] Pre-existing, not touched: 4 failures and 1 error in `tests.test_resource_pools_dagster` on baseline
       (`rp.PERSONA` missing, pinned Dagster version); the `osv_sync_work` pool assertion added there cannot run past it.
 
-## Attack chains (ADR-0016, brief D, branch `kill-chains`)
+## Attack chains (ADR-0016, brief D, branch `kill-chains`, merged `497e1b7`, `bc95049`)
 
 - [x] S1 seeding `attack_chain_seeds.py`; S2 composer persona + `attack_chain_derive.py`; S3 refuter
       persona + `attack_chain_refute.py` + `attack_chain_pool.py`; S4 workers, graph nodes
@@ -256,9 +256,50 @@ build index/plan, discovery, standards corpus, review-stage claims).
 - [ ] First live run on appsec-multi-vuln (expect argv -> strcpy at `case-001/main.cpp:6-7`), then
       freeciv21; record chain counts by state, gaps and cost here; tune the lane-14 tunables.
 - [ ] Controller: confirm the refuter shares the composer's model family (only sonnet-5 and haiku are
-      configured) and the lane-14 Dagster ops returning instead of raising (optional input of 10).
-- [ ] Merge rule: 10's fingerprint changes (new dependency); merge when no run is past 09, then reload
-      Dagster.
+      configured; both cell templates use `claude-sonnet-5`).
+- [x] Lane-14 Dagster ops return `NOT_PUBLISHED` instead of raising (`dagster_workflow.py`
+      `attack_chain_lifecycle_op`), so 10 proceeds with an ABSENT section.
+- [x] Merged; 10's fingerprint changed (new optional dependency): runs past 09 re-run 10 after a reload.
+- Slice numbering: the ADR/plan call live acceptance S5 and the report S4; this section's "brief S5" is the report.
+
+## Hardening (brief B, branch `hardening-b`, merged `60ae2e3`)
+
+- B1 native SAST per-unit gaps (`61ac5b8`), B3 OWASP validator reduced citation reply + `owasp_validator_derive.py`
+  (`446d599`), B4 component-map and build-plan bookkeeping derive (`e2af0af`), B5 07/09/12 prompt text (`323c022`),
+  B6 stale test fixes (`6f4f0c2`) done; B2 not reproducible (invoker now inlines plan-unit.json; build_plan.check already rejects wrong-unit plans).
+- OPEN: build classification makes `ai/` its own build unit (freeciv21 `dir:ai`); belongs to build_index/build_classify.
+- OPEN, pre-existing failures on baseline: `test_validator_vendor_prepass_dispatch` (128F/13E), `test_phase1` A08 x2, `test_owasp_dispatch...prohibited_text_in_the_candidate_itself`, `test_build_discovery` and `test_b13_harmless` (import errors).
+- Reachability has no model judgement field at stages 07/09/12; Python arbitrates it (brief assumed one).
+
+## Run log (branch `run-log`, merged `f25a1e9`)
+
+Supersedes the buffered central log (`d60d07b`); the same series added model-call start/heartbeat/finish
+lines (`f273a04`), reviewer-diag tracebacks in the claim reviewer pool (`0b9fe32`), component-map citation
+normalisation (`1b550b5`) and the Python-merged tag cloud (`8dca5fa`). Operator view: `docs/run-log.md` and the
+operator guide (tailing, `APPSEC_*` settings).
+
+| Item | Status |
+|---|---|
+| `pipeline_log` JSON lines, one file per run, banner at intake/resume, context from Dagster ops, `orchestrator/tail-run-log.sh` | DONE (`docs/run-log.md`) |
+| Idle watchdog in `review_cli._dispatch_streaming` (warn default, kill off by default) | DONE |
+| Workers other than `review_cli` / `claim_reviewer_pool` do not yet log their own progress lines; only step start/finish + those two | OPEN |
+| Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | OPEN (nothing sets it yet) |
+
+## C: language servers, tree-sitter, CodeQL traced (branch `lang-servers`, merged `955d797`)
+
+Merged, not yet built (details and WSL commands: `docs/language-servers.md` §7):
+pinned servers on every `audit-buildenv-*` image, vendored tree-sitter (`audit-lsp-vendor`),
+`lsp_driver.py`, `treesitter_ast.py` (+ schema), `codeql-cpp-traced` in `codeql_sast.py`,
+`queries/appsec-graph-cpp`, .NET SDK in `audit-codeql`, `scripts/smoke_lang_servers.sh`, skills.
+OPEN:
+- Build `audit-lsp-vendor`, then the 9 buildenv images and both CodeQL images; run
+  `images/test/run-lsp-smoke.sh`; regenerate B16 records (now include `audit-codeql`,
+  `audit-codeql-native`). Fix whatever the first build breaks (QL compile, offline servers).
+- Wire `codeql-cpp-traced`: `run_codeql_sast` must pass the accepted `02-native-build` root and
+  fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
+- `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
+- [x] `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (Dependabot bumps): re-recorded with
+  `tool_pins.py pin --keep-lock` (`1661f48`); 20 tests OK.
 
 ## Breakage log
 
@@ -374,33 +415,3 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-build-resolution` | BLOCKED `STALE_GRANT`: build grants bind to the hash of `artifact-manifest.json`, which intake rewrites on acceptance; the controls had been staged before intake | Operator order: run `phase1_intake` before `build_resolution`/`build_configure stage-control` (`stage-run.sh`, operator guide); this run's controls re-staged after intake |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |
-
-## B hardening (agent brief B)
-- B1/B3/B4/B5/B6 done on `hardening-b`; B2 not reproducible (invoker now inlines plan-unit.json; build_plan.check already rejects wrong-unit plans).
-- OPEN: build classification makes `ai/` its own build unit (freeciv21 `dir:ai`); belongs to build_index/build_classify.
-- OPEN, pre-existing failures on baseline: `test_validator_vendor_prepass_dispatch` (128F/13E), `test_phase1` A08 x2, `test_owasp_dispatch...prohibited_text_in_the_candidate_itself`, `test_build_discovery` and `test_b13_harmless` (import errors).
-- Reachability has no model judgement field at stages 07/09/12; Python arbitrates it (brief assumed one).
-
-## run-log (branch `run-log`)
-
-| Item | Status |
-|---|---|
-| `pipeline_log` JSON lines, one file per run, banner at intake/resume, context from Dagster ops, `orchestrator/tail-run-log.sh` | DONE (`docs/run-log.md`) |
-| Idle watchdog in `review_cli._dispatch_streaming` (warn default, kill off by default) | DONE |
-| Workers other than `review_cli` / `claim_reviewer_pool` do not yet log their own progress lines; only step start/finish + those two | OPEN |
-| Persistent processes (Dagster daemon, webserver, code location) should set `APPSEC_LOG_PROC` and write to the global file | OPEN |
-
-## C: language servers, tree-sitter, CodeQL traced (branch `lang-servers`)
-
-Done on the branch, not yet built (details and WSL commands: `docs/language-servers.md` §7):
-pinned servers on every `audit-buildenv-*` image, vendored tree-sitter (`audit-lsp-vendor`),
-`lsp_driver.py`, `treesitter_ast.py` (+ schema), `codeql-cpp-traced` in `codeql_sast.py`,
-`queries/appsec-graph-cpp`, .NET SDK in `audit-codeql`, `scripts/smoke_lang_servers.sh`, skills.
-OPEN:
-- Build `audit-lsp-vendor`, then the 9 buildenv images and both CodeQL images; run
-  `images/test/run-lsp-smoke.sh`; regenerate B16 records (now include `audit-codeql`,
-  `audit-codeql-native`). Fix whatever the first build breaks (QL compile, offline servers).
-- Wire `codeql-cpp-traced`: `run_codeql_sast` must pass the accepted `02-native-build` root and
-  fingerprint, plus a `02-native-build -> 02-codeql-sast` graph edge (controller-owned graph change).
-- `treesitter_ast.py` is not a graph job yet; host venv lacks py-tree-sitter (parsing tests skip).
-- Pre-existing `images.tests.test_tool_pins` failures for tool-checkov/tool-mobsfscan (dependabot bumps) are not this branch's.
