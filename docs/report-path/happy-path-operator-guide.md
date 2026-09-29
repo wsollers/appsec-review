@@ -116,6 +116,44 @@ replace the authoritative `full_review` engagement. A Dagster success is necessa
 sufficient: verify the accepted pointer, result envelope, artifact hashes, permission receipt,
 lineage and reported coverage.
 
+### Tail the run log
+
+Every run writes one JSON-lines log, `runs/<run-id>/data/logs/pipeline.log`, appended to at intake and at
+each resume (each session opens with a `#` banner). Follow it from a second terminal:
+
+```bash
+orchestrator/tail-run-log.sh "$RUN_ID"                  # last 50 lines, then follow
+orchestrator/tail-run-log.sh "$RUN_ID" --level warn     # warnings and errors only (IDLE lines are warn)
+orchestrator/tail-run-log.sh "$RUN_ID" --job 07- --who reviewer-03
+orchestrator/tail-run-log.sh "$RUN_ID" --from-start --raw | rg '"level":"error"'
+orchestrator/tail-run-log.sh                            # no run id: the global logs/pipeline.log
+```
+
+Every Dagster op logs `step start` / `step finished after Ns` / `step failed`; model calls log a start,
+a heartbeat and a finish line. Only `review_cli` and the claim reviewer pool log finer progress today.
+The record format, context fields and buffering are in [`docs/run-log.md`](../run-log.md).
+
+### Environment settings
+
+Per-job sizes, counts and timeouts are tunables in the job templates
+([`docs/processes/tunables.md`](../processes/tunables.md), generated). These process-level settings are
+environment variables instead:
+
+| Variable | Default | Read by | Effect |
+|---|---|---|---|
+| `APPSEC_HEARTBEAT_SECONDS` | 30 | `review_cli._dispatch_streaming` | Interval of the model-call heartbeat line (`events=N last=<type> idle=Ns`). |
+| `APPSEC_IDLE_WARN_SECONDS` | 300 (0 = off) | `review_cli._dispatch_streaming` | No stream event for this long logs a `warn` `IDLE` line, repeated every interval. |
+| `APPSEC_IDLE_KILL_SECONDS` | 0 (never) | `review_cli._dispatch_streaming` | Kills a model call idle this long; it returns `idle_killed: true` and takes the timeout path. The ordinary timeout still applies. |
+| `APPSEC_PIPELINE_LOG` | unset (per-run file) | `pipeline_log.py` | A path forces every line into that one file; `off`, `0`, `false` or empty disables logging. |
+| `APPSEC_RUNS_ROOT` | `appsec-review-process/runs` | `pipeline_log.py`, `orchestrator/tail-run-log.sh`, Dagster definitions | Where run directories (and so run logs) live. `code-location.sh` and `stage-run.sh` export it. |
+| `APPSEC_OSV_ROOT` | `data/feeds/osv` | `osv_feed.py`, `osv_lookup.py` | OSV feed publication root ([`docs/osv-feed.md`](../osv-feed.md)). `code-location.sh` exports it. |
+
+Ops run as host processes under the code-location server and inherit its environment, so export the
+first four before `code-location.sh start`; `reload` only re-imports definitions and does not pick up a
+changed shell. `code-location.sh` sets `APPSEC_RUNS_ROOT` and `APPSEC_OSV_ROOT` unconditionally to the
+repository paths above, so inside Dagster those two can only be changed by editing that script;
+the overrides apply to host commands such as `tail-run-log.sh`, `osv_lookup.py` and `osv_feed.py`.
+
 ## 3. Prepare source, build and searchable evidence
 
 Intake fixes target identity, source commit, scope and permissions. Discovery partitions the
@@ -123,6 +161,10 @@ repository into independently buildable projects and operational surfaces. The i
 runs with no network and imports only allowlisted artifacts. Analysis then publishes:
 
 - source SAST, including Go, Java and PHP;
+- CodeQL (`02-codeql-sast`, [ADR-0017](../decisions/ADR-0017-codeql-sast-job.md)): security-extended
+  queries per detected language in build mode none, one network-less container per language; Go and
+  any language whose image has no B16 record are per-language gaps, and the leads enter the claim
+  ledger as P1 candidates;
 - secrets, IaC, image, SBOM, offline SCA, licence and dependency-lifecycle evidence;
 - native SAST, LLVM IR, Joern AST/CPG, test and ELF hardening evidence;
 - literal/full-text and LanceDB semantic search projections; and
@@ -149,7 +191,10 @@ Do not hand-edit the plan or convert a prerequisite wait into `SKIPPED_NA`.
 
 Run these branches separately and retain separate accepted attempts:
 
-1. L6A produces the initial DFD and STRIDE candidates; L6B reconciles them with accepted evidence,
+1. L6A produces the initial DFD and STRIDE candidates from a deterministic core, then runs the threat
+   workbench persona cells in two waves (privacy, deployment zones, abuse scenarios, attack trees,
+   supply chain; [ADR-0019](../decisions/ADR-0019-threat-workbench-slice-1-and-privacy.md)); a failed
+   cell is a gap, never a failed job; L6B reconciles them with accepted evidence,
    retaining conflicts and model coverage.
 2. OWASP T03-T14 routes controls by component, validates ASVS/MASVS work, and publishes deterministic
    pages plus the control matrix, coverage gaps and candidate routes. Automatic derivation of trusted
@@ -166,6 +211,13 @@ alone may verify a claim. Deterministic merge waits for all expected terminal re
 dissent, validates citations and ordering, and applies evidence/diversity quorum. Lane 12 scores only
 independently verified claims.
 
+Lane 14 ([ADR-0016](../decisions/ADR-0016-attack-chain-composition.md)) runs beside lane 12:
+`14-attack-chain-composition` seeds clusters from 09 claims, code entry points and threat-model actors,
+and a composer persona pool proposes chains; `14-attack-chain-refutation` has a refuter pool try to
+break each chain and publishes the hash-linked attack-chain ledger. With no seeds both are SKIPPED
+(`not-applicable-no-chain-seeds`). Chains are candidates, never findings; lane-14 ops return rather
+than raise, so a lane-14 failure never stops the report. Lane 14 has not run live yet.
+
 If a member is missing, timed out, canceled or blocked, retain that state as a coverage gap. Never
 reduce the expected-member manifest after dispatch to force a rendezvous.
 
@@ -173,7 +225,8 @@ reduce the expected-member manifest after dispatch to force a rendezvous.
 
 The `full_review` lifecycle invokes `synthesis_report` with exact accepted inputs and publishes `report.json`,
 `report.md`, coverage appendix, trace index, publication manifest, LaTeX presentation input,
-HTML, PDF and render manifests. Its publication status must remain
+HTML, PDF and render manifests, plus `attack-chains.json` (the optional "Attack chains" section:
+`PUBLISHED`, or `SKIPPED`/`ABSENT` with the reason). Its publication status must remain
 `DRAFT_EVIDENCE_BACKED`, with `final=false` and `human_signoff=false`, until the final gate is
 human-authorized.
 
@@ -217,3 +270,5 @@ operator and design-document HTML publications are self-contained, but this demo
 | Rendezvous never closes | Inspect expected members and durable terminal states; preserve blocked/missing members. |
 | Synthesis reports `OK_WITH_GAPS` | Read the limitations and coverage appendix; this is an honest accepted draft state. |
 | Dagster shows old definitions | Run `orchestrator/dagster/code-location.sh reload`. |
+| A model step seems hung | `orchestrator/tail-run-log.sh "$RUN_ID" --level warn`: `IDLE` lines name the stalled call; set `APPSEC_IDLE_KILL_SECONDS` to stop such calls automatically. |
+| CodeQL reports every language `UNAVAILABLE` | The `audit-codeql` image has no B16 record yet; build and register it (`images/audit-codeql/README.md`). |
