@@ -194,11 +194,11 @@ made Grype the SCA matcher, so this binding is **no longer the matcher's source*
 - Acceptance: D09's list plus vendored rule packs, no package restore, redaction receipt, fifteen
   steps deleted from both runners.
 
-## V14 — Retire And Delete The Runners (M07 slice) — `INTEGRATION`, `BLOCKED(V10,V11,V12,V13,V15,M06)`
+## V14 — Retire And Delete The Runners (M07 slice) — `INTEGRATION` → done 2026-09-29
 
-- Exclusive paths: `scripts/Invoke-VendorAuditPrePass.ps1`, `.sh`, helper scripts only they call,
-  engagement callers, `pipeline/README.md`, runbooks, `docs/architecture/script-migration-inventory.md`,
-  `arp/TODO.md`.
+- Exclusive paths: `pipeline/Invoke-VendorAuditPrePass.ps1`, `.sh`, engagement callers,
+  `pipeline/README.md`, runbooks, `docs/architecture/script-migration-inventory.md`, `arp/TODO.md`.
+- Deliverables: both prepass runners deleted without wrappers; engagement callers updated; inventory rows 44–45 closed.
 - Acceptance: zero remaining steps, zero executable callers, no wrapper, inventory rows closed.
 
 ## V15 — Evidence-Index Metrics Enrichment (F01) — done (PR #25; Windows verification outstanding)
