@@ -69,3 +69,5 @@ images/audit-buildenv-java/jdtls.tar.gz
 .claude/worktrees/port-scripts
 # Mutable OSV feed state (see docs/osv-feed.md); never committed.
 /data/feeds/osv/
+# Mutable MITRE ATT&CK/CAPEC feed state (see docs/mitre-feed.md); never committed.
+/data/feeds/mitre/
