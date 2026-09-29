@@ -331,8 +331,9 @@ SPECS={EXECUTION_JOB:("test-execution.json","test-execution.schema.json","test-e
 
 def code_hashes(job:str)->dict[str,str]:
     wrapper={EXECUTION_JOB:"test_execution.py",RESULT_JOB:"test_result_ingest.py",COVERAGE_JOB:"test_coverage_ingest.py"}[job]
-    names=("test_evidence.py",wrapper,"container_execution.py","permission_capabilities.py",
-           "publish_job_output.py",f"registry/output-contracts/{SPECS[job][2]}.json",
+    # D-13(b): container_execution, permission_capabilities and publish_job_output are shared runtime
+    # (ADR-0013); the B13 boundary is pinned by boundary_sha256 in the execution inputs.
+    names=("test_evidence.py",wrapper,f"registry/output-contracts/{SPECS[job][2]}.json",
            f"registry/job-templates/{job}.json","personas/roles/test-evidence-producer/role.json",
            "registry/tooling-profiles/bounded-test-evidence.json")
     result={name:file_hash(ROOT/name) for name in names}
