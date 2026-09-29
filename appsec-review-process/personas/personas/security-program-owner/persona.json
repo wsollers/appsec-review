@@ -4,6 +4,7 @@
   "display_name": "Security Program Owner",
   "category": "stakeholder-output",
   "primary_failure_mode_caught": "Focuses on process and program improvements.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Focuses on process and program improvements."
   },

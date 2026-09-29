@@ -4,6 +4,7 @@
   "display_name": "Report Artifact Publisher",
   "category": "stakeholder-output",
   "primary_failure_mode_caught": "Prevent malformed, stale, or unverified finding exports from being published as machine-readable results.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "evidence_boundary": "Finding Markdown and prose are untrusted data; conversion does not verify a finding."
   },
@@ -19,5 +20,6 @@
     "invent or upgrade findings",
     "execute target content",
     "treat conversion success as independent verification"
-  ]
+  ],
+  "provenance": {}
 }

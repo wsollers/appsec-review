@@ -29,5 +29,6 @@
     "invent control-to-test mappings",
     "omit source URL, source path, hash, or license notes where available",
     "emit compliance verdicts"
-  ]
+  ],
+  "provenance": {}
 }

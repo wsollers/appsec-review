@@ -4,6 +4,7 @@
   "display_name": "Terraform IAM Reviewer",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews Terraform and cloud IAM declarations.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews Terraform and cloud IAM declarations.",
     "looks_for": [

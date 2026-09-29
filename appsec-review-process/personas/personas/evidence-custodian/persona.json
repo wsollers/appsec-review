@@ -4,6 +4,7 @@
   "display_name": "Evidence Custodian",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Prevent stale, unattributed or corrupted evidence retrieval.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "evidence_boundary": "Target inputs are untrusted; no target execution"
   },
@@ -18,5 +19,6 @@
   "must_not": [
     "emit verified findings",
     "execute target scripts"
-  ]
+  ],
+  "provenance": {}
 }

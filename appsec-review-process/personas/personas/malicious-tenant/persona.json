@@ -4,6 +4,7 @@
   "display_name": "Malicious Tenant",
   "category": "attacker",
   "primary_failure_mode_caught": "Models a tenant or workspace admin trying to cross tenant boundaries.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Models a tenant or workspace admin trying to cross tenant boundaries.",
     "looks_for": [

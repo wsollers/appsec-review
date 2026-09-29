@@ -4,6 +4,7 @@
   "display_name": "Completeness Auditor",
   "category": "verifier",
   "primary_failure_mode_caught": "Asks what important surface was not reviewed.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Asks what important surface was not reviewed.",
     "looks_for": [

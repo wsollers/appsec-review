@@ -27,5 +27,6 @@
     "claim live cloud state or observed exposure",
     "execute target infrastructure or cloud APIs",
     "invent evidence refs"
-  ]
+  ],
+  "provenance": {}
 }

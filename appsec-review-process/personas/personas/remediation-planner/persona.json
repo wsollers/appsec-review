@@ -4,6 +4,7 @@
   "display_name": "Remediation Planner",
   "category": "synthesis",
   "primary_failure_mode_caught": "Turns verified findings into fix plans.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Turns verified findings into fix plans."
   },

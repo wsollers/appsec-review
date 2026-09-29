@@ -33,5 +33,6 @@
     "treat documents as implementation proof unless the control is documentation-only",
     "report findings directly from documentation gaps",
     "include raw secrets or unnecessary personal data in indexed summaries"
-  ]
+  ],
+  "provenance": {}
 }

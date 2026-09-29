@@ -4,6 +4,7 @@
   "display_name": "Control Owner",
   "category": "defender",
   "primary_failure_mode_caught": "Evaluates whether existing controls meaningfully reduce risk.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Evaluates whether existing controls meaningfully reduce risk.",
     "looks_for": [

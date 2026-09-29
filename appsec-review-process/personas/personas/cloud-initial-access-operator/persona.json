@@ -4,6 +4,7 @@
   "display_name": "Cloud Initial Access Operator",
   "category": "attacker",
   "primary_failure_mode_caught": "Models an attacker seeking initial access through cloud configuration and exposed infrastructure.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Models an attacker seeking initial access through cloud configuration and exposed infrastructure.",
     "looks_for": [

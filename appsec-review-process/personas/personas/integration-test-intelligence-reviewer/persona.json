@@ -4,6 +4,7 @@
   "display_name": "Integration Test Intelligence Reviewer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes integration tests to understand real component interactions.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes integration tests to understand real component interactions.",
     "feeds": [

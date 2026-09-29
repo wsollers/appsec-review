@@ -4,6 +4,7 @@
   "display_name": "Data Storage Records Reviewer",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews databases, caches, queues, blob stores, logs, and analytics flows.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews databases, caches, queues, blob stores, logs, and analytics flows.",
     "looks_for": [

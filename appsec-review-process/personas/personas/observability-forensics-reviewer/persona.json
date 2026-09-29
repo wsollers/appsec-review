@@ -4,6 +4,7 @@
   "display_name": "Observability Forensics Reviewer",
   "category": "defender",
   "primary_failure_mode_caught": "Reviews whether the system can detect and investigate attacks.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews whether the system can detect and investigate attacks.",
     "feeds": [

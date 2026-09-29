@@ -4,6 +4,7 @@
   "display_name": "Smoke Test Validator",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes smoke tests and deployment checks to understand minimum release confidence.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes smoke tests and deployment checks to understand minimum release confidence.",
     "feeds": [

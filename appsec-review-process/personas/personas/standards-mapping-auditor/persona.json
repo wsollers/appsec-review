@@ -4,6 +4,7 @@
   "display_name": "Standards Mapping Auditor",
   "category": "verifier",
   "primary_failure_mode_caught": "Validates CWE, ASVS, MASVS, NIST, ATT&CK, CIS, DISA, and RFC mappings.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Validates CWE, ASVS, MASVS, NIST, ATT&CK, CIS, DISA, and RFC mappings.",
     "rules": [

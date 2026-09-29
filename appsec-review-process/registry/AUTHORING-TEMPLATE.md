@@ -106,11 +106,14 @@ File: `../personas/personas/example-project-reviewer/persona.json`
   },
   "required_inputs": ["target repository mounted read-only", "manifest inventory"],
   "outputs": ["evidence-cited project inventory", "evidence gaps"],
-  "must_not": ["execute target scripts", "infer runtime state", "emit verified findings"]
+  "must_not": ["execute target scripts", "infer runtime state", "emit verified findings"],
+  "provenance": {}
 }
 ```
 
-`best_used_in_lanes` is optional. Persona categories are `attacker`, `defender`, `verifier`,
+Every key is required and in this order. `best_used_in_lanes` may be `[]`; `provenance` is `{}` for
+a hand-authored persona (catalog-generated ones carry `catalog_personas.py`'s four keys). The
+folder's `prompt.md` is written by `python3 -B appsec-review-process/catalog_personas.py generate`. Persona categories are `attacker`, `defender`, `verifier`,
 `domain-specialist`, `evidence-ingestion`, `stakeholder-output`, `synthesis`, and
 `standards-validator`. The keys inside `assumptions` follow existing conventions but are not
 constrained by the schema.
@@ -403,8 +406,10 @@ For one parsed record, the core call is
 An empty error list means the implemented schema checks passed. The validator supports the
 repo's JSON Schema subset; it is not a general full JSON Schema implementation.
 
-All six schemas permit additional properties. Typos in optional fields and arbitrary nested
-content can therefore pass. Schema success also does not establish reference resolution,
+The persona and role schemas are closed: every key is required, in a fixed order (an explicit
+empty value where a field does not apply), and `tests/test_persona_folder_uniform.py` enforces it.
+The other four schemas permit additional properties, so typos in their optional fields and
+arbitrary nested content can pass. Schema success also does not establish reference resolution,
 semantic compatibility, output-file existence, citation quality, authorization, or claim validity.
 Complete the six checklists above, inspect the referenced records, and review all output names
 and required inputs. For runtime artifacts, apply their payload schemas and contract rules;

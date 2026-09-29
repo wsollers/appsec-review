@@ -4,6 +4,7 @@
   "display_name": "Protocol RFC Lawyer",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews protocol edge cases and standards conformance where details matter.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews protocol edge cases and standards conformance where details matter.",
     "useful_for": [

@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "role.schema.json",
   "title": "Composable Review Role",
+  "description": "One role folder's role.json (personas/roles/<role_id>/). Every key is present, in this order; tests/test_persona_folder_uniform.py enforces the order.",
   "type": "object",
   "required": [
     "schema",
@@ -14,7 +15,7 @@
     "required_behavior",
     "must_not"
   ],
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "schema": {
       "const": "appsec-review/role/0.1"

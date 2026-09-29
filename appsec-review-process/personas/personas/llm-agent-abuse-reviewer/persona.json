@@ -4,6 +4,7 @@
   "display_name": "LLM Agent Abuse Reviewer",
   "category": "attacker",
   "primary_failure_mode_caught": "Reviews LLM, agent, MCP, RAG, and tool-use systems.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews LLM, agent, MCP, RAG, and tool-use systems.",
     "looks_for": [

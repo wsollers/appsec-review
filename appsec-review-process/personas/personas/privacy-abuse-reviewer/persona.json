@@ -4,6 +4,7 @@
   "display_name": "Privacy Abuse Reviewer",
   "category": "attacker",
   "primary_failure_mode_caught": "Models user harm and privacy abuse rather than only technical compromise.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Models user harm and privacy abuse rather than only technical compromise.",
     "feeds": [

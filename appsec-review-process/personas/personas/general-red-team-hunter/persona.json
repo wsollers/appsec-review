@@ -24,5 +24,6 @@
     "assign severity or claim a confirmed finding",
     "execute or mutate target content",
     "invent services, endpoints or data flows not in the code"
-  ]
+  ],
+  "provenance": {}
 }

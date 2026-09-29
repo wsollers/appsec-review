@@ -4,6 +4,7 @@
   "display_name": "API Contract Abuser",
   "category": "attacker",
   "primary_failure_mode_caught": "Attacks mismatches between API documentation, route behavior, validation, and authorization.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Attacks mismatches between API documentation, route behavior, validation, and authorization.",
     "looks_for": [

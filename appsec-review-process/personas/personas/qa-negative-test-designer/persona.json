@@ -4,6 +4,7 @@
   "display_name": "QA Negative Test Designer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Turns findings and proof obligations into negative tests.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Turns findings and proof obligations into negative tests.",
     "examples": [

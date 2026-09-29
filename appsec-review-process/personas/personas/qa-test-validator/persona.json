@@ -31,5 +31,6 @@
     "index raw secrets from fixtures or environments",
     "treat mocked controls as production controls without caveat",
     "treat tests as proof that a control is secure"
-  ]
+  ],
+  "provenance": {}
 }

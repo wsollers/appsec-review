@@ -4,6 +4,7 @@
   "display_name": "Postman Bruno Collection Consumer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Specialized evidence-ingestion persona for API collections.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Specialized evidence-ingestion persona for API collections.",
     "tasks": [

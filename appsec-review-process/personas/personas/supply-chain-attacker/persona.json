@@ -4,6 +4,7 @@
   "display_name": "Supply Chain Attacker",
   "category": "attacker",
   "primary_failure_mode_caught": "Models attacks through dependencies, package managers, CI/CD, generated artifacts, and release paths.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Models attacks through dependencies, package managers, CI/CD, generated artifacts, and release paths.",
     "looks_for": [

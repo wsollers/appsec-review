@@ -4,6 +4,7 @@
   "display_name": "Executive Risk Briefing",
   "category": "stakeholder-output",
   "primary_failure_mode_caught": "Focuses on decision-level risk.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Focuses on decision-level risk."
   },

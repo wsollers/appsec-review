@@ -4,6 +4,7 @@
   "display_name": "Kubernetes Workload Hardening Reviewer",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews Kubernetes and Helm workload posture.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews Kubernetes and Helm workload posture.",
     "looks_for": [

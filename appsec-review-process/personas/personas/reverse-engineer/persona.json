@@ -42,5 +42,6 @@
     "ignore packer, stripping, architecture, debug-info, or tool-failure limitations",
     "run networked vulnerability database updates without authorization",
     "mount host credentials, host devices, or the Docker socket for binary analysis"
-  ]
+  ],
+  "provenance": {}
 }

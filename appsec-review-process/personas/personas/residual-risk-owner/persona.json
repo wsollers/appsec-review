@@ -4,6 +4,7 @@
   "display_name": "Residual Risk Owner",
   "category": "synthesis",
   "primary_failure_mode_caught": "Translates unresolved evidence gaps into decision risk.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Translates unresolved evidence gaps into decision risk.",
     "examples": [

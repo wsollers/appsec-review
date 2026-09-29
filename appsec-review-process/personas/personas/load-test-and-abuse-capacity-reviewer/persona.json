@@ -4,6 +4,7 @@
   "display_name": "Load Test And Abuse Capacity Reviewer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes load, stress, soak, and performance test artifacts to identify security-relevant capacity and abuse gaps.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes load, stress, soak, and performance test artifacts to identify security-relevant capacity and abuse gaps.",
     "feeds": [

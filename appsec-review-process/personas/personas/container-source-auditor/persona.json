@@ -4,6 +4,7 @@
   "display_name": "Container Source Auditor",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews Dockerfiles and base image declarations.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews Dockerfiles and base image declarations.",
     "looks_for": [

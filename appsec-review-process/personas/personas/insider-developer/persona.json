@@ -4,6 +4,7 @@
   "display_name": "Insider Developer",
   "category": "attacker",
   "primary_failure_mode_caught": "Models a malicious or negligent contributor with source or CI influence.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Models a malicious or negligent contributor with source or CI influence.",
     "looks_for": [

@@ -25,5 +25,6 @@
     "cite a file or line it did not read",
     "assign severity or claim a confirmed finding",
     "execute or mutate target content"
-  ]
+  ],
+  "provenance": {}
 }

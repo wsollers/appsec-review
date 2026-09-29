@@ -4,6 +4,7 @@
   "display_name": "Product Owner",
   "category": "stakeholder-output",
   "primary_failure_mode_caught": "Focuses on product risk, user harm, requirements gaps, and release decisions.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Focuses on product risk, user harm, requirements gaps, and release decisions."
   },

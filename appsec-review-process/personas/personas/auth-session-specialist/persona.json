@@ -4,6 +4,7 @@
   "display_name": "Auth Session Specialist",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews identity, session, and token systems.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews identity, session, and token systems.",
     "looks_for": [

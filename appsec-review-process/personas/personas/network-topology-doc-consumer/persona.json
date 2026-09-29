@@ -4,6 +4,7 @@
   "display_name": "Network Topology Doc Consumer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes network diagrams, IaC, service docs, and ingress configs.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes network diagrams, IaC, service docs, and ingress configs.",
     "feeds": [

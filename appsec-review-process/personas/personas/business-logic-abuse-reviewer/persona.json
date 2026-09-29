@@ -4,6 +4,7 @@
   "display_name": "Business Logic Abuse Reviewer",
   "category": "attacker",
   "primary_failure_mode_caught": "Focuses on abuse paths that are not obvious scanner findings.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Focuses on abuse paths that are not obvious scanner findings.",
     "looks_for": [

@@ -4,6 +4,7 @@
   "display_name": "Release Integrity Reviewer",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews source-to-artifact integrity.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews source-to-artifact integrity.",
     "looks_for": [

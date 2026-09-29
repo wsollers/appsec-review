@@ -4,6 +4,7 @@
   "display_name": "Nginx REST API Specialist",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews nginx, reverse proxy, ingress, and REST API routing together.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews nginx, reverse proxy, ingress, and REST API routing together.",
     "looks_for": [

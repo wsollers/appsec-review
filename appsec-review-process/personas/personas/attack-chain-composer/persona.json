@@ -24,5 +24,6 @@
     "assign severity or call a chain verified",
     "write exploit code, commands or payloads",
     "execute or mutate target content"
-  ]
+  ],
+  "provenance": {}
 }

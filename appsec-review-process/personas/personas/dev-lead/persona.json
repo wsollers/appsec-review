@@ -4,6 +4,7 @@
   "display_name": "Dev Lead",
   "category": "stakeholder-output",
   "primary_failure_mode_caught": "Focuses on implementation ownership, remediation design, sequencing, and engineering tradeoffs.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Focuses on implementation ownership, remediation design, sequencing, and engineering tradeoffs."
   },

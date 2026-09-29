@@ -31,5 +31,6 @@
     "index raw credentials",
     "treat test presence as proof of security",
     "drop source lineage for derived records"
-  ]
+  ],
+  "provenance": {}
 }

@@ -4,6 +4,7 @@
   "display_name": "Synthesis Integrator",
   "category": "synthesis",
   "primary_failure_mode_caught": "Combines verified facts, unresolved risks, and coverage gaps into the final report.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Combines verified facts, unresolved risks, and coverage gaps into the final report."
   },

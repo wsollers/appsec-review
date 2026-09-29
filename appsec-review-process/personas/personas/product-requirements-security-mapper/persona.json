@@ -4,6 +4,7 @@
   "display_name": "Product Requirements Security Mapper",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Maps product requirements to security requirements.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Maps product requirements to security requirements.",
     "looks_for": [

@@ -4,6 +4,7 @@
   "display_name": "Evidence Only Verifier",
   "category": "verifier",
   "primary_failure_mode_caught": "Independently verifies a candidate claim from cited evidence and minimal source inspection.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Independently verifies a candidate claim from cited evidence and minimal source inspection."
   },

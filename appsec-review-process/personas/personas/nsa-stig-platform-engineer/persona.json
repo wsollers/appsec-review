@@ -30,5 +30,6 @@
     "treat package presence as configuration proof",
     "infer final built-image state from Dockerfile text alone",
     "claim runtime daemon posture without runtime, image, or config evidence"
-  ]
+  ],
+  "provenance": {}
 }

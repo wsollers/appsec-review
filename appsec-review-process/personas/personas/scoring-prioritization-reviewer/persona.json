@@ -4,6 +4,7 @@
   "display_name": "Scoring Prioritization Reviewer",
   "category": "synthesis",
   "primary_failure_mode_caught": "Consumes verified facts and assigns severity/priority.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes verified facts and assigns severity/priority."
   },

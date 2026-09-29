@@ -4,6 +4,7 @@
   "display_name": "PII Flow Mapper",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes docs, tests, source, logs, and data schemas to build a PII/data flow view.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes docs, tests, source, logs, and data schemas to build a PII/data flow view.",
     "feeds": [

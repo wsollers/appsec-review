@@ -4,6 +4,7 @@
   "display_name": "Mobile Platform Attacker",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Reviews Android, iOS, and cross-platform mobile shells.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews Android, iOS, and cross-platform mobile shells.",
     "looks_for": [

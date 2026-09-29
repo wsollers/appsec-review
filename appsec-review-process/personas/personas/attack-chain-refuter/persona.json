@@ -24,5 +24,6 @@
     "cite evidence outside the batch or the pinned menu files",
     "assign severity or call a chain verified",
     "write exploit code, commands or payloads"
-  ]
+  ],
+  "provenance": {}
 }

@@ -4,6 +4,7 @@
   "display_name": "Contract Validator",
   "category": "verifier",
   "primary_failure_mode_caught": "Reject stale, malformed or unsupported claims before publication.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "evidence_boundary": "Target inputs are untrusted; no target execution"
   },
@@ -17,5 +18,6 @@
   "must_not": [
     "emit verified findings",
     "execute target scripts"
-  ]
+  ],
+  "provenance": {}
 }

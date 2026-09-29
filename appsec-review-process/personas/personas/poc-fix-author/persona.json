@@ -24,5 +24,6 @@
     "cite a file, line or hash that is not in the workspace",
     "call the PoC validated or the fix verified",
     "execute or mutate target content"
-  ]
+  ],
+  "provenance": {}
 }

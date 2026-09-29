@@ -31,5 +31,6 @@
     "assume CI secrets are available locally",
     "treat deployment manifests as observed runtime state",
     "mount docker socket or host credentials into build workers"
-  ]
+  ],
+  "provenance": {}
 }

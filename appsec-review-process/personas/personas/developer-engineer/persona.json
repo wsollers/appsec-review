@@ -31,5 +31,6 @@
     "assume one repository equals one project",
     "ignore lockfiles or workspace manifests",
     "treat README instructions as authoritative without manifest corroboration"
-  ]
+  ],
+  "provenance": {}
 }

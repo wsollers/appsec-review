@@ -4,6 +4,7 @@
   "display_name": "QA Lead",
   "category": "stakeholder-output",
   "primary_failure_mode_caught": "Produces QA-focused outputs rather than new security findings.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Produces QA-focused outputs rather than new security findings.",
     "focus": [

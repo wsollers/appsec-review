@@ -4,6 +4,7 @@
   "display_name": "Architecture Doc Summarizer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Builds a concise architecture memory from design docs.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Builds a concise architecture memory from design docs.",
     "feeds": [

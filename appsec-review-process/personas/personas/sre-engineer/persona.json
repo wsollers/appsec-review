@@ -32,5 +32,6 @@
     "execute destructive operational commands",
     "treat monitoring config as proof alerts are active",
     "ignore missing runbooks or ownership metadata"
-  ]
+  ],
+  "provenance": {}
 }

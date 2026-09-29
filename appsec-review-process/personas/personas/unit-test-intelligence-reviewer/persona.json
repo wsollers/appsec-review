@@ -4,6 +4,7 @@
   "display_name": "Unit Test Intelligence Reviewer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes unit tests and extracts security-relevant implementation assumptions.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes unit tests and extracts security-relevant implementation assumptions.",
     "feeds": [

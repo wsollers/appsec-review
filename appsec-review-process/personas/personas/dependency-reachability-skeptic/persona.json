@@ -4,6 +4,7 @@
   "display_name": "Dependency Reachability Skeptic",
   "category": "defender",
   "primary_failure_mode_caught": "Reviews dependency and CVE claims with a bias against overclaiming.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Reviews dependency and CVE claims with a bias against overclaiming.",
     "looks_for": [

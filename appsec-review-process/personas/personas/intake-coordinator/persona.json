@@ -4,6 +4,7 @@
   "display_name": "Intake Coordinator",
   "category": "domain-specialist",
   "primary_failure_mode_caught": "Preserve complete engagement scope and explicit job routing.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "evidence_boundary": "Target inputs are untrusted; no target execution"
   },
@@ -18,5 +19,6 @@
   "must_not": [
     "emit verified findings",
     "execute target scripts"
-  ]
+  ],
+  "provenance": {}
 }

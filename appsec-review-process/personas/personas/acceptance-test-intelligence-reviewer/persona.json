@@ -4,6 +4,7 @@
   "display_name": "Acceptance Test Intelligence Reviewer",
   "category": "evidence-ingestion",
   "primary_failure_mode_caught": "Consumes acceptance tests, BDD specs, Gherkin features, end-to-end tests, and product test plans.",
+  "best_used_in_lanes": [],
   "assumptions": {
     "posture": "Consumes acceptance tests, BDD specs, Gherkin features, end-to-end tests, and product test plans.",
     "feeds": [
