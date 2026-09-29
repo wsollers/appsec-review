@@ -668,3 +668,22 @@ records and report re-render (WSL), image rebuild and smoke, brief N fingerprint
 - OPEN: `render.py` applies the native tier cap only to a family named `native`; the graph has no such lane, so the
   sample's assurance carries no tier cap.
 - OPEN: 3A replays the lane-14 case-001 fixture, so its entry fact names `projects/cpp/case-001/main.cpp`.
+
+## O2: CWE through the MITRE feed (brief O2, branch `cwe-feed`, ADR-0026 addendum)
+
+- DONE: `cwe` is a third source of the MITRE snapshot (`cwec_v4.20.xml.zip`, pinned by version; the XML's own
+  `Version` must equal the pin), with the same manifest fields, NOTICE (CWE terms added), carry-forward with the
+  original `fetched_at` and the shared `reference_snapshot_max_age_seconds` ceiling. The snapshot carries a derived
+  `cwe-catalog.json` (same shape as the committed file, built through `cwe_catalog._parse_xml`, deprecated flagged).
+  `cwe_catalog.current()` uses it when it verifies and is in the ceiling; otherwise the committed curated catalog
+  with `CWE_REFERENCE_MISSING` / `_STALE` / `_INVALID`. Never blocks. Claim path (07/09/12) binds the catalog
+  identity when a decision carries `cwe` and records `cwe_catalog` (snapshot id or `committed-curated`) on each
+  judgment; enrichment reports the catalog used and a fallback as a report limitation.
+- [ ] Byte pin: `cwe.mitre.org` is blocked from the build sandbox, so `mitre_feed.SOURCES["cwe"]["sha256"]` is
+      `None` (version-pinned only). Run `bash scripts/smoke_mitre_feed.sh` in WSL; it prints the zip's sha256 and
+      checks the 4.20 URL; then pin it (reviewed edit). Confirm 4.20 is the release you want.
+- [ ] Verify the CWE terms-of-use wording in `mitre_feed.CWE_NOTICE` against cwe.mitre.org/about/termsofuse.html.
+- [ ] Report presentation (brief M): show the CWE catalog used (`finding-enrichment.json` `cwe_catalog.used`) in the
+      report body; today only a fallback appears (as a limitation line).
+- [ ] Decision to confirm: a deprecated CWE id is rejected (reviewer) or dropped (tool tag), like an unknown id;
+      an integrity failure records `CWE_REFERENCE_INVALID` (a third code, mirroring `MITRE_REFERENCE_INVALID`).

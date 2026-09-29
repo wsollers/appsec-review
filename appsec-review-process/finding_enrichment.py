@@ -5,7 +5,8 @@ For every independently verified finding this module collects, in Python and fro
 accepted inputs only, the report-template fields the draft used to leave blank:
 
 * CWE -- tool rule metadata through the pinned rule->CWE map, plus the reviewers' CWE judgments
-  (07/09/12, carried by the lifecycle), all validated against the pinned CWE catalog;
+  (07/09/12, carried by the lifecycle), all validated against the CWE catalog in force (the MITRE
+  feed snapshot, else the committed curated catalog with a recorded gap; ``cwe_catalog.current``);
 * CVSS v4.0 -- the vector/score the 12 lifecycle computed from the reviewer's base metrics;
 * reachability -- the call-graph analyser over the accepted CPG (+ IR facts); code findings get a
   witness path, SCA findings take the accepted 06-cve-reachability classification;
@@ -74,7 +75,7 @@ def input_bindings(run_root: Path) -> dict[str, Any]:
     bindings["entry_points"] = _sha_file(entry) if entry.is_file() and not entry.is_symlink() else None
     lock = epss_kev_snapshot.SNAPSHOT_DIR / epss_kev_snapshot.LOCK
     bindings["epss_kev_lock"] = _sha_file(lock) if lock.is_file() else None
-    bindings["cwe"] = cwe_catalog.Catalog().identity
+    bindings["cwe"] = cwe_catalog.current().identity      # feed table hash, or the curated fallback + gap
     bindings["cvss_lookup_sha256"] = cvss4.LOOKUP_SHA256
     bindings["sources"] = [{"tree": str(root.relative_to(run_root)) if root.is_relative_to(run_root) else root.name}
                            for root in code_snippets.source_roots(run_root)]
@@ -86,9 +87,11 @@ class Context:
 
     def __init__(self, run_root: Path, snapshot_dir: Path | None = None):
         self.run_root = Path(run_root)
-        self.catalog = cwe_catalog.Catalog()
         self.gaps: list[str] = []
         self.bindings = input_bindings(self.run_root)
+        self.catalog = cwe_catalog.bound(self.bindings["cwe"])     # the catalog the fingerprint names
+        if self.catalog.limitation():
+            self.gaps.append(self.catalog.limitation())
         entry = self.run_root / ENTRY_POINTS
         self.entry_points: list[str] = []
         if self.bindings["entry_points"]:
@@ -167,7 +170,14 @@ def _cwe(ctx: Context, finding: dict[str, Any], code: list[dict[str, Any]]) -> d
             source = f"tool rule {row['tool_id']} {row['rule_id']}"
             if source not in entries[cwe_id]["sources"]:
                 entries[cwe_id]["sources"].append(source)
-    judgments = sorted(finding.get("cwe_judgments") or [], key=lambda item: STAGE_RANK.get(item["stage"], 9))
+    judgments = []
+    for item in sorted(finding.get("cwe_judgments") or [], key=lambda item: STAGE_RANK.get(item["stage"], 9)):
+        try:
+            ctx.catalog.validate(item["cwe_id"])
+        except cwe_catalog.CWEError as exc:        # e.g. judged against the feed, reported on the fallback
+            gaps.append(f"reviewer {item['stage']} CWE judgment dropped: {exc}")
+            continue
+        judgments.append(item)
     for item in judgments:
         cwe_id = ctx.catalog.validate(item["cwe_id"])
         entries.setdefault(cwe_id, {"cwe_id": cwe_id, "name": ctx.catalog.name(cwe_id), "sources": []})
@@ -267,5 +277,6 @@ def build(report: dict[str, Any], run_root: Path, snapshot_dir: Path | None = No
     return {"schema": SCHEMA, "run_id": report["run_id"], "ledger_head_sha256": report["ledger_head_sha256"],
             "inputs": ctx.bindings,
             "epss_kev": ctx.snapshot.identity if ctx.snapshot is not None else {"status": "not assessed"},
+            "cwe_catalog": {"used": ctx.catalog.used, **ctx.catalog.identity},
             "severity_rule": "Critical requires REACHABLE; UNKNOWN and UNREACHABLE cap at High (ADR-0020)",
             "findings": findings, "gaps": ctx.gaps}

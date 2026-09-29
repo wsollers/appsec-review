@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import attack_reference
+import cwe_catalog
 import bounded_analysis_workers
 import claim_lifecycle_core as core
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
@@ -67,12 +68,14 @@ def _sha(value: Any) -> str:
     return "sha256:" + digest(value)
 
 
-def _code_hashes(stage: str) -> dict[str, str]:
+def _code_hashes(stage: str, cwe_judged: bool = False) -> dict[str, str]:
     names = ("claim_review_lifecycle.py", "claim_lifecycle_core.py", WORKERS[stage],
              "publish_job_output.py", "validate_job_output.py",
              f"registry/output-contracts/{stage}.json")
     if stage == "07-red-team-adversarial":          # ATT&CK/CAPEC label validation (ADR-0026)
         names += ("attack_reference.py", "mitre_feed.py")
+    if cwe_judged and stage != "08-blue-team-refutation":   # CWE catalog in force (brief O2)
+        names += tuple(name for name in ("cwe_catalog.py", "mitre_feed.py") if name not in names)
     result = {name: file_hash(ROOT / name) for name in names}
     result["schemas/claim-review-decision.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-decision.schema.json")
@@ -189,13 +192,21 @@ def current_inputs(run_id: str, stage: str) -> dict[str, Any]:
               "upstream": upstream, "upstream_binding": upstream_binding,
               "pool": pool, "pool_binding": pool_binding, "decisions": decisions,
               "applicability": "APPLICABLE" if records else "SKIPPED_NA_NO_CANDIDATES",
-              "code": _code_hashes(stage)}
+              "code": _code_hashes(stage, _cwe_judged(decisions))}
     if stage == "07-red-team-adversarial" and any("attack_refs" in row or "capec_refs" in row
                                                   for row in decisions["decisions"]):
         # ADR-0026: the MITRE reference identity (or its gap) is an input, so a stale or re-pinned
         # snapshot re-executes the stage and a re-validation reproduces the same tags.
         inputs["mitre_reference"] = attack_reference.binding()
+    if _cwe_judged(decisions) and stage != "08-blue-team-refutation":
+        # Brief O2: the CWE catalog in force (feed table hash, or the curated fallback and its gap) is an
+        # input, so a new pin or a stale feed re-executes the stage and a re-validation reproduces it.
+        inputs["cwe_catalog"] = cwe_catalog.current().identity
     return inputs
+
+
+def _cwe_judged(decisions: dict[str, Any]) -> bool:
+    return any(isinstance(row, dict) and "cwe" in row for row in decisions["decisions"])
 
 
 def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
@@ -204,10 +215,11 @@ def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
                 "08-blue-team-refutation": core.blue_team,
                 "09-independent-verification": core.verify,
                 "12-scoring-prioritization": core.score}[stage]
+    extra = {"cwe_binding": inputs["cwe_catalog"]} if "cwe_catalog" in inputs else {}
     if "mitre_reference" in inputs:
         return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"],
-                        inputs["mitre_reference"])
-    return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"])
+                        inputs["mitre_reference"], **extra)
+    return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"], **extra)
 
 
 def _receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
