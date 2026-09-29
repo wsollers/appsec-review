@@ -28,10 +28,10 @@ Usage:
 Options:
   --compile-db PATH       Existing compile_commands.json for native targets.
   --msvc PATH|-           MSVC mount for Windows targets; default "-".
-  --static-image TAG      Static toolbox image; default vendor-audit-toolbox:latest.
-  --static-steps a,b,c    Optional subset for the static prepass runner.
-  --static-runner MODE    auto|bash|powershell; default auto, prefers bash.
-  --skip-static           Do not run Semgrep/gitleaks/trivy/BinSkim/etc pre-pass.
+  --static-image TAG      Static toolbox image; default vendor-audit-toolbox:latest (legacy).
+  --static-steps a,b,c    Optional subset for legacy static prepass (retired).
+  --static-runner MODE    auto|bash|powershell (legacy).
+  --skip-static           Skip static prepass notice/summary.
   --skip-native           Do not run native pregather/IR/CSA/CodeQL.
   --no-codeql             Skip native CodeQL.
   --no-csa                Skip native CSA/CTU.
@@ -114,38 +114,11 @@ run_step() {
 }
 
 if [[ "$RUN_STATIC" == 1 ]]; then
-  if [[ "$STATIC_RUNNER" != "auto" && "$STATIC_RUNNER" != "bash" && "$STATIC_RUNNER" != "powershell" ]]; then
-    echo "--static-runner must be auto, bash, or powershell" >&2
-    exit 2
+  echo "NOTICE: Legacy static prepass runners were retired (ADR-0010 task V14); static evidence is produced by run-owned 02-* Dagster jobs." | tee "$LOG_DIR/static-prepass.log"
+  printf '{"step":"static-prepass","exit_code":0,"seconds":0,"log":%s,"note":"legacy static prepass runners retired per ADR-0010 task V14; use run-owned 02-* Dagster jobs"}\n' "$(json_escape "$LOG_DIR/static-prepass.log")" >> "$MANIFEST"
+  if [[ -f "$STATIC_EVIDENCE/MANIFEST.json" ]]; then
+    run_step "static-summary" python3 "$ROOT/pipeline/summarize_evidence.py" "$STATIC_EVIDENCE" -o "$STATIC_EVIDENCE/SUMMARY.md" || true
   fi
-  BASH_STATIC="$ROOT/pipeline/Invoke-VendorAuditPrePass.sh"
-  PWSH_BIN=""
-  if command -v pwsh >/dev/null 2>&1; then
-    PWSH_BIN="pwsh"
-  elif command -v pwsh.exe >/dev/null 2>&1; then
-    PWSH_BIN="pwsh.exe"
-  fi
-  if [[ "$STATIC_RUNNER" != "powershell" && -f "$BASH_STATIC" ]]; then
-    static_args=("$TARGET" "$STATIC_EVIDENCE" "--image-tag" "$STATIC_IMAGE" "--clean-evidence")
-    if [[ -n "$STATIC_STEPS" ]]; then
-      static_args+=("--steps" "$STATIC_STEPS")
-    fi
-    run_step "static-prepass" bash "$BASH_STATIC" "${static_args[@]}" || true
-  elif [[ "$STATIC_RUNNER" != "bash" && -n "$PWSH_BIN" ]]; then
-    static_args=("-NoProfile")
-    if [[ "$PWSH_BIN" == *.exe ]]; then
-      static_args+=("-ExecutionPolicy" "Bypass")
-    fi
-    static_args+=("-File" "$ROOT/pipeline/Invoke-VendorAuditPrePass.ps1" "$TARGET" "$STATIC_EVIDENCE" "-ImageTag" "$STATIC_IMAGE" "-CleanEvidence")
-    if [[ -n "$STATIC_STEPS" ]]; then
-      static_args+=("-Steps" "$STATIC_STEPS")
-    fi
-    run_step "static-prepass" "$PWSH_BIN" "${static_args[@]}" || true
-  else
-    echo "WARNING: no usable static prepass runner found; skipping static pre-pass" | tee "$LOG_DIR/static-prepass.log"
-    printf '{"step":"static-prepass","exit_code":127,"seconds":0,"log":%s,"note":"no usable static prepass runner found"}\n' "$(json_escape "$LOG_DIR/static-prepass.log")" >> "$MANIFEST"
-  fi
-  run_step "static-summary" python3 "$ROOT/pipeline/summarize_evidence.py" "$STATIC_EVIDENCE" -o "$STATIC_EVIDENCE/SUMMARY.md" || true
 fi
 
 if [[ "$RUN_NATIVE" == 1 ]]; then

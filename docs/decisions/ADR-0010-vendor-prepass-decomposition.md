@@ -523,7 +523,7 @@ Full text: `docs/proposals/vendor-prepass/task-series.md`.
 | V11 SBOM-family workers | `BLOCKED(V02,V05,V09,V16,V17,V18,B13)` | new worker modules/templates/tests | M05 part 2 |
 | V12 Container/mobile/binary workers | `BLOCKED(V02,V06,V07,M02,B13)` | new worker modules/templates/tests | M04 part 2 |
 | V13 Source SAST | `BLOCKED(B13,V01,V06)` | D09's paths | D09 with this ADR's requirements |
-| V14 Retire + delete runners | `INTEGRATION`, `BLOCKED(V10–V13,V15,M06)` | `scripts/Invoke-VendorAuditPrePass.*`, helper scripts, callers, inventory, `TODO.md` | M07 slice; both scripts deleted |
+| V14 Retire + delete runners | `INTEGRATION` → done 2026-09-29 | `pipeline/Invoke-VendorAuditPrePass.*`, callers, inventory, `TODO.md` | M07 slice; both scripts deleted |
 | V16 Grype DB mirror publisher | `BLOCKED(B11)` | new publisher module, snapshot manifest/pointer schemas, tests, doc | M1; one fixed destination; modelled on `nvd_feed.py` |
 | V17 OSV snapshot publisher | `BLOCKED(B11)` | new publisher module, snapshot schemas, tests, doc | M2; one fixed destination; bulk export, per-source licence review |
 | V18 Grype DB + OSV consumer bindings | `BLOCKED(V16,V17)` | new read-only binding module(s), identity schema(s), tests, doc | M4 age policy; same guarantees as `sca_nvd_snapshot.py` |

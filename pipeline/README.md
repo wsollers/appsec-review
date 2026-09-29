@@ -3,7 +3,7 @@
 | Phase | Script | LLM? | Output |
 |---|---|---|---|
 | engagement job | `engagement_job.sh` / `engagement_job.ps1` | no | broad static evidence, native scratch, LLM input index, coverage ledger |
-| static prepass | `pipeline/Invoke-VendorAuditPrePass.sh` / `.ps1` | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes, `MANIFEST.json` |
+| static prepass | Retired (ADR-0010 task V14); replaced by run-owned `02-*` Dagster jobs | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes |
 | static summary | `summarize_evidence.py` (ported from `scripts/` 2026-09-19) | no | `SUMMARY.md`: mechanical per-tool rollup + `MANIFEST.json` status table |
 | repo profile | `profile_repo.py` (ported from `scripts/` 2026-09-21) | no | language/size/binary profile of a tree |
 | native binary fingerprints | `fingerprint_native_binaries.py` (ported 2026-09-21) | no | `binary-fingerprints.csv`/`.md` |
@@ -82,12 +82,11 @@ enabled phase failed or a required artifact is missing. That means the job can k
 partial evidence after CodeQL/Semgrep/etc. failures, while still ending with an explicit
 degraded status instead of a quiet success.
 
-The static prepass has two host runners over the same Docker toolbox image:
-`pipeline/Invoke-VendorAuditPrePass.sh` for bash/Linux/WSL and
-`pipeline/Invoke-VendorAuditPrePass.ps1` for PowerShell/Windows. `engagement_job.sh`
-defaults to `--static-runner auto`, which prefers the bash runner. `engagement_job.ps1`
-also supports `-StaticRunner auto|bash|powershell` and prefers the PowerShell runner in
-`auto`, with bash available as an explicit or fallback path.
+The legacy monolithic static prepass runners (`pipeline/Invoke-VendorAuditPrePass.sh` and
+`.ps1`) were retired in ADR-0010 task V14. Static analysis and evidence collection are decomposed
+into discrete run-owned Dagster jobs (`02-secrets-inventory`, `02-iac-config-scan`,
+`02-container-image-inventory`, `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`,
+`02-dependency-lifecycle`, `02-binary-hardening`, `02-mobile-sast`, `02-source-sast`, `02-evidence-index`).
 
 The `semantic-index` step is intentionally low-memory by default. Both host runners invoke
 `/opt/scripts/run-semantic-index-batched.sh`, which runs `build_semantic_index.py` in fresh
@@ -145,14 +144,12 @@ directory. The full broad static prepass was also run from PowerShell against EA
 validated the broader static tool stack and found the original monolithic `semantic-index` OOM.
 
 After replacing the monolithic semantic index invocation with
-`run-semantic-index-batched.sh`, the Windows path was smoke-tested with:
+Historically, prior to the runner's retirement in ADR-0010 task V14, the Windows path was
+smoke-tested with the legacy runner:
 
 ```powershell
-.\pipeline\Invoke-VendorAuditPrePass.ps1 `
-  -RepoPath scratch\semantic-index-smoke\repo `
-  -EvidencePath scratch\semantic-index-smoke\evidence `
-  -ImageTag vendor-audit-toolbox:latest `
-  -Steps symbol-index,semantic-index
+# (Historical reference)
+# .\pipeline\Invoke-VendorAuditPrePass.ps1 -RepoPath scratch\semantic-index-smoke\repo ...
 ```
 
 The first smoke produced two `semantic-index slice start=... limit=1 batch-size=1` log lines,

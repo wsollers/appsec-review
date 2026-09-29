@@ -403,8 +403,15 @@ OPEN:
       Candidates: `02-binary-triage` or `02-binary-cfg` (PE triage), and `buildenv-catalog.json` tool
       lists. Qualify live x64dbg debugging (it needs ptrace, so the `DEBUG_CAPS` profile) before any
       job relies on it.
-- [ ] Decide whether Joern should move from the apt `temurin-21-jdk` (unpinned) to the pinned
-      `/opt/ghidra-jdk`. That would save about 300 MB, but it changes Joern's runtime.
+## Retire legacy runners (ADR-0010 task V14, branch `retire-legacy-runners`)
+
+Retired and deleted the legacy monolithic static prepass runners `pipeline/Invoke-VendorAuditPrePass.ps1` and `pipeline/Invoke-VendorAuditPrePass.sh` per ADR-0010 task V14:
+- [x] Deleted `pipeline/Invoke-VendorAuditPrePass.ps1` and `pipeline/Invoke-VendorAuditPrePass.sh`.
+- [x] Updated engagement callers `pipeline/engagement_job.sh` and `pipeline/engagement_job.ps1` to eliminate invocations of the legacy prepass scripts.
+- [x] Updated `pipeline/README.md` to document that static analysis is decomposed into run-owned Dagster jobs (`02-*`).
+- [x] Updated `docs/architecture/script-migration-inventory.md` closing rows 44 and 45 (`Invoke-VendorAuditPrePass.ps1` and `.sh`).
+- [x] Updated `docs/decisions/ADR-0010-vendor-prepass-decomposition.md` and `docs/proposals/vendor-prepass/task-series.md` marking task V14 completed.
+- [ ] Run-owned Dagster jobs (`02-*` nodes) continue providing individual tool evidence for full reviews.
 
 ## Breakage log
 

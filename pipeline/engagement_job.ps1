@@ -110,30 +110,18 @@ $runCodeql = -not $NoCodeQL
 $runCsa = -not $NoCsa
 
 if ($runStatic) {
-    $psStatic = Join-Path $Root "pipeline/Invoke-VendorAuditPrePass.ps1"
-    $bashStatic = Join-Path $Root "pipeline/Invoke-VendorAuditPrePass.sh"
-    $bashPath = Get-BashPath
+    $log = Join-Path $LogDir "static-prepass.log"
+    "NOTICE: Legacy static prepass runners were retired (ADR-0010 task V14); static evidence is produced by run-owned 02-* Dagster jobs." | Tee-Object -FilePath $log
+    Add-ManifestRow -Step "static-prepass" -ExitCode 0 -Seconds 0 -Log $log -Note "legacy static prepass runners retired per ADR-0010 task V14; use run-owned 02-* Dagster jobs"
 
-    if (($StaticRunner -eq "powershell") -or (($StaticRunner -eq "auto") -and (Test-Path $psStatic))) {
-        $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $psStatic, "-RepoPath", $Target, "-EvidencePath", $StaticEvidence, "-ImageTag", $StaticImage, "-CleanEvidence")
-        if ($StaticSteps) { $args += @("-Steps", $StaticSteps) }
-        [void](Invoke-LoggedStep -Name "static-prepass" -FilePath (Get-Process -Id $PID).Path -Arguments $args)
-    } elseif (($StaticRunner -eq "bash") -or (($StaticRunner -eq "auto") -and $bashPath -and (Test-Path $bashStatic))) {
-        $args = @($bashStatic, $Target, $StaticEvidence, "--image-tag", $StaticImage, "--clean-evidence")
-        if ($StaticSteps) { $args += @("--steps", $StaticSteps) }
-        [void](Invoke-LoggedStep -Name "static-prepass" -FilePath $bashPath -Arguments $args)
-    } else {
-        $log = Join-Path $LogDir "static-prepass.log"
-        "WARNING: no usable static prepass runner found; skipping static pre-pass" | Tee-Object -FilePath $log
-        Add-ManifestRow -Step "static-prepass" -ExitCode 127 -Seconds 0 -Log $log -Note "no usable static prepass runner found"
+    if (Test-Path (Join-Path $StaticEvidence "MANIFEST.json")) {
+        [void](Invoke-LoggedStep -Name "static-summary" -FilePath "python" -Arguments @(
+            (Join-Path $Root "pipeline/summarize_evidence.py"),
+            $StaticEvidence,
+            "-o",
+            (Join-Path $StaticEvidence "SUMMARY.md")
+        ))
     }
-
-    [void](Invoke-LoggedStep -Name "static-summary" -FilePath "python" -Arguments @(
-        (Join-Path $Root "pipeline/summarize_evidence.py"),
-        $StaticEvidence,
-        "-o",
-        (Join-Path $StaticEvidence "SUMMARY.md")
-    ))
 }
 
 if ($runNative) {
