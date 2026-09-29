@@ -1,51 +1,116 @@
 \documentclass[10pt,a4paper]{article}
 \usepackage[margin=22mm,top=24mm,bottom=24mm]{geometry}
-\usepackage[final]{appsec-house}
+% Draft marks on: the amber \tbd{} fields below are real fill-ins, not template leftovers.
+\usepackage{appsec-house}
 \title{appsec-review}
-\docsubtitle{Executive design and operations overview}
+\docsubtitle{An automated application security engineer: executive design overview}
 \doctype{Design document}
-\docversion{0.5}
-\docstatus{Qualified nominal path}
-\date{2026-09-27}
+\docversion{0.6}
+\docstatus{Draft: built, first live report pending}
+\date{2026-09-29}
 \docowner{W. Sollers}
 \docaudience{Security leadership, engineering leaders and review operators}
 \docclass{Internal}
 
+% job names in the task table: typewriter at the table's size (\mono forces \small)
+\newcommand{\jn}[1]{\texttt{#1}}
+
 \begin{document}
 \maketitle
 \begin{bluf}
-appsec-review turns an authorized repository snapshot into traceable security evidence and an
-evidence-backed draft report. It now includes component-aware search, offline vulnerability
-matching, binary hardening, reconciled threat modeling, multi-language SAST, OWASP publication and
-synthesis publication. Three integration gates remain before the first final real-target report:
-automatic OWASP dispatch-fact derivation, one retained real accepted end-to-end run, and human final
-authorization.
+appsec-review is an automated application security engineer: a pinned, repeatable process that does
+the routine, evidence-heavy work of an AppSec review (scope, build, scan, threat-model, read code, argue
+and verify each finding, score, write up) across more code and more targets than one person can. It is
+\emph{almost} an engineer, never a replacement. People keep the judgement that carries accountability:
+what the risk means to the business, what to accept, and whether the report goes out. Every lane is
+built and unit tested; no target has yet run through to a report.
 \end{bluf}
 
 \metrics[4]{%
-\metric{66}{Lifecycle jobs}{Declared in the current graph}%
-\metric{2}{Search planes}{Text/semantic plus structural}%
-\metric{3}{Decision roles}{Red, blue, independent verifier}%
-\metric{3}{Open gates}{OWASP facts, live chain and signoff}}
+\metric{81}{Lifecycle jobs}{In the job graph, 2026-09-29}%
+\metric{10}{Qualified jobs}{Of 81, per the generated readiness view}%
+\metric{4}{Review stages}{Red, blue, verifier, scorer: separate roles}%
+\metric{0 of 4}{Targets reported}{Run-to-report goal, ADR-0013}}
+\metrics[3]{%
+\metric{\tbd{first runs}}{Engineer hours per review}{With and without the process}%
+\metric{\tbd{first runs}}{Elapsed time per review}{Staging to draft report}%
+\metric{\tbd{first runs}}{Model spend per review}{Per target and budget tier}}
 
 \subsection*{What leadership should know}
 \begin{itemize}
-\item Results are evidence-first: every consequential claim must resolve to immutable accepted input.
-\item A missing check lowers coverage; it never becomes a clean result.
-\item Tools and reference data are pinned, and scanning is offline by default.
-\item The produced report is presently a qualified draft until a human authorizes final publication.
+\item \textbf{It does the routine work, not the accountability.} Machines gather, build, scan,
+read and argue; a named person accepts risk and signs the final package.
+\item \textbf{A tool hit is never a finding.} A finding has passed red-team, blue-team and
+independent verification, and every claim cites evidence that resolves to exact bytes.
+\item \textbf{Silence is never ``clean''.} A scanner that did not run or a build that failed is a
+coverage gap in the report, never ``no issues found''.
+\item \textbf{Python keeps the books; the model supplies judgement only} (ADR-0013). Ids, hashes,
+citations, scores and reachability are computed, never taken from the model.
+\item \textbf{It is not yet proven end to end.} Ten jobs are qualified; all four targets have run
+part of the flow and 108 breakages are logged, but none has produced its report yet.
+\end{itemize}
+
+\subsection*{What changes for the organisation}
+\begin{itemize}
+\item AppSec engineers review verified findings, gaps and attack paths instead of building targets
+and triaging raw scanner output.
+\item Every review yields the same package (findings, coverage, gaps, provenance), so reviews compare
+across teams and over time. Depth is a setting (\mono{probe}, \mono{standard}, \mono{full}), not
+a staffing decision.
+\item New standing duties: persona ownership, reference-feed upkeep and sign-off of each final package.
 \end{itemize}
 
 \newpage
 \tableofcontents
 
-\section{Purpose and operating boundary}
-The system reviews supplied source, build metadata, binaries, images, IaC, dependencies,
-configuration, documentation and static exports. Local compilation is allowed to recover compiler
-semantics. The baseline does not probe production, call live cloud APIs, run authenticated DAST or
-exercise network services. Build scripts are treated as hostile and run in a disposable,
-no-network, least-privilege worker. Only allowlisted, hashed artifacts cross back into the trusted
-evidence store.
+\section{What the process is, and where the line is}
+An application security engineer spends most of a review on work that follows a method: find out what
+the system is, get it to build, run the tools, read what they say, model the threats, read the risky
+code, check each suspicion against the evidence, rate it and write it down. appsec-review encodes that
+method as a graph of 81 lifecycle jobs run by Dagster. Each job gets bounded input and publishes an
+immutable attempt with status, coverage, permissions and lineage. Downstream jobs re-check hashes
+rather than trusting copied prose.
+
+The process reviews an authorized snapshot: source, build metadata, binaries, images, IaC,
+dependencies, configuration and documents. It may compile the target to recover compiler semantics.
+Build scripts are treated as hostile and run in a disposable, no-network, least-privilege container.
+It does not probe production, call live cloud APIs, run authenticated DAST, exercise network services
+or attempt live exploitation.
+
+The line between the process and the engineer is set by what can be checked. Where a conclusion can be
+derived from evidence (does this path exist, does this call reach that sink, what CVSS score follows
+from these metrics), Python derives it. Where it needs judgement about code (is this a plausible
+attack, does this mitigation hold), a model persona gives an opinion and Python validates the form
+and the citations. Where it needs accountability (is this risk acceptable to the business, may this
+report be published), a person decides. Section~\ref{sec:people} lists those decisions.
+
+\section{The engineer's job, mapped to the pipeline}
+Each row is part of an AppSec engineer's job. ``Python'' is deterministic code whose output is
+re-derived on validation. ``Model'' is a persona call through the Claude CLI whose reply is checked
+against a schema and its citations before anything is kept. Job names are those in
+\mono{job-graph.json}.
+
+{\footnotesize
+\begin{longtable}{@{}p{0.13\linewidth}p{0.33\linewidth}p{0.27\linewidth}p{0.19\linewidth}@{}}
+\toprule
+\eyebrow{Engineer task} & \eyebrow{Jobs} & \eyebrow{Python (deterministic)} & \eyebrow{Model (judgement)}\\
+\midrule\endhead
+Scope and characterise the target & \jn{00-intake}; partition, developer, DevOps and SRE discovery; \jn{01-component-characterization}; \jn{02-full-review-input-assembly} & Source identity, permissions, scope validation (every file in exactly one scope), derived component and relationship ids, closed review plan, explicit \jn{SKIPPED\_NA}, wave dispatch & Partitions, component purpose, ownership and boundaries\\
+Build it & \jn{02-build-index}, \jn{-classify}, \jn{-plan}, \jn{-resolution}, \jn{-configure}; \jn{02-native-build} & Unit enumeration, sandboxed offline trials, build locks, compile databases, binary hashes. A unit that will not build is a named gap & Build classification and the per-unit build plan\\
+Run the scanners and read their output & \jn{02-source-sast}; eight \jn{02-codeql-<lang>} nodes; native SAST, IR, code property graph; secrets, IaC, container, SBOM, SCA, licence, lifecycle, binary and mobile jobs; \jn{02-evidence-index}, \jn{02-evidence-assembly} & Pinned tools in network-disabled containers; leads normalised, mapped to CWE, merged per path and line, tiered P1--P3 (ADR-0015); every accepted lead becomes a candidate claim & Binding producers in evidence assembly. Reading the leads happens in the review stages below\\
+Threat-model & \jn{03-threat-model-dfd-stride} (workbench),\newline \jn{03-threat-model-reconciliation} & DFD, trust boundaries and STRIDE hypotheses from the component map; ids, citations, join and validator replay; reconciliation with the evidence & Workbench cells: privacy (LINDDUN), deployment topology, abuse scenarios, attack trees, supply chain (ADR-0019)\\
+Check controls & \jn{04-owasp-validation-worklist}, \jn{04-asvs-masvs}, \jn{15-stig-srg-validation-worklist}, \jn{15-deployment-hardening} & Control selection, applicability, tailoring, separate denominators, status matrix; no compliance verdict & OWASP validator cells\\
+Hunt for bugs by reading code & \jn{07-hypothesis-discovery} (hunter pool) & Shards by component, pins files, resolves every cited location against pinned bytes, drops or defers what does not resolve, deduplicates and tiers (ADR-0018) & General and known-list hunters propose location, weakness class and mechanism\\
+Keep the case file & \jn{claim-ledger-routing} & Admits candidates from four sources (threat model and OWASP routes, tool leads, hunters, dependency reachability) with ids, citations and proof obligations & None\\
+Make the case, then argue against it & \jn{07-red-team-adversarial}, \jn{08-blue-team-refutation} (sharded reviewer pools) & Shards claims, assigns a distinct persona per shard, merges, applies stage rules, requires one decision per claim (ADR-0021, ADR-0024) & Red team argues exploitability; blue team refutes, narrows or leaves unresolved\\
+Verify independently & \jn{09-independent-verification} & Only this stage can verify. Scoring and the findings section read verified claims only, whatever their severity & Verifier personas decide whether the cited mechanism is established\\
+Check whether a dependency flaw is reachable & \jn{06-reachability-codeql}, \jn{06-reachability-ir}, \jn{06-cve-reachability} & Per-ecosystem engines, a fixed verdict lattice and a hash-bound witness path. Model text never decides reachability (ADR-0022, ADR-0023) & None\\
+Score & \jn{12-scoring-prioritization} & CVSS 4.0 vector and score by the FIRST algorithm; EPSS/KEV ``as of'' a dated snapshot; Critical requires a \jn{REACHABLE} witness, otherwise the cap is High (ADR-0020) & Scorer personas give the eleven base metrics with a reason each, and the CWE\\
+Chain findings into attack paths & \jn{14-attack-chain-composition}, \jn{14-attack-chain-refutation} (lane 14) & Seeds, edge basis (code fact, model flow or synthetic), chain state set by its weakest link; ceiling \jn{supported}, never a verified finding (ADR-0016) & Composer proposes chains; refuter attacks the weakest link\\
+Propose a fix & \jn{11-remediation-proposal}, \jn{12b-poc-and-fix} (lane 12b) & Selects verified, Critical, \jn{REACHABLE} findings; checks citations and diff scope; a denylist withholds unsafe text. Nothing is executed, compiled or applied; fixes are labelled \jn{PATCH\_PROPOSED\_UNVALIDATED} & Light static proof of concept and a proposed fix as a diff\\
+Write the report & \jn{10-synthesis-report}, \jn{completeness-audit}, \jn{final-publication-gate} & Every report field, enrichment, coverage, gaps and hashes; the draft is labelled \jn{DRAFT\_EVIDENCE\_BACKED} & None. A person authorizes the final\\
+\bottomrule
+\end{longtable}}
 
 \section{How a review moves through the system}
 \begin{center}
@@ -53,150 +118,219 @@ evidence store.
  node distance=5mm and 4mm,
  box/.style={draw=rule,fill=panel,text width=25mm,minimum height=10mm,align=center,font=\sffamily\scriptsize},
  arr/.style={-{Stealth[length=2mm]},draw=muted,thick}]
-\node[box,fill=ink,text=white,draw=ink] (i) {Intake, scope, permissions};
-\node[box,right=of i] (d) {Discovery and partitioning};
-\node[box,right=of d] (e) {Build, scan and evidence};
-\node[box,below=8mm of e] (c) {Components, search and threat model};
-\node[box,left=of c] (s) {OWASP, STIG and deployment};
-\node[box,left=of s] (r) {Red, blue and verification};
-\node[box,below=8mm of r,fill=ink,text=white,draw=ink] (p) {Scored draft report};
+\node[box,fill=ink,text=white,draw=ink] (i) {Authorize, scope and intake};
+\node[box,right=of i] (d) {Discover, build and characterize};
+\node[box,right=of d] (e) {Scan and gather evidence};
+\node[box,below=8mm of e] (c) {Threat model, controls, hunters};
+\node[box,left=of c] (s) {Claim ledger and reachability};
+\node[box,left=of s] (r) {Red, blue, verify, score};
+\node[box,below=8mm of r] (k) {Chains, PoC and fix};
+\node[box,right=of k] (p) {Draft report and gaps};
+\node[box,right=of p,fill=ink,text=white,draw=ink] (h) {Human sign-off};
 \draw[arr] (i)--(d); \draw[arr] (d)--(e); \draw[arr] (e)--(c);
-\draw[arr] (c)--(s); \draw[arr] (s)--(r); \draw[arr] (r)--(p);
+\draw[arr] (c)--(s); \draw[arr] (s)--(r); \draw[arr] (r)--(k);
+\draw[arr] (k)--(p); \draw[arr] (p)--(h);
 \end{tikzpicture}
 \end{center}
 
-Each job receives explicit, bounded input and emits an immutable attempt with status, coverage,
-permission and lineage. Accepted pointers select the current attempt. Downstream jobs dereference
-and revalidate hashes rather than trusting copied prose. The graph allows independent evidence
-families to run concurrently, then joins them at explicit rendezvous.
+Independent evidence families run at the same time and meet at explicit rendezvous points. A
+rendezvous waits for every expected member and classifies each one (succeeded, failed, blocked,
+timed out, missing). A deterministic merge checks identities, contracts and citations and keeps
+dissent. Evidence-qualified quorum applies evidence and independence thresholds, not a headcount.
+Roles talk through typed, hash-bound artifacts and an append-only claim ledger, never a shared chat.
+The component map is the shared scope key: it routes components to language tools, threat work,
+standards, native analysis and hunters.
 
-\section{Project partitioning and component model}
-Repository discovery separates independently buildable projects, vendored areas, generated code,
-deployment surfaces and operational material. Component characterization converts accepted
-discovery and evidence into stable component IDs, ownership, languages, trust boundaries, data
-flows, build units and coverage. This component map is the shared scope key for threat modeling,
-standards worklists, analysis assignments and report rollups.
+\section{Why it scales}
+A person reviews one component at a time. The process splits the same work along the lines the
+target already has and runs the pieces in parallel under fixed limits.
+\begin{itemize}
+\item \textbf{Parallel by component and language.} The eight per-language CodeQL nodes run side by
+side; a compiled language without a successful build is a gap, not a failure (ADR-0023). Native
+analysis runs per compile invocation and build unit, so one failure is one gap (ADR-0014).
+\item \textbf{Sharded reviewer pools.} Each review stage splits its claims across reviewer instances
+(default 3, three calls at once), each reviewing a different shard as a different persona. Each
+claim is reviewed once per stage (ADR-0021). Hunters shard the code by component into three groups,
+components with the most P1/P2 leads first (ADR-0018). Workbench cells run one, two or three at once
+by budget class.
+\item \textbf{Persona pools.} 75 persona and 48 role records sit in
+\mono{appsec-review-process/personas/}. Attackers, defenders, verifiers and scorers come from
+separate lists, so the persona that argues a claim is never the one that verifies it.
+\item \textbf{Budget tiers.} \mono{probe}, \mono{standard} and \mono{full} set each model call's
+limits: 200k, 800k and 1.6M input tokens; 15, 30 and 60 minutes. A standard call is capped at
+2~USD; the default hunter pool therefore spends at most about 6~USD. Tiers change depth, never the
+evidence or permission rules.
+\item \textbf{Shared, bounded capacity.} Dagster pools cap concurrent work across all runs (five
+model slots, two container slots). Three targets ran at once on one host on 2026-09-27/28.
+\item \textbf{Reusable pinned tools.} Tools live in local images pinned by digest and recorded
+before use. The same image serves every target; workers never pull opportunistically.
+\item \textbf{Offline reference feeds.} NVD and OSV are synchronised outside the review into
+immutable snapshots, and Grype databases are registered the same way. A 14-day ceiling
+(1,209,600~s) applies; a missing or stale snapshot is a gap or a block, never a silent pass. The
+OSV index measured on 2026-09-29 holds 283,781 advisory records, builds in about 12~s at 195~MB,
+and answers lookups in under 1~ms against about 6~s from the raw archives. MITRE ATT\&CK, CAPEC
+and the full CWE catalog will use the same feed rules when brief~O merges (decision log D-05, D-11).
+\item \textbf{Index-first lookup.} Models query pinned inputs through read-only lookup tools instead
+of having whole files pasted into the prompt. On freeciv21, a 6,100-file inventory is summarised by
+folder, about 6K characters instead of 895K.
+\item \textbf{Result caches.} Accepted attempts are reused on relaunch: a pure-reuse relaunch of
+hello-autotools ran 46 steps in 2.4 minutes (2026-09-28). A persona result cache answers an
+identical model request without a new call. Re-execution after a fingerprint change is still
+expensive: 41 minutes to re-plan 53 units on appsec-multi-vuln. The tool-output cache and per-item
+memo are open (brief~N).
+\item \textbf{Dev-mode restart} (ADR-0025). In development, a job ported to the generic item
+executor reruns only when the content or shape of its inputs changed; one job is ported so far. Dev
+results are never evidence. Not yet run live.
+\end{itemize}
+Throughput per host and reviews per engineer-month are \tbd{measure on the four targets}.
 
-The full-review input assembler deterministically revalidates the accepted component map, staged
-target, source generation and accepted dependency prerequisites. It derives the closed plan,
-publishes bounded requests, records absent input classes as \mono{SKIPPED\_NA}, and automatically
-dispatches the applicable first wave. It is reinvoked after accepted SBOM, licence and SCA artifacts
-exist; the same revalidation opens later licence, SCA, lifecycle and reachability waves without
-hand-editing scope.
+\section{Why it can be trusted}
+\begin{itemize}
+\item \textbf{Evidence first.} A tool hit, a STRIDE hypothesis or a hunter's idea is a candidate. It
+becomes a finding only after independent verification, and every claim cites a producer, an
+artifact hash and a line range that consumers re-read and re-hash.
+\item \textbf{The pipeline gathers; it does not judge.} Deterministic jobs collect and normalise
+evidence. Conclusions are carried only by enumerated values checked against each job's allowed claim
+classes, never parsed from prose (ADR-0013).
+\item \textbf{Python derives every mechanical field.} Ids, hashes, lineage, citations, CVSS scores,
+reachability verdicts and chain states are computed, not accepted from the model. A model reply that
+cites a location Python cannot resolve becomes a gap.
+\item \textbf{Gaps stay visible.} A tool that did not run, a build that failed or an unsupported
+language is a coverage gap in the report, never ``no issues''. \mono{OK\_WITH\_GAPS} is an honest
+result, not a failure.
+\item \textbf{Separate roles.} Red team proposes, blue team refutes, an independent verifier decides,
+and a scorer rates. Each runs under its own registry role, which limits the claim class it may emit
+(ADR-0024). The blue team cannot verify; nobody promotes their own proposal.
+\item \textbf{Severity is earned.} Critical needs a reachability witness path; without one the cap is
+High. The CVSS 4.0 table was checked against FIRST's calculator on 204,976 vectors with no mismatch
+(2026-09-29).
+\item \textbf{Target content is data.} Source, documents, logs and search hits under review cannot
+direct the process or grant permissions.
+\item \textbf{Pinned and reproducible.} Tools, images, reference snapshots and prompts are pinned and
+hashed; each job's fingerprint covers its own code and inputs. Scans run offline.
+\item \textbf{Dev runs are never evidence.} A dev-mode receipt carries \mono{evidence\_grade: false};
+production never reuses it, and final publication refuses any run with a dev result (ADR-0025).
+\end{itemize}
 
-\section{Static evidence gathered and seeded}
-\begin{tabularx}{\linewidth}{@{}p{0.24\linewidth}X@{}}
+\Needspace{18\baselineskip}
+\section{Where people stay in the loop}
+\label{sec:people}
+The process stops at these decisions; each belongs to a person.
+
+\begin{longtable}{@{}p{0.28\linewidth}p{0.68\linewidth}@{}}
 \toprule
-\eyebrow{Family} & \eyebrow{Representative retained evidence}\\
-\midrule
-Source & Language SAST including Go, Java and PHP; secrets; mobile; config and IaC findings.\\
-Build/native & Compile database, build units, LLVM IR, Joern CPG/AST, symbols, tests, memory leads and ELF hardening.\\
-Supply chain & Image inventory, SBOMs, licences, lifecycle/EOL signals, offline SCA matches and CVE reachability.\\
-Context & Project/operations discovery, documents, APIs, standards snapshots and threat-model inputs.\\
-\bottomrule
-\end{tabularx}
-
-Reference data is synchronized outside the engagement flow and then bound by digest and timestamp.
-This includes Grype/OSV vulnerability data and standards sources. The engagement allows a configured
-staleness range; absent or over-age data is reported as a gap. No live lookup is added to the main
-flow to make a result appear complete.
-
-\section{Search architecture and cross-references}
-Two search planes serve different questions. The full-text and LanceDB semantic projections find
-literal text, configuration, documentation and conceptually related evidence. Joern CPG/AST and
-LLVM IR projections answer structural questions about calls, symbols, types, control/data flows and
-memory operations. Exported records are bounded and preserve source locations and build identity.
-
-Cross-reference edges connect repository partitions, components, files, symbols, build units,
-binaries, dependencies, controls, threat hypotheses, claims, findings and report citations. This
-lets a reviewer move from a report statement back to the exact code or tool evidence, or from one
-component outward to all applicable checks and unresolved gaps.
-
-\section{Threat model and control work}
-L6A produces an initial DFD and STRIDE hypothesis set from the characterized components. L6B
-reconciles that model with accepted evidence, preserves conflicts and emits explicit model coverage.
-Both stages are executable and qualified. A target's report may cite only that target's accepted
-reconciliation.
-
-OWASP, STIG/SRG and deployment hardening remain distinct processes:
-\begin{enumerate}
-\item The OWASP T03--T14 chain routes ASVS/MASVS controls by component, validates bounded work and
-publishes deterministic pages, a status matrix, gaps and candidate routes. It is qualified; automatic
-derivation of trusted dispatch facts remains open.
-\item STIG/SRG tailoring selects platform-specific controls and publishes a validation worklist.
-\item Deployment hardening consumes the tailored worklist plus static deployment evidence. Its
-observations are not a compliance certification and do not substitute for control validation.
-\end{enumerate}
-
-\section{Red, blue and verifier rendezvous}
-The orchestrator gives each persona or tool member an immutable handoff, permission receipt and
-bounded assignment. Every expected member must reach a durable terminal state. Deterministic merge
-validates identity, contracts, citations and order, while retaining dissent. Evidence-qualified
-quorum applies evidence and independence thresholds.
-
-Red team proposes attack hypotheses. Blue team attempts to refute, narrow or explain them.
-Independent verification alone can verify a claim. Scoring acts only on verified claims. Their
-communication occurs through typed, hash-bound artifacts and append-only claim decisions, not an
-uncontrolled shared chat. This preserves both the admission head and the later decision head.
-
-\section{Reporting and publication}
-The synthesis publication worker consumes exact accepted inputs and produces report JSON and
-Markdown, coverage appendix, evidence trace index, publication manifest, LaTeX presentation input,
-HTML and render manifests. The fixture-qualified result is correctly labeled
-\mono{DRAFT\_EVIDENCE\_BACKED}; it can be \mono{OK\_WITH\_GAPS} and still be an honest successful
-publication.
-
-The final gate must revalidate all inputs and presentation hashes, require completion accounting,
-and receive human authorization. It may not silently transform a fixture, sample or draft into a
-final assessment.
-
-\section{Current readiness}
-\begin{longtable}{@{}p{0.34\linewidth}p{0.18\linewidth}p{0.40\linewidth}@{}}
-\toprule
-\eyebrow{Capability} & \eyebrow{Status} & \eyebrow{Meaning}\\
+\eyebrow{Decision} & \eyebrow{Who and why}\\
 \midrule\endhead
-Joern CPG/AST, LLVM IR and search & \rag{good} Qualified & Accepted producer to indexed, cited query path exists.\\
-Offline vulnerability matching & \rag{good} Qualified & Seeded snapshot, bounded age and no-network matching retained.\\
-Native binary hardening & \rag{good} Qualified & Real accepted ELF routed from build to Checksec.\\
-Threat reconciliation & \rag{good} Qualified & L6A plus executable L6B with conflict and coverage output.\\
-Go, Java and PHP SAST & \rag{good} Qualified & Pinned tools produced cited leads in a live qualification.\\
-OWASP T03--T14 publication & \rag{good} Qualified & Deterministic pagination, matrix, gaps and routes retained.\\
-Synthesis publication & \rag{good} Qualified draft & Hash-bound LaTeX/HTML draft path retained.\\
-Component-derived plan and dispatch & \rag{good} Qualified & Revalidation, first-wave dispatch, explicit N/A and dependency-wave reinvocation.\\
-Automatic OWASP dispatch facts & \rag{warn} Open & Trusted facts are still supplied at the integration boundary.\\
-Real accepted end-to-end report & \rag{warn} Open & Fixture qualifications do not replace one complete target run.\\
-Human final publication & \rag{warn} Open & Draft remains final=false and human\_signoff=false.\\
+Engagement scope and permissions & A person defines the target, business goal and budget, and grants every capability beyond reading source.\\
+Risk acceptance & The process rates risk; only an accountable owner accepts it.\\
+Final publication & The draft stays \mono{DRAFT\_EVIDENCE\_BACKED} until a person authorizes the final package at the final gate.\\
+Personas & 48 of 75 persona records were generated from the catalog and are marked unreviewed; a named owner reviews them, starting with the stage reviewers and hunters (decision log D-06).\\
+Business context and novel design flaws & Business logic, intent and design flaws no evidence points to are outside what the process can see.\\
+Decision-log entries & The owner accepts or overrides each controller decision (decision log, 2026-09-29).\\
 \bottomrule
 \end{longtable}
 
-\section{How to operate and configure}
-Operators stage the engagement definition, permission grant, target snapshot and any supplied
-discovery records; validate graph parity and pins; start Dagster; launch \mono{full\_review}; monitor
-accepted attempts and coverage; then launch \mono{synthesis\_report}. Configuration changes belong
-in versioned registry templates, contracts, image pins or snapshot policy, not in target content or
-ad hoc report edits. The operator guide contains commands and stop conditions.
+\subsection*{What it does not do}
+\begin{itemize}
+\item It does not replace an AppSec engineer or find every vulnerability.
+\item It does not exploit anything live, probe production or run authenticated dynamic tests. PoCs
+and fixes are static text; nothing is executed, compiled or applied.
+\item It does not certify compliance. OWASP, STIG/SRG and deployment output are worklists and
+static observations.
+\item It does not treat a missing scan as a pass, or an attack chain as a verified finding.
+\item It does not publish a final report without human authorization.
+\end{itemize}
+
+\section{Readiness}
+\subsection*{Built and unit tested}
+All 81 jobs have a real worker in \mono{full\_review} (readiness view: 44 deterministic Python, 27
+pinned containers, 6 pool coordinators, 3 persona jobs, 1 join controller). The review lanes (hunters, sharded reviewer pools and stage roles, threat workbench and privacy,
+dependency reachability engines, attack chains, lane 12b, CVSS and reachability in the report, dev
+mode) merged on 2026-09-28/29 and are tested with unit tests and stub model replies only.
+
+\subsection*{Qualified}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.14\linewidth}p{0.44\linewidth}@{}}
+\toprule
+\eyebrow{Capability} & \eyebrow{Date} & \eyebrow{What was shown}\\
+\midrule\endhead
+Ten jobs: intake, Scorecard, partition discovery, build index, classify, plan, resolution, configure, native build, source SAST & per readiness view & \rag{good} \mono{implemented\_and\_qualified}\\
+Binary hardening & 2026-09-27 & \rag{good} Real ELF built in the pinned image, routed to Checksec offline, accepted\\
+Offline dependency path & 2026-09-27 & \rag{good} Syft SBOM to offline Grype and OSV to SCA to reachability evidence\\
+Go, Java and PHP source SAST & 2026-09-27 & \rag{good} All five language adapters through the pinned container boundary\\
+OWASP control chain & 2026-09-27 & \rag{warn} On a Freeciv-like fixture, not a target\\
+Synthesis report & 2026-09-27 & \rag{warn} Fixture happy path; not a target assessment\\
+CVSS 4.0 scorer & 2026-09-29 & \rag{good} 270/270 table entries and 204,976 vectors against FIRST\\
+\bottomrule
+\end{longtable}
+
+\subsection*{Not yet run live}
+Under ADR-0013, hello-autotools, freeciv21 and doom3-bfg ran \mono{full\_review} concurrently on
+2026-09-27/28, and appsec-multi-vuln ran separately. The furthest points were claim review on
+appsec-multi-vuln (61 steps accepted) and 54 steps on hello-autotools. Each breakage is logged
+with its fix or as open in the TODO breakage log. The open gaps:
+\begin{itemize}
+\item \textbf{Image rebuilds pending.} CodeQL, language-server, build-environment and reverse-tool
+images must be rebuilt and registered in WSL. Until then every \mono{02-codeql-<lang>} node is an
+\mono{UNAVAILABLE} gap and CodeQL reachability rows are \mono{unknown}.
+\item \textbf{First live run} of the hunters, the threat-workbench cells, the per-stage reviewer
+roles and sharded pools, lanes 14 and 12b, and dev mode.
+\item \textbf{Windows targets.} The clang-cl route (ADR-0003) has not built a Windows target; doom3-bfg's
+units became coverage gaps on Linux.
+\item \textbf{Reference data.} No EPSS/KEV snapshot is imported yet (the report says ``not
+assessed''). The MITRE feed (brief~O) and exported-symbol entry points (brief~Q) are not merged.
+\end{itemize}
 
 \section{Risk and next decisions}
 \begin{tabularx}{\linewidth}{@{}p{0.31\linewidth}X@{}}
 \toprule
 \eyebrow{Risk} & \eyebrow{Control and next action}\\
 \midrule
-Incomplete coverage looks clean & Coverage denominators and gaps are mandatory; qualify the real accepted end-to-end run.\\
-Reasoning overstates a scanner hit & Red/blue/verifier separation, cited evidence and verified-only scoring.\\
-Reference data becomes stale & Out-of-band sync, digest/time binding and explicit age policy.\\
-Automation dispatches wrong scope & Revalidate component generation and prerequisites; retain the plan, N/A rows and dispatch receipts.\\
-Draft published as final & Human authorization and fail-closed final-publication validation.\\
+Unproven end to end & Rerun in order (D-15): merge briefs L, O, K; rebuild images; run hello-autotools in production mode, then iterate in dev mode with \mono{-{}-explain}; then appsec-multi-vuln and freeciv21.\\
+Incomplete coverage looks clean & Coverage denominators and gaps are mandatory in every report section.\\
+A model overstates a finding & Separate red, blue, verifier and scorer roles; cited evidence; verified-only findings; reachability cap on Critical.\\
+Model cost grows with lead count & Per-call caps; first live hunter run capped at 3 $\times$ 2~USD (D-03); record real cost and tune shard sizes. Per-review cost: \tbd{first runs}.\\
+Unreviewed personas & Hand-review the stage reviewer and hunter personas first (D-06); a failed reviewer shard fails the stage until there is cost data.\\
+Relaunch cost slows fixes & Narrow job fingerprints to real inputs and add the tool-output cache (D-13, brief~N).\\
+Reference data goes stale & 14-day ceiling; missing or stale NVD/OSV data blocks or fails the lane; stale MITRE tags are withheld as a gap (D-11).\\
+Draft published as final & Human authorization and fail-closed final-publication checks; dev results refused.\\
+Sample report mistaken for a run & Sample section 3C records stay labelled as sample data until real output replaces them (D-10).\\
 \bottomrule
 \end{tabularx}
 
+Small open items from the decision log: stage 12 runtime wording says \mono{scorer} (D-08); the
+repository needs Python 3.11 or newer (D-14).
+
 \appendix
-\section{Authority and retained artifacts}
-The machine-readable job graph, design-parity manifest, registry templates/contracts and accepted
-run artifacts are authoritative. The generated job catalog describes the complete topology. This
-document summarizes the interaction model for leadership; it does not grant completion credit.
+\section{Evidence, search and reference data}
+\begin{tabularx}{\linewidth}{@{}p{0.20\linewidth}X@{}}
+\toprule
+\eyebrow{Family} & \eyebrow{Representative retained evidence}\\
+\midrule
+Source & Language SAST including CodeQL per language; secrets; mobile; config and IaC findings.\\
+Build and native & Compile database, build units, LLVM IR, Joern CPG/AST, symbols, tests, memory leads and ELF hardening.\\
+Supply chain & Image inventory, SBOMs, licences, lifecycle/EOL signals, offline SCA matches and dependency reachability.\\
+Context & Discovery, documents, APIs, standards snapshots, threat-model and privacy inputs.\\
+\bottomrule
+\end{tabularx}
+
+Two search planes serve different questions. The full-text index finds literal text, configuration
+and documentation in frozen, hashed evidence. Joern CPG/AST and LLVM IR answer structural questions
+about calls, symbols and data flows. Search results locate evidence; they do not become evidence by
+being copied into a prompt. Cross-references link partitions, components, files, symbols, build
+units, dependencies, controls, threats, claims and report citations, so a reader can move from a
+report statement back to the exact code or tool output.
+
+\section{Authority and operation}
+The machine-readable job graph, design-parity manifest, registry templates and contracts, and
+accepted run artifacts are authoritative. The generated job catalog describes the full topology and
+the readiness view gives per-job status. This document summarizes them for leadership; it grants no
+completion credit. Operators stage the engagement, launch \mono{full\_review}, and follow the
+operator guide for commands and stop conditions. Configuration changes belong in versioned registry
+templates, contracts, image pins or snapshot policy, never in target content or report edits.
 
 \section{Revision history}
 \begin{revisions}
 \revision{0.5}{2026-09-27}{W. Sollers}{Documented automatic plan derivation, wave dispatch and three remaining gates.}
+\revision{0.6}{2026-09-29}{W. Sollers}{Reframed as an automated AppSec engineer: task-to-job map, scaling, trust, human decisions, readiness from the 2026-09-29 decision log.}
 \end{revisions}
 \end{document}
