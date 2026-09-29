@@ -348,6 +348,28 @@ OPEN (deferred, not in brief G's first cut):
 - [ ] Rust MIR/LLVM IR engine and Go SSA engine (same table shape) once the C/C++ LLVM IR + Joern path is qualified.
 - [ ] Reflection, dynamic dispatch, dependency injection and serialisation entry points: record a per-language "incomplete call graph" reason so `unreachable` is never asserted across them.
 
+## H: Ghidra and x64dbg in audit images (branch `image-reverse-tools`)
+
+Both images now pin Ghidra 12.1.3, Temurin 21.0.12+8 and x64dbg 2026.05.27, with a sha256 check for
+each download. x64dbg runs under Wine and Xvfb. Details are in `docs/processes/tool-images.md`. The
+Ghidra, Wine and x64dbg layers of `audit-native`, built alone on `ubuntu:24.04`, passed
+`scripts/smoke_reverse_tools.sh` in the cloud workspace.
+
+OPEN:
+- [ ] Build both images in WSL: `python3 -B images/image_build.py build audit-binary-analysis` and
+      `... build audit-native`. Then run `scripts/smoke_reverse_tools.sh --docker <image>` for each.
+      This also rebuilds `audit-buildenv-cpp`, which extends `audit-native:local`.
+- [ ] `audit-binary-analysis` apt pin `wine=8.0~repack-4` is unverified. Debian mirrors were blocked
+      from the pinning host. If apt reports the version is not found, read the right one with
+      `apt-cache policy wine` in a bookworm container and update `WINE_VERSION` and the smoke script.
+- [ ] Check the Ghidra zip sha256 `93a5d11a…` against the hash in the Ghidra 12.1.3 release notes.
+- [ ] No job or persona uses Ghidra headless in `audit-native`, or x64dbg in either image, yet.
+      Candidates: `02-binary-triage` or `02-binary-cfg` (PE triage), and `buildenv-catalog.json` tool
+      lists. Qualify live x64dbg debugging (it needs ptrace, so the `DEBUG_CAPS` profile) before any
+      job relies on it.
+- [ ] Decide whether Joern should move from the apt `temurin-21-jdk` (unpinned) to the pinned
+      `/opt/ghidra-jdk`. That would save about 300 MB, but it changes Joern's runtime.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).

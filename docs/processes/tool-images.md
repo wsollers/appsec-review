@@ -111,6 +111,68 @@ A Dependabot (or other reviewed) bump of a pip lock changes the lock but not `pi
 wheels it names, and records the lock's hash. Used for `tool-checkov` and `tool-mobsfscan` on
 2026-09-29 (`1661f48`).
 
+## Reverse-engineering tools in audit images (Ghidra, x64dbg)
+
+Ghidra and x64dbg live in the two audit images that hold binaries, not in a `tool-*` image:
+`audit-binary-analysis` (debian:bookworm-slim) and `audit-native` (ubuntu:24.04). They are installed
+by `curl` in the Dockerfile like every other tool there, and each download is checked with
+`sha256sum -c` against a pinned hash. Because these images are not `tool-*` images, `tool_pins.py` does
+not cover them. `images/tests/test_reverse_tools.py` keeps the pins and the shared Dockerfile blocks
+the same in both images.
+
+| Tool | Version | Pin and how the hash was verified | Images |
+|---|---|---|---|
+| Ghidra | 12.1.3 (`20260817`) | zip sha256 `93a5d11a…`, taken from the GitHub release asset over TLS on 2026-09-29. Ghidra's own published hash was not reachable from the pinning host; compare it with the release notes. | both |
+| Temurin JDK | 21.0.12+8 | tarball sha256 `e4446ff0…`, equal to Adoptium's `.sha256.txt` for the asset | both. In `audit-native` it is `/opt/ghidra-jdk`, for Ghidra only (`JAVA_HOME_OVERRIDE` plus the wrappers); Joern keeps the apt `temurin-21-jdk` |
+| x64dbg | snapshot `2026.05.27` (`snapshot_2026-05-27_12-11.zip`, commit `9c8ca1ca`) | sha256 `d41966df…`. The GitHub asset and SourceForge's `snapshots/` copy are byte-identical, and SourceForge's published sha1/md5 match | both |
+| Wine | 8.0 `8.0~repack-4` (bookworm), 9.0 `9.0~repack-4build3` (noble) | exact apt versions of `wine`, `wine64`, `wine32:i386`. The noble version was read from the archive index; the bookworm one could not be (see OPEN in TODO) | both |
+| Xvfb, xauth | distro | not version-pinned, so they take security updates | both |
+
+**Invocation.**
+- `ghidra-analyzeHeadless <project-dir> <name> -import <file>` runs Ghidra headless. The `ghidra` and
+  `ghidra-analyzeHeadless` commands are small wrappers that set `user.home` from `$HOME`, because the
+  boundary runs as the host uid, which has no passwd entry.
+- `x64dbg`, `x32dbg` and `x96dbg` wrap `headless.exe`. They take debugger commands on stdin, and `exit`
+  ends the session. `x96dbg FILE` picks x64 or x32 from the PE header.
+- `--gui` runs the Qt GUI (for `x96dbg`, the launcher) under `xvfb-run`.
+- `--prepare` creates the caller's Wine prefix.
+- `--version` prints the pin.
+
+**Wine prefix.** The prefix is built at image build time in `/opt/wine-prefix`, with
+`WINEDLLOVERRIDES=mscoree,mshtml=` so Mono and Gecko are never fetched. DLLs identical to Wine's own
+are symlinked, which cuts the prefix from 1.3 GB to 72 MB. Wine refuses a prefix owned by another uid,
+and the image root is read-only. So on first use the wrapper copies the prefix to
+`/scratch/.x64dbg-runtime`, or to `$X64DBG_RUNTIME_DIR` or `$TMPDIR` when `/scratch` is not writable.
+
+**MSVC runtime.** The MSVC runtime DLLs that ship in the x64dbg zip load before Wine's builtins
+(`msvcp140,vcruntime140,vcruntime140_1=n,b`). Wine 9.0's `msvcp140` lacks `std::_Throw_Cpp_error`,
+and without the override x32dbg crashed on exit.
+
+**Limits.**
+- x64dbg is a Windows PE debugger run under Wine: use it to inspect PE files. It is not a sandbox.
+  **Do not execute malware or other untrusted targets with it**, and never enable the container network
+  for it.
+- Stepping a live debuggee needs ptrace between Wine processes. The default boundary drops every
+  capability, so real debugging is expected to need the `DEBUG_CAPS=1` profile of
+  `images/audit-buildenv-common/run.sh`, which is not qualified.
+- The GUI under Xvfb starts, but it is not interactive.
+- Unpacked sizes of the added layers on noble: JDK 362 MB, Ghidra 924 MB, Wine with i386 multiarch
+  1.67 GB, x64dbg 86 MB, prefix 76 MB.
+
+**Smoke.** `scripts/smoke_reverse_tools.sh --docker <image>` runs the image inside its own boundary
+wrapper and checks:
+- the Ghidra and JDK versions;
+- a headless import and analysis of `images/test/binary/hello.c`;
+- `wine --version`;
+- the prefix, via wineboot;
+- the pinned hashes of the x64dbg executables;
+- that x64dbg and x32dbg headless start and exit within 60 s;
+- that `x96dbg` selects the right arch.
+
+The `audit-native` Ghidra, Wine and x64dbg layers, built alone on `ubuntu:24.04`, passed every check
+on 2026-09-29, both as root and as uid 1000 under the `audit-native/run.sh` flags. That run did not
+build either full image; see OPEN in TODO.
+
 ## Host-local B13 registry (B16)
 
 Docker image ids differ between hosts, so the 16 tool records and seven shared step-4 image records
