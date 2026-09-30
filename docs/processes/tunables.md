@@ -6,7 +6,7 @@ Every size, count, time and resource value the pipeline uses. Per-job values liv
 
 Kinds: **resource** = what a job's container gets; **window** = how much one call returns (the caller narrows its query; not a data cap); **safety** = protects memory or the host; **logged** = a former cap, now only recorded by `size_log` (see `orchestrator/size-report.py`). Scale notes point at [the scale audit](../scale-audit-unreal-engine.md).
 
-## Shared (`pipeline/tunables.json`)
+## Shared (`appsec-review-process/pipeline/tunables.json`)
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|

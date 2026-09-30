@@ -29,7 +29,7 @@ appsec-review-process/personas/
 - Loading leaves an empty optional field out (`persona_registry.loaded`), so a record reads exactly as it
   did before the fields were made explicit; assembled prompts and pinned record hashes did not move.
 - Persona records name no role. Personas and roles are bound together by job templates in
-  `pipeline/job-templates/` (`composition`, `persona_variants`, `role_variants`, and the claim review
+  `appsec-review-process/pipeline/job-templates/` (`composition`, `persona_variants`, `role_variants`, and the claim review
   pool's `stage_personas` / `stage_roles`). Job templates, domains, tooling profiles and output contracts
   stay in `registry/`.
 - `appsec-review-process/persona_registry.py` is the one place that knows these paths; loaders go

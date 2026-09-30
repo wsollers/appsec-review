@@ -69,7 +69,7 @@ permission_capabilities.evaluate(
     requirement: dict,            # permission-requirement record
     grants: list[dict],           # permission-grant records, any order
     context: dict,                # {run_id, job_id, source_snapshot_sha256, now, registry_ceiling}
-    definitions=None, store=None  # default: load pipeline/permission-capabilities
+    definitions=None, store=None  # default: load appsec-review-process/pipeline/permission-capabilities
 ) -> dict                         # permission-decision record
 ```
 
