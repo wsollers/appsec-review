@@ -87,7 +87,7 @@ check("fx::overload ambiguous, no entry",
 check("hidden-only callee not REACHABLE", hidden["state"] != "REACHABLE", f"{hidden['state']}: {hidden['reason']}")
 import entry_exports
 check("tunables default off", not entry_exports.enabled("reachability_export_entries")
-      and not entry_exports.enabled("reachability_codeql_entries"), "registry/tunables.json")
+      and not entry_exports.enabled("reachability_codeql_entries"), "pipeline/tunables.json")
 PY
 )
 

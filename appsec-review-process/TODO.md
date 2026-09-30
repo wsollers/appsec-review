@@ -546,17 +546,23 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       (KNOWN_DRIFT removed). Fingerprints moved: claim-review pool, 07-hypothesis-discovery, 12b only.
 - [ ] `attack_chain_derive` (checked, no drift) and `owasp_validator_derive` (not in the drift test) still
       hand-write their lists.
+- [ ] William: is it acceptable that `claim_review_derive` stays hand-written (guarded by
+      `tests/test_contract_derive.py`) rather than built with `contract_derive`? Accepted for now.
+- [ ] Close fingerprint gap (pre-existing on `main`): `persona_tool_pool_lifecycle` imports
+      `claim_reviewer_pool` (which imports `claim_review_derive`), but its `_code_hashes` does not list
+      `claim_review_derive.py`, so a derive change does not invalidate the persona-tool-pool-dispatch job.
+      Adding it moves that job's fingerprint once.
+
 ## K: job definitions in `appsec-review-process/pipeline/` (ADR-0028, brief K, branch `registry-move`)
 - [x] `registry/*` and `job-graph.json` moved to `appsec-review-process/pipeline/` (pure `git mv`); every
   path comes from `registry_paths.py`; catalogs, parity views and tunables doc regenerated.
-- [ ] Controller: prod fingerprints change for every job with a `registry/` or `job-graph.json` key
-  (paths are hash keys; record content is byte-identical). See
+- [x] Prod fingerprints change for every job with a `registry/` or `job-graph.json` key (paths are
+  hash keys; record content is byte-identical): accepted, D-22. See
   `docs/decisions/ADR-0028-fingerprint-comparison.md`. Accepted prod runs rerun once.
-- [ ] Controller: a stable logical key (`kind/id`) for implementation maps would stop future moves
-  invalidating fingerprints; that is a logic change, not done here.
-- [ ] `phase-1-implementation-prompt.md` (prompt-hash attested, A01) and
-  `pipeline/prompt-fragments/governing-rules.md` (prompt content) still say `registry/`; editing either
-  changes an attested or live prompt, so they were left for the owner.
+- [ ] Later (D-22): a stable logical key (`kind/id`) for implementation maps would stop future moves
+  invalidating fingerprints; that is a logic change.
+- [x] `pipeline/prompt-fragments/governing-rules.md` now names the real authoring template path.
+  `phase-1-implementation-prompt.md` keeps `registry/` on purpose (A01 prompt-hash attestation).
 - [ ] Not run live: needs the Dagster code location restarted in WSL (`orchestrator/dagster/definitions.py`
   now reads `registry_paths`), and `images/registry_records.py generate` writes to
   `pipeline/container-images/` (host-local records under the old path are no longer read).
