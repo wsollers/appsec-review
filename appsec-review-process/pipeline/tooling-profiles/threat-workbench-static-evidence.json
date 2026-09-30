@@ -16,7 +16,15 @@
   "allowed_actions": [
     "read pinned inputs and look them up by exact path",
     "search the run evidence index",
-    "write the cell reply"
+    "write the cell reply",
+    "query tool: code_symbol",
+    "query tool: code_callers",
+    "query tool: code_callees",
+    "query tool: code_locate",
+    "query tool: code_type_info",
+    "query tool: code_file_outline",
+    "query tool: code_search",
+    "query tool: code_exports"
   ],
   "disallowed_actions": [
     "execute target code",

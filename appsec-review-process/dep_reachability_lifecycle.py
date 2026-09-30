@@ -82,6 +82,18 @@ def _cpg(run_id: str, source: str) -> tuple[dict[str, Any] | None, list[str]]:
     return {**binding, "records_sha256": summary["records_file"].get("sha256")}, []
 
 
+TS_JOB, TS_RESULT = "02-treesitter-ast", "treesitter-ast.json"
+
+
+def _treesitter_job(run_id: str, source: str) -> dict[str, Any] | None:
+    """The accepted ``02-treesitter-ast`` attempt of the same source generation, or None (hint only)."""
+    binding, _gap = _accepted(run_id, TS_JOB, TS_RESULT, source)
+    if binding is None:
+        return None
+    result = read_json(data_path(run_id, "jobs", TS_JOB, "attempts", binding["attempt_id"], TS_RESULT))
+    return binding if isinstance(result.get("records_file"), dict) else None
+
+
 def _supplied(run_id: str) -> dict[str, Any]:
     """Run-supplied files: reviewed map, entry points, LSP call-hierarchy docs, tree-sitter AST (hints)."""
     inputs = run_path(run_id) / "inputs"
@@ -131,7 +143,10 @@ def bindings(run_id: str, source: str, generated_at: str, sca_attempt: str) -> d
     osv, osv_identity, osv_gap = _osv(generated_at)
     if osv is not None:
         osv.connection.close()
-    return {"tables": tables, "osv": osv_identity, "osv_gap": osv_gap, "supplied": _supplied(run_id),
+    supplied = _supplied(run_id)
+    if supplied["treesitter"] is None:      # a manually supplied document wins; else the accepted job output
+        supplied["treesitter_job"] = _treesitter_job(run_id, source)
+    return {"tables": tables, "osv": osv_identity, "osv_gap": osv_gap, "supplied": supplied,
             "gaps": sorted(gaps),
             "code": {name: file_hash(Path(__file__).resolve().parent / name) for name in CODE}}
 
@@ -163,6 +178,12 @@ def derive(run_id: str, bound: dict[str, Any], *, sca: dict[str, Any], sbom: dic
     lsp = {language: json.loads(_check(root / "lsp" / f"{language}.json", sha))
            for language, sha in sorted(supplied["lsp"].items())}
     ast = json.loads(_check(root / "treesitter-ast.json", supplied["treesitter"])) if supplied["treesitter"] else None
+    job = supplied.get("treesitter_job")
+    if ast is None and job:
+        import treesitter_ast_job
+        attempt = data_path(run_id, "jobs", treesitter_ast_job.JOB, "attempts", job["attempt_id"])
+        _check(attempt / treesitter_ast_job.RESULT, job["result_sha256"])
+        ast = treesitter_ast_job.load_document(attempt)
     inputs = run_path(run_id) / "inputs"
     entries = (json.loads(_check(inputs / ENTRY_POINTS, supplied["entry_points"]["sha256"])).get("entry_points", [])
                if supplied["entry_points"] else [])

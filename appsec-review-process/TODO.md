@@ -751,3 +751,15 @@ records and report re-render (WSL), image rebuild and smoke, brief N fingerprint
       report body; today only a fallback appears (as a limitation line).
 - [ ] Decision to confirm: a deprecated CWE id is rejected (reviewer) or dropped (tool tag), like an unknown id;
       an integrity failure records `CWE_REFERENCE_INVALID` (a third code, mirroring `MITRE_REFERENCE_INVALID`).
+
+## U: structural code-query tools (brief U, branch `code-query-tools`, ADR-0032 proposed)
+
+Design: [`docs/code-query-tools.md`](../docs/code-query-tools.md).
+
+- [ ] William: approve the tree-sitter job mounting `treesitter_ast.py` from `data/tooling/` (AGENTS.md rule; ADR-0032 item 4).
+- [ ] Run `02-treesitter-ast` and `02-code-index` against a real target (freeciv21 first); build the tree-sitter CLI image
+      (`audit-lsp-vendor` needs `libclang-dev`, fixed on main) and check `complete=false` rates per tool with `retrieval-report.py`.
+- [ ] `threat-workbench-static-evidence` grants only help if the index is accepted before stage 03; check the job order on a real run.
+- [ ] Decide whether `06-cve-reachability` should depend on `02-treesitter-ast` in the job graph (today: consumed when present).
+- [ ] Brief V (lead context) after merge; sealed code-intel sidecar and query-time CodeQL stay deferred.
+
