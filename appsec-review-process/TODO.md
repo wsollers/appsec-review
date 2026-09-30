@@ -11,7 +11,7 @@ The earlier batch backlog and phase plan were removed on 2026-09-27; see git his
 | # | Target | Source | Pinned commit | What it exercises | Status |
 |---|---|---|---|---|---|
 | 1 | `hello-autotools` | `github.com/wsollers/hello-autotools` | `632522b` | C/autotools, vendored cJSON, Dockerfile; known answer key on branch `with-vulnerabilities-doc` | NEXT |
-| 2 | `appsec-multi-vuln` | `github.com/wsollers/appsec-multi-vuln` | `878d5d6` | C++, C#, Go, Java, JS/TS, PHP, PowerShell, Rust, Bash and six Dockerfiles; answer key in private `appsec-multi-vuln-guide` | TODO |
+| 2 | `appsec-multi-vuln` | `github.com/wsollers/appsec-multi-vuln` | `5c5a776` | C++, C#, Go, Java, JS/TS, PHP, Python (case-073 to case-080, added 2026-09-30), PowerShell, Rust, Bash and six Dockerfiles; answer key in private `appsec-multi-vuln-guide` | TODO |
 | 3 | `freeciv21` | `github.com/longturn/freeciv21` | `0ce1c60` | Large CMake/Qt C++ codebase, many build dependencies | TODO |
 | 4 | `doom3-bfg` | `github.com/id-Software/DOOM-3-BFG` | `1caba19` | Large Windows-oriented C++ (MSVC/clang-cl, ADR-0003); a Linux build is expected to fail and appear as gaps | TODO |
 
@@ -516,8 +516,20 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       rebuild short; dependents buildenv-cpp, cpp-resolute and codeql-native rebuild after it).
 - [ ] Rust: `rust2cpg` worked per crate without cargo in the sandbox; confirm inside `audit-native` (offline).
 - [ ] Kotlin, Ruby, Swift frontends exist in Joern but are not in `joern_cpg.FRONTENDS` (untried).
+- [ ] .NET from a second point of view (William, 2026-09-30): a Roslyn semantic-model tool (small .NET console on
+      `Microsoft.CodeAnalysis`, per project, offline) for a resolved C# call graph and symbols, plus Microsoft's
+      security analyzers (CA2100 family, Security Code Scan) as a C# SAST lane. csharpsrc2cpg's Roslyn astgen is
+      syntax-only and CodeQL build-mode none leaves dependency calls unresolved. Needs vendored NuGet packages;
+      the .NET SDK is already in `audit-codeql`.
 - [ ] Pin the Joern zip by sha256 in `images/audit-native/Dockerfile` (downloaded 2026-09-30:
       `522f63d44e41f52ead5fbf404c1e55b04d1c37bf48b33415435c6b08bb453943`, 1,858,859,964 bytes).
+
+## appsec-multi-vuln Python cases (2026-09-30)
+
+- [x] case-073 to case-080 on branch `add-python-cases` (wsollers/appsec-multi-vuln#30) and the answer key
+      (wsollers/appsec-multi-vuln-guide#1); `fixtures/populate-targets.sh` pins `5c5a776`.
+- [ ] Merge both PRs with a merge commit (a squash merge plus branch deletion would drop the pinned commit;
+      re-pin to the merge commit if squashed). Then `fixtures/populate-targets.sh appsec-multi-vuln` on each host.
 
 ## Shared images (ADR-0033)
 
