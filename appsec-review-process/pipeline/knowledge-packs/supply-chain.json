@@ -1,72 +1,14 @@
-## Persona (supply-chain-attacker)
-
-```json
 {
-  "assumptions": {
-    "looks_for": [
-      "unpinned actions/images/dependencies",
-      "postinstall/build script risk",
-      "dependency confusion",
-      "artifact substitution",
-      "weak signing/provenance",
-      "generated code gaps",
-      "lockfile drift",
-      "vendored code with unclear origin"
-    ],
-    "posture": "Models attacks through dependencies, package managers, CI/CD, generated artifacts, and release paths."
-  },
-  "category": "attacker",
-  "display_name": "Supply Chain Attacker",
-  "knowledge_packs": [
-    "supply-chain"
-  ],
-  "must_not": [
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
-  ],
-  "outputs": [
-    "evidence-bound observations within this persona's focus (catalog lists no specific outputs)"
-  ],
-  "persona_id": "supply-chain-attacker",
-  "primary_failure_mode_caught": "Models attacks through dependencies, package managers, CI/CD, generated artifacts, and release paths.",
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership.",
-    "reviewed": false,
-    "source": "docs/personas-and-registry/persona-catalog.md#supply-chain-attacker"
-  },
-  "required_inputs": [
-    "accepted upstream artifacts and cited evidence for the assigned surface (catalog lists no specific inputs)"
-  ],
-  "schema": "appsec-review/persona/0.1"
-}
-```
-
-## Knowledge Packs
-
-The knowledge packs below are focus and vocabulary for this persona's search: they name an exploit class, where to look and what would prove a claim. They are not a checklist and not evidence. A claim still needs cited evidence from the target; a pack id, or anything a pack lists, is never evidence. When a pack's class is not observed in the target, record it as not observed (a coverage gap), never as "no issues found". ATT&CK, CAPEC and CWE ids taken from a pack are validated like any other tag and are withheld with a recorded gap when they do not validate.
-
-## Knowledge Pack (supply-chain)
-
-```json
-{
+  "schema": "appsec-review/knowledge-pack/0.1",
+  "pack_id": "supply-chain",
+  "display_name": "Software supply chain and CI/CD",
+  "summary": "Compromise through dependencies, package resolution, build scripts, CI/CD workflows, container base images and release signing, established from lockfiles, SBOMs, workflow files, build scripts and OSV/Scorecard evidence.",
   "applies_to": [
     "ci-cd",
     "package-manager",
     "container-image",
     "build-system",
     "release"
-  ],
-  "display_name": "Software supply chain and CI/CD",
-  "false_positive_traps": [
-    "dev-only, test-only or build-only dependencies that are not bundled or shipped, reported as runtime exposure",
-    "OSV or Grype advisories matched on a manifest range while the lockfile or SBOM resolves a fixed version",
-    "advisories against a function or optional feature the application never imports or enables",
-    "actions from the same organization or first-party GitHub actions (actions/*) flagged as untrusted without a concrete takeover path; they still count as unpinned if not SHA-pinned",
-    "pull_request_target workflows that only label or comment and never check out or execute the head ref",
-    "lockfile drift that is only a formatting, integrity-algorithm or platform-specific optional-dependency difference",
-    "curl downloads followed by a checksum or signature check on a later line of the same step or script",
-    "private registries configured as the only index with scoped names, where public resolution cannot occur"
   ],
   "looks_for": [
     "GitHub Actions, reusable workflows and container images referenced by mutable tag or branch instead of a full commit SHA or digest",
@@ -82,12 +24,6 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "vendored, copied or generated code with no recorded upstream origin, version or regeneration step",
     "source-to-artifact divergence: build steps that fetch, patch or generate code not present in the reviewed tree"
   ],
-  "must_not": [
-    "report a CVE or OSV match as exploitable without the resolved version and a reachability statement",
-    "treat an unpinned reference as a compromise; it is exposure to one, and the finding must say so",
-    "publish, install, resolve or execute any package, action or script from the target during review"
-  ],
-  "pack_id": "supply-chain",
   "preconditions": [
     "the attacker controls or can influence an input the build trusts: a public package name, an upstream repository, a PR from a fork, a mutable tag, or a download URL",
     "the build or install resolves that input without pinning it to an immutable identity (commit SHA, digest, lockfile integrity hash, checksum)",
@@ -103,6 +39,16 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "for dependency confusion: the registry configuration (.npmrc, pip.conf, settings.xml, nuget.config) at file:line and the unscoped internal package name",
     "for remote downloads: the fetch at file:line and the absence of a checksum, signature or pinned digest on the same step",
     "the relevant Scorecard check result (Pinned-Dependencies, Token-Permissions, Dangerous-Workflow, Branch-Protection, Signed-Releases) when it was run, or a recorded gap when it was not"
+  ],
+  "false_positive_traps": [
+    "dev-only, test-only or build-only dependencies that are not bundled or shipped, reported as runtime exposure",
+    "OSV or Grype advisories matched on a manifest range while the lockfile or SBOM resolves a fixed version",
+    "advisories against a function or optional feature the application never imports or enables",
+    "actions from the same organization or first-party GitHub actions (actions/*) flagged as untrusted without a concrete takeover path; they still count as unpinned if not SHA-pinned",
+    "pull_request_target workflows that only label or comment and never check out or execute the head ref",
+    "lockfile drift that is only a formatting, integrity-algorithm or platform-specific optional-dependency difference",
+    "curl downloads followed by a checksum or signature check on a later line of the same step or script",
+    "private registries configured as the only index with scoped names, where public resolution cannot occur"
   ],
   "refs": {
     "attack_tactics": [
@@ -161,7 +107,9 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
       "CWE-94"
     ]
   },
-  "schema": "appsec-review/knowledge-pack/0.1",
-  "summary": "Compromise through dependencies, package resolution, build scripts, CI/CD workflows, container base images and release signing, established from lockfiles, SBOMs, workflow files, build scripts and OSV/Scorecard evidence."
+  "must_not": [
+    "report a CVE or OSV match as exploitable without the resolved version and a reachability statement",
+    "treat an unpinned reference as a compromise; it is exposure to one, and the finding must say so",
+    "publish, install, resolve or execute any package, action or script from the target during review"
+  ]
 }
-```

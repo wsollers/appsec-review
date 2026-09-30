@@ -776,10 +776,15 @@ Design: [`docs/code-query-tools.md`](../docs/code-query-tools.md).
 
 Decision record: [ADR-0034](../docs/decisions/ADR-0034-knowledge-packs.md). Closes section O's "prompt menu" item.
 
-- [ ] W1: `knowledge-pack` registry kind (schema, `pipeline/knowledge-packs/`), persona `knowledge_packs` key,
+- [x] W1: `knowledge-pack` registry kind (schema, `pipeline/knowledge-packs/`), persona `knowledge_packs` key,
       catalog label, `knowledge_packs` prompt section, input-hash coverage, `knowledge_packs.py check` in parity.
-- [ ] W2: read-only `mitre_technique` / `mitre_capec` / `mitre_cwe` tools over the resolved snapshot (ADR-0032 pattern),
+- [x] W2: read-only `mitre_technique` / `mitre_capec` / `mitre_cwe` tools over the resolved snapshot (ADR-0032 pattern),
       granted to `claim-review-static` and `hypothesis-hunt-static`.
-- [ ] W3: packs `cloud-exposure`, `injection`, `supply-chain` and their lane-07 persona assignments.
+- [x] W3: packs `cloud-exposure`, `injection`, `supply-chain` and their lane-07 persona assignments
+      (ATT&CK 19.2 / CAPEC 3.9 ids validated `OK` against a synced snapshot; CWE ids format-checked only:
+      `cwe.mitre.org` unreachable from the authoring host).
+- [ ] W2 open points, awaiting William: (a) the MITRE tools are granted only in indexed mode, so inline
+      stage-07 cells without a code index do not get them; (b) the snapshot identity is recorded in attempt
+      limitations but not bound into job inputs.
 - [ ] Phase 2: intake adds packs from target traits (`applies_to`); needs a run-specific prompt cache key.
 - [ ] More packs: authn/session, deserialization, memory safety, IAM escalation, LLM tool abuse, business logic.

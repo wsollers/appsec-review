@@ -1,62 +1,8 @@
-## Persona (api-contract-abuser)
-
-```json
 {
-  "assumptions": {
-    "looks_for": [
-      "undocumented parameters",
-      "method confusion",
-      "versioning gaps",
-      "OpenAPI/schema drift",
-      "mass assignment",
-      "object-level authorization gaps",
-      "response overexposure",
-      "inconsistent validation between clients and server"
-    ],
-    "posture": "Attacks mismatches between API documentation, route behavior, validation, and authorization."
-  },
-  "category": "attacker",
-  "display_name": "API Contract Abuser",
-  "knowledge_packs": [
-    "injection"
-  ],
-  "must_not": [
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
-  ],
-  "outputs": [
-    "API abuse candidates",
-    "route-to-authz coverage gaps",
-    "schema drift findings",
-    "suggested verification requests"
-  ],
-  "persona_id": "api-contract-abuser",
-  "primary_failure_mode_caught": "Attacks mismatches between API documentation, route behavior, validation, and authorization.",
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership.",
-    "reviewed": false,
-    "source": "docs/personas-and-registry/persona-catalog.md#api-contract-abuser"
-  },
-  "required_inputs": [
-    "OpenAPI/Swagger specs",
-    "route inventory",
-    "Postman/Bruno collections",
-    "source handlers/controllers",
-    "API gateway config"
-  ],
-  "schema": "appsec-review/persona/0.1"
-}
-```
-
-## Knowledge Packs
-
-The knowledge packs below are focus and vocabulary for this persona's search: they name an exploit class, where to look and what would prove a claim. They are not a checklist and not evidence. A claim still needs cited evidence from the target; a pack id, or anything a pack lists, is never evidence. When a pack's class is not observed in the target, record it as not observed (a coverage gap), never as "no issues found". ATT&CK, CAPEC and CWE ids taken from a pack are validated like any other tag and are withheld with a recorded gap when they do not validate.
-
-## Knowledge Pack (injection)
-
-```json
-{
+  "schema": "appsec-review/knowledge-pack/0.1",
+  "pack_id": "injection",
+  "display_name": "Injection and server-side request forgery",
+  "summary": "Untrusted input reaching an interpreter, query, template, file path, parser, deserializer or outbound request without neutralization on the path, traced through source and SAST, CodeQL and CPG evidence.",
   "applies_to": [
     "http-api",
     "web",
@@ -64,17 +10,6 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "cli",
     "native",
     "serverless"
-  ],
-  "display_name": "Injection and server-side request forgery",
-  "false_positive_traps": [
-    "parameterized queries misread as concatenation: placeholders (?, $1, :name, %s passed as a separate args tuple) with values bound by the driver",
-    "ORM query builders and criteria APIs that bind values even though the call site looks like string assembly",
-    "concatenated identifiers or fragments taken from a fixed allow-list, enum or constant map rather than from input",
-    "subprocess calls with an argument list and no shell where input cannot become an option or the executable",
-    "template engines with auto-escaping on, where the flagged value is a variable, not template source",
-    "SAST taint that starts from a trusted source (config file, environment, internal constant, admin-only migration script) or from test code",
-    "paths resolved and checked with realpath/canonical form against a base directory before use",
-    "URL fetches whose host is fixed by configuration and whose input only sets a path or query component on a trusted host"
   ],
   "looks_for": [
     "SQL, HQL/JPQL or ORM raw-query strings built by concatenation, format strings or template literals from request data",
@@ -90,12 +25,6 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "sanitizers or validators that are applied on one route but not on a sibling route, version or content type reaching the same sink",
     "CodeQL, Semgrep/Opengrep or Joern CPG flows whose source is a request, message or file input and whose sink is one of the above"
   ],
-  "must_not": [
-    "claim an injection from a sink alone; a finding needs a cited source-to-sink path",
-    "treat a SAST or CodeQL alert as proof without reading the flagged path in the source",
-    "send payloads to, or execute, the target; reason from source and tool evidence only"
-  ],
-  "pack_id": "injection",
   "preconditions": [
     "an attacker-reachable entry point (route, queue consumer, file import, CLI argument from an untrusted caller) supplies the tainted value",
     "the value reaches the sink in a form that changes its structure: query or command syntax, template source, path segment, URL authority, parser input",
@@ -111,6 +40,16 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "the route or entry-point registration at file:line that exposes the source, with its auth middleware or the lack of it",
     "for XXE or deserialization: the parser or deserializer construction at file:line showing the unsafe setting or type, and the library version from the lockfile when the default depends on it",
     "for SSRF: the client call at file:line, the controllable URL component, and the absence of scheme, host allow-list and post-resolution private-address checks"
+  ],
+  "false_positive_traps": [
+    "parameterized queries misread as concatenation: placeholders (?, $1, :name, %s passed as a separate args tuple) with values bound by the driver",
+    "ORM query builders and criteria APIs that bind values even though the call site looks like string assembly",
+    "concatenated identifiers or fragments taken from a fixed allow-list, enum or constant map rather than from input",
+    "subprocess calls with an argument list and no shell where input cannot become an option or the executable",
+    "template engines with auto-escaping on, where the flagged value is a variable, not template source",
+    "SAST taint that starts from a trusted source (config file, environment, internal constant, admin-only migration script) or from test code",
+    "paths resolved and checked with realpath/canonical form against a base directory before use",
+    "URL fetches whose host is fixed by configuration and whose input only sets a path or query component on a trusted host"
   ],
   "refs": {
     "attack_tactics": [
@@ -164,7 +103,9 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
       "CWE-918"
     ]
   },
-  "schema": "appsec-review/knowledge-pack/0.1",
-  "summary": "Untrusted input reaching an interpreter, query, template, file path, parser, deserializer or outbound request without neutralization on the path, traced through source and SAST, CodeQL and CPG evidence."
+  "must_not": [
+    "claim an injection from a sink alone; a finding needs a cited source-to-sink path",
+    "treat a SAST or CodeQL alert as proof without reading the flagged path in the source",
+    "send payloads to, or execute, the target; reason from source and tool evidence only"
+  ]
 }
-```

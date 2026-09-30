@@ -1,59 +1,8 @@
-## Persona (cloud-initial-access-operator)
-
-```json
 {
-  "assumptions": {
-    "looks_for": [
-      "public ingress",
-      "open security groups",
-      "exposed admin ports",
-      "public buckets",
-      "permissive IAM paths",
-      "workload identity escalation",
-      "broad egress that enables callback/exfiltration",
-      "internet-facing resources not reflected in the threat model"
-    ],
-    "posture": "Models an attacker seeking initial access through cloud configuration and exposed infrastructure."
-  },
-  "category": "attacker",
-  "display_name": "Cloud Initial Access Operator",
-  "knowledge_packs": [
-    "cloud-exposure"
-  ],
-  "must_not": [
-    "fail to distinguish declared exposure from observed runtime exposure",
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
-  ],
-  "outputs": [
-    "evidence-bound observations within this persona's focus (catalog lists no specific outputs)"
-  ],
-  "persona_id": "cloud-initial-access-operator",
-  "primary_failure_mode_caught": "Models an attacker seeking initial access through cloud configuration and exposed infrastructure.",
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership.",
-    "reviewed": false,
-    "source": "docs/personas-and-registry/persona-catalog.md#cloud-initial-access-operator"
-  },
-  "required_inputs": [
-    "Terraform/CloudFormation/Kubernetes/IaC",
-    "Checkov/Trivy/tfsec/KICS outputs",
-    "cloud architecture docs",
-    "network exposure model"
-  ],
-  "schema": "appsec-review/persona/0.1"
-}
-```
-
-## Knowledge Packs
-
-The knowledge packs below are focus and vocabulary for this persona's search: they name an exploit class, where to look and what would prove a claim. They are not a checklist and not evidence. A claim still needs cited evidence from the target; a pack id, or anything a pack lists, is never evidence. When a pack's class is not observed in the target, record it as not observed (a coverage gap), never as "no issues found". ATT&CK, CAPEC and CWE ids taken from a pack are validated like any other tag and are withheld with a recorded gap when they do not validate.
-
-## Knowledge Pack (cloud-exposure)
-
-```json
-{
+  "schema": "appsec-review/knowledge-pack/0.1",
+  "pack_id": "cloud-exposure",
+  "display_name": "Cloud exposure and metadata access",
+  "summary": "Internet-reachable cloud and cluster resources, over-broad identity and storage policy, and server-side request paths to instance metadata or internal control planes, as declared in IaC and reachable from application code.",
   "applies_to": [
     "terraform",
     "cloudformation",
@@ -62,17 +11,6 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "docker",
     "iac",
     "http-api"
-  ],
-  "display_name": "Cloud exposure and metadata access",
-  "false_positive_traps": [
-    "declared-but-not-deployed exposure: example, test or disabled modules, count = 0, or a variable default overridden to private in the environment's tfvars or overlay",
-    "public exposure that is intended and fronted: a CDN or load balancer serving static content, or a public API behind authentication and rate limiting",
-    "0.0.0.0/0 on an egress rule, on port 80/443 of a web tier, or on a security group attached to nothing",
-    "bucket policies that grant access to a CloudFront origin access identity, VPC endpoint or specific account rather than to everyone",
-    "wildcard IAM statements constrained by a Condition block, permission boundary or resource-scoped ARN that the scanner rule does not evaluate",
-    "a URL-fetching function whose destination is a constant, config value or allow-listed host the request cannot influence",
-    "cluster-admin or privileged workloads that are the platform's own system components (CNI, CSI, ingress controller) installed from a pinned upstream chart",
-    "scanner findings on vendored upstream charts or modules that the target overrides with values not visible to the scanner"
   ],
   "looks_for": [
     "security groups, firewall rules or NetworkPolicy gaps allowing 0.0.0.0/0 or ::/0 ingress to admin, database, SSH/RDP or cluster API ports",
@@ -88,12 +26,6 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "long-lived cloud credentials or tokens in IaC variables, tfvars, Helm values, container env or state files",
     "internet-facing resources absent from the threat model or architecture docs supplied with the target"
   ],
-  "must_not": [
-    "report declared IaC exposure as observed runtime exposure; state which it is",
-    "probe, scan or fetch any live cloud endpoint, metadata address or account; reason from the target's files and the run's tool evidence only",
-    "treat a scanner rule hit as exploitable without the deployment and reachability evidence above"
-  ],
-  "pack_id": "cloud-exposure",
   "preconditions": [
     "the resource is reachable from the attacker's position: internet-routable address, public DNS, or public endpoint flag set in the deployed configuration",
     "the IaC or manifest path carrying the misconfiguration is the one actually deployed for the environment in scope (not a dev, example or test module)",
@@ -110,6 +42,16 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
     "for metadata access: the SSRF sink plus the IaC or node config showing IMDSv1 or hop-limit permits the call, and the role attached to that instance or workload",
     "for IAM/RBAC escalation: the policy document or binding at file:line and the concrete action chain it permits (e.g. PassRole plus a compute create action)",
     "the compensating controls that were checked (SCP, org policy, NetworkPolicy, private endpoint, WAF) and where each was found or found absent"
+  ],
+  "false_positive_traps": [
+    "declared-but-not-deployed exposure: example, test or disabled modules, count = 0, or a variable default overridden to private in the environment's tfvars or overlay",
+    "public exposure that is intended and fronted: a CDN or load balancer serving static content, or a public API behind authentication and rate limiting",
+    "0.0.0.0/0 on an egress rule, on port 80/443 of a web tier, or on a security group attached to nothing",
+    "bucket policies that grant access to a CloudFront origin access identity, VPC endpoint or specific account rather than to everyone",
+    "wildcard IAM statements constrained by a Condition block, permission boundary or resource-scoped ARN that the scanner rule does not evaluate",
+    "a URL-fetching function whose destination is a constant, config value or allow-listed host the request cannot influence",
+    "cluster-admin or privileged workloads that are the platform's own system components (CNI, CSI, ingress controller) installed from a pinned upstream chart",
+    "scanner findings on vendored upstream charts or modules that the target overrides with values not visible to the scanner"
   ],
   "refs": {
     "attack_tactics": [
@@ -164,7 +106,9 @@ The knowledge packs below are focus and vocabulary for this persona's search: th
       "CWE-923"
     ]
   },
-  "schema": "appsec-review/knowledge-pack/0.1",
-  "summary": "Internet-reachable cloud and cluster resources, over-broad identity and storage policy, and server-side request paths to instance metadata or internal control planes, as declared in IaC and reachable from application code."
+  "must_not": [
+    "report declared IaC exposure as observed runtime exposure; state which it is",
+    "probe, scan or fetch any live cloud endpoint, metadata address or account; reason from the target's files and the run's tool evidence only",
+    "treat a scanner rule hit as exploitable without the deployment and reachability evidence above"
+  ]
 }
-```

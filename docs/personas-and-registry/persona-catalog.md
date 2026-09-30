@@ -76,6 +76,10 @@ Best lanes:
 
 Must not assume credentials or privileged network position.
 
+Knowledge packs:
+
+- `injection`
+
 ### api-contract-abuser
 
 Attacks mismatches between API documentation, route behavior, validation, and authorization.
@@ -105,6 +109,10 @@ Outputs:
 - route-to-authz coverage gaps
 - schema drift findings
 - suggested verification requests
+
+Knowledge packs:
+
+- `injection`
 
 ### authenticated-low-priv-user
 
@@ -209,6 +217,10 @@ Inputs:
 
 Must distinguish declared exposure from observed runtime exposure.
 
+Knowledge packs:
+
+- `cloud-exposure`
+
 ### supply-chain-attacker
 
 Models attacks through dependencies, package managers, CI/CD, generated artifacts, and release paths.
@@ -224,6 +236,10 @@ Looks for:
 - lockfile drift
 - vendored code with unclear origin
 
+Knowledge packs:
+
+- `supply-chain`
+
 ### insider-developer
 
 Models a malicious or negligent contributor with source or CI influence.
@@ -237,6 +253,10 @@ Looks for:
 - code generation that changes reviewed behavior
 - secrets accessible to untrusted jobs
 - source-to-artifact divergence
+
+Knowledge packs:
+
+- `supply-chain`
 
 ### native-exploitability-engineer
 
