@@ -29,6 +29,21 @@ except ImportError:
     HAVE_TREE_SITTER = False
 
 
+class ContainerRequest(unittest.TestCase):
+    """The job's real B13 request must pass the boundary schema (2026-09-30: an environment name outside the
+    allowlist rejected every run before Docker started)."""
+
+    def test_request_passes_the_pinned_container_request_schema(self):
+        import container_execution as ce
+        import treesitter_ast_job as job
+        import tunables
+        inputs = {"image": {"digest": "sha256:" + "a" * 64}, "limits": job._limits(), "target_path": "/tmp/target",
+                  "source_snapshot_sha256": "sha256:" + "b" * 64, "container_limits": tunables.container_limits(job.JOB)}
+        request = job._request("20260930T214459Z-ce7e7f", "ts-0123456789ab", inputs, Path("/tmp/staged"))
+        self.assertEqual(validate_document(request, ce.REQUEST_SCHEMA), [])
+        self.assertEqual(request["argv"][:2], ["/opt/treesitter/bin/python", "-B"])
+
+
 class Walker(unittest.TestCase):
     def test_walk_is_sorted_skips_vcs_and_never_follows_symlinks(self):
         with tempfile.TemporaryDirectory() as temp:

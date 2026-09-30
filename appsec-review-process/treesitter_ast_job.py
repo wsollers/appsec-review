@@ -151,7 +151,9 @@ def _host(runtime: ce.ContainerRuntime) -> dict[str, Any]:
 
 
 def argv(limits: dict[str, int]) -> list[str]:
-    return ["/opt/treesitter/bin/python", f"{MOUNT}/treesitter_ast.py", "--root", "/workspace", "--label", "workspace",
+    # -B, not PYTHONDONTWRITEBYTECODE: the B13 request schema allowlists environment names and that one is
+    # not on it, so every request was rejected before Docker ran (appsec-multi-vuln, 2026-09-30).
+    return ["/opt/treesitter/bin/python", "-B", f"{MOUNT}/treesitter_ast.py", "--root", "/workspace", "--label", "workspace",
             "--out", "/scratch/treesitter-ast.json", "--stats", "/scratch/treesitter-ast.stats.json",
             *[item for key, value in sorted(limits.items()) for item in ("--" + key.replace("_", "-"), str(value))]]
 
@@ -159,8 +161,7 @@ def argv(limits: dict[str, int]) -> list[str]:
 def _request(run_id: str, attempt_id: str, inputs: dict[str, Any], staged: Path) -> dict[str, Any]:
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
         "image": {"image_id": image_id(), "digest": inputs["image"]["digest"]}, "argv": argv(inputs["limits"]),
-        "environment": [{"name": "LANG", "value": "C.UTF-8"}, {"name": "LC_ALL", "value": "C.UTF-8"},
-                        {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}],
+        "environment": [{"name": "LANG", "value": "C.UTF-8"}, {"name": "LC_ALL", "value": "C.UTF-8"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"},
                           {"host_path": str(staged), "container_path": MOUNT}],
         "scratch_path": "scratch", "log_path": "logs/container", "network": {"mode": "none", "destinations": []},
