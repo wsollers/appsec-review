@@ -38,7 +38,7 @@ import registry_paths
 ROOT = Path(__file__).resolve().parent
 REGISTRY_DIR = registry_paths.REGISTRY
 PROMPT_ROOT = ROOT  # matches persona_invocation.PROMPT_ROOT: paths are named relative to this tree
-GOVERNING_RULES_PATH = REGISTRY_DIR / "prompt-fragments" / "governing-rules.md"
+GOVERNING_RULES_PATH = registry_paths.PROMPT_FRAGMENTS_DIR / "governing-rules.md"
 BUILDENV_CATALOG_PATH = ROOT / "tooling" / "buildenv-catalog.json"
 # Deliberately NOT under runs/<run_id>/.../attempts/<attempt_id>/: persona_invocation's own
 # _read_pinned refuses an outer_prompt that sits inside the attempt ("an attempt never reads

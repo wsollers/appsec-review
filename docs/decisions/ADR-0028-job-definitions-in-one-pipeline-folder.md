@@ -1,8 +1,9 @@
 # ADR-0028: Job definitions in one `appsec-review-process/pipeline/` folder
 
-Status: **Proposed 2026-09-29** (brief K, branch `registry-move`). The move and `registry_paths.py`
-come from brief K and decision D-16. Two choices need the controller to confirm: `job-graph.json`
-moved too, and the fingerprint consequence described below.
+Status: **Accepted 2026-09-29** (brief K, branch `registry-move`, merged `d4f5a7c`; decisions D-16,
+D-21, D-22 in `DECISION-LOG-2026-09-29.md`). `job-graph.json` moved with the records, and the
+fingerprint consequence below is accepted: every finished job reruns once. Keying records by name
+instead of path is a later change.
 
 ## Context
 
@@ -77,11 +78,9 @@ change and outside brief K.
 ## Left as written
 
 History (ADRs, decision logs, agent briefs, continuation prompts, proposals, dated reports) keeps
-the old paths. Two tracked prompt texts also still say `registry/`:
+the old paths. So does `phase-1-implementation-prompt.md`: it is the accepted Phase 1 spec, attested
+by prompt hash (A01), and a path edit would void that vetting for no behaviour gain.
 
-- `phase-1-implementation-prompt.md` is attested by prompt hash (A01), so editing it would void the
-  vetting.
-- `pipeline/prompt-fragments/governing-rules.md` is prompt content, so editing it changes every job
-  prompt that includes it.
-
-Both are listed as open in `TODO.md` section K.
+`pipeline/prompt-fragments/governing-rules.md` is live prompt text, so it now names
+`appsec-review-process/pipeline/AUTHORING-TEMPLATE.md` (follow-up to the merge). The change reaches
+every prompt that includes the fragment; those jobs rerun anyway under D-22.
