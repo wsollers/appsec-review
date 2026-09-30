@@ -387,6 +387,10 @@ class InvokerRecordTests(unittest.TestCase):
         text, guides = tool_guides.render(names)
         self.assertIn("mitre_lookup", [row["guide"] for row in guides])
         self.assertIn(text.strip(), seen["prompt"])
+        # An indexed prompt names its lookup tools instead of telling the model it has none.
+        self.assertIn(invoker.INDEXED_TOOL_STATEMENT, seen["prompt"])
+        self.assertNotIn(invoker.INLINE_TOOL_STATEMENT, seen["prompt"])
+        self.assertNotIn("too large to inline", seen["prompt"])
 
     def test_gap_is_recorded(self):
         written, _seen, _take, _key = self.invoke(self.PROFILE, self.GAP_BOUND)
@@ -408,6 +412,7 @@ class InvokerRecordTests(unittest.TestCase):
         self.assertEqual(seen["argv"][seen["argv"].index("--allowedTools") + 1], "")
         self.assertIsNone(seen["server"])
         self.assertNotIn("mitre_", seen["prompt"])
+        self.assertIn(invoker.INLINE_TOOL_STATEMENT, seen["prompt"])
 
     def test_entry_never_enters_the_prompt_or_the_cache_key(self):
         _w1, first, _t1, key1 = self.invoke(self.PROFILE, self.OK_BOUND)

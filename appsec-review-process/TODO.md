@@ -783,13 +783,17 @@ Decision record: [ADR-0034](../docs/decisions/ADR-0034-knowledge-packs.md). Clos
 - [x] W3: packs `cloud-exposure`, `injection`, `supply-chain` and their lane-07 persona assignments
       (ATT&CK 19.2 / CAPEC 3.9 ids validated `OK` against a synced snapshot; CWE ids format-checked only:
       `cwe.mitre.org` unreachable from the authoring host).
-- [ ] W5b (William, 2026-09-30): a MITRE lookup grant switches an inline job to indexed mode, like a `code_*` grant
+- [x] W5b (William, 2026-09-30): a MITRE lookup grant switches an inline job to indexed mode, like a `code_*` grant
       (same off switch for comparing runs).
 - [x] W4 (ADR-0034 addendum 1-2): `knowledge_packs` persona -> packs map in job templates (overrides the persona
       default), W3 assignments moved into `claim-review-pool-cell.json`, cap as tunable `knowledge_packs_per_persona_max` (2).
-- [ ] W5 (ADR-0034 addendum 3): structured `mitre_reference` entry (snapshot id, table hash, ATT&CK/CAPEC/CWE versions
+- [x] W5 (ADR-0034 addendum 3): structured `mitre_reference` entry (snapshot id, table hash, ATT&CK/CAPEC/CWE versions
       or gap) on every job granted MITRE tools, shown in the report.
 - [ ] Later: bind the MITRE snapshot identity into job inputs (today jobs use the current snapshot; the version is
       recorded for reporting only, ADR-0034 addendum 3).
+- [ ] The MITRE reference rows appear in the rendered HTML/PDF provenance table and `mitre-reference-section.json`,
+      not in the markdown draft `report.md`.
+- [ ] Packs are assigned only in `claim-review-pool-cell.json`; add `knowledge_packs` maps to other templates that run
+      attacker personas (hunters, threat workbench, lane 14) where wanted.
 - [ ] Phase 2: intake adds packs from target traits (`applies_to`); needs a run-specific prompt cache key.
 - [ ] More packs: authn/session, deserialization, memory safety, IAM escalation, LLM tool abuse, business logic.

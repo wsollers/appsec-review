@@ -66,10 +66,16 @@ SCHEMAS_ROOT = ROOT.parent / "schemas"
 
 DEFAULT_TIMEOUT_SECONDS = tunables.shared("invoker_timeout_seconds")
 
+# Indexed mode serves inputs and query tools through the read-only input server (brief U, ADR-0034);
+# the statement must not tell a model with lookup tools that it has none.
+INLINE_TOOL_STATEMENT = "You have no tools in this invocation."
+INDEXED_TOOL_STATEMENT = ("Your only tools in this invocation are the read-only lookup tools described above; "
+                          "you cannot write files or run commands.")
+
 ENVELOPE_INSTRUCTIONS = """
 ## Response format -- read carefully, this is enforced mechanically
 
-You have no tools in this invocation. Everything you produce must be in this single response, as
+{tool_statement} Everything you produce must be in this single response, as
 one JSON object and nothing else: no prose before it, no prose after it, no markdown code fence
 around it. The object has exactly these keys, each holding the file's full content:
 
@@ -349,7 +355,8 @@ def _render_input_inventory(inputs: tuple) -> str:
     upstream = [item for item in inputs if item.root == pd.UPSTREAM_ROOT_ID]
     total = sum(len(item.data) for item in inputs)
     parts = ["## Readable Inputs (look them up with tools)\n",
-             f"Your readable inputs total {total} bytes across {len(inputs)} files, too large to inline. "
+             f"Your readable inputs total {total} bytes across {len(inputs)} files, served through lookup tools "
+             "rather than inlined. "
              "They are pinned to exact bytes and SHA-256 hashes (`input_list` returns them). Use the "
              f"`{INPUT_MCP_SERVER}` tools: `input_list` to list refs by prefix, `input_grep` to find text, "
              "`input_read` to read numbered lines by ref, `input_jq` to query a JSON input with a jq "
@@ -458,7 +465,8 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
         parts.append(tool_guides_text.rstrip())
     if schema_sections:
         parts.append("## Required Output Schema(s)\n\n" + "\n".join(schema_sections))
-    parts.append(ENVELOPE_INSTRUCTIONS.format(envelope_keys=envelope_keys))
+    parts.append(ENVELOPE_INSTRUCTIONS.format(envelope_keys=envelope_keys,
+                                              tool_statement=INDEXED_TOOL_STATEMENT if indexed else INLINE_TOOL_STATEMENT))
     return "\n\n".join(parts)
 
 

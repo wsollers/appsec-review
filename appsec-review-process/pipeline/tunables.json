@@ -23,7 +23,7 @@
       "value": true
     },
     "code_query_force_indexed_mode": {
-      "description": "A model job granted code_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools.",
+      "description": "A model job granted code_* or mitre_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and every query-tool grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools.",
       "kind": "safety",
       "scale": "",
       "unit": "flag",
