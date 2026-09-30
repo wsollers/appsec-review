@@ -12,7 +12,7 @@
 #   0. host packages: python3.12 + venv, git, libfuzzy2, jq, docker group (reported; install needs sudo)
 #   1. offline Grype/OSV snapshots resolve within the 14-day ceiling (sync is separate; see TODO.md)
 #   2. Dagster stack (compose project appsec-review) is up
-#   3. every image the B13 registry needs has a successful build on this host (builds the missing ones)
+#   3. every image the B13 registry needs has a current successful build here (builds missing or stale ones)
 #   4. B16 registry records generate and match Docker
 #   5. the host code location is running (started in the background if not) and reloaded
 #   6. the four targets are cloned at their pinned commits (fixtures/populate-targets.sh)
@@ -86,17 +86,32 @@ mapfile -t REQUIRED < <(python3 -B -c 'import sys; sys.path.insert(0, "images");
 if [[ $BUILDENVS -eq 1 ]]; then
     for d in images/audit-buildenv-*/; do [[ -f "$d/image.json" ]] && REQUIRED+=("$(basename "$d")"); done
 fi
+# Missing: no successful build, or its inputs changed since (the same fingerprint check step 4 makes).
 missing_images() {
-    local id
-    for id in "${REQUIRED[@]}"; do
-        [[ -f "images/.build-state/$id/latest.json" ]] || echo "$id"
-    done
+    python3 -B - "${REQUIRED[@]}" <<'PY'
+import json, sys
+from pathlib import Path
+sys.path.insert(0, "images")
+try:
+    import image_build
+    builds = image_build.load_builds(Path("images"))
+except Exception:   # cannot tell: report every image, so nothing passes as current by accident
+    builds = {}
+for image_id in sys.argv[1:]:
+    latest = Path("images/.build-state", image_id, "latest.json")
+    try:
+        stale = image_build.fingerprint(builds[image_id])[0] != json.loads(latest.read_text())["fingerprint"]
+    except Exception:
+        stale = True
+    if stale:
+        print(image_id)
+PY
 }
 mapfile -t MISSING < <(missing_images)
 if [[ ${#MISSING[@]} -eq 0 ]]; then
-    ok "all ${#REQUIRED[@]} images have a successful build"
+    ok "all ${#REQUIRED[@]} images have a current successful build"
 elif [[ $CHECK -eq 1 ]]; then
-    todo "missing builds: ${MISSING[*]}"
+    todo "missing or stale builds: ${MISSING[*]}"
 else
     # A build that needs another image first reports BLOCKED; keep passing until nothing moves.
     while :; do
