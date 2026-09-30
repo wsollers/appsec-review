@@ -785,7 +785,7 @@ Decision record: [ADR-0034](../docs/decisions/ADR-0034-knowledge-packs.md). Clos
       `cwe.mitre.org` unreachable from the authoring host).
 - [ ] W5b (William, 2026-09-30): a MITRE lookup grant switches an inline job to indexed mode, like a `code_*` grant
       (same off switch for comparing runs).
-- [ ] W4 (ADR-0034 addendum 1-2): `knowledge_packs` persona -> packs map in job templates (overrides the persona
+- [x] W4 (ADR-0034 addendum 1-2): `knowledge_packs` persona -> packs map in job templates (overrides the persona
       default), W3 assignments moved into `claim-review-pool-cell.json`, cap as tunable `knowledge_packs_per_persona_max` (2).
 - [ ] W5 (ADR-0034 addendum 3): structured `mitre_reference` entry (snapshot id, table hash, ATT&CK/CAPEC/CWE versions
       or gap) on every job granted MITRE tools, shown in the report.
