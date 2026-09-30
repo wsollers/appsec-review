@@ -208,6 +208,25 @@ class GrantTests(unittest.TestCase):
         self.assertEqual(invoker.granted_tool_names(()), [tool["name"] for tool in input_mcp.BASE_TOOLS])
 
 
+class InputModeTests(unittest.TestCase):
+    GRANT = ("supporting-evidence:02-code-index/attempts/a1/code-index.json", ("code_symbol",))
+
+    def test_forced_mode_indexes_a_small_job_with_code_tools(self):
+        with mock.patch.object(invoker.tunables, "shared", return_value=True):
+            self.assertEqual(invoker.input_mode(10, 100, self.GRANT), (True, self.GRANT))
+
+    def test_forced_mode_off_keeps_a_small_job_inline_and_drops_the_grant(self):
+        with mock.patch.object(invoker.tunables, "shared", return_value=False):
+            self.assertEqual(invoker.input_mode(10, 100, self.GRANT), (False, (None, ())))
+
+    def test_forced_mode_off_keeps_the_grant_for_a_job_already_indexed(self):
+        with mock.patch.object(invoker.tunables, "shared", return_value=False):
+            self.assertEqual(invoker.input_mode(1000, 100, self.GRANT), (True, self.GRANT))
+
+    def test_no_grant_is_unchanged(self):
+        self.assertEqual(invoker.input_mode(10, 100, (None, ())), (False, (None, ())))
+
+
 class GuideTests(unittest.TestCase):
     def test_every_base_and_code_tool_has_a_guide(self):
         every = [tool["name"] for tool in input_mcp.BASE_TOOLS] + list(query.NAMES)

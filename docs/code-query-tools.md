@@ -43,6 +43,12 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 records each call; `orchestrator/retrieval-report.py` prints a code-tool block (calls, incomplete answers, truncations
 per tool) beside the "files read" line.
 
+`code_query_force_indexed_mode` (flag, default on): a job granted code tools runs in indexed mode (inventory plus
+lookup tools) even when its inputs would fit inline. Turn it off to compare runs (for example freeciv21 with and
+without the query tools): a small job then stays inline with no tools and its grant is dropped, so the prompt's tool
+guides, the server's tool list and `--allowedTools` still agree. Jobs whose inputs exceed the inline limit keep their
+grant either way.
+
 ## Dependency reachability
 
 `06-cve-reachability` binds the accepted `02-treesitter-ast` output of the same source generation as its tree-sitter

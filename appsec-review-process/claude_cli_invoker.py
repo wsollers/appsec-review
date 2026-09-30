@@ -244,6 +244,17 @@ def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
     return (ref, tools) if tools else (None, ())
 
 
+def input_mode(inline_bytes: int, inline_limit: int, code_grant: tuple[str | None, tuple[str, ...]]
+               ) -> tuple[bool, tuple[str | None, tuple[str, ...]]]:
+    """(indexed, effective code grant). Inputs over the inline limit are always indexed. A job
+    granted code tools is indexed too while ``code_query_force_indexed_mode`` is on; with it off
+    it stays inline and loses the grant, so the prompt, the server and --allowedTools still agree."""
+    over_limit = inline_bytes > inline_limit
+    if code_grant[1] and not over_limit and tunables.shared("code_query_force_indexed_mode") is not True:
+        code_grant = (None, ())
+    return over_limit or bool(code_grant[1]), code_grant
+
+
 def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
                           code: tuple[str | None, tuple[str, ...]] = (None, ())) -> Path:
     """Write the package's pinned bytes to a private folder for ``input_mcp.py`` and return the
@@ -1161,9 +1172,11 @@ class ClaudeCliInvoker:
         cfg = rc.load_model_config()
         inline_bytes = sum(len(item.data) for item in package.inputs)
         code_grant = code_query_grant(package)
-        # Structural query tools exist only in indexed mode (the input server); a job granted them
-        # is served that way even when its inputs would fit inline.
-        indexed = inline_bytes > _inline_input_limit(cfg) or bool(code_grant[1])
+        # Structural query tools exist only in indexed mode (the input server). Tunable
+        # code_query_force_indexed_mode (default on): a job granted them is served that way even
+        # when its inputs would fit inline. Off: such a job stays inline with no tools at all
+        # (the grant is dropped, so prompt, server and --allowedTools still agree); for comparing runs.
+        indexed, code_grant = input_mode(inline_bytes, _inline_input_limit(cfg), code_grant)
         guides_text, guides = "", []
         if indexed:
             import tool_guides
