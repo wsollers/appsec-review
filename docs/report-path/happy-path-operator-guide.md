@@ -147,7 +147,7 @@ environment variables instead:
 | `APPSEC_PIPELINE_LOG` | unset (per-run file) | `pipeline_log.py` | A path forces every line into that one file; `off`, `0`, `false` or empty disables logging. |
 | `APPSEC_RUNS_ROOT` | `appsec-review-process/runs` | `pipeline_log.py`, `orchestrator/tail-run-log.sh`, Dagster definitions | Where run directories (and so run logs) live. `code-location.sh` and `stage-run.sh` export it. |
 | `APPSEC_OSV_ROOT` | `data/feeds/osv` | `osv_feed.py`, `osv_lookup.py` | OSV feed publication root ([`docs/osv-feed.md`](../osv-feed.md)). `code-location.sh` exports it. |
-| `APPSEC_MITRE_FEED_ROOT` | `data/feeds/mitre` | `mitre_feed.py`, `attack_reference.py` | MITRE ATT&CK/CAPEC feed root ([`docs/mitre-feed.md`](../mitre-feed.md)). `code-location.sh` exports it. |
+| `APPSEC_MITRE_FEED_ROOT` | `data/feeds/mitre` | `mitre_feed.py`, `attack_reference.py`, `cwe_catalog.py` | MITRE ATT&CK/CAPEC/CWE feed root ([`docs/mitre-feed.md`](../mitre-feed.md)). `code-location.sh` exports it. |
 
 Ops run as host processes under the code-location server and inherit its environment, so export the
 first four before `code-location.sh start`; `reload` only re-imports definitions and does not pick up a
@@ -156,7 +156,7 @@ unconditionally to the repository paths above, so inside Dagster those can only 
 script; the overrides apply to host commands such as `tail-run-log.sh`, `osv_lookup.py`, `osv_feed.py` and
 `mitre_feed.py`.
 
-**ATT&CK/CAPEC reference feed.** Before the first engagement on a host, publish the MITRE snapshot once
+**ATT&CK/CAPEC/CWE reference feed.** Before the first engagement on a host, publish the MITRE snapshot once
 (the Dagster `nvd_reference_sync` job refreshes it every two hours afterwards):
 
 ```
@@ -168,7 +168,9 @@ bash scripts/smoke_mitre_feed.sh
 ATT&CK technique and CAPEC ids on claims and chain links are labels, never evidence. When the snapshot is
 missing or older than `reference_snapshot_max_age_seconds` (14 days) the report withholds every tag and
 records the gap `MITRE_REFERENCE_MISSING` / `MITRE_REFERENCE_STALE`; the review itself continues
-([ADR-0026](../decisions/ADR-0026-mitre-attack-capec-reference-feed.md)).
+([ADR-0026](../decisions/ADR-0026-mitre-attack-capec-reference-feed.md)). CWE ids are validated against
+the snapshot's full MITRE CWE catalog; when its CWE source is missing or stale, the committed curated
+catalog is used instead and the gap `CWE_REFERENCE_MISSING` / `CWE_REFERENCE_STALE` is recorded.
 
 ## 3. Prepare source, build and searchable evidence
 

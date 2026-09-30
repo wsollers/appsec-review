@@ -97,14 +97,19 @@ class MitreFeedTests(unittest.TestCase):
     def manifest(self, pointer):
         return json.loads((self.root / "snapshots" / pointer["snapshot_id"] / "manifest.json").read_text())
 
-    def test_pins_are_release_tags_and_default_is_enterprise_plus_capec(self):
+    def test_pins_are_release_tags_and_default_is_enterprise_capec_cwe(self):
         for name, spec in mitre_feed.SOURCES.items():
             self.assertNotIn("/master/", spec["url"], name)
             self.assertNotIn("latest", spec["url"], name)
+            if name == "cwe":           # pinned by version; bytes hashed at the first real sync (O1b)
+                self.assertTrue(spec["sha256"] is None or len(spec["sha256"]) == 64)
+                continue
             self.assertRegex(spec["sha256"], r"^[0-9a-f]{64}$")
         self.assertIn("/v19.2/enterprise-attack/enterprise-attack-19.2.json", mitre_feed.SOURCES["enterprise-attack"]["url"])
         self.assertIn("ATT%26CK-v19.2/capec/2.1/stix-capec.json", mitre_feed.SOURCES["capec"]["url"])
-        self.assertEqual(mitre_feed.DEFAULT_SOURCES, ("enterprise-attack", "capec"))
+        self.assertTrue(mitre_feed.SOURCES["cwe"]["url"].endswith("/cwec_v4.19.xml.zip"))
+        self.assertEqual(mitre_feed.SOURCES["cwe"]["upstream_version"], "4.19")
+        self.assertEqual(mitre_feed.DEFAULT_SOURCES, ("enterprise-attack", "capec", "cwe"))
         with unittest.mock.patch.dict(os.environ, {"APPSEC_MITRE_SOURCES": "enterprise-attack,ics-attack"}):
             self.assertEqual(mitre_feed.configured_sources(), ("enterprise-attack", "ics-attack"))
         with unittest.mock.patch.dict(os.environ, {"APPSEC_MITRE_SOURCES": "enterprise-attack,latest"}):
