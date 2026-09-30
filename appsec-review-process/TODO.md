@@ -546,6 +546,13 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       (KNOWN_DRIFT removed). Fingerprints moved: claim-review pool, 07-hypothesis-discovery, 12b only.
 - [ ] `attack_chain_derive` (checked, no drift) and `owasp_validator_derive` (not in the drift test) still
       hand-write their lists.
+- [ ] William: is it acceptable that `claim_review_derive` stays hand-written (guarded by
+      `tests/test_contract_derive.py`) rather than built with `contract_derive`? Accepted for now.
+- [ ] Close fingerprint gap (pre-existing on `main`): `persona_tool_pool_lifecycle` imports
+      `claim_reviewer_pool` (which imports `claim_review_derive`), but its `_code_hashes` does not list
+      `claim_review_derive.py`, so a derive change does not invalidate the persona-tool-pool-dispatch job.
+      Adding it moves that job's fingerprint once.
+
 ## K: job definitions in `appsec-review-process/pipeline/` (ADR-0028, brief K, branch `registry-move`)
 - [x] `registry/*` and `job-graph.json` moved to `appsec-review-process/pipeline/` (pure `git mv`); every
   path comes from `registry_paths.py`; catalogs, parity views and tunables doc regenerated.
