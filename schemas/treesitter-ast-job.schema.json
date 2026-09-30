@@ -33,15 +33,13 @@
       "minLength": 1
     },
     "source_snapshot_sha256": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
     },
     "source_revision": {
       "type": "string"
     },
     "source_tree_sha256": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
     },
     "image_id": {
       "type": [
@@ -50,15 +48,17 @@
       ]
     },
     "image_digest": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+        }
+      ]
     },
     "script_sha256": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
     },
     "languages": {
       "type": "array",
@@ -67,11 +67,7 @@
       }
     },
     "status": {
-      "enum": [
-        "OK",
-        "OK_WITH_GAPS",
-        "SKIPPED"
-      ]
+      "$ref": "common/formats.schema.json#/$defs/publishable_status"
     },
     "skip_reason": {
       "enum": [
@@ -97,8 +93,7 @@
               "const": "treesitter-ast.records.jsonl"
             },
             "sha256": {
-              "type": "string",
-              "pattern": "^sha256:[0-9a-f]{64}$"
+              "$ref": "common/formats.schema.json#/$defs/sha256_ref"
             },
             "count": {
               "type": "integer",
@@ -109,15 +104,17 @@
       ]
     },
     "content_sha256": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+        }
+      ]
     },
     "source_manifest_sha256": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
     },
     "totals": {
       "type": [

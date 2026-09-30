@@ -28,14 +28,10 @@
       "minLength": 1
     },
     "source_snapshot_sha256": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
     },
     "status": {
-      "enum": [
-        "OK",
-        "OK_WITH_GAPS"
-      ]
+      "$ref": "common/formats.schema.json#/$defs/ok_status"
     },
     "sources": {
       "type": "object",
@@ -107,8 +103,7 @@
       }
     },
     "content_sha256": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
     },
     "sqlite_version": {
       "type": "string"
@@ -126,8 +121,7 @@
           "const": "code-index.sqlite"
         },
         "sha256": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
         },
         "bytes": {
           "type": "integer",

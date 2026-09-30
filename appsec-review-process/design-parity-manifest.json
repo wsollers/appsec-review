@@ -405,6 +405,8 @@
           "02-codeql-ruby",
           "02-codeql-rust",
           "02-code-property-graph",
+          "02-treesitter-ast",
+          "02-code-index",
           "02-native-sast",
           "02-ir-capture",
           "02-ir-link",
