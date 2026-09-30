@@ -355,6 +355,8 @@ class SourceTies(unittest.TestCase):
                     self.assertIsNone(arguments.kwarg)
                 elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
                     local.add(node.id)
+                elif isinstance(node, ast.ExceptHandler) and node.name:  # `except E as name` binds a str
+                    local.add(node.name)
                 # Scopes this simple name analysis does not model; none is used in a factory today.
                 self.assertNotIsInstance(node, (ast.Global, ast.Nonlocal, ast.Import, ast.ImportFrom, ast.Lambda,
                                                 ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp))
@@ -362,7 +364,9 @@ class SourceTies(unittest.TestCase):
                     if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)} - local - set(dir(builtins))
             self.assertEqual(free - defined, set(), factory.name + " uses a name the module never defines")
             factories[factory.name] = free
-        self.assertEqual(factories, {
+        # Exact sets are pinned only for the factories other code lifts out of this file.
+        pinned = ("branch_op", "blocked_op", "_control_op")
+        self.assertEqual({name: factories.get(name) for name in pinned}, {
             "branch_op": {"op", "MetadataValue", "workflow", "data_path", "CPU_POOL"},
             "blocked_op": {"op", "In", "Failure", "MetadataValue", "data_path", "now", "atomic_json",
                            "NOT_IMPLEMENTED"},
