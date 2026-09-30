@@ -128,3 +128,7 @@ Other attacker personas keep `[]` until a pack for their class is written.
    snapshot. Every job granted MITRE lookup tools records a structured `mitre_reference` entry
    (snapshot id, derived-table hash, ATT&CK / CAPEC / CWE versions, or the gap code) in its job record,
    and the report shows which versions the run used. Binding it into job inputs is a TODO.
+4. **A MITRE lookup grant switches a job to indexed mode**, as a `code_*` grant does: a job whose tooling
+   profile grants MITRE tools gets them even when its inputs would fit inline. The existing switch that
+   keeps such jobs inline for comparing runs drops the MITRE grant too, so the prompt, the server and
+   `--allowedTools` still agree.
