@@ -77,6 +77,45 @@ class CodeGraphEvidenceTests(unittest.TestCase):
         self.assertEqual(document["records"], [])
         self.assertIn({"reason": "source-unavailable", "count": 1}, document["coverage_gaps"])
 
+    def test_frontend_outcomes_are_published_and_a_failed_frontend_is_a_gap(self):
+        self.write(self.row())
+        outcomes = self.root / "records.jsonl.frontends.jsonl"
+        outcomes.write_text(json.dumps({"language": "NEWC", "unit": "", "status": "OK", "records": 1, "detail": ""}) + "\n"
+                            + json.dumps({"language": "RUST", "unit": "crates/a", "status": "FAILED", "records": 0,
+                                          "detail": "RuntimeException: rust frontend exited 1"}) + "\n", encoding="utf-8")
+        document = cpg.normalize_jsonl(self.raw, target=self.target, run_id="run-1",
+            source_snapshot_sha256=SHA, source_revision="abc123", image_id="audit-native",
+            image_digest=SHA, exporter_sha256=SHA, build_identity_sha256=SHA, frontends=outcomes)
+        self.assertEqual(validate_document(document, "code-property-graph.schema.json"), [])
+        self.assertEqual(document["status"], "OK_WITH_GAPS")
+        self.assertIn({"reason": "frontend-failed", "count": 1}, document["coverage_gaps"])
+        self.assertEqual([row["status"] for row in document["frontends"]], ["OK", "FAILED"])
+        outcomes.write_text('{"language": "NEWC"}\n', encoding="utf-8")
+        with self.assertRaisesRegex(Blocked, "closed exporter shape"):
+            cpg.normalize_jsonl(self.raw, target=self.target, run_id="run-1",
+                source_snapshot_sha256=SHA, source_revision="abc123", image_id="audit-native",
+                image_digest=SHA, exporter_sha256=SHA, build_identity_sha256=SHA, frontends=outcomes)
+
+    def test_zero_column_from_zero_based_frontends_is_unknown_not_fatal(self):
+        # jssrc2cpg / csharpsrc2cpg give a file's :program method column 0 (appsec-multi-vuln, 2026-09-30).
+        self.write(self.row(kind="symbol", label="METHOD", name=":program", column=0))
+        document = self.normalize()
+        self.assertEqual(document["record_count"], 1)
+        self.assertIsNone(document["records"][0]["start_column"])
+        self.write(self.row(column=-1))
+        with self.assertRaisesRegex(Blocked, "invalid source coordinate"): self.normalize()
+
+    def test_frontend_plan_names_each_language_and_each_rust_project(self):
+        for path in ("cpp/a/main.cpp", "java/B.java", "dotnet/c/Program.cs", "web/app.ts", "py/tool.py",
+                     "rust/x/Cargo.toml", "rust/x/src/main.rs", "rust/x/sub/Cargo.toml", "rust/y/Cargo.toml",
+                     "rust/y/src/lib.rs", "web/node_modules/dep/index.go"):
+            (self.target / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.target / path).write_text("x\n", encoding="utf-8")
+        self.assertEqual(joern_cpg.frontend_plan(self.target),
+                         "NEWC;JAVASRC;CSHARPSRC;JSSRC;PYTHONSRC;RUST=rust/x,rust/y")
+        empty = self.root / "empty"; empty.mkdir()
+        self.assertEqual(joern_cpg.frontend_plan(empty), "")   # the exporter then guesses, as before
+
     def test_record_count_is_logged_not_blocked(self):
         seen = []
         original = cpg.size_log.observe

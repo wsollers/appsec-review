@@ -506,6 +506,19 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [x] O1b (PR #45, merged into `mitre-feed`): superseded by O2 (`cwe-feed`) on `main`, which kept its
       implementation when `mitre-feed` was merged back; open CWE items are tracked under O2 below.
 
+## Joern per language (2026-09-30)
+
+- [x] `02-code-property-graph` runs one Joern frontend per language present (see breakage log).
+- [ ] hal5000: rebuild nothing (the image is unchanged); run `02-code-property-graph` on appsec-multi-vuln and
+      check `frontends` in `code-property-graph.json`: every language `OK`.
+- [ ] PHP: `php2cpg` runs a PHP parser and needs `php` on PATH; `audit-native` has none, so PHP will be a
+      `frontend-failed` gap until `php-cli` is added (append a RUN at the end of the Dockerfile to keep the
+      rebuild short; dependents buildenv-cpp, cpp-resolute and codeql-native rebuild after it).
+- [ ] Rust: `rust2cpg` worked per crate without cargo in the sandbox; confirm inside `audit-native` (offline).
+- [ ] Kotlin, Ruby, Swift frontends exist in Joern but are not in `joern_cpg.FRONTENDS` (untried).
+- [ ] Pin the Joern zip by sha256 in `images/audit-native/Dockerfile` (downloaded 2026-09-30:
+      `522f63d44e41f52ead5fbf404c1e55b04d1c37bf48b33415435c6b08bb453943`, 1,858,859,964 bytes).
+
 ## Shared images (ADR-0033)
 
 - [x] `image_build.py publish|pull|rekey` (Google Drive archives), `images/published.lock.json`, `prepare-host.sh` step 3 pulls
@@ -712,6 +725,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-30 | (host, hal5000 WSL) | - | prepare-host.sh step 4 | `registry-records: audit-binary-analysis: current image inputs drifted from the successful build fingerprint`; step 3 passed because it only checked that `latest.json` exists, so the stale image was never rebuilt and step 5 refused to start | Step 3 now lists an image as missing when its current fingerprint differs from `latest.json` (the step 4 check), so it rebuilds stale images; any error counts as stale |
 | 2026-09-30 | (host, hal5000 WSL) | - | smoke_codeql_per_language.sh (02-codeql-java/-csharp/-javascript) | `CodeQL is out of memory` at 2 GB after `AccessDeniedException` on every `.codeql/precompiled/*.qlx`: `audit-codeql` unpacks the bundle as root without widening permissions, so the non-root lane recompiled every query from source (python fit, the others did not) | `chmod -R a+rX /opt/codeql` after unpacking, as `Dockerfile.native` already did; `images/tests/test_codeql_replay.py` checks both Dockerfiles. |
 | 2026-09-30 | (host, hal5000 WSL) | - | smoke_codeql_per_language.sh (06-reachability-codeql packs) | First compile of `data/codeql-reachability`: java/csharp `CallEdges.ql` used an if-then-else expression (QL has none); python `Common.qll` called `Scope.getQualifiedName()` (absent). After those, python still returned 0 rows: a script module has no `Module.getName()`, so `scopeName` dropped every row naming it | Bind `callee_defined` in the where clause (as go does); `scopeName` from `Function`/`Class.getQualifiedName()`, a script named by its file stem. Checked in the build sandbox against the pinned 2.27.0 bundle: all 20 queries compile (5 languages), python/javascript/java fixtures `reachable` (csharp needs the image's .NET) |
+| 2026-09-30 | appsec-multi-vuln (pre-run check) | - | 02-code-property-graph | `importCode(dir)` guesses ONE language: on appsec-multi-vuln Joern picked C (`NEWC`) and the graph held only `.c/.cpp/.h`; Java, C#, Go, Rust, JS/TS and PHP (53 of 66 cases) had no call graph or data flow | `joern_cpg.frontend_plan` picks one frontend per language present (Rust: one per crate; C# and Rust run their frontend binary, then `importCpg`); the exporter exports each and writes per-frontend outcomes; a failed frontend is a `frontend-failed` gap and `frontends` in the result. jssrc/csharpsrc 0-based columns became `null` (they failed the whole export). Checked with Joern v4.0.625 in the build sandbox on appsec-multi-vuln@878d5d6: 37,540 records, calls in all 8 languages |
 
 ## Decisions 2026-09-29
 

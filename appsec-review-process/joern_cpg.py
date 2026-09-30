@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import tunables
 import json
+import os
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,22 @@ SUMMARY = "code-property-graph-summary.md"
 IMAGE_ID = "audit-native"
 EXPORTER = ROOT.parent / "pipeline" / "joern_export_records.sc"
 PERMISSIONS = ["read-source", "write-run-data"]
+FRONTEND_STATUS = "records.jsonl.frontends.jsonl"   # written next to the records by the exporter
+# One Joern frontend per language present (a plain importCode guesses ONE language for the whole tree:
+# appsec-multi-vuln got only C/C++). Plan order is fixed. Kotlin, Ruby and Swift frontends exist but
+# are untried here; tree-sitter still outlines those files.
+FRONTENDS = (
+    ("NEWC", (".c", ".h", ".cc", ".cpp", ".cxx", ".c++", ".hh", ".hpp", ".hxx", ".inl", ".ipp")),
+    ("JAVASRC", (".java",)),
+    ("CSHARPSRC", (".cs",)),
+    ("GOLANG", (".go",)),
+    ("JSSRC", (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts")),
+    ("PHP", (".php",)),
+    ("PYTHONSRC", (".py", ".pyi")),
+)
+# Frontends that load one project at a time (rust-analyzer workspace): one unit per project directory.
+PROJECT_FRONTENDS = (("RUST", "Cargo.toml", ".rs"),)
+SKIP_DIRS = {".git", "node_modules", "target", "vendor", "bin", "obj"}
 
 
 def _utc() -> str:
@@ -47,6 +64,26 @@ def _target(run_id: str) -> tuple[Path, str, str]:
         raise Blocked(f"{JOB}: target must be an absolute real checkout")
     identity = intake.source_identity(str(target.resolve()))
     return target.resolve(), "sha256:" + file_hash(manifest), identity.get("revision") or "unversioned"
+
+
+def frontend_plan(target: Path) -> str:
+    """The exporter's `frontends` parameter: each language present, and one unit per project directory
+    for per-project frontends (outermost only). Deterministic for a given tree."""
+    suffixes: set[str] = set()
+    projects: dict[str, list[str]] = {language: [] for language, _, _ in PROJECT_FRONTENDS}
+    for current, dirs, files in os.walk(target):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not (Path(current) / d).is_symlink())
+        relative = Path(current).relative_to(target).as_posix()
+        suffixes.update(Path(name).suffix.lower() for name in files)
+        for language, marker, _ in PROJECT_FRONTENDS:
+            if marker in files and relative != "." and not any(
+                    relative.startswith(unit + "/") for unit in projects[language]):
+                projects[language].append(relative)
+    entries = [language for language, known in FRONTENDS if suffixes.intersection(known)]
+    for language, _, suffix in PROJECT_FRONTENDS:
+        if suffix in suffixes and projects[language]:
+            entries.append(language + "=" + ",".join(sorted(projects[language])))
+    return ";".join(entries)
 
 
 def _code() -> dict[str, str]:
@@ -84,7 +121,7 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     exporter = "sha256:" + file_hash(EXPORTER)
     build = "sha256:" + digest({"source_tree_sha256": tree, "image_digest": image["digest"],
                                  "exporter_sha256": exporter})
-    return {"run_id": run_id, "job": JOB, "target_path": str(target),
+    return {"run_id": run_id, "job": JOB, "target_path": str(target), "frontends": frontend_plan(target),
             "source_snapshot_sha256": source, "source_revision": revision,
             "source_tree_sha256": tree, "image": image, "exporter_sha256": exporter,
             "build_identity_sha256": build, "boundary_sha256": ce.boundary_sha256(), "code": _code()}
@@ -111,7 +148,8 @@ def _request(run_id: str, attempt_id: str, inputs: dict[str, Any]) -> dict[str, 
         "image": {"image_id": IMAGE_ID, "digest": image["digest"]},
         "argv": ["/opt/joern-cli/joern", "--script", "/inputs/joern/joern_export_records.sc",
                  "--param", "inputPath=/workspace", "--param", "outputPath=/scratch/records.jsonl",
-                 "--param", "maxRecords=2147483647"],  # uncapped (ADR-0013); counts go to size_log
+                 "--param", "maxRecords=2147483647",  # uncapped (ADR-0013); counts go to size_log
+                 "--param", f"frontends={inputs['frontends']}"],
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
                         {"name": "NO_COLOR", "value": "1"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"},
@@ -178,10 +216,14 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     raw = trial / "scratch" / "records.jsonl"
     if not raw.is_file() or raw.is_symlink() or "sha256:" + file_hash(raw) != receipt.get("raw_sha256"):
         raise Blocked(f"{JOB}: raw Joern projection changed")
+    outcomes = trial / "scratch" / FRONTEND_STATUS
+    if not outcomes.is_file() or "sha256:" + file_hash(outcomes) != receipt.get("frontends_sha256"):
+        raise Blocked(f"{JOB}: Joern frontend outcomes changed")
     expected = core.normalize_jsonl(raw, target=Path(inputs["target_path"]), run_id=run_id,
         source_snapshot_sha256=inputs["source_snapshot_sha256"], source_revision=inputs["source_revision"],
         image_id=IMAGE_ID, image_digest=inputs["image"]["digest"],
-        exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"])
+        exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"],
+        frontends=outcomes)
     if result != _split(expected, None):
         raise Blocked(f"{JOB}: normalized CPG differs from its immutable Joern output")
     if "sha256:" + file_hash(attempt / RECORDS) != result["records_file"]["sha256"]:
@@ -205,19 +247,25 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if terminal["execution_status"] != "OK":
             raise RuntimeError(f"{JOB}: Joern ended {terminal['execution_status']}")
         raw = trial / "scratch" / "records.jsonl"
+        outcomes = trial / "scratch" / FRONTEND_STATUS
         result = core.normalize_jsonl(raw, target=Path(inputs["target_path"]), run_id=run_id,
             source_snapshot_sha256=inputs["source_snapshot_sha256"], source_revision=inputs["source_revision"],
             image_id=IMAGE_ID, image_digest=inputs["image"]["digest"],
-            exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"])
+            exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"],
+            frontends=outcomes)
         result = _split(result, attempt / RECORDS)
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPT, {"adapter_attempt_id": adapter_id, "trial_path": "tool",
-            "expected_result_sha256": expected_sha, "raw_sha256": "sha256:" + file_hash(raw)})
+            "expected_result_sha256": expected_sha, "raw_sha256": "sha256:" + file_hash(raw),
+            "frontends_sha256": "sha256:" + file_hash(outcomes)})
         permission, lineage = _receipts(run_id, inputs)
         atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
         (attempt / SUMMARY).write_text("# Code property graph\n\n"
             f"- Source-bound records: {result['record_count']}.\n"
             f"- Coverage gaps: {len(result['coverage_gaps'])}.\n"
+            + "".join(f"- Frontend {row['language']}{' ' + row['unit'] if row['unit'] else ''}: "
+                      f"{row['status']}, {row['records']} records{'; ' + row['detail'] if row['detail'] else ''}.\n"
+                      for row in result.get("frontends", [])) +
             "- Query hits are locators and require source dereference.\n", encoding="utf-8")
         status = {"process": JOB, "status": result["status"], "run_id": run_id,
                   "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],

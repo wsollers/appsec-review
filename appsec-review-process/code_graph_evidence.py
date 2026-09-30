@@ -85,11 +85,31 @@ def _redact(value: str) -> tuple[str, str]:
     return rendered, "redacted" if outcome.disposition != "unchanged" else "unchanged"
 
 
+def _frontends(path: Path) -> list[dict[str, Any]]:
+    if path.is_symlink() or not path.is_file():
+        raise Blocked("Joern frontend outcome file is missing or linked")
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise Blocked("Joern frontend outcome file contains a malformed line") from exc
+        if not isinstance(row, dict) or set(row) != {"language", "unit", "status", "records", "detail"}:
+            raise Blocked("Joern frontend outcome does not have the closed exporter shape")
+        detail, _ = _redact(str(row["detail"]))
+        rows.append(dict(row, detail=detail[:300]))
+    return rows
+
+
 def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha256: str,
                     source_revision: str, image_id: str, image_digest: str,
-                    exporter_sha256: str, build_identity_sha256: str) -> dict[str, Any]:
+                    exporter_sha256: str, build_identity_sha256: str,
+                    frontends: Path | None = None) -> dict[str, Any]:
+    """``frontends``: the exporter's per-frontend outcome file (one JSON object per line). A FAILED
+    frontend is a coverage gap for that language, never a failed job (ADR-0013)."""
     if raw.is_symlink() or not raw.is_file():
         raise Blocked("Joern JSONL is missing or linked")
+    outcomes = _frontends(frontends) if frontends is not None else None
     size_log.observe(run_id, "02-code-property-graph", "joern_jsonl_bytes", raw.stat().st_size,
                      LIMITS["max_input_bytes"])
     ordinal = 0
@@ -111,6 +131,10 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
             if kind not in KINDS:
                 raise Blocked("Joern record has an unsupported structural kind")
             line_number, column = item["line"], item["column"]
+            if column == 0 and not isinstance(column, bool):
+                # jssrc2cpg and csharpsrc2cpg number some columns from 0 (a file's :program method);
+                # the column is locator detail only, so record it as unknown rather than reject the export.
+                column = None
             if (item["file"] == "" or
                     (isinstance(item["file"], str) and item["file"].startswith("<") and item["file"].endswith(">")) or
                     line_number is None):
@@ -157,6 +181,9 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
     size_log.observe(run_id, "02-code-property-graph", "joern_records", ordinal, LIMITS["max_records"],
                      kept=len(records))
     records.sort(key=lambda row: (row["source_path"], row["start_line"], row["kind"], row["record_id"]))
+    failed = sum(1 for row in outcomes or [] if row["status"] == "FAILED")
+    if failed:
+        skipped["frontend_failed"] = failed
     result = {"schema": SCHEMA, "run_id": run_id, "source_revision": source_revision,
         "source_snapshot_sha256": source_snapshot_sha256, "source_tree_sha256": source_tree_sha256(target),
         "build_identity_sha256": build_identity_sha256, "image_id": image_id,
@@ -166,6 +193,8 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
             {"reason": reason.replace("_", "-"), "count": count}
             for reason, count in sorted(skipped.items()) if count
         ], "limits": LIMITS, "claim_boundary": "STRUCTURAL_RETRIEVAL_NOT_FINDING_OR_RUNTIME_PROOF"}
+    if outcomes is not None:
+        result["frontends"] = outcomes
     if validate_document(result, "code-property-graph.schema.json"):
         raise Blocked("normalized Joern CPG evidence fails its closed schema")
     return result
