@@ -23,8 +23,10 @@ from typing import Any
 
 import build_plan
 import container_execution as ce
-from execution_state import (Blocked, Lock, ROOT, atomic_json, data_path, digest, file_hash, now,
-                             read_json, run_path)
+from execution_state import (Blocked, Lock, ROOT, atomic_json, beneath, data_path, digest, file_hash,
+                             identifier, now, read_json, run_path)
+import intake
+import item_memo
 import permission_capabilities as pc
 import cow_install as cow
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
@@ -46,7 +48,7 @@ APT_MIRROR = {"scheme": "http", "host": "archive.ubuntu.com", "port": 80,
               "suite": "noble", "components": ["main", "universe"]}
 CODE_FILES = ("build_resolution.py", "build_plan.py", "container_execution.py",
               "permission_capabilities.py", "publish_job_output.py", "validate_job_output.py",
-              "registry/output-contracts/build-resolution.json")
+              "registry/output-contracts/build-resolution.json", "item_memo.py", "tool_output_cache.py")
 
 
 def root(run_id: str) -> Path:
@@ -602,6 +604,105 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
     return None
 
 
+# --- per-unit memo (brief N, ADR-0014 item 6) ---------------------------------------------------------
+# A unit whose own inputs are unchanged reuses its earlier successful resolution (cow image, verified B13
+# trial, compile database) from an earlier attempt of this job in the same run, across a fingerprint
+# change that did not touch it. B13 binds a trial to the attempt path it ran in, so the trial is never
+# copied: the receipt names its owner attempt and every validation re-verifies it there. The memo keeps
+# pointers and hashes only; a hit re-verifies the trial, the image, the permission it ran under and the
+# compile database, and today's _compile_db runs on the copy this attempt publishes.
+MEMO_CONTROL_FIELDS = ("mode", "build_resolution_attempts", "build_image_reuse", "build_command_timeout_seconds",
+                       "image_build_timeout_seconds", "apt_mirror")
+
+
+def _host_facts() -> dict[str, Any]:
+    defaults = ce.host_defaults()
+    return {"host_flavor": defaults["host_flavor"], "docker_host": None,
+            "docker_executable": str(defaults["docker_executable"]), "container_user": defaults["container_user"]}
+
+
+def unit_memo_material(run_id: str, plan: dict[str, Any], inputs: dict[str, Any],
+                       source_fingerprint: str) -> dict[str, Any]:
+    """The unit's own inputs: its plan entry, the sealed base (and fallback) records, the build
+    behaviour of the control, the source content fingerprint computed by intake over the checkout, the
+    toolchain, the B13 limits and boundary, the trial runner and the install logic, the host facts.
+    Grant timestamps, attempt ids and the manifest hash are not part of it."""
+    bases = [plan["image"]["base"], _fallback_name(plan["image"]["base"])]
+    control = inputs["control"]["value"]
+    return {"job": JOB, "run_id": run_id, "unit_id": plan["unit_id"], "plan": plan,
+            "base_images": {b: inputs["base_images"][b] for b in bases if b in inputs["base_images"]},
+            "control": {k: control.get(k) for k in MEMO_CONTROL_FIELDS},
+            "permission_requirement": control["permission"]["requirement"],
+            "source_fingerprint": source_fingerprint, "target_path": inputs["target_path"],
+            "toolchain": inputs["plan"]["value"]["toolchain"],
+            "limits": {**tunables.container_limits(JOB), "timeout_seconds": control["build_command_timeout_seconds"]},
+            "boundary_sha256": ce.boundary_sha256(), "runner_sha256": digest(RUNNER),
+            "runner_version": RUNNER_VERSION, "renderer_version": RENDERER_VERSION,
+            "cow_install": file_hash(ROOT / "cow_install.py"), "host": _host_facts()}
+
+
+def _check_recorded_permission(run_id: str, request: dict[str, Any], control: dict[str, Any]) -> None:
+    """The reused trial ran under the exact two-capability grant: re-evaluated at its recorded time."""
+    permission = request["permission"]
+    if permission["requirement"] != control["permission"]["requirement"]:
+        raise ValueError("reused trial ran under a different permission requirement")
+    grants = permission["grants"]
+    context = {"run_id": run_id, "job_id": JOB,
+               "source_snapshot_sha256": grants[0]["binding"]["source_snapshot_sha256"],
+               "now": permission["decision"]["evaluated_at"], "registry_ceiling": None}
+    caps = pc.require_granted(permission["decision"], requirement=permission["requirement"],
+                              grants=grants, context=context)
+    keys = {(c["kind"], json.dumps(c["parameters"], sort_keys=True)) for c in caps}
+    required = {(k, json.dumps(_cap(k, origin="staged-run-config")["parameters"], sort_keys=True))
+                for k in ("package-restore", "target-execution")}
+    if keys != required:
+        raise ValueError("reused trial's permission is not the exact two-capability boundary")
+
+
+def _unit_from_memo(run_id: str, base: Path, attempt: Path, entry: dict[str, Any], plan: dict[str, Any],
+                    inputs: dict[str, Any]) -> tuple:
+    """Re-verify a memoised unit resolution and return the same tuple _resolve_unit_cow returns, with
+    the trial and registry in their owner attempt. Raises on any mismatch (the memo then misses)."""
+    owner_id = identifier(entry["owner_attempt_id"])
+    owner = beneath(base, base / "attempts" / owner_id)
+    if owner == attempt or not owner.is_dir():
+        raise ValueError("memo owner attempt is absent or is this attempt")
+    unit_attempt = beneath(owner, owner / entry["resolution_attempt"])
+    trial, registry = unit_attempt / "trial", unit_attempt / "image-registry"
+    record = entry["record"]
+    image_id = record["image_id"]
+    if read_json(registry / f"{image_id}.json") != record or len(list(registry.iterdir())) != 1:
+        raise ValueError("memoised image record changed")
+    if _inspect(record["digest"]) != record["digest"]:
+        raise ValueError("memoised copy-on-write image is no longer present")
+    request = read_json(trial / "logs" / "container" / ce.REQUEST_FILE)
+    used = {**plan, "commands": entry["commands_used"]} if entry.get("commands_used") else plan
+    control = inputs["control"]["value"]
+    expected = _request(run_id, entry["adapter_id"], unit_attempt, record, used, inputs)
+    for key in ("schema", "run_id", "job_id", "attempt_id", "image", "argv", "environment", "target_mounts",
+                "scratch_path", "log_path", "network", "limits"):
+        if request.get(key) != expected[key]:
+            raise ValueError(f"memoised trial request differs from today's request ({key})")
+    _check_recorded_permission(run_id, request, control)
+    host = _host_facts()
+    verified = ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=entry["adapter_id"],
+        request=request, images_dir=registry, expected_result_sha256=entry["expected_result_sha256"],
+        host_flavor=host["host_flavor"], docker_host=host["docker_host"],
+        docker_executable=Path(host["docker_executable"]), container_user=host["container_user"])
+    if verified["execution_status"] != "OK":
+        raise ValueError("memoised trial did not complete OK")
+    commands = read_json(trial / "scratch" / "trial-result.json").get("commands")
+    if commands != entry["commands"] or not commands or any(c.get("exit_code") != 0 for c in commands):
+        raise ValueError("memoised trial commands differ")
+    db = beneath(owner, owner / entry["compile_commands_path"])
+    installs = beneath(owner, owner / entry["installs_path"])
+    if "sha256:" + file_hash(db) != entry["compile_commands_sha256"] or \
+            "sha256:" + file_hash(installs) != entry["installs_sha256"]:
+        raise ValueError("memoised compile database or install record changed")
+    return (unit_attempt, record, image_id, entry["spec_fingerprint"], entry["dockerfile"], trial, registry,
+            entry["adapter_id"], entry["expected_result_sha256"], commands, db, read_json(installs))
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
@@ -614,9 +715,12 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         raise Blocked(f"{JOB}: result no longer binds the accepted plan")
     receipts = read_json(attempt / RECEIPTS)
     for receipt in receipts:
-        trial = attempt / receipt["trial_path"]
+        # A memoised unit's trial stays in the attempt that ran it (B13 binds the attempt path).
+        owner = (beneath(attempt.parent, attempt.parent / identifier(receipt["owner_attempt_id"]))
+                 if receipt.get("owner_attempt_id") else attempt)
+        trial = beneath(owner, owner / receipt["trial_path"])
         request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
-        runtime = _runtime(inputs["source_snapshot_sha256"], attempt / receipt["registry_path"])
+        runtime = _runtime(inputs["source_snapshot_sha256"], beneath(owner, owner / receipt["registry_path"]))
         errors = ce.verify_container_result(trial, run_id=run_id, job_id=JOB,
             attempt_id=receipt["adapter_attempt_id"], request=request, images_dir=runtime.images_dir,
             expected_result_sha256=receipt["expected_result_sha256"], **_host(runtime))
@@ -645,6 +749,13 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             raise Blocked(f"{JOB}: implementation changed before execution")
         units=[]; locks=[]; receipts=[]; gaps=[]; install_files=[]
         plans = inputs["plan"]["value"]["plans"]
+        memo = item_memo.Memo(JOB + ":unit")
+        source_fingerprint = None
+        if memo.enabled and plans:
+            try:
+                source_fingerprint = intake.source_identity(inputs["target_path"])["fingerprint"]
+            except Exception:   # noqa: BLE001 - no content fingerprint, no memo: every unit resolves fresh
+                source_fingerprint = None
         if not plans:
             gaps.append("no-build-units-planned")
         for number, plan in enumerate(plans, 1):
@@ -656,8 +767,24 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 continue
             unit_key = digest(plan["unit_id"])[:12]
             fallback = _fallback_name(plan["image"]["base"])
-            outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps,
-                                        defer_conflict=bool(fallback and fallback in inputs["base_images"]))
+            material = (unit_memo_material(run_id, plan, inputs, source_fingerprint)
+                        if source_fingerprint is not None else None)
+            memo_entry = {}
+
+            def from_memo(entry, plan=plan):
+                outcome = _unit_from_memo(run_id, base, attempt, entry, plan, inputs)
+                memo_entry.update(entry)
+                return outcome
+
+            outcome = memo.lookup(material, from_memo) if material is not None else None
+            reused = outcome is not None
+            owner = base / "attempts" / memo_entry["owner_attempt_id"] if reused else attempt
+            if reused:
+                if memo_entry["base_used"] != plan["image"]["base"]:
+                    plan = {**plan, "image": {**plan["image"], "base": memo_entry["base_used"]}}
+            else:
+                outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps,
+                                            defer_conflict=bool(fallback and fallback in inputs["base_images"]))
             if outcome == "VERSION_CONFLICT":
                 plan = {**plan, "image": {**plan["image"], "base": fallback}}
                 outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps,
@@ -668,19 +795,22 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
              expected, commands, db_source, installs) = outcome
             if installs.get("adapted_commands"):
                 plan = {**plan, "commands": installs["adapted_commands"]}   # the lock replays what built
-            reused = False
             installs_path = attempt / "outputs" / unit_key / "installs.json"
             installs_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_json(installs_path, installs)
             install_files.append(installs_path.relative_to(attempt).as_posix())
+            db_target = attempt / "outputs" / unit_key / "compile_commands.json"
+            if reused:   # validate this attempt's copy; the owner attempt is never modified
+                db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
+                db_source = db_target
             try:
                 entries = _compile_db(db_source, inputs["plan"]["value"]["toolchain"]["compile_database_compilers"])
             except RuntimeError as exc:   # ADR-0013: one unit's unusable compile DB is that unit's gap
                 gaps.append(f"{plan['unit_id']}: built, but its compile database is unusable: {exc}")
                 continue
-            db_target = attempt / "outputs" / unit_key / "compile_commands.json"
-            db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
-            _prune_trial_source(trial)
+            if not reused:
+                db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
+                _prune_trial_source(trial)
             lock = {"unit_id": plan["unit_id"],
                 "image": {"image_id": image_id, "digest": record["digest"], "digest_kind": "image-id"},
                 "dockerfile_sha256": record["dockerfile_sha256"],
@@ -689,20 +819,33 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 "build": [c for c in _repo_commands(plan) if c["phase"] == "build"],
                 "compile_database": {"method": "bear", "path": "compile_commands.json",
                     "entries": len(entries), "compiler_allowlist": inputs["plan"]["value"]["toolchain"]["compile_database_compilers"]},
-                "successful_attempt": {"resolution_attempt": unit_attempt.relative_to(attempt).as_posix(),
-                    "image_reused": reused, "expected_result_sha256": expected},
+                "successful_attempt": {"resolution_attempt": unit_attempt.relative_to(owner).as_posix(),
+                    "image_reused": reused, "expected_result_sha256": expected,
+                    **({"reused_from": {"memo": "item-memo", "owner_attempt_id": owner.name}} if reused else {})},
                 "permission_fingerprint_sha256": inputs["permission_fingerprint_sha256"]}
             locks.append(lock)
             receipts.append({"unit_id": plan["unit_id"], "adapter_attempt_id": adapter_id,
-                "trial_path": trial.relative_to(attempt).as_posix(),
-                "registry_path": registry.relative_to(attempt).as_posix(),
+                "trial_path": trial.relative_to(owner).as_posix(),
+                "registry_path": registry.relative_to(owner).as_posix(),
                 "compile_commands_path": db_target.relative_to(attempt).as_posix(),
-                "expected_result_sha256": expected})
+                "expected_result_sha256": expected,
+                **({"owner_attempt_id": owner.name} if reused else {})})
             units.append({"unit_id": plan["unit_id"], "status": "OK", "image_id": image_id,
                 "image_digest": record["digest"], "attempt_id": unit_attempt.name,
                 "lock_sha256": digest(lock), "compile_commands": len(entries), "commands": commands})
             _publish_catalog(image_id, record, spec_fingerprint, dockerfile, inputs, plan, unit_attempt,
                              packages=installs["packages"])
+            if material is not None and not reused:
+                memo.record(material, {
+                    "owner_attempt_id": attempt.name, "unit_id": plan["unit_id"],
+                    "resolution_attempt": unit_attempt.relative_to(attempt).as_posix(),
+                    "adapter_id": adapter_id, "expected_result_sha256": expected, "record": record,
+                    "spec_fingerprint": spec_fingerprint, "dockerfile": dockerfile, "commands": commands,
+                    "commands_used": installs.get("adapted_commands"), "base_used": plan["image"]["base"],
+                    "compile_commands_path": db_target.relative_to(attempt).as_posix(),
+                    "compile_commands_sha256": "sha256:" + file_hash(db_target),
+                    "installs_path": installs_path.relative_to(attempt).as_posix(),
+                    "installs_sha256": "sha256:" + file_hash(installs_path)})
         lock_set = {"schema": "appsec-review/buildenv-lock-set/1",
                     "source_revision": inputs["source_revision"],
                     "plan": {"attempt_id": inputs["plan"]["attempt_id"], "sha256": inputs["plan"]["sha256"]},

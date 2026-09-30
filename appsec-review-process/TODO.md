@@ -683,9 +683,10 @@ records and report re-render (WSL), image rebuild and smoke, brief N fingerprint
   the I2b op wiring no longer reruns build discovery; (b) analysis/control feature lifecycles,
   `joern_cpg`, `test_evidence` drop shared runtime. 14 jobs move once (3 + 7 + 1 + 3), plus the four
   preparation branches and, in prod, build discovery's consumers.
-- [ ] Memo call sites not done: build-resolution units (image + plan commands + trial inputs; its
-  receipts cite trials relative to the attempt, so a reused trial needs a cross-attempt receipt path)
-  and IR/SAST invocations (ADR-0014 item 6, cross-run).
+- [x] N5 per-item memo for 02-build-resolution units (successful units only): image, verified trial
+  and compile DB reused from the owner attempt, which receipts name (`owner_attempt_id`); re-verified
+  on every hit and every later validation.
+- [ ] Memo call site not done: IR/SAST invocations (ADR-0014 item 6, cross-run).
 - [ ] `control_feature_lifecycle._code` hashes no per-job worker module (`completeness_audit.py`,
   `dynamic_rescope.py`, ...): an edit there does not rerun that job. Not changed (widening).
 - [ ] Controller: set `tool_output_cache` / `item_memo` to `on` for prod after a live dev loop.

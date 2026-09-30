@@ -68,7 +68,7 @@ fails is invalidated and redone.
 
 | | Tool-output cache (`tool_output_cache.py`) | Per-item memo (`item_memo.py`) |
 |---|---|---|
-| What | Pinned B13 tool runs: syft, grype, osv-scanner, scancode (`dependency_b13_adapters.execute`) | Loop items: 02-build-plan units today |
+| What | Pinned B13 tool runs: syft, grype, osv-scanner, scancode (`dependency_b13_adapters.execute`) | Loop items: 02-build-plan units and 02-build-resolution units |
 | Key | image digest from the B16 record, argv, environment, limits, network, container paths, B13 boundary hash, host binding, run, job, mode, and sha256 digests of the mounted bytes computed by the adapter (the offline registry's re-hashed snapshot identity for a vulnerability database) | the unit's plan-unit request, its classification and index entries, catalog, per-unit prompt bytes, contract, schema, template, the run's pinned model, source snapshot, run, mode |
 | Scope | the same run and job (B13 requests bind the run) | the same run |
 | A hit | reuses the earlier B13 attempt only after full independent re-verification (retained result hash, output hash, re-derived receipt, exact offline permission decision); `dependency_workers` re-verifies it again. The new attempt directory gets `tool-output-reuse.json` with `reused_from` | re-reads the earlier persona attempt's result and summary, checks their hashes and the readable target, re-applies the orchestrator fill, `finalize` and the full unit check with citations. `status.json` marks the unit `reused_from: item-memo` and keeps the original persona attempt id |
@@ -88,6 +88,18 @@ Rules shared by both:
   beyond `tool_output_cache_max_entries` / `item_memo_max_entries`; invalidations and prunes are
   logged to `events.jsonl` there. `python3 appsec-review-process/tool_output_cache.py stats|prune|clear`
   (`prune` also drops entries whose attempt directory is gone).
+
+**02-build-resolution units.** Keyed by the unit's plan entry, its sealed base (and fallback)
+records, the control's build behaviour (not grant timestamps), intake's content fingerprint of the
+checkout, the toolchain, B13 limits and boundary, the trial runner, `cow_install.py` and the host
+facts. Only successful units are memoised. A hit reuses the earlier attempt's copy-on-write image,
+verified trial and compile database: B13 binds a trial to the path it ran in, so the trial stays in
+its owner attempt and the receipt names it (`owner_attempt_id`); the lock's `successful_attempt`
+carries `image_reused: true` and `reused_from`. The hit re-checks the image is still present, the
+trial request against today's request, the exact two-capability grant it ran under (re-evaluated at
+its recorded time), the full B13 result, the trial's commands and the compile-database and install
+hashes; `_compile_db` then runs on this attempt's copy and every later validation re-verifies the
+trial in its owner attempt. Deleting that owner attempt makes the reusing attempt fail validation.
 
 The per-unit build-plan prompt now names the unit id and root at the top and again at the end (a
 small model anchored on the first unit it read). A unit id that is not plain path text is not pasted
