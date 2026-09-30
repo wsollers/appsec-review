@@ -5,16 +5,16 @@
 drill down into their own diagrams.
 
 `render/` holds SVG and PNG renders of every diagram in the file, produced with bpmn-js (the bpmn.io
-renderer). After editing the model, re-render:
+renderer) inside the `images/docs-render` container, so the host needs only Docker. After editing the
+model, re-render:
 
 ```bash
-cd docs/processes/bpmn
-npm install --no-save bpmn-js@17 puppeteer
-node render.cjs pre-submission.bpmn render-new   # then rename into render/ as needed
+bash docs/processes/bpmn/render-in-docker.sh pre-submission.bpmn render-new   # then rename into render/ as needed
 ```
 
-`render.cjs` needs `PUPPETEER_PATH` (path to the `puppeteer` module) and, if puppeteer's bundled
-browser is not used, `CHROME` (a Chromium executable).
+Without Docker, `render.cjs` also runs on the host: `npm install --no-save bpmn-js@17 puppeteer`, then
+`node render.cjs <file.bpmn> <outdir>` with `PUPPETEER_PATH` (path to the `puppeteer` module) and, if
+puppeteer's bundled browser is not used, `CHROME` (a Chromium executable).
 
 `render/print/` holds each diagram cut into overlapping, page-width segments
 (`<diagram>-partNofM.png`) for documents with portrait pages, such as the Google Doc
@@ -36,7 +36,7 @@ the source is `preceded_by` and `sub_jobs` in `../catalog/steps.json`.
 ```bash
 python3 docs/processes/job_catalog.py        # resolves the flow into job-catalog.json ("flow")
 python3 docs/processes/bpmn/card.py          # writes cards/*.bpmn; --check fails when one is stale
-cd docs/processes/bpmn && for f in cards/*.bpmn; do node render.cjs "$f" cards/render; done
+bash docs/processes/bpmn/render-in-docker.sh   # renders every card into cards/render/
 ```
 
 `job_catalog.py --check` fails when a mapped job consumes an artifact that a catalog entry produces

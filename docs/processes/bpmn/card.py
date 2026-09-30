@@ -11,7 +11,7 @@ Usage:
   python3 docs/processes/bpmn/card.py           # write docs/processes/bpmn/cards/<step-id>.bpmn
   python3 docs/processes/bpmn/card.py --check   # exit 1 if a card is stale, missing or orphaned
 
-Render the cards to SVG/PNG with render.cjs (see README.md). Standard library only.
+Render the cards to SVG/PNG with render-in-docker.sh (images/docs-render; see README.md). Standard library only.
 """
 from __future__ import annotations
 

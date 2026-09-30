@@ -1,0 +1,9 @@
+{
+  "name": "appsec-review-docs-render",
+  "private": true,
+  "description": "Renders the process-model BPMN files (docs/processes/bpmn) to SVG/PNG. Locked by package-lock.json; installed with npm ci.",
+  "dependencies": {
+    "bpmn-js": "17.11.1",
+    "puppeteer-core": "25.12.0"
+  }
+}
