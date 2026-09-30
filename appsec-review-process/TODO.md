@@ -510,10 +510,24 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 
 - [x] `image_build.py publish|pull|rekey` (Google Drive archives), `images/published.lock.json`, `prepare-host.sh` step 3 pulls
       before it builds; fingerprints name required images by build identity (tests: `images/tests/test_image_publish.py`).
-- [ ] hal5000: `zstd`, `rclone` remote `gdrive`, `APPSEC_IMAGE_STORE`; `prepare-host.sh`,
-      `image_build.py publish --all`, commit the lock. First live publish to Google Drive.
-- [ ] zarathustra: same setup (`rclone authorize "drive"` from a machine with a browser); `prepare-host.sh`;
-      confirm step 3 loads instead of building.
+- [ ] Merge `claude/loving-meitner-ohogp8` to `main` (shared images plus the two `prepare-host.sh` fixes).
+- [ ] hal5000 (WSL) one-time setup:
+      `sudo apt install zstd rclone`;
+      `rclone config` (new remote `gdrive`, type `drive`, scope `drive.file`, other defaults);
+      `echo 'export APPSEC_IMAGE_STORE=gdrive:appsec-review/images' >> ~/.bashrc`;
+      `rclone lsd gdrive:` answers.
+- [ ] hal5000 first publish: `scripts/sync_wsl.sh` (to the branch or `main`); `orchestrator/prepare-host.sh`
+      rebuilds nothing (`rekey` moves the 11 dependent images); `python3 -B images/image_build.py publish --all`;
+      commit and push `images/published.lock.json`. Record the upload time and the total archive size.
+- [ ] Check the archives in Drive (`rclone ls gdrive:appsec-review/images`): one per lock entry, sizes plausible.
+- [ ] zarathustra one-time setup: same packages, remote and `APPSEC_IMAGE_STORE`; no browser, so answer `n`
+      to auto config and paste the token from `rclone authorize "drive"` run on a machine with one.
+- [ ] zarathustra: `docker version` is 25 or later (loads the OCI archives Docker Desktop saves); `git pull`;
+      `orchestrator/prepare-host.sh`. Step 3 prints "loading published images" and loads instead of building;
+      step 4 passes. A load failure falls back to a local build: record it in the breakage log.
+- [ ] After a real image change: build on hal5000, `publish` (only that image uploads), commit the lock;
+      the other host loads just that one.
+- [ ] Decide how old archives in Drive are cleaned up (today: by hand; the lock names the current ones).
 - [ ] Remove `image_build.py rekey` and its `prepare-host.sh` call once both hosts have run it.
 
 ## L: shared formats and stricter validator (brief L, branch `formats-2`)
