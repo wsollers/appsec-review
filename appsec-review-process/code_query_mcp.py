@@ -112,9 +112,9 @@ def family_enabled(family: str) -> bool:
 
 def profile_tools(profile: dict[str, Any]) -> list[str]:
     """Query tools a tooling profile allows (``allowed_actions`` entries ``query tool: <name>``)."""
-    wanted = [action[len(PROFILE_PREFIX):].strip() for action in profile.get("allowed_actions", [])
-              if isinstance(action, str) and action.startswith(PROFILE_PREFIX)]
-    unknown = sorted(set(wanted) - set(NAMES))
+    import mitre_query_mcp   # the other query family (ADR-0034); its names are not unknown here
+    wanted = mitre_query_mcp.listed(profile)
+    unknown = sorted(set(wanted) - set(NAMES) - set(mitre_query_mcp.NAMES))
     if unknown:
         raise ValueError("tooling profile names unknown query tool(s): " + ", ".join(unknown))
     return [name for name in NAMES if name in wanted]

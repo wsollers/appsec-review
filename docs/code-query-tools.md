@@ -36,6 +36,8 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 - `threat-workbench-static-evidence`: eight query actions. Effective only if the index was accepted before stage 03.
 - Persona task prompts (both hunters, claim review) carry a short "Structural queries" paragraph; the details live in
   the tool guides so they cannot drift from the granted set.
+- The same profiles also list the MITRE lookup tools (`mitre_technique`, `mitre_capec`, `mitre_cwe`, ADR-0034), which
+  use the same grant path but need no index pin; see [mitre-feed.md](mitre-feed.md#lookup-tools-adr-0034-item-5).
 
 ## Tunables and metrics
 

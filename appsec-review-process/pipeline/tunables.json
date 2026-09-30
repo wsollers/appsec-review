@@ -295,6 +295,41 @@
       "description": "Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first.",
       "scale": "One per planned unit per run; engine targets can have thousands."
     },
+    "mitre_query_attack_enabled": {
+      "description": "Grant the mitre_technique lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "mitre_query_capec_enabled": {
+      "description": "Grant the mitre_capec lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "mitre_query_cwe_enabled": {
+      "description": "Grant the mitre_cwe lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "mitre_query_list_items_max": {
+      "description": "Most items in one list (tactics, platforms, related CWE/CAPEC/ATT&CK ids) of a mitre_* lookup answer; more is cut and flagged truncated.",
+      "kind": "window",
+      "scale": "",
+      "unit": "count",
+      "value": 25
+    },
+    "mitre_query_text_chars_max": {
+      "description": "Longest name one mitre_* lookup answer returns; longer is cut and flagged truncated.",
+      "kind": "window",
+      "scale": "",
+      "unit": "chars",
+      "value": 200
+    },
     "model_version_resolve_timeout_seconds": {
       "description": "Timeout for resolving pinned model versions.",
       "kind": "resource",

@@ -120,6 +120,42 @@ is described (`<malformed id, N chars>`), never echoed.
   stage's tactics (`attack_reference.CHAIN_STAGE_TACTICS`); drops are composer limitations. Rendered
   only in the report's attack-chain section, with the ATT&CK version.
 
+## Lookup tools (ADR-0034 item 5)
+
+Model jobs can look up an id instead of carrying the matrix in the prompt: `mitre_technique`
+(`id=T1190` or `T1078.004`, optional `tactic=` shortname or `TA` id), `mitre_capec` (`id=CAPEC-66`) and
+`mitre_cwe` (`id=CWE-89`), in `mitre_query_mcp.py`, served by `input_mcp.py` on the same pattern as
+the `code_*` tools ([code-query-tools.md](code-query-tools.md), ADR-0032):
+
+- **Grant.** Only when the job's tooling profile lists `query tool: mitre_<...>` (today
+  `claim-review-static`, which also covers the lane 14 composer, and `hypothesis-hunt-static`) and the
+  tunable `mitre_query_attack_enabled` / `mitre_query_capec_enabled` / `mitre_query_cwe_enabled`
+  (default on) is on. No per-job pin. The tools live on the input server, so only indexed-mode jobs
+  get them; the grant never makes an inline job indexed. `--allowedTools`, the server's tools/list and
+  the `mitre_lookup` tool guide come from one granted list.
+- **One table per invocation.** The invoker takes `mitre_query_mcp.binding()` (the ATT&CK/CAPEC
+  `attack_reference.binding()` plus the CWE catalog identity) once and passes it to the server, which
+  reopens exactly that table (`attack_reference.bound` / `cwe_catalog.bound`: checked for integrity,
+  not re-aged). The attempt's limitations record the table used ("MITRE lookups answered from ...").
+- **Answers.** `status` (`OK` / `UNKNOWN_ID` / `DEPRECATED` / `TACTIC_MISMATCH`), `entry` (names,
+  tactics, platforms, related ids from the pinned table only), `reference` (reference hash, ATT&CK
+  and CAPEC versions) or `catalog` (CWE catalog source, version, hash), `gap`, `truncated` (names over
+  `mitre_query_text_chars_max`, lists over `mitre_query_list_items_max`), and a fixed note that the
+  answer is untrusted data. A missing, stale or invalid snapshot is an answer with `status=null` and
+  gap `MITRE_REFERENCE_MISSING` / `_STALE` / `_INVALID`: never an error and never a guessed name.
+  `mitre_cwe` uses the addendum's `CWE_REFERENCE_*` codes; on the curated fallback it still names
+  ids the committed catalog holds, and returns `status=null` (not `UNKNOWN_ID`) for ids outside it. A
+  malformed id is `UNKNOWN_ID` with `malformed=true` and is described (`<malformed id, N chars>`),
+  never echoed.
+- **Labels, not evidence.** The guide says so, says a gap means the name is unknown rather than the id
+  being wrong, and forbids concluding a claim from a lookup. Tags a worker emits still go through
+  `screen()` and the CWE checks, and the 07 lifecycle still binds the reference identity when a
+  decision is tagged.
+- **Not bound into the model job's inputs.** The pool jobs' input identity does not include the MITRE
+  binding. Binding it unconditionally would re-run every granted model stage when the snapshot goes
+  stale, and ADR-0026 section 5 binds only tagged decisions. The binding is recorded in the attempt
+  instead.
+
 ## Dagster
 
 `mitre_sync_work` is the third independent op of `nvd_reference_sync` (tag `mitre_feed_id=mitre`,
@@ -135,6 +171,7 @@ python3 appsec-review-process/mitre_feed.py resolve     # exit 2 missing, 3 stal
 python3 appsec-review-process/mitre_feed.py resolve --cwe  # CWE catalog; exit 2 missing, 3 stale, 4 invalid
 python3 appsec-review-process/attack_reference.py technique T1059.004 --tactic execution
 python3 appsec-review-process/cwe_catalog.py current --validate CWE-1321
+python3 appsec-review-process/mitre_query_mcp.py mitre_technique T1190   # the lookup tool's answer
 bash scripts/smoke_mitre_feed.sh                         # sync, verify, resolve, T1190 OK, T9999 UNKNOWN_ID, stale,
                                                          # CWE-1321 OK, CWE-99999 rejected, stale CWE falls back
 ```

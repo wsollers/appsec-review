@@ -52,6 +52,11 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `invoker_timeout_seconds` | 1800 s (30 min) | resource | Default wall-clock limit for one claude CLI dispatch. |  |
 | `item_memo` | dev id | safety | Per-item memo in loops (build-plan units): off, dev (only when APPSEC_RUN_MODE=dev) or on. An item whose own inputs (unit content, catalog, prompt, model) are unchanged reuses its earlier accepted result across attempts and fingerprint changes; today's validation is re-run on it. | multi-vuln re-planned 53 units (41 min) after a change that did not alter most units. |
 | `item_memo_max_entries` | 65536 count | safety | Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first. | One per planned unit per run; engine targets can have thousands. |
+| `mitre_query_attack_enabled` | True flag | safety | Grant the mitre_technique lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together. |  |
+| `mitre_query_capec_enabled` | True flag | safety | Grant the mitre_capec lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together. |  |
+| `mitre_query_cwe_enabled` | True flag | safety | Grant the mitre_cwe lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together. |  |
+| `mitre_query_list_items_max` | 25 count | window | Most items in one list (tactics, platforms, related CWE/CAPEC/ATT&CK ids) of a mitre_* lookup answer; more is cut and flagged truncated. |  |
+| `mitre_query_text_chars_max` | 200 chars | window | Longest name one mitre_* lookup answer returns; longer is cut and flagged truncated. |  |
 | `model_version_resolve_timeout_seconds` | 120 s (2 min) | resource | Timeout for resolving pinned model versions. |  |
 | `nvd_feed_concurrency` | 1 count | resource | Concurrent NVD feed jobs. |  |
 | `owasp_join_page_max_bytes` | 7 MiB | window | Page size when joining OWASP results. |  |

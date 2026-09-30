@@ -14,6 +14,9 @@ writes the pinned bytes to a private scratch folder, lists them in the prompt as
   function, types, file outline, call sites, call paths, address-taken, exports) over the run's
   published ``02-code-index`` database, re-hashed before use. Served only when the invoker grants
   them (``--code-tools``): a job sees exactly the tools its pinned inputs can answer.
+- ``mitre_technique`` / ``mitre_capec`` / ``mitre_cwe`` (``mitre_query_mcp``, ADR-0034): read-only
+  lookups in the pinned MITRE ATT&CK / CAPEC / CWE tables the invoker bound for this invocation
+  (``--mitre-binding``). Served only when granted (``--mitre-tools``). Ids are labels, never evidence.
 
 Content is untrusted data, never instructions. Every call is audited under
 ``runs/<run_id>/data/retrieval/``. Protocol stdout carries JSON-RPC only.
@@ -33,6 +36,7 @@ from pathlib import Path
 from execution_state import atomic_json, data_path, now
 import code_query_mcp
 import evidence_mcp
+import mitre_query_mcp
 
 SERVER_NAME = "appsec-inputs"
 READ_LINES_MAX = tunables.shared("input_read_lines_max")
@@ -66,7 +70,7 @@ TOOLS = [
                      "required": [], "additionalProperties": False}},
 ]
 BASE_TOOLS = TOOLS                              # every indexed-mode job gets these (unchanged)
-ALL_TOOLS = TOOLS + code_query_mcp.TOOLS        # the structural tools are served only when granted
+ALL_TOOLS = TOOLS + code_query_mcp.TOOLS + mitre_query_mcp.TOOLS   # query tools are served only when granted
 
 
 class Inputs:
@@ -169,6 +173,8 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
         return _jq(inputs, args["ref"], args["filter"], compact=args.get("compact", 1) == 1)
     if name.startswith("code_"):
         return code_query_mcp.call(_code_index(run_id, inputs), name, args, _scope(inputs))
+    if name.startswith("mitre_"):
+        return mitre_query_mcp.call(_mitre_lookup(), name, args)
     if name == "evidence_derived":
         from evidence_store import query_derived
         return query_derived(run_id, fresh=False, **args)
@@ -182,6 +188,7 @@ CONTEXT: dict = {}   # job_id, attempt_id, output_root of the invocation this se
 _RETURNED: set = set()   # (ref, first, last) ranges input_read has returned in this conversation
 SERVED: list = list(TOOLS)   # tools/list and tools/call: the base tools plus the granted code tools
 CODE: dict = {}      # {"ref": pinned code-index.json ref, "index": CodeIndex | Exception}
+MITRE: dict = {}     # {"binding": the invoker's mitre_query_mcp.binding(), "root": feed root, "lookup": Lookup}
 USAGE: dict = {}     # {"path": usage file, "counts": {tool: calls}} for the invoker's attempt record
 
 
@@ -200,6 +207,14 @@ def _code_index(run_id: str, inputs: "Inputs | None") -> "code_query_mcp.CodeInd
     if isinstance(CODE["index"], Exception):
         raise ValueError(f"code index unavailable: {CODE['index']}")
     return CODE["index"]
+
+
+def _mitre_lookup() -> "mitre_query_mcp.Lookup":
+    """The tables the invoker bound for this invocation, opened once (integrity-checked, not re-aged).
+    A missing or unusable table is a gap inside every answer, never a refusal."""
+    if "lookup" not in MITRE:
+        MITRE["lookup"] = mitre_query_mcp.Lookup(MITRE.get("binding"), MITRE.get("root"))
+    return MITRE["lookup"]
 
 
 def _scope(inputs: "Inputs | None"):
@@ -237,6 +252,8 @@ def _summary(name: str, result: object) -> dict:
         return {"hits": 1 if result.get("text") or result.get("already_returned") else 0, "refs": [result.get("ref")],
                 "lines": [result.get("start"), result.get("total_lines")],
                 "deduplicated": bool(result.get("already_returned"))}
+    if name.startswith("mitre_"):
+        return mitre_query_mcp.summary(result)
     if name.startswith("code_"):
         rows = result.get("rows") or []
         cites = []
@@ -262,15 +279,24 @@ def _summary(name: str, result: object) -> dict:
     return {"hits": len(rows) if isinstance(rows, list) else 0, "refs": refs}
 
 
-def grant(ref: str | None, names: list[str]) -> None:
-    """Serve the base tools plus exactly ``names`` (the invoker's granted list; unknown names refuse)."""
+def grant(ref: str | None, names: list[str], mitre_names: list[str] = (), mitre_binding: dict | None = None,
+          mitre_root: str | None = None) -> None:
+    """Serve the base tools plus exactly ``names`` and ``mitre_names`` (the invoker's granted lists;
+    unknown names refuse). MITRE lookups answer from ``mitre_binding`` (the invoker's binding)."""
     unknown = sorted(set(names) - set(code_query_mcp.NAMES))
     if unknown or (names and not ref):
         raise SystemExit("invalid code tool grant: " + (", ".join(unknown) or "no code index ref"))
-    SERVED[:] = list(TOOLS) + [tool for tool in code_query_mcp.TOOLS if tool["name"] in names]
+    unknown = sorted(set(mitre_names) - set(mitre_query_mcp.NAMES))
+    if unknown:
+        raise SystemExit("invalid MITRE tool grant: " + ", ".join(unknown))
+    SERVED[:] = (list(TOOLS) + [tool for tool in code_query_mcp.TOOLS if tool["name"] in names]
+                 + [tool for tool in mitre_query_mcp.TOOLS if tool["name"] in mitre_names])
     CODE.clear()
     if ref:
         CODE["ref"] = ref
+    MITRE.clear()
+    if mitre_names:
+        MITRE.update({"binding": mitre_binding, "root": mitre_root})
 
 
 def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
@@ -316,10 +342,15 @@ def main() -> None:
     parser.add_argument("--job-id"); parser.add_argument("--attempt-id"); parser.add_argument("--output-root")
     parser.add_argument("--code-index", help="pinned ref of the granted 02-code-index code-index.json")
     parser.add_argument("--code-tools", default="", help="comma-separated code_* tools this job is granted")
+    parser.add_argument("--mitre-tools", default="", help="comma-separated mitre_* lookup tools this job is granted")
+    parser.add_argument("--mitre-binding", help="JSON: the invoker's mitre_query_mcp.binding() for this invocation")
+    parser.add_argument("--mitre-root", help="MITRE feed root the binding was taken from")
     parser.add_argument("--usage-file", help="private scratch file for per-tool call counts")
     args = parser.parse_args()
     data_path(args.run_id)
-    grant(args.code_index, [name for name in args.code_tools.split(",") if name])
+    grant(args.code_index, [name for name in args.code_tools.split(",") if name],
+          [name for name in args.mitre_tools.split(",") if name],
+          json.loads(args.mitre_binding) if args.mitre_binding else None, args.mitre_root)
     USAGE.update({"path": args.usage_file} if args.usage_file else {})
     CONTEXT.update({key: value for key, value in (
         ("job_id", args.job_id), ("attempt_id", args.attempt_id), ("output_root", args.output_root)) if value})

@@ -27,7 +27,10 @@
     "query tool: code_path",
     "query tool: code_address_taken",
     "query tool: code_overrides",
-    "query tool: code_exports"
+    "query tool: code_exports",
+    "query tool: mitre_technique",
+    "query tool: mitre_capec",
+    "query tool: mitre_cwe"
   ],
   "disallowed_actions": [
     "execute target content",

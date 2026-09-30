@@ -209,17 +209,31 @@ def _inline_input_limit(cfg: dict) -> int:
     return value if isinstance(value, int) and value > 0 else INLINE_INPUT_BYTES_DEFAULT
 
 
-def _input_tool_names(code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
-    """``--allowedTools``: the base lookup tools plus exactly the granted structural query tools."""
-    return [f"mcp__{INPUT_MCP_SERVER}__{name}" for name in granted_tool_names(code_tools)]
+def _input_tool_names(code_tools: tuple[str, ...] | list[str] = (),
+                      mitre_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
+    """``--allowedTools``: the base lookup tools plus exactly the granted query tools."""
+    return [f"mcp__{INPUT_MCP_SERVER}__{name}" for name in granted_tool_names(code_tools, mitre_tools)]
 
 
-def granted_tool_names(code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
-    """Every tool an indexed-mode job may call, in order: the base lookups, then its code tools.
-    The prompt's tool guides, the input server's tools/list and ``--allowedTools`` all come from
-    this one list, so what the prompt describes and what the CLI grants cannot disagree (brief U3)."""
+def granted_tool_names(code_tools: tuple[str, ...] | list[str] = (),
+                       mitre_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
+    """Every tool an indexed-mode job may call, in order: the base lookups, its code tools, then its
+    MITRE lookups (ADR-0034). The prompt's tool guides, the input server's tools/list and
+    ``--allowedTools`` all come from this one list, so what the prompt describes and what the CLI
+    grants cannot disagree (brief U3)."""
     import input_mcp
-    return [tool["name"] for tool in input_mcp.BASE_TOOLS] + list(code_tools)
+    return [tool["name"] for tool in input_mcp.BASE_TOOLS] + list(code_tools) + list(mitre_tools)
+
+
+def mitre_query_grant(package: Any, indexed: bool) -> tuple[str, ...]:
+    """MITRE lookup tools for this invocation (ADR-0034 item 5): listed by the job's tooling profile
+    (``query tool: mitre_*``) and enabled by ``mitre_query_<family>_enabled``. No per-job pin is needed
+    (the snapshot is host reference data, bound per invocation). Served by the input server, so only
+    in indexed mode; the grant never switches an inline job to indexed mode by itself."""
+    if not indexed:
+        return ()
+    import mitre_query_mcp
+    return tuple(mitre_query_mcp.grantable(dict(package.composition.get("tooling_profile") or {})))
 
 
 def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
@@ -256,10 +270,13 @@ def input_mode(inline_bytes: int, inline_limit: int, code_grant: tuple[str | Non
 
 
 def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
-                          code: tuple[str | None, tuple[str, ...]] = (None, ())) -> Path:
+                          code: tuple[str | None, tuple[str, ...]] = (None, ()),
+                          mitre: tuple[tuple[str, ...], dict | None] = ((), None)) -> Path:
     """Write the package's pinned bytes to a private folder for ``input_mcp.py`` and return the
     MCP config path. Outside the attempt tree, like the other diagnostics. ``code`` is the
-    ``code_query_grant``: the server serves exactly those code tools over that pinned index."""
+    ``code_query_grant``: the server serves exactly those code tools over that pinned index.
+    ``mitre`` is (granted mitre_* tools, ``mitre_query_mcp.binding()``): the server answers every
+    MITRE lookup from exactly that bound table."""
     folder = scratch / "inputs"
     (folder / "files").mkdir(parents=True, exist_ok=True)
     entries = []
@@ -276,10 +293,17 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
                        "--attempt-id", str(package.request.get("attempt_id")),
                        "--usage-file", str(scratch / "tool-usage.json"),
                        *(["--code-index", code[0], "--code-tools", ",".join(code[1])] if code[1] else []),
+                       *(_mitre_server_args(*mitre) if mitre[0] else []),
                        *(["--output-root", str(output_root)] if output_root else [])]}
     config = scratch / "mcp-config.json"
     config.write_text(json.dumps({"mcpServers": {INPUT_MCP_SERVER: server}}), encoding="utf-8")
     return config
+
+
+def _mitre_server_args(tools: tuple[str, ...], binding: dict | None) -> list[str]:
+    import mitre_feed
+    return ["--mitre-tools", ",".join(tools), "--mitre-root", str(mitre_feed.feed_root()),
+            *(["--mitre-binding", json.dumps(binding, sort_keys=True)] if binding is not None else [])]
 
 
 INVENTORY_ROWS_MAX = tunables.shared("invoker_inventory_rows_max")   # above this, summarise by folder
@@ -476,7 +500,8 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
 
 def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, timeout_seconds: int,
                    binary: str, mcp_config: Path | None = None,
-                   code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
+                   code_tools: tuple[str, ...] | list[str] = (),
+                   mitre_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
     """`binary` is the caller's already-resolved, real absolute claude CLI path (see
     ``claude_binary_resolver.py`` -- resolved and pinned once per run by whichever job dispatches
     first, normally ``model_version_registry.resolve_run_model_versions``). This function never
@@ -494,7 +519,7 @@ def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, time
     else:
         # Indexed mode: no built-in tools (no shell, no filesystem); only the read-only input server.
         argv += ["--tools", "", "--mcp-config", str(mcp_config), "--strict-mcp-config",
-                 "--allowedTools", ",".join(_input_tool_names(code_tools))]
+                 "--allowedTools", ",".join(_input_tool_names(code_tools, mitre_tools))]
     return argv
 
 
@@ -1177,10 +1202,17 @@ class ClaudeCliInvoker:
         # when its inputs would fit inline. Off: such a job stays inline with no tools at all
         # (the grant is dropped, so prompt, server and --allowedTools still agree); for comparing runs.
         indexed, code_grant = input_mode(inline_bytes, _inline_input_limit(cfg), code_grant)
+        # MITRE lookups (ADR-0034) ride on the input server: granted only in indexed mode, answered
+        # from one table bound here for the whole invocation (a gap when no usable snapshot).
+        mitre_tools = mitre_query_grant(package, indexed)
+        mitre_binding = None
+        if mitre_tools:
+            import mitre_query_mcp
+            mitre_binding = mitre_query_mcp.binding()
         guides_text, guides = "", []
         if indexed:
             import tool_guides
-            guides_text, guides = tool_guides.render(granted_tool_names(code_grant[1]))
+            guides_text, guides = tool_guides.render(granted_tool_names(code_grant[1], mitre_tools))
         prompt_text = build_prompt_text(package, output_contract, store, indexed=indexed,
                                         persona_schema=self._persona_schema, tool_guides_text=guides_text)
         model_alias = package.request["model"]["family"]
@@ -1204,7 +1236,8 @@ class ClaudeCliInvoker:
         # structurally testing this module: the first draft wrote them under
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
-        mcp_config = (_stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root), code_grant)
+        mcp_config = (_stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root), code_grant,
+                                            (mitre_tools, mitre_binding))
                       if indexed else None)
         size_log.observe(package.request.get("run_id"), package.request.get("job_id"), "prompt_input_mode",
                          inline_bytes, _inline_input_limit(cfg), mode="indexed" if indexed else "inline",
@@ -1280,7 +1313,7 @@ class ClaudeCliInvoker:
             rounds = reused or _dispatch_until_accepted(
                 dispatch_fn=self._dispatch_fn, accept=accept, prompt_text=prompt_text,
                 argv_for=lambda budget: _dispatch_argv(model_alias, self.effort, budget, self.timeout_seconds,
-                                                       binary, mcp_config, code_grant[1]),
+                                                       binary, mcp_config, code_grant[1], mitre_tools),
                 budget_usd=self.budget_usd, timeout_seconds=self.timeout_seconds,
                 repair_attempts=_repair_attempts(cfg),
                 input_unit_limit=(package.request.get("budget") or {}).get("input_unit_limit"),
@@ -1321,8 +1354,11 @@ class ClaudeCliInvoker:
             if indexed:
                 # Reproducibility (brief U4/U5): which lookup tools and guides this prompt carried,
                 # and how often the model called each tool (counted by the input server).
-                limitations.append("lookup tools granted: " + ", ".join(granted_tool_names(code_grant[1]))
+                limitations.append("lookup tools granted: " + ", ".join(granted_tool_names(code_grant[1], mitre_tools))
                                    + (f" (code index {code_grant[0]})" if code_grant[0] else ""))
+                if mitre_binding is not None:
+                    import mitre_query_mcp
+                    limitations.append(mitre_query_mcp.limitation(mitre_binding))
                 if guides:
                     limitations.append("tool guides: " + ", ".join(
                         f"{g['guide']}@v{g['version']}:{g['sha256'][7:23]}" for g in guides))
