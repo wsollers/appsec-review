@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # Create and stage a full_review run for one ADR-0013 target, following
-# docs/report-path/happy-path-operator-guide.md, with intake run before the build controls. Prints the run id on the last line.
+# docs/report-path/happy-path-operator-guide.md, with intake run before the build controls.
+# stdout carries ONLY the run id, and only when every step succeeded; progress goes to stderr. So
+#
+#   RUN_ID=$(orchestrator/stage-run.sh hello-autotools) && \
+#     python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
+#
+# never launches with a partial run (2026-09-30: `| tail -1` took a progress line as the run id).
 #
 #   orchestrator/stage-run.sh <target> [--goal "business goal"]
-#   orchestrator/stage-run.sh hello-autotools
-#
-# Then: python3 appsec-review-process/launch_job.py --run-id <run-id> --job full_review --wait
 set -euo pipefail
+exec 3>&1 1>&2   # fd 3 = the caller's stdout, used once at the end; everything else to stderr
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
@@ -53,4 +57,4 @@ python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 echo "staged: launch with"
 echo "  python3 appsec-review-process/launch_job.py --run-id $RUN_ID --job full_review --wait"
-echo "$RUN_ID"
+echo "$RUN_ID" >&3

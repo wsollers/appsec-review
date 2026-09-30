@@ -59,7 +59,7 @@ python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 ```
 
-`orchestrator/stage-run.sh <target>` runs this whole sequence and prints the run id.
+`RUN_ID=$(orchestrator/stage-run.sh <target>)` runs this whole sequence; its stdout is only the run id, and only when every step succeeded (progress goes to stderr).
 
 The build control commands retain the engagement owner's run- and source-bound authorization for
 package resolution and no-network replay of the accepted configure/build lock. They do not grant

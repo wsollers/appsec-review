@@ -35,7 +35,7 @@ host-local state each one keeps: `docs/processes/host-layouts.md`.
 
 ## Running a target
 
-`orchestrator/stage-run.sh <target>` creates and stages the run (the steps in
+`RUN_ID=$(orchestrator/stage-run.sh <target>)` creates and stages the run (stdout is only the run id, and only on success; the steps in
 `docs/report-path/happy-path-operator-guide.md`, with `--max-database-age-seconds 1209600`) and prints
 the run id; then:
 
@@ -738,6 +738,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-30 | (host, hal5000 WSL) | - | smoke_codeql_per_language.sh (02-codeql-java/-csharp/-javascript) | `CodeQL is out of memory` at 2 GB after `AccessDeniedException` on every `.codeql/precompiled/*.qlx`: `audit-codeql` unpacks the bundle as root without widening permissions, so the non-root lane recompiled every query from source (python fit, the others did not) | `chmod -R a+rX /opt/codeql` after unpacking, as `Dockerfile.native` already did; `images/tests/test_codeql_replay.py` checks both Dockerfiles. |
 | 2026-09-30 | (host, hal5000 WSL) | - | smoke_codeql_per_language.sh (06-reachability-codeql packs) | First compile of `data/codeql-reachability`: java/csharp `CallEdges.ql` used an if-then-else expression (QL has none); python `Common.qll` called `Scope.getQualifiedName()` (absent). After those, python still returned 0 rows: a script module has no `Module.getName()`, so `scopeName` dropped every row naming it | Bind `callee_defined` in the where clause (as go does); `scopeName` from `Function`/`Class.getQualifiedName()`, a script named by its file stem. Checked in the build sandbox against the pinned 2.27.0 bundle: all 20 queries compile (5 languages), python/javascript/java fixtures `reachable` (csharp needs the image's .NET) |
 | 2026-09-30 | appsec-multi-vuln (pre-run check) | - | 02-code-property-graph | `importCode(dir)` guesses ONE language: on appsec-multi-vuln Joern picked C (`NEWC`) and the graph held only `.c/.cpp/.h`; Java, C#, Go, Rust, JS/TS and PHP (53 of 66 cases) had no call graph or data flow | `joern_cpg.frontend_plan` picks one frontend per language present (Rust: one per crate; C# and Rust run their frontend binary, then `importCpg`); the exporter exports each and writes per-frontend outcomes; a failed frontend is a `frontend-failed` gap and `frontends` in the result. jssrc/csharpsrc 0-based columns became `null` (they failed the whole export). Checked with Joern v4.0.625 in the build sandbox on appsec-multi-vuln@878d5d6: 37,540 records, calls in all 8 languages |
+| 2026-09-30 | appsec-multi-vuln | `20260930T212835Z-dec95d` | stage-run.sh (phase1_intake) | Dagster rejected `phase1_intake` (`PipelineNotFoundError`; PostgreSQL on 55432 had closed the connection); the script stopped, but `RUN_ID=$(stage-run.sh ... \| tail -1)` took its last progress line as the run id and `full_review` launched with it (`invalid identifier`) | `stage-run.sh` sends all progress to stderr and prints only the run id, only on success: `RUN_ID=$(orchestrator/stage-run.sh <target>) && launch_job.py ...`. The stack failure itself: restart the postgres container, reload the code location |
 
 ## Decisions 2026-09-29
 
