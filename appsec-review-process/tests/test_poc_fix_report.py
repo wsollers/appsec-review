@@ -12,6 +12,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state
 import finding_enrichment
@@ -131,7 +132,7 @@ class WiringTests(unittest.TestCase):
         self.assertIn("poc_fix_report.py", synthesis_worker.CODE_FILES)
         self.assertIn("poc_fix_denylist.py", synthesis_worker.CODE_FILES)
         self.assertIn(poc_report.RESULT, synthesis_worker.ARTIFACTS)
-        contract = json.loads((ROOT / "registry/output-contracts/synthesis-report-publication.json").read_text())
+        contract = json.loads((registry_paths.contract("synthesis-report-publication")).read_text())
         self.assertIn(poc_report.RESULT, contract["required_files"])
 
 

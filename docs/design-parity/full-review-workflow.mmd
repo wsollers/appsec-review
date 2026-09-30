@@ -52,6 +52,8 @@ flowchart TD
   j_02_codeql_ruby["02-codeql-ruby<br/>implemented_not_qualified"]
   j_02_codeql_rust["02-codeql-rust<br/>implemented_not_qualified"]
   j_02_code_property_graph["02-code-property-graph<br/>implemented_not_qualified"]
+  j_02_treesitter_ast["02-treesitter-ast<br/>implemented_not_qualified"]
+  j_02_code_index["02-code-index<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>implemented_not_qualified"]
   j_02_ir_capture["02-ir-capture<br/>implemented_not_qualified"]
   j_02_ir_link["02-ir-link<br/>implemented_not_qualified"]
@@ -119,6 +121,7 @@ flowchart TD
   j_02_dependency_lifecycle --> j_02_evidence_assembly
   j_02_binary_hardening --> j_02_evidence_assembly
   j_02_mobile_sast --> j_02_evidence_assembly
+  j_02_code_index --> j_02_evidence_assembly
   j_02_evidence_assembly --> j_01_component_characterization
   j_01_component_characterization --> j_02_full_review_input_assembly
   j_01_component_characterization --> j_03_threat_model_dfd_stride
@@ -220,6 +223,10 @@ flowchart TD
   j_00_intake --> j_02_codeql_ruby
   j_00_intake --> j_02_codeql_rust
   j_00_intake --> j_02_code_property_graph
+  j_00_intake --> j_02_treesitter_ast
+  j_02_code_property_graph --> j_02_code_index
+  j_02_treesitter_ast --> j_02_code_index
+  j_02_binary_triage --> j_02_code_index
   j_02_native_build --> j_02_native_sast
   j_02_native_build --> j_02_ir_capture
   j_02_ir_capture --> j_02_ir_link

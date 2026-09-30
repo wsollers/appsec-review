@@ -12,9 +12,10 @@ import json
 from pathlib import Path
 import re
 import unittest
+import registry_paths
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = ROOT / "registry" / "job-templates"
+TEMPLATES = registry_paths.JOB_TEMPLATES_DIR
 
 
 def expected_task_prompt(template: dict) -> str:

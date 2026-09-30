@@ -41,8 +41,9 @@ def step_dir(context):
 
 def record(context, path, status, message, **details):
     from job_graph import composition
-    from execution_state import ROOT, read_json
-    template = read_json(ROOT / 'registry/job-templates/00-validation.json')
+    from execution_state import read_json
+    import registry_paths
+    template = read_json(registry_paths.template('00-validation'))
     composition(template)
     value = dict(run_id='dagster-bootstrap-' + context.run_id, dagster_run_id=context.run_id,
                  job_id=context.op.name, status=status, message=message,

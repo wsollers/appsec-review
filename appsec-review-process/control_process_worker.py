@@ -11,9 +11,10 @@ from typing import Any
 from execution_state import Blocked, atomic_json, digest, file_hash
 from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
+import registry_paths
 
 PERMISSIONS = ["read-run-data", "write-run-data"]
-REGISTRY = Path(__file__).resolve().parent / "registry" / "output-contracts"
+REGISTRY = registry_paths.OUTPUT_CONTRACTS_DIR
 
 
 def _validated_contract(job_id: str, contract_id: str, result_name: str,

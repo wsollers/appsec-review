@@ -20,6 +20,7 @@ import automatic_evidence_inputs
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 import reference_snapshots
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "02-standards-source-ingest"
 CONTRACT = "standards-source-extract"
@@ -44,11 +45,11 @@ RECORD_SCHEMAS = {
 CODE_FILES = (
     "standards_source_ingest.py", "reference_snapshots.py", "publish_job_output.py",
     "validate_job_output.py", "worker_result.py",
-    "registry/job-templates/02-standards-source-ingest.json",
-    "registry/output-contracts/standards-source-extract.json",
+    registry_paths.template_rel("02-standards-source-ingest"),
+    registry_paths.contract_rel("standards-source-extract"),
     "personas/roles/standards-source-ingestor/role.json",
-    "registry/domains/owasp-application-controls.json",
-    "registry/tooling-profiles/standards-source-static-ingest.json",
+    registry_paths.rel(registry_paths.DOMAINS, "owasp-application-controls"),
+    registry_paths.rel(registry_paths.TOOLING_PROFILES, "standards-source-static-ingest"),
 )
 
 
@@ -70,7 +71,7 @@ def _code_hashes() -> dict[str, str]:
 
 
 def _permissions() -> list[str]:
-    value = read_json(ROOT / "registry/job-templates/02-standards-source-ingest.json").get("permissions")
+    value = read_json(registry_paths.template("02-standards-source-ingest")).get("permissions")
     if not isinstance(value, list) or not value or len(value) != len(set(value)):
         raise Blocked(f"{JOB}: canonical template permissions are absent or invalid")
     return value

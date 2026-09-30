@@ -15,6 +15,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claude_cli_invoker as cli
 import execution_state
@@ -36,7 +37,7 @@ def request_workspace() -> dict:
 
 def package(document: dict) -> SimpleNamespace:
     data = derive.workspace_bytes(document)
-    contract = json.loads((ROOT / "registry/output-contracts/poc-fix-candidates.json").read_text())
+    contract = json.loads((registry_paths.contract("poc-fix-candidates")).read_text())
     return SimpleNamespace(composition={"output_contract": contract}, prompt=b"OUTER",
         inputs=(SimpleNamespace(root=derive.WORKSPACE_ROOT_ID, path=document["request_id"] + ".json",
                                 sha256="sha256:" + hashlib.sha256(data).hexdigest(), data=data, role="evidence"),),

@@ -11,7 +11,9 @@ report groups those audits by job invocation and shows:
   files read (input_read / evidence_read) and files surfaced by searches;
   citation backing: of the target paths the job's output cites, how many it actually read or
   surfaced (a citation to a file never looked at is a red flag), and how much of what it read
-  ended up cited.
+  ended up cited;
+  structural code_* tools (ADR-0032): per tool the calls, answers that were complete=false, escapes
+  returned, truncated answers and rows; a job that never used them is listed as such when granted.
 
 --calls also prints each call (tool, arguments, hits). Inline-mode jobs (inputs pasted into the
 prompt, no tools) are listed from size observations.
@@ -95,6 +97,18 @@ def main() -> int:
         print(f"   errors {errors}, empty lookups {empty}, bytes returned "
               f"{sum(o.get('bytes', 0) for _, o in calls)}, time {sum(o.get('duration_ms', 0) for _, o in calls)} ms")
         print(f"   files read {len(read)}, files surfaced by searches {len(surfaced)}")
+        code = defaultdict(lambda: Counter())
+        for request, outcome in calls:
+            if request["tool"].startswith("code_") and outcome.get("_kind") == "result":
+                row = code[request["tool"]]
+                row["calls"] += 1
+                row["incomplete"] += 0 if outcome.get("complete") else 1
+                row["escapes"] += int(outcome.get("escapes") or 0)
+                row["truncated"] += 1 if outcome.get("truncated") else 0
+                row["rows"] += int(outcome.get("rows") or 0)
+        for tool, row in sorted(code.items()):
+            print(f"   {tool:<20} calls {row['calls']}, complete=false {row['incomplete']}, "
+                  f"escapes {row['escapes']}, truncated {row['truncated']}, rows {row['rows']}")
         root = calls[0][0].get("output_root")
         if root and Path(root).is_dir():
             cited = set()

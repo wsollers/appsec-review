@@ -12,6 +12,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state as state
 from execution_state import tree_hashes
@@ -162,7 +163,7 @@ class IrEvidenceTests(unittest.TestCase):
         self.assertEqual(permission["permissions"],["read-source","write-run-data"])
         self.assertEqual(lineage["build_lineage_sha256"],"sha256:"+"9"*64)
         for contract in ("ir-capture","ir-link","ir-facts"):
-            declared=json.loads((ROOT/"registry/output-contracts"/(contract+".json")).read_text())
+            declared=json.loads((registry_paths.contract(contract)).read_text())
             policy=output_validator.CLAIM_CLASS_POLICIES[contract]
             self.assertEqual(policy["claim_class_id"],declared["claim_class"]["claim_class_id"])
             self.assertEqual(policy["allowed_assertions"],set(declared["claim_class"]["allowed_assertions"]))

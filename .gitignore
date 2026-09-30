@@ -42,8 +42,8 @@ images/audit-buildenv-java/jdtls.tar.gz
 /images/.build-state/
 /images/tool-*/downloads/
 # B16 host-local records are regenerated from image build state at code-location start.
-/appsec-review-process/registry/container-images/*.json
-!/appsec-review-process/registry/container-images/fixture-harmless.json
+/appsec-review-process/pipeline/container-images/*.json
+!/appsec-review-process/pipeline/container-images/fixture-harmless.json
 # Stage-13 rendered images are host-local immutable state, never source artifacts.
 /appsec-review-process/data/build-images/
 # Offline Grype/OSV snapshot registry: host-local immutable data, synced by
@@ -73,3 +73,6 @@ images/audit-buildenv-java/jdtls.tar.gz
 /data/feeds/osv/
 # Mutable MITRE ATT&CK/CAPEC feed state (see docs/mitre-feed.md); never committed.
 /data/feeds/mitre/
+
+# Host-local seeds and keys (dependency DB seeds, demo HMAC key): never source.
+.artifacts/

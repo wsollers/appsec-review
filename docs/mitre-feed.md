@@ -1,8 +1,8 @@
-# MITRE ATT&CK / CAPEC reference feed
+# MITRE ATT&CK / CAPEC / CWE reference feed
 
-ATT&CK and CAPEC, published the same way as the NVD and OSV feeds: a writer publishes immutable
-snapshots, a resolver checks integrity and age, a Dagster op refreshes it. Decisions:
-[ADR-0026](decisions/ADR-0026-mitre-attack-capec-reference-feed.md).
+ATT&CK, CAPEC and the CWE catalog, published the same way as the NVD and OSV feeds: a writer publishes
+immutable snapshots, a resolver checks integrity and age, a Dagster op refreshes it. Decisions:
+[ADR-0026](decisions/ADR-0026-mitre-attack-capec-reference-feed.md) and its CWE addendum (brief O2).
 
 **Labels, never evidence.** An ATT&CK technique or CAPEC pattern id labels a claim or a chain link.
 It never supports, promotes or upgrades a finding, never changes a review state, chain state or
@@ -16,6 +16,7 @@ severity, and a claim never needs one.
 | `capec` | yes | `https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v19.2/capec/2.1/stix-capec.json` | CAPEC 3.9 | `ee6244f4…76fa69` |
 | `mobile-attack` | no | `…/attack-stix-data/v19.2/mobile-attack/mobile-attack-19.2.json` | ATT&CK 19.2 | `acfa5ca2…dada64` |
 | `ics-attack` | no | `…/attack-stix-data/v19.2/ics-attack/ics-attack-19.2.json` | ATT&CK 19.2 | `08b83d2c…82dada9` |
+| `cwe` | yes | `https://cwe.mitre.org/data/xml/cwec_v4.20.xml.zip` | CWE List 4.20 | OPEN (version-pinned) |
 
 Full hashes are in `mitre_feed.SOURCES`. A fetched bundle must hash to its pin and carry the pinned
 upstream version (`x-mitre-collection.x_mitre_version`, `x_capec_version`); anything else is a failed
@@ -23,6 +24,11 @@ source. Never `master` or `latest` at run time: raising a pin is a reviewed edit
 Mobile/ICS: `APPSEC_MITRE_SOURCES=enterprise-attack,capec,mobile-attack` or `sync --sources ...`.
 CAPEC comes from `mitre/cti` (STIX 2.1) because `capec.mitre.org` was not reachable from the build
 sandbox; the XML at capec.mitre.org is the same 3.9 release.
+
+CWE is pinned by version (never `cwec_latest`): the zip must hold exactly one `cwec_v<version>.xml`
+(no DTD, size-capped) whose `Weakness_Catalog` `Version` equals the pin. `cwe.mitre.org` was not
+reachable from the build sandbox either, so its byte pin (`sha256`) is still `None`; the smoke script
+prints the digest of the first real download so it can be pinned (TODO section O2).
 
 ## Layout
 
@@ -36,7 +42,9 @@ snapshots/<snapshot_id>/
                                   fetched_at, etag, licence, MITRE marking statements; gaps; reference hash
   NOTICE.txt                      MITRE copyright designations and the ATT&CK / CAPEC terms-of-use licence text
   reference.json                  derived table (attack_reference.py), hash-listed in the manifest
+  cwe-catalog.json                derived CWE table (cwe_catalog.py), hash-listed as manifest.cwe_catalog
   sources/<source>.json           unmodified upstream STIX bundles
+  sources/cwe.xml.zip             unmodified upstream CWE zip
 staging/  locks/  events.jsonl
 ```
 
@@ -46,11 +54,18 @@ snapshot id. It holds ATT&CK tactics and techniques/sub-techniques (id, name, ta
 deprecated, revoked, url, domains) and CAPEC patterns (id, name, status, deprecated, related CWE ids,
 related ATT&CK ids where MITRE gives them, url).
 
+`cwe-catalog.json` has the same shape as the committed `data/reference/cwe/cwe-catalog.json`
+(`id`, `name`, plus `status`, `abstraction` and `deprecated`; deprecated weaknesses are flagged, not
+dropped). It is derived through `cwe_catalog._parse_xml` (one parser for intake and the feed), is a
+pure function of the zip bytes, and its `as_of` is MITRE's release date, so a re-sync of the same pin
+keeps the same `sha256`. `reference.json` does not change when CWE is added.
+
 ## Modules
 
 | Module | Role |
 |---|---|
 | `mitre_feed.py` | Writer and resolver. `sync` (per-source failure carries the last good bundle forward with its ORIGINAL `fetched_at`; only a total failure or a failed derivation fails the sync and leaves `current.json` untouched), `verify` (re-hash everything), `resolve` (integrity + age; `SnapshotBlocked` / `SnapshotStale` / `SnapshotInvalid`, the SCA registry's semantics). Keeps the last N snapshots (`APPSEC_MITRE_KEEP`, default 3). |
+| `cwe_catalog.py` | `current()` is the catalog in force: the feed's `cwe-catalog.json` (via `mitre_feed.resolve_cwe`) when the snapshot verifies and the CWE source is in the ceiling, else the committed curated catalog with a recorded gap. `bound(identity)` reproduces a stage's bound catalog without re-ageing it. The rule map is always the committed hash-pinned file. `intake` (offline manual import) still works. CLI: `cwe_catalog.py current [--validate CWE-n]`. |
 | `attack_reference.py` | Derives `reference.json`; `Reference.validate_technique(id, tactic=None)` / `validate_capec(id)` return `OK` / `UNKNOWN_ID` / `DEPRECATED` / `TACTIC_MISMATCH`; `screen()` is the one gate for claims and chain links. CLI: `attack_reference.py technique T1190 --tactic initial-access`, `attack_reference.py capec CAPEC-66`. |
 
 The feed is not bound into `dependency_snapshot_registry` (that registry is shaped for container
@@ -59,7 +74,7 @@ outcomes instead.
 
 ## Age ceiling and the staleness rule
 
-One tunable, `reference_snapshot_max_age_seconds` (1,209,600 s = 14 days, `registry/tunables.json`),
+One tunable, `reference_snapshot_max_age_seconds` (1,209,600 s = 14 days, `pipeline/tunables.json`),
 is the ceiling for OSV, the OSV SCA registry binding and this feed. Age is measured from the OLDEST
 usable source's original `fetched_at`.
 
@@ -70,6 +85,23 @@ usable source's original `fetched_at`.
 | never published / missing | SCA blocked | **gap** `MITRE_REFERENCE_MISSING`: every tag withheld |
 | fails integrity | SCA fails | **gap** `MITRE_REFERENCE_INVALID`: every tag withheld |
 | one source missing (e.g. CAPEC) | ecosystem gap | that kind's tags withheld as `MITRE_REFERENCE_MISSING` |
+
+CWE follows the same ceiling, measured from the CWE source's own ORIGINAL `fetched_at` (`resolve_cwe`;
+`resolve` ages ATT&CK/CAPEC only, so one kind going stale never withholds the other):
+
+| CWE state | Catalog used | Gap recorded |
+|---|---|---|
+| in ceiling | feed `cwe-catalog.json` (full MITRE catalog) | none |
+| older than the ceiling | committed curated catalog (96 ids) | `CWE_REFERENCE_STALE` |
+| no feed, no CWE source, or a bad zip at sync | committed curated catalog | `CWE_REFERENCE_MISSING` |
+| integrity failure, or the rule map names an id the feed catalog lacks | committed curated catalog | `CWE_REFERENCE_INVALID` |
+
+Whichever catalog is in force, an unknown or deprecated CWE id is still rejected (reviewer reply,
+repair round) or dropped with a note (tool tag); it is never published. The claim path (07/09/12)
+binds the catalog identity (table hash, or the curated fallback and its gap; never the snapshot id,
+which changes every sync) into its inputs when a decision carries `cwe`, and records `cwe_catalog`
+(snapshot id or `committed-curated`) on each judgment. `finding-enrichment.json` records the catalog
+used; a fallback also appears as a report limitation.
 
 A stale label table does not stop a code review: tags are withheld and the gap is recorded; an
 unvalidated id is never published. William can change this to a hard block (ADR-0026, decision 2).
@@ -100,6 +132,9 @@ one op never stops the others.
 python3 appsec-review-process/mitre_feed.py sync        # normally the Dagster op does this
 python3 appsec-review-process/mitre_feed.py verify
 python3 appsec-review-process/mitre_feed.py resolve     # exit 2 missing, 3 stale, 4 invalid
+python3 appsec-review-process/mitre_feed.py resolve --cwe  # CWE catalog; exit 2 missing, 3 stale, 4 invalid
 python3 appsec-review-process/attack_reference.py technique T1059.004 --tactic execution
-bash scripts/smoke_mitre_feed.sh                         # sync, verify, resolve, T1190 OK, T9999 UNKNOWN_ID, stale
+python3 appsec-review-process/cwe_catalog.py current --validate CWE-1321
+bash scripts/smoke_mitre_feed.sh                         # sync, verify, resolve, T1190 OK, T9999 UNKNOWN_ID, stale,
+                                                         # CWE-1321 OK, CWE-99999 rejected, stale CWE falls back
 ```

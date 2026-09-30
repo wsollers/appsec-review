@@ -24,16 +24,6 @@ CONTRACTS = (
     (hypothesis_hunt_derive, "hunter-hypothesis.schema.json",
      "hypothesis-hunt-persona.schema.json", (("hypotheses", "[]"), ())),
 )
-# Final-record fields the schemas mark orchestrator-owned that the module's hand-written
-# _ORCHESTRATOR_KEYS does not strip (an echo of one costs a repair round instead of a note).
-# Recorded in TODO "L formats"; the fix edits the derive module, which is part of its job's
-# fingerprint, so it waits for owner approval. Shrink this table as modules adopt contract_derive.
-KNOWN_DRIFT = {
-    "poc_fix_derive": {"explanation_status", "reason"},
-    "attack_chain_derive": set(),
-    "claim_review_derive": {"citations"},
-    "hypothesis_hunt_derive": {"drop_reason"},
-}
 
 
 class ContractDerive(unittest.TestCase):
@@ -53,11 +43,28 @@ class ContractDerive(unittest.TestCase):
                                        (("chains", "[]"), ()))
         self.assertEqual(set().union(*found.values()), attack_chain_derive._ORCHESTRATOR_KEYS)
 
-    def test_hand_written_lists_drift_only_as_recorded(self):
+    def test_every_schema_derived_field_is_in_its_derive_list(self):
+        # A final-record field the persona schema does not declare is Python's (ADR-0013). If a
+        # derive list misses one, a model echo of it costs a repair round instead of a note.
         for module, final, persona, anchor in CONTRACTS:
-            derived = set().union(*cd.orchestrator_fields(final, persona, anchor).values())
-            missing = derived - module._ORCHESTRATOR_KEYS
-            self.assertEqual(missing, KNOWN_DRIFT[module.__name__], module.__name__)
+            for path, names in cd.orchestrator_fields(final, persona, anchor).items():
+                with self.subTest(module=module.__name__, path=path):
+                    self.assertEqual(names - module._ORCHESTRATOR_KEYS, set())
+        _, final, persona, anchor = CONTRACTS[2]
+        self.assertEqual(claim_review_derive._OBLIGATION_KEYS, cd.orchestrator_keys(
+            final, persona, anchor, path=("decisions", "[]", "proof_obligations", "[]")))
+
+    def test_brief_l2_fields_are_now_derived(self):
+        self.assertLessEqual({"explanation_status", "reason"}, poc_fix_derive._ORCHESTRATOR_KEYS)
+        self.assertIn("citations", claim_review_derive._ORCHESTRATOR_KEYS)
+        self.assertIn("drop_reason", hypothesis_hunt_derive._ORCHESTRATOR_KEYS)
+
+    def test_orchestrator_keys_is_the_union_or_one_path(self):
+        final = {"properties": {"a": {}, "rows": {"items": {"properties": {"b": {}, "c": {}}}}}}
+        persona = {"properties": {"rows": {"items": {"properties": {"c": {}}}}}}
+        self.assertEqual(cd.orchestrator_keys(final, persona), {"a", "b"})
+        self.assertEqual(cd.orchestrator_keys(final, persona, path=("rows", "[]")), {"b"})
+        self.assertEqual(cd.orchestrator_keys(final, persona, path=("nope",)), set())
 
     def test_branches_refs_and_items_are_followed(self):
         schema = {"$defs": {"base": {"properties": {"a": {}}}},

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state as state
 from execution_state import tree_hashes
@@ -62,7 +63,7 @@ class IrB13ToolchainTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("APPSEC_RUN_LIVE_IR_B13") == "1",
                          "set APPSEC_RUN_LIVE_IR_B13=1 for the bounded Docker qualification")
     def test_live_source_to_accepted_ir_facts(self):
-        image_path = ROOT / "registry/container-images/audit-buildenv-cpp.json"
+        image_path = registry_paths.record(registry_paths.CONTAINER_IMAGES, "audit-buildenv-cpp")
         self.assertTrue(image_path.is_file(), "generate the host-local audit-buildenv-cpp record first")
         image = state.read_json(image_path)
         image_id = "image_build_" + image["digest"].removeprefix("sha256:")[:12]

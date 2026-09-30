@@ -19,6 +19,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import resource_pools as rp  # noqa: E402
 import validate_design_parity as parity  # noqa: E402
@@ -158,7 +159,7 @@ class Derivation(unittest.TestCase):
             self.assertEqual(rp.derive_pool("deterministic_python", [kind], memory_heavy=False), rp.CPU, kind)
 
     def test_every_registered_permission_kind_has_a_decision(self):
-        registered = {path.stem for path in (ROOT / "registry" / "permission-capabilities").glob("*.json")}
+        registered = {path.stem for path in registry_paths.PERMISSION_CAPABILITIES_DIR.glob("*.json")}
         self.assertTrue(registered)
         self.assertEqual(registered, set(rp.PERMISSION_KIND_POOLS))
 

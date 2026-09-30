@@ -6,6 +6,7 @@ import re
 from execution_state import ROOT, Blocked, beneath, read_json
 import size_log
 from phase1 import config_for, job_root
+import registry_paths
 
 
 def collect(run_id, pointer, data):
@@ -28,7 +29,7 @@ def collect(run_id, pointer, data):
         evidence.append({'path':name,'sha256':info['sha256'],'text':content.decode('utf-8',errors='replace')})
     size_log.observe(run_id, '00-workflow-preparation', 'build_evidence_bytes', used, 8*1024*1024,
                      files=len(evidence))
-    template = read_json(ROOT/'registry/job-templates/02-dev-project-discovery.json')
+    template = read_json(registry_paths.template("02-dev-project-discovery"))
     return {'files':evidence,'composition':template['composition'],
             'buildenv_catalog':read_json(ROOT/'tooling/buildenv-catalog.json')}
 

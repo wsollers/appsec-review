@@ -13,6 +13,7 @@ from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 JOBS = {
     "05-native-memory": ("native-memory-analysis", "native-memory-analysis.json", "native-memory-analysis.schema.json"),
@@ -38,7 +39,7 @@ def _code(job: str) -> dict[str, str]:
     paths = ["analysis_feature_lifecycle.py", "bounded_analysis_workers.py",
              {"05-native-memory":"native_memory_analysis.py","06-cve-reachability":"cve_reachability.py",
               "13-fuzz-target-triage":"fuzz_target_triage.py"}[job],
-             f"registry/job-templates/{job}.json", f"registry/output-contracts/{JOBS[job][0]}.json"]
+             registry_paths.template_rel(job), registry_paths.contract_rel(JOBS[job][0])]
     if job == "06-cve-reachability":
         paths += ["dependency_workers.py", *dep_reachability_lifecycle.CODE]
     values = {path: file_hash(ROOT / path) for path in paths}

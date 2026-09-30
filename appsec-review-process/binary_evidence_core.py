@@ -17,6 +17,7 @@ import native_build
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 SPECS = {
     "02-debug-symbol-index": ("debug-symbol-index", "debug-symbol-index.json", "debug-symbol-index.schema.json"),
@@ -117,7 +118,7 @@ def _hash(value: Any) -> str:
 
 
 def _permissions(job: str) -> list[str]:
-    value = read_json(ROOT / "registry/job-templates" / f"{job}.json").get("permissions")
+    value = read_json(registry_paths.template(job)).get("permissions")
     if (not isinstance(value, list) or not value or any(not isinstance(item, str) or not item for item in value)
             or len(value) != len(set(value))):
         raise Blocked(f"{job}: job template has no closed canonical permission binding")
@@ -202,7 +203,7 @@ def _code_hashes(job: str) -> dict[str, str]:
     contract, _result, schema = SPECS[job]
     wrapper = job[3:].replace("-", "_") + ".py"
     files = ["binary_evidence_core.py", wrapper, "publish_job_output.py",
-             f"registry/output-contracts/{contract}.json", f"registry/job-templates/{job}.json"]
+             registry_paths.contract_rel(contract), registry_paths.template_rel(job)]
     values = {name: file_hash(ROOT / name) for name in files}
     values["schemas/" + schema] = file_hash(ROOT.parent / "schemas" / schema)
     for name in ("binary-evidence-native.schema.json", "binary-evidence-authority.schema.json",

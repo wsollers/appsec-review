@@ -4,7 +4,7 @@
 Three record types, all closed schemas under ``schemas/``:
 
 * capability *definition* -- versioned registry record under
-  ``registry/permission-capabilities/`` naming the typed parameters one kind requires;
+  ``pipeline/permission-capabilities/`` naming the typed parameters one kind requires;
 * job *requirement* -- the exact capabilities one lifecycle job needs;
 * engagement *grant* -- an ALLOW or DENY issued by a named human authority, bound to one run and
   one source snapshot, with issue and expiry timestamps.
@@ -32,13 +32,14 @@ from pathlib import Path
 import re
 import sys
 from typing import Any
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from schema_validate import SchemaStore, validate_document  # noqa: E402
 
-DEFINITIONS_DIR = ROOT / "registry" / "permission-capabilities"
+DEFINITIONS_DIR = registry_paths.PERMISSION_CAPABILITIES_DIR
 
 DEFINITION_SCHEMA = "permission-capability.schema.json"
 ENTRY_SCHEMA = "permission-capability-entry.schema.json"

@@ -14,6 +14,7 @@ from publish_job_output import coordinate_worker_lifecycle, record_terminal_curr
 from schema_validate import validate_document
 import threat_model_core as tm
 from worker_result import validate_worker_result
+import registry_paths
 
 JOB = "03-threat-model-reconciliation"
 CONTRACT = "threat-model-reconciliation"
@@ -24,11 +25,11 @@ PERMISSIONS = ["read-source", "read-run-data", "write-run-data"]
 CODE_FILES = (
     "threat_model_reconciliation.py", "threat_model_core.py", "component_characterization.py",
     "publish_job_output.py", "validate_job_output.py",
-    "registry/job-templates/03-threat-model-reconciliation.json",
-    "registry/output-contracts/threat-model-reconciliation.json",
+    registry_paths.template_rel("03-threat-model-reconciliation"),
+    registry_paths.contract_rel("threat-model-reconciliation"),
     "personas/roles/threat-model-reconciler/role.json",
-    "registry/domains/threat-model-reconciliation.json",
-    "registry/tooling-profiles/threat-model-reconciliation.json",
+    registry_paths.rel(registry_paths.DOMAINS, "threat-model-reconciliation"),
+    registry_paths.rel(registry_paths.TOOLING_PROFILES, "threat-model-reconciliation"),
 )
 
 

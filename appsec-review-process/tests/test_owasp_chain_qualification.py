@@ -13,6 +13,7 @@ import unittest
 PROCESS = Path(__file__).resolve().parents[1]
 ROOT = PROCESS.parent
 sys.path.insert(0, str(PROCESS))
+import registry_paths
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import execution_state  # noqa: E402
@@ -240,7 +241,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
             "model": deepcopy(invocation_support.MODEL),
         }
         facts = owasp_dispatch.DispatchFacts(
-            registry_dir=PROCESS / "registry", allowed_models=(invocation_support.MODEL,),
+            registry_dir=registry_paths.REGISTRY, allowed_models=(invocation_support.MODEL,),
             invoker_id=persona_invocation.FixtureInvoker.invoker_id,
             source_snapshot_sha256=invocation_support.SNAPSHOT, registry_ceiling=None,
         )
@@ -312,7 +313,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
             routing.assemble(self.run_id)
 
     def test_validator_authority_is_separate_from_worklist_builder(self):
-        registry = PROCESS / "registry"
+        registry = registry_paths.REGISTRY
         worklist_template = json.loads((registry / "job-templates/04-owasp-validation-worklist.json").read_text())
         validator_template = json.loads((registry / "job-templates/04-owasp-validator-cell.json").read_text())
         self.assertEqual(worklist_template["composition"]["tooling_profile_id"], "owasp-worklist-builder")

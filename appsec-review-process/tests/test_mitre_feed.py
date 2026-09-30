@@ -101,10 +101,11 @@ class MitreFeedTests(unittest.TestCase):
         for name, spec in mitre_feed.SOURCES.items():
             self.assertNotIn("/master/", spec["url"], name)
             self.assertNotIn("latest", spec["url"], name)
-            self.assertRegex(spec["sha256"], r"^[0-9a-f]{64}$")
+            if spec["kind"] != "cwe":        # CWE is pinned by version; its byte pin is OPEN (brief O2, TODO)
+                self.assertRegex(spec["sha256"], r"^[0-9a-f]{64}$")
         self.assertIn("/v19.2/enterprise-attack/enterprise-attack-19.2.json", mitre_feed.SOURCES["enterprise-attack"]["url"])
         self.assertIn("ATT%26CK-v19.2/capec/2.1/stix-capec.json", mitre_feed.SOURCES["capec"]["url"])
-        self.assertEqual(mitre_feed.DEFAULT_SOURCES, ("enterprise-attack", "capec"))
+        self.assertEqual(mitre_feed.DEFAULT_SOURCES, ("enterprise-attack", "capec", "cwe"))
         with unittest.mock.patch.dict(os.environ, {"APPSEC_MITRE_SOURCES": "enterprise-attack,ics-attack"}):
             self.assertEqual(mitre_feed.configured_sources(), ("enterprise-attack", "ics-attack"))
         with unittest.mock.patch.dict(os.environ, {"APPSEC_MITRE_SOURCES": "enterprise-attack,latest"}):

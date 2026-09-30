@@ -182,7 +182,7 @@ are not committed. `orchestrator/dagster/code-location.sh start` runs:
 python3 -B images/registry_records.py generate
 ```
 
-The generator writes ignored `appsec-review-process/registry/container-images/<image_id>.json`
+The generator writes ignored `appsec-review-process/pipeline/container-images/<image_id>.json`
 records only after all 23 successful build pointers still match the current image inputs and
 `docker image inspect`. It never builds, pulls, or repairs an image. `check` is read-only and fails
 on a missing record, changed Dockerfile/build fingerprint, changed attempt identity, or Docker image

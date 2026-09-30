@@ -49,6 +49,7 @@ import tunables
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path
 from schema_validate import SchemaStore, validate_document
 import threat_workbench_intercom as intercom
+import registry_paths
 
 JOB = "03-threat-model-dfd-stride"
 RECORD_SCHEMA = "appsec-review/threat-workbench-record/0.1"
@@ -150,13 +151,13 @@ MENU_DESCRIPTIONS = {
 }
 CODE_FILES = (
     "threat_workbench.py", "threat_workbench_intercom.py",
-    *(f"registry/job-templates/{cell.template_id}.json" for cell in WORKCELLS),
+    *(registry_paths.template_rel(cell.template_id) for cell in WORKCELLS),
     *(f"personas/personas/{cell.persona_id}/persona.json" for cell in WORKCELLS),
     *(f"03-threat-model-dfd-stride/cells/{cell.workcell_id}.md" for cell in WORKCELLS),
     "personas/roles/data-flow-modeler/role.json", "personas/roles/abuse-modeler/role.json",
-    "personas/roles/attack-modeler/role.json", "registry/domains/threat-model-graph.json",
-    "registry/tooling-profiles/threat-workbench-static-evidence.json",
-    "registry/output-contracts/threat-workbench-cell-output.json",
+    "personas/roles/attack-modeler/role.json", registry_paths.rel(registry_paths.DOMAINS, "threat-model-graph"),
+    registry_paths.rel(registry_paths.TOOLING_PROFILES, "threat-workbench-static-evidence"),
+    registry_paths.contract_rel("threat-workbench-cell-output"),
 )
 SCHEMA_FILES = (CELL_SCHEMA, "threat-model-privacy-threat.schema.json", "threat-model-abuse-scenario.schema.json",
                 "threat-model-attack-tree.schema.json", "threat-model-data-class.schema.json",
@@ -1340,7 +1341,7 @@ def cell_results(model: dict[str, Any], record: dict[str, Any], run_id: str, att
         delta = {key: [item for item in model.get(key, []) if item.get("originating_workcell_id") == cid]
                  for key in families}
         delta["stride_coverage"] = []
-        template = read_json(ROOT / "registry" / "job-templates" / f"{CELLS[cid].template_id}.json")
+        template = read_json(registry_paths.template(CELLS[cid].template_id))
         composition = template["composition"]
         status = row["terminal_status"]
         if status == "OK" and any(g["originating_workcell_id"] == cid for g in model["gaps"]):

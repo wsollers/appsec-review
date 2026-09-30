@@ -25,6 +25,7 @@ import uuid
 from execution_state import (ROOT, atomic_bytes, atomic_json, data_path, execute, file_hash, now,
                              read_json, run_path, tree_hashes)
 from publish_job_output import ACCEPTED_SCHEMA, NONCURRENT_SCHEMA
+import registry_paths
 
 JOB_ID = "10-critical-findings-sarif"
 DAGSTER_JOB = "critical_findings_sarif"
@@ -234,8 +235,8 @@ def qualify(owner_run: str) -> int:
             ROOT / "process_gate.py", ROOT / "dagster_workflow.py",
             ROOT / "tests/test_critical_findings_sarif.py",
             ROOT / "tests/test_worker_adoption.py", ROOT / "tests/test_deterministic_child.py",
-            ROOT / "registry/job-templates/10-critical-findings-sarif.json",
-            ROOT / "registry/output-contracts/critical-findings-sarif.json",
+            registry_paths.template("10-critical-findings-sarif"),
+            registry_paths.contract("critical-findings-sarif"),
             ROOT.parent / "schemas/critical-findings-sarif.schema.json",
             ROOT.parent / "schemas/worker-result-envelope.schema.json",
         ]

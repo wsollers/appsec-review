@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claude_cli_invoker as cci
 import discovery_gate
@@ -116,7 +117,7 @@ class TopologyClaimBuilderTests(unittest.TestCase):
 
     def test_the_topology_claim_classes_are_inside_the_registry_ceiling(self):
         import persona_invocation as pi
-        registry = ROOT / "registry"
+        registry = registry_paths.REGISTRY
         role = json.loads((ROOT / "personas/roles/operations-topology-mapper/role.json").read_text(encoding="utf-8"))
         profile = json.loads((registry / "tooling-profiles" / "static-ops-topology-inspector.json")
                              .read_text(encoding="utf-8"))
@@ -375,7 +376,7 @@ class GateTests(unittest.TestCase):
             discovery_gate._run_project_automatic(self.run_id, "dagster-a", "02-build-index")
 
     def test_every_automatic_job_spec_matches_its_output_contract(self):
-        registry = ROOT / "registry"
+        registry = registry_paths.REGISTRY
         for job, spec in discovery_gate.AUTOMATIC_JOBS.items():
             with self.subTest(job=job):
                 template = json.loads((registry / "job-templates" / f"{job}.json").read_text(encoding="utf-8"))
@@ -418,8 +419,7 @@ class GateTests(unittest.TestCase):
 
     def test_sre_output_contract_has_the_exact_trusted_claim_policy(self):
         import validate_job_output
-        contract = json.loads((ROOT / "registry" / "output-contracts" /
-                               "operations-topology.json").read_text(encoding="utf-8"))
+        contract = json.loads((registry_paths.contract("operations-topology")).read_text(encoding="utf-8"))
         policy = validate_job_output.CLAIM_CLASS_POLICIES["operations-topology"]
         self.assertEqual(policy["claim_class_id"], contract["claim_class"]["claim_class_id"])
         self.assertEqual(policy["allowed_assertions"],

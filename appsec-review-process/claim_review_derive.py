@@ -65,8 +65,14 @@ PERSONA_FIELDS = {
 }
 ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool specification."
 # Orchestrator-owned keys a model may still echo out of habit; they are ignored, never trusted.
-_ORCHESTRATOR_KEYS = {"reviewer", "verifier", "candidate_id", "subject_id", "claim_class",
-                      "evidence_sha256", "assertion", "statement"}
+# Candidate-wrapper bookkeeping, plus every field the decision schema declares where the persona schema
+# does not (ADR-0013: Python derives it). `citations` is one: Python builds it from citation_ids, and
+# only the citation ids a legacy echo names are read. Hand-written, not built with contract_derive,
+# because claim_reviewer_pool.py (which would list that module) is also hashed by the intake
+# persona-tool pool; tests/test_contract_derive.py fails when a schema-derived field is missing here.
+_ORCHESTRATOR_KEYS = frozenset({"reviewer", "verifier", "citations", "statement", "candidate_id", "subject_id",
+                                "claim_class", "evidence_sha256", "assertion"})
+_OBLIGATION_KEYS = frozenset({"citations", "statement"})
 _CORE = {"07-red-team-adversarial": core.red_team, "08-blue-team-refutation": core.blue_team,
          "09-independent-verification": core.verify, "12-scoring-prioritization": core.score}
 
@@ -114,6 +120,15 @@ def _ids(values: Any, where: str, errors: list[str]) -> list[str]:
     return result
 
 
+def _strip(row: dict[str, Any], owned: frozenset[str], where: str, errors: list[str]) -> dict[str, Any]:
+    """``row`` without orchestrator-owned keys; the ids of an echoed ``citations`` join citation_ids."""
+    kept = {key: item for key, item in row.items() if key not in owned}
+    if "citations" in row:
+        legacy = _ids(row["citations"], f"{where}.citations", errors)
+        kept["citation_ids"] = list(kept.get("citation_ids") or []) + legacy
+    return kept
+
+
 def _normalize(stage: str, value: Any) -> tuple[Any, list[str]]:
     """Accept the persona reply and the legacy full-candidate reply; return persona decisions."""
     errors: list[str] = []
@@ -142,19 +157,13 @@ def _normalize(stage: str, value: Any) -> tuple[Any, list[str]]:
         if not isinstance(row, dict):
             decisions.append(row)
             continue
-        row = {key: item for key, item in row.items() if key not in _ORCHESTRATOR_KEYS}
-        if "citations" in row:
-            legacy = _ids(row.pop("citations"), f"decisions[{index}].citations", errors)
-            row["citation_ids"] = list(row.get("citation_ids") or []) + legacy
+        row = _strip(row, _ORCHESTRATOR_KEYS, f"decisions[{index}]", errors)
         if isinstance(row.get("proof_obligations"), list):
             obligations = []
             for position, item in enumerate(row["proof_obligations"]):
                 if isinstance(item, dict):
-                    item = {key: part for key, part in item.items() if key != "statement"}
-                    if "citations" in item:
-                        legacy = _ids(item.pop("citations"),
-                                      f"decisions[{index}].proof_obligations[{position}].citations", errors)
-                        item["citation_ids"] = list(item.get("citation_ids") or []) + legacy
+                    item = _strip(item, _OBLIGATION_KEYS,
+                                  f"decisions[{index}].proof_obligations[{position}]", errors)
                 obligations.append(item)
             row["proof_obligations"] = obligations
         if stage == "12-scoring-prioritization":

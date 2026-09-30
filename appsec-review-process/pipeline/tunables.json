@@ -8,6 +8,97 @@
       "unit": "bytes",
       "value": 16777216
     },
+    "code_query_depth_max": {
+      "description": "Deepest code_callers / code_callees walk (hops).",
+      "kind": "window",
+      "scale": "",
+      "unit": "count",
+      "value": 4
+    },
+    "code_query_exports_enabled": {
+      "description": "Grant the code_exports query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "code_query_force_indexed_mode": {
+      "description": "A model job granted code_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "code_query_graph_enabled": {
+      "description": "Grant the code_callers, code_callees, code_path query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "code_query_native_enabled": {
+      "description": "Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "code_query_outline_enabled": {
+      "description": "Grant the code_file_outline query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "code_query_path_depth_max": {
+      "description": "Longest call path code_path explores (edges).",
+      "kind": "safety",
+      "scale": "",
+      "unit": "count",
+      "value": 24
+    },
+    "code_query_path_nodes_max": {
+      "description": "Functions code_path may expand per call before it stops with complete=false.",
+      "kind": "safety",
+      "scale": "Grows with the call graph; freeciv21-size graphs stay well under this per query.",
+      "unit": "count",
+      "value": 50000
+    },
+    "code_query_paths_max": {
+      "description": "Most call paths one code_path call returns.",
+      "kind": "window",
+      "scale": "",
+      "unit": "count",
+      "value": 10
+    },
+    "code_query_rows_default": {
+      "description": "Rows a code_* query tool returns when the call gives no limit (brief U1).",
+      "kind": "window",
+      "scale": "",
+      "unit": "count",
+      "value": 20
+    },
+    "code_query_rows_max": {
+      "description": "Most rows one code_* query tool call returns; more is flagged truncated and the model narrows the query.",
+      "kind": "window",
+      "scale": "",
+      "unit": "count",
+      "value": 200
+    },
+    "code_query_symbols_enabled": {
+      "description": "Grant the code_symbol, code_locate, code_search query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
+    "code_query_types_enabled": {
+      "description": "Grant the code_type_info, code_overrides query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
     "container_argv_member_chars_max": {
       "description": "Longest single argv entry.",
       "kind": "safety",
@@ -469,6 +560,20 @@
       "scale": "",
       "unit": "seconds",
       "value": 604800
+    },
+    "reachability_codeql_entries": {
+      "description": "The CPG engine also roots the BFS at CodeQL EntryPoints rows (servlet, request mapping, controller action, route handler) joined by the handler's (path, start_line) when both tools saw the same source snapshot. Off until live CodeQL tables are produced and qualified (brief Q2, ADR-0023).",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": false
+    },
+    "reachability_export_entries": {
+      "description": "Finding reachability also roots the BFS at the functions a shipped shared library exports (dynamic export table from the accepted 02-binary-triage evidence, joined uniquely to the CPG; an ambiguous join is an escape, never an entry). When on and a shipped binary's export table is missing or partial, an unreached function is UNKNOWN, never UNREACHABLE. Off until scripts/smoke_entry_exports.sh qualifies it (brief Q).",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": false
     },
     "redaction_max_file_bytes": {
       "description": "Largest single file the evidence redactor processes; larger files are withheld.",

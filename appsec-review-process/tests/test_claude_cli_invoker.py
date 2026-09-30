@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claude_cli_invoker as invoker
 import execution_state as state
@@ -200,7 +201,7 @@ class InvokeRepairEndToEndTests(unittest.TestCase):
         from tests.test_dev_dispatch import inventory
         from schema_validate import SchemaStore
         store = SchemaStore()
-        contract = json.loads((ROOT / "registry" / "output-contracts" / "project-discovery.json").read_text())
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
         clean = inventory()
         bad = dict(clean, project_discovery_summary_placeholder="x")
         responses = [json.dumps({"project_inventory": bad, "project_discovery_summary": "# s"}),
@@ -239,7 +240,7 @@ class InvokeRepairEndToEndTests(unittest.TestCase):
 class PersonaResultCacheTests(unittest.TestCase):
     def test_identical_request_reuses_the_accepted_response_without_a_model_call(self):
         from tests.test_dev_dispatch import inventory
-        contract = json.loads((ROOT / "registry" / "output-contracts" / "project-discovery.json").read_text())
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
         response = json.dumps({"project_inventory": inventory(), "project_discovery_summary": "# s"})
         calls = []
 

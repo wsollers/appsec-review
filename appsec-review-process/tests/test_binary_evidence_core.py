@@ -12,6 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/binary-evidence/raw-records.json"
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import binary_evidence_core as core  # noqa: E402
 import evidence_assembly as assembly  # noqa: E402
@@ -207,8 +208,8 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
         self.assertNotIn("subprocess", source)
         self.assertNotIn("run_container", source)
         for job, (contract_id, result_name, schema_name) in core.SPECS.items():
-            template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
-            contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
+            template = json.loads((ROOT / registry_paths.template_rel(job)).read_text())
+            contract = json.loads((ROOT / registry_paths.contract_rel(contract_id)).read_text())
             self.assertEqual(template["implemented"],
                              job in core.adapter.SUPPORTED or job == "02-binary-intelligence-ingest")
             self.assertEqual(template["composition"]["output_contract_id"], contract_id)
@@ -244,7 +245,7 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
 
     def test_claim_ceiling_and_schema_closure_matrix(self):
         for _job, (contract_id, _result, schema) in core.SPECS.items():
-            contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
+            contract = json.loads((ROOT / registry_paths.contract_rel(contract_id)).read_text())
             self.assertEqual(_claim_class_errors(contract, {"lead": "static evidence"}), [])
             for forbidden in ("finding", "severity", "runtime_state"):
                 self.assertTrue(_claim_class_errors(contract, {forbidden: "high"}))

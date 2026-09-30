@@ -18,6 +18,7 @@ from schema_validate import validate_document
 from worker_result import validate_worker_result
 from execution_state import tree_hashes
 import intake
+import registry_paths
 
 PROHIBITED_KEYS = {"finding", "findings", "severity", "vulnerability", "vulnerabilities", "clean_claim"}
 NO_BINARIES = "not-applicable-no-native-binaries"
@@ -333,9 +334,9 @@ def code_hashes(job:str)->dict[str,str]:
     wrapper={EXECUTION_JOB:"test_execution.py",RESULT_JOB:"test_result_ingest.py",COVERAGE_JOB:"test_coverage_ingest.py"}[job]
     # D-13(b): container_execution, permission_capabilities and publish_job_output are shared runtime
     # (ADR-0013); the B13 boundary is pinned by boundary_sha256 in the execution inputs.
-    names=("test_evidence.py",wrapper,f"registry/output-contracts/{SPECS[job][2]}.json",
-           f"registry/job-templates/{job}.json","personas/roles/test-evidence-producer/role.json",
-           "registry/tooling-profiles/bounded-test-evidence.json")
+    names=("test_evidence.py",wrapper,registry_paths.contract_rel(SPECS[job][2]),
+           registry_paths.template_rel(job),"personas/roles/test-evidence-producer/role.json",
+           registry_paths.rel(registry_paths.TOOLING_PROFILES, "bounded-test-evidence"))
     result={name:file_hash(ROOT/name) for name in names}
     schemas=[SPECS[job][1],"test-execution-lineage.schema.json","test-native-build-lineage.schema.json"]
     if job==EXECUTION_JOB: schemas += ["test-execution-control.schema.json","native-build.schema.json",

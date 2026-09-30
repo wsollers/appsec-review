@@ -33,6 +33,7 @@ import resource_pools
 import review_cli
 from execution_state import Blocked, ROOT, atomic_bytes, digest, file_hash
 from schema_validate import SchemaStore
+import registry_paths
 
 TEMPLATE = "poc-and-fix-cell"
 LANE = "12b-poc-and-fix"
@@ -49,13 +50,14 @@ RULES = (
 
 def code_hashes() -> dict[str, str]:
     """Implementation files the lane-12b job depends on (the worker adds its own module)."""
-    paths = ["poc_fix_derive.py", "poc_fix_denylist.py", "poc_fix_select.py", "poc_fix_pool.py",
-             "finding_enrichment.py", "reachability.py", "code_snippets.py", "cwe_catalog.py",
+    paths = ["poc_fix_derive.py", "contract_derive.py", "poc_fix_denylist.py", "poc_fix_select.py", "poc_fix_pool.py",
+             "finding_enrichment.py", "reachability.py", "entry_exports.py", "code_snippets.py", "cwe_catalog.py",
+             "mitre_feed.py",
              "persona_invocation.py", "deterministic_pool_merge.py", "pool_launcher.py", "pool_rendezvous.py",
              "pool_specification.py", "personas/personas/poc-fix-author/persona.json", "personas/roles/poc-fix-author/role.json",
-             "personas/roles/poc-fix-coordinator/role.json", "registry/domains/poc-and-fix.json",
-             "registry/tooling-profiles/claim-review-static.json", "registry/output-contracts/poc-fix-candidates.json",
-             f"registry/job-templates/{TEMPLATE}.json", f"{LANE}/task-{TEMPLATE}.md"]
+             "personas/roles/poc-fix-coordinator/role.json", registry_paths.rel(registry_paths.DOMAINS, "poc-and-fix"),
+             registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"), registry_paths.contract_rel("poc-fix-candidates"),
+             registry_paths.template_rel(TEMPLATE), f"{LANE}/task-{TEMPLATE}.md"]
     values = {path: file_hash(ROOT / path) for path in paths}
     for name in (derive.PERSONA_SCHEMA, derive.RECORD_SCHEMA, derive.CANDIDATES_SCHEMA, derive.WORKSPACE_SCHEMA):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)

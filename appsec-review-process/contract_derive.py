@@ -15,19 +15,22 @@ hand-maintain it and an existing list can be checked for drift:
 * ``object_paths(schema)``: every property path at which a schema declares an object;
 * ``orchestrator_fields(final, persona, anchor)``: {path: final-only property names} over every
   object path the two schemas share once the persona wrapper is aligned with the final record;
+* ``orchestrator_keys(final, persona, anchor, path)``: those names as one set (all paths, or one),
+  the derive list a module strips before it validates a reply;
 * ``strip_orchestrator_fields(row, fields, where, notes)``: drop them from a reply row, noting each;
 * ``content_id(prefix, identity)``: the ``<prefix>-<24 hex of digest(identity)>`` id rule the
   derive modules use (byte-identical to ``prefix + "-" + execution_state.digest(identity)[:24]``);
 * ``unwrap_single(value)``: the one-item list wrapper models send around a single object.
 
-Nothing here is wired into a job yet; adopting it in a derive module is a separate change, because
-that module is part of its job's fingerprint.
+``poc_fix_derive`` and ``hypothesis_hunt_derive`` build their derive lists with ``orchestrator_keys``
+(brief L2), so this module is part of those jobs' fingerprints. It imports only the shared-runtime
+validator at module level; ``formats`` is loaded by ``content_id`` alone. The other derive modules keep
+hand-written lists that ``tests/test_contract_derive.py`` checks against the schemas.
 """
 from __future__ import annotations
 
 from typing import Any, Iterable, Sequence
 
-from formats import digest
 from schema_validate import SchemaStore, UnsupportedSchema, resolve_ref
 
 _BRANCHES = ("allOf", "anyOf", "oneOf")
@@ -145,6 +148,18 @@ def orchestrator_fields(final: str | dict, persona: str | dict,
     return out
 
 
+def orchestrator_keys(final: str | dict, persona: str | dict,
+                      anchor: tuple[Sequence[str], Sequence[str]] = ((), ()),
+                      path: Sequence[str] | None = None,
+                      store: SchemaStore | None = None) -> frozenset[str]:
+    """The orchestrator-owned names of :func:`orchestrator_fields` as one set: the union over every
+    shared path, or the names at one persona ``path`` (empty when the schemas do not share it)."""
+    found = orchestrator_fields(final, persona, anchor, store)
+    if path is not None:
+        return frozenset(found.get(tuple(path), ()))
+    return frozenset(set().union(*found.values()))
+
+
 def strip_orchestrator_fields(row: Any, fields: Iterable[str], where: str,
                               notes: list[str]) -> Any:
     """``row`` without the orchestrator-owned keys, each dropped key noted (never an error)."""
@@ -157,6 +172,7 @@ def strip_orchestrator_fields(row: Any, fields: Iterable[str], where: str,
 
 
 def content_id(prefix: str, identity: Any, width: int = 24) -> str:
+    from formats import digest
     return f"{prefix}-{digest(identity)[:width]}"
 
 

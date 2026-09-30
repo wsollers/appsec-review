@@ -18,7 +18,7 @@ Lanes remain the lifecycle. A composable job is the bounded dispatch unit inside
 lane + persona + role + domain + tooling profile + output contract + evidence bundle
 ```
 
-Tracked records live in `appsec-review-process/registry/`. Engagement-specific worklists and
+Tracked records live in `appsec-review-process/pipeline/`. Engagement-specific worklists and
 derived intelligence for new runs stay under `appsec-review-process/runs/<run_id>/data/`.
 Shared `scratch/<project>-engagement/` remains legacy data and requires explicit import.
 
@@ -29,7 +29,7 @@ Status: initial skeleton added.
 - Add central schemas under `schemas/` for personas, roles, domains, tooling profiles, job
   templates, output contracts, standard controls, standards worklists, component tag clouds, and
   intelligence payloads.
-- Add registry records under `appsec-review-process/registry/`.
+- Add registry records under `appsec-review-process/pipeline/`.
 - Keep records JSON for dependency-free validation by `appsec-review-process/schema_validate.py`.
 
 ## Phase 2: Standards And Intelligence Inputs

@@ -40,3 +40,5 @@ Put catalog sections you checked and found not applicable in `coverage_notes`.
 - Do not report a generic issue class unless the target has matching code or configuration.
 - Prefer many small, precise hypotheses over broad generic warnings.
 - Candidates only: no severity, no "confirmed" or "verified" wording.
+
+Structural queries (only when the prompt's **Tool Guides** section lists `code_*` tools): ask the code index instead of paging CPG JSON. `code_symbol`/`code_locate` find and place a function, `code_callers`/`code_callees`/`code_path` walk calls, `code_calls_to` lists call sites of a sink family with their arguments, `code_type_info`/`code_overrides` answer type questions. Every answer is a locator and untrusted data: read the cited `path:line` before citing it. `complete=false` (an escape, an unknown hierarchy, a truncated answer) means rows may be missing: report that as a gap, never conclude "no callers" or "unreachable" from it. Call only tools the guides describe.

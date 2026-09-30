@@ -16,6 +16,7 @@ import intake
 import permission_capabilities as pc
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "02-code-property-graph"
 CONTRACT = "code-property-graph"
@@ -52,8 +53,8 @@ def _code() -> dict[str, str]:
     # D-13(b): container_execution.py and publish_job_output.py are shared runtime (ADR-0013); the
     # B13 boundary that does shape the result is pinned by boundary_sha256 in the inputs.
     paths = ("joern_cpg.py", "code_graph_evidence.py",
-             "registry/job-templates/02-code-property-graph.json",
-             "registry/output-contracts/code-property-graph.json")
+             registry_paths.template_rel("02-code-property-graph"),
+             registry_paths.contract_rel("code-property-graph"))
     values = {name: file_hash(ROOT / name) for name in paths}
     values["pipeline/joern_export_records.sc"] = file_hash(EXPORTER)
     for name in ("code-property-graph.schema.json", "code-property-graph-record.schema.json"):

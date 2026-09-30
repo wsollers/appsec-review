@@ -49,6 +49,7 @@ from publish_job_output import coordinate_worker_lifecycle, record_terminal_curr
 import reachability
 from schema_validate import validate_document
 import tunables
+import registry_paths
 
 JOBS = {"codeql": "06-reachability-codeql", "ir": "06-reachability-ir"}
 DAGSTER_JOBS = {"codeql": "reachability_codeql", "ir": "reachability_ir"}
@@ -67,7 +68,7 @@ MAX_ROWS_REASON = 1024
 CODE_FILES = ("reachability_engine_jobs.py", "dep_reachability.py", "dep_reachability_engines.py",
               "dep_reachability_codeql.py", "dep_reachability_lifecycle.py", "dep_symbol_resolver.py",
               "reachability.py", "codeql_sast.py", "container_execution.py", "publish_job_output.py",
-              f"registry/output-contracts/{CONTRACT}.json")
+              registry_paths.contract_rel(CONTRACT))
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
 
 
@@ -91,7 +92,7 @@ def _clean(value: Any, limit: int) -> str:
 
 def _code(engine: str) -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
-    template = f"registry/job-templates/{job_id(engine)}.json"
+    template = registry_paths.template_rel(job_id(engine))
     values[template] = file_hash(ROOT / template)
     for name in (SCHEMA_FILE, "engine-reachability-row.schema.json"):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
@@ -625,7 +626,7 @@ def _write(attempt: Path, result: dict[str, Any], run_id: str, dagster_id: str, 
 
 
 def _receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    template = read_json(ROOT / "registry" / "job-templates" / f"{inputs['job']}.json")
+    template = read_json(registry_paths.JOB_TEMPLATES_DIR / f"{inputs['job']}.json")
     common = {"run_id": inputs["run_id"], "job_id": inputs["job"], "source_snapshot_sha256": inputs["source_generation"]}
     return ({"schema": "appsec-review/producer-permission-receipt/1.0", **common,
              "permissions": template["permissions"]},

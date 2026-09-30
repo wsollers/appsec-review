@@ -27,6 +27,7 @@ from execution_state import (Blocked, ROOT, atomic_bytes, atomic_json, data_path
                              read_json, run_path)
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import registry_paths
 
 JOB = "persona-tool-pool-dispatch"
 CONTRACT = JOB
@@ -61,10 +62,10 @@ def _code_hashes() -> dict[str, str]:
     names = ["persona_tool_pool_lifecycle.py", "claim_reviewer_pool.py", "pool_launcher.py",
              "pool_rendezvous.py", "pool_specification.py", "deterministic_pool_merge.py",
              "claude_cli_invoker.py", "persona_invocation.py", "control_lane_orchestration.py",
-             "intake-review-pool-task.md", "registry/job-templates/intake-review-pool-cell.json",
-             "registry/job-templates/intake-review-pool-independent-cell.json",
-             "registry/job-templates/persona-tool-pool-dispatch.json",
-             "registry/output-contracts/persona-tool-pool-dispatch.json"]
+             "intake-review-pool-task.md", registry_paths.template_rel("intake-review-pool-cell"),
+             registry_paths.template_rel("intake-review-pool-independent-cell"),
+             registry_paths.template_rel("persona-tool-pool-dispatch"),
+             registry_paths.contract_rel("persona-tool-pool-dispatch")]
     result = {name: file_hash(ROOT / name) for name in names}
     for name in ("persona-tool-pool-dispatch.schema.json", "graph-pool-context.schema.json",
                  "claim-review-pool-candidates.schema.json"):

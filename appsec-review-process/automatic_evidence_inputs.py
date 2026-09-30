@@ -24,6 +24,7 @@ import reference_snapshots
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 import vendor_evidence_workers as vendor_workers
+import registry_paths
 
 CONTROL = "automatic-evidence-input-control.json"
 CONTROL_SCHEMA = "appsec-review/automatic-evidence-input-control/1"
@@ -82,7 +83,7 @@ def _manifest(run_id: str) -> tuple[Path, dict[str, Any], str]:
 
 def _permissions(manifest: dict[str, Any], job_id: str) -> list[str]:
     configured = manifest["intake_config"].get("permissions")
-    template = read_json(ROOT / "registry" / "job-templates" / f"{job_id}.json")
+    template = read_json(registry_paths.template(job_id))
     required = template.get("permissions")
     if (not isinstance(configured, list) or any(not isinstance(item, str) for item in configured) or
             not isinstance(required, list) or any(not isinstance(item, str) for item in required)):

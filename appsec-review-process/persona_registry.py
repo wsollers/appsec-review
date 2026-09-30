@@ -5,9 +5,10 @@
     personas/personas/<persona-id>/persona.json   prompt.md
     personas/roles/<role-id>/role.json            prompt.md
 
-The folder tree sits beside ``registry/`` (``<registry_dir>/../personas``), so a test that copies a
-registry directory copies the ``personas`` directory next to it. Every other registry record kind
-(job templates, domains, tooling profiles, output contracts) stays ``registry/<kind>/<id>.json``;
+The folder tree sits beside the registry directory ``pipeline/`` (``<registry_dir>/../personas``), so a
+test that copies a registry directory copies the ``personas`` directory next to it. Every other registry
+record kind (job templates, domains, tooling profiles, output contracts) stays
+``pipeline/<kind>/<id>.json`` (brief K; ``registry_paths`` owns those paths);
 callers name a kind by its old registry directory (``"personas"``, ``"roles"``, ``"domains"`` ...)
 and this module answers where that record's file is.
 

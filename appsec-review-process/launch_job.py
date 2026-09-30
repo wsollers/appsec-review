@@ -10,6 +10,7 @@ import uuid
 
 import dev_restart
 from execution_state import ROOT, Blocked, Lock, atomic_json, data_path, identifier, now, read_json, run_path
+import registry_paths
 
 ENDPOINT = 'http://127.0.0.1:3000/graphql'
 FIND = '''query($tags:[ExecutionTag!]!) {
@@ -91,7 +92,7 @@ def explain(run_id, mode='prod', force_jobs=()):
         item_explain = job_executor.explain_items
     except ImportError:
         item_explain = None
-    return dev_restart.explain_run(run_path(run_id), read_json(ROOT/'job-graph.json'), ROOT, mode=mode,
+    return dev_restart.explain_run(run_path(run_id), read_json(registry_paths.JOB_GRAPH), ROOT, mode=mode,
                                    forced=force_jobs, item_explain=item_explain)
 
 

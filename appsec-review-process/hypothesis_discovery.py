@@ -55,6 +55,7 @@ from execution_state import (Blocked, ROOT, atomic_bytes, atomic_json, data_path
                              read_json, run_path)
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import registry_paths
 
 JOB = "07-hypothesis-discovery"
 CONTRACT = "hypothesis-discovery"
@@ -99,18 +100,18 @@ def _sha(value: Any) -> str:
 
 
 def _code_hashes() -> dict[str, str]:
-    paths = ["hypothesis_discovery.py", "hypothesis_hunt_derive.py", "claim_ledger.py",
+    paths = ["hypothesis_discovery.py", "hypothesis_hunt_derive.py", "contract_derive.py", "claim_ledger.py",
              "claude_cli_invoker.py", "persona_invocation.py", "deterministic_pool_merge.py",
              "pool_launcher.py", "pool_rendezvous.py", "pool_specification.py", "supporting_evidence_menu.py",
-             "registry/job-templates/07-hypothesis-discovery.json",
-             "registry/output-contracts/hypothesis-discovery.json",
-             "registry/output-contracts/hypothesis-hunt-candidates.json",
+             registry_paths.template_rel("07-hypothesis-discovery"),
+             registry_paths.contract_rel("hypothesis-discovery"),
+             registry_paths.contract_rel("hypothesis-hunt-candidates"),
              "personas/roles/vulnerability-hypothesis-hunter/role.json",
              "personas/roles/hypothesis-hunt-coordinator/role.json",
-             "registry/domains/vulnerability-hypothesis-discovery.json",
-             "registry/tooling-profiles/hypothesis-hunt-static.json"]
+             registry_paths.rel(registry_paths.DOMAINS, "vulnerability-hypothesis-discovery"),
+             registry_paths.rel(registry_paths.TOOLING_PROFILES, "hypothesis-hunt-static")]
     for mode, template in sorted(TEMPLATES.items()):
-        paths += [f"registry/job-templates/{template}.json", f"personas/personas/{derive.MODES[mode]}/persona.json",
+        paths += [registry_paths.template_rel(template), f"personas/personas/{derive.MODES[mode]}/persona.json",
                   f"07-red-team-adversarial/task-{template}.md"]
     paths += [f"07-red-team-adversarial/{name}" for name in sorted({n for v in GUIDE_FILES.values() for n in v})]
     values = {path: file_hash(ROOT / path) for path in paths}

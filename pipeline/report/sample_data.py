@@ -9,7 +9,7 @@ are illustrative and hand-kept. Every block below is produced by the real code p
 cannot drift from the pipeline (deterministic, offline, no model call):
 
 * ``families`` / ``processes`` / ``scoring.family_weight`` -- one process per job in
-  ``appsec-review-process/job-graph.json``, grouped by the graph's own ``lane`` field; kind and tools
+  ``appsec-review-process/pipeline/job-graph.json``, grouped by the graph's own ``lane`` field; kind and tools
   from the design-parity manifest. Statuses follow the fixed SAMPLE rule in ``SKIPPED`` and
   ``GAPS`` (everything else OK); skip receipts are the reason-code constants the workers emit.
 * ``threat_workbench`` (section 3C) -- the canned cell replies in
@@ -41,7 +41,7 @@ ROOT = HERE.parents[1]
 PROCESS = ROOT / "appsec-review-process"
 EXAMPLE = HERE / "examples" / "hello-autotools.review.json"
 REPLIES = HERE / "examples" / "hello-autotools.workbench-replies.json"
-GRAPH = PROCESS / "job-graph.json"
+GRAPH = PROCESS / "pipeline" / "job-graph.json"
 MANIFEST = PROCESS / "design-parity-manifest.json"
 COMPONENT = PROCESS / "tests" / "fixtures" / "component-characterization" / "hello-autotools.json"
 

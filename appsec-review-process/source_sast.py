@@ -26,6 +26,7 @@ import permission_capabilities as pc
 import source_sast_language_adapters as language_adapters
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "02-source-sast"
 DAGSTER_JOB = "source_sast"
@@ -86,10 +87,10 @@ def vendored_rules() -> dict[str, dict[str, Any]]:
 CODE_FILES = (
     "source_sast.py", "container_execution.py", "permission_capabilities.py",
     "publish_job_output.py", "validate_job_output.py", "source_sast_language_adapters.py",
-    "registry/output-contracts/source-sast.json",
-    "registry/job-templates/02-source-sast.json",
+    registry_paths.contract_rel("source-sast"),
+    registry_paths.template_rel("02-source-sast"),
 )
-TEMPLATE = ROOT / "registry" / "job-templates" / f"{JOB}.json"
+TEMPLATE = registry_paths.template(JOB)
 
 
 def _producer_receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

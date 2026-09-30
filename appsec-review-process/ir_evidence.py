@@ -18,6 +18,7 @@ import intake
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 NATIVE_JOB = "02-native-build"
 JOBS = {
@@ -483,8 +484,8 @@ def _code_hashes(job: str) -> dict[str, str]:
     result = {name: file_hash(ROOT / name) for name in (
         "ir_evidence.py", "ir_b13_toolchain.py", "container_execution.py", wrapper,
         "publish_job_output.py", "worker_result.py", "validate_job_output.py",
-        f"registry/job-templates/{job}.json",
-        f"registry/output-contracts/{JOBS[job][2]}.json")}
+        registry_paths.template_rel(job),
+        registry_paths.contract_rel(JOBS[job][2]))}
     consumed = {"02-ir-capture": "native-build.schema.json",
                 "02-ir-link": "ir-capture.schema.json",
                 "02-ir-facts": "ir-link.schema.json"}[job]
