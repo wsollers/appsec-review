@@ -31,6 +31,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import evidence_redaction as redaction
 import sbom_family_contracts as contracts
@@ -38,7 +39,7 @@ import sca_nvd_snapshot
 from schema_validate import SchemaStore, validate_document
 import tool_instance_shapes as shapes
 
-CONTRACT_DIR = ROOT / "registry" / "output-contracts"
+CONTRACT_DIR = registry_paths.OUTPUT_CONTRACTS_DIR
 PROPOSAL = REPO / "docs" / "proposals" / "vendor-prepass" / "job-nodes.proposal.json"
 PRODUCERS = REPO / "docs" / "proposals" / "vendor-prepass" / "threat-workbench-producers.proposal.yaml"
 ALL_SCHEMAS = sorted(path.name for prefix in ("sbom-inventory", "sca-vulnerability-match", "license-inventory",

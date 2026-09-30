@@ -1,7 +1,7 @@
 # AppSec review - implemented process flow
 
 Snapshot: 2026-09-27 (diagram updated 2026-09-29 for ADR-0023). The machine-readable authorities are
-[`job-graph.json`](../appsec-review-process/job-graph.json),
+[`job-graph.json`](../appsec-review-process/pipeline/job-graph.json),
 [`design-parity-manifest.json`](../appsec-review-process/design-parity-manifest.json), and the
 registry contracts. The generated [job and artifact catalog](processes/job-catalog.md) is the exact
 inventory. This document explains how work and evidence move through the system.

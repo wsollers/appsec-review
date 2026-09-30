@@ -804,7 +804,7 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   (`model-config.json`'s `invocation.save_llm_transcripts`, default false) so a live dispatch's raw
   transcript can be durably reviewed on request, without changing the default trust boundary that
   keeps raw model output out of the accepted run record. **Found, deliberately not fixed (Full-
-  protocol scope, confirm with William first): `registry/output-contracts/project-discovery.json`'s
+  protocol scope, confirm with William first): `appsec-review-process/pipeline/output-contracts/project-discovery.json`'s
   `required_files` lists `safe-command-plan.json` as a separate file, but
   `schemas/project-discovery.schema.json` already defines `safe_command_plan` as a field inside
   `project-inventory.json` -- reproduced directly, this raises `InvokerOutputError` on the first

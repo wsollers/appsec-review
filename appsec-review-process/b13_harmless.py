@@ -22,6 +22,7 @@ import permission_capabilities as pc
 from publish_job_output import coordinate_worker_lifecycle, publish_validated, validate_published
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 JOB = "b13-harmless-container"
 DAGSTER_JOB = "b13_harmless_container"
@@ -36,8 +37,8 @@ ARGV = {"success": ["/bin/true"], "exit-nonzero": ["/bin/false"]}
 CODE_FILES = (
     "b13_harmless.py", "container_execution.py", "deterministic_child.py", "execution_state.py",
     "permission_capabilities.py", "publish_job_output.py", "validate_job_output.py",
-    "worker_result.py", "registry/output-contracts/b13-harmless-container.json",
-    "registry/container-images/fixture-harmless.json",
+    "worker_result.py", registry_paths.contract_rel("b13-harmless-container"),
+    registry_paths.rel(registry_paths.CONTAINER_IMAGES, "fixture-harmless"),
 )
 
 

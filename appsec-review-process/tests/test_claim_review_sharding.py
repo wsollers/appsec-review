@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import catalog_personas
 import claim_review_sharding as sharding
@@ -19,7 +20,7 @@ from schema_validate import SchemaStore
 
 STRIDE = ("spoofing", "tampering", "repudiation", "information-disclosure", "denial-of-service",
           "elevation-of-privilege")
-TEMPLATE = json.loads((ROOT / "registry/job-templates/claim-review-pool-cell.json").read_text())
+TEMPLATE = json.loads((registry_paths.template("claim-review-pool-cell")).read_text())
 
 
 def claim(claim_id, components, hypothesis="Candidate condition.", path=None, causal=(), producer="03-x"):

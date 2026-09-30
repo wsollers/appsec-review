@@ -37,6 +37,7 @@ import tunables
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import registry_paths
 
 JOB = "14-attack-chain-composition"
 CONTRACT = "14-attack-chain-composition"
@@ -70,8 +71,8 @@ def _sha(value: Any) -> str:
 
 def _code_hashes() -> dict[str, str]:
     values = chain_pool.code_hashes()
-    for path in ("attack_chain_composition.py", f"registry/job-templates/{JOB}.json",
-                 f"registry/output-contracts/{CONTRACT}.json"):
+    for path in ("attack_chain_composition.py", registry_paths.template_rel(JOB),
+                 registry_paths.contract_rel(CONTRACT)):
         values[path] = file_hash(ROOT / path)
     values["schemas/" + RESULT_SCHEMA] = file_hash(ROOT.parent / "schemas" / RESULT_SCHEMA)
     return values

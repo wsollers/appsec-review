@@ -31,6 +31,7 @@ from phase1 import config_for
 from publish_job_output import (common_pointer, coordinate_worker_lifecycle,
                                 record_terminal_current, validate_published)
 from validate_job_output import validate_contract_result
+import registry_paths
 
 JOB_ID = "02-ossf-scorecard"
 INPUT_NAME = "ossf-scorecard-projects.json"
@@ -66,7 +67,7 @@ def input_path(run_id: str) -> Path:
 
 
 def template() -> dict[str, Any]:
-    value = read_json(ROOT / "registry" / "job-templates" / f"{JOB_ID}.json")
+    value = read_json(registry_paths.template(JOB_ID))
     composition(value)
     return value
 
@@ -225,8 +226,8 @@ def current_inputs(run_id: str, persist_handoff: bool = True) -> dict[str, Any]:
                        "executable": str(Path(sys.executable).resolve()),
                        "image": os.environ.get("APPSEC_WORKER_IMAGE", "appsec-review-dagster:local")},
               "code": {"ossf_scorecard.py": file_hash(Path(__file__)),
-                       f"registry/job-templates/{JOB_ID}.json": file_hash(
-                           ROOT / "registry" / "job-templates" / f"{JOB_ID}.json")},
+                       registry_paths.template_rel(JOB_ID): file_hash(
+                           registry_paths.template(JOB_ID))},
               "child_execution": {"contract": CHILD_CONTRACT, "argv_only": True,
                                   "shell_allowed": False,
                                   "stdout_limit_bytes": STDOUT_LIMIT_BYTES,
@@ -244,8 +245,7 @@ def current_inputs(run_id: str, persist_handoff: bool = True) -> dict[str, Any]:
 
 def _validate_attempt_payload(attempt: Path, record: dict[str, Any]) -> None:
     del record  # inputs.json is the immutable source used by the contract validator.
-    contract = read_json(ROOT / "registry" / "output-contracts" /
-                         "ossf-scorecard-results.json")
+    contract = read_json(registry_paths.contract("ossf-scorecard-results"))
     errors = validate_contract_result(
         attempt, contract, run_id=read_json(attempt / "status.json").get("run_id", ""))
     if errors:
@@ -382,7 +382,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if not isinstance(identity.get("fingerprint"), str):
             raise Blocked("OpenSSF Scorecard: accepted intake source identity is missing")
         source_snapshot = "sha256:" + identity["fingerprint"]
-        permissions = read_json(ROOT / "registry" / "job-templates" / "02-ossf-scorecard.json")["permissions"]
+        permissions = read_json(registry_paths.template("02-ossf-scorecard"))["permissions"]
         atomic_json(attempt / "permission.json", {
             "schema": "appsec-review/producer-permission-receipt/1.0", "run_id": run_id,
             "job_id": JOB_ID, "source_snapshot_sha256": source_snapshot, "permissions": permissions})

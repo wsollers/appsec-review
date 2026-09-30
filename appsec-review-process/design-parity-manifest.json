@@ -2,7 +2,7 @@
   "schema": "appsec-review/design-parity-manifest/1.0",
   "design_authority": "docs/architecture/design-v3.md",
   "sources": [
-    "appsec-review-process/job-graph.json",
+    "appsec-review-process/pipeline/job-graph.json",
     "appsec-review-process/dagster_workflow.py",
     "appsec-review-process/launch_job.py",
     "appsec-review-process/worker-result-contract.json",
@@ -13,7 +13,7 @@
     "appsec-review-process/validate_job_output.py",
     "orchestrator/dagster/definitions.py",
     "orchestrator/dagster/dagster.yaml",
-    "appsec-review-process/registry/",
+    "appsec-review-process/pipeline/",
     "docs/design-parity/design-parity-completion-plan.md"
   ],
   "worker_result_contract": {
@@ -405,6 +405,8 @@
           "02-codeql-ruby",
           "02-codeql-rust",
           "02-code-property-graph",
+          "02-treesitter-ast",
+          "02-code-index",
           "02-native-sast",
           "02-ir-capture",
           "02-ir-link",
@@ -774,7 +776,7 @@
       },
       "output": {
         "contract": "intake",
-        "contract_file": "appsec-review-process/registry/output-contracts/intake.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/intake.json",
         "schema_file": null,
         "claim_class": "intake_inventory"
       },
@@ -842,7 +844,7 @@
       },
       "output": {
         "contract": "ossf-scorecard-results",
-        "contract_file": "appsec-review-process/registry/output-contracts/ossf-scorecard-results.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/ossf-scorecard-results.json",
         "schema_file": "schemas/ossf-scorecard-results.schema.json",
         "claim_class": "supply_chain_posture_evidence"
       },
@@ -915,7 +917,7 @@
       },
       "output": {
         "contract": "repository-partition-map",
-        "contract_file": "appsec-review-process/registry/output-contracts/repository-partition-map.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/repository-partition-map.json",
         "schema_file": "schemas/repository-partition-map.schema.json",
         "claim_class": "supplied_partition_map"
       },
@@ -983,7 +985,7 @@
       },
       "output": {
         "contract": "project-discovery",
-        "contract_file": "appsec-review-process/registry/output-contracts/project-discovery.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/project-discovery.json",
         "schema_file": "schemas/project-discovery.schema.json",
         "claim_class": "supplied_project_discovery"
       },
@@ -1044,7 +1046,7 @@
       },
       "output": {
         "contract": "project-discovery",
-        "contract_file": "appsec-review-process/registry/output-contracts/project-discovery.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/project-discovery.json",
         "schema_file": "schemas/project-discovery.schema.json",
         "claim_class": "supplied_project_discovery"
       },
@@ -1105,7 +1107,7 @@
       },
       "output": {
         "contract": "operations-topology",
-        "contract_file": "appsec-review-process/registry/output-contracts/operations-topology.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/operations-topology.json",
         "schema_file": "schemas/operations-topology.schema.json",
         "claim_class": "supplied_operations_topology"
       },
@@ -1169,7 +1171,7 @@
       },
       "output": {
         "contract": "build-index",
-        "contract_file": "appsec-review-process/registry/output-contracts/build-index.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/build-index.json",
         "schema_file": "schemas/build-index.schema.json",
         "claim_class": "build_index"
       },
@@ -1239,7 +1241,7 @@
       },
       "output": {
         "contract": "build-classification",
-        "contract_file": "appsec-review-process/registry/output-contracts/build-classification.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/build-classification.json",
         "schema_file": "schemas/build-classification.schema.json",
         "claim_class": "build_unit_classification"
       },
@@ -1309,7 +1311,7 @@
       },
       "output": {
         "contract": "build-plan",
-        "contract_file": "appsec-review-process/registry/output-contracts/build-plan.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/build-plan.json",
         "schema_file": "schemas/build-plan.schema.json",
         "claim_class": "build_unit_plan"
       },
@@ -1379,7 +1381,7 @@
       },
       "output": {
         "contract": "build-resolution",
-        "contract_file": "appsec-review-process/registry/output-contracts/build-resolution.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/build-resolution.json",
         "schema_file": "schemas/build-resolution.schema.json",
         "claim_class": "build_resolution"
       },
@@ -1462,7 +1464,8 @@
           "02-license-scan",
           "02-dependency-lifecycle",
           "02-binary-hardening",
-          "02-mobile-sast"
+          "02-mobile-sast",
+          "02-code-index"
         ]
       },
       "registry": {
@@ -1480,7 +1483,7 @@
       },
       "output": {
         "contract": "pregather",
-        "contract_file": "appsec-review-process/registry/output-contracts/pregather.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/pregather.json",
         "schema_file": "schemas/intel-manifest.schema.json",
         "claim_class": "evidence_manifest"
       },
@@ -1543,7 +1546,7 @@
       },
       "output": {
         "contract": "component-map",
-        "contract_file": "appsec-review-process/registry/output-contracts/component-map.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/component-map.json",
         "schema_file": "schemas/component-purpose-map.schema.json",
         "claim_class": "component_characterization"
       },
@@ -1613,7 +1616,7 @@
       },
       "output": {
         "contract": "full-review-input-assembly",
-        "contract_file": "appsec-review-process/registry/output-contracts/full-review-input-assembly.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/full-review-input-assembly.json",
         "schema_file": "schemas/full-review-input-assembly.schema.json",
         "claim_class": "analysis_request_assembly"
       },
@@ -1683,7 +1686,7 @@
       },
       "output": {
         "contract": "threat-model-core",
-        "contract_file": "appsec-review-process/registry/output-contracts/threat-model-core.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/threat-model-core.json",
         "schema_file": "schemas/integrated-threat-model.schema.json",
         "claim_class": "threat_model_candidate"
       },
@@ -1757,7 +1760,7 @@
       },
       "output": {
         "contract": "threat-model-reconciliation",
-        "contract_file": "appsec-review-process/registry/output-contracts/threat-model-reconciliation.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/threat-model-reconciliation.json",
         "schema_file": "schemas/threat-model-reconciliation.schema.json",
         "claim_class": "threat_model_reconciliation"
       },
@@ -1831,7 +1834,7 @@
       },
       "output": {
         "contract": "owasp-join-report",
-        "contract_file": "appsec-review-process/registry/output-contracts/owasp-join-report.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/owasp-join-report.json",
         "schema_file": "schemas/owasp-control-status-matrix-manifest.schema.json",
         "claim_class": "control_accounting_candidate_routes"
       },
@@ -1902,7 +1905,7 @@
       },
       "output": {
         "contract": "native-memory-analysis",
-        "contract_file": "appsec-review-process/registry/output-contracts/native-memory-analysis.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/native-memory-analysis.json",
         "schema_file": "schemas/native-memory-analysis.schema.json",
         "claim_class": "candidate_only"
       },
@@ -1980,7 +1983,7 @@
       },
       "output": {
         "contract": "engine-reachability",
-        "contract_file": "appsec-review-process/registry/output-contracts/engine-reachability.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/engine-reachability.json",
         "schema_file": "schemas/engine-reachability.schema.json",
         "claim_class": "cve_reachability_evidence_lead"
       },
@@ -2048,7 +2051,7 @@
       },
       "output": {
         "contract": "engine-reachability",
-        "contract_file": "appsec-review-process/registry/output-contracts/engine-reachability.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/engine-reachability.json",
         "schema_file": "schemas/engine-reachability.schema.json",
         "claim_class": "cve_reachability_evidence_lead"
       },
@@ -2115,7 +2118,7 @@
       },
       "output": {
         "contract": "cve-reachability",
-        "contract_file": "appsec-review-process/registry/output-contracts/cve-reachability.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/cve-reachability.json",
         "schema_file": "schemas/cve-reachability.schema.json",
         "claim_class": "cve_reachability_evidence_lead"
       },
@@ -2193,7 +2196,7 @@
       },
       "output": {
         "contract": "fuzz-target-triage",
-        "contract_file": "appsec-review-process/registry/output-contracts/fuzz-target-triage.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/fuzz-target-triage.json",
         "schema_file": "schemas/fuzz-target-triage.schema.json",
         "claim_class": "planning_evidence"
       },
@@ -2264,7 +2267,7 @@
       },
       "output": {
         "contract": "deployment-hardening",
-        "contract_file": "appsec-review-process/registry/output-contracts/deployment-hardening.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/deployment-hardening.json",
         "schema_file": "schemas/deployment-hardening.schema.json",
         "claim_class": "static_configuration_evidence"
       },
@@ -2336,7 +2339,7 @@
       },
       "output": {
         "contract": "hypothesis-discovery",
-        "contract_file": "appsec-review-process/registry/output-contracts/hypothesis-discovery.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/hypothesis-discovery.json",
         "schema_file": "schemas/hypothesis-discovery.schema.json",
         "claim_class": "candidate_hypothesis"
       },
@@ -2403,7 +2406,7 @@
       },
       "output": {
         "contract": "claim-ledger-core",
-        "contract_file": "appsec-review-process/registry/output-contracts/claim-ledger-core.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/claim-ledger-core.json",
         "schema_file": "schemas/claim-decision-ledger.schema.json",
         "claim_class": "candidate_claim_ledger"
       },
@@ -2473,7 +2476,7 @@
       },
       "output": {
         "contract": "07-red-team-adversarial",
-        "contract_file": "appsec-review-process/registry/output-contracts/07-red-team-adversarial.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/07-red-team-adversarial.json",
         "schema_file": "schemas/07-red-team-adversarial.schema.json",
         "claim_class": "adversarial_candidate_hypothesis"
       },
@@ -2537,7 +2540,7 @@
       },
       "output": {
         "contract": "08-blue-team-refutation",
-        "contract_file": "appsec-review-process/registry/output-contracts/08-blue-team-refutation.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/08-blue-team-refutation.json",
         "schema_file": "schemas/08-blue-team-refutation.schema.json",
         "claim_class": "claim_refutation_disposition"
       },
@@ -2601,7 +2604,7 @@
       },
       "output": {
         "contract": "09-independent-verification",
-        "contract_file": "appsec-review-process/registry/output-contracts/09-independent-verification.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/09-independent-verification.json",
         "schema_file": "schemas/09-independent-verification.schema.json",
         "claim_class": "independent_claim_verification"
       },
@@ -2664,7 +2667,7 @@
       },
       "output": {
         "contract": "11-remediation-proposal",
-        "contract_file": "appsec-review-process/registry/output-contracts/11-remediation-proposal.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/11-remediation-proposal.json",
         "schema_file": "schemas/remediation-proposal.schema.json",
         "claim_class": "planned_contract_output"
       },
@@ -2725,7 +2728,7 @@
       },
       "output": {
         "contract": "12-scoring-prioritization",
-        "contract_file": "appsec-review-process/registry/output-contracts/12-scoring-prioritization.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/12-scoring-prioritization.json",
         "schema_file": "schemas/scoring-prioritization.schema.json",
         "claim_class": "verified_claim_scoring"
       },
@@ -2792,7 +2795,7 @@
       },
       "output": {
         "contract": "14-attack-chain-composition",
-        "contract_file": "appsec-review-process/registry/output-contracts/14-attack-chain-composition.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/14-attack-chain-composition.json",
         "schema_file": "schemas/attack-chain-composition.schema.json",
         "claim_class": "candidate_hypothesis"
       },
@@ -2861,7 +2864,7 @@
       },
       "output": {
         "contract": "14-attack-chain-refutation",
-        "contract_file": "appsec-review-process/registry/output-contracts/14-attack-chain-refutation.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/14-attack-chain-refutation.json",
         "schema_file": "schemas/attack-chain-ledger.schema.json",
         "claim_class": "candidate_hypothesis"
       },
@@ -2930,7 +2933,7 @@
       },
       "output": {
         "contract": "12b-poc-and-fix",
-        "contract_file": "appsec-review-process/registry/output-contracts/12b-poc-and-fix.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/12b-poc-and-fix.json",
         "schema_file": "schemas/poc-fix.schema.json",
         "claim_class": "candidate_hypothesis"
       },
@@ -3008,7 +3011,7 @@
       },
       "output": {
         "contract": "synthesis-report-publication",
-        "contract_file": "appsec-review-process/registry/output-contracts/synthesis-report-publication.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/synthesis-report-publication.json",
         "schema_file": "schemas/synthesis-report.schema.json",
         "claim_class": "evidence_backed_draft_report"
       },
@@ -3079,7 +3082,7 @@
       },
       "output": {
         "contract": "api-collection-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/api-collection-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/api-collection-intelligence.json",
         "schema_file": "schemas/api-collection-intelligence.schema.json",
         "claim_class": "static_intelligence_evidence"
       },
@@ -3145,7 +3148,7 @@
       },
       "output": {
         "contract": "binary-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/binary-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/binary-intelligence.json",
         "schema_file": "schemas/binary-intelligence.schema.json",
         "claim_class": "binary_lead_evidence"
       },
@@ -3210,7 +3213,7 @@
       },
       "output": {
         "contract": "doc-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/doc-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/doc-intelligence.json",
         "schema_file": "schemas/doc-intelligence.schema.json",
         "claim_class": "static_intelligence_evidence"
       },
@@ -3275,7 +3278,7 @@
       },
       "output": {
         "contract": "standards-source-extract",
-        "contract_file": "appsec-review-process/registry/output-contracts/standards-source-extract.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/standards-source-extract.json",
         "schema_file": "schemas/standards-source-extract.schema.json",
         "claim_class": "planned_contract_output"
       },
@@ -3340,7 +3343,7 @@
       },
       "output": {
         "contract": "test-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/test-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/test-intelligence.json",
         "schema_file": "schemas/test-intelligence.schema.json",
         "claim_class": "static_intelligence_evidence"
       },
@@ -3406,7 +3409,7 @@
       },
       "output": {
         "contract": "owasp-validation-worklist",
-        "contract_file": "appsec-review-process/registry/output-contracts/owasp-validation-worklist.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/owasp-validation-worklist.json",
         "schema_file": "schemas/owasp-validation-worklist-core.schema.json",
         "claim_class": "control_worklist"
       },
@@ -3476,7 +3479,7 @@
       },
       "output": {
         "contract": "stig-srg-validation-worklist",
-        "contract_file": "appsec-review-process/registry/output-contracts/stig-srg-validation-worklist.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/stig-srg-validation-worklist.json",
         "schema_file": "schemas/stig-srg-validation-worklist.schema.json",
         "claim_class": "control_worklist"
       },
@@ -3545,7 +3548,7 @@
       },
       "output": {
         "contract": "configured-build",
-        "contract_file": "appsec-review-process/registry/output-contracts/configured-build.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/configured-build.json",
         "schema_file": "schemas/configured-build.schema.json",
         "claim_class": "build_replay"
       },
@@ -3618,7 +3621,7 @@
       },
       "output": {
         "contract": "native-build",
-        "contract_file": "appsec-review-process/registry/output-contracts/native-build.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/native-build.json",
         "schema_file": "schemas/native-build.schema.json",
         "claim_class": "build_replay"
       },
@@ -3691,7 +3694,7 @@
       },
       "output": {
         "contract": "source-sast",
-        "contract_file": "appsec-review-process/registry/output-contracts/source-sast.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/source-sast.json",
         "schema_file": "schemas/source-sast.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -3767,7 +3770,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -3837,7 +3840,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -3907,7 +3910,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -3977,7 +3980,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -4047,7 +4050,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -4117,7 +4120,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -4187,7 +4190,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -4257,7 +4260,7 @@
       },
       "output": {
         "contract": "codeql-language",
-        "contract_file": "appsec-review-process/registry/output-contracts/codeql-language.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/codeql-language.json",
         "schema_file": "schemas/codeql-language.schema.json",
         "claim_class": "source_static_evidence"
       },
@@ -4326,7 +4329,7 @@
       },
       "output": {
         "contract": "code-property-graph",
-        "contract_file": "appsec-review-process/registry/output-contracts/code-property-graph.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/code-property-graph.json",
         "schema_file": "schemas/code-property-graph.schema.json",
         "claim_class": "structural_source_evidence"
       },
@@ -4370,6 +4373,134 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "02-treesitter-ast",
+      "design_refs": [
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "02-treesitter-ast",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-treesitter-ast",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "treesitter-ast"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/treesitter_ast_job.py:run",
+        "validator": "appsec-review-process/treesitter_ast_job.py:validate"
+      },
+      "output": {
+        "contract": "treesitter-ast",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/treesitter-ast.json",
+        "schema_file": "schemas/treesitter-ast-job.schema.json",
+        "claim_class": "structural_source_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-code-index",
+      "design_refs": [
+        "docs/architecture/design-v3.md"
+      ],
+      "graph": {
+        "node": "02-code-index",
+        "implemented": true,
+        "dependencies": [
+          "02-code-property-graph",
+          "02-treesitter-ast",
+          "02-binary-triage"
+        ]
+      },
+      "registry": {
+        "template": "02-code-index",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "code-index"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/code_index_job.py:run",
+        "validator": "appsec-review-process/code_index_job.py:validate"
+      },
+      "output": {
+        "contract": "code-index",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/code-index.json",
+        "schema_file": "schemas/code-index.schema.json",
+        "claim_class": "structural_source_evidence"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
       "id": "02-native-sast",
       "design_refs": [
         "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
@@ -4397,7 +4528,7 @@
       },
       "output": {
         "contract": "native-sast",
-        "contract_file": "appsec-review-process/registry/output-contracts/native-sast.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/native-sast.json",
         "schema_file": "schemas/native-sast.schema.json",
         "claim_class": "native_static_evidence"
       },
@@ -4463,7 +4594,7 @@
       },
       "output": {
         "contract": "ir-capture",
-        "contract_file": "appsec-review-process/registry/output-contracts/ir-capture.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/ir-capture.json",
         "schema_file": "schemas/ir-capture.schema.json",
         "claim_class": "ir_static_evidence"
       },
@@ -4535,7 +4666,7 @@
       },
       "output": {
         "contract": "ir-link",
-        "contract_file": "appsec-review-process/registry/output-contracts/ir-link.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/ir-link.json",
         "schema_file": "schemas/ir-link.schema.json",
         "claim_class": "ir_static_evidence"
       },
@@ -4607,7 +4738,7 @@
       },
       "output": {
         "contract": "ir-facts",
-        "contract_file": "appsec-review-process/registry/output-contracts/ir-facts.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/ir-facts.json",
         "schema_file": "schemas/ir-facts.schema.json",
         "claim_class": "ir_static_evidence"
       },
@@ -4679,7 +4810,7 @@
       },
       "output": {
         "contract": "debug-symbol-index",
-        "contract_file": "appsec-review-process/registry/output-contracts/debug-symbol-index.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/debug-symbol-index.json",
         "schema_file": "schemas/debug-symbol-index.schema.json",
         "claim_class": "debug_symbol_static_evidence"
       },
@@ -4744,7 +4875,7 @@
       },
       "output": {
         "contract": "binary-triage",
-        "contract_file": "appsec-review-process/registry/output-contracts/binary-triage.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/binary-triage.json",
         "schema_file": "schemas/binary-triage.schema.json",
         "claim_class": "binary_inventory_static_evidence"
       },
@@ -4810,7 +4941,7 @@
       },
       "output": {
         "contract": "binary-cfg",
-        "contract_file": "appsec-review-process/registry/output-contracts/binary-cfg.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/binary-cfg.json",
         "schema_file": "schemas/binary-cfg.schema.json",
         "claim_class": "binary_cfg_static_evidence"
       },
@@ -4875,7 +5006,7 @@
       },
       "output": {
         "contract": "test-execution",
-        "contract_file": "appsec-review-process/registry/output-contracts/test-execution.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/test-execution.json",
         "schema_file": "schemas/test-execution.schema.json",
         "claim_class": "test_evidence"
       },
@@ -4939,7 +5070,7 @@
       },
       "output": {
         "contract": "test-result-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/test-result-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/test-result-intelligence.json",
         "schema_file": "schemas/test-results.schema.json",
         "claim_class": "test_evidence"
       },
@@ -5003,7 +5134,7 @@
       },
       "output": {
         "contract": "test-coverage-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/test-coverage-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/test-coverage-intelligence.json",
         "schema_file": "schemas/test-coverage.schema.json",
         "claim_class": "test_evidence"
       },
@@ -5067,7 +5198,7 @@
       },
       "output": {
         "contract": "operations-doc-intelligence",
-        "contract_file": "appsec-review-process/registry/output-contracts/operations-doc-intelligence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/operations-doc-intelligence.json",
         "schema_file": "schemas/operations-doc-intelligence.schema.json",
         "claim_class": "static_intelligence_evidence"
       },
@@ -5132,7 +5263,7 @@
       },
       "output": {
         "contract": "evidence-index",
-        "contract_file": "appsec-review-process/registry/output-contracts/evidence-index.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/evidence-index.json",
         "schema_file": null,
         "claim_class": "retrieval_evidence"
       },
@@ -5203,7 +5334,7 @@
       },
       "output": {
         "contract": "secrets-inventory",
-        "contract_file": "appsec-review-process/registry/output-contracts/secrets-inventory.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/secrets-inventory.json",
         "schema_file": "schemas/secrets-inventory.schema.json",
         "claim_class": "secret_exposure_lead"
       },
@@ -5274,7 +5405,7 @@
       },
       "output": {
         "contract": "iac-config-evidence",
-        "contract_file": "appsec-review-process/registry/output-contracts/iac-config-evidence.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/iac-config-evidence.json",
         "schema_file": "schemas/iac-config-evidence.schema.json",
         "claim_class": "declared_configuration_evidence"
       },
@@ -5345,7 +5476,7 @@
       },
       "output": {
         "contract": "container-image-inventory",
-        "contract_file": "appsec-review-process/registry/output-contracts/container-image-inventory.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/container-image-inventory.json",
         "schema_file": "schemas/container-image-inventory.schema.json",
         "claim_class": "supplied_image_static_evidence"
       },
@@ -5417,7 +5548,7 @@
       },
       "output": {
         "contract": "sbom-inventory",
-        "contract_file": "appsec-review-process/registry/output-contracts/sbom-inventory.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/sbom-inventory.json",
         "schema_file": "schemas/sbom-inventory.schema.json",
         "claim_class": "dependency_inventory_evidence"
       },
@@ -5490,7 +5621,7 @@
       },
       "output": {
         "contract": "sca-vulnerability-match",
-        "contract_file": "appsec-review-process/registry/output-contracts/sca-vulnerability-match.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/sca-vulnerability-match.json",
         "schema_file": "schemas/sca-vulnerability-match.schema.json",
         "claim_class": "known_vulnerability_match_lead"
       },
@@ -5564,7 +5695,7 @@
       },
       "output": {
         "contract": "license-inventory",
-        "contract_file": "appsec-review-process/registry/output-contracts/license-inventory.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/license-inventory.json",
         "schema_file": "schemas/license-inventory.schema.json",
         "claim_class": "license_detection_evidence"
       },
@@ -5638,7 +5769,7 @@
       },
       "output": {
         "contract": "dependency-lifecycle",
-        "contract_file": "appsec-review-process/registry/output-contracts/dependency-lifecycle.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/dependency-lifecycle.json",
         "schema_file": "schemas/dependency-lifecycle.schema.json",
         "claim_class": "dependency_lifecycle_evidence"
       },
@@ -5710,7 +5841,7 @@
       },
       "output": {
         "contract": "binary-hardening",
-        "contract_file": "appsec-review-process/registry/output-contracts/binary-hardening.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/binary-hardening.json",
         "schema_file": "schemas/binary-hardening.schema.json",
         "claim_class": "binary_hardening_property_evidence"
       },
@@ -5784,7 +5915,7 @@
       },
       "output": {
         "contract": "mobile-sast",
-        "contract_file": "appsec-review-process/registry/output-contracts/mobile-sast.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/mobile-sast.json",
         "schema_file": "schemas/mobile-sast.schema.json",
         "claim_class": "mobile_static_lead"
       },
@@ -5853,7 +5984,7 @@
       },
       "output": {
         "contract": "persona-tool-pool-dispatch",
-        "contract_file": "appsec-review-process/registry/output-contracts/persona-tool-pool-dispatch.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/persona-tool-pool-dispatch.json",
         "schema_file": "schemas/persona-tool-pool-dispatch.schema.json",
         "claim_class": "control_decision"
       },
@@ -5921,7 +6052,7 @@
       },
       "output": {
         "contract": "deterministic-pool-merge",
-        "contract_file": "appsec-review-process/registry/output-contracts/deterministic-pool-merge.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/deterministic-pool-merge.json",
         "schema_file": "schemas/deterministic-pool-merge.schema.json",
         "claim_class": "control_decision"
       },
@@ -5986,7 +6117,7 @@
       },
       "output": {
         "contract": "evidence-qualified-quorum",
-        "contract_file": "appsec-review-process/registry/output-contracts/evidence-qualified-quorum.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/evidence-qualified-quorum.json",
         "schema_file": "schemas/evidence-qualified-quorum.schema.json",
         "claim_class": "control_decision"
       },
@@ -6051,7 +6182,7 @@
       },
       "output": {
         "contract": "bounded-rescope-plan",
-        "contract_file": "appsec-review-process/registry/output-contracts/bounded-rescope-plan.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/bounded-rescope-plan.json",
         "schema_file": "schemas/bounded-rescope-plan.schema.json",
         "claim_class": "control_decision"
       },
@@ -6116,7 +6247,7 @@
       },
       "output": {
         "contract": "completeness-audit",
-        "contract_file": "appsec-review-process/registry/output-contracts/completeness-audit.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/completeness-audit.json",
         "schema_file": "schemas/completeness-audit.schema.json",
         "claim_class": "control_decision"
       },
@@ -6181,7 +6312,7 @@
       },
       "output": {
         "contract": "synthetic-hypothesis-resynthesis",
-        "contract_file": "appsec-review-process/registry/output-contracts/synthetic-hypothesis-resynthesis.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/synthetic-hypothesis-resynthesis.json",
         "schema_file": "schemas/synthetic-hypothesis-resynthesis.schema.json",
         "claim_class": "control_decision"
       },
@@ -6247,7 +6378,7 @@
       },
       "output": {
         "contract": "remediation-retest-feedback",
-        "contract_file": "appsec-review-process/registry/output-contracts/remediation-retest-feedback.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/remediation-retest-feedback.json",
         "schema_file": "schemas/remediation-retest-feedback.schema.json",
         "claim_class": "control_decision"
       },
@@ -6317,7 +6448,7 @@
       },
       "output": {
         "contract": "final-publication-package",
-        "contract_file": "appsec-review-process/registry/output-contracts/final-publication-package.json",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/final-publication-package.json",
         "schema_file": "schemas/final-publication.schema.json",
         "claim_class": "publication_gate_decision"
       },

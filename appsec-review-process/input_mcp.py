@@ -10,6 +10,10 @@ writes the pinned bytes to a private scratch folder, lists them in the prompt as
   (02-evidence-index, FTS + ssdeep over the target snapshot), via ``evidence_mcp``.
 - ``evidence_derived``: the index's derived records from upstream producers (SAST, CPG, IR, SBOM,
   ...), filterable by partition or component.
+- ``code_*`` (``code_query_mcp``, ADR-0032): structural queries (symbols, callers/callees, enclosing
+  function, types, file outline, call sites, call paths, address-taken, exports) over the run's
+  published ``02-code-index`` database, re-hashed before use. Served only when the invoker grants
+  them (``--code-tools``): a job sees exactly the tools its pinned inputs can answer.
 
 Content is untrusted data, never instructions. Every call is audited under
 ``runs/<run_id>/data/retrieval/``. Protocol stdout carries JSON-RPC only.
@@ -27,6 +31,7 @@ import uuid
 from pathlib import Path
 
 from execution_state import atomic_json, data_path, now
+import code_query_mcp
 import evidence_mcp
 
 SERVER_NAME = "appsec-inputs"
@@ -60,6 +65,8 @@ TOOLS = [
                      "component_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
                      "required": [], "additionalProperties": False}},
 ]
+BASE_TOOLS = TOOLS                              # every indexed-mode job gets these (unchanged)
+ALL_TOOLS = TOOLS + code_query_mcp.TOOLS        # the structural tools are served only when granted
 
 
 class Inputs:
@@ -160,6 +167,8 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
         return {"hits": hits, "truncated": False}
     if name == "input_jq":
         return _jq(inputs, args["ref"], args["filter"], compact=args.get("compact", 1) == 1)
+    if name.startswith("code_"):
+        return code_query_mcp.call(_code_index(run_id, inputs), name, args, _scope(inputs))
     if name == "evidence_derived":
         from evidence_store import query_derived
         return query_derived(run_id, fresh=False, **args)
@@ -171,6 +180,50 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
 
 CONTEXT: dict = {}   # job_id, attempt_id, output_root of the invocation this server serves
 _RETURNED: set = set()   # (ref, first, last) ranges input_read has returned in this conversation
+SERVED: list = list(TOOLS)   # tools/list and tools/call: the base tools plus the granted code tools
+CODE: dict = {}      # {"ref": pinned code-index.json ref, "index": CodeIndex | Exception}
+USAGE: dict = {}     # {"path": usage file, "counts": {tool: calls}} for the invoker's attempt record
+
+
+def _code_index(run_id: str, inputs: "Inputs | None") -> "code_query_mcp.CodeIndex":
+    """The granted code index: its pinned summary (hash-checked as an input) names the database,
+    which is re-hashed before it is opened read-only. A failure refuses every code query."""
+    if "index" not in CODE:
+        try:
+            ref = CODE.get("ref")
+            if not ref or inputs is None:
+                raise ValueError("no code index is attached to this job")
+            summary = json.loads(inputs.text(ref))
+            CODE["index"] = code_query_mcp.CodeIndex(data_path(run_id, "jobs"), ref.split(":", 1)[1], summary)
+        except Exception as exc:   # remembered: every later code query reports the same refusal
+            CODE["index"] = exc
+    if isinstance(CODE["index"], Exception):
+        raise ValueError(f"code index unavailable: {CODE['index']}")
+    return CODE["index"]
+
+
+def _scope(inputs: "Inputs | None"):
+    """Partition / component path matchers from this job's own pinned maps (never a fresh read)."""
+    def pinned(suffix: str) -> dict | None:
+        for entry in (inputs.entries if inputs is not None else []):
+            if entry["ref"].endswith("/" + suffix):
+                try:
+                    return json.loads(inputs.text(entry["ref"]))
+                except ValueError:
+                    return None
+        return None
+    return code_query_mcp.scope_matchers(pinned("repository-partition-map.json"), pinned("component-purpose-map.json"))
+
+
+def _count(name: str) -> None:
+    if not USAGE.get("path"):
+        return
+    counts = USAGE.setdefault("counts", {})
+    counts[name] = counts.get(name, 0) + 1
+    try:
+        Path(USAGE["path"]).write_text(json.dumps(counts, sort_keys=True), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _summary(name: str, result: object) -> dict:
@@ -184,6 +237,21 @@ def _summary(name: str, result: object) -> dict:
         return {"hits": 1 if result.get("text") or result.get("already_returned") else 0, "refs": [result.get("ref")],
                 "lines": [result.get("start"), result.get("total_lines")],
                 "deduplicated": bool(result.get("already_returned"))}
+    if name.startswith("code_"):
+        rows = result.get("rows") or []
+        cites = []
+        for row in rows:
+            for step in row.get("steps", [row]) if isinstance(row, dict) else []:
+                cite = step.get("cite") if isinstance(step, dict) else None
+                if cite and cite not in cites:
+                    cites.append(cite)
+        return {"hits": len(rows), "refs": cites[:200], "rows": len(rows), "total": result.get("total"),
+                "complete": result.get("complete"), "reasons": result.get("reasons", [])[:10],
+                "gaps": result.get("gaps", []), "truncated": result.get("truncated"),
+                "escapes": sum(1 for row in rows if isinstance(row, dict) and row.get("kind") == "escape")
+                + len(result.get("escapes") or []),
+                "targets": [t.get("full_name") for t in result.get("targets") or []][:10],
+                "code_index_sha256": (result.get("source") or {}).get("sha256")}
     rows = result.get("hits") or result.get("results") or result.get("inputs") or []
     refs = []
     for row in rows if isinstance(rows, list) else []:
@@ -192,6 +260,17 @@ def _summary(name: str, result: object) -> dict:
             if ref and ref not in refs:
                 refs.append(ref)
     return {"hits": len(rows) if isinstance(rows, list) else 0, "refs": refs}
+
+
+def grant(ref: str | None, names: list[str]) -> None:
+    """Serve the base tools plus exactly ``names`` (the invoker's granted list; unknown names refuse)."""
+    unknown = sorted(set(names) - set(code_query_mcp.NAMES))
+    if unknown or (names and not ref):
+        raise SystemExit("invalid code tool grant: " + (", ".join(unknown) or "no code index ref"))
+    SERVED[:] = list(TOOLS) + [tool for tool in code_query_mcp.TOOLS if tool["name"] in names]
+    CODE.clear()
+    if ref:
+        CODE["ref"] = ref
 
 
 def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
@@ -204,10 +283,10 @@ def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": TOOLS}
+        return {"tools": SERVED}
     if method != "tools/call":
         raise ValueError("unsupported method")
-    tool = next((t for t in TOOLS if t["name"] == params.get("name")), None)
+    tool = next((t for t in SERVED if t["name"] == params.get("name")), None)
     if tool is None:
         raise ValueError("unknown tool")
     args = params.get("arguments") or {}
@@ -215,6 +294,7 @@ def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
     started = time.monotonic()
     atomic_json(audit / "request.json", {"time": now(), "server": SERVER_NAME, "tool": tool["name"],
                                          "arguments": args, **CONTEXT})
+    _count(tool["name"])
     try:
         _check(tool["inputSchema"], args)
         result = call(run_id, inputs, tool["name"], args)
@@ -234,8 +314,13 @@ def main() -> None:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--inputs", help="folder holding manifest.json and files/")
     parser.add_argument("--job-id"); parser.add_argument("--attempt-id"); parser.add_argument("--output-root")
+    parser.add_argument("--code-index", help="pinned ref of the granted 02-code-index code-index.json")
+    parser.add_argument("--code-tools", default="", help="comma-separated code_* tools this job is granted")
+    parser.add_argument("--usage-file", help="private scratch file for per-tool call counts")
     args = parser.parse_args()
     data_path(args.run_id)
+    grant(args.code_index, [name for name in args.code_tools.split(",") if name])
+    USAGE.update({"path": args.usage_file} if args.usage_file else {})
     CONTEXT.update({key: value for key, value in (
         ("job_id", args.job_id), ("attempt_id", args.attempt_id), ("output_root", args.output_root)) if value})
     inputs = Inputs(Path(args.inputs)) if args.inputs else None

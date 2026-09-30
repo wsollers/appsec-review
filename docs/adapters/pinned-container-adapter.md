@@ -98,7 +98,7 @@ context (`source_snapshot_sha256`, `registry_ceiling`, `clock`) and the cancella
 
 ## Image registry
 
-`appsec-review-process/registry/container-images/<image_id>.json`
+`appsec-review-process/pipeline/container-images/<image_id>.json`
 (`schemas/container-image.schema.json`, `appsec-review/container-image/1.0`) holds a fully
 qualified `repository` and an immutable `sha256:` `digest`. The schema has no tag property and the
 repository pattern admits no tag. A request names an `image_id` and repeats the digest it expects;
@@ -332,7 +332,7 @@ prove after every test that no labelled container remains.
 ## Integration follow-ups
 
 1. **Implemented by B16 (2026-09-27):** `qualify_phase1.py contracts()` schema-checks
-   `registry/container-images/`; the folder remains part of the code identity hash.
+   `appsec-review-process/pipeline/container-images/`; the folder remains part of the code identity hash.
 2. **Implemented for the 19 current step-4 images by B16:** generate host-local `image-id` records
    at code-location startup. A later registry push may replace them with portable manifest digests.
 3. **Implemented as a standalone integration proof (2026-09-27):** `b13_harmless_container`

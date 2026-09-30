@@ -447,6 +447,39 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       default off) and CodeQL `EntryPoint` rows into the CPG engine; library functions shipped for other
       consumers should be UNKNOWN, not UNREACHABLE, once export facts exist.
 - [ ] `docs/report-examples/appsec-review-sample.{html,pdf}` predate sections 3A-3C; re-render in WSL.
+## I: dev-mode restart and generic executor (ADR-0025, brief I, branch `dev-executor`)
+
+- [x] I1 dev-mode restart policy (`dev_restart.py`): `APPSEC_RUN_MODE=dev|prod` (default prod), content +
+  shape hashes, REUSE/RERUN/REWIND, early cutoff, `--force <job>`, `launch_job.py --mode/--explain`,
+  guard rails (dev receipts never evidence; `final_publication.publish` refuses dev). Operator doc
+  `docs/dev-mode-restart.md`. Prod fingerprints unchanged (tests/test_dev_restart.py).
+- [x] I2 generic item executor (`job_executor.py`, `items/<job>/item.json` + `input.schema.json` +
+  `output.schema.json`): PRE resolve/validate/redact-stream/hash, PROCESS argv worker, POST validate,
+  coverage/gap record, receipt (mode, evidence_grade, resume_from, rerun_command), pass-through
+  normaliser, publication through `publish_job_output`. `02-operations-doc-ingest` ported; outputs
+  byte-identical to the legacy worker (tests/test_job_executor.py).
+- [ ] HOLD with I3: I2b registers item ops in `dagster_workflow.py` (`job_executor.register_item_ops`).
+  `workflow.py` hashes `dagster_workflow.py` into the workflow-preparation branch fingerprints, so this
+  one-line wiring reruns build discovery (and what follows it) once in prod.
+- [x] I3 fingerprint scope audit (HOLD until the hello-autotools baseline finishes): 502 files are
+  hashed by the per-job code lists; all are semantics (code, schemas, contracts, templates, prompts,
+  rule sets). The only docs were 3 files in `job_graph.definition_hash` (phase-1 implementation
+  spec, `00-intake-recovery/config.md` and `prompt.md`); removed. Only 00-intake's recorded
+  definition hash changes once. ADR-0013 item 8 already keeps it out of intake staleness, so no job
+  reruns.
+- [ ] Controller decision (relaunch tax, not docs): `workflow.py` hashes `dagster_workflow.py` into
+  every workflow-preparation branch, so any op wiring edit reruns build discovery and what follows.
+  Four modules (`analysis_feature_lifecycle`, `control_feature_lifecycle`, `joern_cpg`, `test_evidence`)
+  still hash SHARED_RUNTIME files (`publish_job_output.py` and others) without
+  `drop_shared_runtime` (ADR-0013). Together they cover 15 jobs.
+- [ ] Legacy lifecycles keep their prod fingerprint in dev too (no early cutoff: inputs pin upstream
+  attempt ids). The win arrives per job as jobs are ported to the item executor.
+- [ ] Container items: `job_executor.check_item` refuses `grants.container` until an item needs one
+  (route through `container_execution` then). Network grants likewise.
+- [x] Brief K (registry move) must update the `registry/...` paths in `items/*/item.json` (done, brief K).
+- [ ] The legacy CLI `operations_doc_ingest.py validate` does not accept executor attempts (different
+  inputs record); consumers read `accepted.json` + `result.json` and are unaffected.
+- [ ] Not run live: needs the code location started with `APPSEC_RUN_MODE=dev` in WSL.
 
 ## O: MITRE ATT&CK / CAPEC reference feed (ADR-0026, brief O, branch `mitre-feed`)
 
@@ -470,12 +503,71 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] Shell literals of the 14-day ceiling remain in `orchestrator/prepare-host.sh`, `orchestrator/stage-run.sh`
       and the operator guide (`--max-database-age-seconds 1209600`); read the tunable there if wanted.
 - [ ] Decision to confirm (William): stale/missing MITRE snapshot withholds tags as a gap (current) vs hard block.
-- [x] O1b: MITRE CWE catalog (`cwec_v4.19.xml.zip`) is a third feed source; `cwe_catalog.Catalog()` reads the
-      snapshot's full catalog and falls back to the committed curated one with `CWE_REFERENCE_MISSING` /
-      `CWE_REFERENCE_STALE` / `CWE_REFERENCE_INVALID`; judgments record `catalog`; `resolve(kinds=...)`.
-- [ ] Pin the CWE zip's sha256 in `mitre_feed.SOURCES["cwe"]` from the first WSL sync (the smoke script
-      prints it). cwe.mitre.org was blocked from the build sandbox, so the URL and 4.19 are unverified by fetch.
-- [ ] Verify the CWE terms-of-use text in `mitre_feed.NOTICE` against cwe.mitre.org/about/termsofuse.html.
+- [x] O1b (PR #45, merged into `mitre-feed`): superseded by O2 (`cwe-feed`) on `main`, which kept its
+      implementation when `mitre-feed` was merged back; open CWE items are tracked under O2 below.
+
+## L: shared formats and stricter validator (brief L, branch `formats-2`)
+
+- [x] `schema_validate.py` implements Draft 2020-12 assertions/applicators used or plausible here
+      (length, numeric bounds, maxItems/uniqueItems/contains/prefixItems, object keywords, allOf/anyOf/
+      oneOf/not/if-then-else, `format` date-time/date, `$ref` to `file#/pointer` and local `#/pointer`);
+      any other keyword, format or remote `$ref` raises `UnsupportedSchema`. Shared runtime: no fingerprint moves.
+      Previously ignored: minLength (335 uses), minimum (198), maxLength, maxItems, uniqueItems, maximum,
+      if/then, allOf, oneOf, format; `#/$defs/...` refs (binary-cfg, debug-symbol-index,
+      threat-model-reconciliation) crashed.
+- [x] `schema_keyword_lint.py`: keywords used vs supported, bad `$ref`, patterns that do not compile.
+- [x] `schemas/common/formats.schema.json` + `formats.py` (22 kinds); outside the hashed top-level schema set.
+- [x] `schema_format_lint.py` + `schemas/common/inline-format-baseline.json` (1,025 inline copies in 268
+      schemas, ratchet: new copies fail, converted copies must shrink the baseline).
+- [x] `contract_derive.py`: orchestrator-owned fields derived from final vs persona schema; matches
+      `attack_chain_derive._ORCHESTRATOR_KEYS` exactly. Not wired into any job.
+- [ ] William: `threat-model-reconciliation.schema.json` `$defs/citation/properties/path` pattern
+      `^[^/\\](?:[^\\]*[^/\\])?$` does not compile (the `\\]` escapes the bracket); validating any
+      citation path raises. Fix = `[^/\\\\]` in three places. Edits a top-level schema (every job's
+      definition hash moves). Allow-listed in `tests/test_schema_validate_keywords.py` until then.
+- [ ] William: convert the 1,025 inline copies to `$ref` (top-level schema edits: every job's definition
+      hash moves; `$`-anchored copies also start rejecting a trailing newline). One batch, then
+      `schema_format_lint.py --write-baseline`.
+- [x] William: `_ORCHESTRATOR_KEYS` drift the schemas show (an echo costs a repair round, not a note):
+      `poc_fix_derive` misses `explanation_status`, `poc.reason`; `claim_review_derive` misses `citations`;
+      `hypothesis_hunt_derive` misses `drop_reason`. Fixed in brief L2 (section below).
+- [ ] William: `const`/`enum` still use Python equality (`0` passes `const: false`), as before. Strict JSON
+      equality (`schema_validate.json_equal`, already used by `uniqueItems`) changes the rejection message in
+      three tests owned elsewhere (owasp_dispatch, evidence_index_metrics, pool_rendezvous); no published bytes.
+
+## L2: derive-list fixes (brief L2, branch `derive-fixes`)
+
+- [x] `poc_fix_derive` and `hypothesis_hunt_derive` build `_ORCHESTRATOR_KEYS` with
+      `contract_derive.orchestrator_keys` (record vs persona schema; the hunter keeps its echo-habit names on
+      top); `contract_derive.py` joins lane 12b's and 07-hypothesis-discovery's implementation lists.
+      `explanation_status`, `poc.reason` and `drop_reason` echoes are now dropped (poc-fix with a note).
+- [x] `claim_review_derive` keeps a hand-written list, now with `citations` (decision and proof
+      obligation; the ids an echo names still join `citation_ids`, behaviour unchanged). Generating it would
+      list `contract_derive.py` in `claim_reviewer_pool.py`, which the intake persona-tool pool also hashes.
+- [x] `tests/test_contract_derive.py` fails when any schema-derived field is missing from a derive list
+      (KNOWN_DRIFT removed). Fingerprints moved: claim-review pool, 07-hypothesis-discovery, 12b only.
+- [ ] `attack_chain_derive` (checked, no drift) and `owasp_validator_derive` (not in the drift test) still
+      hand-write their lists.
+- [ ] William: is it acceptable that `claim_review_derive` stays hand-written (guarded by
+      `tests/test_contract_derive.py`) rather than built with `contract_derive`? Accepted for now.
+- [ ] Close fingerprint gap (pre-existing on `main`): `persona_tool_pool_lifecycle` imports
+      `claim_reviewer_pool` (which imports `claim_review_derive`), but its `_code_hashes` does not list
+      `claim_review_derive.py`, so a derive change does not invalidate the persona-tool-pool-dispatch job.
+      Adding it moves that job's fingerprint once.
+
+## K: job definitions in `appsec-review-process/pipeline/` (ADR-0028, brief K, branch `registry-move`)
+- [x] `registry/*` and `job-graph.json` moved to `appsec-review-process/pipeline/` (pure `git mv`); every
+  path comes from `registry_paths.py`; catalogs, parity views and tunables doc regenerated.
+- [x] Prod fingerprints change for every job with a `registry/` or `job-graph.json` key (paths are
+  hash keys; record content is byte-identical): accepted, D-22. See
+  `docs/decisions/ADR-0028-fingerprint-comparison.md`. Accepted prod runs rerun once.
+- [ ] Later (D-22): a stable logical key (`kind/id`) for implementation maps would stop future moves
+  invalidating fingerprints; that is a logic change.
+- [x] `pipeline/prompt-fragments/governing-rules.md` now names the real authoring template path.
+  `phase-1-implementation-prompt.md` keeps `registry/` on purpose (A01 prompt-hash attestation).
+- [ ] Not run live: needs the Dagster code location restarted in WSL (`orchestrator/dagster/definitions.py`
+  now reads `registry_paths`), and `images/registry_records.py generate` writes to
+  `pipeline/container-images/` (host-local records under the old path are no longer read).
 
 ## Breakage log
 
@@ -592,3 +684,90 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-build-resolution` | BLOCKED `STALE_GRANT`: build grants bind to the hash of `artifact-manifest.json`, which intake rewrites on acceptance; the controls had been staged before intake | Operator order: run `phase1_intake` before `build_resolution`/`build_configure stage-control` (`stage-run.sh`, operator guide); this run's controls re-staged after intake |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
 | 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |
+
+## Decisions 2026-09-29
+
+All outstanding ADR questions, the brief I/J/M confirmations and the fuzz-entry alignment are resolved in
+`docs/decisions/DECISION-LOG-2026-09-29.md` (controller decisions by William's delegation; he can override any row).
+OPEN items that log leaves: CWE in the MITRE feed, exported-symbol entry points, stage 12 `scorer` wording, sample 3C
+records and report re-render (WSL), image rebuild and smoke, brief N fingerprint-scope narrowing (D-13).
+
+## P: sample report refresh (brief P, branch `claude/sweet-mccarthy-zb4at6`)
+
+- DONE: `pipeline/report/sample_data.py` regenerates the sample's processes (81 jobs, 17 lane families),
+  3A attack chains, 3B dependency reachability, 3C workbench records (real `threat_workbench.join` over
+  `examples/hello-autotools.workbench-replies.json`), EPSS/KEV lines and lane-12 CVSS rows; `--check` and
+  `tests/test_sample_report_data.py` guard drift. HTML re-rendered.
+- OPEN: re-render `docs/report-examples/appsec-review-sample.pdf` in WSL (`bash pipeline/report/render-in-docker.sh`,
+  then copy `build/report.pdf`); the README marks it stale until then.
+- OPEN: `render.py` applies the native tier cap only to a family named `native`; the graph has no such lane, so the
+  sample's assurance carries no tier cap.
+- OPEN: 3A replays the lane-14 case-001 fixture, so its entry fact names `projects/cpp/case-001/main.cpp`.
+## Q: exported-symbol entry points (brief Q, `entry_exports.py`, tunables default off)
+
+- [x] Q1 `binary-summary` records `dynamic_exports` (ELF `.dynsym`, PE export directory; binding, visibility,
+      version-hidden, `c++filt`-demangled, artifact kind, `complete`); `entry_exports` reads it hash-bound from the
+      accepted `02-binary-triage` attempt and joins it uniquely to the CPG (`exported-symbol` roots,
+      `ambiguous-export` escapes, not-in-CPG / unjoinable / incomplete-table gaps keep UNKNOWN). Finding enrichment
+      uses it when `reachability_export_entries` is on. One entry-name table (`ENTRY_POINT_SOURCES["cpp"]["names"]`
+      is `reachability.PROGRAM_ENTRY_NAMES`). Replaces the M5 open item for source 2.
+- [x] Q2 `join_codeql_entries` (`(path, start_line)`, same snapshot, framework reasons only) and `CpgEngine(extra=)`,
+      canned tables only (`reachability_codeql_entries`).
+- [ ] Q3 WSL: rebuild `audit-binary-analysis`, run `bash scripts/smoke_entry_exports.sh`, then William decides the
+      `reachability_export_entries` default.
+- [ ] Exported-symbol roots for `06-reachability-ir` (needs a `02-binary-triage` input edge); source 3 live consumer
+      (non-native `EntryPoints` tables); Mach-O exports; IR linkage facts for stripped binaries.
+
+## N: tool-output cache and per-item memo (brief N, branch `caches`)
+
+- [x] N1 tool-output cache (`tool_output_cache.py`, call site `dependency_b13_adapters.execute`):
+  syft/grype/osv/scancode keyed by pinned request + adapter-computed content digests + mode; a hit is
+  re-verified end to end (B13, output hash, receipt, permission) and recorded as `reused_from`;
+  TIMEOUT/OOM gaps cached under the same limits only. Tunable `tool_output_cache` = dev (prod off).
+- [x] N2 per-item memo (`item_memo.py`) for 02-build-plan units, today's validation re-run on a hit;
+  unit id and root stated at both ends of the per-unit prompt. Tunable `item_memo` = dev.
+- [x] N3 store `data/caches/` (git-ignored), size caps, pruning, `tool_output_cache.py stats|prune|clear`;
+  docs in `docs/dev-mode-restart.md`.
+- [x] N4 fingerprint scope (D-13): (a) build discovery hashes `dagster_workflow.py:branch_op` only, so
+  the I2b op wiring no longer reruns build discovery; (b) analysis/control feature lifecycles,
+  `joern_cpg`, `test_evidence` drop shared runtime. 14 jobs move once (3 + 7 + 1 + 3), plus the four
+  preparation branches and, in prod, build discovery's consumers.
+- [ ] Memo call sites not done: build-resolution units (image + plan commands + trial inputs; its
+  receipts cite trials relative to the attempt, so a reused trial needs a cross-attempt receipt path)
+  and IR/SAST invocations (ADR-0014 item 6, cross-run).
+- [ ] `control_feature_lifecycle._code` hashes no per-job worker module (`completeness_audit.py`,
+  `dynamic_rescope.py`, ...): an edit there does not rerun that job. Not changed (widening).
+- [ ] Controller: set `tool_output_cache` / `item_memo` to `on` for prod after a live dev loop.
+- [ ] Not run live (no Docker here): first dev relaunch of freeciv21 license-scan should show
+  `tool-output-reuse.json` in the new orchestration attempt.
+
+## O2: CWE through the MITRE feed (brief O2, branch `cwe-feed`, ADR-0026 addendum)
+
+- DONE: `cwe` is a third source of the MITRE snapshot (`cwec_v4.20.xml.zip`, pinned by version; the XML's own
+  `Version` must equal the pin), with the same manifest fields, NOTICE (CWE terms added), carry-forward with the
+  original `fetched_at` and the shared `reference_snapshot_max_age_seconds` ceiling. The snapshot carries a derived
+  `cwe-catalog.json` (same shape as the committed file, built through `cwe_catalog._parse_xml`, deprecated flagged).
+  `cwe_catalog.current()` uses it when it verifies and is in the ceiling; otherwise the committed curated catalog
+  with `CWE_REFERENCE_MISSING` / `_STALE` / `_INVALID`. Never blocks. Claim path (07/09/12) binds the catalog
+  identity when a decision carries `cwe` and records `cwe_catalog` (snapshot id or `committed-curated`) on each
+  judgment; enrichment reports the catalog used and a fallback as a report limitation.
+- [ ] Byte pin: `cwe.mitre.org` is blocked from the build sandbox, so `mitre_feed.SOURCES["cwe"]["sha256"]` is
+      `None` (version-pinned only). Run `bash scripts/smoke_mitre_feed.sh` in WSL; it prints the zip's sha256 and
+      checks the 4.20 URL; then pin it (reviewed edit). Confirm 4.20 is the release you want.
+- [ ] Verify the CWE terms-of-use wording in `mitre_feed.CWE_NOTICE` against cwe.mitre.org/about/termsofuse.html.
+- [ ] Report presentation (brief M): show the CWE catalog used (`finding-enrichment.json` `cwe_catalog.used`) in the
+      report body; today only a fallback appears (as a limitation line).
+- [ ] Decision to confirm: a deprecated CWE id is rejected (reviewer) or dropped (tool tag), like an unknown id;
+      an integrity failure records `CWE_REFERENCE_INVALID` (a third code, mirroring `MITRE_REFERENCE_INVALID`).
+
+## U: structural code-query tools (brief U, branch `code-query-tools`, ADR-0032 proposed)
+
+Design: [`docs/code-query-tools.md`](../docs/code-query-tools.md).
+
+- [ ] William: approve the tree-sitter job mounting `treesitter_ast.py` from `data/tooling/` (AGENTS.md rule; ADR-0032 item 4).
+- [ ] Run `02-treesitter-ast` and `02-code-index` against a real target (freeciv21 first); build the tree-sitter CLI image
+      (`audit-lsp-vendor` needs `libclang-dev`, fixed on main) and check `complete=false` rates per tool with `retrieval-report.py`.
+- [ ] `threat-workbench-static-evidence` grants only help if the index is accepted before stage 03; check the job order on a real run.
+- [ ] Decide whether `06-cve-reachability` should depend on `02-treesitter-ast` in the job graph (today: consumed when present).
+- [ ] Brief V (lead context) after merge; sealed code-intel sidecar and query-time CodeQL stay deferred.
+

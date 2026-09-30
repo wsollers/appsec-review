@@ -4,9 +4,10 @@ import os
 from execution_state import ROOT, identifier, read_json, file_hash, digest, Blocked
 from schema_validate import validate_document
 import persona_registry
+import registry_paths
 
-REGISTRY = ROOT / 'registry'
-GRAPH = ROOT / 'job-graph.json'
+REGISTRY = registry_paths.REGISTRY
+GRAPH = registry_paths.JOB_GRAPH
 IMPLEMENTATION_FILES = ['execution_state.py','process_gate.py','phase1.py','intake.py','job_graph.py']
 LOADED_IMPLEMENTATION = {name:file_hash(ROOT/name) for name in IMPLEMENTATION_FILES}
 KINDS = {'persona_id': ('personas', 'persona', 'persona_id'),
@@ -149,9 +150,10 @@ def definition_hash(job):
     for name in sorted(templates):
         template=read_json(REGISTRY/'job-templates'/(name+'.json'))
         registry[name]={'template':template,'composition':composition(template)}
+    # Semantics only (brief I3): the phase-1 implementation spec and the lane's operator config.md /
+    # prompt.md are documentation; no worker reads them.
     paths = [ROOT / 'execution_state.py', ROOT / 'process_gate.py', ROOT / 'phase1.py', ROOT / 'intake.py',
-             ROOT / 'job_graph.py', ROOT / 'phase-1-implementation-prompt.md', ROOT / 'process-manifest.json',
-             ROOT / 'tooling/buildenv-catalog.json', ROOT / '00-intake-recovery/config.md', ROOT / '00-intake-recovery/prompt.md', GRAPH]
+             ROOT / 'job_graph.py', ROOT / 'process-manifest.json', ROOT / 'tooling/buildenv-catalog.json', GRAPH]
     paths += sorted((ROOT.parent / 'schemas').glob('*.schema.json'))
     orchestration = Path(os.environ.get('APPSEC_ORCHESTRATOR_ROOT', ROOT.parent / 'orchestrator/dagster'))
     runtime = {name:file_hash(orchestration/name) for name in ('definitions.py','Dockerfile','requirements.txt','requirements.lock.txt','compose.yaml','dagster.yaml')}

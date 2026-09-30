@@ -1,6 +1,6 @@
 # ADR-0024: Per-stage registry roles for the claim review pool (role variants)
 
-Status: **Proposed** (2026-09-29, brief J, branch `personas-folder`; awaiting William). No live run yet.
+Status: **Accepted 2026-09-29** (open questions resolved in `DECISION-LOG-2026-09-29.md`; brief J). No live run yet.
 
 ## Context
 

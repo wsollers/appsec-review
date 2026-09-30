@@ -57,9 +57,10 @@ import permission_capabilities as pc
 import review_cli as rc
 from execution_state import beneath, identifier
 from schema_validate import SchemaStore
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
-REGISTRY_DIR = ROOT / "registry"
+REGISTRY_DIR = registry_paths.REGISTRY
 
 DEFAULT_INVOKER_ID = "claude-cli"
 DEFAULT_READABLE_ROOT = "target-repository"

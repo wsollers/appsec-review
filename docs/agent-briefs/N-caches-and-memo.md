@@ -12,6 +12,12 @@ spent 60 min in scancode, all after a fingerprint change that did not alter the 
    alter that item's inputs. Also state the unit id in the per-unit build-plan prompt (TODO breakage log: a small model
    anchored on the first unit it read).
 3. Cache store location, size cap and pruning under `data/`, git-ignored; docs in `docs/dev-mode-restart.md`.
+4. Fingerprint-scope findings from brief I (decision log D-13): (a) `workflow.py` hashes all of `dagster_workflow.py`
+   into build discovery's fingerprint, so any op-wiring edit reruns build discovery: hash only what changes the
+   behaviour of build discovery (its own ops and helpers) and report the before/after set of affected jobs;
+   (b) `analysis_feature_lifecycle`, `control_feature_lifecycle`, `joern_cpg` and `test_evidence` still hash shared
+   runtime files, covering 15 jobs: narrow each to the files that affect that job's output. Each is a one-time
+   fingerprint change: commit separately, list which jobs move.
 ## You own
 New `tool_output_cache.py`, `item_memo.py`, and the narrow call sites in the B13 adapters and per-unit loops.
 ## Do not touch

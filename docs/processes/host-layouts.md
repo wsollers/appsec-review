@@ -29,7 +29,7 @@ target runs.
   | Path | What | Recreated by |
   |---|---|---|
   | `images/.build-state/` | successful image builds (image ids differ per host) | `images/image_build.py build <id>` |
-  | `appsec-review-process/registry/container-images/*.json` | B16 image records | generated at code-location start |
+  | `appsec-review-process/pipeline/container-images/*.json` | B16 image records | generated at code-location start |
   | `appsec-review-process/offline/dependency-snapshots/` | Grype/OSV snapshot registry | `dependency_snapshot_sync.py` |
   | `appsec-review-process/runs/` | engagement runs and their evidence | `run_process.py --start` |
   | `appsec-review-process/data/build-images/` | per-target build images | `02-build-resolution` |

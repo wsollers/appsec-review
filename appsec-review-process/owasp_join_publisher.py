@@ -16,6 +16,7 @@ import owasp_dispatch as dispatch
 import owasp_join_report as join
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+import registry_paths
 
 JOB = join.JOB_ID
 CONTRACT = "owasp-join-report"
@@ -29,7 +30,7 @@ SCHEMAS = {MATRIX_MANIFEST:"owasp-control-status-matrix-manifest.schema.json",
            join.GAPS:"owasp-coverage-gaps-report.schema.json",
            join.ROUTES:"owasp-candidate-promotion-routes.schema.json"}
 CODE_FILES = ("owasp_join_publisher.py","owasp_join_report.py","owasp_dispatch.py",
-    "publish_job_output.py","validate_job_output.py","registry/output-contracts/owasp-join-report.json")
+    "publish_job_output.py","validate_job_output.py",registry_paths.contract_rel("owasp-join-report"))
 
 
 def root(run_id: str) -> Path:

@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/pipeline-item/1",
+  "job_id": "02-operations-doc-ingest",
+  "description": "Runbooks, operations and deployment docs as redacted, static-only intelligence records. Ported from the legacy static_intelligence_core lifecycle as the ADR-0025 proof item; outputs are byte-identical.",
+  "output_contract": "operations-doc-intelligence",
+  "worker_kind": "deterministic_python",
+  "needs": [
+    {"job": "00-intake", "as": "source", "resolve": "intake-source"}
+  ],
+  "worker": {
+    "argv": ["{python}", "-B", "{item}/worker.py", "--job", "{job_id}", "--run-id", "{run_id}",
+             "--attempt-id", "{attempt_id}", "--input", "{input}", "--output", "{output}"],
+    "grants": {"container": null, "network": false},
+    "timeout_seconds": 1800
+  },
+  "params": {},
+  "implementation": {
+    "own": [
+      "static_intelligence_core.py",
+      "pipeline/job-templates/02-operations-doc-ingest.json",
+      "pipeline/output-contracts/operations-doc-intelligence.json",
+      "schemas/operations-doc-intelligence.schema.json",
+      "schemas/static-intelligence-record.schema.json",
+      "schemas/static-intelligence-source.schema.json",
+      "schemas/static-intelligence-binding.schema.json"
+    ],
+    "related": []
+  },
+  "outputs": {
+    "artifacts": ["operations-doc-intelligence.json", "status.json", "permission.json", "lineage.json"]
+  },
+  "normalise": null
+}

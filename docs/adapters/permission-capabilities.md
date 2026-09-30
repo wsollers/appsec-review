@@ -19,7 +19,7 @@ All schemas are closed (`additionalProperties: false`), every declared property 
 
 | Record | Schema | Where it lives | Who authors it |
 |---|---|---|---|
-| Capability definition | `schemas/permission-capability.schema.json` | `appsec-review-process/registry/permission-capabilities/<kind>.json` (tracked) | repository maintainers |
+| Capability definition | `schemas/permission-capability.schema.json` | `appsec-review-process/pipeline/permission-capabilities/<kind>.json` (tracked) | repository maintainers |
 | Capability entry + parameters | `permission-capability-entry.schema.json`, `permission-capability-parameters.schema.json` | inside requirements, grants and ceilings | — |
 | Job requirement | `permission-requirement.schema.json` | trusted registry composition (follow-up) | repository maintainers |
 | Engagement grant | `permission-grant.schema.json` | staged run configuration, e.g. `runs/<run_id>/inputs/` (follow-up) | a named human authority |
@@ -69,7 +69,7 @@ permission_capabilities.evaluate(
     requirement: dict,            # permission-requirement record
     grants: list[dict],           # permission-grant records, any order
     context: dict,                # {run_id, job_id, source_snapshot_sha256, now, registry_ceiling}
-    definitions=None, store=None  # default: load registry/permission-capabilities
+    definitions=None, store=None  # default: load appsec-review-process/pipeline/permission-capabilities
 ) -> dict                         # permission-decision record
 ```
 
@@ -214,8 +214,8 @@ python -B appsec-review-process/permission_capabilities.py evaluate `
 
 Shared surfaces, to be done sequentially by whoever owns them. None were edited in B11.
 
-1. `schemas/job-template.schema.json`, `appsec-review-process/registry/job-templates/*.json`,
-   `appsec-review-process/job_graph.py` (`composition`) and `registry/README.md`: replace or
+1. `schemas/job-template.schema.json`, `appsec-review-process/pipeline/job-templates/*.json`,
+   `appsec-review-process/job_graph.py` (`composition`) and `pipeline/README.md`: replace or
    accompany the free-text `permissions` list with a `permission-requirement` record (origin
    `registry`) and have tooling profiles supply the `registry_ceiling`. Map legacy strings, e.g.
    `network:api.scorecard.dev` -> `fixed-network-destination {https, api.scorecard.dev, 443}`.

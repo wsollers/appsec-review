@@ -9,6 +9,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claim_lifecycle_core as core
 import claim_reviewer_pool as reviewer_pool
@@ -355,9 +356,9 @@ class ClaimReviewerPoolTests(unittest.TestCase):
         self.assertNotIn("persona-attempt", instructions)
         self.assertNotIn("sha256:" + "a" * 64, instructions)
         self.assertIn(reviewer_pool.derive.PERSONA_SCHEMA, instructions)
-        for path, schema in ((ROOT / "registry/job-templates/claim-review-pool-cell.json",
+        for path, schema in ((registry_paths.template("claim-review-pool-cell"),
                               "job-template.schema.json"),
-                             (ROOT / "registry/output-contracts/claim-review-pool-candidates.json",
+                             (registry_paths.contract("claim-review-pool-candidates"),
                               "output-contract.schema.json")):
             self.assertEqual(validate_document(json.loads(path.read_text()), schema), [])
 

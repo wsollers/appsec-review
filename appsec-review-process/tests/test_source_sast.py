@@ -10,6 +10,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import source_sast as worker  # noqa: E402
 import container_execution as ce  # noqa: E402
@@ -252,8 +253,8 @@ class SourceSastTests(unittest.TestCase):
         self.assertEqual(leads[0]["path"],"index.php")
 
     def test_contract_registry_records_are_explicitly_not_fully_qualified(self):
-        template = json.loads((ROOT / "registry/job-templates/02-source-sast.json").read_text())
-        contract = json.loads((ROOT / "registry/output-contracts/source-sast.json").read_text())
+        template = json.loads((registry_paths.template("02-source-sast")).read_text())
+        contract = json.loads((registry_paths.contract("source-sast")).read_text())
         self.assertTrue(template["implemented"])
         self.assertEqual(template["composition"]["output_contract_id"], contract["contract_id"])
         self.assertIn("qualification", contract["required_status_fields"])
@@ -263,7 +264,7 @@ class SourceSastTests(unittest.TestCase):
         inputs = {"run_id": "run-1", "source_snapshot_sha256": "sha256:" + "b" * 64,
                   "accepted": {"attempt": "one"}}
         permission, lineage = worker._producer_receipts(inputs)
-        template = json.loads((ROOT / "registry/job-templates/02-source-sast.json").read_text())
+        template = json.loads((registry_paths.template("02-source-sast")).read_text())
         self.assertEqual(permission["permissions"], template["permissions"])
         self.assertEqual(permission["source_snapshot_sha256"], inputs["source_snapshot_sha256"])
         self.assertEqual(lineage["build_lineage_sha256"], "sha256:" + worker.digest(inputs))

@@ -1,6 +1,6 @@
 # ADR-0020: Report findings carry CWE, CVSS v4.0, reachability, EPSS/KEV, snippets and remediation
 
-Status: **Proposed** (2026-09-28; implementation merged to `main` from `ws-report`, `2f93649`). Reachability as final arbiter and the offline
+Status: **Accepted 2026-09-29** (decision log `DECISION-LOG-2026-09-29.md`; proposed 2026-09-28; implementation merged to `main` from `ws-report`, `2f93649`). Reachability as final arbiter and the offline
 EPSS/KEV snapshot were decided by William on 2026-09-28; the rest awaits review.
 
 ## Context

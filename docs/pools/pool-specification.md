@@ -26,7 +26,7 @@ Closed, every property required, `schema_validate.py` subset only.
 | lane | `lane` (with `pool_id`, `run_id`, `job_id`, `attempt_id`) |
 | worker kind | `worker_groups[].worker_kind`: `persona` or `pinned_container` |
 | persona identity | `worker_groups[].persona_request.persona` (the six-record composition with hashes), `.model`, `.invoker_id`, `.invocation_role` |
-| tool identity | `worker_groups[].tool_request.image` `{image_id, digest}`, resolved against `registry/container-images/` |
+| tool identity | `worker_groups[].tool_request.image` `{image_id, digest}`, resolved against `appsec-review-process/pipeline/container-images/` |
 | count | `worker_groups[].count`, 0 to 32 |
 | scope, inputs | `persona_request.readable_inputs` and `.outer_prompt`; `tool_request.target_mounts` (`{mount_root_id, relative_path, container_path}`) |
 | budget | `persona_request.budget`; `tool_request.limits`; pool level `budget_class` and `pool_budget` |
@@ -424,7 +424,7 @@ ADR-0008 T05 names `cells/<wave>/<instance_id>/`; with `pool_parent = cells/<wav
 `reviewer-01`, ..., count 1 each) instead of one `reviewers` group:
 
 - **Instances.** `claim_review_pool_instances` (tunable in
-  `registry/job-templates/claim-review-pool-cell.json`, default 3). Fewer instances when there are
+  `appsec-review-process/pipeline/job-templates/claim-review-pool-cell.json`, default 3). Fewer instances when there are
   fewer independent claim groups; more (up to `pool_groups_max`) when a shard's estimated input
   (claim JSON bytes / 4) exceeds `claim_review_shard_input_units_max`. An empty population keeps the
   single zero-count `reviewers` group.

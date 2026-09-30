@@ -10,6 +10,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import execution_state as state
 from schema_validate import SchemaStore, validate_document
@@ -53,7 +54,7 @@ class ThreatModelCoreTests(unittest.TestCase):
         self.assertEqual(sorted({item["stride_category"] for item in first["stride_hypotheses"]}),
                          expected["stride_categories"])
         role = json.loads((ROOT / "personas/roles/threat-model-core/role.json").read_text())
-        tooling = json.loads((ROOT / "registry/tooling-profiles/threat-model-static-evidence.json").read_text())
+        tooling = json.loads((registry_paths.record(registry_paths.TOOLING_PROFILES, "threat-model-static-evidence")).read_text())
         self.assertEqual(set(role["allowed_outputs"]), set(tooling["claim_limits"]["allowed"]))
         self.assertTrue({"finding", "severity", "runtime_state"} <= set(role["forbidden_outputs"]))
 
@@ -175,7 +176,7 @@ class ThreatModelCoreTests(unittest.TestCase):
             tm._validate_attempt(attempt, self.inputs)
 
     def test_prohibited_conclusion_text_and_generic_contract_policy_fail_closed(self):
-        contract = json.loads((ROOT / "registry/output-contracts/threat-model-core.json").read_text())
+        contract = json.loads((registry_paths.contract("threat-model-core")).read_text())
         policy = output_validator.CLAIM_CLASS_POLICIES["threat-model-core"]
         self.assertEqual(policy["claim_class_id"], contract["claim_class"]["claim_class_id"])
         self.assertEqual(policy["allowed_assertions"], set(contract["claim_class"]["allowed_assertions"]))
@@ -203,7 +204,7 @@ class ThreatModelCoreTests(unittest.TestCase):
             ("tooling-profiles/threat-model-static-evidence.json", "tooling-profile.schema.json"),
             ("output-contracts/threat-model-core.json", "output-contract.schema.json"))
         for relative, schema in records:
-            value = json.loads((ROOT / "registry" / relative).read_text())
+            value = json.loads((registry_paths.REGISTRY / relative).read_text())
             self.assertEqual(validate_document(value, schema, store), [], relative)
 
 

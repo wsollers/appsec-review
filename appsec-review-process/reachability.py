@@ -14,7 +14,10 @@ Reachability is the final severity arbiter.  Three states, no others:
 
 Entry points are the program entries in ``PROGRAM_ENTRY_NAMES`` (``main`` and the Windows C/C++
 runtime and loader entries) plus exported symbols / network handlers named in a hash-bound
-entry-point list when a run supplies one (docs/reachability-entry-points.md).  The same analyser writes the
+entry-point list when a run supplies one (docs/reachability-entry-points.md).  ``ExtraEntries``
+adds roots from a verified source outside the CPG (``entry_exports``: a shipped library's dynamic
+export table, CodeQL ``EntryPoints`` rows), each labelled in the witness; its escapes and gaps can
+only turn UNREACHABLE into UNKNOWN.  Without ``extra`` every result is unchanged.  The same analyser writes the
 ``06-cve-reachability`` evidence file (vulnerable dependency function -> call path from application
 code) from a reviewer-supplied advisory -> vulnerable-function map; there is no network lookup.
 """
@@ -22,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
+from dataclasses import dataclass, field
 import hashlib
 import json
 from pathlib import Path
@@ -37,12 +41,44 @@ BENIGN_GAPS = {"duplicate"}  # CPG coverage-gap reasons that cannot hide a call 
 # Functions the C/C++ runtime or OS loader calls: a path from any of them is a path from the
 # program.  More real entries can only turn UNREACHABLE into REACHABLE/UNKNOWN, never the reverse.
 # Fuzz harness entries (LLVMFuzzerTestOneInput) are deliberately absent: a harness path must not
-# produce a REACHABLE witness that lifts the Critical cap.
+# produce a REACHABLE witness that lifts the Critical cap.  One table: the dependency engines'
+# ``ENTRY_POINT_SOURCES["cpp"]["names"]`` is this tuple.
 PROGRAM_ENTRY_NAMES = ("main", "wmain", "WinMain", "wWinMain", "DllMain")
 _DUPLICATE = re.compile(r"<duplicate>\d+")
 _OPERATOR = ("<operator>", "<operators>")
 # Callees that cannot be named statically (function pointers, "ANY" receivers, lambdas).
 _INDIRECT = ("<operator>.pointerCall", "<operator>.indirectCall", "ANY.ANY", "<lambda>")
+
+
+@dataclass(frozen=True)
+class ExtraEntries:
+    """Roots from a verified source outside the CPG, with the joins that could not become roots.
+
+    ``roots`` maps a CPG method full name to its witness label (``{"label": "exported-symbol",
+    "artifact": ..., "symbol": ...}``).  ``escapes`` are joins that were not unique (an ambiguous
+    export is an escape, never an entry); ``gaps`` are entries the source names but the graph cannot
+    root (symbol not in the CPG, export table missing or partial).  Both keep an unreached target
+    UNKNOWN; neither can add a path.
+    """
+    roots: dict[str, dict[str, Any]] = field(default_factory=dict)
+    escapes: tuple[dict[str, Any], ...] = ()
+    gaps: tuple[str, ...] = ()
+
+    def summary(self) -> dict[str, Any]:
+        return {"roots": len(self.roots), "escapes": len(self.escapes), "gaps": list(self.gaps[:10])}
+
+
+def qualified_name(full_name: str) -> str:
+    """``ns.Class.method:sig`` -> ``ns.Class.method`` (the part ``short_name`` takes the last segment of)."""
+    parts = full_name.split(":")
+    head = parts[1] if "/" in parts[0] and len(parts) > 1 else parts[0]
+    return _DUPLICATE.sub("", head)
+
+
+def file_scoped(full_name: str) -> bool:
+    """The CPG names this method with a file prefix (``dir/a.c:helper``): internal linkage, never an export."""
+    parts = full_name.split(":")
+    return "/" in parts[0] and len(parts) > 1
 
 
 def short_name(full_name: str) -> str:
@@ -205,12 +241,22 @@ class CallGraph:
 
 
 def analyze(graph: CallGraph, target: str | None, entries: list[str], *, sink: dict[str, Any] | None = None,
-            max_depth: int = MAX_DEPTH, max_nodes: int = MAX_NODES) -> dict[str, Any]:
-    """Bounded multi-source BFS from the entry points to ``target``; returns a reachability record."""
+            max_depth: int = MAX_DEPTH, max_nodes: int = MAX_NODES,
+            extra: ExtraEntries | None = None) -> dict[str, Any]:
+    """Bounded multi-source BFS from the entry points to ``target``; returns a reachability record.
+
+    ``extra`` roots are searched after ``entries`` (an equal-length path from a program entry wins);
+    its escapes and gaps are applied only when the target is not reached.
+    """
+    program = set(entries)
+    if extra is not None:
+        entries = list(entries) + sorted(full for full in extra.roots if full not in program and full in graph.methods)
     base: dict[str, Any] = {"analyser": "reachability.py bounded BFS over resolved CPG call edges",
         "entry_point_count": len(entries), "max_depth": max_depth,
         "graph": {"methods": len(graph.methods), "edges": sum(len(v) for v in graph.edges.values()),
                   **graph.identity}}
+    if extra is not None:
+        base["extra_entries"] = extra.summary()
     if sink:
         base["sink"] = sink
     if target is None:
@@ -262,9 +308,16 @@ def analyze(graph: CallGraph, target: str | None, entries: list[str], *, sink: d
         if sink:
             witness.append({"function": "(finding location)", "file": sink.get("file"),
                             "line": sink.get("line"), "code": sink.get("code")})
-        return {**base, "state": REACHABLE, "witness": witness,
-                "entry_point": graph.describe(chain[0][0]),
-                "reason": f"call path of {len(chain) - 1} edge(s) from entry point {graph.methods[chain[0][0]]['name']}()"}
+        root = chain[0][0]
+        entry_point = graph.describe(root)
+        reason = f"call path of {len(chain) - 1} edge(s) from entry point {graph.methods[root]['name']}()"
+        if extra is not None and root not in program and root in extra.roots:
+            label = extra.roots[root]
+            entry_point.update(label)
+            witness[0]["entry"] = dict(label)
+            reason += f" ({label.get('label')}: {label.get('symbol') or label.get('reason')}"
+            reason += f" in {label['artifact']})" if label.get("artifact") else ")"
+        return {**base, "state": REACHABLE, "witness": witness, "entry_point": entry_point, "reason": reason}
     if truncated:
         return {**base, "state": UNKNOWN, "witness": [],
                 "reason": "search bound reached before the graph was exhausted"}
@@ -272,9 +325,17 @@ def analyze(graph: CallGraph, target: str | None, entries: list[str], *, sink: d
         return {**base, "state": UNKNOWN, "witness": [], "escapes": escapes[:10],
                 "reason": f"{len(escapes)} indirect or ambiguous call(s) reachable from the entry points "
                           "(dynamic-dispatch escape)"}
+    if extra is not None and extra.escapes:
+        return {**base, "state": UNKNOWN, "witness": [], "escapes": list(extra.escapes[:10]),
+                "reason": f"{len(extra.escapes)} entry join(s) are not unique "
+                          f"({', '.join(sorted({item['reason'] for item in extra.escapes}))}); no entry was assumed"}
     if graph.gaps:
         return {**base, "state": UNKNOWN, "witness": [],
                 "reason": "CPG coverage gaps could hide call edges: " + ", ".join(graph.gaps[:5])}
+    if extra is not None and extra.gaps:
+        return {**base, "state": UNKNOWN, "witness": [],
+                "reason": "entry facts are incomplete, an unmodelled entry could reach this function: "
+                          + ", ".join(extra.gaps[:5])}
     return {**base, "state": UNREACHABLE, "witness": [],
             "reason": f"no path from {len(entries)} entry point(s) over {len(parent)} reached function(s); "
                       "no dynamic-dispatch escape"}
@@ -298,10 +359,10 @@ def load_cpg(attempt: Path, ir_facts: Path | None = None) -> CallGraph:
 
 
 def assess_location(graph: CallGraph, path: str, line: int, entries_extra: Iterable[str] = (),
-                    code: str | None = None) -> dict[str, Any]:
+                    code: str | None = None, extra: ExtraEntries | None = None) -> dict[str, Any]:
     target, how = graph.locate(path, line)
     result = analyze(graph, target, graph.entry_points(entries_extra),
-                     sink={"file": path, "line": line, "code": code})
+                     sink={"file": path, "line": line, "code": code}, extra=extra)
     result["located_by"] = how
     if target is None:
         ir = sorted({function for (source, function) in graph.ir_functions if source == path})
@@ -387,7 +448,8 @@ def symbol_matches(full_name: str | None, symbol: str, package: str | None = Non
 
 
 def assess_symbols(graph: CallGraph, symbols: Iterable[dict[str, Any]], entries: list[str],
-                   max_depth: int = MAX_DEPTH, max_nodes: int = MAX_NODES) -> dict[str, Any]:
+                   max_depth: int = MAX_DEPTH, max_nodes: int = MAX_NODES,
+                   extra: ExtraEntries | None = None) -> dict[str, Any]:
     """Best reachability of any listed dependency symbol (``{package, symbol}``) from ``entries``.
 
     A symbol is either defined in the graph (vendored dependency analysed with the application;
@@ -411,7 +473,7 @@ def assess_symbols(graph: CallGraph, symbols: Iterable[dict[str, Any]], entries:
             if hit:
                 callers[caller] = hit
         for target in sorted(set(defined) | set(callers)):
-            result = analyze(graph, target, entries, max_depth=max_depth, max_nodes=max_nodes)
+            result = analyze(graph, target, entries, max_depth=max_depth, max_nodes=max_nodes, extra=extra)
             if target in callers and target not in defined and result["state"] == REACHABLE:
                 call = callers[target]
                 result["witness"].append({"function": symbol, "file": call["path"], "line": call["line"],

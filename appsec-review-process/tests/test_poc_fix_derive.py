@@ -148,6 +148,14 @@ class DeriveTests(Run):
         self.assertNotEqual(record["poc_fix_id"], "pocfix-" + "0" * 24)
         self.assertTrue(any("source_sha256" in note for note in notes))
 
+    def test_echoed_explanation_status_and_poc_reason_are_noted_not_repaired(self):
+        reply = good_reply(explanation_status="ACCEPTED")
+        reply["poc"]["reason"] = "model copied the record shape"
+        record, notes = derive.derive(self.workspace, reply, author=AUTHOR)
+        self.assertEqual((record["explanation_status"], record["poc"]["reason"]), ("ACCEPTED", None))
+        self.assertTrue(any("'explanation_status'" in note for note in notes))
+        self.assertTrue(any(note.startswith("poc: ") and "'reason'" in note for note in notes))
+
     def test_fix_touching_another_file_or_without_hunk_is_repaired(self):
         other = good_reply(fix={"diff": "--- a/etc/config\n+++ b/etc/config\n@@ -1 +1 @@\n-a\n+b\n", "rationale": "x"})
         with self.assertRaises(InvokerOutputError) as caught:

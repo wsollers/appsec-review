@@ -237,7 +237,7 @@ On `OK`:
   per successful trial (source revision, plan sha256, run id, attempt id, date). The entry is
   immutable and validated against `schemas/build-image.schema.json` on reuse and publication.
 - **Container-image record** for B13 in `data/build-images/container-images/image_build_<id>.json`
-  (the B16 shape). B13 resolves tracked records in `registry/container-images/` and, for ids
+  (the B16 shape). B13 resolves tracked records in `appsec-review-process/pipeline/container-images/` and, for ids
   starting `image_build_` only, these host-local ones. This is a required B13 change.
 - **Build lock** `build-lock.json` in the immutable accepted attempt (the Phase 4 `buildenv-lock` shape): image id
   and local digest, Dockerfile sha256, ordered argv for configure / build, compile-database
@@ -262,7 +262,7 @@ Decided by William, 2026-09-24.
 
 | Setting | Value | Where to change it |
 |---|---|---|
-| Model | Haiku (`haiku`, the claude CLI alias for the current Haiku) | `appsec-review-process/model-config.json`, `unbuilt_job_defaults["02-build-plan"].model` (moves into `registry/job-templates/02-build-plan.json`'s own `model` field once that job template is authored -- see model-config.json's `_notes`, changed 2026-09-24) |
+| Model | Haiku (`haiku`, the claude CLI alias for the current Haiku) | `appsec-review-process/model-config.json`, `unbuilt_job_defaults["02-build-plan"].model` (moves into `appsec-review-process/pipeline/job-templates/02-build-plan.json`'s own `model` field once that job template is authored -- see model-config.json's `_notes`, changed 2026-09-24) |
 | Authentication | `subscription`: the claude CLI's current login, never an API key | `appsec-review-process/model-config.json`, `invocation.auth.mode` |
 
 With `subscription`, the invoker removes `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the

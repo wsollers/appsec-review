@@ -259,8 +259,7 @@ def load(root: Any = None, *, now: datetime | None = None,
     from dependency_snapshot_registry import SnapshotBlocked, SnapshotInvalid, SnapshotStale
     now = now or datetime.now(timezone.utc)
     try:
-        identity = mitre_feed.resolve(root, now=now, max_age_seconds=max_age_seconds,
-                                      kinds=mitre_feed.REFERENCE_KINDS)
+        identity = mitre_feed.resolve(root, now=now, max_age_seconds=max_age_seconds)
     except SnapshotBlocked as exc:
         return None, {"code": GAP_MISSING, "detail": str(exc)[:300]}
     except SnapshotStale as exc:

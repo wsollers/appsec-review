@@ -37,6 +37,7 @@ import review_cli
 import supporting_evidence_menu as evidence_menu
 from execution_state import Blocked, ROOT, atomic_bytes, digest, file_hash
 from schema_validate import SchemaStore
+import registry_paths
 
 COMPOSER_TEMPLATE = "attack-chain-composition-cell"
 REFUTER_TEMPLATE = "attack-chain-refutation-cell"
@@ -69,9 +70,9 @@ def code_hashes() -> dict[str, str]:
              "personas/personas/attack-chain-composer/persona.json", "personas/personas/attack-chain-refuter/persona.json",
              "personas/roles/chain-composer/role.json", "personas/roles/chain-refuter/role.json",
              "personas/roles/attack-chain-coordinator/role.json",
-             "registry/domains/attack-chain-lifecycle.json", "registry/tooling-profiles/claim-review-static.json",
-             "registry/output-contracts/attack-chain-candidates.json",
-             f"registry/job-templates/{COMPOSER_TEMPLATE}.json", f"registry/job-templates/{REFUTER_TEMPLATE}.json",
+             registry_paths.rel(registry_paths.DOMAINS, "attack-chain-lifecycle"), registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"),
+             registry_paths.contract_rel("attack-chain-candidates"),
+             registry_paths.template_rel(COMPOSER_TEMPLATE), registry_paths.template_rel(REFUTER_TEMPLATE),
              f"{LANE}/task-{COMPOSER_TEMPLATE}.md", f"{LANE}/task-{REFUTER_TEMPLATE}.md"]
     values = {path: file_hash(ROOT / path) for path in paths}
     for name in ("attack-chain-seeds.schema.json", "attack-chain-workspace.schema.json",

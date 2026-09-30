@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import container_mobile_binary_contracts as cmb
 import evidence_redaction
@@ -120,7 +121,7 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                 self.assertEqual(errors, [])
                 permission = json.loads((attempt / "permission.json").read_text())
                 lineage = json.loads((attempt / "lineage.json").read_text())
-                template = json.loads((ROOT / "registry" / "job-templates" / f"{job}.json").read_text())
+                template = json.loads((registry_paths.template(job)).read_text())
                 self.assertEqual(permission, {"schema": workers.PERMISSION_SCHEMA, "run_id": "run-1",
                     "job_id": job, "source_snapshot_sha256": SOURCE_SHA,
                     "permissions": template["permissions"]})
@@ -150,8 +151,7 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                 attempt = run / "data/jobs" / job / "whole/attempts" / attempt_id
                 workers.materialize_attempt(documents, attempt, dagster_run_id="dagster-canonical-v04",
                     started_at="2026-09-27T12:00:00Z", finished_at="2026-09-27T12:00:01Z")
-                contract = json.loads((ROOT / "registry/output-contracts" /
-                    (workers.SPECS[job][0] + ".json")).read_text())
+                contract = json.loads((registry_paths.contract(workers.SPECS[job][0])).read_text())
                 errors = validator.validate_vendor_prepass_attempt(attempt, contract, run_id=run_id,
                     job_id=job, attempt_id=attempt_id, node_status=documents["status"],
                     orchestration=validator.OrchestrationFacts(

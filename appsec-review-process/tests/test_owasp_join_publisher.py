@@ -12,6 +12,7 @@ from owasp_dispatch_support import DispatchCase
 import execution_state
 import owasp_join_publisher as publisher
 import owasp_join_report as join
+import registry_paths
 from schema_validate import SchemaStore,validate_document
 
 
@@ -82,7 +83,7 @@ class OwaspJoinPublisherTests(DispatchCase):
             publisher._validate_attempt(attempt,inputs,self.facts())
 
     def test_output_contract_and_owned_schema_are_valid(self):
-        contract=json.loads((Path(publisher.ROOT)/"registry/output-contracts/owasp-join-report.json").read_text())
+        contract=json.loads(registry_paths.contract("owasp-join-report").read_text())
         self.assertEqual(validate_document(contract,"output-contract.schema.json",SchemaStore()),[])
         self.assertEqual(contract["required_files"],
             [publisher.MATRIX_MANIFEST,join.GAPS,join.ROUTES,"permission.json","lineage.json","status.json"])

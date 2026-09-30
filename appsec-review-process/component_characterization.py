@@ -27,6 +27,7 @@ from publish_job_output import coordinate_worker_lifecycle, record_terminal_curr
 import review_cli as rc
 from schema_validate import SchemaStore, validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 JOB = "01-component-characterization"
 DAGSTER_JOB = "component_characterization"
@@ -58,10 +59,10 @@ ABSENT_SCHEMA_SHA256 = "ABSENT"
 CODE_FILES = (
     "component_characterization.py", "persona_dispatch.py", "persona_invocation.py",
     "persona_prompt_assembly.py", "claude_cli_invoker.py", "publish_job_output.py",
-    "validate_job_output.py", "registry/job-templates/01-component-characterization.json",
-    "personas/roles/component-characterizer/role.json", "registry/domains/component-characterization.json",
-    "registry/tooling-profiles/component-evidence-router.json",
-    "registry/output-contracts/component-map.json",
+    "validate_job_output.py", registry_paths.template_rel("01-component-characterization"),
+    "personas/roles/component-characterizer/role.json", registry_paths.rel(registry_paths.DOMAINS, "component-characterization"),
+    registry_paths.rel(registry_paths.TOOLING_PROFILES, "component-evidence-router"),
+    registry_paths.contract_rel("component-map"),
     "01-component-characterization/task-component-characterization.md",
 )
 
@@ -727,7 +728,7 @@ def _lane_vocabulary() -> dict[str, str]:
     component may route to a job such as ``02-native-build``), keyed by the id itself and by its name
     without the number when that name is unambiguous."""
     ids = {folder.name for folder in ROOT.iterdir() if folder.is_dir() and re.fullmatch(r"\d\d-[a-z0-9-]+", folder.name)}
-    ids |= {path.stem for path in (ROOT / "registry" / "job-templates").glob("*.json")
+    ids |= {path.stem for path in registry_paths.JOB_TEMPLATES_DIR.glob("*.json")
             if re.fullmatch(r"\d\d-[a-z0-9-]+", path.stem)}
     table = {lane: lane for lane in ids}
     names: dict[str, set[str]] = {}

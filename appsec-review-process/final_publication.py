@@ -16,6 +16,7 @@ import shutil
 import tempfile
 from typing import Any
 
+import dev_restart
 from execution_state import Blocked, atomic_json, digest, file_hash, read_json, run_path
 from schema_validate import validate_document
 import synthesis_sarif
@@ -256,6 +257,8 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
             authorization_key: bytes, expected_ledger_anchor: str,
             expected_ledger_head: str) -> dict[str, Any]:
     """Publish only from exact current accepted completeness and feedback attempts."""
+    # ADR-0025: a dev process, or a run with any accepted dev-mode result, is never a deliverable.
+    dev_restart.assert_deliverable(Path(run_root))
     publication=read_json(_safe_artifact(Path(draft_attempt),"publication-manifest.json"))
     run_id=publication.get("run_id")
     expected=((completeness_ref,"completeness-audit","completeness-audit","completeness-audit.json"),

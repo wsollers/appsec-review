@@ -5,10 +5,13 @@ For every independently verified finding this module collects, in Python and fro
 accepted inputs only, the report-template fields the draft used to leave blank:
 
 * CWE -- tool rule metadata through the pinned rule->CWE map, plus the reviewers' CWE judgments
-  (07/09/12, carried by the lifecycle), all validated against the pinned CWE catalog;
+  (07/09/12, carried by the lifecycle), all validated against the CWE catalog in force (the MITRE
+  feed snapshot, else the committed curated catalog with a recorded gap; ``cwe_catalog.current``);
 * CVSS v4.0 -- the vector/score the 12 lifecycle computed from the reviewer's base metrics;
 * reachability -- the call-graph analyser over the accepted CPG (+ IR facts); code findings get a
-  witness path, SCA findings take the accepted 06-cve-reachability classification;
+  witness path, SCA findings take the accepted 06-cve-reachability classification; with the
+  ``reachability_export_entries`` tunable on, a shipped library's exported functions are roots too
+  (``entry_exports``, from the accepted 02-binary-triage evidence);
 * severity -- the lifecycle severity, capped by reachability: Critical requires REACHABLE,
   UNKNOWN and UNREACHABLE cap at High (and say so);
 * EPSS / KEV -- from the dated, hash-pinned offline snapshot for SCA findings, else "not assessed";
@@ -28,6 +31,7 @@ from typing import Any
 import code_snippets
 import cvss4
 import cwe_catalog
+import entry_exports
 import epss_kev_snapshot
 import reachability
 
@@ -72,9 +76,13 @@ def input_bindings(run_root: Path) -> dict[str, Any]:
             bindings[name] = None
     entry = Path(run_root) / ENTRY_POINTS
     bindings["entry_points"] = _sha_file(entry) if entry.is_file() and not entry.is_symlink() else None
+    if entry_exports.enabled("reachability_export_entries"):
+        # Only when on: with the tunable off the bindings (and so the fingerprint) are unchanged.
+        found = _accepted_attempt(run_root, entry_exports.TRIAGE_JOB)
+        bindings["export_entries"] = {**found[1], **entry_exports.triage_binding(found[0])} if found else None
     lock = epss_kev_snapshot.SNAPSHOT_DIR / epss_kev_snapshot.LOCK
     bindings["epss_kev_lock"] = _sha_file(lock) if lock.is_file() else None
-    bindings["cwe"] = cwe_catalog.Catalog().identity
+    bindings["cwe"] = cwe_catalog.current().identity      # feed table hash, or the curated fallback + gap
     bindings["cvss_lookup_sha256"] = cvss4.LOOKUP_SHA256
     bindings["sources"] = [{"tree": str(root.relative_to(run_root)) if root.is_relative_to(run_root) else root.name}
                            for root in code_snippets.source_roots(run_root)]
@@ -86,9 +94,11 @@ class Context:
 
     def __init__(self, run_root: Path, snapshot_dir: Path | None = None):
         self.run_root = Path(run_root)
-        self.catalog = cwe_catalog.Catalog()
-        self.gaps: list[str] = [self.catalog.gap_line()] if self.catalog.gap else []
+        self.gaps: list[str] = []
         self.bindings = input_bindings(self.run_root)
+        self.catalog = cwe_catalog.bound(self.bindings["cwe"])     # the catalog the fingerprint names
+        if self.catalog.limitation():
+            self.gaps.append(self.catalog.limitation())
         entry = self.run_root / ENTRY_POINTS
         self.entry_points: list[str] = []
         if self.bindings["entry_points"]:
@@ -101,7 +111,14 @@ class Context:
             if self.bindings["ir"]:
                 ir = _accepted_attempt(self.run_root, OPTIONAL_JOBS["ir"][0])[0] / OPTIONAL_JOBS["ir"][1]
             self.graph = reachability.load_cpg(attempt, ir)
-        else:
+        self.extra: reachability.ExtraEntries | None = None
+        if self.graph is not None and "export_entries" in self.bindings:
+            tables, gaps = [], [f"export-facts-missing:{entry_exports.TRIAGE_JOB}"]
+            if self.bindings["export_entries"]:
+                tables, gaps = entry_exports.tables_from_triage(
+                    _accepted_attempt(self.run_root, entry_exports.TRIAGE_JOB)[0])
+            self.extra = entry_exports.join_exports(self.graph, tables, gaps)
+        if self.graph is None:
             self.gaps.append("REACHABILITY_UNKNOWN: no accepted 02-code-property-graph; every code finding is UNKNOWN")
         self.remediation: dict[str, dict[str, Any]] = {}
         if self.bindings["remediation"]:
@@ -169,9 +186,9 @@ def _cwe(ctx: Context, finding: dict[str, Any], code: list[dict[str, Any]]) -> d
                 entries[cwe_id]["sources"].append(source)
     judgments = []
     for item in sorted(finding.get("cwe_judgments") or [], key=lambda item: STAGE_RANK.get(item["stage"], 9)):
-        try:                          # validated upstream, possibly against a catalog no longer in force
+        try:
             ctx.catalog.validate(item["cwe_id"])
-        except cwe_catalog.CWEError as exc:
+        except cwe_catalog.CWEError as exc:        # e.g. judged against the feed, reported on the fallback
             gaps.append(f"reviewer {item['stage']} CWE judgment dropped: {exc}")
             continue
         judgments.append(item)
@@ -203,7 +220,7 @@ def _reachability(ctx: Context, code: list[dict[str, Any]], dependency: list[dic
                 "reason": "no accepted code property graph"}
     best = None
     for row in code:
-        result = reachability.assess_location(ctx.graph, row["path"], row["line"], ctx.entry_points)
+        result = reachability.assess_location(ctx.graph, row["path"], row["line"], ctx.entry_points, extra=ctx.extra)
         if best is None or reachability.STATES.index(result["state"]) < reachability.STATES.index(best["state"]):
             best = result
     best = {key: value for key, value in best.items() if key != "graph"}
@@ -274,5 +291,6 @@ def build(report: dict[str, Any], run_root: Path, snapshot_dir: Path | None = No
     return {"schema": SCHEMA, "run_id": report["run_id"], "ledger_head_sha256": report["ledger_head_sha256"],
             "inputs": ctx.bindings,
             "epss_kev": ctx.snapshot.identity if ctx.snapshot is not None else {"status": "not assessed"},
+            "cwe_catalog": {"used": ctx.catalog.used, **ctx.catalog.identity},
             "severity_rule": "Critical requires REACHABLE; UNKNOWN and UNREACHABLE cap at High (ADR-0020)",
             "findings": findings, "gaps": ctx.gaps}

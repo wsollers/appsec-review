@@ -15,6 +15,7 @@ import json
 import pathlib
 import subprocess
 from typing import Any
+import registry_paths
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -143,7 +144,7 @@ def main() -> int:
     parser.add_argument("--run-root", type=pathlib.Path)
     args = parser.parse_args()
 
-    graph_path = PROCESS / "job-graph.json"
+    graph_path = registry_paths.JOB_GRAPH
     parity_path = PROCESS / "design-parity-manifest.json"
     catalog_path = ROOT / "docs/processes/job-catalog.json"
     graph = load(graph_path)

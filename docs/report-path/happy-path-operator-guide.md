@@ -170,7 +170,7 @@ missing or older than `reference_snapshot_max_age_seconds` (14 days) the report 
 records the gap `MITRE_REFERENCE_MISSING` / `MITRE_REFERENCE_STALE`; the review itself continues
 ([ADR-0026](../decisions/ADR-0026-mitre-attack-capec-reference-feed.md)). CWE ids are validated against
 the snapshot's full MITRE CWE catalog; when its CWE source is missing or stale, the committed curated
-catalog is used instead and the gap `CWE_REFERENCE_MISSING` / `CWE_REFERENCE_STALE` is recorded.
+catalog is used instead and the gap `CWE_REFERENCE_MISSING` / `CWE_REFERENCE_STALE` / `CWE_REFERENCE_INVALID` is recorded.
 
 ## 3. Prepare source, build and searchable evidence
 

@@ -160,26 +160,26 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 </style>
 
 <nav class="toc" aria-label="Sections">
-  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a>
+  <a href="#summary">1 Summary</a><a href="#coverage">2 Coverage</a><a href="#findings">3 Findings</a><a href="#chains">3A Attack chains</a><a href="#dependency-reachability">3B Dependency reachability</a><a href="#threat-workbench">3C Threat workbench</a>
   <a href="#gaps">4 Gaps</a><a href="#method">5 Scoring</a><a href="#evidence">A Evidence</a><a href="#provenance">B Provenance</a><a href="#latex">LaTeX source</a>
 </nav>
 
 <main class="doc">
   <header class="cover">
-    <div class="eyebrow">SAT fixture - system acceptance</div>
+    <div class="eyebrow">SAMPLE - hello-autotools fixture (illustrative)</div>
     <h1>Application Security Review</h1>
     <div class="target">hello-autotools <span class="muted">@ <span class="mono">e3ad863</span></span></div>
     <div class="kpis">
       <div class="kpi"><div class="eyebrow">Overall rating</div><div class="v"><span class="chip s-High">High</span></div><div class="s">top priority 8.5</div></div>
-      <div class="kpi"><div class="eyebrow">Process assurance</div><div class="v">82%</div><div class="s">28 of 42 retained process records OK, 11 gaps</div></div>
+      <div class="kpi"><div class="eyebrow">Process assurance</div><div class="v">94%</div><div class="s">62 of 81 retained process records OK, 7 gaps</div></div>
       <div class="kpi"><div class="eyebrow">Native tier</div><div class="v">A</div><div class="s">ADR-0001 gate</div></div>
-      <div class="kpi"><div class="eyebrow">Report date</div><div class="v" style="font-size:20px">2026-09-27</div><div class="s">SAT 20260927T141440Z</div></div>
+      <div class="kpi"><div class="eyebrow">Report date</div><div class="v" style="font-size:20px">2026-09-29</div><div class="s">SAT 20260927T141440Z</div></div>
     </div>
 <p class="sample"><b>Sample data.</b> Values are illustrative, shaped like a hello-autotools SAT run.</p>  </header>
 
   <section id="summary">
     <h2><span class="n">1</span>Executive summary</h2>
-<p>The review ran 42 processes across 6 families. 28 completed cleanly, 3 were skipped as not applicable with a probe receipt, and 11 left coverage gaps. Overall rating is <b>High</b>, driven by the highest verified priority score of 8.5. Process assurance is <b>82%</b>; a process that did not run is reported as a gap, never as a clean result.</p>    <div class="sevstrip">
+<p>The review ran 81 processes across 17 families. 62 completed cleanly, 12 were skipped as not applicable with a probe receipt, and 7 left coverage gaps. Overall rating is <b>High</b>, driven by the highest verified priority score of 8.5. Process assurance is <b>94%</b>; a process that did not run is reported as a gap, never as a clean result.</p>    <div class="sevstrip">
 <div><span class="chip s-Critical">Critical</span><b>0</b></div><div><span class="chip s-High">High</span><b>3</b></div><div><span class="chip s-Medium">Medium</span><b>2</b></div><div><span class="chip s-Low">Low</span><b>2</b></div><div><span class="chip s-Refuted">Refuted</span><b>1</b></div>    </div>
     <div class="tbl"><table>
       <thead><tr><th>ID</th><th>Finding</th><th class="num">CVSS 4.0</th><th class="num">Priority</th><th>Severity</th></tr></thead>
@@ -200,7 +200,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
           <td class="num">7.3</td>
           <td class="num"><b>6.2</b></td>
           <td><span class="chip s-Medium">Medium</span></td></tr>
-        <tr><td><a class="mono" href="#AR-005">AR-005</a></td><td>Vendored cJSON 1.7.18 missing from SBOM; CVE match not performed</td>
+        <tr><td><a class="mono" href="#AR-005">AR-005</a></td><td>Vendored cJSON 1.7.18 has no purl or CPE; advisory matching could not cover it</td>
           <td class="num">–</td>
           <td class="num"><b>–</b></td>
           <td><span class="chip s-Medium">Medium</span></td></tr>
@@ -221,196 +221,423 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 
   <section id="coverage">
     <h2><span class="n">2</span>Scope and process coverage</h2>
-<p>Every process in the flow appears here, including designed lanes that are not built yet. Credit per process: <span class="st t-OK">OK</span> = 1, <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> = measured coverage, <span class="st t-BLOCKED">BLOCKED</span> / <span class="st t-FAILED">FAILED</span> / <span class="st t-NOT_BUILT">NOT_BUILT</span> = 0, <span class="st t-SKIPPED_NA">SKIPPED_NA</span> excluded from the denominator.</p>    <div class="math">\[ A = \frac{\sum_k w_k A_k}{\sum_k w_k} = \frac{1 \cdot 0.94 + 2 \cdot 1.00 + 3 \cdot 0.57 + 3 \cdot 1.00 + 4 \cdot 0.95 + 1 \cdot 0.00}{14} = \mathbf{0.82} \]</div>
+<p>Every process in the flow appears here, including designed lanes that are not built yet. Credit per process: <span class="st t-OK">OK</span> = 1, <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> = measured coverage, <span class="st t-BLOCKED">BLOCKED</span> / <span class="st t-FAILED">FAILED</span> / <span class="st t-NOT_BUILT">NOT_BUILT</span> = 0, <span class="st t-SKIPPED_NA">SKIPPED_NA</span> excluded from the denominator.</p>    <div class="math">\[ A = \frac{\sum_k w_k A_k}{\sum_k w_k} = \frac{1 \cdot 1.00 + 3 \cdot 1.00 + 48 \cdot 0.90 + 2 \cdot 1.00 + 2 \cdot 1.00 + 1 \cdot 1.00 + 3 \cdot 1.00 + 5 \cdot 1.00 + 1 \cdot 1.00 + 2 \cdot 1.00 + 4 \cdot 0.97 + 2 \cdot 1.00 + 1 \cdot 1.00 + 2 \cdot 1.00 + 2 \cdot 1.00}{79} = \mathbf{0.94} \]</div>
 
     <div class="bars" role="table" aria-label="Assurance by family">
       <span class="h">Family</span><span class="h" style="text-align:center">\(w_k\)</span><span class="h">\(A_k\) &nbsp;<span style="text-transform:none;letter-spacing:0">(line = 0.85 floor)</span></span><span class="h" style="text-align:right">\(A_k\)</span>
-      <span>Intake and discovery</span><span class="w">1</span>
-      <span class="track"><span class="fill" style="width:94.0%"></span><span class="thr" style="left:85.0%"></span></span>
-      <span class="num">0.94</span>
-      <span>Build resolution</span><span class="w">2</span>
+      <span>Lane 00: intake recovery</span><span class="w">1</span>
       <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
       <span class="num">1.00</span>
-      <span>Deterministic scan jobs</span><span class="w">3</span>
-      <span class="track"><span class="fill low" style="width:56.7%"></span><span class="thr" style="left:85.0%"></span></span>
-      <span class="num">0.57</span>
-      <span>Native analysis substrate</span><span class="w">3</span>
+      <span>Lane 01: component characterization</span><span class="w">3</span>
       <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
       <span class="num">1.00</span>
-      <span>LLM review lanes</span><span class="w">4</span>
-      <span class="track"><span class="fill" style="width:95.0%"></span><span class="thr" style="left:85.0%"></span></span>
-      <span class="num">0.95</span>
-      <span>Designed, not built</span><span class="w">1</span>
+      <span>Lane 02: evidence pregather</span><span class="w">48</span>
+      <span class="track"><span class="fill" style="width:90.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">0.90</span>
+      <span>Lane 03: threat model dfd stride</span><span class="w">2</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 04: asvs masvs</span><span class="w">2</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 05: native memory</span><span class="w">1</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 06: cve reachability</span><span class="w">3</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 07: red team adversarial</span><span class="w">5</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 08: blue team refutation</span><span class="w">1</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 09: independent verification</span><span class="w">2</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 10: synthesis report</span><span class="w">4</span>
+      <span class="track"><span class="fill" style="width:97.5%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">0.97</span>
+      <span>Lane 11: remediation proposal</span><span class="w">2</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 12: scoring prioritization</span><span class="w">1</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 12b: poc and fix</span><span class="w">1</span>
       <span class="track"><span class="fill low" style="width:0%"></span><span class="thr" style="left:85.0%"></span></span>
-      <span class="num">0.00</span>
+      <span class="num">–</span>
+      <span>Lane 13: fuzz target triage</span><span class="w">1</span>
+      <span class="track"><span class="fill low" style="width:0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">–</span>
+      <span>Lane 14: attack chain</span><span class="w">2</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
+      <span>Lane 15: deployment hardening</span><span class="w">2</span>
+      <span class="track"><span class="fill" style="width:100.0%"></span><span class="thr" style="left:85.0%"></span></span>
+      <span class="num">1.00</span>
     </div>
 
     <details class="fam" open>
-      <summary><h3><span class="n">2.1</span>Intake and discovery</h3><span class="muted" style="font-size:14px">00-intake plus D01-D04 persona discovery.</span></summary>
+      <summary><h3><span class="n">2.1</span>Lane 00: intake recovery</h3><span class="muted" style="font-size:14px">1 job(s) whose job-graph.json lane is 00-intake-recovery.</span></summary>
       <div class="tbl"><table>
         <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
         <tbody>
           <tr><td class="mono">00-intake</td><td><span class="st t-OK">OK</span></td>
             <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">intake.py</span><span><a class="mono" href="#E-001">E-001</a></span></div></td></tr>
-          <tr><td class="mono">02-repository-partition-discovery</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">developer-engineer / D01</span><span><a class="mono" href="#E-002">E-002</a></span></div></td></tr>
-          <tr><td class="mono">02-dev-project-discovery</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">developer-engineer / D02</span></div></td></tr>
-          <tr><td class="mono">02-devops-project-discovery</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">devops-engineer / D03</span></div></td></tr>
-          <tr><td class="mono">02-sre-operations-topology</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
-            <td class="num">0.70</td>
-            <td><div class="detail"><span class="tools">sre-engineer / D04</span><span class="gap">No runbooks or monitoring config in target; topology inferred from Dockerfile only.</span></div></td></tr>
+            <td><div class="detail"><span class="tools">read-only-intake (intake.py:write_intake)</span><span><a class="mono" href="#E-001">E-001</a></span></div></td></tr>
         </tbody></table></div>
     </details>
     <details class="fam" open>
-      <summary><h3><span class="n">2.2</span>Build resolution</h3><span class="muted" style="font-size:14px">Build index, plan, resolution and hostile native build.</span></summary>
-      <div class="tbl"><table>
-        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">02-build-index</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">build_index.py</span><span><a class="mono" href="#E-003">E-003</a></span></div></td></tr>
-          <tr><td class="mono">02-build-plan</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">haiku / build planner</span></div></td></tr>
-          <tr><td class="mono">02-build-resolution</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">repair loop, 1 retry</span></div></td></tr>
-          <tr><td class="mono">native-build</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">audit-native (network none)</span><span><a class="mono" href="#E-004">E-004</a></span></div></td></tr>
-        </tbody></table></div>
-    </details>
-    <details class="fam" open>
-      <summary><h3><span class="n">2.3</span>Deterministic scan jobs</h3><span class="muted" style="font-size:14px">One graph node per evidence family, one attempt-bearing instance per tool (ADR-0010).</span></summary>
-      <div class="tbl"><table>
-        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">02-secrets-inventory</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">gitleaks, key-material-file-inventory</span><span><a class="mono" href="#E-010">E-010</a></span></div></td></tr>
-          <tr><td class="mono">02-iac-config-scan</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
-            <td class="num">0.60</td>
-            <td><div class="detail"><span class="tools">checkov, trivy-config, hadolint (tfsec, kube-linter BLOCKED: no image)</span><span class="gap">tfsec and kube-linter declared but no pinned image; 2 of 5 scanner instances did not run.</span><span><a class="mono" href="#E-011">E-011</a></span></div></td></tr>
-          <tr><td class="mono">02-sbom-inventory</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
-            <td class="num">0.50</td>
-            <td><div class="detail"><span class="tools">syft-directory</span><span class="gap">syft found 0 components; vendored cJSON has no manifest. Second source (build index vendored members) not yet wired.</span><span><a class="mono" href="#E-012">E-012</a></span></div></td></tr>
-          <tr><td class="mono">02-sca-vulnerability-match</td><td><span class="st t-BLOCKED">BLOCKED</span></td>
-            <td class="num">0.00</td>
-            <td><div class="detail"><span class="tools">grype</span><span class="gap">Blocked on V16/V18 offline vulnerability DB mirror. No CVE matching was performed.</span></div></td></tr>
-          <tr><td class="mono">02-license-scan</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">scancode-toolkit</span><span><a class="mono" href="#E-013">E-013</a></span></div></td></tr>
-          <tr><td class="mono">02-dependency-lifecycle</td><td><span class="st t-BLOCKED">BLOCKED</span></td>
-            <td class="num">0.00</td>
-            <td><div class="detail"><span class="tools">dependency-lifecycle-transform</span><span class="gap">EOL reference table unowned. Lifecycle of cJSON 1.7.18 reported unknown.</span></div></td></tr>
-          <tr><td class="mono">02-binary-hardening</td><td><span class="st t-BLOCKED">BLOCKED</span></td>
-            <td class="num">0.00</td>
-            <td><div class="detail"><span class="tools">binskim</span><span class="gap">M02 unresolved; no ELF hardening check ran on the built binary.</span></div></td></tr>
-          <tr><td class="mono">02-container-image-inventory</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
-            <td class="num">–</td>
-            <td><div class="detail"><span class="tools">oci-archive-inventory</span><span class="receipt">applicability-probe: no OCI archive in inputs</span></div></td></tr>
-          <tr><td class="mono">02-mobile-sast</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
-            <td class="num">–</td>
-            <td><div class="detail"><span class="tools">mobsfscan</span><span class="receipt">applicability-probe: no Android/iOS markers</span></div></td></tr>
-          <tr><td class="mono">02-source-sast</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">semgrep (vendored packs), gosec/php* N/A</span><span><a class="mono" href="#E-014">E-014</a></span></div></td></tr>
-          <tr><td class="mono">ossf-scorecard</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">scorecard (offline mode)</span><span><a class="mono" href="#E-015">E-015</a></span></div></td></tr>
-        </tbody></table></div>
-    </details>
-    <details class="fam" open>
-      <summary><h3><span class="n">2.4</span>Native analysis substrate</h3><span class="muted" style="font-size:14px">Compile DB, IR, CSA/CTU, CodeQL, correlation and deep confirmation.</span></summary>
-      <div class="tbl"><table>
-        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">compile-db + clang-tidy/cppcheck</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">audit-native</span><span><a class="mono" href="#E-020">E-020</a></span></div></td></tr>
-          <tr><td class="mono">llvm-ir + ir-facts + svf</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">audit-native</span><span><a class="mono" href="#E-021">E-021</a></span></div></td></tr>
-          <tr><td class="mono">csa-ctu</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">clang static analyzer + CTU</span><span><a class="mono" href="#E-022">E-022</a></span></div></td></tr>
-          <tr><td class="mono">codeql (security-extended + mythos-cpp)</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">audit-codeql (breadth only, ADR-0006)</span><span><a class="mono" href="#E-023">E-023</a></span></div></td></tr>
-          <tr><td class="mono">correlation + deep-confirmation</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">correlate, deep_confirm</span><span><a class="mono" href="#E-024">E-024</a></span></div></td></tr>
-        </tbody></table></div>
-    </details>
-    <details class="fam" open>
-      <summary><h3><span class="n">2.5</span>LLM review lanes</h3><span class="muted" style="font-size:14px">Hypothesis, refutation, verification, scoring and synthesis.</span></summary>
+      <summary><h3><span class="n">2.2</span>Lane 01: component characterization</h3><span class="muted" style="font-size:14px">3 job(s) whose job-graph.json lane is 01-component-characterization.</span></summary>
       <div class="tbl"><table>
         <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
         <tbody>
           <tr><td class="mono">01-component-characterization</td><td><span class="st t-OK">OK</span></td>
             <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">component cloud</span></div></td></tr>
-          <tr><td class="mono">03-threat-model-dfd-stride</td><td><span class="st t-OK">OK</span></td>
+            <td><div class="detail"><span class="tools">component-evidence-router (component_characterization.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-full-review-input-assembly</td><td><span class="st t-OK">OK</span></td>
             <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">DFD + STRIDE</span><span><a class="mono" href="#E-030">E-030</a></span></div></td></tr>
-          <tr><td class="mono">04-asvs-masvs</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
-            <td class="num">–</td>
-            <td><div class="detail"><span class="tools">ASVS 5.0</span><span class="receipt">no web/API surface; CLI only</span></div></td></tr>
-          <tr><td class="mono">05-native-memory</td><td><span class="st t-OK">OK</span></td>
+            <td><div class="detail"><span class="tools">local-evidence-retrieval (full_review_input_assembly.py:assemble)</span></div></td></tr>
+          <tr><td class="mono">dynamic-rescope</td><td><span class="st t-OK">OK</span></td>
             <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">IR + CSA + CodeQL review</span></div></td></tr>
-          <tr><td class="mono">06-cve-reachability</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
-            <td class="num">0.40</td>
-            <td><div class="detail"><span class="tools">inventory + reachability</span><span class="gap">No SCA matches to triage (02-sca BLOCKED); inventory from build index only.</span></div></td></tr>
-          <tr><td class="mono">13-fuzz-target-triage</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">target ranking</span></div></td></tr>
-          <tr><td class="mono">15-deployment-hardening</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">container/Dockerfile persona</span></div></td></tr>
-          <tr><td class="mono">07-red-team-adversarial</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">general + known-list + kill-chain</span></div></td></tr>
-          <tr><td class="mono">08-blue-team-refutation</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">refutation</span></div></td></tr>
-          <tr><td class="mono">09-independent-verification</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">evidence-only verifier</span><span><a class="mono" href="#E-040">E-040</a></span></div></td></tr>
-          <tr><td class="mono">11-remediation-proposal</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">patch + retest in audit-native</span></div></td></tr>
-          <tr><td class="mono">12-scoring-prioritization</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">CVSS 4.0 + EPSS/KEV</span></div></td></tr>
-          <tr><td class="mono">10-synthesis-report</td><td><span class="st t-OK">OK</span></td>
-            <td class="num">1.00</td>
-            <td><div class="detail"><span class="tools">this document</span></div></td></tr>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (dynamic_rescope.py:run_attempt)</span></div></td></tr>
         </tbody></table></div>
     </details>
     <details class="fam" open>
-      <summary><h3><span class="n">2.6</span>Designed, not built</h3><span class="muted" style="font-size:14px">Design-v3 lanes with no evidence-gathering step yet. Counted as gaps.</span></summary>
+      <summary><h3><span class="n">2.3</span>Lane 02: evidence pregather</h3><span class="muted" style="font-size:14px">48 job(s) whose job-graph.json lane is 02-evidence-pregather.</span></summary>
       <div class="tbl"><table>
         <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
         <tbody>
-          <tr><td class="mono">L6B threat-model reconciliation</td><td><span class="st t-NOT_BUILT">NOT_BUILT</span></td>
+          <tr><td class="mono">02-ossf-scorecard</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">authorized-scorecard-api (ossf_scorecard.py:run)</span><span><a class="mono" href="#E-015">E-015</a></span></div></td></tr>
+          <tr><td class="mono">02-repository-partition-discovery</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-repo-project-inspector (automatic_discovery.py:run)</span><span><a class="mono" href="#E-002">E-002</a></span></div></td></tr>
+          <tr><td class="mono">02-dev-project-discovery</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-repo-project-inspector (automatic_discovery.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-devops-project-discovery</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-repo-project-inspector (automatic_discovery.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-sre-operations-topology</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
+            <td class="num">0.70</td>
+            <td><div class="detail"><span class="tools">static-ops-topology-inspector (automatic_discovery.py:run)</span><span class="gap">No runbooks or monitoring configuration in the target; topology inferred from the Dockerfile only.</span></div></td></tr>
+          <tr><td class="mono">02-build-index</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-build-indexer (build_index.py:run)</span><span><a class="mono" href="#E-003">E-003</a></span></div></td></tr>
+          <tr><td class="mono">02-build-classify</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-repo-project-inspector (build_classify.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-build-plan</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-repo-project-inspector (build_plan.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-build-resolution</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-build-resolver (build_resolution.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-evidence-assembly</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-bound-evidence-assembly (evidence_assembly.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-api-collection-intelligence-ingest</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-api-collection-parser (api_collection_intelligence_ingest.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-binary-intelligence-ingest</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">binary-intel-static-analysis (binary_intelligence_ingest.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-doc-intelligence-ingest</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-doc-parser (doc_intelligence_ingest.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-standards-source-ingest</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">standards-source-static-ingest (standards_source_ingest.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-test-intelligence-ingest</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-test-doc-parser (test_intelligence_ingest.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-build-configure</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-build-resolver (build_configure.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-native-build</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-build-resolver (native_build.py:run)</span><span><a class="mono" href="#E-004">E-004</a></span></div></td></tr>
+          <tr><td class="mono">02-source-sast</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (source_sast.py:run)</span><span><a class="mono" href="#E-014">E-014</a></span></div></td></tr>
+          <tr><td class="mono">02-codeql-cpp</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span><a class="mono" href="#E-023">E-023</a></span></div></td></tr>
+          <tr><td class="mono">02-codeql-csharp</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-codeql-go</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-codeql-java</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-codeql-javascript</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-codeql-python</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-codeql-ruby</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-codeql-rust</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (codeql_sast.py:run)</span><span class="receipt">not-applicable-language-absent</span></div></td></tr>
+          <tr><td class="mono">02-code-property-graph</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-source-sast (joern_cpg.py:run)</span><span><a class="mono" href="#E-024">E-024</a></span></div></td></tr>
+          <tr><td class="mono">02-native-sast</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-native-sast (native_sast.py:run)</span><span><a class="mono" href="#E-020">E-020</a>, <a class="mono" href="#E-022">E-022</a></span></div></td></tr>
+          <tr><td class="mono">02-ir-capture</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">llvm-ir-evidence (ir_evidence.py:run_job)</span></div></td></tr>
+          <tr><td class="mono">02-ir-link</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">llvm-ir-evidence (ir_evidence.py:run_job)</span></div></td></tr>
+          <tr><td class="mono">02-ir-facts</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">llvm-ir-evidence (ir_evidence.py:run_job)</span><span><a class="mono" href="#E-021">E-021</a></span></div></td></tr>
+          <tr><td class="mono">02-debug-symbol-index</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">binary-intel-static-analysis (debug_symbol_index.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-binary-triage</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">binary-intel-static-analysis (binary_triage.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-binary-cfg</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">binary-intel-static-analysis (binary_cfg.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-test-execution</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">bounded-test-evidence (test_execution.py:run)</span><span class="receipt">not-applicable-no-test-plan</span></div></td></tr>
+          <tr><td class="mono">02-test-result-ingest</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
             <td class="num">0.00</td>
-            <td><div class="detail"><span class="gap">Designed in design-v3, no lane.</span></div></td></tr>
-          <tr><td class="mono">L10 protocol/parser analysis</td><td><span class="st t-NOT_BUILT">NOT_BUILT</span></td>
+            <td><div class="detail"><span class="tools">bounded-test-evidence (test_result_ingest.py:run)</span><span class="gap">No test plan and no test results: nothing to ingest (explicit gap).</span></div></td></tr>
+          <tr><td class="mono">02-test-coverage-ingest</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
             <td class="num">0.00</td>
-            <td><div class="detail"><span class="gap">Designed in design-v3, no lane.</span></div></td></tr>
-          <tr><td class="mono">L12 supply-chain / provenance</td><td><span class="st t-NOT_BUILT">NOT_BUILT</span></td>
-            <td class="num">0.00</td>
-            <td><div class="detail"><span class="gap">Tier B scripts exist, not wired.</span></div></td></tr>
-          <tr><td class="mono">L13 privacy / data protection</td><td><span class="st t-NOT_BUILT">NOT_BUILT</span></td>
-            <td class="num">0.00</td>
-            <td><div class="detail"><span class="gap">Designed in design-v3, no lane.</span></div></td></tr>
+            <td><div class="detail"><span class="tools">bounded-test-evidence (test_coverage_ingest.py:run)</span><span class="gap">No instrumented test run: coverage is missing (explicit gap).</span></div></td></tr>
+          <tr><td class="mono">02-operations-doc-ingest</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">static-doc-parser (operations_doc_ingest.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-evidence-index</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">local-evidence-retrieval (evidence_store.py:run)</span></div></td></tr>
+          <tr><td class="mono">02-secrets-inventory</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-vendor-static-evidence (secrets_inventory.py:build)</span><span><a class="mono" href="#E-010">E-010</a></span></div></td></tr>
+          <tr><td class="mono">02-iac-config-scan</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-vendor-static-evidence (iac_config_scan.py:build)</span><span><a class="mono" href="#E-011">E-011</a></span></div></td></tr>
+          <tr><td class="mono">02-container-image-inventory</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-vendor-static-evidence (container_image_inventory.py:build)</span><span class="receipt">not-applicable-no-matching-inputs</span></div></td></tr>
+          <tr><td class="mono">02-sbom-inventory</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
+            <td class="num">0.50</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (dependency_workers.py:run)</span><span class="gap">Syft found no package manifest; vendored cJSON 1.7.18 was added from the accepted build-index vendored members without a purl or CPE (inferred component kept as an explicit gap).</span><span><a class="mono" href="#E-012">E-012</a></span></div></td></tr>
+          <tr><td class="mono">02-sca-vulnerability-match</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
+            <td class="num">0.50</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (dependency_workers.py:run)</span><span class="gap">Grype ran and matched nothing; OSV was SKIPPED_NA per tool because no component carries a purl. Vendored cJSON was not matched against any advisory.</span></div></td></tr>
+          <tr><td class="mono">02-license-scan</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (dependency_workers.py:run)</span><span><a class="mono" href="#E-013">E-013</a></span></div></td></tr>
+          <tr><td class="mono">02-dependency-lifecycle</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
+            <td class="num">0.50</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (dependency_workers.py:run)</span><span class="gap">cJSON 1.7.18 is not in the pinned lifecycle reference table; its lifecycle is reported unknown.</span></div></td></tr>
+          <tr><td class="mono">02-binary-hardening</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-vendor-static-evidence (vendor_evidence_orchestration.py:execute_binary_from_native)</span></div></td></tr>
+          <tr><td class="mono">02-mobile-sast</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-vendor-static-evidence (mobile_sast.py:build)</span><span class="receipt">not-applicable-no-matching-inputs</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.4</span>Lane 03: threat model dfd stride</h3><span class="muted" style="font-size:14px">2 job(s) whose job-graph.json lane is 03-threat-model-dfd-stride.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">03-threat-model-dfd-stride</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">threat-model-static-evidence (threat_model_core.py:run)</span><span><a class="mono" href="#E-030">E-030</a></span></div></td></tr>
+          <tr><td class="mono">03-threat-model-reconciliation</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">threat-model-reconciliation (threat_model_reconciliation.py:run)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.5</span>Lane 04: asvs masvs</h3><span class="muted" style="font-size:14px">2 job(s) whose job-graph.json lane is 04-asvs-masvs.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">04-asvs-masvs</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">owasp-join-reporter (owasp_join_publisher.py:run)</span></div></td></tr>
+          <tr><td class="mono">04-owasp-validation-worklist</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">owasp-worklist-builder (owasp_validation_worklist.py:build)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.6</span>Lane 05: native memory</h3><span class="muted" style="font-size:14px">1 job(s) whose job-graph.json lane is 05-native-memory.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">05-native-memory</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-native-sast (bounded_analysis_workers.py:native_memory)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.7</span>Lane 06: cve reachability</h3><span class="muted" style="font-size:14px">3 job(s) whose job-graph.json lane is 06-cve-reachability.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">06-reachability-codeql</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (reachability_engine_jobs.py:run_codeql)</span></div></td></tr>
+          <tr><td class="mono">06-reachability-ir</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (reachability_engine_jobs.py:run_ir)</span></div></td></tr>
+          <tr><td class="mono">06-cve-reachability</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">pinned-dependency-analysis (dependency_workers.py:run)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.8</span>Lane 07: red team adversarial</h3><span class="muted" style="font-size:14px">5 job(s) whose job-graph.json lane is 07-red-team-adversarial.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">07-hypothesis-discovery</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hypothesis-hunt-static (hypothesis_discovery.py:run)</span></div></td></tr>
+          <tr><td class="mono">claim-ledger-routing</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-linked-claim-ledger (claim_ledger.py:run)</span></div></td></tr>
+          <tr><td class="mono">07-red-team-adversarial</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)</span></div></td></tr>
+          <tr><td class="mono">persona-tool-pool-dispatch</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (pool_launcher.py:launch)</span></div></td></tr>
+          <tr><td class="mono">deterministic-pool-merge</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (deterministic_pool_merge.py:run_verified_attempt)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.9</span>Lane 08: blue team refutation</h3><span class="muted" style="font-size:14px">1 job(s) whose job-graph.json lane is 08-blue-team-refutation.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">08-blue-team-refutation</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.10</span>Lane 09: independent verification</h3><span class="muted" style="font-size:14px">2 job(s) whose job-graph.json lane is 09-independent-verification.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">09-independent-verification</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)</span><span><a class="mono" href="#E-040">E-040</a></span></div></td></tr>
+          <tr><td class="mono">evidence-qualified-quorum</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (evidence_quorum.py:run_verified_attempt)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.11</span>Lane 10: synthesis report</h3><span class="muted" style="font-size:14px">4 job(s) whose job-graph.json lane is 10-synthesis-report.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">10-synthesis-report</td><td><span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span></td>
+            <td class="num">0.90</td>
+            <td><div class="detail"><span class="tools">synthesis-report-static (synthesis_report_worker.py:run)</span><span class="gap">EPSS/KEV not assessed: no pinned offline snapshot has been imported; every exploit signal reads &#39;not assessed&#39;.</span></div></td></tr>
+          <tr><td class="mono">completeness-audit</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (completeness_audit.py:run_attempt)</span></div></td></tr>
+          <tr><td class="mono">synthetic-hypothesis-resynthesis</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (synthetic_hypothesis_resynthesis.py:run_attempt)</span></div></td></tr>
+          <tr><td class="mono">final-publication-gate</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (final_publication.py:publish)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.12</span>Lane 11: remediation proposal</h3><span class="muted" style="font-size:14px">2 job(s) whose job-graph.json lane is 11-remediation-proposal.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">11-remediation-proposal</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-bound-evidence-assembly (remediation_proposal.py:run)</span></div></td></tr>
+          <tr><td class="mono">remediation-retest-feedback</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">verified-control-lifecycle (remediation_retest.py:run_attempt)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.13</span>Lane 12: scoring prioritization</h3><span class="muted" style="font-size:14px">1 job(s) whose job-graph.json lane is 12-scoring-prioritization.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">12-scoring-prioritization</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">hash-bound-evidence-assembly (claim_lifecycle_core.py:run_stage)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.14</span>Lane 12b: poc and fix</h3><span class="muted" style="font-size:14px">1 job(s) whose job-graph.json lane is 12b-poc-and-fix.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">12b-poc-and-fix</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">claim-review-static (poc_fix_worker.py:run)</span><span class="receipt">not-applicable-no-eligible-findings</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.15</span>Lane 13: fuzz target triage</h3><span class="muted" style="font-size:14px">1 job(s) whose job-graph.json lane is 13-fuzz-target-triage.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">13-fuzz-target-triage</td><td><span class="st t-SKIPPED_NA">SKIPPED_NA</span></td>
+            <td class="num">–</td>
+            <td><div class="detail"><span class="tools">pinned-native-sast (bounded_analysis_workers.py:fuzz_triage)</span><span class="receipt">not-applicable-no-fuzz-target</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.16</span>Lane 14: attack chain</h3><span class="muted" style="font-size:14px">2 job(s) whose job-graph.json lane is 14-attack-chain.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">14-attack-chain-composition</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">claim-review-static (attack_chain_composition.py:run)</span></div></td></tr>
+          <tr><td class="mono">14-attack-chain-refutation</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">claim-review-static (attack_chain_refutation.py:run)</span></div></td></tr>
+        </tbody></table></div>
+    </details>
+    <details class="fam" open>
+      <summary><h3><span class="n">2.17</span>Lane 15: deployment hardening</h3><span class="muted" style="font-size:14px">2 job(s) whose job-graph.json lane is 15-deployment-hardening.</span></summary>
+      <div class="tbl"><table>
+        <thead><tr><th>Process</th><th>Status</th><th class="num">\(c_i\)</th><th>Tools / gap / receipt</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">15-deployment-hardening</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">stig-worklist-builder (bounded_analysis_workers.py:deployment_hardening)</span></div></td></tr>
+          <tr><td class="mono">15-stig-srg-validation-worklist</td><td><span class="st t-OK">OK</span></td>
+            <td class="num">1.00</td>
+            <td><div class="detail"><span class="tools">stig-worklist-builder (stig_srg_validation_worklist.py:build)</span></div></td></tr>
         </tbody></table></div>
     </details>
   </section>
@@ -426,7 +653,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>cli/greeting <span class="muted">CWE-121, CWE-676</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N</span> <b>8.5</b> High</span>
         <span class="eyebrow">Evidence / status</span><span>DIRECT_EVIDENCE · VERIFIED · reachable-default</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 8.5 \times 1.00 \times 1.00 \times 1.00 \times 1.00\big) = \mathbf{8.5} \]</div>
       <p>The greeting &#34;Hello, &#34; + name + &#34;!&#34; is copied into char buf[32] with strcpy. A name of 24 or more characters overflows buf. Reached on every run. A hardened distro build aborts via _FORTIFY_SOURCE; an unhardened or ASan build shows the corruption.</p>
       <figure class="snippet">
@@ -434,9 +661,9 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">13</span>// This is intentional: it is the seeded defect this fixture target</span><span class="l"><span class="n">14</span>// exists to exercise for source/native SAST and dynamic tools. See</span><span class="l"><span class="n">15</span>// docs/VULNERABILITIES.md for details and the expected finding.</span><span class="l"><span class="n">16</span>std::string build_greeting(const std::string &amp;name) {</span><span class="l"><span class="n">17</span>    char buf[32];</span><span class="l flaw"><span class="n">18</span>    std::strcpy(buf, (&#34;Hello, &#34; + name + &#34;!&#34;).c_str());</span><span class="l"><span class="n">19</span>    return std::string(buf);</span><span class="l"><span class="n">20</span>}</span></pre>
       </figure>
 <p class="snipnote">build_greeting(): buf is 32 bytes; strcpy has no bound.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>semgrep insecure-use-strcpy, CSA, CodeQL</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-001</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>refutation failed: no length check on any path</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED: ASan stack-buffer-overflow at greet.cpp:18</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">11</span>patch: bounded copy, retest OK</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>scored</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>semgrep strcpy, native-sast CSA, CodeQL cpp</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-001</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>refutation failed: no length check on any path</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED: copy length is argv-controlled and the buffer is 32 bytes (static)</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">11</span>remediation objective: bounded copy (proposal, not validated)</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 8.5 HIGH (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> semgrep: <span class="mono">02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li><li><a class="mono" href="#E-022">E-022</a> csa-ctu: <span class="mono">native/csa/*.plist (greet.cpp:18, jsonreport.cpp:17)</span></li><li><a class="mono" href="#E-023">E-023</a> codeql: <span class="mono">codeql/security-extended.sarif + mythos-cpp.sarif</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">outputs/09/verification.json (ASan logs attached)</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> 02-source-sast: <span class="mono">source-sast.json (semgrep: greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li><li><a class="mono" href="#E-022">E-022</a> 02-native-sast: <span class="mono">native-sast.json#csa (greet.cpp:18, jsonreport.cpp:17)</span></li><li><a class="mono" href="#E-023">E-023</a> 02-codeql-cpp: <span class="mono">codeql-language.json (cpp security-extended SARIF leads)</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">verification record (static source review; no runtime claim)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>Return the std::string directly, or use a bounded copy and reject oversize names.</p></div>
     </article>
     <article class="finding s-High" id="AR-003">
@@ -447,7 +674,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>reporting <span class="muted">CWE-78</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N</span> <b>8.5</b> High</span>
         <span class="eyebrow">Evidence / status</span><span>DIRECT_EVIDENCE · VERIFIED · reachable-flag</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 8.5 \times 1.00 \times 1.00 \times 0.85 \times 1.00\big) = \mathbf{7.2} \]</div>
       <p>With --report, the CLI name is spliced into an echo command and passed to system(). A double quote breaks out of the quoted argument and runs arbitrary shell commands with the process&#39;s privileges.</p>
       <figure class="snippet">
@@ -459,9 +686,9 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">57</span>        std::cout &lt;&lt; &#34;stored &#34; &lt;&lt; name.size() &lt;&lt; &#34; byte(s) into a &#34;</span><span class="l"><span class="n">58</span>                  &lt;&lt; sizeof(slot) &lt;&lt; &#34;-byte slot&#34; &lt;&lt; std::endl;</span><span class="l"><span class="n">59</span>    }</span><span class="l"><span class="n">60</span></span><span class="l"><span class="n">61</span>    if (report) {</span><span class="l flaw"><span class="n">62</span>        run_report(name);</span><span class="l"><span class="n">63</span>    }</span><span class="l"><span class="n">64</span></span><span class="l"><span class="n">65</span>    return 0;</span><span class="l"><span class="n">66</span>}</span></pre>
       </figure>
 <p class="snipnote">Only call site, behind --report.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>semgrep, CodeQL cpp/command-line-injection</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">05</span>data flow argv -&gt; name -&gt; cmd confirmed in IR</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-003</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>not refuted; flag gate lowers reachability only</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED: --report &#39;x&#34;;touch /tmp/pwned;echo &#34;&#39; creates the file</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>scored</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>semgrep, CodeQL cpp/command-line-injection</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">05</span>data flow argv -&gt; name -&gt; cmd recorded in IR facts</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-003</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>not refuted; flag gate lowers reachability only</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED: name is concatenated into the system() command without quoting (static)</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 8.5 HIGH (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> semgrep: <span class="mono">02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li><li><a class="mono" href="#E-021">E-021</a> ir-facts / component IR slice: <span class="mono">native/ir-slices/*.json (memcpy@store.h:30 N=16; system@runner.cpp:18)</span></li><li><a class="mono" href="#E-023">E-023</a> codeql: <span class="mono">codeql/security-extended.sarif + mythos-cpp.sarif</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">outputs/09/verification.json (ASan logs attached)</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> 02-source-sast: <span class="mono">source-sast.json (semgrep: greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li><li><a class="mono" href="#E-021">E-021</a> 02-ir-facts: <span class="mono">ir-facts.json (memcpy@store.h:30 N=16; system@runner.cpp:18)</span></li><li><a class="mono" href="#E-023">E-023</a> 02-codeql-cpp: <span class="mono">codeql-language.json (cpp security-extended SARIF leads)</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">verification record (static source review; no runtime claim)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>Write the log line with file I/O instead of a shell, or use execve with an argv array.</p></div>
     </article>
     <article class="finding s-High" id="AR-002">
@@ -472,7 +699,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>cli/logging <span class="muted">CWE-134</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:L/VA:H/SC:N/SI:N/SA:N</span> <b>7.0</b> High</span>
         <span class="eyebrow">Evidence / status</span><span>DIRECT_EVIDENCE · VERIFIED · reachable-default</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 7.0 \times 1.00 \times 1.00 \times 1.00 \times 1.00\big) = \mathbf{7.0} \]</div>
       <p>log_message() passes the greeting, which embeds the CLI name, straight to printf as the format. Conversion specifiers in the name are interpreted.</p>
       <figure class="snippet">
@@ -480,9 +707,9 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">11</span>// (e.g. &#34;%x %x %x&#34;) or crash the process (e.g. &#34;%s&#34; reading an</span><span class="l"><span class="n">12</span>// invalid pointer). The fix is `std::printf(&#34;%s\n&#34;, message.c_str())`.</span><span class="l"><span class="n">13</span>//</span><span class="l"><span class="n">14</span>// Intentional seeded defect — see docs/VULNERABILITIES.md.</span><span class="l"><span class="n">15</span>void log_message(const std::string &amp;message) {</span><span class="l flaw"><span class="n">16</span>    std::printf(message.c_str());</span><span class="l"><span class="n">17</span>    std::printf(&#34;\n&#34;);</span><span class="l"><span class="n">18</span>}</span></pre>
       </figure>
 <p class="snipnote">log_message(): message is the format argument.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>semgrep printf-format, CodeQL cpp/tainted-format-string</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-002</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>not refuted</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED: &#39;%x %x %x %x&#39; leaks stack words</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>scored</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>semgrep printf-format, CodeQL cpp/tainted-format-string</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-002</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>not refuted</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED: CLI-derived text reaches the printf format argument (static)</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 7.0 HIGH (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> semgrep: <span class="mono">02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li><li><a class="mono" href="#E-023">E-023</a> codeql: <span class="mono">codeql/security-extended.sarif + mythos-cpp.sarif</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">outputs/09/verification.json (ASan logs attached)</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> 02-source-sast: <span class="mono">source-sast.json (semgrep: greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li><li><a class="mono" href="#E-023">E-023</a> 02-codeql-cpp: <span class="mono">codeql-language.json (cpp security-extended SARIF leads)</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">verification record (static source review; no runtime claim)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>std::printf(&#34;%s\n&#34;, message.c_str());</p></div>
     </article>
     <article class="finding s-Medium" id="AR-004">
@@ -493,7 +720,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>storage <span class="muted">CWE-787, CWE-120</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N</span> <b>7.3</b> High</span>
         <span class="eyebrow">Evidence / status</span><span>DIRECT_EVIDENCE · VERIFIED · reachable-flag</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 7.3 \times 1.00 \times 1.00 \times 0.85 \times 1.00\big) = \mathbf{6.2} \]</div>
       <p>STORE_INTO expands to copy_into_fixed&lt;16&gt;, which memcpys the whole name into a 16-byte stack slot. Only the tools that see through macro expansion and template instantiation report it; this is the fixture&#39;s control for that capability.</p>
       <figure class="snippet">
@@ -505,27 +732,27 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">51</span>        std::cout &lt;&lt; build_json_report(name, greeting) &lt;&lt; std::endl;</span><span class="l"><span class="n">52</span>    }</span><span class="l"><span class="n">53</span></span><span class="l"><span class="n">54</span>    if (store) {</span><span class="l"><span class="n">55</span>        char slot[16];</span><span class="l flaw"><span class="n">56</span>        STORE_INTO(slot, name);</span><span class="l"><span class="n">57</span>        std::cout &lt;&lt; &#34;stored &#34; &lt;&lt; name.size() &lt;&lt; &#34; byte(s) into a &#34;</span><span class="l"><span class="n">58</span>                  &lt;&lt; sizeof(slot) &lt;&lt; &#34;-byte slot&#34; &lt;&lt; std::endl;</span><span class="l"><span class="n">59</span>    }</span><span class="l"><span class="n">60</span></span><span class="l"><span class="n">61</span>    if (report) {</span></pre>
       </figure>
 <p class="snipnote">Instantiated as copy_into_fixed&lt;16&gt; through the macro, behind --store.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>stock CodeQL: 0 hits; mythos-cpp: 1 hit; semgrep: 0 hits</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">05</span>IR slice: memcpy size = name.size(), dst = 16</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-004</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>refutation failed: no clamp before copy</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED_PRIMITIVE</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>scored</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>CodeQL cpp: 0 hits; semgrep: 0 hits; IR facts: memcpy size from input</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">05</span>IR slice: memcpy size = name.size(), dst = 16</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-004</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>refutation failed: no clamp before copy</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 7.3 HIGH (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-021">E-021</a> ir-facts / component IR slice: <span class="mono">native/ir-slices/*.json (memcpy@store.h:30 N=16; system@runner.cpp:18)</span></li><li><a class="mono" href="#E-023">E-023</a> codeql: <span class="mono">codeql/security-extended.sarif + mythos-cpp.sarif</span></li><li><a class="mono" href="#E-024">E-024</a> deep-confirmation: <span class="mono">deep-confirmation.json cluster C-007</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">outputs/09/verification.json (ASan logs attached)</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-021">E-021</a> 02-ir-facts: <span class="mono">ir-facts.json (memcpy@store.h:30 N=16; system@runner.cpp:18)</span></li><li><a class="mono" href="#E-023">E-023</a> 02-codeql-cpp: <span class="mono">codeql-language.json (cpp security-extended SARIF leads)</span></li><li><a class="mono" href="#E-024">E-024</a> 02-code-property-graph: <span class="mono">code-property-graph.json (call path main -&gt; store_into -&gt; memcpy)</span></li><li><a class="mono" href="#E-040">E-040</a> 09-independent-verification: <span class="mono">verification record (static source review; no runtime claim)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>Check src.size() &lt; N before the copy, or truncate explicitly.</p></div>
     </article>
     <article class="finding s-Medium" id="AR-005">
       <div class="top"><span class="mono">AR-005</span><span class="chip s-Medium">Medium</span></div>
-      <h3>Vendored cJSON 1.7.18 missing from SBOM; CVE match not performed</h3>
+      <h3>Vendored cJSON 1.7.18 has no purl or CPE; advisory matching could not cover it</h3>
       <div class="meta">
         <span class="eyebrow">Location</span><span class="mono">vendor/cJSON-1.7.18/</span>
         <span class="eyebrow">Component</span><span>supply chain <span class="muted">CWE-1104</span></span>
         <span class="eyebrow">CVSS 4.0</span><span>not scored</span>
         <span class="eyebrow">Evidence / status</span><span>DIRECT_EVIDENCE · UNRESOLVED · unknown</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not assessed (no pinned snapshot imported)</span>      </div>
       <div class="math">\[ P = \text{unscored (coverage finding; reviewer severity: Medium)} \]</div>
-      <p>The build links a vendored cJSON that no manifest declares, so the SBOM omits it and no vulnerability match ran. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it until SCA runs. Lane 06 found no call to the JSON-pointer API in project code.</p>
+      <p>The build links a vendored cJSON that no manifest declares. 02-sbom-inventory adds it from the accepted build-index vendored members, but without a purl or CPE, so Grype matched nothing and OSV was not applicable. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it. Section 3B has no dependency match to decide, and lane 06 found no call to the JSON-pointer API in project code.</p>
       <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>syft: 0 components; build index: vendored member</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">06</span>inventory mismatch flagged; affected-API use not found in src/</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>UNRESOLVED: 02-sca-vulnerability-match BLOCKED</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>syft: no manifest; build index: vendored member (inferred, no purl)</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">02</span>SCA: grype no match, OSV SKIPPED_NA (no purl)</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">06</span>no SCA match to decide</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>UNRESOLVED: the component has no advisory identity</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-003">E-003</a> 02-build-index: <span class="mono">data/jobs/02-build-index/build-index.json#vendored[0]</span></li><li><a class="mono" href="#E-012">E-012</a> syft-directory: <span class="mono">02-sbom-inventory/syft-directory/outputs/sbom.cdx.json (0 components)</span></li><li><a class="mono" href="#E-013">E-013</a> scancode-toolkit: <span class="mono">02-license-scan/outputs/scancode.json#vendor/cJSON-1.7.18 (MIT)</span></li></ul></div>
-      <div class="block"><div class="eyebrow">Remediation</div><p>Feed build-index vendored members into the SBOM and unblock 02-sca-vulnerability-match (V16/V18).</p></div>
+        <ul class="evlist"><li><a class="mono" href="#E-003">E-003</a> 02-build-index: <span class="mono">build-index.json#vendored[0]</span></li><li><a class="mono" href="#E-012">E-012</a> 02-sbom-inventory: <span class="mono">outputs/sbom.cdx.json + build-index-vendored-members.json (cJSON inferred, no purl)</span></li><li><a class="mono" href="#E-013">E-013</a> 02-license-scan: <span class="mono">outputs/license-inventory.json#vendor/cJSON-1.7.18 (MIT)</span></li></ul></div>
+      <div class="block"><div class="eyebrow">Remediation</div><p>Give the vendored cJSON a package identity (purl or CPE) so SCA matching covers it, or replace it with a declared dependency.</p></div>
     </article>
     <article class="finding s-Low" id="AR-006">
       <div class="top"><span class="mono">AR-006</span><span class="chip s-Low">Low</span></div>
@@ -535,7 +762,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>deployment <span class="muted">CWE-250</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N</span> <b>2.0</b> Low</span>
         <span class="eyebrow">Evidence / status</span><span>DIRECT_EVIDENCE · VERIFIED · reachable-build-config</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 2.0 \times 1.00 \times 1.00 \times 0.75 \times 1.00\big) = \mathbf{1.5} \]</div>
       <p>Both stages use debian:bookworm-slim by tag, and the runtime stage has no USER instruction, so the binary runs as root. Three scanners agree.</p>
       <figure class="snippet">
@@ -543,9 +770,9 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">16</span>RUN autoreconf -fi \</span><span class="l"><span class="n">17</span>    &amp;&amp; ./configure \</span><span class="l"><span class="n">18</span>    &amp;&amp; make \</span><span class="l"><span class="n">19</span>    &amp;&amp; make check</span><span class="l"><span class="n">20</span></span><span class="l flaw"><span class="n">21</span>FROM debian:bookworm-slim</span><span class="l"><span class="n">22</span>COPY --from=build /src/hello-autotools /usr/local/bin/hello-autotools</span><span class="l flaw"><span class="n">23</span>ENTRYPOINT [&#34;/usr/local/bin/hello-autotools&#34;]</span></pre>
       </figure>
 <p class="snipnote">Final stage: floating tag, no USER before ENTRYPOINT.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>hadolint DL3006/DL3002, checkov CKV_DOCKER_3, trivy DS002</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">15</span>container baseline</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>scored</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>hadolint DL3006/DL3002, checkov CKV_DOCKER_3, trivy DS002</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">15</span>container baseline</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>VERIFIED</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 2.0 LOW (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-011">E-011</a> hadolint, checkov, trivy-config: <span class="mono">02-iac-config-scan/tool-results.json</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-011">E-011</a> 02-iac-config-scan: <span class="mono">outputs/iac-config-evidence.json (hadolint, checkov, trivy config)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>Pin FROM by digest and add a non-root USER before ENTRYPOINT.</p></div>
     </article>
     <article class="finding s-Low" id="AR-007">
@@ -556,7 +783,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>reporting/json <span class="muted">CWE-476</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:H/AT:P/PR:N/UI:P/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N</span> <b>2.0</b> Low</span>
         <span class="eyebrow">Evidence / status</span><span>STRONG_INFERENCE · UNRESOLVED · reachable-flag</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 2.0 \times 0.80 \times 0.70 \times 0.85 \times 1.00\big) = \mathbf{1.0} \]</div>
       <p>cJSON_PrintUnformatted returns NULL when allocation fails, and std::string(nullptr) is undefined behavior. Only reachable with --json under memory pressure.</p>
       <figure class="snippet">
@@ -564,9 +791,9 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">12</span>    cJSON *root = cJSON_CreateObject();</span><span class="l"><span class="n">13</span>    cJSON_AddStringToObject(root, &#34;name&#34;, name.c_str());</span><span class="l"><span class="n">14</span>    cJSON_AddStringToObject(root, &#34;greeting&#34;, greeting.c_str());</span><span class="l"><span class="n">15</span></span><span class="l"><span class="n">16</span>    char *rendered = cJSON_PrintUnformatted(root);</span><span class="l flaw"><span class="n">17</span>    std::string result(rendered);</span><span class="l"><span class="n">18</span></span><span class="l"><span class="n">19</span>    free(rendered); // cJSON allocates with malloc(); must be freed with free(), not delete.</span><span class="l"><span class="n">20</span>    cJSON_Delete(root);</span><span class="l"><span class="n">21</span></span><span class="l"><span class="n">22</span>    return result;</span></pre>
       </figure>
 <p class="snipnote">rendered can be NULL on allocation failure.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>CSA core.NonNullParamChecker</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-007</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>partial: only under allocation failure</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>UNRESOLVED: not reproducible without fault injection</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>scored</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>native-sast CSA core.NonNullParamChecker</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-007</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>partial: only under allocation failure</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>UNRESOLVED: the allocation-failure path needs dynamic evidence the pipeline does not collect</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 2.0 LOW (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-022">E-022</a> csa-ctu: <span class="mono">native/csa/*.plist (greet.cpp:18, jsonreport.cpp:17)</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-022">E-022</a> 02-native-sast: <span class="mono">native-sast.json#csa (greet.cpp:18, jsonreport.cpp:17)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>Check rendered for NULL before constructing the string.</p></div>
     </article>
     <article class="finding s-Refuted" id="AR-008">
@@ -577,7 +804,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>reporting/json <span class="muted">CWE-762</span></span>
         <span class="eyebrow">CVSS 4.0</span><span><span class="mono">CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:L/VI:L/VA:L/SC:N/SI:N/SA:N</span> <b>4.8</b> Medium</span>
         <span class="eyebrow">Evidence / status</span><span>WEAK_INFERENCE · REFUTED · reachable-flag</span>
-      </div>
+<span class="eyebrow">EPSS / KEV</span><span>EPSS/KEV not applicable (not a dependency finding)</span>      </div>
       <div class="math">\[ P = \min\!\big(10,\; 4.8 \times 0.50 \times 0.00 \times 0.85 \times 1.00\big) = \mathbf{0.0} \]</div>
       <p>The scanner assumed a C++ allocation. cJSON allocates with malloc by default and the project never installs custom hooks, so free() is correct.</p>
       <figure class="snippet">
@@ -585,18 +812,67 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <pre class="code"><span class="l"><span class="n">14</span>    cJSON_AddStringToObject(root, &#34;greeting&#34;, greeting.c_str());</span><span class="l"><span class="n">15</span></span><span class="l"><span class="n">16</span>    char *rendered = cJSON_PrintUnformatted(root);</span><span class="l"><span class="n">17</span>    std::string result(rendered);</span><span class="l"><span class="n">18</span></span><span class="l flaw"><span class="n">19</span>    free(rendered); // cJSON allocates with malloc(); must be freed with free(), not delete.</span><span class="l"><span class="n">20</span>    cJSON_Delete(root);</span><span class="l"><span class="n">21</span></span><span class="l"><span class="n">22</span>    return result;</span><span class="l"><span class="n">23</span>}</span></pre>
       </figure>
 <p class="snipnote">Flagged line; refuted.</p>      <div class="block"><div class="eyebrow">Lane trail</div>
-        <div class="trail"><span><span class="lane">tool</span>semgrep c.lang.memory mismatched free</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-008</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>REFUTED: cJSON default hooks allocate with malloc; no cJSON_InitHooks call in project</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>concurs</span></div></div>
+        <div class="trail"><span><span class="lane">tool</span>semgrep c.lang.memory mismatched free</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">07</span>hypothesis RT-008</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">08</span>REFUTED: cJSON default hooks allocate with malloc; no cJSON_InitHooks call in project</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">09</span>concurs</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">12</span>CVSS 4.8 MEDIUM (pinned cvss4.py)</span></div></div>
       <div class="block"><div class="eyebrow">Evidence</div>
-        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> semgrep: <span class="mono">02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li></ul></div>
+        <ul class="evlist"><li><a class="mono" href="#E-014">E-014</a> 02-source-sast: <span class="mono">source-sast.json (semgrep: greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</span></li></ul></div>
       <div class="block"><div class="eyebrow">Remediation</div><p>None required.</p></div>
     </article>
+  </section>
+
+  <section id="chains">
+    <h2><span class="n">3A</span>Attack chains</h2>
+    <p>Attack chains are prioritisation context composed from reviewed claims: each is at most &#39;supported&#39; (composed from verified parts along tool-recorded edges and not broken by an adversarial reviewer), never a verified finding, and assigns no severity.</p>
+    <article class="finding" id="chain-3fefbf49de14f56a742ca4e5">
+      <div class="top"><span class="mono">#1 chain-3fefbf49de14f56a742ca4e5</span><span class="chip">supported</span></div>
+      <h3>Run attacker-chosen code through the hello command line</h3>
+      <div class="meta">
+        <span class="eyebrow">Impact</span><span>code_execution</span>
+        <span class="eyebrow">Weakest link</span><span>link 0 (entry) is verified</span>
+        <span class="eyebrow">Refutation</span><span>holds (0 citation(s))</span>
+      </div>
+      <div class="block"><div class="eyebrow">Stages</div>
+        <div class="trail"><span><span class="lane">entry</span>argv read in main at projects/cpp/case-001/main.cpp:6 <span class="muted">(verified)</span></span><span class="arrow" aria-hidden="true">→</span><span class="muted">code_fact</span><span class="arrow" aria-hidden="true">→</span><span><span class="lane">impact</span>Stack buffer overflow: strcpy of CLI name into 32-byte buffer <span class="muted">(verified, HIGH)</span></span></div></div>
+      <p>argv[1] reaches the unbounded copy of claim-000000000000000000case01 into a fixed-size stack buffer.</p>
+    </article>
+  </section>
+
+  <section id="dependency-reachability">
+    <h2><span class="n">3B</span>Dependency reachability</h2>
+    <p>Dependency reachability is decided by deterministic engines, never by a model: reachable needs a hash-bound witness from CodeQL or the IR/CPG engine; unreachable only from the complete IR/CPG engine with the dependency source analysed; conflict means the engines disagree and is left for review; unknown is a coverage gap, not &#39;not vulnerable&#39;. A Critical dependency finding requires reachable (ADR-0020).</p>
+<p><b>No dependency match.</b> 06-cve-reachability had no SCA match to decide</p>    <p class="muted">reachable 0 &middot; conflict 0 &middot; unknown 0 &middot; unreachable 0</p>
+  </section>
+
+  <section id="threat-workbench">
+    <h2><span class="n">3C</span>Threat model workbench</h2>
+    <p>Candidate threat-model records from 03-threat-model-dfd-stride (ADR-0019 workbench and L13 privacy cell). They are hypotheses for review, not findings: exposure is declared, never observed, and regulatory notes are candidates, not a conclusion about compliance.</p>
+    <p class="muted">data classes 2 &middot; privacy threats 1 &middot; deployment zones 2 &middot; attack trees 1</p>
+    <h3>Data classes</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Id</th><th>Category</th><th>Sensitivity</th><th>Stores</th><th>Flows</th><th>Handling</th><th>Evidence</th></tr></thead>
+      <tbody><tr><td class="mono">data-cli-name</td><td>user_content</td><td><span class="chip">internal</span></td><td class="mono"></td><td class="mono"></td><td></td><td>STRONG_INFERENCE (medium)</td></tr><tr><td class="mono">data-json-report</td><td>user_content</td><td><span class="chip">internal</span></td><td class="mono">element-hello-cli</td><td class="mono"></td><td>retention: kept until the user deletes the file</td><td>STRONG_INFERENCE (medium)</td></tr></tbody>
+    </table></div>
+    <h3>Privacy threats (LINDDUN)</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Id</th><th>Category</th><th>Statement</th><th>Targets</th><th>Data classes</th><th>Regulatory candidate notes</th><th>Evidence</th></tr></thead>
+      <tbody><tr><td class="mono">privacy-dd-a181a39c5e</td><td><span class="chip">data_disclosure</span></td><td>The --report option writes the user-supplied name to a JSON file whose permissions follow the process umask, so other local accounts may be able to read it.</td><td class="mono">element-hello-cli</td><td class="mono">data-cli-name, data-json-report</td><td>GDPR Art. 5(1)(f) confidentiality may apply if the name is personal data (candidate)</td><td>STRONG_INFERENCE (low)</td></tr></tbody>
+    </table></div>
+    <h3>Deployment zones</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Id</th><th>Kind</th><th>Name</th><th>Exposure</th><th>Evidence</th></tr></thead>
+      <tbody><tr><td class="mono">zone-build</td><td>build_release</td><td>Autotools configure and make</td><td><span class="chip">DECLARED_EXPOSURE</span></td><td>STRONG_INFERENCE (high)</td></tr><tr><td class="mono">zone-local-host</td><td>client_device</td><td>Local user shell running hello</td><td><span class="chip">DECLARED_EXPOSURE</span></td><td>STRONG_INFERENCE (medium)</td></tr></tbody>
+    </table></div>
+    <h3>Attack trees</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Tree</th><th>Objective</th><th>Nodes</th><th>Leaves (evidence / assumption / unresolved)</th><th>Verification items</th><th>Evidence</th></tr></thead>
+      <tbody><tr><td class="mono">tree-corrupt-memory-through-the-greeting-form-c52a1743</td><td>Corrupt memory through the greeting formatter</td><td>5 (2 gates)</td><td>3 (1 / 1 / 1)</td><td class="mono"></td><td>STRONG_INFERENCE (low)</td></tr></tbody>
+    </table></div>
   </section>
 
   <section id="gaps">
     <h2><span class="n">4</span>Coverage gaps</h2>
     <p>Each item below is an area the review did not fully examine. None of them may be read as “no issues”.</p>
     <ul class="gaps">
-<li><span class="mono">02-sre-operations-topology</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — No runbooks or monitoring config in target; topology inferred from Dockerfile only.</li><li><span class="mono">02-iac-config-scan</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — tfsec and kube-linter declared but no pinned image; 2 of 5 scanner instances did not run.</li><li><span class="mono">02-sbom-inventory</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — syft found 0 components; vendored cJSON has no manifest. Second source (build index vendored members) not yet wired.</li><li><span class="mono">02-sca-vulnerability-match</span> <span class="st t-BLOCKED">BLOCKED</span> — Blocked on V16/V18 offline vulnerability DB mirror. No CVE matching was performed.</li><li><span class="mono">02-dependency-lifecycle</span> <span class="st t-BLOCKED">BLOCKED</span> — EOL reference table unowned. Lifecycle of cJSON 1.7.18 reported unknown.</li><li><span class="mono">02-binary-hardening</span> <span class="st t-BLOCKED">BLOCKED</span> — M02 unresolved; no ELF hardening check ran on the built binary.</li><li><span class="mono">06-cve-reachability</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — No SCA matches to triage (02-sca BLOCKED); inventory from build index only.</li><li><span class="mono">L6B threat-model reconciliation</span> <span class="st t-NOT_BUILT">NOT_BUILT</span> — Designed in design-v3, no lane.</li><li><span class="mono">L10 protocol/parser analysis</span> <span class="st t-NOT_BUILT">NOT_BUILT</span> — Designed in design-v3, no lane.</li><li><span class="mono">L12 supply-chain / provenance</span> <span class="st t-NOT_BUILT">NOT_BUILT</span> — Tier B scripts exist, not wired.</li><li><span class="mono">L13 privacy / data protection</span> <span class="st t-NOT_BUILT">NOT_BUILT</span> — Designed in design-v3, no lane.</li>    </ul>
+<li><span class="mono">02-sre-operations-topology</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — No runbooks or monitoring configuration in the target; topology inferred from the Dockerfile only.</li><li><span class="mono">02-test-result-ingest</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — No test plan and no test results: nothing to ingest (explicit gap).</li><li><span class="mono">02-test-coverage-ingest</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — No instrumented test run: coverage is missing (explicit gap).</li><li><span class="mono">02-sbom-inventory</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — Syft found no package manifest; vendored cJSON 1.7.18 was added from the accepted build-index vendored members without a purl or CPE (inferred component kept as an explicit gap).</li><li><span class="mono">02-sca-vulnerability-match</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — Grype ran and matched nothing; OSV was SKIPPED_NA per tool because no component carries a purl. Vendored cJSON was not matched against any advisory.</li><li><span class="mono">02-dependency-lifecycle</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — cJSON 1.7.18 is not in the pinned lifecycle reference table; its lifecycle is reported unknown.</li><li><span class="mono">10-synthesis-report</span> <span class="st t-OK_WITH_GAPS">OK_WITH_GAPS</span> — EPSS/KEV not assessed: no pinned offline snapshot has been imported; every exploit signal reads &#39;not assessed&#39;.</li>    </ul>
   </section>
 
   <section id="method">
@@ -625,18 +901,18 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
     <h2><span class="n">A</span>Evidence register</h2>
     <div class="tbl"><table>
       <thead><tr><th>ID</th><th>Producer</th><th>Artifact</th><th>sha256</th></tr></thead>
-      <tbody><tr id="E-001"><td class="mono">E-001</td><td>00-intake</td><td class="mono">data/jobs/00-intake/manifest.json</td><td class="mono">3f9a1c0e</td></tr><tr id="E-002"><td class="mono">E-002</td><td>02-repository-partition-discovery</td><td class="mono">attempt-1/repository-partition-map.json</td><td class="mono">a41be209</td></tr><tr id="E-003"><td class="mono">E-003</td><td>02-build-index</td><td class="mono">data/jobs/02-build-index/build-index.json#vendored[0]</td><td class="mono">0c7d55e1</td></tr><tr id="E-004"><td class="mono">E-004</td><td>native-build</td><td class="mono">compile_commands.json (6 project TUs + cJSON.c)</td><td class="mono">e8812fd0</td></tr><tr id="E-010"><td class="mono">E-010</td><td>gitleaks</td><td class="mono">02-secrets-inventory/gitleaks/outputs/findings.json (0 hits) + redaction-receipt.json</td><td class="mono">5b2e0a77</td></tr><tr id="E-011"><td class="mono">E-011</td><td>hadolint, checkov, trivy-config</td><td class="mono">02-iac-config-scan/tool-results.json</td><td class="mono">91d0c3e6</td></tr><tr id="E-012"><td class="mono">E-012</td><td>syft-directory</td><td class="mono">02-sbom-inventory/syft-directory/outputs/sbom.cdx.json (0 components)</td><td class="mono">77ac21b9</td></tr><tr id="E-013"><td class="mono">E-013</td><td>scancode-toolkit</td><td class="mono">02-license-scan/outputs/scancode.json#vendor/cJSON-1.7.18 (MIT)</td><td class="mono">c2f9084d</td></tr><tr id="E-014"><td class="mono">E-014</td><td>semgrep</td><td class="mono">02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</td><td class="mono">4ae6f19c</td></tr><tr id="E-015"><td class="mono">E-015</td><td>ossf-scorecard</td><td class="mono">ossf-scorecard/scorecard.json (aggregate 4.1)</td><td class="mono">d03b8e2c</td></tr><tr id="E-020"><td class="mono">E-020</td><td>clang-tidy, cppcheck</td><td class="mono">native/clang-tidy.sarif, cppcheck.xml</td><td class="mono">12fe7a09</td></tr><tr id="E-021"><td class="mono">E-021</td><td>ir-facts / component IR slice</td><td class="mono">native/ir-slices/*.json (memcpy@store.h:30 N=16; system@runner.cpp:18)</td><td class="mono">6d8b03e5</td></tr><tr id="E-022"><td class="mono">E-022</td><td>csa-ctu</td><td class="mono">native/csa/*.plist (greet.cpp:18, jsonreport.cpp:17)</td><td class="mono">b90c4e17</td></tr><tr id="E-023"><td class="mono">E-023</td><td>codeql</td><td class="mono">codeql/security-extended.sarif + mythos-cpp.sarif</td><td class="mono">f15a2d8c</td></tr><tr id="E-024"><td class="mono">E-024</td><td>deep-confirmation</td><td class="mono">deep-confirmation.json cluster C-007</td><td class="mono">280e6b4f</td></tr><tr id="E-030"><td class="mono">E-030</td><td>03-threat-model-dfd-stride</td><td class="mono">outputs/03/dfd.json, stride.json</td><td class="mono">8c4f1a93</td></tr><tr id="E-040"><td class="mono">E-040</td><td>09-independent-verification</td><td class="mono">outputs/09/verification.json (ASan logs attached)</td><td class="mono">ee07b6d2</td></tr></tbody>
+      <tbody><tr id="E-001"><td class="mono">E-001</td><td>00-intake</td><td class="mono">data/jobs/00-intake/manifest.json</td><td class="mono">3f9a1c0e</td></tr><tr id="E-002"><td class="mono">E-002</td><td>02-repository-partition-discovery</td><td class="mono">repository-partition-map.json</td><td class="mono">a41be209</td></tr><tr id="E-003"><td class="mono">E-003</td><td>02-build-index</td><td class="mono">build-index.json#vendored[0]</td><td class="mono">0c7d55e1</td></tr><tr id="E-004"><td class="mono">E-004</td><td>02-native-build</td><td class="mono">data/jobs/02-native-build/attempts/&lt;id&gt;/compile_commands.json (project TUs + cJSON.c)</td><td class="mono">e8812fd0</td></tr><tr id="E-010"><td class="mono">E-010</td><td>02-secrets-inventory</td><td class="mono">outputs/secrets-inventory.redacted.json (0 hits) + redaction-receipt.json</td><td class="mono">5b2e0a77</td></tr><tr id="E-011"><td class="mono">E-011</td><td>02-iac-config-scan</td><td class="mono">outputs/iac-config-evidence.json (hadolint, checkov, trivy config)</td><td class="mono">91d0c3e6</td></tr><tr id="E-012"><td class="mono">E-012</td><td>02-sbom-inventory</td><td class="mono">outputs/sbom.cdx.json + build-index-vendored-members.json (cJSON inferred, no purl)</td><td class="mono">77ac21b9</td></tr><tr id="E-013"><td class="mono">E-013</td><td>02-license-scan</td><td class="mono">outputs/license-inventory.json#vendor/cJSON-1.7.18 (MIT)</td><td class="mono">c2f9084d</td></tr><tr id="E-014"><td class="mono">E-014</td><td>02-source-sast</td><td class="mono">source-sast.json (semgrep: greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)</td><td class="mono">4ae6f19c</td></tr><tr id="E-015"><td class="mono">E-015</td><td>02-ossf-scorecard</td><td class="mono">ossf-scorecard-results.json (aggregate 4.1)</td><td class="mono">d03b8e2c</td></tr><tr id="E-020"><td class="mono">E-020</td><td>02-native-sast</td><td class="mono">native-sast.json (clang-tidy, cppcheck)</td><td class="mono">12fe7a09</td></tr><tr id="E-021"><td class="mono">E-021</td><td>02-ir-facts</td><td class="mono">ir-facts.json (memcpy@store.h:30 N=16; system@runner.cpp:18)</td><td class="mono">6d8b03e5</td></tr><tr id="E-022"><td class="mono">E-022</td><td>02-native-sast</td><td class="mono">native-sast.json#csa (greet.cpp:18, jsonreport.cpp:17)</td><td class="mono">b90c4e17</td></tr><tr id="E-023"><td class="mono">E-023</td><td>02-codeql-cpp</td><td class="mono">codeql-language.json (cpp security-extended SARIF leads)</td><td class="mono">f15a2d8c</td></tr><tr id="E-024"><td class="mono">E-024</td><td>02-code-property-graph</td><td class="mono">code-property-graph.json (call path main -&gt; store_into -&gt; memcpy)</td><td class="mono">280e6b4f</td></tr><tr id="E-030"><td class="mono">E-030</td><td>03-threat-model-dfd-stride</td><td class="mono">integrated-threat-model.json, dfd.mmd</td><td class="mono">8c4f1a93</td></tr><tr id="E-040"><td class="mono">E-040</td><td>09-independent-verification</td><td class="mono">verification record (static source review; no runtime claim)</td><td class="mono">ee07b6d2</td></tr></tbody>
     </table></div>
   </section>
 
   <section id="provenance">
     <h2><span class="n">B</span>Provenance</h2>
     <div class="tbl"><table><tbody>
-      <tr><td class="eyebrow">Run</td><td><span class="mono">20260927T141502Z-7a3e91</span> (SAT <span class="mono">20260927T141440Z</span>)</td></tr>
-      <tr><td class="eyebrow">Pipeline</td><td class="mono">report-template (from origin/main b3b87de2)</td></tr>
+      <tr><td class="eyebrow">Run</td><td><span class="mono">sample-hello-autotools</span> (SAT <span class="mono">20260927T141440Z</span>)</td></tr>
+      <tr><td class="eyebrow">Pipeline</td><td class="mono">sample; job-graph.json sha256:877934e0f3e8 (81 jobs)</td></tr>
       <tr><td class="eyebrow">Ledger head</td><td class="mono">sha256:6e1d…b38c</td></tr>
       <tr><td class="eyebrow">Native tier</td><td>A — clang compiled 6/6 project TUs plus vendored cJSON; IR, CSA/CTU and SVF substrate available (ADR-0001).</td></tr>
-<tr><td class="mono">tool-gitleaks</td><td class="mono">sha256:1c4e…9a02</td></tr><tr><td class="mono">tool-semgrep</td><td class="mono">sha256:7b10…e33f</td></tr><tr><td class="mono">tool-syft</td><td class="mono">sha256:a9d2…4410</td></tr><tr><td class="mono">tool-checkov</td><td class="mono">sha256:55e0…b7c1</td></tr><tr><td class="mono">tool-trivy</td><td class="mono">sha256:03fd…8e29</td></tr><tr><td class="mono">tool-hadolint</td><td class="mono">sha256:c871…1d5a</td></tr><tr><td class="mono">scancode-toolkit</td><td class="mono">sha256:e2a4…70bb</td></tr><tr><td class="mono">audit-native</td><td class="mono">sha256:9f31…c6d8</td></tr><tr><td class="mono">audit-codeql</td><td class="mono">sha256:4b7a…02e1</td></tr><tr><td>claude-sonnet-5 (D01, lanes 07/08/09)</td><td>pinned per run by model_version_registry.py</td></tr><tr><td>claude-haiku (build plan)</td><td>pinned per run</td></tr>    </tbody></table></div>
+<tr><td class="mono">tool-gitleaks</td><td class="mono">sha256:1c4e…9a02</td></tr><tr><td class="mono">tool-semgrep</td><td class="mono">sha256:7b10…e33f</td></tr><tr><td class="mono">tool-syft</td><td class="mono">sha256:a9d2…4410</td></tr><tr><td class="mono">tool-checkov</td><td class="mono">sha256:55e0…b7c1</td></tr><tr><td class="mono">tool-trivy</td><td class="mono">sha256:03fd…8e29</td></tr><tr><td class="mono">tool-hadolint</td><td class="mono">sha256:c871…1d5a</td></tr><tr><td class="mono">scancode-toolkit</td><td class="mono">sha256:e2a4…70bb</td></tr><tr><td class="mono">audit-native</td><td class="mono">sha256:9f31…c6d8</td></tr><tr><td class="mono">audit-codeql</td><td class="mono">sha256:4b7a…02e1</td></tr><tr><td class="mono">tool-grype</td><td class="mono">sha256:5d0e…3b71</td></tr><tr><td class="mono">tool-osv-scanner</td><td class="mono">sha256:c4a8…9e12</td></tr><tr><td>claude-sonnet-5 (D01, lanes 07/08/09)</td><td>pinned per run by model_version_registry.py</td></tr><tr><td>claude-haiku (build plan)</td><td>pinned per run</td></tr>    </tbody></table></div>
   </section>
 
   <details class="src" id="latex">
@@ -714,7 +990,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 \renewcommand{\headrulewidth}{0pt}
 \fancyhead[L]{\eyebrow{Application Security Review \textperiodcentered{} hello-autotools}}
 \fancyhead[R]{\eyebrow{Internal - sample}}
-\fancyfoot[L]{\eyebrow{run 20260927T141502Z-7a3e91}}
+\fancyfoot[L]{\eyebrow{run sample-hello-autotools}}
 \fancyfoot[R]{\sffamily\scriptsize\thepage}
 
 \setlength{\parindent}{0pt}\setlength{\parskip}{0.5em}
@@ -725,25 +1001,25 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
 
 
 \begin{tcolorbox}[enhanced,colback=panel,colframe=panel,arc=0pt,boxrule=0pt,left=10pt,right=10pt,top=10pt,bottom=10pt]
-\eyebrow{SAT fixture - system acceptance}\\[2pt]
+\eyebrow{SAMPLE - hello-autotools fixture (illustrative)}\\[2pt]
 {\sffamily\fontsize{24}{28}\selectfont\bfseries Application Security Review}\\[4pt]
 {\sffamily\large hello-autotools \textcolor{muted}{@ \mono{e3ad863}}}
 
 \vspace{6pt}
 \begin{tabularx}{\linewidth}{@{}p{0.23\linewidth}p{0.23\linewidth}p{0.23\linewidth}X@{}}
 \eyebrow{Overall rating} &amp; \eyebrow{Process assurance} &amp; \eyebrow{Native tier} &amp; \eyebrow{Report date}\\
-\sev{High} &amp; {\sffamily\Large\bfseries 82\%} &amp; {\sffamily\Large\bfseries A} &amp; {\sffamily 2026-09-27}\\
-{\scriptsize\color{muted} top priority 8.5} &amp; {\scriptsize\color{muted} 28 of 42 processes OK, 11 gaps} &amp; {\scriptsize\color{muted} ADR-0001 gate} &amp; {\scriptsize\color{muted} SAT 20260927T141440Z}\\
+\sev{High} &amp; {\sffamily\Large\bfseries 94\%} &amp; {\sffamily\Large\bfseries A} &amp; {\sffamily 2026-09-29}\\
+{\scriptsize\color{muted} top priority 8.5} &amp; {\scriptsize\color{muted} 62 of 81 processes OK, 7 gaps} &amp; {\scriptsize\color{muted} ADR-0001 gate} &amp; {\scriptsize\color{muted} SAT 20260927T141440Z}\\
 \end{tabularx}
 \end{tcolorbox}
 {\small\color{sevMedium}\textbf{Sample data.} Values are illustrative, shaped like a hello-autotools SAT run.}
 
 \section{Executive summary}
-The review ran 42 processes across 6 families.
-28 completed cleanly, 3 were skipped as not applicable with a probe receipt,
-and 11 left coverage gaps. Overall rating is \textbf{High}, driven by the
+The review ran 81 processes across 17 families.
+62 completed cleanly, 12 were skipped as not applicable with a probe receipt,
+and 7 left coverage gaps. Overall rating is \textbf{High}, driven by the
 highest verified priority score of 8.5. Process assurance is
-\textbf{82\%}; a process that did not run is reported as a gap, never as a clean result.
+\textbf{94\%}; a process that did not run is reported as a gap, never as a clean result.
 
 \begin{center}
 \begin{tabular}{@{}ccccc@{}}
@@ -763,7 +1039,7 @@ highest verified priority score of 8.5. Process assurance is
 \hyperref[AR-003]{\mono{AR-\allowbreak{}003}} &amp; OS command injection: name concatenated into system() command &amp; 8.5 &amp; \textbf{7.2} &amp; \sev{High}\\
 \hyperref[AR-002]{\mono{AR-\allowbreak{}002}} &amp; Format string: CLI-derived message used as printf format &amp; 7.0 &amp; \textbf{7.0} &amp; \sev{High}\\
 \hyperref[AR-004]{\mono{AR-\allowbreak{}004}} &amp; Out-of-bounds write: memcpy behind STORE\_INTO macro and template &amp; 7.3 &amp; \textbf{6.2} &amp; \sev{Medium}\\
-\hyperref[AR-005]{\mono{AR-\allowbreak{}005}} &amp; Vendored cJSON 1.7.18 missing from SBOM; CVE match not performed &amp; -- &amp; -- &amp; \sev{Medium}\\
+\hyperref[AR-005]{\mono{AR-\allowbreak{}005}} &amp; Vendored cJSON 1.7.18 has no purl or CPE; advisory matching could not cover it &amp; -- &amp; -- &amp; \sev{Medium}\\
 \hyperref[AR-006]{\mono{AR-\allowbreak{}006}} &amp; Runtime image runs as root; base image not pinned by digest &amp; 2.0 &amp; \textbf{1.5} &amp; \sev{Low}\\
 \hyperref[AR-007]{\mono{AR-\allowbreak{}007}} &amp; Unchecked NULL from cJSON\_PrintUnformatted used to build std::string &amp; 2.0 &amp; \textbf{1.0} &amp; \sev{Low}\\
 \hyperref[AR-008]{\mono{AR-\allowbreak{}008}} &amp; Mismatched deallocation: free() on cJSON output (refuted) &amp; 4.8 &amp; \textbf{0.0} &amp; \sev{Refuted}\\
@@ -775,111 +1051,249 @@ highest verified priority score of 8.5. Process assurance is
 Every process in the flow appears here, including designed lanes that are not built yet.
 Credit $c_i$ per process: \st{OK}{OK} $=1$, \st{OKWITHGAPS}{OK\_WITH\_GAPS} $=$ measured coverage,
 \st{BLOCKED}{BLOCKED}/\st{FAILED}{FAILED}/\st{NOTBUILT}{NOT\_BUILT} $=0$, \st{SKIPPEDNA}{SKIPPED\_NA} excluded from the denominator.
-\[ A = \frac{\sum_k w_k A_k}{\sum_k w_k} = \frac{1 \cdot 0.94 + 2 \cdot 1.00 + 3 \cdot 0.57 + 3 \cdot 1.00 + 4 \cdot 0.95 + 1 \cdot 0.00}{14} = \mathbf{0.82} \]
+\[ A = \frac{\sum_k w_k A_k}{\sum_k w_k} = \frac{1 \cdot 1.00 + 3 \cdot 1.00 + 48 \cdot 0.90 + 2 \cdot 1.00 + 2 \cdot 1.00 + 1 \cdot 1.00 + 3 \cdot 1.00 + 5 \cdot 1.00 + 1 \cdot 1.00 + 2 \cdot 1.00 + 4 \cdot 0.97 + 2 \cdot 1.00 + 1 \cdot 1.00 + 2 \cdot 1.00 + 2 \cdot 1.00}{79} = \mathbf{0.94} \]
 
 \begin{center}
 \begin{tabular}{@{}lrrrrrrr@{}}
 \toprule
 \eyebrow{Family} &amp; \eyebrow{$w_k$} &amp; \eyebrow{OK} &amp; \eyebrow{Gaps} &amp; \eyebrow{Blocked} &amp; \eyebrow{Not built} &amp; \eyebrow{N/A} &amp; \eyebrow{$A_k$}\\
 \midrule
-Intake and discovery &amp; 1 &amp; 4 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{0.94}\\
-Build resolution &amp; 2 &amp; 4 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
-Deterministic scan jobs &amp; 3 &amp; 4 &amp; 2 &amp; 3 &amp; 0 &amp; 2 &amp; \textbf{0.57}\\
-Native analysis substrate &amp; 3 &amp; 5 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
-LLM review lanes &amp; 4 &amp; 11 &amp; 1 &amp; 0 &amp; 0 &amp; 1 &amp; \textbf{0.95}\\
-Designed, not built &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 4 &amp; 0 &amp; \textbf{0.00}\\
+Lane 00: intake recovery &amp; 1 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 01: component characterization &amp; 3 &amp; 3 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 02: evidence pregather &amp; 48 &amp; 32 &amp; 6 &amp; 0 &amp; 0 &amp; 10 &amp; \textbf{0.90}\\
+Lane 03: threat model dfd stride &amp; 2 &amp; 2 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 04: asvs masvs &amp; 2 &amp; 2 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 05: native memory &amp; 1 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 06: cve reachability &amp; 3 &amp; 3 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 07: red team adversarial &amp; 5 &amp; 5 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 08: blue team refutation &amp; 1 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 09: independent verification &amp; 2 &amp; 2 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 10: synthesis report &amp; 4 &amp; 3 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{0.97}\\
+Lane 11: remediation proposal &amp; 2 &amp; 2 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 12: scoring prioritization &amp; 1 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 12b: poc and fix &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; \textbf{--}\\
+Lane 13: fuzz target triage &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; \textbf{--}\\
+Lane 14: attack chain &amp; 2 &amp; 2 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
+Lane 15: deployment hardening &amp; 2 &amp; 2 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; \textbf{1.00}\\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\subsection{Intake and discovery}
-{\small\color{muted}00-intake plus D01-D04 persona discovery.}
+\subsection{Lane 00: intake recovery}
+{\small\color{muted}1 job(s) whose job-graph.json lane is 00-intake-recovery.}
 \begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
 \toprule
 \eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
 \midrule\endhead
-\mono{00-\allowbreak{}intake} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small intake.py\newline \textcolor{accent}{E-001}}\\
-\mono{02-\allowbreak{}repository-\allowbreak{}partition-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small developer-engineer / D01\newline \textcolor{accent}{E-002}}\\
-\mono{02-\allowbreak{}dev-\allowbreak{}project-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small developer-engineer / D02}\\
-\mono{02-\allowbreak{}devops-\allowbreak{}project-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small devops-engineer / D03}\\
-\mono{02-\allowbreak{}sre-\allowbreak{}operations-\allowbreak{}topology} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.70 &amp; {\small sre-engineer / D04\newline \textcolor{sevHigh}{No runbooks or monitoring config in target; topology inferred from Dockerfile only.}}\\
+\mono{00-\allowbreak{}intake} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small read-only-intake (intake.py:write\_intake)\newline \textcolor{accent}{E-001}}\\
 \bottomrule
 \end{longtable}
-\subsection{Build resolution}
-{\small\color{muted}Build index, plan, resolution and hostile native build.}
+\subsection{Lane 01: component characterization}
+{\small\color{muted}3 job(s) whose job-graph.json lane is 01-component-characterization.}
 \begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
 \toprule
 \eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
 \midrule\endhead
-\mono{02-\allowbreak{}build-\allowbreak{}index} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small build\_index.py\newline \textcolor{accent}{E-003}}\\
-\mono{02-\allowbreak{}build-\allowbreak{}plan} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small haiku / build planner}\\
-\mono{02-\allowbreak{}build-\allowbreak{}resolution} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small repair loop, 1 retry}\\
-\mono{native-\allowbreak{}build} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small audit-native (network none)\newline \textcolor{accent}{E-004}}\\
+\mono{01-\allowbreak{}component-\allowbreak{}characterization} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small component-evidence-router (component\_characterization.py:run)}\\
+\mono{02-\allowbreak{}full-\allowbreak{}review-\allowbreak{}input-\allowbreak{}assembly} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small local-evidence-retrieval (full\_review\_input\_assembly.py:assemble)}\\
+\mono{dynamic-\allowbreak{}rescope} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (dynamic\_rescope.py:run\_attempt)}\\
 \bottomrule
 \end{longtable}
-\subsection{Deterministic scan jobs}
-{\small\color{muted}One graph node per evidence family, one attempt-bearing instance per tool (ADR-0010).}
+\subsection{Lane 02: evidence pregather}
+{\small\color{muted}48 job(s) whose job-graph.json lane is 02-evidence-pregather.}
 \begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
 \toprule
 \eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
 \midrule\endhead
-\mono{02-\allowbreak{}secrets-\allowbreak{}inventory} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small gitleaks, key-material-file-inventory\newline \textcolor{accent}{E-010}}\\
-\mono{02-\allowbreak{}iac-\allowbreak{}config-\allowbreak{}scan} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.60 &amp; {\small checkov, trivy-config, hadolint (tfsec, kube-linter BLOCKED: no image)\newline \textcolor{sevHigh}{tfsec and kube-linter declared but no pinned image; 2 of 5 scanner instances did not run.}\newline \textcolor{accent}{E-011}}\\
-\mono{02-\allowbreak{}sbom-\allowbreak{}inventory} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.50 &amp; {\small syft-directory\newline \textcolor{sevHigh}{syft found 0 components; vendored cJSON has no manifest. Second source (build index vendored members) not yet wired.}\newline \textcolor{accent}{E-012}}\\
-\mono{02-\allowbreak{}sca-\allowbreak{}vulnerability-\allowbreak{}match} &amp; \st{BLOCKED}{BLOCKED} &amp; 0.00 &amp; {\small grype\newline \textcolor{sevHigh}{Blocked on V16/V18 offline vulnerability DB mirror. No CVE matching was performed.}}\\
-\mono{02-\allowbreak{}license-\allowbreak{}scan} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small scancode-toolkit\newline \textcolor{accent}{E-013}}\\
-\mono{02-\allowbreak{}dependency-\allowbreak{}lifecycle} &amp; \st{BLOCKED}{BLOCKED} &amp; 0.00 &amp; {\small dependency-lifecycle-transform\newline \textcolor{sevHigh}{EOL reference table unowned. Lifecycle of cJSON 1.7.18 reported unknown.}}\\
-\mono{02-\allowbreak{}binary-\allowbreak{}hardening} &amp; \st{BLOCKED}{BLOCKED} &amp; 0.00 &amp; {\small binskim\newline \textcolor{sevHigh}{M02 unresolved; no ELF hardening check ran on the built binary.}}\\
-\mono{02-\allowbreak{}container-\allowbreak{}image-\allowbreak{}inventory} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small oci-archive-inventory\newline \textcolor{muted}{applicability-probe: no OCI archive in inputs}}\\
-\mono{02-\allowbreak{}mobile-\allowbreak{}sast} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small mobsfscan\newline \textcolor{muted}{applicability-probe: no Android/iOS markers}}\\
-\mono{02-\allowbreak{}source-\allowbreak{}sast} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small semgrep (vendored packs), gosec/php* N/A\newline \textcolor{accent}{E-014}}\\
-\mono{ossf-\allowbreak{}scorecard} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small scorecard (offline mode)\newline \textcolor{accent}{E-015}}\\
+\mono{02-\allowbreak{}ossf-\allowbreak{}scorecard} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small authorized-scorecard-api (ossf\_scorecard.py:run)\newline \textcolor{accent}{E-015}}\\
+\mono{02-\allowbreak{}repository-\allowbreak{}partition-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-repo-project-inspector (automatic\_discovery.py:run)\newline \textcolor{accent}{E-002}}\\
+\mono{02-\allowbreak{}dev-\allowbreak{}project-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-repo-project-inspector (automatic\_discovery.py:run)}\\
+\mono{02-\allowbreak{}devops-\allowbreak{}project-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-repo-project-inspector (automatic\_discovery.py:run)}\\
+\mono{02-\allowbreak{}sre-\allowbreak{}operations-\allowbreak{}topology} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.70 &amp; {\small static-ops-topology-inspector (automatic\_discovery.py:run)\newline \textcolor{sevHigh}{No runbooks or monitoring configuration in the target; topology inferred from the Dockerfile only.}}\\
+\mono{02-\allowbreak{}build-\allowbreak{}index} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-build-indexer (build\_index.py:run)\newline \textcolor{accent}{E-003}}\\
+\mono{02-\allowbreak{}build-\allowbreak{}classify} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-repo-project-inspector (build\_classify.py:run)}\\
+\mono{02-\allowbreak{}build-\allowbreak{}plan} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-repo-project-inspector (build\_plan.py:run)}\\
+\mono{02-\allowbreak{}build-\allowbreak{}resolution} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-build-resolver (build\_resolution.py:run)}\\
+\mono{02-\allowbreak{}evidence-\allowbreak{}assembly} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-bound-evidence-assembly (evidence\_assembly.py:run)}\\
+\mono{02-\allowbreak{}api-\allowbreak{}collection-\allowbreak{}intelligence-\allowbreak{}ingest} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-api-collection-parser (api\_collection\_intelligence\_ingest.py:run)}\\
+\mono{02-\allowbreak{}binary-\allowbreak{}intelligence-\allowbreak{}ingest} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small binary-intel-static-analysis (binary\_intelligence\_ingest.py:run)}\\
+\mono{02-\allowbreak{}doc-\allowbreak{}intelligence-\allowbreak{}ingest} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-doc-parser (doc\_intelligence\_ingest.py:run)}\\
+\mono{02-\allowbreak{}standards-\allowbreak{}source-\allowbreak{}ingest} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small standards-source-static-ingest (standards\_source\_ingest.py:run)}\\
+\mono{02-\allowbreak{}test-\allowbreak{}intelligence-\allowbreak{}ingest} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-test-doc-parser (test\_intelligence\_ingest.py:run)}\\
+\mono{02-\allowbreak{}build-\allowbreak{}configure} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-build-resolver (build\_configure.py:run)}\\
+\mono{02-\allowbreak{}native-\allowbreak{}build} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-build-resolver (native\_build.py:run)\newline \textcolor{accent}{E-004}}\\
+\mono{02-\allowbreak{}source-\allowbreak{}sast} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-source-sast (source\_sast.py:run)\newline \textcolor{accent}{E-014}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}cpp} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{accent}{E-023}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}csharp} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}go} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}java} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}javascript} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}python} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}ruby} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}codeql-\allowbreak{}rust} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-source-sast (codeql\_sast.py:run)\newline \textcolor{muted}{not-applicable-language-absent}}\\
+\mono{02-\allowbreak{}code-\allowbreak{}property-\allowbreak{}graph} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-source-sast (joern\_cpg.py:run)\newline \textcolor{accent}{E-024}}\\
+\mono{02-\allowbreak{}native-\allowbreak{}sast} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-native-sast (native\_sast.py:run)\newline \textcolor{accent}{E-020, E-022}}\\
+\mono{02-\allowbreak{}ir-\allowbreak{}capture} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small llvm-ir-evidence (ir\_evidence.py:run\_job)}\\
+\mono{02-\allowbreak{}ir-\allowbreak{}link} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small llvm-ir-evidence (ir\_evidence.py:run\_job)}\\
+\mono{02-\allowbreak{}ir-\allowbreak{}facts} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small llvm-ir-evidence (ir\_evidence.py:run\_job)\newline \textcolor{accent}{E-021}}\\
+\mono{02-\allowbreak{}debug-\allowbreak{}symbol-\allowbreak{}index} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small binary-intel-static-analysis (debug\_symbol\_index.py:run)}\\
+\mono{02-\allowbreak{}binary-\allowbreak{}triage} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small binary-intel-static-analysis (binary\_triage.py:run)}\\
+\mono{02-\allowbreak{}binary-\allowbreak{}cfg} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small binary-intel-static-analysis (binary\_cfg.py:run)}\\
+\mono{02-\allowbreak{}test-\allowbreak{}execution} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small bounded-test-evidence (test\_execution.py:run)\newline \textcolor{muted}{not-applicable-no-test-plan}}\\
+\mono{02-\allowbreak{}test-\allowbreak{}result-\allowbreak{}ingest} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.00 &amp; {\small bounded-test-evidence (test\_result\_ingest.py:run)\newline \textcolor{sevHigh}{No test plan and no test results: nothing to ingest (explicit gap).}}\\
+\mono{02-\allowbreak{}test-\allowbreak{}coverage-\allowbreak{}ingest} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.00 &amp; {\small bounded-test-evidence (test\_coverage\_ingest.py:run)\newline \textcolor{sevHigh}{No instrumented test run: coverage is missing (explicit gap).}}\\
+\mono{02-\allowbreak{}operations-\allowbreak{}doc-\allowbreak{}ingest} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small static-doc-parser (operations\_doc\_ingest.py:run)}\\
+\mono{02-\allowbreak{}evidence-\allowbreak{}index} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small local-evidence-retrieval (evidence\_store.py:run)}\\
+\mono{02-\allowbreak{}secrets-\allowbreak{}inventory} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-vendor-static-evidence (secrets\_inventory.py:build)\newline \textcolor{accent}{E-010}}\\
+\mono{02-\allowbreak{}iac-\allowbreak{}config-\allowbreak{}scan} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-vendor-static-evidence (iac\_config\_scan.py:build)\newline \textcolor{accent}{E-011}}\\
+\mono{02-\allowbreak{}container-\allowbreak{}image-\allowbreak{}inventory} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-vendor-static-evidence (container\_image\_inventory.py:build)\newline \textcolor{muted}{not-applicable-no-matching-inputs}}\\
+\mono{02-\allowbreak{}sbom-\allowbreak{}inventory} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.50 &amp; {\small pinned-dependency-analysis (dependency\_workers.py:run)\newline \textcolor{sevHigh}{Syft found no package manifest; vendored cJSON 1.7.18 was added from the accepted build-index vendored members without a purl or CPE (inferred component kept as an explicit gap).}\newline \textcolor{accent}{E-012}}\\
+\mono{02-\allowbreak{}sca-\allowbreak{}vulnerability-\allowbreak{}match} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.50 &amp; {\small pinned-dependency-analysis (dependency\_workers.py:run)\newline \textcolor{sevHigh}{Grype ran and matched nothing; OSV was SKIPPED\_NA per tool because no component carries a purl. Vendored cJSON was not matched against any advisory.}}\\
+\mono{02-\allowbreak{}license-\allowbreak{}scan} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-dependency-analysis (dependency\_workers.py:run)\newline \textcolor{accent}{E-013}}\\
+\mono{02-\allowbreak{}dependency-\allowbreak{}lifecycle} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.50 &amp; {\small pinned-dependency-analysis (dependency\_workers.py:run)\newline \textcolor{sevHigh}{cJSON 1.7.18 is not in the pinned lifecycle reference table; its lifecycle is reported unknown.}}\\
+\mono{02-\allowbreak{}binary-\allowbreak{}hardening} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-vendor-static-evidence (vendor\_evidence\_orchestration.py:execute\_binary\_from\_native)}\\
+\mono{02-\allowbreak{}mobile-\allowbreak{}sast} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-vendor-static-evidence (mobile\_sast.py:build)\newline \textcolor{muted}{not-applicable-no-matching-inputs}}\\
 \bottomrule
 \end{longtable}
-\subsection{Native analysis substrate}
-{\small\color{muted}Compile DB, IR, CSA/CTU, CodeQL, correlation and deep confirmation.}
+\subsection{Lane 03: threat model dfd stride}
+{\small\color{muted}2 job(s) whose job-graph.json lane is 03-threat-model-dfd-stride.}
 \begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
 \toprule
 \eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
 \midrule\endhead
-\mono{compile-\allowbreak{}db + clang-\allowbreak{}tidy/\allowbreak{}cppcheck} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small audit-native\newline \textcolor{accent}{E-020}}\\
-\mono{llvm-\allowbreak{}ir + ir-\allowbreak{}facts + svf} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small audit-native\newline \textcolor{accent}{E-021}}\\
-\mono{csa-\allowbreak{}ctu} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small clang static analyzer + CTU\newline \textcolor{accent}{E-022}}\\
-\mono{codeql (security-\allowbreak{}extended + mythos-\allowbreak{}cpp)} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small audit-codeql (breadth only, ADR-0006)\newline \textcolor{accent}{E-023}}\\
-\mono{correlation + deep-\allowbreak{}confirmation} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small correlate, deep\_confirm\newline \textcolor{accent}{E-024}}\\
+\mono{03-\allowbreak{}threat-\allowbreak{}model-\allowbreak{}dfd-\allowbreak{}stride} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small threat-model-static-evidence (threat\_model\_core.py:run)\newline \textcolor{accent}{E-030}}\\
+\mono{03-\allowbreak{}threat-\allowbreak{}model-\allowbreak{}reconciliation} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small threat-model-reconciliation (threat\_model\_reconciliation.py:run)}\\
 \bottomrule
 \end{longtable}
-\subsection{LLM review lanes}
-{\small\color{muted}Hypothesis, refutation, verification, scoring and synthesis.}
+\subsection{Lane 04: asvs masvs}
+{\small\color{muted}2 job(s) whose job-graph.json lane is 04-asvs-masvs.}
 \begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
 \toprule
 \eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
 \midrule\endhead
-\mono{01-\allowbreak{}component-\allowbreak{}characterization} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small component cloud}\\
-\mono{03-\allowbreak{}threat-\allowbreak{}model-\allowbreak{}dfd-\allowbreak{}stride} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small DFD + STRIDE\newline \textcolor{accent}{E-030}}\\
-\mono{04-\allowbreak{}asvs-\allowbreak{}masvs} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small ASVS 5.0\newline \textcolor{muted}{no web/API surface; CLI only}}\\
-\mono{05-\allowbreak{}native-\allowbreak{}memory} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small IR + CSA + CodeQL review}\\
-\mono{06-\allowbreak{}cve-\allowbreak{}reachability} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.40 &amp; {\small inventory + reachability\newline \textcolor{sevHigh}{No SCA matches to triage (02-sca BLOCKED); inventory from build index only.}}\\
-\mono{13-\allowbreak{}fuzz-\allowbreak{}target-\allowbreak{}triage} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small target ranking}\\
-\mono{15-\allowbreak{}deployment-\allowbreak{}hardening} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small container/Dockerfile persona}\\
-\mono{07-\allowbreak{}red-\allowbreak{}team-\allowbreak{}adversarial} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small general + known-list + kill-chain}\\
-\mono{08-\allowbreak{}blue-\allowbreak{}team-\allowbreak{}refutation} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small refutation}\\
-\mono{09-\allowbreak{}independent-\allowbreak{}verification} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small evidence-only verifier\newline \textcolor{accent}{E-040}}\\
-\mono{11-\allowbreak{}remediation-\allowbreak{}proposal} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small patch + retest in audit-native}\\
-\mono{12-\allowbreak{}scoring-\allowbreak{}prioritization} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small CVSS 4.0 + EPSS/KEV}\\
-\mono{10-\allowbreak{}synthesis-\allowbreak{}report} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small this document}\\
+\mono{04-\allowbreak{}asvs-\allowbreak{}masvs} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small owasp-join-reporter (owasp\_join\_publisher.py:run)}\\
+\mono{04-\allowbreak{}owasp-\allowbreak{}validation-\allowbreak{}worklist} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small owasp-worklist-builder (owasp\_validation\_worklist.py:build)}\\
 \bottomrule
 \end{longtable}
-\subsection{Designed, not built}
-{\small\color{muted}Design-v3 lanes with no evidence-gathering step yet. Counted as gaps.}
+\subsection{Lane 05: native memory}
+{\small\color{muted}1 job(s) whose job-graph.json lane is 05-native-memory.}
 \begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
 \toprule
 \eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
 \midrule\endhead
-\mono{L6B threat-\allowbreak{}model reconciliation} &amp; \st{NOTBUILT}{NOT\_BUILT} &amp; 0.00 &amp; {\small \textcolor{sevHigh}{Designed in design-v3, no lane.}}\\
-\mono{L10 protocol/\allowbreak{}parser analysis} &amp; \st{NOTBUILT}{NOT\_BUILT} &amp; 0.00 &amp; {\small \textcolor{sevHigh}{Designed in design-v3, no lane.}}\\
-\mono{L12 supply-\allowbreak{}chain /\allowbreak{} provenance} &amp; \st{NOTBUILT}{NOT\_BUILT} &amp; 0.00 &amp; {\small \textcolor{sevHigh}{Tier B scripts exist, not wired.}}\\
-\mono{L13 privacy /\allowbreak{} data protection} &amp; \st{NOTBUILT}{NOT\_BUILT} &amp; 0.00 &amp; {\small \textcolor{sevHigh}{Designed in design-v3, no lane.}}\\
+\mono{05-\allowbreak{}native-\allowbreak{}memory} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-native-sast (bounded\_analysis\_workers.py:native\_memory)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 06: cve reachability}
+{\small\color{muted}3 job(s) whose job-graph.json lane is 06-cve-reachability.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{06-\allowbreak{}reachability-\allowbreak{}codeql} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-dependency-analysis (reachability\_engine\_jobs.py:run\_codeql)}\\
+\mono{06-\allowbreak{}reachability-\allowbreak{}ir} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-dependency-analysis (reachability\_engine\_jobs.py:run\_ir)}\\
+\mono{06-\allowbreak{}cve-\allowbreak{}reachability} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small pinned-dependency-analysis (dependency\_workers.py:run)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 07: red team adversarial}
+{\small\color{muted}5 job(s) whose job-graph.json lane is 07-red-team-adversarial.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{07-\allowbreak{}hypothesis-\allowbreak{}discovery} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hypothesis-hunt-static (hypothesis\_discovery.py:run)}\\
+\mono{claim-\allowbreak{}ledger-\allowbreak{}routing} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-linked-claim-ledger (claim\_ledger.py:run)}\\
+\mono{07-\allowbreak{}red-\allowbreak{}team-\allowbreak{}adversarial} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-bound-evidence-assembly (claim\_lifecycle\_core.py:run\_stage)}\\
+\mono{persona-\allowbreak{}tool-\allowbreak{}pool-\allowbreak{}dispatch} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (pool\_launcher.py:launch)}\\
+\mono{deterministic-\allowbreak{}pool-\allowbreak{}merge} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (deterministic\_pool\_merge.py:run\_verified\_attempt)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 08: blue team refutation}
+{\small\color{muted}1 job(s) whose job-graph.json lane is 08-blue-team-refutation.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{08-\allowbreak{}blue-\allowbreak{}team-\allowbreak{}refutation} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-bound-evidence-assembly (claim\_lifecycle\_core.py:run\_stage)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 09: independent verification}
+{\small\color{muted}2 job(s) whose job-graph.json lane is 09-independent-verification.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{09-\allowbreak{}independent-\allowbreak{}verification} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-bound-evidence-assembly (claim\_lifecycle\_core.py:run\_stage)\newline \textcolor{accent}{E-040}}\\
+\mono{evidence-\allowbreak{}qualified-\allowbreak{}quorum} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (evidence\_quorum.py:run\_verified\_attempt)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 10: synthesis report}
+{\small\color{muted}4 job(s) whose job-graph.json lane is 10-synthesis-report.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{10-\allowbreak{}synthesis-\allowbreak{}report} &amp; \st{OKWITHGAPS}{OK\_WITH\_GAPS} &amp; 0.90 &amp; {\small synthesis-report-static (synthesis\_report\_worker.py:run)\newline \textcolor{sevHigh}{EPSS/KEV not assessed: no pinned offline snapshot has been imported; every exploit signal reads &#39;not assessed&#39;.}}\\
+\mono{completeness-\allowbreak{}audit} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (completeness\_audit.py:run\_attempt)}\\
+\mono{synthetic-\allowbreak{}hypothesis-\allowbreak{}resynthesis} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (synthetic\_hypothesis\_resynthesis.py:run\_attempt)}\\
+\mono{final-\allowbreak{}publication-\allowbreak{}gate} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (final\_publication.py:publish)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 11: remediation proposal}
+{\small\color{muted}2 job(s) whose job-graph.json lane is 11-remediation-proposal.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{11-\allowbreak{}remediation-\allowbreak{}proposal} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-bound-evidence-assembly (remediation\_proposal.py:run)}\\
+\mono{remediation-\allowbreak{}retest-\allowbreak{}feedback} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small verified-control-lifecycle (remediation\_retest.py:run\_attempt)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 12: scoring prioritization}
+{\small\color{muted}1 job(s) whose job-graph.json lane is 12-scoring-prioritization.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{12-\allowbreak{}scoring-\allowbreak{}prioritization} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small hash-bound-evidence-assembly (claim\_lifecycle\_core.py:run\_stage)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 12b: poc and fix}
+{\small\color{muted}1 job(s) whose job-graph.json lane is 12b-poc-and-fix.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{12b-\allowbreak{}poc-\allowbreak{}and-\allowbreak{}fix} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small claim-review-static (poc\_fix\_worker.py:run)\newline \textcolor{muted}{not-applicable-no-eligible-findings}}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 13: fuzz target triage}
+{\small\color{muted}1 job(s) whose job-graph.json lane is 13-fuzz-target-triage.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{13-\allowbreak{}fuzz-\allowbreak{}target-\allowbreak{}triage} &amp; \st{SKIPPEDNA}{SKIPPED\_NA} &amp; -- &amp; {\small pinned-native-sast (bounded\_analysis\_workers.py:fuzz\_triage)\newline \textcolor{muted}{not-applicable-no-fuzz-target}}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 14: attack chain}
+{\small\color{muted}2 job(s) whose job-graph.json lane is 14-attack-chain.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{14-\allowbreak{}attack-\allowbreak{}chain-\allowbreak{}composition} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small claim-review-static (attack\_chain\_composition.py:run)}\\
+\mono{14-\allowbreak{}attack-\allowbreak{}chain-\allowbreak{}refutation} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small claim-review-static (attack\_chain\_refutation.py:run)}\\
+\bottomrule
+\end{longtable}
+\subsection{Lane 15: deployment hardening}
+{\small\color{muted}2 job(s) whose job-graph.json lane is 15-deployment-hardening.}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} &amp; \eyebrow{Status} &amp; \eyebrow{$c_i$} &amp; \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+\mono{15-\allowbreak{}deployment-\allowbreak{}hardening} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small stig-worklist-builder (bounded\_analysis\_workers.py:deployment\_hardening)}\\
+\mono{15-\allowbreak{}stig-\allowbreak{}srg-\allowbreak{}validation-\allowbreak{}worklist} &amp; \st{OK}{OK} &amp; 1.00 &amp; {\small stig-worklist-builder (stig\_srg\_validation\_worklist.py:build)}\\
 \bottomrule
 \end{longtable}
 
@@ -899,6 +1313,7 @@ verification (lane 09). Refuted hypotheses are kept for the record with priority
 \eyebrow{Component} &amp; cli/greeting \quad \textcolor{muted}{CWE-121, CWE-676}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:L/\allowbreak{}AT:N/\allowbreak{}PR:N/\allowbreak{}UI:P/\allowbreak{}VC:H/\allowbreak{}VI:H/\allowbreak{}VA:H/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{8.5} High\\
 \eyebrow{Evidence / status} &amp; DIRECT\_EVIDENCE \textperiodcentered{} VERIFIED \textperiodcentered{} reachable-default\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 8.5 \times 1.00 \times 1.00 \times 1.00 \times 1.00\big) = \mathbf{8.5} \]
@@ -919,14 +1334,14 @@ The greeting &#34;Hello, &#34; + name + &#34;!&#34; is copied into char buf[32] 
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep insecure-use-strcpy, CSA, CodeQL\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-001\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} refutation failed: no length check on any path\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED: ASan stack-buffer-overflow at greet.cpp:18\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 11} patch: bounded copy, retest OK\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} scored}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep strcpy, native-sast CSA, CodeQL cpp\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-001\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} refutation failed: no length check on any path\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED: copy length is argv-controlled and the buffer is 32 bytes (static)\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 11} remediation objective: bounded copy (proposal, not validated)\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 8.5 HIGH (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-014]{\mono{E-014}} semgrep: \mono{02-\allowbreak{}source-\allowbreak{}sast/\allowbreak{}semgrep/\allowbreak{}outputs/\allowbreak{}results.\allowbreak{}sarif (greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
-\hyperref[E-022]{\mono{E-022}} csa-ctu: \mono{native/\allowbreak{}csa/\allowbreak{}*.\allowbreak{}plist (greet.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:17)}\\
-\hyperref[E-023]{\mono{E-023}} codeql: \mono{codeql/\allowbreak{}security-\allowbreak{}extended.\allowbreak{}sarif + mythos-\allowbreak{}cpp.\allowbreak{}sarif}\\
-\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{outputs/\allowbreak{}09/\allowbreak{}verification.\allowbreak{}json (ASan logs attached)}\\
+\hyperref[E-014]{\mono{E-014}} 02-source-sast: \mono{source-\allowbreak{}sast.\allowbreak{}json (semgrep: greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
+\hyperref[E-022]{\mono{E-022}} 02-native-sast: \mono{native-\allowbreak{}sast.\allowbreak{}json\#\allowbreak{}csa (greet.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:17)}\\
+\hyperref[E-023]{\mono{E-023}} 02-codeql-cpp: \mono{codeql-\allowbreak{}language.\allowbreak{}json (cpp security-\allowbreak{}extended SARIF leads)}\\
+\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{verification record (static source review; no runtime claim)}\\
 }
 
 \eyebrow{Remediation}\\ Return the std::string directly, or use a bounded copy and reject oversize names.
@@ -944,6 +1359,7 @@ The greeting &#34;Hello, &#34; + name + &#34;!&#34; is copied into char buf[32] 
 \eyebrow{Component} &amp; reporting \quad \textcolor{muted}{CWE-78}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:L/\allowbreak{}AT:N/\allowbreak{}PR:N/\allowbreak{}UI:P/\allowbreak{}VC:H/\allowbreak{}VI:H/\allowbreak{}VA:H/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{8.5} High\\
 \eyebrow{Evidence / status} &amp; DIRECT\_EVIDENCE \textperiodcentered{} VERIFIED \textperiodcentered{} reachable-flag\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 8.5 \times 1.00 \times 1.00 \times 0.85 \times 1.00\big) = \mathbf{7.2} \]
@@ -978,14 +1394,14 @@ With -{}-report, the CLI name is spliced into an echo command and passed to syst
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep, CodeQL cpp/command-line-injection\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 05} data flow argv -\textgreater{} name -\textgreater{} cmd confirmed in IR\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-003\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} not refuted; flag gate lowers reachability only\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED: -{}-report &#39;x&#34;;touch /tmp/pwned;echo &#34;&#39; creates the file\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} scored}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep, CodeQL cpp/command-line-injection\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 05} data flow argv -\textgreater{} name -\textgreater{} cmd recorded in IR facts\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-003\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} not refuted; flag gate lowers reachability only\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED: name is concatenated into the system() command without quoting (static)\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 8.5 HIGH (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-014]{\mono{E-014}} semgrep: \mono{02-\allowbreak{}source-\allowbreak{}sast/\allowbreak{}semgrep/\allowbreak{}outputs/\allowbreak{}results.\allowbreak{}sarif (greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
-\hyperref[E-021]{\mono{E-021}} ir-facts / component IR slice: \mono{native/\allowbreak{}ir-\allowbreak{}slices/\allowbreak{}*.\allowbreak{}json (memcpy@store.\allowbreak{}h:30 N=16; system@runner.\allowbreak{}cpp:18)}\\
-\hyperref[E-023]{\mono{E-023}} codeql: \mono{codeql/\allowbreak{}security-\allowbreak{}extended.\allowbreak{}sarif + mythos-\allowbreak{}cpp.\allowbreak{}sarif}\\
-\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{outputs/\allowbreak{}09/\allowbreak{}verification.\allowbreak{}json (ASan logs attached)}\\
+\hyperref[E-014]{\mono{E-014}} 02-source-sast: \mono{source-\allowbreak{}sast.\allowbreak{}json (semgrep: greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
+\hyperref[E-021]{\mono{E-021}} 02-ir-facts: \mono{ir-\allowbreak{}facts.\allowbreak{}json (memcpy@store.\allowbreak{}h:30 N=16; system@runner.\allowbreak{}cpp:18)}\\
+\hyperref[E-023]{\mono{E-023}} 02-codeql-cpp: \mono{codeql-\allowbreak{}language.\allowbreak{}json (cpp security-\allowbreak{}extended SARIF leads)}\\
+\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{verification record (static source review; no runtime claim)}\\
 }
 
 \eyebrow{Remediation}\\ Write the log line with file I/O instead of a shell, or use execve with an argv array.
@@ -1003,6 +1419,7 @@ With -{}-report, the CLI name is spliced into an echo command and passed to syst
 \eyebrow{Component} &amp; cli/logging \quad \textcolor{muted}{CWE-134}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:L/\allowbreak{}AT:N/\allowbreak{}PR:N/\allowbreak{}UI:P/\allowbreak{}VC:H/\allowbreak{}VI:L/\allowbreak{}VA:H/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{7.0} High\\
 \eyebrow{Evidence / status} &amp; DIRECT\_EVIDENCE \textperiodcentered{} VERIFIED \textperiodcentered{} reachable-default\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 7.0 \times 1.00 \times 1.00 \times 1.00 \times 1.00\big) = \mathbf{7.0} \]
@@ -1023,13 +1440,13 @@ log\_message() passes the greeting, which embeds the CLI name, straight to print
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep printf-format, CodeQL cpp/tainted-format-string\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-002\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} not refuted\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED: &#39;\%x \%x \%x \%x&#39; leaks stack words\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} scored}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep printf-format, CodeQL cpp/tainted-format-string\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-002\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} not refuted\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED: CLI-derived text reaches the printf format argument (static)\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 7.0 HIGH (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-014]{\mono{E-014}} semgrep: \mono{02-\allowbreak{}source-\allowbreak{}sast/\allowbreak{}semgrep/\allowbreak{}outputs/\allowbreak{}results.\allowbreak{}sarif (greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
-\hyperref[E-023]{\mono{E-023}} codeql: \mono{codeql/\allowbreak{}security-\allowbreak{}extended.\allowbreak{}sarif + mythos-\allowbreak{}cpp.\allowbreak{}sarif}\\
-\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{outputs/\allowbreak{}09/\allowbreak{}verification.\allowbreak{}json (ASan logs attached)}\\
+\hyperref[E-014]{\mono{E-014}} 02-source-sast: \mono{source-\allowbreak{}sast.\allowbreak{}json (semgrep: greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
+\hyperref[E-023]{\mono{E-023}} 02-codeql-cpp: \mono{codeql-\allowbreak{}language.\allowbreak{}json (cpp security-\allowbreak{}extended SARIF leads)}\\
+\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{verification record (static source review; no runtime claim)}\\
 }
 
 \eyebrow{Remediation}\\ std::printf(&#34;\%s\textbackslash{}n&#34;, message.c\_str());
@@ -1047,6 +1464,7 @@ log\_message() passes the greeting, which embeds the CLI name, straight to print
 \eyebrow{Component} &amp; storage \quad \textcolor{muted}{CWE-787, CWE-120}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:L/\allowbreak{}AT:P/\allowbreak{}PR:N/\allowbreak{}UI:P/\allowbreak{}VC:H/\allowbreak{}VI:H/\allowbreak{}VA:H/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{7.3} High\\
 \eyebrow{Evidence / status} &amp; DIRECT\_EVIDENCE \textperiodcentered{} VERIFIED \textperiodcentered{} reachable-flag\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 7.3 \times 1.00 \times 1.00 \times 0.85 \times 1.00\big) = \mathbf{6.2} \]
@@ -1085,14 +1503,14 @@ STORE\_INTO expands to copy\_into\_fixed\textless{}16\textgreater{}, which memcp
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} stock CodeQL: 0 hits; mythos-cpp: 1 hit; semgrep: 0 hits\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 05} IR slice: memcpy size = name.size(), dst = 16\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-004\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} refutation failed: no clamp before copy\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED\_PRIMITIVE\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} scored}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} CodeQL cpp: 0 hits; semgrep: 0 hits; IR facts: memcpy size from input\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 05} IR slice: memcpy size = name.size(), dst = 16\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-004\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} refutation failed: no clamp before copy\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 7.3 HIGH (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-021]{\mono{E-021}} ir-facts / component IR slice: \mono{native/\allowbreak{}ir-\allowbreak{}slices/\allowbreak{}*.\allowbreak{}json (memcpy@store.\allowbreak{}h:30 N=16; system@runner.\allowbreak{}cpp:18)}\\
-\hyperref[E-023]{\mono{E-023}} codeql: \mono{codeql/\allowbreak{}security-\allowbreak{}extended.\allowbreak{}sarif + mythos-\allowbreak{}cpp.\allowbreak{}sarif}\\
-\hyperref[E-024]{\mono{E-024}} deep-confirmation: \mono{deep-\allowbreak{}confirmation.\allowbreak{}json cluster C-\allowbreak{}007}\\
-\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{outputs/\allowbreak{}09/\allowbreak{}verification.\allowbreak{}json (ASan logs attached)}\\
+\hyperref[E-021]{\mono{E-021}} 02-ir-facts: \mono{ir-\allowbreak{}facts.\allowbreak{}json (memcpy@store.\allowbreak{}h:30 N=16; system@runner.\allowbreak{}cpp:18)}\\
+\hyperref[E-023]{\mono{E-023}} 02-codeql-cpp: \mono{codeql-\allowbreak{}language.\allowbreak{}json (cpp security-\allowbreak{}extended SARIF leads)}\\
+\hyperref[E-024]{\mono{E-024}} 02-code-property-graph: \mono{code-\allowbreak{}property-\allowbreak{}graph.\allowbreak{}json (call path main -\allowbreak{}\textgreater{} store\_into -\allowbreak{}\textgreater{} memcpy)}\\
+\hyperref[E-040]{\mono{E-040}} 09-independent-verification: \mono{verification record (static source review; no runtime claim)}\\
 }
 
 \eyebrow{Remediation}\\ Check src.size() \textless{} N before the copy, or truncate explicitly.
@@ -1102,7 +1520,7 @@ STORE\_INTO expands to copy\_into\_fixed\textless{}16\textgreater{}, which memcp
   borderline west={3pt}{0pt}{sevMedium},left=10pt,right=8pt,top=6pt,bottom=6pt]
 \label{AR-005}
 {\sffamily\mono{AR-005} \hfill \sev{Medium}}\\[2pt]
-{\sffamily\large\bfseries Vendored cJSON 1.7.18 missing from SBOM; CVE match not performed}
+{\sffamily\large\bfseries Vendored cJSON 1.7.18 has no purl or CPE; advisory matching could not cover it}
 
 {\small
 \begin{tabularx}{\linewidth}{@{}&gt;{\raggedright\arraybackslash}m{0.2\linewidth}&gt;{\raggedright\arraybackslash}X@{}}
@@ -1110,24 +1528,25 @@ STORE\_INTO expands to copy\_into\_fixed\textless{}16\textgreater{}, which memcp
 \eyebrow{Component} &amp; supply chain \quad \textcolor{muted}{CWE-1104}\\
 \eyebrow{CVSS 4.0} &amp; not scored\\
 \eyebrow{Evidence / status} &amp; DIRECT\_EVIDENCE \textperiodcentered{} UNRESOLVED \textperiodcentered{} unknown\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not assessed (no pinned snapshot imported)\\
 \end{tabularx}}
 
 \[ P = \text{unscored (coverage finding; reviewer severity: Medium)} \]
 
-The build links a vendored cJSON that no manifest declares, so the SBOM omits it and no vulnerability match ran. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it until SCA runs. Lane 06 found no call to the JSON-pointer API in project code.
+The build links a vendored cJSON that no manifest declares. 02-sbom-inventory adds it from the accepted build-index vendored members, but without a purl or CPE, so Grype matched nothing and OSV was not applicable. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it. Section 3B has no dependency match to decide, and lane 06 found no call to the JSON-pointer API in project code.
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} syft: 0 components; build index: vendored member\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 06} inventory mismatch flagged; affected-API use not found in src/\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} UNRESOLVED: 02-sca-vulnerability-match BLOCKED}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} syft: no manifest; build index: vendored member (inferred, no purl)\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 02} SCA: grype no match, OSV SKIPPED\_NA (no purl)\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 06} no SCA match to decide\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} UNRESOLVED: the component has no advisory identity}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-003]{\mono{E-003}} 02-build-index: \mono{data/\allowbreak{}jobs/\allowbreak{}02-\allowbreak{}build-\allowbreak{}index/\allowbreak{}build-\allowbreak{}index.\allowbreak{}json\#\allowbreak{}vendored[0]}\\
-\hyperref[E-012]{\mono{E-012}} syft-directory: \mono{02-\allowbreak{}sbom-\allowbreak{}inventory/\allowbreak{}syft-\allowbreak{}directory/\allowbreak{}outputs/\allowbreak{}sbom.\allowbreak{}cdx.\allowbreak{}json (0 components)}\\
-\hyperref[E-013]{\mono{E-013}} scancode-toolkit: \mono{02-\allowbreak{}license-\allowbreak{}scan/\allowbreak{}outputs/\allowbreak{}scancode.\allowbreak{}json\#\allowbreak{}vendor/\allowbreak{}cJSON-\allowbreak{}1.\allowbreak{}7.\allowbreak{}18 (MIT)}\\
+\hyperref[E-003]{\mono{E-003}} 02-build-index: \mono{build-\allowbreak{}index.\allowbreak{}json\#\allowbreak{}vendored[0]}\\
+\hyperref[E-012]{\mono{E-012}} 02-sbom-inventory: \mono{outputs/\allowbreak{}sbom.\allowbreak{}cdx.\allowbreak{}json + build-\allowbreak{}index-\allowbreak{}vendored-\allowbreak{}members.\allowbreak{}json (cJSON inferred, no purl)}\\
+\hyperref[E-013]{\mono{E-013}} 02-license-scan: \mono{outputs/\allowbreak{}license-\allowbreak{}inventory.\allowbreak{}json\#\allowbreak{}vendor/\allowbreak{}cJSON-\allowbreak{}1.\allowbreak{}7.\allowbreak{}18 (MIT)}\\
 }
 
-\eyebrow{Remediation}\\ Feed build-index vendored members into the SBOM and unblock 02-sca-vulnerability-match (V16/V18).
+\eyebrow{Remediation}\\ Give the vendored cJSON a package identity (purl or CPE) so SCA matching covers it, or replace it with a declared dependency.
 \end{tcolorbox}
 \vspace{4pt}
 \begin{tcolorbox}[enhanced,breakable,colback=white,colframe=rule,boxrule=0.5pt,arc=0pt,
@@ -1142,6 +1561,7 @@ The build links a vendored cJSON that no manifest declares, so the SBOM omits it
 \eyebrow{Component} &amp; deployment \quad \textcolor{muted}{CWE-250}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:H/\allowbreak{}AT:P/\allowbreak{}PR:L/\allowbreak{}UI:N/\allowbreak{}VC:L/\allowbreak{}VI:L/\allowbreak{}VA:N/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{2.0} Low\\
 \eyebrow{Evidence / status} &amp; DIRECT\_EVIDENCE \textperiodcentered{} VERIFIED \textperiodcentered{} reachable-build-config\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 2.0 \times 1.00 \times 1.00 \times 0.75 \times 1.00\big) = \mathbf{1.5} \]
@@ -1162,11 +1582,11 @@ Both stages use debian:bookworm-slim by tag, and the runtime stage has no USER i
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} hadolint DL3006/DL3002, checkov CKV\_DOCKER\_3, trivy DS002\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 15} container baseline\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} scored}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} hadolint DL3006/DL3002, checkov CKV\_DOCKER\_3, trivy DS002\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 15} container baseline\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} VERIFIED\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 2.0 LOW (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-011]{\mono{E-011}} hadolint, checkov, trivy-config: \mono{02-\allowbreak{}iac-\allowbreak{}config-\allowbreak{}scan/\allowbreak{}tool-\allowbreak{}results.\allowbreak{}json}\\
+\hyperref[E-011]{\mono{E-011}} 02-iac-config-scan: \mono{outputs/\allowbreak{}iac-\allowbreak{}config-\allowbreak{}evidence.\allowbreak{}json (hadolint, checkov, trivy config)}\\
 }
 
 \eyebrow{Remediation}\\ Pin FROM by digest and add a non-root USER before ENTRYPOINT.
@@ -1184,6 +1604,7 @@ Both stages use debian:bookworm-slim by tag, and the runtime stage has no USER i
 \eyebrow{Component} &amp; reporting/json \quad \textcolor{muted}{CWE-476}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:H/\allowbreak{}AT:P/\allowbreak{}PR:N/\allowbreak{}UI:P/\allowbreak{}VC:N/\allowbreak{}VI:N/\allowbreak{}VA:L/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{2.0} Low\\
 \eyebrow{Evidence / status} &amp; STRONG\_INFERENCE \textperiodcentered{} UNRESOLVED \textperiodcentered{} reachable-flag\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 2.0 \times 0.80 \times 0.70 \times 0.85 \times 1.00\big) = \mathbf{1.0} \]
@@ -1207,11 +1628,11 @@ cJSON\_PrintUnformatted returns NULL when allocation fails, and std::string(null
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} CSA core.NonNullParamChecker\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-007\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} partial: only under allocation failure\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} UNRESOLVED: not reproducible without fault injection\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} scored}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} native-sast CSA core.NonNullParamChecker\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-007\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} partial: only under allocation failure\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} UNRESOLVED: the allocation-failure path needs dynamic evidence the pipeline does not collect\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 2.0 LOW (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-022]{\mono{E-022}} csa-ctu: \mono{native/\allowbreak{}csa/\allowbreak{}*.\allowbreak{}plist (greet.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:17)}\\
+\hyperref[E-022]{\mono{E-022}} 02-native-sast: \mono{native-\allowbreak{}sast.\allowbreak{}json\#\allowbreak{}csa (greet.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:17)}\\
 }
 
 \eyebrow{Remediation}\\ Check rendered for NULL before constructing the string.
@@ -1229,6 +1650,7 @@ cJSON\_PrintUnformatted returns NULL when allocation fails, and std::string(null
 \eyebrow{Component} &amp; reporting/json \quad \textcolor{muted}{CWE-762}\\
 \eyebrow{CVSS 4.0} &amp; \mono{CVSS:4.\allowbreak{}0/\allowbreak{}AV:L/\allowbreak{}AC:L/\allowbreak{}AT:N/\allowbreak{}PR:N/\allowbreak{}UI:P/\allowbreak{}VC:L/\allowbreak{}VI:L/\allowbreak{}VA:L/\allowbreak{}SC:N/\allowbreak{}SI:N/\allowbreak{}SA:N} \quad \textbf{4.8} Medium\\
 \eyebrow{Evidence / status} &amp; WEAK\_INFERENCE \textperiodcentered{} REFUTED \textperiodcentered{} reachable-flag\\
+\eyebrow{EPSS / KEV} &amp; EPSS/KEV not applicable (not a dependency finding)\\
 \end{tabularx}}
 
 \[ P = \min\!\big(10,\; 4.8 \times 0.50 \times 0.00 \times 0.85 \times 1.00\big) = \mathbf{0.0} \]
@@ -1251,21 +1673,84 @@ The scanner assumed a C++ allocation. cJSON allocates with malloc by default and
 
 \eyebrow{Lane trail}\\
 {\small
-\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep c.lang.memory mismatched free\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-008\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} REFUTED: cJSON default hooks allocate with malloc; no cJSON\_InitHooks call in project\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} concurs}
+\colorbox{panel}{\sffamily\scriptsize\bfseries tool} semgrep c.lang.memory mismatched free\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 07} hypothesis RT-008\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 08} REFUTED: cJSON default hooks allocate with malloc; no cJSON\_InitHooks call in project\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 09} concurs\quad$\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries 12} CVSS 4.8 MEDIUM (pinned cvss4.py)}
 
 \eyebrow{Evidence}\\
 {\small
-\hyperref[E-014]{\mono{E-014}} semgrep: \mono{02-\allowbreak{}source-\allowbreak{}sast/\allowbreak{}semgrep/\allowbreak{}outputs/\allowbreak{}results.\allowbreak{}sarif (greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
+\hyperref[E-014]{\mono{E-014}} 02-source-sast: \mono{source-\allowbreak{}sast.\allowbreak{}json (semgrep: greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)}\\
 }
 
 \eyebrow{Remediation}\\ None required.
 \end{tcolorbox}
 \vspace{4pt}
 
+\section{Attack chains}
+Attack chains are prioritisation context composed from reviewed claims: each is at most &#39;supported&#39; (composed from verified parts along tool-recorded edges and not broken by an adversarial reviewer), never a verified finding, and assigns no severity.
+
+\begin{tcolorbox}[enhanced,breakable,colback=white,colframe=rule,boxrule=0.5pt,arc=0pt,left=10pt,right=8pt,top=6pt,bottom=6pt]
+{\sffamily\mono{\#1 chain-\allowbreak{}3fefbf49de14f56a742ca4e5} \hfill supported}\\[2pt]
+{\sffamily\large\bfseries Run attacker-chosen code through the hello command line}
+
+{\small
+\begin{tabularx}{\linewidth}{@{}&gt;{\raggedright\arraybackslash}m{0.2\linewidth}&gt;{\raggedright\arraybackslash}X@{}}
+\eyebrow{Impact} &amp; code\_execution\\
+\eyebrow{Weakest link} &amp; link 0 (entry) is verified\\
+\eyebrow{Refutation} &amp; holds (0 citation(s))\\
+\end{tabularx}}
+
+\eyebrow{Stages}\\
+{\small
+\colorbox{panel}{\sffamily\scriptsize\bfseries entry} argv read in main at projects/cpp/case-001/main.cpp:6 \textcolor{muted}{(verified)}\quad$\rightarrow$ \textcolor{muted}{code\_fact} $\rightarrow$\quad\colorbox{panel}{\sffamily\scriptsize\bfseries impact} Stack buffer overflow: strcpy of CLI name into 32-byte buffer \textcolor{muted}{(verified, HIGH)}}
+
+argv[1] reaches the unbounded copy of claim-000000000000000000case01 into a fixed-size stack buffer.
+\end{tcolorbox}
+\vspace{4pt}
+
+
+\section{Dependency reachability}
+Dependency reachability is decided by deterministic engines, never by a model: reachable needs a hash-bound witness from CodeQL or the IR/CPG engine; unreachable only from the complete IR/CPG engine with the dependency source analysed; conflict means the engines disagree and is left for review; unknown is a coverage gap, not &#39;not vulnerable&#39;. A Critical dependency finding requires reachable (ADR-0020).
+
+\textbf{No dependency match.} 06-cve-reachability had no SCA match to decide
+
+{\small\color{muted}reachable 0, conflict 0, unknown 0, unreachable 0\par}
+
+
+\section{Threat model workbench}
+Candidate threat-model records from 03-threat-model-dfd-stride (ADR-0019 workbench and L13 privacy cell). They are hypotheses for review, not findings: exposure is declared, never observed, and regulatory notes are candidates, not a conclusion about compliance.
+
+{\small\color{muted}data classes 2, privacy threats 1, deployment zones 2, attack trees 1\par}
+\subsection*{Data classes}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l l &gt;{\raggedright\arraybackslash}X &gt;{\raggedright\arraybackslash}X l@{}}
+Id &amp; Category &amp; Sensitivity &amp; Stores / flows &amp; Handling &amp; Evidence\\
+\mono{data-\allowbreak{}cli-\allowbreak{}name} &amp; user\_content &amp; internal &amp;  &amp;  &amp; STRONG\_INFERENCE\\
+\mono{data-\allowbreak{}json-\allowbreak{}report} &amp; user\_content &amp; internal &amp; element-hello-cli &amp; retention: kept until the user deletes the file &amp; STRONG\_INFERENCE\\
+\end{tabularx}}
+\subsection*{Privacy threats (LINDDUN)}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l &gt;{\raggedright\arraybackslash}X &gt;{\raggedright\arraybackslash}X l@{}}
+Id &amp; Category &amp; Statement &amp; Regulatory candidate notes &amp; Evidence\\
+\mono{privacy-\allowbreak{}dd-\allowbreak{}a181a39c5e} &amp; data\_disclosure &amp; The -{}-report option writes the user-supplied name to a JSON file whose permissions follow the process umask, so other local accounts may be able to read it. &amp; GDPR Art. 5(1)(f) confidentiality may apply if the name is personal data (candidate) &amp; STRONG\_INFERENCE\\
+\end{tabularx}}
+\subsection*{Deployment zones}
+{\small
+\begin{tabularx}{\linewidth}{@{}l l &gt;{\raggedright\arraybackslash}X l l@{}}
+Id &amp; Kind &amp; Name &amp; Exposure &amp; Evidence\\
+\mono{zone-\allowbreak{}build} &amp; build\_release &amp; Autotools configure and make &amp; DECLARED\_EXPOSURE &amp; STRONG\_INFERENCE\\
+\mono{zone-\allowbreak{}local-\allowbreak{}host} &amp; client\_device &amp; Local user shell running hello &amp; DECLARED\_EXPOSURE &amp; STRONG\_INFERENCE\\
+\end{tabularx}}
+\subsection*{Attack trees}
+{\small
+\begin{tabularx}{\linewidth}{@{}l &gt;{\raggedright\arraybackslash}X l l l@{}}
+Tree &amp; Objective &amp; Nodes &amp; Leaves (ev./ass./unres.) &amp; Evidence\\
+\mono{tree-\allowbreak{}corrupt-\allowbreak{}memory-\allowbreak{}through-\allowbreak{}the-\allowbreak{}greeting-\allowbreak{}form-\allowbreak{}c52a1743} &amp; Corrupt memory through the greeting formatter &amp; 5 &amp; 3 (1/1/1) &amp; STRONG\_INFERENCE\\
+\end{tabularx}}
+
+
 \section{Coverage gaps}
 Each item below is an area the review did not fully examine. None of them may be read as ``no issues&#39;&#39;.
 \begin{itemize}
-\item \mono{02-\allowbreak{}sre-\allowbreak{}operations-\allowbreak{}topology} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- No runbooks or monitoring config in target; topology inferred from Dockerfile only.\item \mono{02-\allowbreak{}iac-\allowbreak{}config-\allowbreak{}scan} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- tfsec and kube-linter declared but no pinned image; 2 of 5 scanner instances did not run.\item \mono{02-\allowbreak{}sbom-\allowbreak{}inventory} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- syft found 0 components; vendored cJSON has no manifest. Second source (build index vendored members) not yet wired.\item \mono{02-\allowbreak{}sca-\allowbreak{}vulnerability-\allowbreak{}match} \st{BLOCKED}{BLOCKED} --- Blocked on V16/V18 offline vulnerability DB mirror. No CVE matching was performed.\item \mono{02-\allowbreak{}dependency-\allowbreak{}lifecycle} \st{BLOCKED}{BLOCKED} --- EOL reference table unowned. Lifecycle of cJSON 1.7.18 reported unknown.\item \mono{02-\allowbreak{}binary-\allowbreak{}hardening} \st{BLOCKED}{BLOCKED} --- M02 unresolved; no ELF hardening check ran on the built binary.\item \mono{06-\allowbreak{}cve-\allowbreak{}reachability} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- No SCA matches to triage (02-sca BLOCKED); inventory from build index only.\item \mono{L6B threat-\allowbreak{}model reconciliation} \st{NOTBUILT}{NOT\_BUILT} --- Designed in design-v3, no lane.\item \mono{L10 protocol/\allowbreak{}parser analysis} \st{NOTBUILT}{NOT\_BUILT} --- Designed in design-v3, no lane.\item \mono{L12 supply-\allowbreak{}chain /\allowbreak{} provenance} \st{NOTBUILT}{NOT\_BUILT} --- Tier B scripts exist, not wired.\item \mono{L13 privacy /\allowbreak{} data protection} \st{NOTBUILT}{NOT\_BUILT} --- Designed in design-v3, no lane.\end{itemize}
+\item \mono{02-\allowbreak{}sre-\allowbreak{}operations-\allowbreak{}topology} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- No runbooks or monitoring configuration in the target; topology inferred from the Dockerfile only.\item \mono{02-\allowbreak{}test-\allowbreak{}result-\allowbreak{}ingest} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- No test plan and no test results: nothing to ingest (explicit gap).\item \mono{02-\allowbreak{}test-\allowbreak{}coverage-\allowbreak{}ingest} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- No instrumented test run: coverage is missing (explicit gap).\item \mono{02-\allowbreak{}sbom-\allowbreak{}inventory} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- Syft found no package manifest; vendored cJSON 1.7.18 was added from the accepted build-index vendored members without a purl or CPE (inferred component kept as an explicit gap).\item \mono{02-\allowbreak{}sca-\allowbreak{}vulnerability-\allowbreak{}match} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- Grype ran and matched nothing; OSV was SKIPPED\_NA per tool because no component carries a purl. Vendored cJSON was not matched against any advisory.\item \mono{02-\allowbreak{}dependency-\allowbreak{}lifecycle} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- cJSON 1.7.18 is not in the pinned lifecycle reference table; its lifecycle is reported unknown.\item \mono{10-\allowbreak{}synthesis-\allowbreak{}report} \st{OKWITHGAPS}{OK\_WITH\_GAPS} --- EPSS/KEV not assessed: no pinned offline snapshot has been imported; every exploit signal reads &#39;not assessed&#39;.\end{itemize}
 
 
 \section{Scoring method}
@@ -1305,30 +1790,30 @@ A low score is only reported as low when enough of the process ran to support it
 \eyebrow{ID} &amp; \eyebrow{Producer} &amp; \eyebrow{Artifact} &amp; \eyebrow{sha256}\\
 \midrule\endhead
 \label{E-001}\mono{E-001} &amp; {\small 00-intake} &amp; \mono{data/\allowbreak{}jobs/\allowbreak{}00-\allowbreak{}intake/\allowbreak{}manifest.\allowbreak{}json} &amp; \mono{3f9a1c0e}\\
-\label{E-002}\mono{E-002} &amp; {\small 02-repository-partition-discovery} &amp; \mono{attempt-\allowbreak{}1/\allowbreak{}repository-\allowbreak{}partition-\allowbreak{}map.\allowbreak{}json} &amp; \mono{a41be209}\\
-\label{E-003}\mono{E-003} &amp; {\small 02-build-index} &amp; \mono{data/\allowbreak{}jobs/\allowbreak{}02-\allowbreak{}build-\allowbreak{}index/\allowbreak{}build-\allowbreak{}index.\allowbreak{}json\#\allowbreak{}vendored[0]} &amp; \mono{0c7d55e1}\\
-\label{E-004}\mono{E-004} &amp; {\small native-build} &amp; \mono{compile\_commands.\allowbreak{}json (6 project TUs + cJSON.\allowbreak{}c)} &amp; \mono{e8812fd0}\\
-\label{E-010}\mono{E-010} &amp; {\small gitleaks} &amp; \mono{02-\allowbreak{}secrets-\allowbreak{}inventory/\allowbreak{}gitleaks/\allowbreak{}outputs/\allowbreak{}findings.\allowbreak{}json (0 hits) + redaction-\allowbreak{}receipt.\allowbreak{}json} &amp; \mono{5b2e0a77}\\
-\label{E-011}\mono{E-011} &amp; {\small hadolint, checkov, trivy-config} &amp; \mono{02-\allowbreak{}iac-\allowbreak{}config-\allowbreak{}scan/\allowbreak{}tool-\allowbreak{}results.\allowbreak{}json} &amp; \mono{91d0c3e6}\\
-\label{E-012}\mono{E-012} &amp; {\small syft-directory} &amp; \mono{02-\allowbreak{}sbom-\allowbreak{}inventory/\allowbreak{}syft-\allowbreak{}directory/\allowbreak{}outputs/\allowbreak{}sbom.\allowbreak{}cdx.\allowbreak{}json (0 components)} &amp; \mono{77ac21b9}\\
-\label{E-013}\mono{E-013} &amp; {\small scancode-toolkit} &amp; \mono{02-\allowbreak{}license-\allowbreak{}scan/\allowbreak{}outputs/\allowbreak{}scancode.\allowbreak{}json\#\allowbreak{}vendor/\allowbreak{}cJSON-\allowbreak{}1.\allowbreak{}7.\allowbreak{}18 (MIT)} &amp; \mono{c2f9084d}\\
-\label{E-014}\mono{E-014} &amp; {\small semgrep} &amp; \mono{02-\allowbreak{}source-\allowbreak{}sast/\allowbreak{}semgrep/\allowbreak{}outputs/\allowbreak{}results.\allowbreak{}sarif (greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)} &amp; \mono{4ae6f19c}\\
-\label{E-015}\mono{E-015} &amp; {\small ossf-scorecard} &amp; \mono{ossf-\allowbreak{}scorecard/\allowbreak{}scorecard.\allowbreak{}json (aggregate 4.\allowbreak{}1)} &amp; \mono{d03b8e2c}\\
-\label{E-020}\mono{E-020} &amp; {\small clang-tidy, cppcheck} &amp; \mono{native/\allowbreak{}clang-\allowbreak{}tidy.\allowbreak{}sarif, cppcheck.\allowbreak{}xml} &amp; \mono{12fe7a09}\\
-\label{E-021}\mono{E-021} &amp; {\small ir-facts / component IR slice} &amp; \mono{native/\allowbreak{}ir-\allowbreak{}slices/\allowbreak{}*.\allowbreak{}json (memcpy@store.\allowbreak{}h:30 N=16; system@runner.\allowbreak{}cpp:18)} &amp; \mono{6d8b03e5}\\
-\label{E-022}\mono{E-022} &amp; {\small csa-ctu} &amp; \mono{native/\allowbreak{}csa/\allowbreak{}*.\allowbreak{}plist (greet.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:17)} &amp; \mono{b90c4e17}\\
-\label{E-023}\mono{E-023} &amp; {\small codeql} &amp; \mono{codeql/\allowbreak{}security-\allowbreak{}extended.\allowbreak{}sarif + mythos-\allowbreak{}cpp.\allowbreak{}sarif} &amp; \mono{f15a2d8c}\\
-\label{E-024}\mono{E-024} &amp; {\small deep-confirmation} &amp; \mono{deep-\allowbreak{}confirmation.\allowbreak{}json cluster C-\allowbreak{}007} &amp; \mono{280e6b4f}\\
-\label{E-030}\mono{E-030} &amp; {\small 03-threat-model-dfd-stride} &amp; \mono{outputs/\allowbreak{}03/\allowbreak{}dfd.\allowbreak{}json, stride.\allowbreak{}json} &amp; \mono{8c4f1a93}\\
-\label{E-040}\mono{E-040} &amp; {\small 09-independent-verification} &amp; \mono{outputs/\allowbreak{}09/\allowbreak{}verification.\allowbreak{}json (ASan logs attached)} &amp; \mono{ee07b6d2}\\
+\label{E-002}\mono{E-002} &amp; {\small 02-repository-partition-discovery} &amp; \mono{repository-\allowbreak{}partition-\allowbreak{}map.\allowbreak{}json} &amp; \mono{a41be209}\\
+\label{E-003}\mono{E-003} &amp; {\small 02-build-index} &amp; \mono{build-\allowbreak{}index.\allowbreak{}json\#\allowbreak{}vendored[0]} &amp; \mono{0c7d55e1}\\
+\label{E-004}\mono{E-004} &amp; {\small 02-native-build} &amp; \mono{data/\allowbreak{}jobs/\allowbreak{}02-\allowbreak{}native-\allowbreak{}build/\allowbreak{}attempts/\allowbreak{}\textless{}id\textgreater{}/\allowbreak{}compile\_commands.\allowbreak{}json (project TUs + cJSON.\allowbreak{}c)} &amp; \mono{e8812fd0}\\
+\label{E-010}\mono{E-010} &amp; {\small 02-secrets-inventory} &amp; \mono{outputs/\allowbreak{}secrets-\allowbreak{}inventory.\allowbreak{}redacted.\allowbreak{}json (0 hits) + redaction-\allowbreak{}receipt.\allowbreak{}json} &amp; \mono{5b2e0a77}\\
+\label{E-011}\mono{E-011} &amp; {\small 02-iac-config-scan} &amp; \mono{outputs/\allowbreak{}iac-\allowbreak{}config-\allowbreak{}evidence.\allowbreak{}json (hadolint, checkov, trivy config)} &amp; \mono{91d0c3e6}\\
+\label{E-012}\mono{E-012} &amp; {\small 02-sbom-inventory} &amp; \mono{outputs/\allowbreak{}sbom.\allowbreak{}cdx.\allowbreak{}json + build-\allowbreak{}index-\allowbreak{}vendored-\allowbreak{}members.\allowbreak{}json (cJSON inferred, no purl)} &amp; \mono{77ac21b9}\\
+\label{E-013}\mono{E-013} &amp; {\small 02-license-scan} &amp; \mono{outputs/\allowbreak{}license-\allowbreak{}inventory.\allowbreak{}json\#\allowbreak{}vendor/\allowbreak{}cJSON-\allowbreak{}1.\allowbreak{}7.\allowbreak{}18 (MIT)} &amp; \mono{c2f9084d}\\
+\label{E-014}\mono{E-014} &amp; {\small 02-source-sast} &amp; \mono{source-\allowbreak{}sast.\allowbreak{}json (semgrep: greet.\allowbreak{}cpp:18, logger.\allowbreak{}cpp:16, runner.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:19)} &amp; \mono{4ae6f19c}\\
+\label{E-015}\mono{E-015} &amp; {\small 02-ossf-scorecard} &amp; \mono{ossf-\allowbreak{}scorecard-\allowbreak{}results.\allowbreak{}json (aggregate 4.\allowbreak{}1)} &amp; \mono{d03b8e2c}\\
+\label{E-020}\mono{E-020} &amp; {\small 02-native-sast} &amp; \mono{native-\allowbreak{}sast.\allowbreak{}json (clang-\allowbreak{}tidy, cppcheck)} &amp; \mono{12fe7a09}\\
+\label{E-021}\mono{E-021} &amp; {\small 02-ir-facts} &amp; \mono{ir-\allowbreak{}facts.\allowbreak{}json (memcpy@store.\allowbreak{}h:30 N=16; system@runner.\allowbreak{}cpp:18)} &amp; \mono{6d8b03e5}\\
+\label{E-022}\mono{E-022} &amp; {\small 02-native-sast} &amp; \mono{native-\allowbreak{}sast.\allowbreak{}json\#\allowbreak{}csa (greet.\allowbreak{}cpp:18, jsonreport.\allowbreak{}cpp:17)} &amp; \mono{b90c4e17}\\
+\label{E-023}\mono{E-023} &amp; {\small 02-codeql-cpp} &amp; \mono{codeql-\allowbreak{}language.\allowbreak{}json (cpp security-\allowbreak{}extended SARIF leads)} &amp; \mono{f15a2d8c}\\
+\label{E-024}\mono{E-024} &amp; {\small 02-code-property-graph} &amp; \mono{code-\allowbreak{}property-\allowbreak{}graph.\allowbreak{}json (call path main -\allowbreak{}\textgreater{} store\_into -\allowbreak{}\textgreater{} memcpy)} &amp; \mono{280e6b4f}\\
+\label{E-030}\mono{E-030} &amp; {\small 03-threat-model-dfd-stride} &amp; \mono{integrated-\allowbreak{}threat-\allowbreak{}model.\allowbreak{}json, dfd.\allowbreak{}mmd} &amp; \mono{8c4f1a93}\\
+\label{E-040}\mono{E-040} &amp; {\small 09-independent-verification} &amp; \mono{verification record (static source review; no runtime claim)} &amp; \mono{ee07b6d2}\\
 \bottomrule
 \end{longtable}
 
 \section{Provenance}
 \begin{tabularx}{\linewidth}{@{}lX@{}}
 \toprule
-\eyebrow{Run} &amp; \mono{20260927T141502Z-7a3e91} (SAT \mono{20260927T141440Z})\\
-\eyebrow{Pipeline} &amp; \mono{report-\allowbreak{}template (from origin/\allowbreak{}main b3b87de2)}\\
+\eyebrow{Run} &amp; \mono{sample-hello-autotools} (SAT \mono{20260927T141440Z})\\
+\eyebrow{Pipeline} &amp; \mono{sample; job-\allowbreak{}graph.\allowbreak{}json sha256:877934e0f3e8 (81 jobs)}\\
 \eyebrow{Ledger head} &amp; \mono{sha256:6e1d\ldots{}b38c}\\
 \eyebrow{Native tier} &amp; A --- clang compiled 6/6 project TUs plus vendored cJSON; IR, CSA/CTU and SVF substrate available (ADR-0001).\\
 \midrule
@@ -1341,6 +1826,8 @@ A low score is only reported as low when enough of the process ran to support it
 \mono{scancode-toolkit} &amp; \mono{sha256:e2a4\ldots{}70bb}\\
 \mono{audit-native} &amp; \mono{sha256:9f31\ldots{}c6d8}\\
 \mono{audit-codeql} &amp; \mono{sha256:4b7a\ldots{}02e1}\\
+\mono{tool-grype} &amp; \mono{sha256:5d0e\ldots{}3b71}\\
+\mono{tool-osv-scanner} &amp; \mono{sha256:c4a8\ldots{}9e12}\\
 \midrule
 claude-sonnet-5 (D01, lanes 07/08/09) &amp; pinned per run by model\_version\_registry.py\\
 claude-haiku (build plan) &amp; pinned per run\\

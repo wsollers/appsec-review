@@ -70,6 +70,7 @@ flowchart TD
   02_dependency_lifecycle_post -->|required| 02_evidence_assembly_config
   02_binary_hardening_post -->|required| 02_evidence_assembly_config
   02_mobile_sast_post -->|required| 02_evidence_assembly_config
+  02_code_index_post -->|required| 02_evidence_assembly_config
   01_component_characterization_config["01-component-characterization: resolve job configuration"] --> 01_component_characterization_pre["01-component-characterization: pre-validation"]
   01_component_characterization_pre --> 01_component_characterization["01-component-characterization: work or reuse"]
   01_component_characterization --> 01_component_characterization_post["01-component-characterization: post-validation and publish"]
@@ -294,6 +295,16 @@ flowchart TD
   02_code_property_graph_pre --> 02_code_property_graph["02-code-property-graph: work or reuse"]
   02_code_property_graph --> 02_code_property_graph_post["02-code-property-graph: post-validation and publish"]
   00_intake_post -->|required| 02_code_property_graph_config
+  02_treesitter_ast_config["02-treesitter-ast: resolve job configuration"] --> 02_treesitter_ast_pre["02-treesitter-ast: pre-validation"]
+  02_treesitter_ast_pre --> 02_treesitter_ast["02-treesitter-ast: work or reuse"]
+  02_treesitter_ast --> 02_treesitter_ast_post["02-treesitter-ast: post-validation and publish"]
+  00_intake_post -->|required| 02_treesitter_ast_config
+  02_code_index_config["02-code-index: resolve job configuration"] --> 02_code_index_pre["02-code-index: pre-validation"]
+  02_code_index_pre --> 02_code_index["02-code-index: work or reuse"]
+  02_code_index --> 02_code_index_post["02-code-index: post-validation and publish"]
+  02_code_property_graph_post -->|required| 02_code_index_config
+  02_treesitter_ast_post -->|required| 02_code_index_config
+  02_binary_triage_post -->|required| 02_code_index_config
   02_native_sast_config["02-native-sast: resolve job configuration"] --> 02_native_sast_pre["02-native-sast: pre-validation"]
   02_native_sast_pre --> 02_native_sast["02-native-sast: work or reuse"]
   02_native_sast --> 02_native_sast_post["02-native-sast: post-validation and publish"]

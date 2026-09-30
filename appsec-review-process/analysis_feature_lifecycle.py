@@ -13,6 +13,7 @@ from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import registry_paths
 
 JOBS = {
     "05-native-memory": ("native-memory-analysis", "native-memory-analysis.json", "native-memory-analysis.schema.json"),
@@ -33,13 +34,14 @@ def _sha(value: Any) -> str: return "sha256:" + digest(value)
 
 
 def _code(job: str) -> dict[str, str]:
+    # D-13(b): only files that change this job's output. publish_job_output.py is shared runtime
+    # (ADR-0013); dependency_workers.build_reachability is 06-cve-reachability's alone.
     paths = ["analysis_feature_lifecycle.py", "bounded_analysis_workers.py",
-             "dependency_workers.py", "publish_job_output.py",
              {"05-native-memory":"native_memory_analysis.py","06-cve-reachability":"cve_reachability.py",
               "13-fuzz-target-triage":"fuzz_target_triage.py"}[job],
-             f"registry/job-templates/{job}.json", f"registry/output-contracts/{JOBS[job][0]}.json"]
+             registry_paths.template_rel(job), registry_paths.contract_rel(JOBS[job][0])]
     if job == "06-cve-reachability":
-        paths += list(dep_reachability_lifecycle.CODE)
+        paths += ["dependency_workers.py", *dep_reachability_lifecycle.CODE]
     values = {path: file_hash(ROOT / path) for path in paths}
     values["schemas/" + JOBS[job][2]] = file_hash(ROOT.parent / "schemas" / JOBS[job][2])
     if job == "06-cve-reachability":

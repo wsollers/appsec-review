@@ -11,12 +11,13 @@ Both files are hash-checked against ``cwe-lock.json`` at load; every CWE a tool 
 is validated against the catalog.  An unknown id is rejected (reviewer reply -> repair round) or
 dropped with a limitation (tool tag), never published.
 
-Catalog in force (brief O1b): ``Catalog()`` reads the full MITRE CWE catalog from the resolved
-``mitre_feed`` snapshot (same 14-day ceiling as ATT&CK/CAPEC).  When that snapshot is missing, older
-than the ceiling or invalid, it falls back to the committed curated catalog exactly as before and
-records the gap ``CWE_REFERENCE_MISSING`` / ``CWE_REFERENCE_STALE`` / ``CWE_REFERENCE_INVALID``;
-never a block.  ``Catalog(directory)`` reads only the committed files (tests, ``intake``, ``relock``).
-The rule map stays committed and hash-pinned in every case.
+The full catalog comes from the MITRE feed (brief O2, ADR-0026 addendum): ``mitre_feed.py`` publishes
+the release-pinned ``cwec_v<version>.xml.zip`` and a derived ``cwe-catalog.json`` (same shape as the
+committed file, built by ``derive_snapshot_catalog`` through ``_parse_xml``).  ``current()`` uses it
+when the snapshot verifies and is inside the shared age ceiling; otherwise it falls back to the
+committed curated catalog and records ``CWE_REFERENCE_MISSING`` / ``CWE_REFERENCE_STALE`` /
+``CWE_REFERENCE_INVALID``.  A stale feed never blocks a review.  The rule map is always the committed,
+hash-pinned file (the repository's own judgement, not upstream data).
 """
 from __future__ import annotations
 
@@ -40,8 +41,8 @@ RULE_MAP = "rule-cwe-map.json"
 LOCK = "cwe-lock.json"
 CWE_ID = re.compile(r"^CWE-[1-9][0-9]{0,4}$")
 TAG = re.compile(r"\bCWE[-_ :]?([1-9][0-9]{0,4})\b", re.I)
-CATALOG_SCHEMA = "appsec-review/cwe-catalog/1.0"
 COMMITTED = "committed-curated"
+FEED = "mitre-feed"
 GAP_MISSING, GAP_STALE, GAP_INVALID = "CWE_REFERENCE_MISSING", "CWE_REFERENCE_STALE", "CWE_REFERENCE_INVALID"
 MAX_XML_BYTES = 256 * 1024 ** 2
 MIN_WEAKNESSES = 100
@@ -69,88 +70,40 @@ def _load(directory: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]
     return catalog, rules, lock
 
 
-def _rule_index(rules: dict[str, Any], names: dict[str, str]) -> dict[tuple[str, str], list[str]]:
-    index: dict[tuple[str, str], list[str]] = {}
-    for row in rules["rules"]:
-        if any(value not in names for value in row["cwe_ids"]):
-            raise CWEError(f"rule map names a CWE outside the catalog: {row}")
-        index[(row["tool_id"], row["rule_id"])] = list(row["cwe_ids"])
-    return index
-
-
-def _feed_catalog(feed_root: Any, now: datetime | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None,
-                                                                  dict[str, Any] | None]:
-    """(table, snapshot identity, None) from a verified, in-ceiling feed snapshot, else (None, None, gap)."""
-    try:
-        import mitre_feed
-        from dependency_snapshot_registry import SnapshotBlocked, SnapshotInvalid, SnapshotStale
-    except ImportError as exc:
-        return None, None, {"code": GAP_MISSING, "detail": f"MITRE feed code unavailable: {exc}"[:300]}
-    try:
-        identity = mitre_feed.resolve(feed_root, now=now or datetime.now(timezone.utc), kinds=("cwe",))
-    except SnapshotBlocked as exc:
-        return None, None, {"code": GAP_MISSING, "detail": str(exc)[:300]}
-    except SnapshotStale as exc:
-        return None, None, {"code": GAP_STALE, "detail": str(exc)[:300]}
-    except (SnapshotInvalid, OSError, ValueError) as exc:
-        return None, None, {"code": GAP_INVALID, "detail": f"{type(exc).__name__}: {exc}"[:300]}
-    if not identity.get("cwe_catalog_path"):
-        return None, None, {"code": GAP_MISSING, "detail": "the MITRE snapshot carries no CWE catalog"}
-    try:
-        path = Path(identity["cwe_catalog_path"])
-        if _sha(path) != "sha256:" + identity["cwe_catalog_sha256"]:
-            raise CWEError("snapshot CWE catalog changed after it was resolved")
-        table = json.loads(path.read_text(encoding="utf-8"))
-        if table.get("schema") != CATALOG_SCHEMA or not isinstance(table.get("entries"), list):
-            raise CWEError("snapshot CWE catalog schema is not recognised")
-    except (OSError, ValueError) as exc:
-        return None, None, {"code": GAP_INVALID, "detail": f"{type(exc).__name__}: {exc}"[:300]}
-    return table, identity, None
-
-
 class Catalog:
-    """The CWE catalog in force: the feed snapshot's full catalog, else the committed curated one."""
+    """Validator over one catalog: the committed curated file (default) or a feed snapshot's derived
+    table (``table``).  ``used`` names the catalog in force (``snapshot_id`` or ``committed-curated``);
+    ``gap`` is the recorded reason a feed catalog was not used, if one was sought."""
 
-    def __init__(self, directory: Path | None = None, *, feed_root: Any = None, now: datetime | None = None):
+    def __init__(self, directory: Path | None = None, *, table: dict[str, Any] | None = None,
+                 table_sha256: str | None = None, snapshot_id: str | None = None,
+                 gap: dict[str, Any] | None = None):
         catalog, rules, lock = _load(directory)
-        self.gap: dict[str, Any] | None = None
-        self.deprecated: set[str] = set()
-        table = identity = None
-        if directory is None:
-            table, identity, self.gap = _feed_catalog(feed_root, now)
         if table is not None:
-            try:
-                names = {row["cwe_id"]: row["name"] for row in table["entries"] if not row.get("deprecated")}
-                self.rules = _rule_index(rules, names)
-            except (CWEError, KeyError, TypeError) as exc:
-                table, self.gap = None, {"code": GAP_INVALID, "detail": f"snapshot CWE catalog unusable: {exc}"[:300]}
-        if table is not None:
-            self.source = identity["snapshot_id"]
-            self.version, self.as_of, self.names = table["version"], table["as_of"], names
-            self.deprecated = {row["cwe_id"] for row in table["entries"] if row.get("deprecated")}
-            self.identity = {"catalog_source": "mitre-feed", "catalog_version": self.version,
-                             "catalog_as_of": self.as_of, "catalog_sha256": "sha256:" + identity["cwe_catalog_sha256"],
-                             "rule_map_sha256": lock[RULE_MAP]}
-        else:
-            self.source = COMMITTED
-            self.version, self.as_of = catalog["version"], catalog["as_of"]
-            self.names = {row["cwe_id"]: row["name"] for row in catalog["entries"]}
-            self.rules = _rule_index(rules, self.names)
-            self.identity = {"catalog_version": self.version, "catalog_as_of": self.as_of,
-                             "catalog_sha256": lock[CATALOG], "rule_map_sha256": lock[RULE_MAP]}
-            if self.gap is not None:
-                self.identity = {"catalog_source": COMMITTED, **self.identity, "gap": self.gap["code"]}
+            if table.get("schema") != "appsec-review/cwe-catalog/1.0" or not table_sha256 or not snapshot_id:
+                raise CWEError("feed CWE catalog schema or identity is not recognised")
+            catalog = table
+        self.version = catalog["version"]
+        self.as_of = catalog["as_of"]
+        self.names = {row["cwe_id"]: row["name"] for row in catalog["entries"]}
+        self.deprecated = {row["cwe_id"] for row in catalog["entries"] if row.get("deprecated")}
+        self.source = FEED if table is not None else COMMITTED
+        self.snapshot_id = snapshot_id if table is not None else None
+        self.used = self.snapshot_id or COMMITTED
+        self.gap = dict(gap) if gap else None
+        self.rules: dict[tuple[str, str], list[str]] = {}
+        for row in rules["rules"]:
+            if any(value not in self.names or value in self.deprecated for value in row["cwe_ids"]):
+                raise CWEError(f"rule map names a CWE outside the catalog: {row}")
+            self.rules[(row["tool_id"], row["rule_id"])] = list(row["cwe_ids"])
+        # Stable across re-syncs of the same pin (no snapshot id): a stage's input binding.
+        self.identity = {"catalog_version": self.version, "catalog_as_of": self.as_of,
+                         "catalog_sha256": table_sha256 if table is not None else lock[CATALOG],
+                         "rule_map_sha256": lock[RULE_MAP], "catalog_source": self.source,
+                         **({"reference_gap": self.gap["code"]} if self.gap else {})}
 
-    def provenance(self) -> dict[str, Any]:
-        """Which catalog was used (``snapshot_id`` or ``committed-curated``) and the gap, if any."""
-        return {"catalog": self.source, "catalog_version": self.version,
-                "gap": dict(self.gap, used=COMMITTED) if self.gap else None}
-
-    def gap_line(self) -> str | None:
-        if self.gap is None:
-            return None
-        return (f"{self.gap['code']}: the MITRE CWE snapshot was not usable ({self.gap['detail']}); CWE ids were "
-                f"validated against the committed curated catalog ({self.version})")
+    def known(self, cwe_id: str) -> bool:
+        return cwe_id in self.names and cwe_id not in self.deprecated
 
     def validate(self, value: Any) -> str:
         """Canonical ``CWE-n`` for a known id, else CWEError naming the problem."""
@@ -159,14 +112,25 @@ class Catalog:
             text = "CWE-" + text
         if not CWE_ID.match(text):
             raise CWEError(f"{value!r} is not a CWE id of the form CWE-<n>")
-        if text in self.deprecated:
-            raise CWEError(f"{text} is deprecated in the CWE catalog ({self.version})")
         if text not in self.names:
             raise CWEError(f"{text} is not in the pinned CWE catalog ({self.version})")
+        if text in self.deprecated:
+            raise CWEError(f"{text} is deprecated in the pinned CWE catalog ({self.version})")
         return text
 
     def name(self, cwe_id: str) -> str:
         return self.names[self.validate(cwe_id)]
+
+    def limitation(self) -> str | None:
+        """Report line for a feed catalog that was sought and not used (None when the feed was used)."""
+        if not self.gap:
+            return None
+        reason = {GAP_MISSING: "no usable MITRE CWE snapshot is published on this host",
+                  GAP_STALE: "the MITRE CWE snapshot is older than the reference age ceiling",
+                  GAP_INVALID: "the MITRE CWE snapshot failed verification"}.get(self.gap["code"], "feed not used")
+        # Fixed wording only: the gap detail may carry host paths or exception text.
+        return (f"{self.gap['code']}: CWE ids validated against the committed curated catalog "
+                f"({self.version}), not the full MITRE catalog; {reason}")
 
     def for_lead(self, tool_id: str, rule_id: str, tags: Iterable[str] = ()) -> tuple[list[str], list[str]]:
         """(CWE ids, limitations) for one tool lead from the pinned map and the lead's own tags."""
@@ -174,7 +138,7 @@ class Catalog:
         for tag in tags or ():
             for number in TAG.findall(str(tag)):
                 candidate = "CWE-" + number
-                if candidate in self.names:
+                if self.known(candidate):
                     if candidate not in found:
                         found.append(candidate)
                 else:
@@ -184,24 +148,28 @@ class Catalog:
 
 # ---- intake: import a user-supplied full catalog (no network) --------------------------------------
 
-def _parse_tree(data: bytes, full: bool = False) -> tuple[ET.Element, list[dict[str, Any]]]:
-    """The one CWE XML parser. ``full`` keeps deprecated weaknesses (flagged) plus status/abstraction."""
+def _parse_xml(data: bytes, *, full: bool = False, meta: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Weakness rows of a MITRE ``cwec_v*.xml``.  Default (``intake``): id and name, deprecated rows
+    dropped.  ``full`` (feed snapshot): every weakness, with ``status``/``abstraction`` when MITRE gives
+    them and deprecated rows flagged, not dropped.  ``meta`` receives the catalog's Version and Date."""
     root = ET.fromstring(data)
+    if meta is not None:
+        meta.update({"version": root.get("Version"), "date": root.get("Date")})
     rows = []
     for element in root.iter():
         if element.tag.rsplit("}", 1)[-1] == "Weakness" and element.get("ID") and element.get("Name"):
-            status = element.get("Status")
-            if full:
-                rows.append({"cwe_id": "CWE-" + element.get("ID"), "name": " ".join(element.get("Name").split()),
-                             "status": status, "abstraction": element.get("Abstraction"),
-                             "deprecated": status == "Deprecated"})
-            elif status != "Deprecated":
-                rows.append({"cwe_id": "CWE-" + element.get("ID"), "name": element.get("Name")})
-    return root, rows
-
-
-def _parse_xml(data: bytes) -> list[dict[str, str]]:
-    return _parse_tree(data)[1]
+            deprecated = element.get("Status") == "Deprecated"
+            if not full:
+                if not deprecated:
+                    rows.append({"cwe_id": "CWE-" + element.get("ID"), "name": element.get("Name")})
+                continue
+            row: dict[str, Any] = {"cwe_id": "CWE-" + element.get("ID"), "name": " ".join(element.get("Name").split())}
+            for key, attribute in (("status", "Status"), ("abstraction", "Abstraction")):
+                if element.get(attribute):
+                    row[key] = element.get(attribute)
+            row["deprecated"] = deprecated
+            rows.append(row)
+    return rows
 
 
 def _parse_csv(data: bytes) -> list[dict[str, str]]:
@@ -212,51 +180,6 @@ def _parse_csv(data: bytes) -> list[dict[str, str]]:
         if raw and name and (row.get("Status") or "").strip() != "Deprecated":
             rows.append({"cwe_id": raw if raw.upper().startswith("CWE-") else "CWE-" + raw, "name": name})
     return rows
-
-
-# ---- feed: the full MITRE catalog published by mitre_feed.py (brief O1b) ------------------------------
-
-def xml_from_zip(data: bytes) -> bytes:
-    """The single ``cwec_v*.xml`` member of a MITRE CWE zip, size-capped before it is read."""
-    try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as exc:
-        raise CWEError(f"CWE download is not a zip: {exc}") from None
-    with archive:
-        members = [info for info in archive.infolist() if not info.is_dir()]
-        if len(members) != 1 or not re.fullmatch(r"cwec_v[0-9.]+\.xml", Path(members[0].filename).name):
-            raise CWEError("CWE zip must hold exactly one cwec_v<version>.xml")
-        if members[0].file_size > MAX_XML_BYTES:
-            raise CWEError("CWE XML exceeds the size cap")
-        with archive.open(members[0]) as handle:
-            xml = handle.read(MAX_XML_BYTES + 1)
-    if len(xml) > MAX_XML_BYTES:
-        raise CWEError("CWE XML exceeds the size cap")
-    return xml
-
-
-def parse_feed(data: bytes) -> dict[str, Any]:
-    """Parse a MITRE ``cwec_v<version>.xml.zip``: upstream version, release date and every weakness."""
-    root, rows = _parse_tree(xml_from_zip(data), full=True)
-    if root.tag.rsplit("}", 1)[-1] != "Weakness_Catalog" or not root.get("Version"):
-        raise CWEError("CWE XML is not a versioned Weakness_Catalog")
-    unique = {row["cwe_id"]: row for row in rows if CWE_ID.match(row["cwe_id"])}
-    if sum(not row["deprecated"] for row in unique.values()) < MIN_WEAKNESSES:
-        raise CWEError(f"CWE XML does not look like a full catalog (fewer than {MIN_WEAKNESSES} weaknesses)")
-    return {"upstream_version": root.get("Version"), "date": root.get("Date"),
-            "entries": [unique[key] for key in sorted(unique, key=lambda item: int(item[4:]))]}
-
-
-def feed_table(parsed: dict[str, Any], file: str, sha256: str) -> dict[str, Any]:
-    """The snapshot's derived catalog, the same shape as the committed ``cwe-catalog.json``."""
-    date = parsed.get("date") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(parsed.get("date"))) else None
-    return {"schema": CATALOG_SCHEMA, "version": f"CWE List {parsed['upstream_version']}", "as_of": date,
-            "source": {"kind": "MITRE CWE feed snapshot (mitre_feed.py)", "file": file, "sha256": "sha256:" + sha256},
-            "entries": parsed["entries"]}
-
-
-def table_bytes(table: dict[str, Any]) -> bytes:
-    return (json.dumps(table, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def _write_lock(directory: Path) -> dict[str, Any]:
@@ -297,6 +220,101 @@ def relock(directory: Path | None = None) -> dict[str, Any]:
     return lock
 
 
+# ---- the MITRE feed: derive the full catalog from the pinned zip, resolve it, fall back ---------------
+
+def _xml_from_zip(data: bytes) -> tuple[str, bytes]:
+    """The single ``cwec_v*.xml`` member of a MITRE zip, size-bounded and without a DTD."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise CWEError(f"CWE download is not a zip archive: {exc}") from None
+    with archive:
+        members = [info for info in archive.infolist() if not info.is_dir()]
+        if len(members) != 1 or not re.fullmatch(r"cwec_v[0-9.]+\.xml", members[0].filename):
+            raise CWEError("CWE zip must hold exactly one cwec_v<version>.xml")
+        if members[0].file_size > MAX_XML_BYTES:
+            raise CWEError("CWE XML exceeds the size cap")
+        with archive.open(members[0]) as handle:
+            xml = handle.read(MAX_XML_BYTES + 1)
+    if len(xml) > MAX_XML_BYTES:
+        raise CWEError("CWE XML exceeds the size cap")
+    if b"<!DOCTYPE" in xml or b"<!ENTITY" in xml:
+        raise CWEError("CWE XML carries a DTD; refused")
+    return members[0].filename, xml
+
+
+def derive_snapshot_catalog(data: bytes, version: str) -> dict[str, Any]:
+    """The feed's derived table from the pinned ``cwec_v<version>.xml.zip`` bytes: same shape as the
+    committed ``cwe-catalog.json`` and a pure function of the bytes (sorted, no fetch time)."""
+    member, xml = _xml_from_zip(data)
+    meta: dict[str, Any] = {}
+    try:
+        rows = _parse_xml(xml, full=True, meta=meta)
+    except ET.ParseError as exc:
+        raise CWEError(f"CWE XML does not parse: {exc}") from None
+    if meta.get("version") != version:
+        raise CWEError(f"CWE catalog is version {meta.get('version')!r}, pinned {version!r}")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(meta.get("date"))):
+        raise CWEError("CWE catalog has no release date")
+    unique = {row["cwe_id"]: row for row in rows if CWE_ID.match(row["cwe_id"])}
+    if sum(not row["deprecated"] for row in unique.values()) < MIN_WEAKNESSES:
+        raise CWEError("CWE download does not look like the MITRE catalog (fewer than 100 weaknesses)")
+    return {"schema": "appsec-review/cwe-catalog/1.0", "version": f"CWE List {version}", "as_of": meta["date"],
+            "source": {"kind": f"MITRE CWE feed (cwec_v{version}.xml.zip, mitre_feed.py)", "file": member,
+                       "sha256": "sha256:" + hashlib.sha256(xml).hexdigest()},
+            "entries": [unique[key] for key in sorted(unique, key=lambda item: int(item[4:]))]}
+
+
+def summarize_zip(data: bytes, version: str) -> dict[str, Any]:
+    """Parse check for ``mitre_feed.validate_source``: upstream version and weakness count."""
+    table = derive_snapshot_catalog(data, version)
+    return {"upstream_version": version, "record_count": len(table["entries"]),
+            "deprecated_count": sum(1 for row in table["entries"] if row["deprecated"]), "marking_statements": []}
+
+
+def table_bytes(table: dict[str, Any]) -> bytes:
+    return (json.dumps(table, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def current(root: Any = None, *, now: datetime | None = None, max_age_seconds: int | None = None,
+            directory: Path | None = None) -> Catalog:
+    """The catalog in force: the feed's full catalog when the snapshot verifies and is inside the
+    ceiling, else the committed curated catalog with the recorded gap.  Never blocks on the feed."""
+    import mitre_feed
+    from dependency_snapshot_registry import SnapshotBlocked, SnapshotInvalid, SnapshotStale
+    now = now or datetime.now(timezone.utc)
+    try:
+        identity = mitre_feed.resolve_cwe(root, now=now, max_age_seconds=max_age_seconds)
+        data = Path(identity["catalog_path"]).read_bytes()
+        if hashlib.sha256(data).hexdigest() != identity["catalog_sha256"]:
+            raise SnapshotInvalid("CWE catalog changed after verification")
+        return Catalog(directory, table=json.loads(data), table_sha256="sha256:" + identity["catalog_sha256"],
+                       snapshot_id=identity["snapshot_id"])
+    except SnapshotBlocked as exc:
+        gap = {"code": GAP_MISSING, "detail": str(exc)[:300]}
+    except SnapshotStale as exc:
+        gap = {"code": GAP_STALE, "detail": str(exc)[:300]}
+    except (SnapshotInvalid, CWEError, OSError, ValueError, KeyError, TypeError) as exc:
+        gap = {"code": GAP_INVALID, "detail": f"{type(exc).__name__}: {exc}"[:300]}
+    return Catalog(directory, gap=gap)
+
+
+def bound(value: dict[str, Any], root: Any = None, directory: Path | None = None) -> Catalog:
+    """The catalog a recorded ``identity`` names, integrity-checked but not re-aged (the ceiling was
+    applied when the binding was taken), so a re-validation reproduces the same result.  A feed table
+    that is no longer published falls back to the curated catalog with ``CWE_REFERENCE_INVALID``."""
+    value = value or {}
+    if value.get("catalog_source") == FEED:
+        catalog = current(root, max_age_seconds=sys.maxsize, directory=directory)
+        if catalog.source == FEED and catalog.identity["catalog_sha256"] == value.get("catalog_sha256"):
+            return catalog
+        return Catalog(directory, gap={"code": GAP_INVALID,
+                                       "detail": "the bound MITRE CWE catalog is no longer published"})
+    gap = value.get("reference_gap")
+    return Catalog(directory, gap={"code": gap, "detail": "recorded when this stage's inputs were bound"}
+                   if gap in (GAP_MISSING, GAP_STALE, GAP_INVALID) else None)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -305,15 +323,28 @@ def main(argv: list[str] | None = None) -> int:
     take.add_argument("--version", required=True)
     take.add_argument("--as-of", required=True)
     sub.add_parser("relock", help="re-pin the catalog and rule map hashes after a reviewed edit")
-    sub.add_parser("check", help="verify the pinned files and report the catalog in force")
+    sub.add_parser("check", help="verify the pinned files")
+    resolved = sub.add_parser("current", help="the catalog in force: MITRE feed snapshot or curated fallback")
+    resolved.add_argument("--root", type=Path)
+    resolved.add_argument("--validate", help="also validate one CWE id against it")
     args = parser.parse_args(argv)
     if args.command == "intake":
         print(json.dumps(intake(args.source, args.version, args.as_of), indent=1))
     elif args.command == "relock":
         print(json.dumps(relock(), indent=1))
+    elif args.command == "current":
+        catalog = current(args.root)
+        result = {**catalog.identity, "catalog_used": catalog.used, "entries": len(catalog.names),
+                  **({"gap": catalog.gap} if catalog.gap else {})}
+        if args.validate:
+            try:
+                result["validated"] = catalog.validate(args.validate)
+            except CWEError as exc:
+                result["rejected"] = str(exc)
+        print(json.dumps(result, indent=1))
+        return 1 if "rejected" in result else 0
     else:
-        catalog = Catalog()
-        print(json.dumps({**catalog.identity, **catalog.provenance()}, indent=1))
+        print(json.dumps(Catalog().identity, indent=1))
     return 0
 
 

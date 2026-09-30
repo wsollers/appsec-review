@@ -29,7 +29,7 @@ appsec-review-process/personas/
 - Loading leaves an empty optional field out (`persona_registry.loaded`), so a record reads exactly as it
   did before the fields were made explicit; assembled prompts and pinned record hashes did not move.
 - Persona records name no role. Personas and roles are bound together by job templates in
-  `registry/job-templates/` (`composition`, `persona_variants`, `role_variants`, and the claim review
+  `appsec-review-process/pipeline/job-templates/` (`composition`, `persona_variants`, `role_variants`, and the claim review
   pool's `stage_personas` / `stage_roles`). Job templates, domains, tooling profiles and output contracts
   stay in `registry/`.
 - `appsec-review-process/persona_registry.py` is the one place that knows these paths; loaders go
@@ -57,7 +57,7 @@ the provenance shape, `prompt.md` current, and every persona and role a job temp
 
 A persona is used by a job only once a job template composes it or lists it in `persona_variants`; a role
 once a template composes it or lists it in `role_variants`. See
-[AUTHORING-TEMPLATE.md](../../appsec-review-process/registry/AUTHORING-TEMPLATE.md) for what makes a
+[AUTHORING-TEMPLATE.md](../../appsec-review-process/pipeline/AUTHORING-TEMPLATE.md) for what makes a
 good persona or role.
 
 A catalog persona (a `### <id>` section of [persona-catalog.md](persona-catalog.md)) is not copied by

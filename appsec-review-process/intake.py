@@ -11,6 +11,7 @@ import hashlib
 import time
 import re
 from execution_state import ROOT, atomic_json, atomic_bytes, digest, file_hash, read_json, beneath, Blocked
+import registry_paths
 
 
 def git(target, *args):
@@ -178,7 +179,7 @@ def inventory(identity, config):
         jobs.append({'job': job, 'applicability': 'required' if applicable else 'needs-partition-review', 'persona': persona,
                      'coordinator': 'intake-coordinator', 'implemented': False, 'reason': 'Static inventory; absence is not a scope exclusion'})
     for planned in jobs:
-        template=read_json(ROOT/'registry/job-templates'/(planned['job']+'.json'))
+        template=read_json(registry_paths.template(planned['job']))
         planned['composition']=template['composition']
         planned['persona']=template['composition']['persona_id']
     return {'schema':'appsec-review/intake/1', 'source_fingerprint':identity['fingerprint'], 'source_revision':identity['revision'],

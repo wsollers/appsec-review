@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT.parent / "docs"
 PARITY = DOCS / "design-parity"
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 from execution_state import Blocked
 import job_graph
@@ -40,7 +41,7 @@ PROPOSALS = DOCS / "proposals" / "vendor-prepass"
 NODE_FIXTURE = PROPOSALS / "job-nodes.proposal.json"
 STEP_MAP = PROPOSALS / "legacy-step-map.proposal.json"
 PRODUCERS = PROPOSALS / "threat-workbench-producers.proposal.yaml"
-CONTRACTS = ROOT / "registry" / "output-contracts"
+CONTRACTS = registry_paths.OUTPUT_CONTRACTS_DIR
 ASSEMBLY = "02-evidence-assembly"
 NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
                 "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
@@ -129,7 +130,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
         for job in s.adr_not_adopted:
             self.assertNotIn(job, s.jobs)
             self.assertNotIn(job, s.rows)
-            self.assertFalse((ROOT / "registry" / "job-templates" / f"{job}.json").exists())
+            self.assertFalse((registry_paths.template(job)).exists())
         # No alias: a graph node that emits one of the ADR's contracts is one of the ADR's nodes.
         proposed_contracts = {node["proposed_output_contract_id"] for node in s.proposed.values()}
         self.assertEqual({job for job, node in s.jobs.items() if node["contract"] in proposed_contracts}, set(s.adopted))
@@ -334,11 +335,11 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 if job in self.executable:
                     self.assertIs(node["implemented"], True)
                     self.assertEqual(node["template"], job)
-                    self.assertTrue((ROOT / "registry" / "job-templates" / f"{job}.json").is_file())
+                    self.assertTrue((registry_paths.template(job)).is_file())
                 else:
                     self.assertIs(node["implemented"], False)
                     self.assertIsNone(node["template"])
-                    self.assertFalse((ROOT / "registry" / "job-templates" / f"{job}.json").exists())
+                    self.assertFalse((registry_paths.template(job)).exists())
                 self.assertEqual(node["namespace"], job)
                 self.assertEqual(node["lane"], proposed["lane"])
                 self.assertEqual(node["contract"], proposed["proposed_output_contract_id"])
@@ -417,7 +418,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 record = read_json(CONTRACTS / f"{s.jobs[job]['contract']}.json")
                 self.assertEqual(row["output"], {
                     "contract": record["contract_id"],
-                    "contract_file": f"appsec-review-process/registry/output-contracts/{record['contract_id']}.json",
+                    "contract_file": registry_paths.repo_rel(registry_paths.contract_rel(record["contract_id"])),
                     "schema_file": "schemas/" + record["result_schema"]["schema_file"],
                     "claim_class": record["claim_class"]["claim_class_id"]})
                 self.assertEqual(record["claim_class"], proposed["proposed_claim_class"])

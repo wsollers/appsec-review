@@ -39,6 +39,7 @@ from pathlib import Path
 import sys
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -46,7 +47,7 @@ sys.path.insert(0, str(ROOT))
 from schema_validate import SchemaStore, validate_document  # noqa: E402
 import tool_instance_shapes as shapes  # noqa: E402
 
-REGISTRY_CONTRACTS = ROOT / "registry" / "output-contracts"
+REGISTRY_CONTRACTS = registry_paths.OUTPUT_CONTRACTS_DIR
 REDACTION_RECEIPT = "outputs/redaction-receipt.json"
 TOOL_RESULTS = "outputs/tool-results.json"
 COVERAGE = "outputs/coverage.json"

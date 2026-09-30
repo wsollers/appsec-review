@@ -18,6 +18,7 @@ from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_result import validate_worker_result
+import registry_paths
 
 SELECTION = "evidence-index-producers.json"
 RESULT = "evidence-index-enrichment.json"
@@ -48,11 +49,23 @@ PROFILES = {
     "02-test-coverage-ingest": ("test-coverage-intelligence", "test-coverage.json", "test-coverage.schema.json", ("files",), "derived_evidence"),
     "02-repository-partition-discovery": ("repository-partition-map", "repository-partition-map.json", "repository-partition-map.schema.json", ("partitions",), "derived_characterization"),
     "01-component-characterization": ("component-map", "component-purpose-map.json", "component-purpose-map.schema.json", ("code_scope_classification", "functional_components", "component_relationships"), "derived_characterization"),
+    # Brief U0.3: tool leads index rule id, category, CWE, path and line only. The SARIF message
+    # text never reaches these producers' results (decision D-02 item 6), so it cannot be indexed.
+    "02-source-sast": ("source-sast", "source-sast.json", "source-sast.schema.json", ("leads",), "derived_evidence"),
+    **{f"02-codeql-{language}": ("codeql-language", "codeql-language.json", "codeql-language.schema.json", ("leads",), "derived_evidence")
+       for language in ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")},
+    "02-treesitter-ast": ("treesitter-ast", "treesitter-ast.json", "treesitter-ast-job.schema.json", ("records",), "derived_evidence"),
 }
+# Producers brief U0.3 names that this index cannot admit yet: they publish no F02 permission/lineage
+# receipts (vendor B13 adapters), and load_producer's admission rule requires them. Each stays
+# readable through the supporting-evidence menu; the gap is reported, not papered over.
+NOT_INDEXABLE = {job: "vendor producer publishes no F02 permission/lineage receipts" for job in (
+    "02-secrets-inventory", "02-sca-vulnerability-match", "02-sbom-inventory", "02-iac-config-scan", "02-license-scan")}
 
 _TEXT_KEYS = frozenset({"title", "summary", "name", "kind", "description", "purpose", "method",
                         "route", "status", "semantics", "symbol", "function", "test_name", "outcome",
-                        "full_name", "caller", "type_name", "code", "search_text", "source_path"})
+                        "full_name", "caller", "type_name", "code", "search_text", "source_path",
+                        "rule_id", "rule_name", "category", "cwe", "language", "path", "detail"})
 _IDENTITY_KEYS = ("record_id", "lead_id", "fact_id", "partition_id", "component_id", "relationship_id",
                   "test_id", "artifact_id", "binary_id", "symbol_id", "cfg_id", "location_id", "path")
 
@@ -135,7 +148,7 @@ def _producer_root(run_id: str, job: str) -> Path:
 
 
 def _template_permissions(job: str) -> list[str]:
-    value = read_json(ROOT / "registry/job-templates" / f"{job}.json").get("permissions")
+    value = read_json(registry_paths.template(job)).get("permissions")
     if not isinstance(value, list) or len(value) != len(set(value)):
         raise Blocked(f"02-evidence-index: selected producer {job} has invalid canonical permissions")
     return value

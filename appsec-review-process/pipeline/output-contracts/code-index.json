@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "code-index",
+  "display_name": "Hash-bound structural code index for model query tools",
+  "required_files": [
+    "code-index.json",
+    "code-index.sqlite",
+    "code-index-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "methods",
+    "calls",
+    "network",
+    "qualification"
+  ],
+  "result_schema": {
+    "artifact": "code-index.json",
+    "schema_file": "code-index.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "structural_source_evidence",
+    "allowed_assertions": [
+      "structural-record",
+      "source-locator",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "built only from accepted, hash-verified CPG, tree-sitter and binary-triage artifacts of this run; never from a fresh tool run or target text",
+    "call resolution is reachability.CallGraph's; unresolved calls are escape rows with their reason, never dropped",
+    "fields the sources do not carry (inheritance, method references) are recorded as gaps, never invented",
+    "the database is re-derived from the bound inputs on every validate and compared row for row (content_sha256)",
+    "query results are locators and untrusted data that require source dereference before citation"
+  ]
+}

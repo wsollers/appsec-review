@@ -134,7 +134,7 @@ Cross-record id resolution, the completeness invariant, index-only citation reje
 Permission-capability schemas (backlog batch B11; model and validator only -- no worker, launcher,
 graph, manifest or handoff consumes them yet, see `docs/adapters/permission-capabilities.md`):
 
-- `permission-capability.schema.json` -- versioned capability *definition* (closed kind enum: target execution, fixed network destination, dynamic testing, debugger/ptrace, credential use, package restore, target mutation), its required typed parameters and `default_decision: DENY`. Records live in `appsec-review-process/registry/permission-capabilities/`.
+- `permission-capability.schema.json` -- versioned capability *definition* (closed kind enum: target execution, fixed network destination, dynamic testing, debugger/ptrace, credential use, package restore, target mutation), its required typed parameters and `default_decision: DENY`. Records live in `appsec-review-process/pipeline/permission-capabilities/`.
 - `permission-capability-parameters.schema.json` and `permission-capability-entry.schema.json` -- the closed, all-nullable exact parameter set (one scheme/host/port, one repository-relative path, a `cred:` reference id and never a value) and one capability instance with its required `origin`. `kind` and `origin` deliberately admit unknown and target-controlled values so `permission_capabilities.py` can reject them by name.
 - `permission-requirement.schema.json` -- the exact capabilities one job requires.
 - `permission-grant.schema.json` -- an ALLOW or DENY from a named human authority with issue/expiry timestamps, bound to one run and source snapshot (optionally one job).
@@ -253,11 +253,26 @@ Evidence-index metrics (ADR-0010 G10 = B, task V15; consumed by `02-evidence-ind
   digest over one canonical byte form; projection, digest and snapshot binding are
   `evidence_store.check_metrics` responsibilities.
 
-Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
-engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
-plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json that
-plain JSON Schema can't express cleanly). No external `jsonschema` pip dependency, consistent with
-the rest of appsec-review-process/*.py.
+Validated by `appsec-review-process/schema_validate.py` (a small dependency-free Draft 2020-12
+engine, plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json
+that plain JSON Schema can't express cleanly). No external `jsonschema` pip dependency, consistent
+with the rest of appsec-review-process/*.py. Every keyword is either implemented
+(`SUPPORTED_KEYWORDS`), an annotation, or rejected with `UnsupportedSchema`; nothing is silently
+ignored. `format` is asserted (`date-time`, `date`). `pattern` is Python `re` syntax matched from the
+start of the string (use `\\Z` for end-of-string). `$ref` takes `file.schema.json`,
+`dir/file.schema.json#/json/pointer` or a local `#/json/pointer`. `schema_keyword_lint.py` lists the
+keywords in use against the supported set and fails on anything else, a bad `$ref` or a pattern that
+does not compile.
+
+Shared value formats (brief L): `common/formats.schema.json` defines each format used by many
+schemas once (SHA-256 forms, git SHA, 128-bit hex ids, UTC timestamp and date, run/job/attempt
+identifier, slug and dotted ids, semver, and the shared confidence/status/strength/tier enums).
+Reference a kind with `{"$ref": "common/formats.schema.json#/$defs/<kind>"}`;
+`appsec-review-process/formats.py` is the Python side. `schema_format_lint.py` fails on a new inline
+copy of a shared format; the copies that predate it are counted in
+`common/inline-format-baseline.json` and may only go down. The `common/` directory sits outside the
+top-level `*.schema.json` set hashed into every job's definition, so adding a kind does not
+invalidate accepted jobs; converting a top-level schema to a `$ref` does.
 
 Still stub-only, unrelated to this effort, pending the foundational orchestrator layer: `lane-contract`
 (per-lane YAML contract under contracts/), `component-purpose-map`, `index-manifest`,
@@ -281,7 +296,7 @@ Pinned-container argv adapter (backlog batch B13; the standalone `b13_harmless_c
 qualifies it, but no scanner or lifecycle worker consumes it; see
 `docs/adapters/pinned-container-adapter.md`):
 
-- `container-image.schema.json` -- one registered image identity under `appsec-review-process/registry/container-images/`: fully qualified `repository` and immutable `sha256:` `digest` (`image-index`, `image-manifest`, or host-local `image-id`), nullable Dockerfile/build-fingerprint/build-attempt provenance, purpose and provenance. There is deliberately no tag property and the repository pattern admits no tag. B16 host-local records are generated and Docker-checked at code-location startup and ignored by Git; portable remote records remain tracked.
+- `container-image.schema.json` -- one registered image identity under `appsec-review-process/pipeline/container-images/`: fully qualified `repository` and immutable `sha256:` `digest` (`image-index`, `image-manifest`, or host-local `image-id`), nullable Dockerfile/build-fingerprint/build-attempt provenance, purpose and provenance. There is deliberately no tag property and the repository pattern admits no tag. B16 host-local records are generated and Docker-checked at code-location startup and ignored by Git; portable remote records remain tracked.
 - `pinned-container-request.schema.json` -- everything a caller may say to `container_execution.run_container`: run/job/attempt identity, `{image_id, digest}`, an `argv` array, an allow-listed `environment`, read-only `target_mounts` (`/workspace` or `/inputs/<name>`), run-owned `scratch_path`/`log_path`, `network` (`none` or exact granted destinations), the B11 `permission` block (`$ref` to the requirement, grant and decision schemas) and seven required integer `limits`. Closed, every property required; no property for a docker option, capability, device, user, working directory or writable target.
 - `pinned-container-result.schema.json` -- the `container-result.json` written last into the log directory: adapter/boundary identity and `boundary_sha256`, request/image/permission hashes, run-owned container name, `execution_status` with a closed `cause` enum, exit code, timestamps, stream byte counts, the hashed log-file list (`request.json`, the child runner's four files and the adapter's `observation.json`), `container_removed` and `result_sha256`. No container output, docker error text or free text.
 - `b13-harmless-qualification-input.schema.json` -- closed, run-owned input for the standalone

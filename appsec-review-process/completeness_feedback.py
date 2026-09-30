@@ -6,13 +6,14 @@ from pathlib import Path
 from execution_state import Blocked, atomic_json, read_json
 from review_control_loops import completeness_audit, synthetic_feedback
 import control_process_worker
+import registry_paths
 
 JOB = "completeness-feedback"
 RESULT = "completeness-feedback.json"
 CONTRACT = "completeness-feedback"
 
 def _registered_routes(routes):
-    registered={path.stem for path in (Path(__file__).resolve().parent/"registry"/"job-templates").glob("*.json")}
+    registered={path.stem for path in registry_paths.JOB_TEMPLATES_DIR.glob("*.json")}
     if any(job not in registered for job in routes.values()):
         raise Blocked("synthetic feedback route is not a registered job")
 

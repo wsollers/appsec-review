@@ -136,7 +136,7 @@ Unchanged from ADR-0022 decision 7 (`dep_reachability_engines.ENTRY_POINT_SOURCE
 
 | Language | Name-based (CPG, CodeQL tables, LSP) | CodeQL `EntryPoint` class adds | Not covered |
 |---|---|---|---|
-| C/C++ | `main`, `wmain`, `WinMain`, `wWinMain`, `DllMain`, `LLVMFuzzerTestOneInput` | traced tables: `main`, no-internal-caller, address-taken | exported library API unless listed in the run file; callbacks registered at run time |
+| C/C++ | `main`, `wmain`, `WinMain`, `wWinMain`, `DllMain` (fuzz-harness entries are deliberately absent, see `docs/reachability-entry-points.md`) | traced tables: `main`, no-internal-caller, address-taken | exported library API unless listed in the run file; callbacks registered at run time |
 | Go | `main`, `init`, `ServeHTTP` | functions reading a `RemoteFlowSource` | goroutines started from reflection; plugin symbols |
 | Java | `main`, `doGet`, `doPost`, `doPut`, `doDelete`, `service` | servlet `do*`, `@*Mapping` methods, remote-input readers | DI-wired beans without annotations, reflection, JNI |
 | C# | `Main` | public `*Controller` actions, remote-input readers | minimal-API lambdas not reading request data |

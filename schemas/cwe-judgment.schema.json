@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "cwe-judgment.schema.json",
-  "description": "One reviewer CWE judgment (ADR-0020). The reviewer supplies cwe_id + rationale; claim_lifecycle_core validates cwe_id against the CWE catalog in force (the MITRE feed snapshot, else the committed data/reference/cwe catalog, brief O1b) and supplies cwe_name, stage and catalog.",
+  "description": "One reviewer CWE judgment (ADR-0020). The reviewer supplies cwe_id + rationale; claim_lifecycle_core validates cwe_id against the CWE catalog in force (the MITRE feed snapshot, else the committed curated data/reference/cwe catalog; brief O2) and supplies cwe_name, stage and cwe_catalog.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -31,10 +31,10 @@
       "minLength": 1,
       "maxLength": 600
     },
-    "catalog": {
+    "cwe_catalog": {
+      "description": "Which catalog validated cwe_id: the MITRE feed snapshot id or committed-curated. Optional so records written before brief O2 stay valid.",
       "type": "string",
-      "minLength": 1,
-      "description": "Which catalog validated cwe_id: the MITRE feed snapshot_id or committed-curated."
+      "pattern": "^(committed-curated|sha256-[0-9a-f]{16})$"
     }
   }
 }

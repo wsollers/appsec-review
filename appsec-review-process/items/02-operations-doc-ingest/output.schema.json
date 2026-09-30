@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "items/02-operations-doc-ingest/output.schema.json",
+  "title": "02-operations-doc-ingest worker result (worker-result.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["execution_status", "gaps", "summary", "status", "artifacts"],
+  "properties": {
+    "execution_status": {"enum": ["OK", "OK_WITH_GAPS"]},
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "string"},
+    "artifacts": {"type": "array", "items": {"enum": ["operations-doc-intelligence.json", "permission.json", "lineage.json"]}},
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["process", "sources", "records", "static_only", "qualification"],
+      "properties": {
+        "process": {"const": "02-operations-doc-ingest"},
+        "sources": {"type": "integer"},
+        "records": {"type": "integer"},
+        "static_only": {"const": true},
+        "qualification": {"const": "implemented_not_qualified"}
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claim_ledger as ledger
 import execution_state
@@ -438,7 +439,7 @@ class ClaimLedgerTests(unittest.TestCase):
         self.assertEqual(len(value["claim_states"]), 60 + 90)
 
     def test_contract_policy_receipts_and_owned_records(self):
-        contract = json.loads((ROOT / "registry/output-contracts/claim-ledger-core.json").read_text())
+        contract = json.loads((registry_paths.contract("claim-ledger-core")).read_text())
         policy = validate_job_output.CLAIM_CLASS_POLICIES["claim-ledger-core"]
         self.assertEqual(policy["claim_class_id"], contract["claim_class"]["claim_class_id"])
         self.assertEqual(policy["allowed_assertions"], set(contract["claim_class"]["allowed_assertions"]))
@@ -457,7 +458,7 @@ class ClaimLedgerTests(unittest.TestCase):
             ("tooling-profiles/hash-linked-claim-ledger.json", "tooling-profile.schema.json"),
             ("output-contracts/claim-ledger-core.json", "output-contract.schema.json"))
         for relative, schema in records:
-            record = json.loads((ROOT / "registry" / relative).read_text())
+            record = json.loads((registry_paths.REGISTRY / relative).read_text())
             self.assertEqual(validate_document(record, schema, store), [], relative)
         def assert_closed(value, path="$", parent=None):
             if isinstance(value, dict):
