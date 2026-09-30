@@ -190,7 +190,8 @@ class RepairRetryTests(unittest.TestCase):
         self.assertEqual(invoker._repair_attempts({"invocation": {"repair_attempts": 9}}), 1)
         self.assertEqual(invoker._repair_attempts({"invocation": {"repair_attempts": True}}), 1)
         committed = json.loads((ROOT / "model-config.json").read_text())
-        self.assertEqual(invoker._repair_attempts(committed), 1)
+        # Raised 1 -> 2 on 2026-09-30 (appsec-multi-vuln partition discovery; model-config.json note).
+        self.assertEqual(invoker._repair_attempts(committed), 2)
 
 
 class InvokeRepairEndToEndTests(unittest.TestCase):
