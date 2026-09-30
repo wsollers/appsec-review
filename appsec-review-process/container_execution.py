@@ -3,7 +3,7 @@
 
 One request, one registry-pinned image, one argv array, one container, one terminal result.
 
-* The image is resolved from ``registry/container-images/`` to ``repository@sha256:digest`` for a
+* The image is resolved from ``pipeline/container-images/`` to ``repository@sha256:digest`` for a
   portable manifest/index or the raw ``sha256:digest`` for a verified host-local image id. The
   reference handed to docker is built from the registry record, never from the request.
 * The docker command line is a list built by :func:`build_docker_argv` and executed without a
@@ -38,6 +38,7 @@ import sys
 import threading
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -59,7 +60,7 @@ REQUEST_SCHEMA = "pinned-container-request.schema.json"
 RESULT_SCHEMA = "pinned-container-result.schema.json"
 IMAGE_SCHEMA = "container-image.schema.json"
 
-IMAGES_DIR = ROOT / "registry" / "container-images"
+IMAGES_DIR = registry_paths.CONTAINER_IMAGES_DIR
 BUILD_IMAGES_DIR = Path(os.environ.get(
     "APPSEC_BUILD_IMAGES_ROOT", ROOT / "data" / "build-images")) / "container-images"
 WORKER_KIND = "pinned_container"

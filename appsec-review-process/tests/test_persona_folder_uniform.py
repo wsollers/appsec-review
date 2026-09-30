@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import catalog_personas
 import persona_registry
@@ -30,7 +31,7 @@ def records(directory: str) -> list[tuple[Path, dict]]:
 
 def templates() -> list[dict]:
     return [json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((ROOT / "registry" / "job-templates").glob("*.json"))]
+            for path in sorted(registry_paths.JOB_TEMPLATES_DIR.glob("*.json"))]
 
 
 class FolderLayoutTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class FolderLayoutTests(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in FOLDERS.iterdir()),
                          ["persona.schema.json", "personas", "role.schema.json", "roles"])
         for directory in persona_registry.KINDS:
-            self.assertFalse((ROOT / "registry" / directory).exists(), f"registry/{directory} is back")
+            self.assertFalse((registry_paths.REGISTRY / directory).exists(), f"registry/{directory} is back")
 
     def test_every_folder_holds_exactly_its_record_and_prompt(self):
         for directory, (file_name, _, _) in persona_registry.KINDS.items():
@@ -101,8 +102,8 @@ class ReferenceTests(unittest.TestCase):
     so every id a template names (composition, variants, stage pools) must be a folder."""
 
     def test_every_persona_and_role_a_job_template_names_exists(self):
-        personas = set(persona_registry.record_ids(ROOT / "registry", "personas"))
-        roles = set(persona_registry.record_ids(ROOT / "registry", "roles"))
+        personas = set(persona_registry.record_ids(registry_paths.REGISTRY, "personas"))
+        roles = set(persona_registry.record_ids(registry_paths.REGISTRY, "roles"))
         for template in templates():
             with self.subTest(template=template["job_template_id"]):
                 named_personas = {template["composition"]["persona_id"], *(template.get("persona_variants") or [])}

@@ -364,7 +364,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path("appsec-review-process").resolve()))
 from schema_validate import SchemaStore, validate_document
 
-registry = Path("appsec-review-process/registry")
+registry = Path("appsec-review-process/pipeline")
 record_types = {
     "personas": ("persona", "persona_id"),
     "roles": ("role", "role_id"),

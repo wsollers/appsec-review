@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import registry_paths
 
 HERE = Path(__file__).resolve().parent
 PROCESS = HERE.parent
@@ -115,7 +116,7 @@ class HappyPathDagsterIntegrationTests(unittest.TestCase):
             self.assertTrue(resolved["ops"]["full_review_input_assembly_standalone_work"]["config"]["dispatch"])
 
     def test_authoritative_templates_and_contracts_are_closed_and_schema_valid(self):
-        registry = PROCESS / "registry"
+        registry = registry_paths.REGISTRY
         cases = (
             ("02-full-review-input-assembly", "full-review-input-assembly"),
             ("04-asvs-masvs", "owasp-join-report"),

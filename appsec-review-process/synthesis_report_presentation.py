@@ -121,7 +121,10 @@ def _reachability_text(reach: dict[str, Any], cap: str | None) -> str:
     if state == "REACHABLE":
         steps = [f"{step['function']}() {step['file']}:{step['line']}" if step["function"] != "(finding location)"
                  else f"{step['file']}:{step['line']}" for step in reach.get("witness", [])]
-        return "REACHABLE via " + " -> ".join(steps)
+        entry = (reach.get("witness") or [{}])[0].get("entry")  # a root from entry_exports (tunable, default off)
+        why = (f" [entry: {entry.get('label')} {entry.get('symbol') or entry.get('reason')}"
+               + (f" in {entry['artifact']}]" if entry.get("artifact") else "]")) if isinstance(entry, dict) else ""
+        return "REACHABLE via " + " -> ".join(steps) + why
     label = "UNREACHABLE (no call path from any analysed entry point)" if state == "UNREACHABLE" else "UNKNOWN"
     return f"{label}: {reach.get('reason', 'not analysed')}" + (f"; {cap}" if cap else "")
 

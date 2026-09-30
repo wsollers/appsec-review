@@ -10,6 +10,7 @@ from claude_cli_invoker import ClaudeCliInvoker
 import container_execution
 from execution_state import Blocked, beneath, data_path, file_hash, identifier, read_json, run_path
 from publish_job_output import mark_attempt_started, publish_validated
+import registry_paths
 
 SCHEMA="appsec-review/control-lane-orchestration-request/1.0"
 SIMPLE={
@@ -76,7 +77,7 @@ def _pool_context(value:dict,owner:Path,generation:str)->pool_specification.Pool
     roots=lambda rows:{key:_owned(path,owner,"pool context root",directory=True) for key,path in rows.items()}
     pool_parent=Path(value["pool_parent"]).absolute(); beneath(owner,pool_parent.parent)
     docker=Path(value["docker_executable"]).absolute() if value["docker_executable"] else None
-    return pool_specification.PoolContext(pool_parent=pool_parent,registry_dir=Path(__file__).resolve().parent/"registry",
+    return pool_specification.PoolContext(pool_parent=pool_parent,registry_dir=registry_paths.REGISTRY,
         prompt_root=_owned(value["prompt_root"],owner,"prompt root",directory=True),readable_roots=roots(value["readable_roots"]),
         allowed_models=tuple(value["allowed_models"]),invoker_id=value["invoker_id"],images_dir=container_execution.IMAGES_DIR,
         host_flavor=value["host_flavor"],docker_host=None,docker_executable=docker,container_user=value["container_user"],

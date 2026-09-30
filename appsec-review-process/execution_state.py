@@ -20,6 +20,8 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+import registry_paths
+
 ROOT = Path(__file__).resolve().parent
 RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT', ROOT / 'runs'))
 
@@ -301,7 +303,7 @@ def execute(argv, cwd, log_dir, timeout, cancel=None, env=None, observer=None):
 # ADR-0013: shared runtime and validator modules are not part of any job's code fingerprint, so a
 # fix to them does not make every accepted job stale. A job's fingerprint covers its own code,
 # contracts, schemas and actual inputs.
-SHARED_RUNTIME = frozenset(['container_execution.py', 'permission_capabilities.py', 'publish_job_output.py', 'validate_job_output.py', 'worker_result.py', 'persona_invocation.py', 'persona_dispatch.py', 'persona_prompt_assembly.py', 'claude_cli_invoker.py', 'claude_binary_resolver.py', 'model_version_registry.py', 'evidence_redaction.py', 'execution_state.py', 'schema_validate.py', 'job_graph.py', 'deterministic_child.py', 'create_job_handoff.py', 'process_gate.py', 'pool_launcher.py', 'pool_rendezvous.py', 'pool_specification.py', 'schemas/worker-result-envelope.schema.json', 'job-graph.json', 'size_log.py'])
+SHARED_RUNTIME = frozenset(['container_execution.py', 'permission_capabilities.py', 'publish_job_output.py', 'validate_job_output.py', 'worker_result.py', 'persona_invocation.py', 'persona_dispatch.py', 'persona_prompt_assembly.py', 'claude_cli_invoker.py', 'claude_binary_resolver.py', 'model_version_registry.py', 'evidence_redaction.py', 'execution_state.py', 'schema_validate.py', 'job_graph.py', 'deterministic_child.py', 'create_job_handoff.py', 'process_gate.py', 'pool_launcher.py', 'pool_rendezvous.py', 'pool_specification.py', 'schemas/worker-result-envelope.schema.json', registry_paths.GRAPH_REL, 'size_log.py'])
 
 
 def drop_shared_runtime(values):

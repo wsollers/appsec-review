@@ -12,6 +12,7 @@ import test_evidence as te
 import validate_job_output as output_validator
 from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope
+import registry_paths
 
 class TestEvidenceTests(unittest.TestCase):
     def setUp(self):
@@ -171,7 +172,7 @@ class TestEvidenceTests(unittest.TestCase):
         values={te.EXECUTION_JOB:execution,te.RESULT_JOB:te.junit(execution,result_path),
                 te.COVERAGE_JOB:te.lcov(execution,coverage_path,self.target)}
         for job,(_artifact,_schema,contract_id) in te.SPECS.items():
-            contract=te.read_json(ROOT/"registry/output-contracts"/(contract_id+".json"))
+            contract=te.read_json(registry_paths.contract(contract_id))
             policy=output_validator.CLAIM_CLASS_POLICIES[contract_id]
             self.assertEqual(policy["claim_class_id"],contract["claim_class"]["claim_class_id"])
             self.assertEqual(policy["allowed_assertions"],set(contract["claim_class"]["allowed_assertions"]))

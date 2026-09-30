@@ -23,6 +23,7 @@ import permission_capabilities as pc
 from publish_job_output import (ACCEPTED_SCHEMA, coordinate_worker_lifecycle,
                                 record_terminal_current, validate_published)
 from schema_validate import validate_document
+import registry_paths
 
 JOB = "02-native-sast"
 UPSTREAM_JOB = "02-native-build"
@@ -35,12 +36,12 @@ PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 IMAGE_ID = "audit-native"
 CONFIG = ROOT.parent / "data" / "native-sast" / "config-v1.json"
-TEMPLATE = ROOT / "registry/job-templates/02-native-sast.json"
+TEMPLATE = registry_paths.template("02-native-sast")
 TOOLS = ("clang-tidy", "cppcheck", "clang-static-analyzer")
 CODE_FILES = (
     "native_sast.py", "native_sast_adapters.py", "container_execution.py",
     "permission_capabilities.py", "publish_job_output.py", "validate_job_output.py",
-    "registry/output-contracts/native-sast.json", "registry/job-templates/02-native-sast.json",
+    registry_paths.contract_rel("native-sast"), registry_paths.template_rel("02-native-sast"),
 )
 
 

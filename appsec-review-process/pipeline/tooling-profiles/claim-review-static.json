@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "claim-review-static",
+  "display_name": "Static Accepted-claim Review",
+  "mode": "evidence-only",
+  "required_inputs": [
+    "newest accepted upstream claim artifact"
+  ],
+  "optional_inputs": [],
+  "allowed_actions": [
+    "read the pinned upstream artifact",
+    "emit closed candidate decisions",
+    "query tool: code_symbol",
+    "query tool: code_callers",
+    "query tool: code_callees",
+    "query tool: code_locate",
+    "query tool: code_type_info",
+    "query tool: code_file_outline",
+    "query tool: code_search",
+    "query tool: code_calls_to",
+    "query tool: code_path",
+    "query tool: code_address_taken",
+    "query tool: code_overrides",
+    "query tool: code_exports"
+  ],
+  "disallowed_actions": [
+    "execute target content",
+    "network access other than the configured model invocation",
+    "mutate target content",
+    "invent evidence"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "candidate_only",
+      "refutation",
+      "verification_observation"
+    ],
+    "forbidden": [
+      "finding",
+      "severity",
+      "runtime_state",
+      "compliance_verdict"
+    ]
+  }
+}

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import component_characterization as cc
 import execution_state as state
@@ -52,12 +53,12 @@ class ComponentCharacterizationTests(unittest.TestCase):
         store = SchemaStore()
         prompt, template = ppa.assemble_prompt_text(cc.TEMPLATE, store)
         self.assertIn("This job produces evidence organization and routing only", prompt)
-        records = pi.load_composition(ROOT / "registry", {
+        records = pi.load_composition(registry_paths.REGISTRY, {
             "job_template_id": cc.TEMPLATE,
             "job_template_sha256": pi._sha(template),
             **{name + "_id": template["composition"][name + "_id"]
                for name, *_rest in pi.COMPOSITION_KINDS if name != "job_template"},
-            **{name + "_sha256": pi._sha(pi._load_record(ROOT / "registry", directory, schema, field,
+            **{name + "_sha256": pi._sha(pi._load_record(registry_paths.REGISTRY, directory, schema, field,
                 template["composition"][name + "_id"], store))
                for name, directory, schema, field in pi.COMPOSITION_KINDS if name != "job_template"},
         }, store)
@@ -73,7 +74,7 @@ class ComponentCharacterizationTests(unittest.TestCase):
             "review-routing", "unknown", "coverage-gap", "rescope-trigger",
         }
         self.assertEqual(set(ceiling["allowed"]), expected_ceiling)
-        contract = json.loads((ROOT / "registry/output-contracts/component-map.json").read_text(
+        contract = json.loads((registry_paths.contract("component-map")).read_text(
             encoding="utf-8"))
         policy = output_validator.CLAIM_CLASS_POLICIES["component-map"]
         contract_allowed = set(contract["claim_class"]["allowed_assertions"])

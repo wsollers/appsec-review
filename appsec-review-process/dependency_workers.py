@@ -28,6 +28,7 @@ from sbom_family_contracts import (
     build_index_enrichment_errors, canonical_advisory_id, databases_digest, declaration_kind, lifecycle_row_for,
     required_gap_reason, spdx_expression_shape_ok, version_scheme_for,
 )
+import registry_paths
 
 JOBS = {
     "sbom": ("02-sbom-inventory", "sbom-inventory", "outputs/sbom-manifest.json"),
@@ -36,7 +37,7 @@ JOBS = {
     "lifecycle": ("02-dependency-lifecycle", "dependency-lifecycle", "outputs/dependency-lifecycle.json"),
     "reachability": ("06-cve-reachability", "cve-reachability", "outputs/cve-reachability.json"),
 }
-REGISTRY = Path(__file__).resolve().parent / "registry" / "job-templates"
+REGISTRY = registry_paths.JOB_TEMPLATES_DIR
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 IMPLEMENTATION = "dependency-workers-v2-producer-receipts"

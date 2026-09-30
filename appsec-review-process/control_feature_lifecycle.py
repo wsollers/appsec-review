@@ -27,6 +27,7 @@ from review_control_loops import completion_gate
 from schema_validate import validate_document
 import synthetic_hypothesis_resynthesis
 from worker_result import validate_worker_result
+import registry_paths
 
 HASH = "sha256:"
 JOBS = {
@@ -179,8 +180,9 @@ def _disposition(run_id: str, job_id: str) -> dict[str, Any]:
 
 def _code(job_id: str) -> dict[str, str]:
     contract, _artifact, schema = JOBS[job_id]
-    paths = ["control_feature_lifecycle.py", "review_control_loops.py", "publish_job_output.py",
-             f"registry/output-contracts/{contract}.json"]
+    # D-13(b): publish_job_output.py is shared runtime (ADR-0013), not part of a job's output.
+    paths = ["control_feature_lifecycle.py", "review_control_loops.py",
+             registry_paths.contract_rel(contract)]
     values = {path: file_hash(ROOT / path) for path in paths}
     values[f"schemas/{schema}"] = file_hash(ROOT.parent / "schemas" / schema)
     if job_id == "final-publication-preparation":
@@ -212,7 +214,7 @@ def _verified_dispatch(run_id: str) -> tuple[pool_rendezvous.VerifiedManifest, P
 
 
 def _graph_index(run_id: str) -> tuple[list[str], list[dict[str, str]]]:
-    graph = read_json(ROOT / "job-graph.json")
+    graph = read_json(registry_paths.JOB_GRAPH)
     jobs = graph.get("jobs")
     if not isinstance(jobs, dict) or "00-intake" not in jobs:
         raise Blocked("dynamic rescope: tracked job graph is invalid")

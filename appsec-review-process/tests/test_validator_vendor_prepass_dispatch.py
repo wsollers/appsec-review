@@ -30,6 +30,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import container_mobile_binary_contracts as v07
@@ -46,7 +47,7 @@ from validate_job_output import (NO_ORCHESTRATION_FACTS, OrchestrationFacts, val
                                  validate_vendor_prepass_attempt)
 from worker_result import artifact_records, terminal_envelope
 
-REGISTRY = ROOT / "registry"
+REGISTRY = registry_paths.REGISTRY
 PROPOSAL = SCHEMAS_DIR.parent / "docs" / "proposals" / "vendor-prepass" / "job-nodes.proposal.json"
 FINGERPRINT = "sha256:" + "5" * 64
 NOW = t05.NOW
@@ -1020,7 +1021,7 @@ class JobContractBindingTests(unittest.TestCase):
 
     def test_registered_jobs_are_bound_by_their_template_and_their_graph_node(self):
         import validate_job_output as validator
-        graph = json.loads((ROOT / "job-graph.json").read_text(encoding="utf-8"))
+        graph = json.loads((registry_paths.JOB_GRAPH).read_text(encoding="utf-8"))
         checked = 0
         for job_id, node_record in sorted(graph["jobs"].items()):
             template_id = node_record.get("template")

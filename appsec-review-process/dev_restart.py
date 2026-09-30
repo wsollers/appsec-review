@@ -322,14 +322,35 @@ def _file_hash(path: Path) -> str | None:
         return None
 
 
+def function_source_hash(path: Path, name: str) -> str | None:
+    """sha256 of the exact source of one top-level function, read without importing the module. A
+    `<file>:<function>` code key narrows a fingerprint to the part of a large module that matters
+    (brief N, D-13: build discovery hashes only dagster_workflow.py's branch_op). None if absent."""
+    import ast
+    try:
+        text = Path(path).read_text(encoding='utf-8')
+        tree = ast.parse(text)
+    except (OSError, SyntaxError, UnicodeError, ValueError):
+        return None
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return hashlib.sha256(ast.get_source_segment(text, node).encode('utf-8')).hexdigest()
+    return None
+
+
 def current_code(recorded: Mapping[str, str], process_root: Path) -> dict[str, str | None]:
     """Re-hash the files an attempt recorded. Keys are process-root relative, `schemas/` keys are
-    repository relative, as every `_code_hashes` writes them. A missing file hashes to None."""
+    repository relative, as every `_code_hashes` writes them; a `<file>:<function>` key hashes that
+    function's source. A missing file hashes to None."""
     process_root = Path(process_root)
     values = {}
     for key in recorded:
         base = process_root.parent if key.startswith('schemas/') else process_root
-        values[key] = _file_hash(base / key)
+        if ':' in key:
+            file_part, function = key.rsplit(':', 1)
+            values[key] = function_source_hash(base / file_part, function)
+        else:
+            values[key] = _file_hash(base / key)
     return values
 
 

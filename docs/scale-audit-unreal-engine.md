@@ -96,8 +96,8 @@ model narrows its query; they are not data caps.
 ## Tunables (done 2026-09-28)
 
 Every value in the tables above now lives in config, not code: per-job values in a `tunables` block
-in `appsec-review-process/registry/job-templates/<job>.json`, shared ones in
-`appsec-review-process/registry/tunables.json`. Each has a unit, a kind (resource, window, safety,
+in `appsec-review-process/pipeline/job-templates/<job>.json`, shared ones in
+`appsec-review-process/pipeline/tunables.json`. Each has a unit, a kind (resource, window, safety,
 logged), a description and a scale note. The generated reference is
 [`processes/tunables.md`](processes/tunables.md); `python3 -B appsec-review-process/tunables.py check`
 fails when code asks for a tunable config lacks, or the doc is stale. The whole checkout is

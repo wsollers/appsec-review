@@ -4,9 +4,10 @@ import os
 from execution_state import ROOT, identifier, read_json, file_hash, digest, Blocked
 from schema_validate import validate_document
 import persona_registry
+import registry_paths
 
-REGISTRY = ROOT / 'registry'
-GRAPH = ROOT / 'job-graph.json'
+REGISTRY = registry_paths.REGISTRY
+GRAPH = registry_paths.JOB_GRAPH
 IMPLEMENTATION_FILES = ['execution_state.py','process_gate.py','phase1.py','intake.py','job_graph.py']
 LOADED_IMPLEMENTATION = {name:file_hash(ROOT/name) for name in IMPLEMENTATION_FILES}
 KINDS = {'persona_id': ('personas', 'persona', 'persona_id'),

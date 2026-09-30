@@ -6,6 +6,7 @@ identities while enforcing independent, monotonic decision transitions.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -276,18 +277,23 @@ def _closed(record: dict[str, Any], keys: set[str], stage: str, optional: set[st
 
 
 # ---- reviewer judgment fields (ADR-0020): CWE at 07/09/12, CVSS v4.0 + remediation at 12 ---------
-_CATALOG: list[cwe_catalog.Catalog] = []
+_CATALOG: dict[str, cwe_catalog.Catalog] = {}
 PRIORITY_FOR_SEVERITY = {"CRITICAL": "P0", "HIGH": "P1", "MEDIUM": "P2", "LOW": "P3"}
 
 
-def _cwe_catalog() -> cwe_catalog.Catalog:
-    if not _CATALOG:
-        _CATALOG.append(cwe_catalog.Catalog())
-    return _CATALOG[0]
+def _cwe_catalog(cwe_binding: dict[str, Any] | None = None) -> cwe_catalog.Catalog:
+    """The catalog a stage validates against: the one bound into its inputs (deterministic on
+    re-validation), else the one in force now (MITRE feed snapshot or the curated fallback)."""
+    key = json.dumps(cwe_binding, sort_keys=True)
+    if key not in _CATALOG:
+        _CATALOG[key] = cwe_catalog.bound(cwe_binding) if cwe_binding is not None else cwe_catalog.current()
+    return _CATALOG[key]
 
 
-def _cwe_judgment(stage: str, decision: dict[str, Any]) -> dict[str, Any] | None:
-    """Validate a reviewer's CWE judgment against the pinned catalog (Python owns the name)."""
+def _cwe_judgment(stage: str, decision: dict[str, Any],
+                  cwe_binding: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Validate a reviewer's CWE judgment against the catalog in force (Python owns the name and
+    records which catalog was used: a feed ``snapshot_id`` or ``committed-curated``)."""
     value = decision.get("cwe")
     if value is None:
         return None
@@ -295,11 +301,12 @@ def _cwe_judgment(stage: str, decision: dict[str, Any]) -> dict[str, Any] | None
             not isinstance(value.get("rationale"), str) or not value["rationale"].strip()):
         raise Blocked(f"{stage}: a cwe judgment needs exactly cwe_id and a non-empty rationale")
     try:
-        cwe_id = _cwe_catalog().validate(value["cwe_id"])
+        catalog = _cwe_catalog(cwe_binding)
+        cwe_id = catalog.validate(value["cwe_id"])
     except cwe_catalog.CWEError as exc:
         raise Blocked(f"{stage}: {exc}") from None
-    return {"stage": stage, "cwe_id": cwe_id, "cwe_name": _cwe_catalog().name(cwe_id),
-            "rationale": value["rationale"].strip()[:600]}
+    return {"stage": stage, "cwe_id": cwe_id, "cwe_name": catalog.name(cwe_id),
+            "rationale": value["rationale"].strip()[:600], "cwe_catalog": catalog.used}
 
 
 def _judged(record: dict[str, Any], upstream: dict[str, Any], judgment: dict[str, Any] | None) -> dict[str, Any]:
@@ -461,7 +468,8 @@ def source_generation(result: dict[str, Any]) -> str:
 
 
 def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any],
-             mitre_binding: dict[str, Any] | None = None) -> dict[str, Any]:
+             mitre_binding: dict[str, Any] | None = None, *,
+             cwe_binding: dict[str, Any] | None = None) -> dict[str, Any]:
     _validate_ledger(ledger)
     candidates = _index(ledger["candidates"])
     rows = _decision_index(decisions, set(candidates))
@@ -471,7 +479,7 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
         candidate, decision = candidates[claim_id], rows[claim_id]
         _closed(decision, {"claim_id", "reviewer", "attacker_case", "citations", "dissent_ids"}, "red team",
                 {"cwe", "attack_refs", "capec_refs"})
-        judgment = _cwe_judgment("07-red-team-adversarial", decision)
+        judgment = _cwe_judgment("07-red-team-adversarial", decision, cwe_binding)
         if candidate["claim_class"] != "candidate_only" or candidate["status"] != "candidate":
             raise Blocked("red team: ledger record is not a candidate")
         reviewer = decision["reviewer"]
@@ -535,7 +543,8 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
     return _validate(result, "08-blue-team-refutation.schema.json")
 
 
-def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
+def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any], *,
+           cwe_binding: dict[str, Any] | None = None) -> dict[str, Any]:
     reviews = _index(blue["reviews"])
     rows = _decision_index(decisions, set(reviews))
     results = []
@@ -543,7 +552,7 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
         review, decision = reviews[claim_id], rows[claim_id]
         _closed(decision, {"claim_id", "verifier", "disposition", "method", "proof_obligations",
                            "citations", "dissent_ids"}, "verification", {"cwe"})
-        judgment = _cwe_judgment("09-independent-verification", decision)
+        judgment = _cwe_judgment("09-independent-verification", decision, cwe_binding)
         forbidden = {(review["red_reviewer"]["job_id"], review["red_reviewer"]["attempt_id"]),
                      (review["blue_reviewer"]["job_id"], review["blue_reviewer"]["attempt_id"])}
         _independent(decision["verifier"], forbidden)
@@ -582,14 +591,15 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
     return _validate(result, "09-independent-verification.schema.json")
 
 
-def score(verification: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
+def score(verification: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any], *,
+          cwe_binding: dict[str, Any] | None = None) -> dict[str, Any]:
     verified = _index(verification["verifications"])
     rows = _decision_index(decisions, set(verified))
     priorities = []
     for claim_id in sorted(verified):
         record, decision = verified[claim_id], rows[claim_id]
         _closed(decision, {"claim_id", "factors", "rationale"}, "scoring", {"cwe", "cvss_v4", "remediation"})
-        judgment = _cwe_judgment("12-scoring-prioritization", decision)
+        judgment = _cwe_judgment("12-scoring-prioritization", decision, cwe_binding)
         cvss, remediation = None, None
         if record["status"] != "VERIFIED":
             if (decision.get("factors") is not None or decision.get("cvss_v4") is not None or

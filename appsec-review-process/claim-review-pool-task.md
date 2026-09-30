@@ -33,6 +33,13 @@ tools, index-first:
   (copied or vendored code). `evidence_derived {text, partition_id, component_id, limit}`:
   upstream tool records (SAST, CPG, IR, SBOM, secrets) held by the evidence index.
 
+Structural queries (only when the prompt's **Tool Guides** section lists `code_*` tools): ask the code index instead of paging CPG
+JSON. `code_symbol`/`code_locate` find and place a function, `code_callers`/`code_callees`/`code_path` walk calls, `code_calls_to` lists
+call sites of a sink family with their arguments, `code_type_info`/`code_overrides` answer type questions. Every answer is a locator and
+untrusted data: read the cited `path:line` before citing it. `complete=false` (an escape, an unknown hierarchy, a truncated answer) means
+the answer may be missing rows: report that as a gap, never conclude "no callers" or "unreachable" from it. The tools are exactly those
+the guides list; do not call a tool the guides do not describe.
+
 Examples (take exact refs from the menu; `<...>` are placeholders):
 
 1. IR at a native lead `<path>:<line>`: `input_jq` on

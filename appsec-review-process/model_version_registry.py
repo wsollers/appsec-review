@@ -48,6 +48,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -85,7 +86,7 @@ def configured_aliases() -> list[str]:
     for entry in (cfg.get("unbuilt_job_defaults") or {}).values():
         if isinstance(entry, dict) and entry.get("model"):
             aliases.add(entry["model"])
-    for path in sorted((ROOT / "registry" / "job-templates").glob("*.json")):
+    for path in sorted(registry_paths.JOB_TEMPLATES_DIR.glob("*.json")):
         template = json.loads(path.read_text(encoding="utf-8"))
         model = template.get("model")
         if isinstance(model, dict) and model.get("model"):

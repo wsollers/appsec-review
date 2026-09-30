@@ -18,6 +18,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import claim_lifecycle_core as core
 import claim_review_derive as derive
@@ -269,7 +270,7 @@ class InvokerIntegrationTests(unittest.TestCase):
     """ClaimReviewerInvoker end to end over the real ClaudeCliInvoker with a fake model."""
 
     def package(self):
-        contract = json.loads((ROOT / "registry/output-contracts/claim-review-pool-candidates.json").read_text())
+        contract = json.loads((registry_paths.contract("claim-review-pool-candidates")).read_text())
         data = json.dumps(upstream(RED)).encode()
         item = SimpleNamespace(root=reviewer_pool.ROOT_ID, path="claim-decision-ledger.json", data=data,
                                sha256=EVIDENCE_SHA)

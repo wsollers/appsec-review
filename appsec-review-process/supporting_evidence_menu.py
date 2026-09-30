@@ -35,6 +35,8 @@ MENU = (
     ("02-ir-facts", "native", "IR facts: functions, calls and memory operations with source file/line", ["ir-facts.json"]),
     ("02-code-property-graph", "native", "Code property graph summary plus records (JSON Lines; filter with input_jq)",
      ["code-property-graph.json", "code-property-graph.records.jsonl"]),
+    ("02-treesitter-ast", "native", "Tree-sitter AST summary plus records (JSON Lines): functions with spans, call sites, imports",
+     ["treesitter-ast.json", "treesitter-ast.records.jsonl"]),
     ("02-debug-symbol-index", "native", "Debug-symbol index summary plus records (JSON Lines): symbols to source file/line",
      ["debug-symbol-index.json", "debug-symbol-index.records.jsonl"]),
     ("02-native-build", "native", "Native build units, compile databases and produced binaries (paths, hashes)",
@@ -76,6 +78,10 @@ MENU = (
     ("02-license-scan", "dependency", "License inventory", ["outputs/license-inventory.json"]),
     ("06-cve-reachability", "dependency", "CVE reachability evidence and the correlated per-engine summary (ADR-0023)",
      ["outputs/cve-reachability.json", "outputs/dependency-reachability-summary.json"]),
+    ("06-reachability-codeql", "dependency", "CodeQL dependency-reachability engine table (one row per SCA match)",
+     ["engine-reachability.json"]),
+    ("06-reachability-ir", "dependency", "IR/CPG dependency-reachability engine table (one row per SCA match)",
+     ["engine-reachability.json"]),
     ("02-iac-config-scan", "config", "IaC and Dockerfile rule hits, base images",
      ["outputs/iac-config-evidence.json", "outputs/base-image-inventory.json"]),
     ("02-container-image-inventory", "config", "Container image inventory", ["outputs/container-image-inventory.json"]),
@@ -89,6 +95,8 @@ MENU = (
     ("02-operations-doc-ingest", "docs", "Operations documentation intelligence", ["operations-doc-intelligence.json"]),
     ("02-evidence-index", "index", "Run evidence index over the target snapshot (SQLite FTS + ssdeep). Not pinned: "
      "query it with evidence_search / evidence_read / evidence_similar / evidence_derived", []),
+    ("02-code-index", "index", "Structural code index summary (the SQLite database is not pinned: jobs granted the "
+     "code_* query tools query it; the summary names its sha256, sources, capabilities and gaps)", ["code-index.json"]),
 )
 PROFILES = {
     "code": ("native", "tool-leads", "build", "architecture", "binary", "test", "docs", "dependency", "config", "index"),

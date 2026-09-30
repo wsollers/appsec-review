@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -28,7 +29,10 @@ from typing import Any, Callable
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 PROCESS = REPO / "appsec-review-process"
-DEFAULT_OUTPUT = PROCESS / "registry" / "container-images"
+_spec = importlib.util.spec_from_file_location("registry_paths", PROCESS / "registry_paths.py")
+registry_paths = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(registry_paths)
+DEFAULT_OUTPUT = registry_paths.CONTAINER_IMAGES_DIR
 SCHEMA = "appsec-review/container-image/1.0"
 SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}\Z")
 STATE_KEYS = {"attempt_id", "fingerprint", "finished_at", "image_digest", "image_id", "tag"}

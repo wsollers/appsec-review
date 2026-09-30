@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import dev_restart as dr
 import execution_state as state
@@ -177,10 +178,10 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(actions(result), dict.fromkeys(GRAPH, dr.REUSE))
 
     def test_rule6_own_contract_counts(self):
-        self.store.own_files['C']['registry/output-contracts/c.json'] = 'v1'
+        self.store.own_files['C'][registry_paths.contract_rel("c")] = 'v1'
         result = dr.run_pass(self.store, GRAPH, self.jobs)
         self.assertEqual(actions(result), {'A': dr.REUSE, 'B': dr.REUSE, 'C': dr.RERUN, 'D': dr.REUSE})
-        self.assertEqual(causes(result, 'C'), ['own registry/output-contracts/c.json added'])
+        self.assertEqual(causes(result, 'C'), [f'own {registry_paths.contract_rel("c")} added'])
 
     def test_force_reruns_one_job_regardless(self):
         result = dr.run_pass(self.store, GRAPH, self.jobs, forced={'B'})
@@ -249,7 +250,7 @@ class ExplainRunTests(unittest.TestCase):
     def setUp(self):
         self.base = Path(tempfile.mkdtemp())
         self.process = self.base / 'process'
-        (self.process / 'registry').mkdir(parents=True)
+        (self.process / registry_paths.DIRNAME).mkdir(parents=True)
         (self.base / 'schemas').mkdir()
         for name, text in (('x.py', 'x = 1\n'), ('y.py', 'y = 1\n'), ('z.py', 'z = 1\n')):
             (self.process / name).write_text(text)
@@ -386,8 +387,10 @@ class ProdFingerprintTests(unittest.TestCase):
 
     def test_shared_runtime_list_is_unchanged(self):
         # ADR-0013's list is part of every job's fingerprint scope; brief I must not move it.
+        # Brief K (ADR-0028) renamed only its job-graph entry to the file's new path.
         self.assertEqual(hashlib.sha256('\n'.join(sorted(state.SHARED_RUNTIME)).encode()).hexdigest(),
-                         '0f7ac42d3ad120130a40cbe6fb0e0c879ec2242174b02453d83c767587ad56df')
+                         '402a78c48d7f479d9bd33ec7fa2d8518f199b6f693842d3a418f19de3d6920aa')
+        self.assertIn(registry_paths.GRAPH_REL, state.SHARED_RUNTIME)
 
     def test_run_mode_does_not_change_prod_code_fingerprints(self):
         import build_classify
@@ -413,7 +416,7 @@ class FingerprintScopeTests(unittest.TestCase):
         def spy(path):
             hashed.append(Path(path).resolve())
             return real(path)
-        template = state.read_json(ROOT / 'registry' / 'job-templates' / '00-intake.json')
+        template = state.read_json(registry_paths.template("00-intake"))
         with patch.object(job_graph, 'file_hash', side_effect=spy):
             job_graph.definition_hash(template)
         names = {path.relative_to(ROOT.parent).as_posix() for path in hashed}

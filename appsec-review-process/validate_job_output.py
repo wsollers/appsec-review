@@ -24,9 +24,10 @@ from schema_validate import SchemaStore, validate_document
 import secrets_iac_contracts as _v04
 from tool_instance_shapes import HEADER_FIELDS, NODE_STATUSES
 from worker_result import validate_immutable_reuse, validate_worker_result
+import registry_paths
 
-REGISTRY = ROOT / "registry"
-GRAPH = ROOT / "job-graph.json"
+REGISTRY = registry_paths.REGISTRY
+GRAPH = registry_paths.JOB_GRAPH
 SCHEMAS = ROOT.parent / "schemas"
 MAX_RESULT_BYTES = tunables.shared("result_artifact_max_bytes")
 MAX_CITATIONS = 4096
@@ -162,6 +163,14 @@ CLAIM_CLASS_POLICIES = {
         "allowed_assertions": {"debug-location", "pointer-memory-fact", "coverage-gap"},
     },
     "code-property-graph": {
+        "claim_class_id": "structural_source_evidence",
+        "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
+    },
+    "treesitter-ast": {
+        "claim_class_id": "structural_source_evidence",
+        "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
+    },
+    "code-index": {
         "claim_class_id": "structural_source_evidence",
         "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
     },

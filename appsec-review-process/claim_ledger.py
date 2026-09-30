@@ -14,6 +14,7 @@ from schema_validate import validate_document
 from worker_result import validate_worker_result
 import threat_model_core
 import bounded_analysis_workers
+import registry_paths
 
 JOB = "claim-ledger-routing"
 CONTRACT = "claim-ledger-core"
@@ -58,9 +59,9 @@ PROHIBITED_TEXT = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\b(?:is|are)\s+(?:compliant|certified)\b", r"\b(?:is|has been)\s+(?:fixed|remediated)\b"))
 CODE_FILES = (
     "claim_ledger.py", "threat_model_core.py", "publish_job_output.py", "validate_job_output.py",
-    "registry/job-templates/claim-ledger-routing.json", "personas/roles/claim-ledger-custodian/role.json",
-    "registry/domains/claim-ledger-lifecycle.json", "registry/tooling-profiles/hash-linked-claim-ledger.json",
-    "registry/output-contracts/claim-ledger-core.json", "claim-ledger-routing/task-claim-ledger-core.md",
+    registry_paths.template_rel("claim-ledger-routing"), "personas/roles/claim-ledger-custodian/role.json",
+    registry_paths.rel(registry_paths.DOMAINS, "claim-ledger-lifecycle"), registry_paths.rel(registry_paths.TOOLING_PROFILES, "hash-linked-claim-ledger"),
+    registry_paths.contract_rel("claim-ledger-core"), "claim-ledger-routing/task-claim-ledger-core.md",
 )
 
 

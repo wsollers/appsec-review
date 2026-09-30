@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
 
+import registry_paths
 import resource_pools
 from validate_design_parity import (
     render_mermaid,
@@ -62,7 +63,7 @@ class DesignParityTests(unittest.TestCase):
     def test_current_honest_baseline(self):
         result = validate_manifest(self.manifest)
         self.assertEqual(result["status"], "PASS", result["errors"])
-        self.assertEqual(result["job_count"], 81)
+        self.assertEqual(result["job_count"], 83)
         self.assertEqual(result["capability_count"], 16)
         self.assertNotIn("resource_pools: no dedicated Dagster resource pools are configured", result["gaps"])
         self.assertEqual(tuple(self.manifest["dagster_inventory"]["resource_pools"]), resource_pools.POOL_IDS)
@@ -91,7 +92,7 @@ class DesignParityTests(unittest.TestCase):
                 ignore=shutil.ignore_patterns("runs", "logs", "__pycache__"),
             )
             shutil.copytree(resolve_repo_path("orchestrator/dagster"), repo / "orchestrator/dagster")
-            template = repo / "appsec-review-process/registry/job-templates/00-intake.json"
+            template = repo / registry_paths.repo_rel(registry_paths.template_rel("00-intake"))
             value = json.loads(template.read_text(encoding="utf-8"))
             value["composition"]["persona_id"] = "missing-persona"
             template.write_text(json.dumps(value), encoding="utf-8")
@@ -175,7 +176,7 @@ class DesignParityTests(unittest.TestCase):
         first = render_report(self.manifest, result)
         second = render_report(deepcopy(self.manifest), validate_manifest(deepcopy(self.manifest)))
         self.assertEqual(first, second)
-        self.assertIn("Lifecycle jobs: **81**", first)
+        self.assertIn("Lifecycle jobs: **83**", first)
 
     def test_common_worker_result_envelope_semantics(self):
         base = {
@@ -213,7 +214,7 @@ class DesignParityTests(unittest.TestCase):
     def test_graph_cycle_and_unreachable_mutations(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.copy_repo(temporary)
-            path = repo / "appsec-review-process/job-graph.json"
+            path = repo / registry_paths.repo_rel(registry_paths.GRAPH_REL)
             graph = json.loads(path.read_text(encoding="utf-8"))
             graph["jobs"]["00-intake"]["dependencies"] = [{
                 "job": "10-synthesis-report", "kind": "required",
@@ -224,7 +225,7 @@ class DesignParityTests(unittest.TestCase):
             self.assertIn("graph dependency cycle", errors)
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.copy_repo(temporary)
-            path = repo / "appsec-review-process/job-graph.json"
+            path = repo / registry_paths.repo_rel(registry_paths.GRAPH_REL)
             graph = json.loads(path.read_text(encoding="utf-8"))
             graph["jobs"]["02-operations-doc-ingest"]["dependencies"] = []
             path.write_text(json.dumps(graph), encoding="utf-8")
@@ -239,7 +240,7 @@ class DesignParityTests(unittest.TestCase):
         for field, value, expected in mutations:
             with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
                 repo = self.copy_repo(temporary)
-                path = repo / "appsec-review-process/job-graph.json"
+                path = repo / registry_paths.repo_rel(registry_paths.GRAPH_REL)
                 graph = json.loads(path.read_text(encoding="utf-8"))
                 dependency = graph["jobs"]["10-synthesis-report"]["dependencies"][-1]
                 dependency[field] = value
@@ -249,7 +250,7 @@ class DesignParityTests(unittest.TestCase):
     def test_graph_namespace_collision(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.copy_repo(temporary)
-            path = repo / "appsec-review-process/job-graph.json"
+            path = repo / registry_paths.repo_rel(registry_paths.GRAPH_REL)
             graph = json.loads(path.read_text(encoding="utf-8"))
             graph["jobs"]["02-ossf-scorecard"]["namespace"] = "00-intake"
             path.write_text(json.dumps(graph), encoding="utf-8")
@@ -258,7 +259,7 @@ class DesignParityTests(unittest.TestCase):
     def test_optional_dependency_requires_skip_reason(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.copy_repo(temporary)
-            path = repo / "appsec-review-process/job-graph.json"
+            path = repo / registry_paths.repo_rel(registry_paths.GRAPH_REL)
             graph = json.loads(path.read_text(encoding="utf-8"))
             dependency = graph["jobs"]["10-synthesis-report"]["dependencies"][-2]
             dependency["kind"] = "optional"

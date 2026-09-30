@@ -24,5 +24,10 @@ Each file here is the exact prompt to paste into a new Claude session. Every pro
 | `Q-exported-symbol-entry-points.md` | cloud (code) + you run one WSL smoke | now | `entry-exports` |
 | `O2-cwe-through-feed.md` | cloud | now (O merged) | `cwe-feed` |
 | `L2-derive-list-fixes.md` | cloud | now (L merged) | `derive-fixes` |
+| `R-authorization-matrix.md` | cloud | now | `authz-matrix` |
+| `S-reachability-precision.md` | cloud (code) + you run one WSL Joern capture | now (after brief Q merged) | `reach-precision` |
+| `T-attack-trees-into-chains.md` | cloud | now (independent of R and S) | `trees-into-chains` |
+| `U-structural-query-tools.md` | cloud | now (independent; uses Q/S outputs when present) | `code-query-tools` |
+| `V-lead-context.md` | cloud | after brief U merges | `lead-context` |
 
 Agent A (`osv-feed`) is finished; its branch is waiting for the controller to push and merge. Waves 1 and 2 (2026-09-29) run three agents at once because their file ownership is disjoint; wave 2 starts only after the merges named in its row. Each agent pushes ONLY its own branch; the controller merges.

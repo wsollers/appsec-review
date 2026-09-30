@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dependency_workers as workers
@@ -197,7 +198,7 @@ class DependencyWorkersTest(unittest.TestCase):
             attempt = self.out / envelope["job_id"] / "attempts" / envelope["attempt_id"]
             permission = json.loads((attempt / "permission.json").read_text())
             lineage = json.loads((attempt / "lineage.json").read_text())
-            template = json.loads((ROOT / "registry" / "job-templates" /
+            template = json.loads((registry_paths.JOB_TEMPLATES_DIR /
                                    f"{envelope['job_id']}.json").read_text())
             self.assertEqual(permission, {"schema": workers.PERMISSION_SCHEMA, "run_id": self.run_id,
                 "job_id": envelope["job_id"], "source_snapshot_sha256": self.source,

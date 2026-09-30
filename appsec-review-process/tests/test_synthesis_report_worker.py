@@ -9,6 +9,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import registry_paths
 
 import demo_report_fixture
 from execution_state import Blocked, file_hash
@@ -90,7 +91,7 @@ class SynthesisReportWorkerTests(unittest.TestCase):
             presentation.build_review(report, {})
 
     def test_standalone_contract_and_template_are_schema_valid(self):
-        registry = ROOT / "registry"
+        registry = registry_paths.REGISTRY
         records = ((registry / "output-contracts/synthesis-report-publication.json",
                     "output-contract.schema.json"),
                    (registry / "job-templates/10-synthesis-report.json", "job-template.schema.json"))

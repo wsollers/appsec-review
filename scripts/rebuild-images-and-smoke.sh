@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rebuild-images-and-smoke.sh   (run from the appsec-review repo root in WSL, Docker required)   v2
+# rebuild-images-and-smoke.sh   (run from the appsec-review repo root in WSL, Docker required)   v3
 #
 # Rebuilds audit-lsp-vendor, audit-native, audit-binary-analysis, audit-codeql and audit-codeql-native, then runs
 # the smoke tests. One PASS/FAIL line per step and a summary. EVERY failure prints the real error lines, and at
@@ -11,7 +11,10 @@
 # Options (environment variables):
 #   DRY_RUN=1        print the commands, run nothing
 #   NO_CACHE=1       docker build --no-cache
-#   FORCE=1          rebuild even when the fingerprint is unchanged (default: REUSED is fine)
+#   FORCE=1          rebuild and re-smoke even when nothing changed. Default: an image whose fingerprint is
+#                    unchanged and which still exists is SKIPPED (image_build.py says REUSED), and a smoke
+#                    test that already passed against that exact image id is SKIPPED too (stamps in
+#                    scratch/.smoke-ok/). NO_CACHE=1 also rebuilds.
 #   WITH_BUILDENV=1  also rebuild audit-buildenv-cpp and run the lang-server smoke
 #   REGISTER=1       regenerate the B16 image records afterwards (OFF by default: it changes job fingerprints;
 #                    do it after briefs L, O and K are merged, before the hello-autotools rerun)
@@ -73,7 +76,9 @@ step() {
   start=$(date +%s)
   if [[ "${DRY_RUN:-0}" == "1" ]]; then rc=0; else "$@" >"$log" 2>&1; rc=$?; fi
   end=$(date +%s); NAMES+=("$name"); SECS+=($((end - start)))
-  if [[ $rc -eq 0 ]]; then
+  if [[ $rc -eq 0 && "${DRY_RUN:-0}" != "1" && "$name" == build-* ]] && grep -q "^REUSED" "$log"; then
+    RESULTS+=("SKIP (already built)"); echo "SKIP  $name  (already built, fingerprint unchanged)"
+  elif [[ $rc -eq 0 ]]; then
     RESULTS+=("PASS"); echo "PASS  $name  ($((end - start))s)"
   else
     RESULTS+=("FAIL (exit $rc)"); FAILED["$name"]=1
@@ -114,7 +119,7 @@ finish() {
   local bad=0 i
   for i in "${!NAMES[@]}"; do
     printf '%-42s %-30s %s\n' "${NAMES[$i]}" "${RESULTS[$i]}" "${SECS[$i]}"
-    [[ "${RESULTS[$i]}" == PASS ]] || bad=1
+    [[ "${RESULTS[$i]}" == PASS || "${RESULTS[$i]}" == SKIP* ]] || bad=1
   done
   cat <<'EOF'
 
@@ -187,14 +192,34 @@ else
   echo "NOTE  image records NOT regenerated (REGISTER=1). Every 02-codeql-<lang> node stays an UNAVAILABLE gap until you do."
 fi
 
+# smoke NAME IMAGE SCRIPT-FILE -- COMMAND...: skip when this smoke already passed against this exact image id
+STAMPS="scratch/.smoke-ok"; mkdir -p "$STAMPS"
+smoke() {
+  local name="$1" image="$2" script="$3"; shift 3; shift   # drop the --
+  local iid sh key
+  iid=$(docker image inspect --format "{{.Id}}" "${image}:local" 2>/dev/null | sed 's/^sha256://' | cut -c1-16)
+  sh=$(sha256sum "$script" 2>/dev/null | cut -c1-12)
+  key="$STAMPS/${name}-${iid}-${sh}"
+  if [[ "${FORCE:-0}" != "1" && "${DRY_RUN:-0}" != "1" && -n "$iid" && -f "$key" ]]; then
+    NAMES+=("$name"); RESULTS+=("SKIP (already passed)"); SECS+=(0)
+    echo "SKIP  $name  (passed before against image ${iid})"; return 0
+  fi
+  step "$name" "${SMOKE_NEEDS[@]}" -- "$@"
+  if [[ "${RESULTS[-1]}" == PASS && -n "$iid" ]]; then touch "$key"; fi
+}
+
 # ---- 3. smoke tests -----------------------------------------------------------------------------
 if [[ "${SKIP_SMOKE:-0}" != "1" ]]; then
-  step smoke-reverse-audit-binary-analysis --needs build-audit-binary-analysis -- bash scripts/smoke_reverse_tools.sh --docker audit-binary-analysis
-  step smoke-reverse-audit-native          --needs build-audit-native -- bash scripts/smoke_reverse_tools.sh --docker audit-native
-  step smoke-codeql-per-language           --needs build-audit-codeql -- bash scripts/smoke_codeql_per_language.sh
-  step smoke-codeql-reachability           --needs build-audit-codeql -- bash scripts/smoke_codeql_reachability.sh
+  SMOKE_NEEDS=(--needs build-audit-binary-analysis)
+  smoke smoke-reverse-audit-binary-analysis audit-binary-analysis scripts/smoke_reverse_tools.sh -- bash scripts/smoke_reverse_tools.sh --docker audit-binary-analysis
+  SMOKE_NEEDS=(--needs build-audit-native)
+  smoke smoke-reverse-audit-native audit-native scripts/smoke_reverse_tools.sh -- bash scripts/smoke_reverse_tools.sh --docker audit-native
+  SMOKE_NEEDS=(--needs build-audit-codeql)
+  smoke smoke-codeql-per-language audit-codeql scripts/smoke_codeql_per_language.sh -- bash scripts/smoke_codeql_per_language.sh
+  smoke smoke-codeql-reachability audit-codeql scripts/smoke_codeql_reachability.sh -- bash scripts/smoke_codeql_reachability.sh
   if [[ "${WITH_BUILDENV:-0}" == "1" ]]; then
-    step smoke-lang-servers-cpp --needs build-audit-buildenv-cpp -- bash scripts/smoke_lang_servers.sh --docker audit-buildenv-cpp
+    SMOKE_NEEDS=(--needs build-audit-buildenv-cpp)
+    smoke smoke-lang-servers-cpp audit-buildenv-cpp scripts/smoke_lang_servers.sh -- bash scripts/smoke_lang_servers.sh --docker audit-buildenv-cpp
   fi
 fi
 

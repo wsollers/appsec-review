@@ -222,7 +222,7 @@ For bounded plumbing tests, add `-StaticSteps cloc`. For a full broad static pas
 
 ## Composable Pregather Jobs
 
-The registry under `appsec-review-process/registry/job-templates/` defines bounded pregather jobs
+The registry under `appsec-review-process/pipeline/job-templates/` defines bounded pregather jobs
 that can be rendered into future handoffs once `create_job_handoff.py` exists. Current job
 templates include:
 

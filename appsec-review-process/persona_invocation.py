@@ -36,6 +36,7 @@ import time
 import unicodedata
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, runtime_checkable
+import registry_paths
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -61,7 +62,7 @@ OUTPUT_SCHEMA = "persona-invoker-output.schema.json"
 RECORD_SCHEMA = "persona-invocation-record.schema.json"
 RESULT_SCHEMA = "persona-invocation-result.schema.json"
 
-REGISTRY_DIR = ROOT / "registry"
+REGISTRY_DIR = registry_paths.REGISTRY
 PROMPT_ROOT = ROOT          # outer prompts are named relative to the process tree, as the worker sees it
 WORKER_KIND = "persona"
 REQUEST_FILE = "request.json"

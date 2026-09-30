@@ -19,11 +19,12 @@ import report_input_assembly as assembly
 from schema_validate import validate_document
 import synthesis_report as synthesis
 import synthesis_report_presentation as presentation
+import registry_paths
 
 JOB = synthesis.JOB
 CONTRACT = "synthesis-report-publication"
-STANDALONE_REGISTRY = ROOT / "registry"
-STANDALONE_GRAPH = ROOT / "job-graph.json"
+STANDALONE_REGISTRY = registry_paths.REGISTRY
+STANDALONE_GRAPH = registry_paths.JOB_GRAPH
 PERMISSIONS = ["read-run-data", "write-run-data"]
 ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthesis.APPENDIX,
     synthesis.TRACE, synthesis.PUBLICATION, enrichment_core.RESULT, chain_report.RESULT, poc_report.RESULT, dep_report.RESULT,
@@ -32,12 +33,12 @@ ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthe
     *(f"presentation/{name}" for name in presentation.RENDERED),
     "permission.json", "lineage.json", "status.json"]
 CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", "synthesis_report.py",
-    "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py",
-    "cvss4.py", "cwe_catalog.py", "code_snippets.py", "epss_kev_snapshot.py",
+    "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py", "entry_exports.py",
+    "cvss4.py", "cwe_catalog.py", "mitre_feed.py", "code_snippets.py", "epss_kev_snapshot.py",
     "attack_chain_report.py", "attack_chain_refute.py", "attack_chain_derive.py",
     "poc_fix_report.py", "poc_fix_denylist.py", "dependency_reachability_report.py",
-    "registry/output-contracts/synthesis-report-publication.json",
-    "registry/job-templates/10-synthesis-report.json", "job-graph.json")
+    registry_paths.contract_rel("synthesis-report-publication"),
+    registry_paths.template_rel("10-synthesis-report"), registry_paths.GRAPH_REL)
 RENDER_FILES = ("pipeline/report/render.py", "pipeline/report/templates/report.tex.j2",
     "pipeline/report/templates/report.html.j2", "pipeline/report/templates/workbench.html.j2",
     "pipeline/report/templates/vendor/katex-0.16.11.css", "pipeline/report/latex/appsec-house.sty")

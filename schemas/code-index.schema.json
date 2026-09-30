@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "code-index.schema.json",
+  "title": "Accepted 02-code-index result: the structural code index database, its hashes, sources, capabilities and gaps",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_snapshot_sha256",
+    "status",
+    "sources",
+    "capabilities",
+    "counts",
+    "graph_gaps",
+    "gaps",
+    "content_sha256",
+    "sqlite_version",
+    "sqlite",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/code-index/1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_snapshot_sha256": {
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+    },
+    "status": {
+      "$ref": "common/formats.schema.json#/$defs/ok_status"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpg",
+        "treesitter",
+        "binary_triage"
+      ],
+      "properties": {
+        "cpg": {
+          "type": "object"
+        },
+        "treesitter": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "binary_triage": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpg",
+        "treesitter",
+        "exports",
+        "type_edges"
+      ],
+      "properties": {
+        "cpg": {
+          "type": "boolean"
+        },
+        "treesitter": {
+          "type": "boolean"
+        },
+        "exports": {
+          "type": "boolean"
+        },
+        "type_edges": {
+          "type": "boolean"
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "graph_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "content_sha256": {
+      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+    },
+    "sqlite_version": {
+      "type": "string"
+    },
+    "sqlite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "const": "code-index.sqlite"
+        },
+        "sha256": {
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "claim_boundary": {
+      "const": "STRUCTURAL_LOCATORS_NOT_FINDINGS_REQUIRE_SOURCE_DEREFERENCE"
+    }
+  }
+}

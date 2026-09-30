@@ -36,6 +36,7 @@ import tunables
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import registry_paths
 
 JOB = "12b-poc-and-fix"
 CONTRACT = "12b-poc-and-fix"
@@ -65,7 +66,7 @@ def _sha(value: Any) -> str:
 
 def _code_hashes() -> dict[str, str]:
     values = fix_pool.code_hashes()
-    for path in ("poc_fix_worker.py", f"registry/job-templates/{JOB}.json", f"registry/output-contracts/{CONTRACT}.json"):
+    for path in ("poc_fix_worker.py", registry_paths.template_rel(JOB), registry_paths.contract_rel(CONTRACT)):
         values[path] = file_hash(ROOT / path)
     values["schemas/" + RESULT_SCHEMA] = file_hash(ROOT.parent / "schemas" / RESULT_SCHEMA)
     return values

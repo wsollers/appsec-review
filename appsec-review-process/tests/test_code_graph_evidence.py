@@ -9,6 +9,7 @@ from unittest import mock
 
 PROCESS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROCESS))
+import registry_paths
 
 import code_graph_evidence as cpg
 from execution_state import Blocked, file_hash
@@ -113,8 +114,8 @@ class CodeGraphEvidenceTests(unittest.TestCase):
                 joern_cpg.current_inputs("run-1")
 
     def test_lancedb_contract_cannot_be_confused_with_fts_authority(self):
-        contract = json.loads((PROCESS / "registry/output-contracts/semantic-recall-index.json").read_text())
-        template = json.loads((PROCESS / "registry/job-templates/02-semantic-recall-index.json").read_text())
+        contract = json.loads((registry_paths.contract("semantic-recall-index")).read_text())
+        template = json.loads((registry_paths.template("02-semantic-recall-index")).read_text())
         rules = " ".join(contract["validation_rules"])
         self.assertIn("Vector distance", rules)
         self.assertIn("SQLite FTS5 remains", rules)

@@ -12,6 +12,7 @@ from typing import Any
 
 from execution_state import ROOT, read_json
 from job_graph import composition
+import registry_paths
 import resource_pools
 from schema_validate import validate_document
 from worker_result import validate_worker_result
@@ -111,8 +112,8 @@ def _registry_for(node: dict[str, Any], repo: Path) -> dict[str, str] | None:
     template_id = node.get("template")
     if not template_id:
         return None
-    registry = resolve_repo_path("appsec-review-process/registry", repo)
-    template = read_json(registry / "job-templates" / f"{template_id}.json")
+    registry = resolve_repo_path(registry_paths.repo_rel(registry_paths.DIRNAME), repo)
+    template = read_json(registry_paths.template(template_id, registry))
     composition(template, registry)
     value = template["composition"]
     return {"template": template_id, "persona": value["persona_id"], "role": value["role_id"],
@@ -277,7 +278,7 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
     errors += _unique(manifest.get("capabilities", []), "capability")
     errors += _validate_worker_result_contract(manifest, repo)
     gaps: list[str] = []
-    graph = read_json(resolve_repo_path("appsec-review-process/job-graph.json", repo))
+    graph = read_json(resolve_repo_path(registry_paths.repo_rel(registry_paths.GRAPH_REL), repo))
     errors += _validate_graph(graph, manifest, repo)
     graph_jobs = graph["jobs"]
     records = {record.get("id"): record for record in manifest.get("jobs", []) if isinstance(record, dict)}
@@ -349,7 +350,7 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
         if record.get("registry") != expected_registry:
             errors.append(f"{job_id}: registry composition mismatch")
         if expected_registry:
-            template = read_json(resolve_repo_path("appsec-review-process/registry/job-templates", repo) /
+            template = read_json(resolve_repo_path(registry_paths.repo_rel(registry_paths.rel(registry_paths.JOB_TEMPLATES)), repo) /
                                  f"{expected_registry['template']}.json")
             expected_permissions = template.get("permissions", [])
             if record.get("permissions") != expected_permissions:
@@ -362,7 +363,7 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
             if relative and not resolve_repo_path(relative, repo).is_file():
                 errors.append(f"{job_id}: missing declared {field}: {relative}")
         if expected_registry:
-            expected_contract = f"appsec-review-process/registry/output-contracts/{node['contract']}.json"
+            expected_contract = registry_paths.repo_rel(registry_paths.contract_rel(node["contract"]))
             if output.get("contract_file") != expected_contract:
                 errors.append(f"{job_id}: registry output-contract file mismatch")
             contract_record = read_json(resolve_repo_path(expected_contract, repo))
