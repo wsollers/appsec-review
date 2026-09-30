@@ -26,7 +26,8 @@ A terminal record is always written before the error is reported, with the log t
     python -B images/image_build.py rekey --all        (once per host after ADR-0033; no rebuild)
 
 Shared images (ADR-0033). ``publish`` pushes a current successful build to the private registry
-(``APPSEC_IMAGE_REGISTRY``, default ghcr.io/wsollers/appsec-review) and records its manifest digest
+(``APPSEC_IMAGE_REGISTRY``, default the LAN registry on zarathustra, 192.168.1.228:5000/appsec-review;
+orchestrator/image-registry/compose.yaml) and records its manifest digest
 and build identity in the committed ``images/published.lock.json``. ``pull`` fetches that digest on
 another host when the lock's fingerprint equals this checkout's, tags it with the local tag and
 writes ``latest.json`` with the publisher's fingerprint and attempt id and this host's image id, so
@@ -59,7 +60,7 @@ BUILD_KEYS = {"image_id", "tag", "dockerfile", "context", "build_args", "require
               "prebuild", "timeout_seconds"}
 SKIP_DIRS = {".git", "__pycache__"}
 LOCK_SCHEMA = "appsec-review/image-publish-lock/1"
-DEFAULT_REGISTRY = "ghcr.io/wsollers/appsec-review"
+DEFAULT_REGISTRY = "192.168.1.228:5000/appsec-review"   # zarathustra, orchestrator/image-registry/
 SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}\Z")
 
 
@@ -621,7 +622,7 @@ def publish(image_id: str) -> str:
         raise BuildFailed("PUBLISH_TAG_FAILED", tagged.stderr.strip()[-500:])
     pushed = _run([str(docker), "push", remote], 7200)
     if pushed.returncode != 0:
-        raise BuildFailed("PUBLISH_PUSH_FAILED", "docker push failed (docker login ghcr.io?)",
+        raise BuildFailed("PUBLISH_PUSH_FAILED", "docker push failed (is the registry on zarathustra up, and listed under insecure-registries?)",
                           (pushed.stderr or pushed.stdout)[-2000:])
     found = re.findall(r"digest: (sha256:[0-9a-f]{64})", pushed.stdout + pushed.stderr)
     if not found:   # the push output format is not an API; the pushed repo digest is
@@ -684,7 +685,7 @@ def pull(image_id: str, builds: dict[str, dict[str, Any]], lock: dict[str, Any])
         reference = f"{entry['repository']}@{entry['manifest_digest']}"
         pulled = _run([str(docker), "pull", reference], 7200)
         if pulled.returncode != 0:
-            raise BuildFailed("PULL_FAILED", "docker pull failed (docker login ghcr.io?)",
+            raise BuildFailed("PULL_FAILED", "docker pull failed (is the registry on zarathustra up, and listed under insecure-registries?)",
                               (pulled.stderr or pulled.stdout)[-2000:])
         tagged = _run([str(docker), "tag", reference, build["tag"]], 120)
         if tagged.returncode != 0:

@@ -92,7 +92,7 @@ class Hosts(unittest.TestCase):
         return mock.patch.dict(os.environ, {
             "APPSEC_IMAGES_ROOT": str(images), "APPSEC_IMAGE_BUILD_STATE": str(images / ".build-state"),
             "APPSEC_IMAGE_PUBLISH_LOCK": str(self.lock), "APPSEC_DOCKER_BIN": str(self.docker),
-            "APPSEC_IMAGE_REGISTRY": "ghcr.io/example/appsec-review",
+            "APPSEC_IMAGE_REGISTRY": "192.0.2.10:5000/appsec-review",
             "FAKE_DOCKER_HOST": host, "FAKE_DOCKER_LOCAL": str(self.root / f"{host}-docker.json"),
             "FAKE_DOCKER_REGISTRY": str(self.registry_file),
         })
@@ -124,7 +124,7 @@ class Hosts(unittest.TestCase):
     def test_publish_then_pull_gives_the_puller_valid_records(self):
         self.assertEqual(self.publish_all(), ["PUBLISHED", "PUBLISHED"])
         entry = json.loads(self.lock.read_text())["images"]["tool-one"]
-        self.assertEqual(entry["repository"], "ghcr.io/example/appsec-review/tool-one")
+        self.assertEqual(entry["repository"], "192.0.2.10:5000/appsec-review/tool-one")
         self.assertRegex(entry["manifest_digest"], r"^sha256:[0-9a-f]{64}$")
 
         self.assertEqual(self.pull_all(), ["PULLED", "PULLED"])
@@ -206,7 +206,7 @@ class Hosts(unittest.TestCase):
     def test_lock_entry_outside_the_configured_registry_is_refused(self):
         self.publish_all()
         document = json.loads(self.lock.read_text())
-        document["images"]["base-one"]["repository"] = "ghcr.io/someone-else/appsec-review/base-one"
+        document["images"]["base-one"]["repository"] = "192.0.2.99:5000/appsec-review/base-one"
         self.lock.write_text(json.dumps(document))
         with self.on("puller"):
             builds = image_build.load_builds()
@@ -215,7 +215,7 @@ class Hosts(unittest.TestCase):
 
     def test_malformed_lock_entry_is_refused(self):
         self.lock.write_text(json.dumps({"schema": image_build.LOCK_SCHEMA, "images": {
-            "base-one": {"repository": "ghcr.io/x/y", "manifest_digest": "latest",
+            "base-one": {"repository": "192.0.2.10:5000/appsec-review/base-one", "manifest_digest": "latest",
                          "fingerprint": "sha256:" + "0" * 64, "attempt_id": "a", "finished_at": "b"}}}))
         with self.on("puller"):
             builds = image_build.load_builds()

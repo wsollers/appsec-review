@@ -117,7 +117,7 @@ elif [[ $CHECK -eq 1 ]]; then
     todo "missing or stale builds: ${MISSING[*]}"
 else
     # Shared images first (ADR-0033): pull what images/published.lock.json holds for these sources.
-    # STALE or UNPUBLISHED ones, and a failed pull (no `docker login ghcr.io`), fall through to a build.
+    # STALE or UNPUBLISHED ones, and a failed pull (registry down or unreachable), fall through to a build.
     echo "  pulling published images ..."
     python3 -B images/image_build.py pull "${MISSING[@]}" 2>&1 | sed 's/^/    /'
     mapfile -t MISSING < <(missing_images)

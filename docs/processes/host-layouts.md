@@ -39,12 +39,13 @@ target runs.
   | `data/feeds/osv/`, `data/feeds/mitre/` | OSV and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `nvd_reference_schedule`, `mitre_feed.py sync` |
 
 - **Runs are not portable.** A run started on one host is resumed on the same host.
-- **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-through-ghcr.md)).** hal5000 builds and
-  publishes images to the private `ghcr.io/wsollers/appsec-review/<id>` packages and commits
-  `images/published.lock.json`; every other host pulls them in `prepare-host.sh` step 3 and builds only
-  what the lock does not cover (`image_build.py pull --all` also replaces current local builds with the
-  published ones). Each host needs `docker login ghcr.io -u wsollers` once, with a classic
-  token (`read:packages`; `write:packages` on hal5000).
+- **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-lan-registry.md)).** hal5000 builds and
+  publishes images to the LAN registry on zarathustra (`192.168.1.228:5000/appsec-review/<id>`) and
+  commits `images/published.lock.json`; every other host pulls them in `prepare-host.sh` step 3 and builds
+  only what the lock does not cover (`image_build.py pull --all` also replaces current local builds with
+  the published ones). Every host, zarathustra included, lists `192.168.1.228:5000` under Docker's
+  `insecure-registries`: `/etc/docker/daemon.json` then `sudo systemctl restart docker` on native Linux;
+  Docker Desktop, Settings, Docker Engine on hal5000.
 
 ## zarathustra (native Linux)
 
@@ -58,6 +59,8 @@ target runs.
 - `prepare-host.sh` starts the code location in the background with its log at
   `orchestrator/dagster/.host/code-location.log`; stop it with
   `pkill -f 'dagster code-server start'`.
+- Runs the LAN image registry (ADR-0033): `docker compose -f orchestrator/image-registry/compose.yaml up -d`
+  (restarts with Docker). Port 5000 on the LAN; if `ufw` is active, allow it from `192.168.1.0/24` only.
 - Also on this host: Codex worktrees under `~/.codex/worktrees/` and
   `/mnt/projects-drive/projects/appsec-review-*`, plus many prunable `/tmp/appsec-*` worktrees
   (`git worktree prune` clears the missing ones). They share the one Docker engine but not the
