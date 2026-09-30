@@ -110,3 +110,21 @@ Other attacker personas keep `[]` until a pack for their class is written.
   every tag is still withheld by `screen()` (ADR-0026 §2).
 - Adding a pack for a new class (authn/session, deserialization, memory safety, IAM escalation, LLM tool
   abuse) is a new JSON file plus a persona catalog line.
+
+## Addendum (2026-09-30, William): packs per job, MITRE version recorded for reporting
+
+1. **Packs are assigned in the job config.** A job template may carry `knowledge_packs`: a map of
+   persona id -> pack ids. Red-team pools hold several personas, so the pool's job template is where they
+   are focused (for `claim-review-pool-cell`, next to `stage_personas`). A persona named in the map gets
+   exactly those packs (`[]` removes them); a persona not named falls back to its `persona.json`
+   `knowledge_packs` default. The item 2 category rule applies to both sources. The W3 assignments move
+   from the five `persona.json` files into `claim-review-pool-cell.json`; the persona defaults return
+   to `[]`. The job template is already part of each job's input identity, and the prompt stays a pure
+   function of the registry (template + variant), so the prompt cache key does not change.
+2. **The cap is a tunable.** `knowledge_packs_per_persona_max` (default 2) replaces the fixed limit in
+   item 2; the schema no longer hard-codes `maxItems`, and `knowledge_packs.py check` enforces the tunable
+   on both sources.
+3. **The MITRE snapshot is recorded, not bound.** It stays out of job inputs: jobs use the current
+   snapshot. Every job granted MITRE lookup tools records a structured `mitre_reference` entry
+   (snapshot id, derived-table hash, ATT&CK / CAPEC / CWE versions, or the gap code) in its job record,
+   and the report shows which versions the run used. Binding it into job inputs is a TODO.

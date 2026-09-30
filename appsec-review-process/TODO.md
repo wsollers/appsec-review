@@ -783,8 +783,13 @@ Decision record: [ADR-0034](../docs/decisions/ADR-0034-knowledge-packs.md). Clos
 - [x] W3: packs `cloud-exposure`, `injection`, `supply-chain` and their lane-07 persona assignments
       (ATT&CK 19.2 / CAPEC 3.9 ids validated `OK` against a synced snapshot; CWE ids format-checked only:
       `cwe.mitre.org` unreachable from the authoring host).
-- [ ] W2 open points, awaiting William: (a) the MITRE tools are granted only in indexed mode, so inline
-      stage-07 cells without a code index do not get them; (b) the snapshot identity is recorded in attempt
-      limitations but not bound into job inputs.
+- [ ] W2 open point, awaiting William: the MITRE tools are granted only in indexed mode, so inline
+      stage-07 cells without a code index do not get them.
+- [ ] W4 (ADR-0034 addendum 1-2): `knowledge_packs` persona -> packs map in job templates (overrides the persona
+      default), W3 assignments moved into `claim-review-pool-cell.json`, cap as tunable `knowledge_packs_per_persona_max` (2).
+- [ ] W5 (ADR-0034 addendum 3): structured `mitre_reference` entry (snapshot id, table hash, ATT&CK/CAPEC/CWE versions
+      or gap) on every job granted MITRE tools, shown in the report.
+- [ ] Later: bind the MITRE snapshot identity into job inputs (today jobs use the current snapshot; the version is
+      recorded for reporting only, ADR-0034 addendum 3).
 - [ ] Phase 2: intake adds packs from target traits (`applies_to`); needs a run-specific prompt cache key.
 - [ ] More packs: authn/session, deserialization, memory safety, IAM escalation, LLM tool abuse, business logic.
