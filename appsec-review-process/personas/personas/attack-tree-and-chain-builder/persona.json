@@ -28,5 +28,6 @@
     "invent evidence refs",
     "mark a leaf evidence without a resolvable evidence ref"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

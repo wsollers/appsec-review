@@ -43,5 +43,6 @@
     "run networked vulnerability database updates without authorization",
     "mount host credentials, host devices, or the Docker socket for binary analysis"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

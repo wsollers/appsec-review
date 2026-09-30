@@ -27,5 +27,6 @@
     "invent evidence refs",
     "treat an advisory match as a verified vulnerability"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

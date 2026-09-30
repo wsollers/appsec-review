@@ -9,7 +9,9 @@ Every registry-record section (``persona``, ``role``, ``domain``, ``tooling_prof
 directory. This module never re-derives, paraphrases, or summarizes a registry record -- it reads
 the record, validates it against its own schema (the same schema persona_invocation validates
 against), and writes its canonical JSON form. What the persona reads and what persona_invocation
-pins can never drift apart, because they are read from the same file.
+pins can never drift apart, because they are read from the same file. When the persona lists
+knowledge packs (ADR-0034), a ``Knowledge Packs`` section follows the persona section: a fixed
+framing statement, then each pack record rendered the same way.
 
 Two sections are literal file bytes, not a registry record: ``governing_rules``
 (``pipeline/prompt-fragments/governing-rules.md``, shared by every future job template that lists
@@ -60,6 +62,17 @@ RECORD_SECTIONS: dict[str, tuple[str, str, str, str]] = {
     "tooling_profile": ("tooling-profiles", "tooling-profile.schema.json", "tooling_profile_id", "tooling_profile_id"),
     "output_contract": ("output-contracts", "output-contract.schema.json", "output_contract_id", "contract_id"),
 }
+
+# ADR-0034 item 4: the fixed, trusted statement that heads a persona's knowledge packs. A pack frames
+# the search; it is not a checklist and never evidence.
+KNOWLEDGE_PACK_FRAMING = (
+    "The knowledge packs below are focus and vocabulary for this persona's search: they name an exploit "
+    "class, where to look and what would prove a claim. They are not a checklist and not evidence. A claim "
+    "still needs cited evidence from the target; a pack id, or anything a pack lists, is never evidence. "
+    "When a pack's class is not observed in the target, record it as not observed (a coverage gap), never "
+    "as \"no issues found\". ATT&CK, CAPEC and CWE ids taken from a pack are validated like any other tag "
+    "and are withheld with a recorded gap when they do not validate."
+)
 
 LITERAL_SECTIONS: dict[str, tuple[Path, str]] = {
     "governing_rules": (GOVERNING_RULES_PATH, "Governing Rules"),
@@ -112,15 +125,58 @@ def _render_record(section: str, composition: Mapping[str, str], store: SchemaSt
         raise PromptAssemblyError(f"{section} record {record_id!r} is not valid JSON") from None
     if validate_document(record, schema, store) or record.get(record_field) != record_id:
         raise PromptAssemblyError(f"{section} record {record_id!r} is invalid or misnamed")
+    if section == "persona":
+        return render_persona_prompt(record_id, record, REGISTRY_DIR, store)
     return render_record_section(section, record_id, persona_registry.loaded(directory, record))
 
 
 def render_record_section(section: str, record_id: str, record: Mapping[str, Any]) -> str:
-    """The exact prompt section for one loaded registry record (a persona or role folder's
-    ``prompt.md`` is this text; ``catalog_personas.py check`` keeps the two equal)."""
+    """The exact prompt section for one loaded registry record (a role folder's ``prompt.md`` is
+    this text; ``catalog_personas.py check`` keeps the two equal)."""
     body = json.dumps(record, indent=2, sort_keys=True)
     heading = section.replace("_", " ").title()
     return f"## {heading} ({record_id})\n\n```json\n{body}\n```\n"
+
+
+def load_knowledge_packs(registry_dir: Path, pack_ids: Any, store: SchemaStore) -> list[tuple[str, dict]]:
+    """(pack id, record) for each listed pack, in the persona's order; each read from
+    ``<registry_dir>/knowledge-packs/`` and checked against its own schema and file name."""
+    if not isinstance(pack_ids, list):
+        raise PromptAssemblyError("persona knowledge_packs is not a list")
+    packs = []
+    for pack_id in pack_ids:
+        path = persona_registry.knowledge_pack_path(Path(registry_dir), identifier(pack_id))
+        text = _read_utf8(path, Path(registry_dir), f"knowledge pack {pack_id!r}")
+        try:
+            record = json.loads(text)
+        except ValueError:
+            raise PromptAssemblyError(f"knowledge pack {pack_id!r} is not valid JSON") from None
+        if (validate_document(record, persona_registry.KNOWLEDGE_PACK_SCHEMA, store)
+                or record.get("pack_id") != pack_id):
+            raise PromptAssemblyError(f"knowledge pack {pack_id!r} is invalid or misnamed")
+        packs.append((pack_id, record))
+    return packs
+
+
+def render_knowledge_packs_section(packs: list[tuple[str, Mapping[str, Any]]]) -> str:
+    """The ``knowledge_packs`` section (ADR-0034 items 3 and 4): the fixed framing statement, then
+    each pack as the same labelled, fenced canonical JSON every record section uses. Empty when the
+    persona lists no pack."""
+    if not packs:
+        return ""
+    parts = [f"## Knowledge Packs\n\n{KNOWLEDGE_PACK_FRAMING}\n"]
+    parts += [render_record_section("knowledge_pack", pack_id, record) for pack_id, record in packs]
+    return "\n".join(parts)
+
+
+def render_persona_prompt(persona_id: str, record: Mapping[str, Any], registry_dir: Path = REGISTRY_DIR,
+                          store: SchemaStore | None = None) -> str:
+    """The persona section and, when the persona lists knowledge packs, the ``knowledge_packs``
+    section right after it. ``record`` is the persona.json as on disk. A persona folder's
+    ``prompt.md`` is this text; a pure function of the registry, so the prompt cache stays valid."""
+    text = render_record_section("persona", persona_id, persona_registry.loaded("personas", record))
+    packs = load_knowledge_packs(registry_dir, record.get("knowledge_packs") or [], store or SchemaStore())
+    return text + ("\n" + render_knowledge_packs_section(packs) if packs else "")
 
 
 def _render_literal(section: str) -> str:

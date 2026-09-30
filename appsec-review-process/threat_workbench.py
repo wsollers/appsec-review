@@ -49,6 +49,7 @@ import tunables
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path
 from schema_validate import SchemaStore, validate_document
 import threat_workbench_intercom as intercom
+import persona_registry
 import registry_paths
 
 JOB = "03-threat-model-dfd-stride"
@@ -166,7 +167,8 @@ SCHEMA_FILES = (CELL_SCHEMA, "threat-model-privacy-threat.schema.json", "threat-
 
 
 def code_hashes() -> dict[str, str]:
-    values = {name: file_hash(ROOT / name) for name in CODE_FILES}
+    values = {name: file_hash(ROOT / name)
+              for name in (*CODE_FILES, *persona_registry.knowledge_pack_rels(CODE_FILES))}
     for name in SCHEMA_FILES:
         values[f"schemas/{name}"] = file_hash(ROOT.parent / "schemas" / name)
     return values

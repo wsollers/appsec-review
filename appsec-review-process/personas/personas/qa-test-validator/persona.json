@@ -32,5 +32,6 @@
     "treat mocked controls as production controls without caveat",
     "treat tests as proof that a control is secure"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

@@ -22,6 +22,8 @@ Composable review schemas (added for the registry/worklist layer):
 - `persona.schema.json` -- reusable reviewer stance, assumptions, inputs, outputs, and hard boundaries.
 - `role.schema.json` -- reusable work function such as intelligence extraction, standards validation, or platform hardening validation.
 - `domain.schema.json` -- reviewed surface, common failure modes, standards context, and evidence hints.
+- `knowledge-pack.schema.json` -- one exploit-class focus record a persona may list (ADR-0034): what to
+  look for, preconditions, proof obligations, false-positive traps and ATT&CK/CAPEC/CWE ids only.
 - `tooling-profile.schema.json` -- allowed evidence/actions and claim limits, including static-only boundaries.
 - `output-contract.schema.json` -- required files, status fields, validation rules, and an optional
   one-artifact result-schema identity plus an optional claim-class declaration for a composed job.

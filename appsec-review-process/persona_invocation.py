@@ -364,6 +364,9 @@ def load_composition(registry_dir: Path, persona: Mapping[str, str], store: Sche
             continue   # a registry-declared role variant of this template (ADR-0024)
         if composed[name + "_id"] != persona[name + "_id"]:
             raise PersonaRequestError(f"persona.{name}_id is not what the named job template composes")
+    packs = load_knowledge_packs(registry_dir, records["persona"], store)
+    if packs:
+        records["knowledge_packs"] = packs   # ADR-0034: part of the composition's identity
     errors = composition_errors(records)
     if errors:
         raise PersonaRequestError("the named composition cannot be invoked: " + "; ".join(errors))
@@ -394,8 +397,25 @@ def role_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(values)
 
 
+def load_knowledge_packs(registry_dir: Path, persona: Mapping[str, Any], store: SchemaStore
+                         ) -> dict[str, dict[str, Any]]:
+    """{pack id: record} for every knowledge pack the loaded persona lists (ADR-0034), each loaded,
+    schema-checked and name-checked like any other registry record. Empty when it lists none."""
+    pack_ids = persona.get("knowledge_packs") or []
+    if not isinstance(pack_ids, (list, tuple)) or not all(isinstance(v, str) and _REG_RE.match(v) for v in pack_ids):
+        raise PersonaRequestError("persona knowledge_packs must be a list of registry ids")
+    return {pack_id: _load_record(Path(registry_dir), persona_registry.KNOWLEDGE_PACKS,
+                                  persona_registry.KNOWLEDGE_PACK_SCHEMA, "pack_id", pack_id, store)
+            for pack_id in pack_ids}
+
+
 def composition_sha256(records: Mapping[str, Mapping[str, Any]]) -> str:
-    return _sha({name: _sha(thaw(records[name])) for name, _, _, _ in COMPOSITION_KINDS})
+    """Hash of the composition's records; a persona's knowledge packs are part of it when it lists
+    any (a persona without packs hashes exactly as before ADR-0034)."""
+    value = {name: _sha(thaw(records[name])) for name, _, _, _ in COMPOSITION_KINDS}
+    if records.get("knowledge_packs"):
+        value["knowledge_packs"] = _sha(thaw(records["knowledge_packs"]))
+    return _sha(value)
 
 
 def validate_persona_registry(registry_dir: Path) -> list[str]:

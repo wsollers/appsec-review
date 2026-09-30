@@ -39,6 +39,7 @@ import tunables
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import persona_registry
 import registry_paths
 
 JOB = "deterministic-pool-merge"
@@ -206,6 +207,8 @@ def _code_hashes() -> dict[str, str]:
         result[path] = file_hash(ROOT / path)
     for role_id in sorted(set(_stage_roles().values())):
         path = f"personas/roles/{role_id}/role.json"
+        result[path] = file_hash(ROOT / path)
+    for path in persona_registry.knowledge_pack_rels(list(result)):   # ADR-0034: packs the personas list
         result[path] = file_hash(ROOT / path)
     result["schemas/claim-review-pool-candidates.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-pool-candidates.schema.json")

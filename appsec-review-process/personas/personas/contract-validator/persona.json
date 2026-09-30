@@ -19,5 +19,6 @@
     "emit verified findings",
     "execute target scripts"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

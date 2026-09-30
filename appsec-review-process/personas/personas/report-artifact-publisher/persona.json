@@ -21,5 +21,6 @@
     "execute target content",
     "treat conversion success as independent verification"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

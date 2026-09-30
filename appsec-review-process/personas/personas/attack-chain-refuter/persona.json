@@ -25,5 +25,6 @@
     "assign severity or call a chain verified",
     "write exploit code, commands or payloads"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

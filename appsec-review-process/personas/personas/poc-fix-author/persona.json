@@ -25,5 +25,6 @@
     "call the PoC validated or the fix verified",
     "execute or mutate target content"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

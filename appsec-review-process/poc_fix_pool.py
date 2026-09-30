@@ -33,6 +33,7 @@ import resource_pools
 import review_cli
 from execution_state import Blocked, ROOT, atomic_bytes, digest, file_hash
 from schema_validate import SchemaStore
+import persona_registry
 import registry_paths
 
 TEMPLATE = "poc-and-fix-cell"
@@ -58,7 +59,7 @@ def code_hashes() -> dict[str, str]:
              "personas/roles/poc-fix-coordinator/role.json", registry_paths.rel(registry_paths.DOMAINS, "poc-and-fix"),
              registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"), registry_paths.contract_rel("poc-fix-candidates"),
              registry_paths.template_rel(TEMPLATE), f"{LANE}/task-{TEMPLATE}.md"]
-    values = {path: file_hash(ROOT / path) for path in paths}
+    values = {path: file_hash(ROOT / path) for path in (*paths, *persona_registry.knowledge_pack_rels(paths))}
     for name in (derive.PERSONA_SCHEMA, derive.RECORD_SCHEMA, derive.CANDIDATES_SCHEMA, derive.WORKSPACE_SCHEMA):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values

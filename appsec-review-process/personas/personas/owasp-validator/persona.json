@@ -40,5 +40,6 @@
     "mark a control satisfied without direct evidence",
     "silently skip controls selected by the applicability job"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

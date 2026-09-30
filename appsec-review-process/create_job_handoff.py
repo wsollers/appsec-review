@@ -132,10 +132,14 @@ def build_handoff(run_id: str, job_id: str, input_paths: list[str], scope_id: st
             raise ValueError(f"handoff inputs exceed {MAX_TOTAL_INPUT_BYTES} bytes")
         inputs.append({"path": relative.as_posix(), "bytes": size, "sha256": file_hash(path)})
     template_record = _source_record(template_path, template)
+    composed = {key: value["record"] for key, value in records.items()}
+    packs = persona_registry.persona_pack_ids(REGISTRY, template["composition"]["persona_id"])
+    if packs:   # ADR-0034: the persona's knowledge packs are part of the composition's identity
+        composed["knowledge_packs"] = {pack: read_json(persona_registry.knowledge_pack_path(REGISTRY, pack))
+                                       for pack in packs}
     identity = {
         "template_sha256": template_record["sha256"],
-        "composition_sha256": "sha256:" + digest({key: value["record"]
-                                                   for key, value in records.items()}),
+        "composition_sha256": "sha256:" + digest(composed),
         "prompt_sha256": prompt["sha256"] if prompt else None,
         "output_contract_sha256": records["output_contract_id"]["sha256"],
         "inputs_sha256": "sha256:" + digest(inputs),

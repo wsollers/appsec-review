@@ -32,5 +32,6 @@
     "treat test presence as proof of security",
     "drop source lineage for derived records"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

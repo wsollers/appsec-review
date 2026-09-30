@@ -107,11 +107,14 @@ File: `../personas/personas/example-project-reviewer/persona.json`
   "required_inputs": ["target repository mounted read-only", "manifest inventory"],
   "outputs": ["evidence-cited project inventory", "evidence gaps"],
   "must_not": ["execute target scripts", "infer runtime state", "emit verified findings"],
+  "knowledge_packs": [],
   "provenance": {}
 }
 ```
 
-Every key is required and in this order. `best_used_in_lanes` may be `[]`; `provenance` is `{}` for
+Every key is required and in this order. `best_used_in_lanes` may be `[]`; `knowledge_packs` lists at
+most two `pipeline/knowledge-packs/` ids (attacker and domain-specialist personas only, ADR-0034), else
+`[]`; `provenance` is `{}` for
 a hand-authored persona (catalog-generated ones carry `catalog_personas.py`'s four keys). The
 folder's `prompt.md` is written by `python3 -B appsec-review-process/catalog_personas.py generate`. Persona categories are `attacker`, `defender`, `verifier`,
 `domain-specialist`, `evidence-ingestion`, `stakeholder-output`, `synthesis`, and

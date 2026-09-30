@@ -32,5 +32,6 @@
     "treat deployment manifests as observed runtime state",
     "mount docker socket or host credentials into build workers"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

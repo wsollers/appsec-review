@@ -26,5 +26,6 @@
     "assign severity or claim a confirmed finding",
     "execute or mutate target content"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

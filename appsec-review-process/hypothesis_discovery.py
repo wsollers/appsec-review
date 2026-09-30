@@ -55,6 +55,7 @@ from execution_state import (Blocked, ROOT, atomic_bytes, atomic_json, data_path
                              read_json, run_path)
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
+import persona_registry
 import registry_paths
 
 JOB = "07-hypothesis-discovery"
@@ -114,7 +115,7 @@ def _code_hashes() -> dict[str, str]:
         paths += [registry_paths.template_rel(template), f"personas/personas/{derive.MODES[mode]}/persona.json",
                   f"07-red-team-adversarial/task-{template}.md"]
     paths += [f"07-red-team-adversarial/{name}" for name in sorted({n for v in GUIDE_FILES.values() for n in v})]
-    values = {path: file_hash(ROOT / path) for path in paths}
+    values = {path: file_hash(ROOT / path) for path in (*paths, *persona_registry.knowledge_pack_rels(paths))}
     for name in (RESULT_SCHEMA, derive.PERSONA_SCHEMA, derive.CANDIDATES_SCHEMA, derive.RECORD_SCHEMA):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values

@@ -12,6 +12,7 @@ from typing import Any
 
 from execution_state import ROOT, read_json
 from job_graph import composition
+import knowledge_packs
 import registry_paths
 import resource_pools
 from schema_validate import validate_document
@@ -446,6 +447,13 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
     # The code-server deliberately mounts /opt/process and /opt/schemas but not repository docs.
     # Enforce checked-in view freshness on full checkouts; split mounts still exercise both pure
     # renderers and every graph/contract check through the focused Linux suite.
+    # ADR-0034: knowledge packs and the personas that list them. A missing MITRE snapshot is a gap
+    # (ids format-checked only), never an error.
+    pack_registry = repo / registry_paths.ROOT.name / registry_paths.DIRNAME
+    if pack_registry.is_dir():
+        pack_errors, pack_notes = knowledge_packs.check(pack_registry)
+        errors += [f"knowledge packs: {error}" for error in pack_errors]
+        gaps += [f"knowledge packs: {note}" for note in pack_notes if "format-checked only" in note]
     if (repo / "appsec-review-process").is_dir():
         generated = manifest.get("generated_views", {})
         expected_views = {

@@ -17,6 +17,7 @@ from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, digest, fi
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import persona_registry
 import registry_paths
 
 JOB = "10-synthesis-report"
@@ -60,7 +61,7 @@ def _sha(value: Any) -> str:
 
 
 def _generator_sha256() -> str:
-    values={name:file_hash(ROOT/name) for name in CODE_FILES}
+    values={name:file_hash(ROOT/name) for name in (*CODE_FILES,*persona_registry.knowledge_pack_rels(CODE_FILES))}
     values.update({"schemas/"+name:file_hash(ROOT.parent/"schemas"/name) for name in SCHEMA_FILES})
     return _sha(values)
 

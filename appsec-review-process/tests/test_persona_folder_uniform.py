@@ -66,6 +66,14 @@ class RecordShapeTests(unittest.TestCase):
                     self.assertEqual(list(record), order)
                     self.assertEqual(validate_document(record, schema_name, store), [])
 
+    def test_persona_key_order_ends_with_knowledge_packs_then_provenance(self):
+        """ADR-0034: ``knowledge_packs`` sits immediately before ``provenance`` in every persona."""
+        for folder, record in records("personas"):
+            with self.subTest(persona=folder.name):
+                self.assertEqual(list(record)[-2:], ["knowledge_packs", "provenance"])
+                self.assertIsInstance(record["knowledge_packs"], list)
+                self.assertLessEqual(len(record["knowledge_packs"]), persona_registry.PACKS_PER_PERSONA_MAX)
+
     def test_ids_match_their_folder_and_are_unique(self):
         for directory, (_, _, field) in persona_registry.KINDS.items():
             ids = [record[field] for _, record in records(directory)]

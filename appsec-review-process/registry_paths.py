@@ -6,6 +6,7 @@
     pipeline/job-templates/<id>.json      compositions a lane dispatches
     pipeline/output-contracts/<id>.json   required files, status fields, claim classes
     pipeline/domains/<id>.json            reviewed surfaces
+    pipeline/knowledge-packs/<id>.json    exploit-class focus records personas list (ADR-0034)
     pipeline/tooling-profiles/<id>.json   evidence and action boundaries
     pipeline/permission-capabilities/     capability definitions
     pipeline/container-images/<id>.json   pinned tool images
@@ -30,6 +31,7 @@ REGISTRY = ROOT / DIRNAME
 JOB_TEMPLATES = "job-templates"
 OUTPUT_CONTRACTS = "output-contracts"
 DOMAINS = "domains"
+KNOWLEDGE_PACKS = "knowledge-packs"
 TOOLING_PROFILES = "tooling-profiles"
 PERMISSION_CAPABILITIES = "permission-capabilities"
 CONTAINER_IMAGES = "container-images"
@@ -42,6 +44,7 @@ TUNABLES = REGISTRY / TUNABLES_NAME
 JOB_TEMPLATES_DIR = REGISTRY / JOB_TEMPLATES
 OUTPUT_CONTRACTS_DIR = REGISTRY / OUTPUT_CONTRACTS
 DOMAINS_DIR = REGISTRY / DOMAINS
+KNOWLEDGE_PACKS_DIR = REGISTRY / KNOWLEDGE_PACKS
 TOOLING_PROFILES_DIR = REGISTRY / TOOLING_PROFILES
 PERMISSION_CAPABILITIES_DIR = REGISTRY / PERMISSION_CAPABILITIES
 CONTAINER_IMAGES_DIR = REGISTRY / CONTAINER_IMAGES

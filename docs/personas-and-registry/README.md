@@ -21,10 +21,12 @@ appsec-review-process/personas/
 
 - `persona.json` / `role.json` is the machine record a job template composes. Every key the schema lists
   is present, in the schema's property order. A field that does not apply holds an explicit empty value
-  and is never omitted: `best_used_in_lanes: []` when a persona names no lanes, `provenance: {}` for a
+  and is never omitted: `best_used_in_lanes: []` when a persona names no lanes, `knowledge_packs: []`
+  when it lists no knowledge pack, `provenance: {}` for a
   hand-authored persona (catalog-generated personas carry `generated_by`, `source`, `reviewed`, `note`).
 - `prompt.md` is the exact section the prompt assembler puts in a job's prompt for that record
-  (`## Persona (<id>)` or `## Role (<id>)` and the record as sorted JSON). It is written by
+  (`## Persona (<id>)` or `## Role (<id>)` and the record as sorted JSON; a persona that lists knowledge
+  packs is followed by its `## Knowledge Packs` section). It is written by
   `catalog_personas.py generate`, never by hand, so opening a folder shows what the model reads.
 - Loading leaves an empty optional field out (`persona_registry.loaded`), so a record reads exactly as it
   did before the fields were made explicit; assembled prompts and pinned record hashes did not move.
@@ -78,3 +80,26 @@ The 07/08/09/12 claim review pool runs each stage under its own registry role (A
 
 The template's composed role stays the generic `claim-reviewer`. The code-reading hypothesis hunters
 already run as their own role, `vulnerability-hypothesis-hunter`.
+
+## Knowledge packs
+
+A persona is a point of view; a knowledge pack is an exploit-class focus it can carry
+([ADR-0034](../decisions/ADR-0034-knowledge-packs.md)). Packs are registry records,
+`appsec-review-process/pipeline/knowledge-packs/<pack_id>.json` (schema
+`schemas/knowledge-pack.schema.json`, every key present in order: `schema`, `pack_id`, `display_name`,
+`summary`, `applies_to`, `looks_for` ≤ 12, `preconditions` ≤ 8, `proof_obligations` ≤ 8,
+`false_positive_traps` ≤ 8, `refs` {`attack_tactics`, `attack_techniques`, `capec`, `cwe`} ≤ 15 ids each,
+`must_not`).
+
+- A persona lists at most two packs in `knowledge_packs`; only `attacker` and `domain-specialist`
+  personas may list any. Catalog personas take them from a `Knowledge packs:` list in
+  [persona-catalog.md](persona-catalog.md).
+- The prompt renders a `## Knowledge Packs` section right after the persona section: a fixed statement
+  that a pack is focus and vocabulary, never evidence, then each pack as fenced canonical JSON
+  (`persona_prompt_assembly.render_persona_prompt`).
+- Every job that hashes a `persona.json` also hashes the packs it lists
+  (`persona_registry.knowledge_pack_rels`), and a persona invocation's composition hash covers them, so a
+  pack edit re-executes the stages that use it.
+- `python3 -B appsec-review-process/knowledge_packs.py check` validates packs, id formats, caps and
+  persona references (against the MITRE snapshot when one resolves, format only otherwise); it also runs
+  from `validate_design_parity.py`.

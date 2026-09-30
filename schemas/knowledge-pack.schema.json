@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge-pack.schema.json",
+  "title": "Knowledge Pack",
+  "description": "One exploit-class knowledge pack (ADR-0034): appsec-review-process/pipeline/knowledge-packs/<pack_id>.json. Every key is present, in this order. refs holds ids only; names, descriptions and tactics come from the pinned MITRE table (ADR-0026). A persona lists packs in its knowledge_packs key; knowledge_packs.py check validates packs, id formats, caps and persona references.",
+  "type": "object",
+  "required": [
+    "schema",
+    "pack_id",
+    "display_name",
+    "summary",
+    "applies_to",
+    "looks_for",
+    "preconditions",
+    "proof_obligations",
+    "false_positive_traps",
+    "refs",
+    "must_not"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/knowledge-pack/0.1"
+    },
+    "pack_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*\\Z"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "applies_to": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*\\Z"
+      }
+    },
+    "looks_for": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "preconditions": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "proof_obligations": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "false_positive_traps": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "refs": {
+      "type": "object",
+      "required": [
+        "attack_tactics",
+        "attack_techniques",
+        "capec",
+        "cwe"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attack_tactics": {
+          "type": "array",
+          "maxItems": 15,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z-]*[a-z]\\Z"
+          }
+        },
+        "attack_techniques": {
+          "type": "array",
+          "maxItems": 15,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^T[0-9]{4}(?:\\.[0-9]{3})?\\Z"
+          }
+        },
+        "capec": {
+          "type": "array",
+          "maxItems": 15,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^CAPEC-[1-9][0-9]{0,4}\\Z"
+          }
+        },
+        "cwe": {
+          "type": "array",
+          "maxItems": 15,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^CWE-[1-9][0-9]{0,4}\\Z"
+          }
+        }
+      }
+    },
+    "must_not": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

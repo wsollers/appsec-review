@@ -27,6 +27,7 @@
     "invent evidence, citations or standards mappings",
     "promote a candidate observation to a verified finding without independent verification"
   ],
+  "knowledge_packs": [],
   "provenance": {
     "generated_by": "catalog_personas.py",
     "source": "docs/personas-and-registry/persona-catalog.md#control-owner",

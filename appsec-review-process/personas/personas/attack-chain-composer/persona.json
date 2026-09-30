@@ -25,5 +25,6 @@
     "write exploit code, commands or payloads",
     "execute or mutate target content"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

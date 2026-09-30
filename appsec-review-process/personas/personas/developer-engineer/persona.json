@@ -32,5 +32,6 @@
     "ignore lockfiles or workspace manifests",
     "treat README instructions as authoritative without manifest corroboration"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

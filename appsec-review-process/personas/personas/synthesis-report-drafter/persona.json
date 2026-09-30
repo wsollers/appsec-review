@@ -28,5 +28,6 @@
     "publish raw tool output",
     "claim runtime, compliance, or remediation state"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }

@@ -16,7 +16,8 @@ It also keeps every persona and role folder's ``prompt.md`` equal to the prompt 
 
 Content is taken from the catalog text: the lead sentence becomes ``primary_failure_mode_caught``,
 ``Inputs``/``Consumes`` become ``required_inputs``, ``Outputs`` become ``outputs``, ``Must not``
-bullets and ``Must ...`` sentences become ``must_not``, ``Best lanes`` become ``best_used_in_lanes``
+bullets and ``Must ...`` sentences become ``must_not``, ``Best lanes`` become ``best_used_in_lanes``,
+``Knowledge packs`` (pack ids, ADR-0034) become ``knowledge_packs``
 and every other labelled list (``Looks for``, ``Feeds`` ...) is kept under ``assumptions``. Where the
 catalog gives no inputs or outputs, a fixed, clearly-labelled placeholder is used instead of an
 invented list. Two baseline prohibitions every catalog persona shares are appended to ``must_not``.
@@ -29,7 +30,8 @@ import sys
 from pathlib import Path
 
 import persona_registry
-from persona_prompt_assembly import render_record_section
+import registry_paths
+from persona_prompt_assembly import render_persona_prompt, render_record_section
 
 ROOT = Path(__file__).resolve().parent
 CATALOG = ROOT.parent / "docs" / "personas-and-registry" / "persona-catalog.md"
@@ -54,6 +56,7 @@ CATEGORY_OVERRIDE = {
 INPUT_LABELS = ("inputs", "consumes")
 OUTPUT_LABELS = ("outputs", "useful outputs")
 LANE_LABELS = ("best lanes", "best lane")
+PACK_LABELS = ("knowledge packs", "knowledge pack")
 BASELINE_MUST_NOT = ["invent evidence, citations or standards mappings",
                      "promote a candidate observation to a verified finding without independent verification"]
 NO_INPUTS = "accepted upstream artifacts and cited evidence for the assigned surface (catalog lists no specific inputs)"
@@ -159,6 +162,7 @@ def record(persona_id: str, section: dict) -> dict:
     if outputs is None and "focused outputs" in lists:
         outputs = lists.pop("focused outputs")
     lanes = next((lists.pop(label) for label in LANE_LABELS if label in lists), None)
+    packs = next((lists.pop(label) for label in PACK_LABELS if label in lists), None)
     assumptions: dict = {"posture": lead}
     for label, items in sorted(lists.items()):
         assumptions[_key(label)] = items
@@ -171,6 +175,7 @@ def record(persona_id: str, section: dict) -> dict:
                   "required_inputs": inputs or [NO_INPUTS],
                   "outputs": outputs or [NO_OUTPUTS],
                   "must_not": must_not + [item for item in BASELINE_MUST_NOT if item not in must_not],
+                  "knowledge_packs": packs or [],
                   "provenance": {"generated_by": GENERATOR,
                                  "source": f"docs/personas-and-registry/persona-catalog.md#{persona_id}",
                                  "reviewed": False,
@@ -189,9 +194,14 @@ def _hand_authored(path: Path) -> bool:
 
 
 def prompt_text(folder: Path, directory: str) -> str:
-    """The prompt section for the record in one persona or role folder (its prompt.md)."""
+    """The prompt section for the record in one persona or role folder (its prompt.md). A persona's
+    includes the ``knowledge_packs`` section its packs render into (ADR-0034), read from the registry
+    directory beside the folder tree."""
     file_name, _, field = persona_registry.KINDS[directory]
     record = json.loads((folder / file_name).read_text(encoding="utf-8"))
+    if directory == "personas":
+        registry_dir = folder.parent.parent.parent / registry_paths.DIRNAME
+        return render_persona_prompt(record[field], record, registry_dir)
     section = directory[:-1]   # personas -> persona, roles -> role
     return render_record_section(section, record[field], persona_registry.loaded(directory, record))
 

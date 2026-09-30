@@ -36,12 +36,17 @@ The keys, taken from `owasp-validator.json`:
   "assumptions": {"posture": "...", "verdicts": ["satisfied", "partially_satisfied", "..."]},
   "required_inputs": ["standards-intel/applicable-controls.json", "..."],
   "outputs": ["per-control OWASP verdicts", "..."],
-  "must_not": ["invent OWASP mappings without loaded standard context", "..."]
+  "must_not": ["invent OWASP mappings without loaded standard context", "..."],
+  "knowledge_packs": [],
+  "provenance": {}
 }
 ```
 
 `best_used_in_lanes` holds job-graph node IDs and is optional; `assumptions` is a free-form object
-whose keys vary by persona. The prose entries below are the human-readable source of the registry
+whose keys vary by persona. `knowledge_packs` lists at most two knowledge pack ids
+(`appsec-review-process/pipeline/knowledge-packs/`, ADR-0034) and is `[]` unless the persona is an
+attacker or domain specialist that carries an exploit-class focus; in a catalog section, a
+`Knowledge packs:` list of pack ids becomes that field. The prose entries below are the human-readable source of the registry
 records: every persona here has one. Records without a hand-authored file are generated from this
 text by `python3 -B appsec-review-process/catalog_personas.py generate` and carry a `provenance`
 block (`generated_by: catalog_personas.py`, `reviewed: false`); `catalog_personas.py check` fails when

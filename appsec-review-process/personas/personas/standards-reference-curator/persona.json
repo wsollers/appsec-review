@@ -30,5 +30,6 @@
     "omit source URL, source path, hash, or license notes where available",
     "emit compliance verdicts"
   ],
+  "knowledge_packs": [],
   "provenance": {}
 }
