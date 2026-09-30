@@ -7,13 +7,15 @@
 import csharp
 import Common
 
-from Call call, Callable caller, Callable callee
+from Call call, Callable caller, Callable callee, string defined
 where
   caller = call.getEnclosingCallable() and
   callee = call.getARuntimeTarget().getUnboundDeclaration() and
-  exists(call.getFile().getRelativePath())
+  exists(call.getFile().getRelativePath()) and
+  // QL has no conditional expression: bind the column in the where clause (as the Go pack does)
+  (if callee.fromSource() then defined = "yes" else defined = "no")
 select callableName(caller) as caller_name, relPath(caller.getLocation()) as caller_file,
   caller.getLocation().getStartLine() as caller_line, relPath(call.getLocation()) as call_file,
   call.getLocation().getStartLine() as call_line, callableName(callee) as callee_name,
   relPath(callee.getLocation()) as callee_file, callee.getLocation().getStartLine() as callee_line,
-  (if callee.fromSource() then "yes" else "no") as callee_defined
+  defined as callee_defined

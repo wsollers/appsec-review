@@ -10,8 +10,13 @@ string relPath(Location l) {
   if exists(l.getFile().getRelativePath()) then result = l.getFile().getRelativePath() else result = ""
 }
 
+/** Module name, or the qualified name of a function or class (`Scope` itself has no qualified name). */
 string scopeName(Scope s) {
-  if s instanceof Module then result = s.(Module).getName() else result = s.getQualifiedName()
+  result = s.(Module).getName()
+  or
+  result = s.(Function).getQualifiedName()
+  or
+  result = s.(Class).getQualifiedName()
 }
 
 /** A resolved call edge (new data-flow call graph) from a scope to a Python function. */
