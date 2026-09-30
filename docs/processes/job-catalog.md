@@ -462,8 +462,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `fixtures/populate-targets.sh` |
 | BPMN elements | `sp1_clone`, `sp1_origin`, `sp1_status`, `sp1_fetch`, `sp1_checkout` |
-| Consumes | [`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin) |
+| Preceded by | nothing (first job in the flow) |
+| Consumes | [`sut-origin`](#a-sut-origin) (external)<br>[`sut-pin`](#a-sut-pin) (external) |
 | Produces | [`sut-checkout`](#a-sut-checkout) |
+| Card | [BPMN](bpmn/cards/populate-targets.bpmn), [SVG](bpmn/cards/render/populate-targets.svg) |
 | Notes | Clones or fetches, verifies origin, refuses local changes (never resets), checks out the pinned commit and verifies HEAD. |
 
 <a id="step-docker-check"></a>
@@ -475,8 +477,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `docker version` |
 | BPMN elements | `sp2_docker` |
+| Preceded by | [`populate-targets`](#step-populate-targets) |
 | Consumes | -- |
 | Produces | [`docker-engine`](#a-docker-engine) |
+| Card | [BPMN](bpmn/cards/docker-check.bpmn), [SVG](bpmn/cards/render/docker-check.svg) |
 | Notes | Docker Desktop must be the only engine: a native docker.service in the distro competes for /var/run/docker.sock (500 on /version, hangs). docker info reports OperatingSystem "Docker Desktop"; systemctl is-active docker reports inactive. |
 
 <a id="step-docker-recover"></a>
@@ -501,8 +505,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `orchestrator/dagster/setup.py` |
 | BPMN elements | `sp2_setup` |
+| Preceded by | [`docker-check`](#step-docker-check) |
 | Consumes | -- |
 | Produces | [`compose-env`](#a-compose-env)<br>[`host-dirs`](#a-host-dirs) |
+| Card | [BPMN](bpmn/cards/compose-setup.bpmn), [SVG](bpmn/cards/render/compose-setup.svg) |
 | Notes | Writes the .env password and operator uid/gid; creates .host/ as the operator. |
 
 <a id="step-compose-up"></a>
@@ -514,8 +520,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `docker compose -f orchestrator/dagster/compose.yaml up -d; compose ps` |
 | BPMN elements | `sp2_up`, `sp2_ps`, `sp2_wait` |
-| Consumes | [`docker-engine`](#a-docker-engine)<br>[`compose-env`](#a-compose-env)<br>[`host-dirs`](#a-host-dirs) |
+| Preceded by | [`compose-setup`](#step-compose-setup) |
+| Consumes | [`docker-engine`](#a-docker-engine) from [`docker-check`](#step-docker-check)<br>[`compose-env`](#a-compose-env) from [`compose-setup`](#step-compose-setup)<br>[`host-dirs`](#a-host-dirs) from [`compose-setup`](#step-compose-setup) |
 | Produces | [`dagster-services`](#a-dagster-services) |
+| Card | [BPMN](bpmn/cards/compose-up.bpmn), [SVG](bpmn/cards/render/compose-up.svg) |
 | Notes | Waits for webserver, daemon and postgres to report healthy. |
 
 <a id="step-code-location-start"></a>
@@ -527,8 +535,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `orchestrator/dagster/code-location.sh start` |
 | BPMN elements | `sp2_cl`, `sp2_recreate` |
-| Consumes | [`job-definitions`](#a-job-definitions)<br>[`compose-env`](#a-compose-env) |
+| Preceded by | [`compose-up`](#step-compose-up) |
+| Consumes | [`job-definitions`](#a-job-definitions) (external)<br>[`compose-env`](#a-compose-env) from [`compose-setup`](#step-compose-setup) |
 | Produces | [`code-location-venv`](#a-code-location-venv)<br>[`code-location`](#a-code-location)<br>[`compose-env`](#a-compose-env) |
+| Card | [BPMN](bpmn/cards/code-location-start.bpmn), [SVG](bpmn/cards/render/code-location-start.svg) |
 | Notes | Builds the Python 3.12 venv, checks git and libfuzzy, regenerates B16 records only from current successful image fingerprints and immutable Docker image ids, then runs dagster code-server start; image drift fails closed, and if the WSL IP changed it updates .env and recreates webserver and daemon. |
 
 <a id="step-code-location-check"></a>
@@ -540,8 +550,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `orchestrator/dagster/code-location.sh check` |
 | BPMN elements | `sp2_check` |
-| Consumes | [`code-location`](#a-code-location) |
+| Preceded by | [`code-location-start`](#step-code-location-start) |
+| Consumes | [`code-location`](#a-code-location) from [`code-location-start`](#step-code-location-start) |
 | Produces | -- |
+| Card | [BPMN](bpmn/cards/code-location-check.bpmn), [SVG](bpmn/cards/render/code-location-check.svg) |
 | Notes | gRPC health check from the host. |
 
 <a id="step-code-location-reload"></a>
@@ -553,8 +565,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `orchestrator/dagster/code-location.sh reload` |
 | BPMN elements | `sp2_reload` |
-| Consumes | [`code-location`](#a-code-location)<br>[`dagster-services`](#a-dagster-services)<br>[`job-definitions`](#a-job-definitions) |
+| Preceded by | [`code-location-check`](#step-code-location-check) |
+| Consumes | [`code-location`](#a-code-location) from [`code-location-start`](#step-code-location-start)<br>[`dagster-services`](#a-dagster-services) from [`compose-up`](#step-compose-up)<br>[`job-definitions`](#a-job-definitions) (external) |
 | Produces | [`loaded-job-list`](#a-loaded-job-list) |
+| Card | [BPMN](bpmn/cards/code-location-reload.bpmn), [SVG](bpmn/cards/render/code-location-reload.svg) |
 | Notes | GraphQL reloadRepositoryLocation, retried for 60 s; required after every start and after pulling job code. |
 
 <a id="step-nop"></a>
@@ -578,8 +592,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | human task |
 | Runs | `security engineer` |
 | BPMN elements | `sp3_define` |
+| Preceded by | [`code-location-reload`](#step-code-location-reload) |
 | Consumes | -- |
 | Produces | [`engagement-definition`](#a-engagement-definition) |
+| Card | [BPMN](bpmn/cards/define-engagement.bpmn), [SVG](bpmn/cards/render/define-engagement.svg) |
 | Notes | Business goal, platforms, budget, scope and permissions. |
 
 <a id="step-grant-permissions"></a>
@@ -591,8 +607,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | human task |
 | Runs | `named approver` |
 | BPMN elements | `sp3_grant` |
-| Consumes | [`engagement-definition`](#a-engagement-definition) |
+| Preceded by | [`define-engagement`](#step-define-engagement) |
+| Consumes | [`engagement-definition`](#a-engagement-definition) from [`define-engagement`](#step-define-engagement) |
 | Produces | [`permission-grant`](#a-permission-grant) |
+| Card | [BPMN](bpmn/cards/grant-permissions.bpmn), [SVG](bpmn/cards/render/grant-permissions.svg) |
 | Notes | Only when the engagement needs more than read-source. |
 
 <a id="step-run-start"></a>
@@ -604,8 +622,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `appsec-review-process/run_process.py --start` |
 | BPMN elements | `sp3_create` |
+| Preceded by | [`grant-permissions`](#step-grant-permissions) |
 | Consumes | -- |
 | Produces | [`run-dir`](#a-run-dir) |
+| Card | [BPMN](bpmn/cards/run-start.bpmn), [SVG](bpmn/cards/render/run-start.svg) |
 | Notes | New run ID and run-owned folders; runs on the host (ADR-0011). |
 
 <a id="step-stage-artifacts"></a>
@@ -617,8 +637,10 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | operator script |
 | Runs | `appsec-review-process/stage_artifacts.py --run-id <run_id> --target <host path> ...` |
 | BPMN elements | `sp3_stage` |
-| Consumes | [`run-dir`](#a-run-dir)<br>[`sut-checkout`](#a-sut-checkout)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant) |
+| Preceded by | [`run-start`](#step-run-start) |
+| Consumes | [`run-dir`](#a-run-dir) from [`run-start`](#step-run-start)<br>[`sut-checkout`](#a-sut-checkout) from [`populate-targets`](#step-populate-targets)<br>[`engagement-definition`](#a-engagement-definition) from [`define-engagement`](#step-define-engagement)<br>[`permission-grant`](#a-permission-grant) from [`grant-permissions`](#step-grant-permissions) |
 | Produces | [`artifact-manifest`](#a-artifact-manifest) |
+| Card | [BPMN](bpmn/cards/stage-artifacts.bpmn), [SVG](bpmn/cards/render/stage-artifacts.svg) |
 | Notes | Records executor platform posix and fingerprints inputs; refuses legacy runs, other platforms and unimported evidence. |
 
 <a id="step-phase1-intake"></a>
@@ -856,8 +878,11 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Type | Dagster job |
 | Runs | `launch_job.py --run-id <run_id> --job engagement_workflow --wait` |
 | Lifecycle job(s) | [`00-intake`](#job-00-intake) |
-| Consumes | [`artifact-manifest`](#a-artifact-manifest)<br>[`loaded-job-list`](#a-loaded-job-list) |
+| Preceded by | [`stage-artifacts`](#step-stage-artifacts) |
+| Sub-jobs | [`op-workflow_config`](#step-op-workflow-config)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish) |
+| Consumes | [`artifact-manifest`](#a-artifact-manifest) from [`stage-artifacts`](#step-stage-artifacts)<br>[`loaded-job-list`](#a-loaded-job-list) from [`code-location-reload`](#step-code-location-reload) |
 | Produces | [`00-intake`](#a-job-00-intake)<br>[`prep-scope`](#a-prep-scope)<br>[`prep-native-plan`](#a-prep-native-plan)<br>[`prep-handoffs`](#a-prep-handoffs)<br>[`workflow-status`](#a-workflow-status) |
+| Card | [BPMN](bpmn/cards/engagement_workflow.bpmn), [SVG](bpmn/cards/render/engagement_workflow.svg) |
 | Notes | Preparation workflow: config, intake, three preparation branches, validated join. Not a full lifecycle review. |
 
 <a id="step-op-workflow-config"></a>
@@ -868,6 +893,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 |---|---|
 | Type | Dagster op |
 | Runs | `engagement_workflow` |
+| Part of | [`engagement_workflow`](#step-engagement-workflow) |
 | Consumes | [`artifact-manifest`](#a-artifact-manifest) |
 | Produces | [`workflow-status`](#a-workflow-status) |
 | Notes | Checks the engagement_run_id tag, takes generation ownership, records the attempt config. |
@@ -880,6 +906,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 |---|---|
 | Type | Dagster op |
 | Runs | `engagement_workflow` |
+| Part of | [`engagement_workflow`](#step-engagement-workflow) |
 | Consumes | [`artifact-manifest`](#a-artifact-manifest)<br>[`workflow-status`](#a-workflow-status) |
 | Produces | [`00-intake`](#a-job-00-intake) |
 | Notes | Atomic intake: configure, prepare, work (or reuse), publish. |
@@ -892,6 +919,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 |---|---|
 | Type | Dagster op |
 | Runs | `engagement_workflow` |
+| Part of | [`engagement_workflow`](#step-engagement-workflow) |
 | Consumes | [`00-intake`](#a-job-00-intake) |
 | Produces | [`prep-scope`](#a-prep-scope) |
 | Notes | Preparation branch. |
@@ -904,6 +932,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 |---|---|
 | Type | Dagster op |
 | Runs | `engagement_workflow` |
+| Part of | [`engagement_workflow`](#step-engagement-workflow) |
 | Consumes | [`00-intake`](#a-job-00-intake) |
 | Produces | [`prep-native-plan`](#a-prep-native-plan) |
 | Notes | Preparation branch. |
@@ -916,6 +945,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 |---|---|
 | Type | Dagster op |
 | Runs | `engagement_workflow` |
+| Part of | [`engagement_workflow`](#step-engagement-workflow) |
 | Consumes | [`00-intake`](#a-job-00-intake) |
 | Produces | [`prep-handoffs`](#a-prep-handoffs) |
 | Notes | Preparation branch. |
@@ -928,6 +958,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 |---|---|
 | Type | Dagster op |
 | Runs | `engagement_workflow` |
+| Part of | [`engagement_workflow`](#step-engagement-workflow) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`prep-scope`](#a-prep-scope)<br>[`prep-native-plan`](#a-prep-native-plan)<br>[`prep-handoffs`](#a-prep-handoffs) |
 | Produces | [`workflow-status`](#a-workflow-status) |
 | Notes | Rechecks freshness, validates every branch, publishes the join. |

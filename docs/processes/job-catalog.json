@@ -6161,6 +6161,7 @@
     "sp1_fetch",
     "sp1_checkout"
    ],
+   "preceded_by": null,
    "consumes": [
     "sut-origin",
     "sut-pin"
@@ -6178,6 +6179,7 @@
    "bpmn": [
     "sp2_docker"
    ],
+   "preceded_by": "step:populate-targets",
    "consumes": [],
    "produces": [
     "docker-engine"
@@ -6206,6 +6208,7 @@
    "bpmn": [
     "sp2_setup"
    ],
+   "preceded_by": "step:docker-check",
    "consumes": [],
    "produces": [
     "compose-env",
@@ -6223,6 +6226,7 @@
     "sp2_ps",
     "sp2_wait"
    ],
+   "preceded_by": "step:compose-setup",
    "consumes": [
     "docker-engine",
     "compose-env",
@@ -6242,6 +6246,7 @@
     "sp2_cl",
     "sp2_recreate"
    ],
+   "preceded_by": "step:compose-up",
    "consumes": [
     "job-definitions",
     "compose-env"
@@ -6261,6 +6266,7 @@
    "bpmn": [
     "sp2_check"
    ],
+   "preceded_by": "step:code-location-start",
    "consumes": [
     "code-location"
    ],
@@ -6275,6 +6281,7 @@
    "bpmn": [
     "sp2_reload"
    ],
+   "preceded_by": "step:code-location-check",
    "consumes": [
     "code-location",
     "dagster-services",
@@ -6306,6 +6313,7 @@
    "bpmn": [
     "sp3_define"
    ],
+   "preceded_by": "step:code-location-reload",
    "consumes": [],
    "produces": [
     "engagement-definition"
@@ -6320,6 +6328,7 @@
    "bpmn": [
     "sp3_grant"
    ],
+   "preceded_by": "step:define-engagement",
    "consumes": [
     "engagement-definition"
    ],
@@ -6336,6 +6345,7 @@
    "bpmn": [
     "sp3_create"
    ],
+   "preceded_by": "step:grant-permissions",
    "consumes": [],
    "produces": [
     "run-dir"
@@ -6350,6 +6360,7 @@
    "bpmn": [
     "sp3_stage"
    ],
+   "preceded_by": "step:run-start",
    "consumes": [
     "run-dir",
     "sut-checkout",
@@ -6698,6 +6709,15 @@
    "bpmn": [],
    "lifecycle": [
     "00-intake"
+   ],
+   "preceded_by": "step:stage-artifacts",
+   "sub_jobs": [
+    "step:op-workflow_config",
+    "step:op-workflow_intake",
+    "step:op-scope_check",
+    "step:op-native_plan_check",
+    "step:op-discovery_handoffs",
+    "step:op-workflow_publish"
    ],
    "consumes": [
     "artifact-manifest",
@@ -7331,6 +7351,338 @@
    "notes": "Hand-off files for the tracked prompt harness; lanes are not yet graph workers."
   }
  ],
+ "flow": {
+  "populate-targets": {
+   "ref": "step:populate-targets",
+   "name": "Check out the system under test",
+   "kind": "script",
+   "preceded_by": null,
+   "preceded_by_name": null,
+   "inputs": [
+    {
+     "ref": "sut-origin",
+     "from": "external"
+    },
+    {
+     "ref": "sut-pin",
+     "from": "external"
+    }
+   ],
+   "outputs": [
+    "sut-checkout"
+   ],
+   "sub_jobs": []
+  },
+  "docker-check": {
+   "ref": "step:docker-check",
+   "name": "Check the Docker engine",
+   "kind": "script",
+   "preceded_by": "step:populate-targets",
+   "preceded_by_name": "Check out the system under test",
+   "inputs": [],
+   "outputs": [
+    "docker-engine"
+   ],
+   "sub_jobs": []
+  },
+  "compose-setup": {
+   "ref": "step:compose-setup",
+   "name": "Prepare compose settings and host storage",
+   "kind": "script",
+   "preceded_by": "step:docker-check",
+   "preceded_by_name": "Check the Docker engine",
+   "inputs": [],
+   "outputs": [
+    "compose-env",
+    "host-dirs"
+   ],
+   "sub_jobs": []
+  },
+  "compose-up": {
+   "ref": "step:compose-up",
+   "name": "Start Dagster services",
+   "kind": "script",
+   "preceded_by": "step:compose-setup",
+   "preceded_by_name": "Prepare compose settings and host storage",
+   "inputs": [
+    {
+     "ref": "docker-engine",
+     "from": "step:docker-check"
+    },
+    {
+     "ref": "compose-env",
+     "from": "step:compose-setup"
+    },
+    {
+     "ref": "host-dirs",
+     "from": "step:compose-setup"
+    }
+   ],
+   "outputs": [
+    "dagster-services"
+   ],
+   "sub_jobs": []
+  },
+  "code-location-start": {
+   "ref": "step:code-location-start",
+   "name": "Start the host code location",
+   "kind": "script",
+   "preceded_by": "step:compose-up",
+   "preceded_by_name": "Start Dagster services",
+   "inputs": [
+    {
+     "ref": "job-definitions",
+     "from": "external"
+    },
+    {
+     "ref": "compose-env",
+     "from": "step:compose-setup"
+    }
+   ],
+   "outputs": [
+    "code-location-venv",
+    "code-location",
+    "compose-env"
+   ],
+   "sub_jobs": []
+  },
+  "code-location-check": {
+   "ref": "step:code-location-check",
+   "name": "Check the code location",
+   "kind": "script",
+   "preceded_by": "step:code-location-start",
+   "preceded_by_name": "Start the host code location",
+   "inputs": [
+    {
+     "ref": "code-location",
+     "from": "step:code-location-start"
+    }
+   ],
+   "outputs": [],
+   "sub_jobs": []
+  },
+  "code-location-reload": {
+   "ref": "step:code-location-reload",
+   "name": "Reload job definitions",
+   "kind": "script",
+   "preceded_by": "step:code-location-check",
+   "preceded_by_name": "Check the code location",
+   "inputs": [
+    {
+     "ref": "code-location",
+     "from": "step:code-location-start"
+    },
+    {
+     "ref": "dagster-services",
+     "from": "step:compose-up"
+    },
+    {
+     "ref": "job-definitions",
+     "from": "external"
+    }
+   ],
+   "outputs": [
+    "loaded-job-list"
+   ],
+   "sub_jobs": []
+  },
+  "define-engagement": {
+   "ref": "step:define-engagement",
+   "name": "Define the engagement",
+   "kind": "human",
+   "preceded_by": "step:code-location-reload",
+   "preceded_by_name": "Reload job definitions",
+   "inputs": [],
+   "outputs": [
+    "engagement-definition"
+   ],
+   "sub_jobs": []
+  },
+  "grant-permissions": {
+   "ref": "step:grant-permissions",
+   "name": "Grant permissions beyond read-source",
+   "kind": "human",
+   "preceded_by": "step:define-engagement",
+   "preceded_by_name": "Define the engagement",
+   "inputs": [
+    {
+     "ref": "engagement-definition",
+     "from": "step:define-engagement"
+    }
+   ],
+   "outputs": [
+    "permission-grant"
+   ],
+   "sub_jobs": []
+  },
+  "run-start": {
+   "ref": "step:run-start",
+   "name": "Create the run",
+   "kind": "script",
+   "preceded_by": "step:grant-permissions",
+   "preceded_by_name": "Grant permissions beyond read-source",
+   "inputs": [],
+   "outputs": [
+    "run-dir"
+   ],
+   "sub_jobs": []
+  },
+  "stage-artifacts": {
+   "ref": "step:stage-artifacts",
+   "name": "Stage the inputs",
+   "kind": "script",
+   "preceded_by": "step:run-start",
+   "preceded_by_name": "Create the run",
+   "inputs": [
+    {
+     "ref": "run-dir",
+     "from": "step:run-start"
+    },
+    {
+     "ref": "sut-checkout",
+     "from": "step:populate-targets"
+    },
+    {
+     "ref": "engagement-definition",
+     "from": "step:define-engagement"
+    },
+    {
+     "ref": "permission-grant",
+     "from": "step:grant-permissions"
+    }
+   ],
+   "outputs": [
+    "artifact-manifest"
+   ],
+   "sub_jobs": []
+  },
+  "engagement_workflow": {
+   "ref": "step:engagement_workflow",
+   "name": "engagement_workflow (Dagster job)",
+   "kind": "dagster-job",
+   "preceded_by": "step:stage-artifacts",
+   "preceded_by_name": "Stage the inputs",
+   "inputs": [
+    {
+     "ref": "artifact-manifest",
+     "from": "step:stage-artifacts"
+    },
+    {
+     "ref": "loaded-job-list",
+     "from": "step:code-location-reload"
+    }
+   ],
+   "outputs": [
+    "job:00-intake",
+    "prep-scope",
+    "prep-native-plan",
+    "prep-handoffs",
+    "workflow-status"
+   ],
+   "sub_jobs": [
+    {
+     "ref": "step:op-workflow_config",
+     "name": "workflow_config (op)",
+     "kind": "dagster-op",
+     "inputs": [
+      {
+       "ref": "artifact-manifest",
+       "from": "step:stage-artifacts"
+      }
+     ],
+     "outputs": [
+      "workflow-status"
+     ]
+    },
+    {
+     "ref": "step:op-workflow_intake",
+     "name": "workflow_intake (op)",
+     "kind": "dagster-op",
+     "inputs": [
+      {
+       "ref": "artifact-manifest",
+       "from": "step:stage-artifacts"
+      },
+      {
+       "ref": "workflow-status",
+       "from": "step:op-workflow_config"
+      }
+     ],
+     "outputs": [
+      "job:00-intake"
+     ]
+    },
+    {
+     "ref": "step:op-scope_check",
+     "name": "scope_check (op)",
+     "kind": "dagster-op",
+     "inputs": [
+      {
+       "ref": "job:00-intake",
+       "from": "step:op-workflow_intake"
+      }
+     ],
+     "outputs": [
+      "prep-scope"
+     ]
+    },
+    {
+     "ref": "step:op-native_plan_check",
+     "name": "native_plan_check (op)",
+     "kind": "dagster-op",
+     "inputs": [
+      {
+       "ref": "job:00-intake",
+       "from": "step:op-workflow_intake"
+      }
+     ],
+     "outputs": [
+      "prep-native-plan"
+     ]
+    },
+    {
+     "ref": "step:op-discovery_handoffs",
+     "name": "discovery_handoffs (op)",
+     "kind": "dagster-op",
+     "inputs": [
+      {
+       "ref": "job:00-intake",
+       "from": "step:op-workflow_intake"
+      }
+     ],
+     "outputs": [
+      "prep-handoffs"
+     ]
+    },
+    {
+     "ref": "step:op-workflow_publish",
+     "name": "workflow_publish (op)",
+     "kind": "dagster-op",
+     "inputs": [
+      {
+       "ref": "job:00-intake",
+       "from": "step:op-workflow_intake"
+      },
+      {
+       "ref": "prep-scope",
+       "from": "step:op-scope_check"
+      },
+      {
+       "ref": "prep-native-plan",
+       "from": "step:op-native_plan_check"
+      },
+      {
+       "ref": "prep-handoffs",
+       "from": "step:op-discovery_handoffs"
+      }
+     ],
+     "outputs": [
+      "workflow-status"
+     ]
+    }
+   ]
+  }
+ },
  "lifecycle_jobs": [
   {
    "id": "00-intake",

@@ -71,6 +71,110 @@ def config_sections(lane: str) -> dict[str, list[str]]:
     return found
 
 
+def io_flow(steps: list[dict], step_by_id: dict, job_by_id: dict, problems: list[str]) -> dict:
+    """The engagement flow: steps mapped with preceded_by, their sub-jobs, and where each input comes from.
+
+    A mapped step's input resolves to the nearest entry before it in the preceded_by chain (or a sub-job of
+    one) that produces it, or is external when no catalog entry produces it. Consuming something another
+    entry produces, but no earlier one, is a problem: the flow order does not deliver that input.
+    """
+    def lookup(ref: str) -> dict | None:
+        if ref.startswith('step:') and ref[5:] in step_by_id:
+            s = step_by_id[ref[5:]]
+            return {'ref': ref, 'name': s['name'], 'kind': s['kind'], 'consumes': s['consumes'],
+                    'produces': s['produces'], 'sub_jobs': s.get('sub_jobs', [])}
+        if ref.startswith('job:') and ref[4:] in job_by_id:
+            j = job_by_id[ref[4:]]
+            return {'ref': ref, 'name': j['name'], 'kind': 'lifecycle', 'consumes': j['consumes'],
+                    'produces': j['produces'], 'sub_jobs': []}
+        return None
+
+    producers: dict[str, list[str]] = {}
+    for s in steps:
+        for r in s['produces']:
+            producers.setdefault(r, []).append(f"step:{s['id']}")
+    for jid in job_by_id:
+        producers.setdefault(f'job:{jid}', []).append(f'job:{jid}')
+
+    parent_of: dict[str, str] = {}
+    for s in steps:
+        for sub in s.get('sub_jobs', []):
+            if lookup(sub) is None:
+                problems.append(f"step {s['id']}: unknown sub-job {sub}")
+            elif sub in parent_of:
+                problems.append(f"step {s['id']}: sub-job {sub} already belongs to {parent_of[sub]}")
+            else:
+                parent_of[sub] = f"step:{s['id']}"
+
+    mapped = [s for s in steps if 'preceded_by' in s]
+
+    def chain(ref: str) -> list[str]:
+        """Entries before ref, nearest first."""
+        out, seen = [], {ref}
+        cur = lookup(ref)
+        prev = step_by_id[ref[5:]].get('preceded_by') if ref.startswith('step:') else None
+        while prev:
+            if prev in seen:
+                problems.append(f'preceded_by cycle through {prev}')
+                break
+            if lookup(prev) is None:
+                problems.append(f'{cur["ref"]}: preceded_by names unknown entry {prev}')
+                break
+            seen.add(prev)
+            out.append(prev)
+            prev = step_by_id[prev[5:]].get('preceded_by') if prev.startswith('step:') else None
+        return out
+
+    def source(ref: str, before: list[str], siblings: list[str] = ()) -> str | None:
+        for sib in siblings:
+            if ref in lookup(sib)['produces']:
+                return sib
+        for b in before:
+            e = lookup(b)
+            if ref in e['produces']:
+                return b
+            for sub in e['sub_jobs']:
+                if lookup(sub) and ref in lookup(sub)['produces']:
+                    return sub
+        return None if producers.get(ref) else 'external'
+
+    def inputs(e: dict, before: list[str], siblings: list[str] = ()) -> list[dict]:
+        out = []
+        for ref in e['consumes']:
+            src = source(ref, before, siblings)
+            if src is None:
+                problems.append(f"{e['ref']}: consumes {ref}, produced by {', '.join(producers[ref])}, "
+                                f"none of which comes before it in the preceded_by chain")
+            out.append({'ref': ref, 'from': src})
+        return out
+
+    flow = {}
+    for s in mapped:
+        ref = f"step:{s['id']}"
+        e = lookup(ref)
+        before = chain(ref)
+        subs = [x for x in s.get('sub_jobs', []) if lookup(x)]
+        sub_out = []
+        for sub in subs:
+            se = lookup(sub)
+            siblings = [x for x in subs if x != sub]
+            sub_out.append({'ref': sub, 'name': se['name'], 'kind': se['kind'],
+                            'inputs': inputs(se, before, siblings), 'outputs': se['produces']})
+        if subs:
+            made = {r for sub in subs for r in lookup(sub)['produces']}
+            for r in s['produces']:
+                if r not in made:
+                    problems.append(f'{ref}: produces {r}, which none of its sub-jobs produces')
+        prev = s['preceded_by']
+        flow[s['id']] = {'ref': ref, 'name': s['name'], 'kind': s['kind'],
+                         'preceded_by': prev, 'preceded_by_name': lookup(prev)['name'] if prev and lookup(prev) else None,
+                         'inputs': inputs(e, before), 'outputs': s['produces'], 'sub_jobs': sub_out}
+    for sub, parent in parent_of.items():
+        if sub.startswith('step:') and 'preceded_by' in step_by_id[sub[5:]]:
+            problems.append(f'{sub}: a sub-job of {parent} is ordered by its parent and takes no preceded_by')
+    return flow
+
+
 def build() -> dict:
     graph = load(registry_paths.JOB_GRAPH)['jobs']
     parity = {j['id']: j for j in load(PROC / 'design-parity-manifest.json')['jobs']}
@@ -160,6 +264,8 @@ def build() -> dict:
         for b in sorted(set(tasks) - covered):
             problems.append(f'BPMN task {b} ("{tasks[b]}") is not covered by any step in steps.json')
 
+    flow = io_flow(steps, step_by_id, job_by_id, problems)
+
     # ---- entries (uniform view of steps and lifecycle jobs) ---------------------------------------
     def entry(ref: str) -> dict:
         if ref.startswith('step:'):
@@ -242,7 +348,7 @@ def build() -> dict:
             'generated_by': 'docs/processes/job_catalog.py',
             'counts': {'lifecycle_jobs': len(jobs), 'steps': len(steps), 'artifacts': len(artifacts),
                        'models': len(out_models)},
-            'models': out_models, 'steps': steps, 'lifecycle_jobs': jobs, 'lanes': lanes,
+            'models': out_models, 'steps': steps, 'flow': flow, 'lifecycle_jobs': jobs, 'lanes': lanes,
             'artifacts': glossary, 'problems': problems}
 
 
@@ -258,6 +364,10 @@ def link(ref: str) -> str:
 
 def entry_link(e: dict) -> str:
     return f"[{e['name']}](#{anchor(e['ref'])})"
+
+
+def entry_ref(ref: str) -> str:
+    return f'[`{ref.split(":", 1)[1]}`](#{anchor(ref)})'
 
 
 def cell(items, fn=link, empty='--') -> str:
@@ -368,8 +478,22 @@ def render(cat: dict) -> str:
             w(f"| Lifecycle job(s) | {'all (Appendix B)' if s['lifecycle'] == ['*'] else cell(['job:' + x for x in s['lifecycle']], lambda r: f'[`{r[4:]}`](#{anchor(r)})')} |")
         if s.get('bpmn'):
             w(f"| BPMN elements | {', '.join('`' + b + '`' for b in s['bpmn'])} |")
-        w(f"| Consumes | {cell(s['consumes'])} |")
+        f = cat['flow'].get(s['id'])
+        if f:
+            w(f"| Preceded by | {entry_ref(f['preceded_by']) if f['preceded_by'] else 'nothing (first job in the flow)'} |")
+        if s.get('sub_jobs'):
+            w(f"| Sub-jobs | {cell(s['sub_jobs'], entry_ref)} |")
+        parents = [p['id'] for p in cat['steps'] if f"step:{s['id']}" in p.get('sub_jobs', [])]
+        if parents:
+            w(f"| Part of | {cell(['step:' + p for p in parents], entry_ref)} |")
+        if f:
+            src = {i['ref']: i['from'] for i in f['inputs']}
+            w(f"| Consumes | {cell(s['consumes'], lambda r: link(r) + (' (external)' if src[r] == 'external' else f' from {entry_ref(src[r])}'))} |")
+        else:
+            w(f"| Consumes | {cell(s['consumes'])} |")
         w(f"| Produces | {cell(s['produces'])} |")
+        if f:
+            w(f"| Card | [BPMN](bpmn/cards/{s['id']}.bpmn), [SVG](bpmn/cards/render/{s['id']}.svg) |")
         w(f"| Notes | {esc(s.get('notes', ''))} |")
         w('')
 

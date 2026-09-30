@@ -24,3 +24,22 @@ What each BPMN task consumes and produces is in [../job-catalog.md](../job-catal
 "Pre-submission process"). `catalog/steps.json` maps each step to the BPMN element ids it covers, and
 `python3 docs/processes/job_catalog.py --check` fails if a BPMN task is added without a step, so update
 `steps.json` with the model.
+
+## Job cards
+
+`cards/<step-id>.bpmn` is one generated card per job mapped into the engagement flow: the job before it
+(`preceded_by`), the job with its inputs on the left and outputs on the right, and, when it has
+`sub_jobs`, each sub-job inside it with its own inputs above and outputs below. Every input is
+labelled with the step that produces it, or "external input". The cards are generated, never edited:
+the source is `preceded_by` and `sub_jobs` in `../catalog/steps.json`.
+
+```bash
+python3 docs/processes/job_catalog.py        # resolves the flow into job-catalog.json ("flow")
+python3 docs/processes/bpmn/card.py          # writes cards/*.bpmn; --check fails when one is stale
+cd docs/processes/bpmn && for f in cards/*.bpmn; do node render.cjs "$f" cards/render; done
+```
+
+`job_catalog.py --check` fails when a mapped job consumes an artifact that a catalog entry produces
+but nothing before it in the `preceded_by` chain does, when a sub-job consumes something neither its
+siblings nor the jobs before its parent produce, or when a parent declares an output none of its
+sub-jobs produce. Sub-jobs take no `preceded_by`; their parent orders them.
