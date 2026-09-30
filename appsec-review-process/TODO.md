@@ -503,6 +503,8 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] Shell literals of the 14-day ceiling remain in `orchestrator/prepare-host.sh`, `orchestrator/stage-run.sh`
       and the operator guide (`--max-database-age-seconds 1209600`); read the tunable there if wanted.
 - [ ] Decision to confirm (William): stale/missing MITRE snapshot withholds tags as a gap (current) vs hard block.
+- [x] O1b (PR #45, merged into `mitre-feed`): superseded by O2 (`cwe-feed`) on `main`, which kept its
+      implementation when `mitre-feed` was merged back; open CWE items are tracked under O2 below.
 
 ## L: shared formats and stricter validator (brief L, branch `formats-2`)
 
