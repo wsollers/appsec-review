@@ -28,7 +28,7 @@ target runs.
 
   | Path | What | Recreated by |
   |---|---|---|
-  | `images/.build-state/` | successful image builds (image ids differ per host) | `images/image_build.py build <id>` |
+  | `images/.build-state/` | successful image builds (image ids differ per host) | `images/image_build.py pull <id>` (published, ADR-0033) or `build <id>` |
   | `appsec-review-process/pipeline/container-images/*.json` | B16 image records | generated at code-location start |
   | `appsec-review-process/offline/dependency-snapshots/` | Grype/OSV snapshot registry | `dependency_snapshot_sync.py` |
   | `appsec-review-process/runs/` | engagement runs and their evidence | `run_process.py --start` |
@@ -39,6 +39,12 @@ target runs.
   | `data/feeds/osv/`, `data/feeds/mitre/` | OSV and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `nvd_reference_schedule`, `mitre_feed.py sync` |
 
 - **Runs are not portable.** A run started on one host is resumed on the same host.
+- **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-through-ghcr.md)).** hal5000 builds and
+  publishes images to the private `ghcr.io/wsollers/appsec-review/<id>` packages and commits
+  `images/published.lock.json`; every other host pulls them in `prepare-host.sh` step 3 and builds only
+  what the lock does not cover (`image_build.py pull --all` also replaces current local builds with the
+  published ones). Each host needs `docker login ghcr.io -u wsollers` once, with a classic
+  token (`read:packages`; `write:packages` on hal5000).
 
 ## zarathustra (native Linux)
 
@@ -77,6 +83,9 @@ target runs.
   ownership).
 - `scripts/sync_wsl.sh [BRANCH]` (default `main`) resets that clone to `origin/BRANCH`. It
   stashes local changes first; `git stash pop` brings them back.
+- Publishing host for images (ADR-0033). After an image change: `orchestrator/prepare-host.sh` (builds
+  it), `python3 -B images/image_build.py publish --all` (pushes only what changed), then commit and push
+  `images/published.lock.json`.
 
 ## hal5000, Windows side
 

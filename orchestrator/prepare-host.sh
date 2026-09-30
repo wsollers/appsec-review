@@ -12,7 +12,8 @@
 #   0. host packages: python3.12 + venv, git, libfuzzy2, jq, docker group (reported; install needs sudo)
 #   1. offline Grype/OSV snapshots resolve within the 14-day ceiling (sync is separate; see TODO.md)
 #   2. Dagster stack (compose project appsec-review) is up
-#   3. every image the B13 registry needs has a current successful build here (builds missing or stale ones)
+#   3. every image the B13 registry needs has a current successful build here: pulls the published
+#      ones (images/published.lock.json, ADR-0033), builds the rest
 #   4. B16 registry records generate and match Docker
 #   5. the host code location is running (started in the background if not) and reloaded
 #   6. the four targets are cloned at their pinned commits (fixtures/populate-targets.sh)
@@ -107,14 +108,21 @@ for image_id in sys.argv[1:]:
         print(image_id)
 PY
 }
+# One-time ADR-0033 fingerprint move for builds already current here (idempotent; no rebuild).
+[[ $CHECK -eq 0 ]] && python3 -B images/image_build.py rekey "${REQUIRED[@]}" 2>&1 | grep -v '^UNCHANGED' | sed 's/^/  /'
 mapfile -t MISSING < <(missing_images)
 if [[ ${#MISSING[@]} -eq 0 ]]; then
     ok "all ${#REQUIRED[@]} images have a current successful build"
 elif [[ $CHECK -eq 1 ]]; then
     todo "missing or stale builds: ${MISSING[*]}"
 else
+    # Shared images first (ADR-0033): pull what images/published.lock.json holds for these sources.
+    # STALE or UNPUBLISHED ones, and a failed pull (no `docker login ghcr.io`), fall through to a build.
+    echo "  pulling published images ..."
+    python3 -B images/image_build.py pull "${MISSING[@]}" 2>&1 | sed 's/^/    /'
+    mapfile -t MISSING < <(missing_images)
     # A build that needs another image first reports BLOCKED; keep passing until nothing moves.
-    while :; do
+    while [[ ${#MISSING[@]} -gt 0 ]]; do
         before=${#MISSING[@]}
         for id in "${MISSING[@]}"; do
             echo "  building $id ..."
@@ -123,7 +131,7 @@ else
         mapfile -t MISSING < <(missing_images)
         [[ ${#MISSING[@]} -eq 0 || ${#MISSING[@]} -eq $before ]] && break
     done
-    if [[ ${#MISSING[@]} -eq 0 ]]; then ok "all ${#REQUIRED[@]} images built"
+    if [[ ${#MISSING[@]} -eq 0 ]]; then ok "all ${#REQUIRED[@]} images current (pulled or built)"
     else bad "images" "still missing: ${MISSING[*]} (see images/.build-state/<id>/attempts/*/logs)"; fi
 fi
 

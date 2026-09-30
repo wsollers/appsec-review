@@ -506,6 +506,15 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [x] O1b (PR #45, merged into `mitre-feed`): superseded by O2 (`cwe-feed`) on `main`, which kept its
       implementation when `mitre-feed` was merged back; open CWE items are tracked under O2 below.
 
+## Shared images (ADR-0033)
+
+- [x] `image_build.py publish|pull|rekey`, `images/published.lock.json`, `prepare-host.sh` step 3 pulls
+      before it builds; fingerprints name required images by build identity (tests: `images/tests/test_image_publish.py`).
+- [ ] hal5000: `docker login ghcr.io -u wsollers` (classic token, `write:packages`), `prepare-host.sh`,
+      `image_build.py publish --all`, commit the lock. First live push; check the packages are private.
+- [ ] zarathustra: `docker login ghcr.io` (`read:packages`), `prepare-host.sh`; confirm step 3 pulls.
+- [ ] Remove `image_build.py rekey` and its `prepare-host.sh` call once both hosts have run it.
+
 ## L: shared formats and stricter validator (brief L, branch `formats-2`)
 
 - [x] `schema_validate.py` implements Draft 2020-12 assertions/applicators used or plausible here

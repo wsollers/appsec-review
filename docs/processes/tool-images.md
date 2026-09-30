@@ -103,7 +103,8 @@ needed. Each smoke run asserts the exit code and an output: e.g. semgrep finds t
 in `src/greet.cpp`, trivy reports Dockerfile misconfigurations, hadolint reports DL3008.
 
 To update a tool: change `version` in its `tool.json`, `pin`, `check`, `image_build.py build`, `smoke`,
-commit the folder. Nothing else changes.
+commit the folder. On hal5000, `image_build.py publish <id>` and commit `images/published.lock.json` so
+other hosts pull it ([ADR-0033](../decisions/ADR-0033-shared-images-through-ghcr.md)).
 
 A Dependabot (or other reviewed) bump of a pip lock changes the lock but not `pin-record.json`, so
 `check` fails. Re-record it without re-resolving: `python -B images/tool_pins.py pin <image_id>

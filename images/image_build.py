@@ -21,6 +21,17 @@ A terminal record is always written before the error is reported, with the log t
     python -B images/image_build.py list
     python -B images/image_build.py build audit-codeql [--no-cache] [--force] [--tag T]
                                        [--build-arg K=V] [--docker-context C] [--timeout-seconds N]
+    python -B images/image_build.py publish audit-codeql ... | --all      (publishing host only)
+    python -B images/image_build.py pull audit-codeql ... | --all
+    python -B images/image_build.py rekey --all        (once per host after ADR-0033; no rebuild)
+
+Shared images (ADR-0033). ``publish`` pushes a current successful build to the private registry
+(``APPSEC_IMAGE_REGISTRY``, default ghcr.io/wsollers/appsec-review) and records its manifest digest
+and build identity in the committed ``images/published.lock.json``. ``pull`` fetches that digest on
+another host when the lock's fingerprint equals this checkout's, tags it with the local tag and
+writes ``latest.json`` with the publisher's fingerprint and attempt id and this host's image id, so
+the B16 records and every job work exactly as after a local build. Pull outcomes: PULLED, CURRENT,
+STALE (the sources changed since publication: build locally), UNPUBLISHED, FAILED.
 """
 from __future__ import annotations
 
@@ -47,6 +58,9 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*\Z")
 BUILD_KEYS = {"image_id", "tag", "dockerfile", "context", "build_args", "requires_images",
               "prebuild", "timeout_seconds"}
 SKIP_DIRS = {".git", "__pycache__"}
+LOCK_SCHEMA = "appsec-review/image-publish-lock/1"
+DEFAULT_REGISTRY = "ghcr.io/wsollers/appsec-review"
+SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}\Z")
 
 
 class Blocked(RuntimeError):
@@ -79,6 +93,29 @@ def images_root() -> Path:
 
 def state_root() -> Path:
     return Path(os.environ.get("APPSEC_IMAGE_BUILD_STATE", images_root() / ".build-state"))
+
+
+def publish_lock_path() -> Path:
+    return Path(os.environ.get("APPSEC_IMAGE_PUBLISH_LOCK", images_root() / "published.lock.json"))
+
+
+def load_publish_lock() -> dict[str, Any]:
+    """The committed publication lock; an absent file is an empty lock, a malformed one raises."""
+    path = publish_lock_path()
+    if not path.is_file():
+        return {"schema": LOCK_SCHEMA, "images": {}}
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("schema") != LOCK_SCHEMA \
+            or not isinstance(document.get("images"), dict):
+        raise ValueError(f"{path} is not a {LOCK_SCHEMA} document")
+    return document
+
+
+def registry() -> str:
+    value = os.environ.get("APPSEC_IMAGE_REGISTRY", DEFAULT_REGISTRY).rstrip("/")
+    if not re.fullmatch(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+", value):
+        raise Blocked(f"APPSEC_IMAGE_REGISTRY is not a registry repository prefix: {value!r}")
+    return value
 
 
 def _relative(value: Any, label: str) -> str:
@@ -199,10 +236,36 @@ def _file_hash(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def fingerprint(build: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def _required_identity(tag: str) -> dict[str, Any] | None:
+    """Host-independent identity of a required image: its build fingerprint and attempt id.
+
+    Not the local image id, which differs between Docker Engine and Docker Desktop's containerd
+    store for the same pulled bytes. A rebuild of the required image still changes its attempt id,
+    so every image built on it rebuilds too."""
+    owners = [image_id for image_id, item in load_builds().items() if item["tag"] == tag]
+    if len(owners) != 1:
+        return None
+    try:
+        state = json.loads((state_root() / owners[0] / "latest.json").read_text(encoding="utf-8"))
+        return {"fingerprint": state["fingerprint"], "attempt_id": state["attempt_id"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _published_heads(image_id: str) -> dict[str, str]:
+    try:
+        entry = load_publish_lock()["images"].get(image_id) or {}
+    except (OSError, ValueError):
+        return {}
+    heads = entry.get("clone_heads")
+    return heads if isinstance(heads, dict) else {}
+
+
+def fingerprint(build: dict[str, Any], *, legacy_requires: bool = False) -> tuple[str, dict[str, Any]]:
     """Hash everything that decides the built image: the folder's files (except fetched inputs, which
-    are identified by their declared checksum or clone commit), the effective config, and the image
-    ids of required images."""
+    are identified by their declared checksum or clone commit), the effective config, and the build
+    identity of required images. A host that pulled the image has no clone; it takes the clone
+    commit the publisher recorded in the publication lock."""
     folder = Path(build["folder"])
     fetched = {step["dest"].replace("\\", "/").strip("/") for step in build["prebuild"]}
     files: list[list[str]] = []
@@ -220,11 +283,17 @@ def fingerprint(build: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     for step in build["prebuild"]:
         entry = dict(step)
         clone = folder / step["dest"]
-        if step["kind"] == "git_clone" and (clone / ".git").exists():
-            head = _run(["git", "-C", str(clone), "rev-parse", "HEAD"], 30)
-            entry["head"] = head.stdout.strip() if head.returncode == 0 else "unknown"
+        if step["kind"] == "git_clone":
+            if (clone / ".git").exists():
+                head = _run(["git", "-C", str(clone), "rev-parse", "HEAD"], 30)
+                entry["head"] = head.stdout.strip() if head.returncode == 0 else "unknown"
+            elif step["dest"] in _published_heads(build["image_id"]):
+                entry["head"] = _published_heads(build["image_id"])[step["dest"]]
         prebuild.append(entry)
-    required = {tag: image_id_of(build, tag) for tag in build["requires_images"]}
+    if legacy_requires:   # before ADR-0033: the local image id of each required image (rekey only)
+        required = {tag: image_id_of(build, tag) for tag in build["requires_images"]}
+    else:
+        required = {tag: _required_identity(tag) for tag in build["requires_images"]}
     plan = {"image_id": build["image_id"], "tag": build["tag"], "dockerfile": build["dockerfile"],
             "context": build["context"], "build_args": build["build_args"], "files": files,
             "prebuild": prebuild, "requires": required}
@@ -510,6 +579,155 @@ def run(image_id: str, override: dict[str, Any] | None = None, *, force: bool = 
             pass
 
 
+def _read_state(image_id: str) -> dict[str, Any] | None:
+    try:
+        state = json.loads((state_root() / image_id / "latest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def _clone_heads(build: dict[str, Any]) -> dict[str, str]:
+    heads = {}
+    for step in build["prebuild"]:
+        clone = Path(build["folder"]) / step["dest"]
+        if step["kind"] == "git_clone" and (clone / ".git").exists():
+            head = _run(["git", "-C", str(clone), "rev-parse", "HEAD"], 30)
+            if head.returncode == 0 and re.fullmatch(r"[0-9a-f]{40,64}", head.stdout.strip()):
+                heads[step["dest"]] = head.stdout.strip()
+    return heads
+
+
+def publish(image_id: str) -> str:
+    """Push this host's current successful build and record it in the publication lock."""
+    builds = load_builds()
+    if image_id not in builds:
+        raise Blocked(f"UNKNOWN_IMAGE: {image_id}")
+    build = effective(builds[image_id])
+    state = _read_state(image_id)
+    if not state or state.get("fingerprint") != fingerprint(build)[0]:
+        raise Blocked(f"NOT_CURRENT: {image_id} has no successful build of the current sources; build it first")
+    local = image_id_of(build, build["tag"])
+    if not local or local != state.get("image_digest"):
+        raise Blocked(f"IMAGE_DRIFTED: {build['tag']} is missing or differs from latest.json; rebuild it")
+    entry = load_publish_lock()["images"].get(image_id) or {}
+    if entry.get("fingerprint") == state["fingerprint"] and entry.get("attempt_id") == state["attempt_id"]:
+        return "CURRENT"
+    docker = _docker()
+    repository = f"{registry()}/{image_id}"
+    remote = f"{repository}:{state['fingerprint'][len('sha256:'):][:20]}"
+    tagged = _run([str(docker), "tag", build["tag"], remote], 120)
+    if tagged.returncode != 0:
+        raise BuildFailed("PUBLISH_TAG_FAILED", tagged.stderr.strip()[-500:])
+    pushed = _run([str(docker), "push", remote], 7200)
+    if pushed.returncode != 0:
+        raise BuildFailed("PUBLISH_PUSH_FAILED", "docker push failed (docker login ghcr.io?)",
+                          (pushed.stderr or pushed.stdout)[-2000:])
+    found = re.findall(r"digest: (sha256:[0-9a-f]{64})", pushed.stdout + pushed.stderr)
+    if not found:   # the push output format is not an API; the pushed repo digest is
+        inspected = _run([str(docker), "image", "inspect", "--format", "{{json .RepoDigests}}", remote], 60)
+        try:
+            found = [d.split("@", 1)[1] for d in json.loads(inspected.stdout or "[]")
+                     if d.startswith(repository + "@") and SHA_RE.fullmatch(d.split("@", 1)[1])]
+        except ValueError:
+            found = []
+    if not found:
+        raise BuildFailed("PUBLISH_DIGEST_UNKNOWN", "docker push did not report a manifest digest",
+                          pushed.stdout[-2000:])
+    lock = load_publish_lock()   # re-read: keep entries another publish wrote meanwhile
+    lock["images"][image_id] = {
+        "repository": repository, "manifest_digest": found[-1], "fingerprint": state["fingerprint"],
+        "attempt_id": state["attempt_id"], "finished_at": state["finished_at"],
+        "clone_heads": _clone_heads(build), "published_at": now(),
+    }
+    lock["images"] = dict(sorted(lock["images"].items()))
+    atomic_json(publish_lock_path(), lock)
+    return "PUBLISHED"
+
+
+def _valid_entry(entry: Any) -> bool:
+    return (isinstance(entry, dict)
+            and isinstance(entry.get("repository"), str)
+            and re.fullmatch(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+", entry["repository"]) is not None
+            and all(SHA_RE.fullmatch(str(entry.get(key))) for key in ("manifest_digest", "fingerprint"))
+            and isinstance(entry.get("attempt_id"), str) and isinstance(entry.get("finished_at"), str))
+
+
+def pull(image_id: str, builds: dict[str, dict[str, Any]], lock: dict[str, Any]) -> str:
+    """Fetch the published image when the lock matches this checkout's sources."""
+    build = effective(builds[image_id])
+    entry = lock["images"].get(image_id)
+    if entry is None:
+        return "UNPUBLISHED"
+    if not _valid_entry(entry):
+        raise BuildFailed("PULL_LOCK_INVALID", f"published.lock.json entry for {image_id} is malformed")
+    if entry["repository"] != f"{registry()}/{image_id}":
+        raise BuildFailed("PULL_LOCK_INVALID", f"{image_id} is published at {entry['repository']}, "
+                                               f"not under the configured registry {registry()}")
+    if fingerprint(build)[0] != entry["fingerprint"]:
+        return "STALE"
+    state = _read_state(image_id) or {}
+    if (state.get("fingerprint") == entry["fingerprint"] and state.get("attempt_id") == entry["attempt_id"]
+            and state.get("image_digest") and image_id_of(build, build["tag"]) == state["image_digest"]):
+        return "CURRENT"
+    base = state_root() / image_id
+    base.mkdir(parents=True, exist_ok=True)
+    lock_file = base / "lock"
+    try:
+        descriptor = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise Blocked(f"BUILD_IN_PROGRESS: {lock_file} is held") from None
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump({"attempt_id": "pull", "pid": os.getpid(), "host": socket.gethostname(), "at": now()}, stream)
+    try:
+        docker = _docker()
+        reference = f"{entry['repository']}@{entry['manifest_digest']}"
+        pulled = _run([str(docker), "pull", reference], 7200)
+        if pulled.returncode != 0:
+            raise BuildFailed("PULL_FAILED", "docker pull failed (docker login ghcr.io?)",
+                              (pulled.stderr or pulled.stdout)[-2000:])
+        tagged = _run([str(docker), "tag", reference, build["tag"]], 120)
+        if tagged.returncode != 0:
+            raise BuildFailed("PULL_TAG_FAILED", tagged.stderr.strip()[-500:])
+        local = image_id_of(build, build["tag"])
+        if not local:
+            raise BuildFailed("PULL_IMAGE_MISSING", f"{build['tag']} is not present after the pull")
+        atomic_json(base / "latest.json", {"image_id": image_id, "tag": build["tag"],
+                                            "fingerprint": entry["fingerprint"], "image_digest": local,
+                                            "attempt_id": entry["attempt_id"],
+                                            "finished_at": entry["finished_at"]})
+        return "PULLED"
+    finally:
+        lock_file.unlink(missing_ok=True)
+
+
+def pull_order(image_ids: list[str], builds: dict[str, dict[str, Any]]) -> list[str]:
+    """The requested images with the images they build on first (a fingerprint names their identity)."""
+    by_tag = {item["tag"]: image_id for image_id, item in builds.items()}
+    ordered: list[str] = []
+
+    def visit(image_id: str, path: tuple[str, ...]) -> None:
+        if image_id in ordered or image_id in path:
+            return
+        for tag in builds[image_id]["requires_images"]:
+            if tag in by_tag:
+                visit(by_tag[tag], path + (image_id,))
+        ordered.append(image_id)
+
+    for image_id in image_ids:
+        if image_id not in builds:
+            raise Blocked(f"UNKNOWN_IMAGE: {image_id}")
+        visit(image_id, ())
+    return ordered
+
+
+def _shared_image_ids() -> list[str]:
+    """The images prepare-host.sh needs on every host (registry_records owns the list)."""
+    sys.path.insert(0, str(ROOT))
+    import registry_records
+    return list(registry_records.BUILD_ONLY_IMAGE_IDS + registry_records.STEP4_IMAGE_IDS)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -522,12 +740,18 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--build-arg", action="append", default=[], metavar="K=V")
     build.add_argument("--docker-context")
     build.add_argument("--timeout-seconds", type=int)
+    for name in ("publish", "pull", "rekey"):
+        shared = sub.add_parser(name)
+        shared.add_argument("image_id", nargs="*")
+        shared.add_argument("--all", action="store_true", help="every image prepare-host.sh needs")
     args = parser.parse_args(argv)
     if args.command == "list":
         for image_id, item in sorted(load_builds().items()):
             needs = f"  needs {', '.join(item['requires_images'])}" if item["requires_images"] else ""
             print(f"{image_id:28} {item['tag']}{needs}")
         return 0
+    if args.command in ("publish", "pull", "rekey"):
+        return _shared(args)
     failures = 0
     for image_id in args.image_id:
         override = {"tag": args.tag if len(args.image_id) == 1 else None, "no_cache": args.no_cache,
@@ -539,6 +763,54 @@ def main(argv: list[str] | None = None) -> int:
         except (Blocked, BuildFailed) as exc:
             failures += 1
             print(f"FAILED   {image_id}: {exc}", file=sys.stderr)
+            if isinstance(exc, BuildFailed) and exc.tail:
+                print(exc.tail, file=sys.stderr)
+    return 1 if failures else 0
+
+
+def rekey(image_id: str, builds: dict[str, dict[str, Any]]) -> str:
+    """One-time move of a build to the ADR-0033 fingerprint (required images named by build identity,
+    not local image id). Only a build that is current under the old fingerprint and still present in
+    Docker is rewritten; anything else is left for prepare-host.sh to rebuild. Remove once every host
+    has run it."""
+    build = effective(builds[image_id])
+    state = _read_state(image_id)
+    if not state or not build["requires_images"]:
+        return "UNCHANGED"
+    new = fingerprint(build)[0]
+    if state.get("fingerprint") == new:
+        return "UNCHANGED"
+    if state.get("fingerprint") != fingerprint(build, legacy_requires=True)[0] \
+            or image_id_of(build, build["tag"]) != state.get("image_digest"):
+        return "STALE"
+    atomic_json(state_root() / image_id / "latest.json", dict(state, fingerprint=new))
+    return "REKEYED"
+
+
+def _shared(args: argparse.Namespace) -> int:
+    if bool(args.image_id) == bool(args.all):
+        print(f"{args.command}: name images or pass --all", file=sys.stderr)
+        return 2
+    failures = 0
+    try:
+        builds = load_builds()
+        ids = pull_order(args.image_id or _shared_image_ids(), builds)
+        lock = load_publish_lock()
+    except (Blocked, ValueError, OSError) as exc:
+        print(f"FAILED   {args.command}: {exc}", file=sys.stderr)
+        return 1
+    for image_id in ids:
+        try:
+            if args.command == "publish":
+                outcome = publish(image_id)
+            elif args.command == "pull":
+                outcome = pull(image_id, builds, lock)
+            else:
+                outcome = rekey(image_id, builds)
+            print(f"{outcome:11} {image_id}")
+        except (Blocked, BuildFailed) as exc:
+            failures += 1
+            print(f"FAILED      {image_id}: {exc}", file=sys.stderr)
             if isinstance(exc, BuildFailed) and exc.tail:
                 print(exc.tail, file=sys.stderr)
     return 1 if failures else 0
