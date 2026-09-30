@@ -68,7 +68,7 @@ fails is invalidated and redone.
 
 | | Tool-output cache (`tool_output_cache.py`) | Per-item memo (`item_memo.py`) |
 |---|---|---|
-| What | Pinned B13 tool runs: syft, grype, osv-scanner, scancode (`dependency_b13_adapters.execute`) | Loop items: 02-build-plan units and 02-build-resolution units |
+| What | Pinned B13 tool runs: syft, grype, osv-scanner, scancode (`dependency_b13_adapters.execute`) | Loop items: 02-build-plan units, 02-build-resolution units, IR operations (one per clang invocation in 02-ir-capture, the link, the disassembly) and 02-native-sast (unit, tool group) runs |
 | Key | image digest from the B16 record, argv, environment, limits, network, container paths, B13 boundary hash, host binding, run, job, mode, and sha256 digests of the mounted bytes computed by the adapter (the offline registry's re-hashed snapshot identity for a vulnerability database) | the unit's plan-unit request, its classification and index entries, catalog, per-unit prompt bytes, contract, schema, template, the run's pinned model, source snapshot, run, mode |
 | Scope | the same run and job (B13 requests bind the run) | the same run |
 | A hit | reuses the earlier B13 attempt only after full independent re-verification (retained result hash, output hash, re-derived receipt, exact offline permission decision); `dependency_workers` re-verifies it again. The new attempt directory gets `tool-output-reuse.json` with `reused_from` | re-reads the earlier persona attempt's result and summary, checks their hashes and the readable target, re-applies the orchestrator fill, `finalize` and the full unit check with citations. `status.json` marks the unit `reused_from: item-memo` and keeps the original persona attempt id |
@@ -100,6 +100,19 @@ trial request against today's request, the exact two-capability grant it ran und
 its recorded time), the full B13 result, the trial's commands and the compile-database and install
 hashes; `_compile_db` then runs on this attempt's copy and every later validation re-verifies the
 trial in its owner attempt. Deleting that owner attempt makes the reusing attempt fail validation.
+
+**IR operations and native SAST.** One memo entry per B13 run: an IR compile per clang invocation
+(ADR-0014's unit of native analysis), the IR link, the disassembly, and each native-SAST (unit, tool
+group) run. Keyed by today's request (image, argv, environment, limits, network, container paths),
+the toolchain or analyzer config, the B13 boundary, the host facts and the content behind each mount,
+hashed here: the attested post-build checkout identity for `/workspace`, the sha256 of every upstream
+file the argv names (IR link and disassembly), the unit's adapted compile database (native SAST).
+Only OK runs are memoised. A hit re-checks the recorded request against today's, re-evaluates the
+recorded (empty) permission decision at its recorded time and re-verifies the B13 result and the
+retained output hash in the owner attempt; the receipt names it (`owner_attempt_id`) and every later
+validation re-verifies it there. IR jobs copy the verified module bytes as before. Native SAST
+publishes its raw analyzer outputs, so a hit copies the owner trial's `scratch/` files to the same
+relative path in this attempt, and validation checks that copy byte for byte against the owner.
 
 The per-unit build-plan prompt now names the unit id and root at the top and again at the end (a
 small model anchored on the first unit it read). A unit id that is not plain path text is not pasted

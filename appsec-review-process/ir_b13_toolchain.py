@@ -4,12 +4,15 @@ from __future__ import annotations
 import tunables
 from datetime import datetime, timezone
 import json
+import re
 from pathlib import Path, PurePosixPath
 import threading
 from typing import Any
 
 import container_execution as ce
-from execution_state import Blocked, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
+from execution_state import (Blocked, atomic_bytes, atomic_json, beneath, data_path, digest, file_hash, identifier,
+                             read_json)
+import item_memo
 import permission_capabilities as pc
 
 RECEIPT = "b13-receipts.json"
@@ -114,6 +117,9 @@ class B13IrToolchain:
         self.runtime = _runtime(inputs["source_snapshot_sha256"])
         self.receipts: list[dict[str, Any]] = []
         self.target = Path(inputs["target_path"]) if job == "02-ir-capture" else None
+        # Brief N / ADR-0014 item 6: one B13 run per clang invocation (capture), per link or per
+        # disassembly; an unchanged operation reuses its earlier verified trial in its owner attempt.
+        self.memo = item_memo.Memo("ir:" + job)
 
     def select(self, image_id: str) -> None:
         """Capture only: compile the next unit's entries with that unit's build image."""
@@ -131,7 +137,74 @@ class B13IrToolchain:
             "permission":_permission(self.run_id,self.job,self.inputs["source_snapshot_sha256"],_utc()),
             "limits":tunables.container_limits(self.job)}
 
+    def _memo_material(self, operation: str, request: dict[str, Any], output: str) -> dict[str, Any]:
+        """The operation's own inputs: today's request minus attempt id, permission and mount host
+        paths, and the content behind each mount, hashed here: the attested checkout identity for
+        /workspace, and for an upstream attempt mount the sha256 of every file the argv names in it."""
+        contents = {}
+        for mount in request["target_mounts"]:
+            path = mount["container_path"]
+            if path == "/workspace":
+                contents[path] = self.inputs["source_tree_sha256"]
+                continue
+            named = sorted(word for word in request["argv"] if word.startswith(path + "/"))
+            if not named:
+                raise ValueError("an input mount the argv never names cannot be keyed")
+            host = Path(mount["host_path"])
+            contents[path] = {word: "sha256:" + file_hash(beneath(host, host / word[len(path) + 1:]))
+                              for word in named}
+        defaults = ce.host_defaults()
+        return {"run_id": self.run_id, "job": self.job, "operation": operation, "output": output,
+                "toolchain_sha256": self.toolchain_sha256,
+                **{key: value for key, value in request.items()
+                   if key not in ("attempt_id", "permission", "target_mounts")},
+                "container_paths": [m["container_path"] for m in request["target_mounts"]],
+                "contents": contents, "boundary_sha256": ce.boundary_sha256(),
+                "host": {"host_flavor": defaults["host_flavor"], "docker_executable": str(defaults["docker_executable"]),
+                         "container_user": defaults["container_user"]}}
+
+    def _from_memo(self, entry: dict[str, Any], operation: str, request: dict[str, Any],
+                   output: str) -> tuple[dict[str, Any], Path]:
+        """Re-verify a memoised trial in its owner attempt; returns its receipt and output path."""
+        base = self.attempt.parent
+        owner = beneath(base, base / identifier(entry["owner_attempt_id"]))
+        if owner == self.attempt or not owner.is_dir():
+            raise ValueError("memo owner attempt is absent or is this attempt")
+        if not re.fullmatch(r"tools/[0-9]{4}-" + operation, entry["trial_path"]):
+            raise ValueError("memoised trial path is not a tool trial of this operation")
+        trial = beneath(owner, owner / entry["trial_path"])
+        recorded = read_json(trial / "logs/container" / ce.REQUEST_FILE)
+        item_memo.same_b13_request(recorded, request, adapter_id=entry["adapter_attempt_id"])
+        item_memo.recorded_permission_granted(recorded["permission"], run_id=self.run_id, job_id=self.job,
+            requirement=request["permission"]["requirement"], registry_ceiling=[])
+        verified = ce.load_verified_result(trial, run_id=self.run_id, job_id=self.job,
+            attempt_id=entry["adapter_attempt_id"], request=recorded, images_dir=self.runtime.images_dir,
+            expected_result_sha256=entry["expected_result_sha256"], **_host(self.runtime))
+        if verified["execution_status"] != "OK":
+            raise ValueError("memoised trial did not complete OK")
+        raw = trial / "scratch" / output
+        if not raw.is_file() or raw.is_symlink() or "sha256:" + file_hash(raw) != entry["output_sha256"]:
+            raise ValueError("memoised tool output differs from its retained hash")
+        receipt = {"operation": operation, "adapter_attempt_id": entry["adapter_attempt_id"],
+                   "trial_path": entry["trial_path"], "expected_result_sha256": entry["expected_result_sha256"],
+                   "output_path": "scratch/" + output, "output_sha256": entry["output_sha256"],
+                   "execution_status": "OK", "owner_attempt_id": owner.name}
+        return receipt, raw
+
     def _run(self, operation: str, argv: list[str], mounts: list[dict[str, str]], output: str | None) -> tuple[int, Path]:
+        material = None
+        if self.memo.enabled and output is not None:
+            probe = self._request("memo-probe", argv, mounts)
+            try:
+                material = self._memo_material(operation, probe, output)
+            except (OSError, ValueError, KeyError):
+                material = None
+            if material is not None:
+                hit = self.memo.lookup(material, lambda entry: self._from_memo(entry, operation, probe, output))
+                if hit is not None:
+                    receipt, raw = hit
+                    self.receipts.append(receipt)
+                    return 0, raw
         ordinal = len(self.receipts) + 1
         adapter_id = f"{self.job.removeprefix('02-ir-')}-{ordinal:04d}-{self.attempt.name[:8]}"
         trial = self.attempt / "tools" / f"{ordinal:04d}-{operation}"
@@ -149,6 +222,11 @@ class B13IrToolchain:
             "trial_path":trial.relative_to(self.attempt).as_posix(),"expected_result_sha256":expected,
             "output_path":("scratch/"+output) if output else "logs/container/stdout.log",
             "output_sha256":raw_sha,"execution_status":terminal["execution_status"]})
+        if material is not None and terminal["execution_status"] == "OK" and raw_sha is not None:
+            # only complete outputs are memoised; a failed compile is retried next attempt
+            self.memo.record(material, {"owner_attempt_id": self.attempt.name,
+                "trial_path": trial.relative_to(self.attempt).as_posix(), "adapter_attempt_id": adapter_id,
+                "expected_result_sha256": expected, "output_sha256": raw_sha})
         return (0 if terminal["execution_status"] == "OK" else 1), raw
 
     def compile(self, argv: list[str], source: Path, destination: Path) -> int:
@@ -261,15 +339,28 @@ def validate_receipts(job: str, inputs: dict[str, Any], attempt: Path) -> None:
     runtime=_runtime(inputs["source_snapshot_sha256"])
     expected_output = {"compile":"scratch/module.bc", "link":"scratch/linked.bc",
                        "disassemble":"scratch/module.ll"}[expected_operation]
+    fields={"operation","adapter_attempt_id","trial_path","expected_result_sha256","output_path","output_sha256","execution_status"}
     for ordinal, record in enumerate(document["operations"], start=1):
-        if set(record)!={"operation","adapter_attempt_id","trial_path","expected_result_sha256","output_path","output_sha256","execution_status"}:
+        # A memoised operation (brief N) names the earlier attempt that ran its trial; it is
+        # re-verified there, and its trial path is that attempt's own tool trial.
+        owned = "owner_attempt_id" in record
+        if set(record) != (fields | {"owner_attempt_id"} if owned else fields):
             raise Blocked(f"{job}: B13 operation receipt shape is invalid")
         pure=PurePosixPath(record["trial_path"])
         if (pure.is_absolute() or any(part in ("",".","..") for part in pure.parts) or
-                record["trial_path"] != f"tools/{ordinal:04d}-{expected_operation}" or
+                (not owned and record["trial_path"] != f"tools/{ordinal:04d}-{expected_operation}") or
+                (owned and (record["execution_status"] != "OK" or
+                            not re.fullmatch(r"tools/[0-9]{4}-" + expected_operation, record["trial_path"]))) or
                 record["output_path"] != expected_output):
             raise Blocked(f"{job}: B13 trial path is unsafe")
-        trial=attempt.joinpath(*pure.parts); request=read_json(trial/"logs/container"/ce.REQUEST_FILE)
+        try:
+            owner = (beneath(attempt.parent, attempt.parent / identifier(record["owner_attempt_id"]))
+                     if owned else attempt)
+        except ValueError as exc:
+            raise Blocked(f"{job}: B13 receipt owner attempt is invalid") from exc
+        if owned and (owner == attempt or not owner.is_dir()):
+            raise Blocked(f"{job}: B13 receipt owner attempt is absent")
+        trial=owner.joinpath(*pure.parts); request=read_json(trial/"logs/container"/ce.REQUEST_FILE)
         if (request.get("image") or {}).get("image_id") not in allowed_images:
             raise Blocked(f"{job}: B13 operation ran on an image outside the accepted build images")
         errors=ce.verify_container_result(trial,run_id=inputs["run_id"],job_id=job,

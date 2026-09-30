@@ -482,7 +482,7 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
 def _code_hashes(job: str) -> dict[str, str]:
     wrapper = job.replace("02-", "").replace("-", "_") + ".py"
     result = {name: file_hash(ROOT / name) for name in (
-        "ir_evidence.py", "ir_b13_toolchain.py", "container_execution.py", wrapper,
+        "ir_evidence.py", "ir_b13_toolchain.py", "item_memo.py", "tool_output_cache.py", "container_execution.py", wrapper,
         "publish_job_output.py", "worker_result.py", "validate_job_output.py",
         registry_paths.template_rel(job),
         registry_paths.contract_rel(JOBS[job][2]))}

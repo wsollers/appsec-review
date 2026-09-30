@@ -69,3 +69,38 @@ class Memo:
             return
         full = self._material(material)
         self.store.put(toc.key_of(full), full, {"loop": self.loop, **payload})
+
+
+# --- helpers for loops whose items are B13 container runs ---------------------------------------------
+# A memoised B13 trial stays in the attempt that ran it (B13 binds a trial to its attempt path); the
+# caller re-verifies it there with container_execution.load_verified_result. These two checks make sure
+# the recorded request is the one today's code would issue and that it ran under a granted decision.
+
+def same_b13_request(recorded: Any, expected: dict[str, Any], *, adapter_id: str) -> None:
+    """Raise unless ``recorded`` equals today's ``expected`` request in everything but the attempt
+    id (which must be the memoised adapter id), the permission (checked separately) and the mount
+    host paths (the content behind them is in the memo key)."""
+    if not isinstance(recorded, dict) or set(recorded) != set(expected):
+        raise ValueError("recorded B13 request shape differs")
+    for key, value in expected.items():
+        if key not in ("attempt_id", "permission", "target_mounts") and recorded[key] != value:
+            raise ValueError(f"recorded B13 request differs from today's request ({key})")
+    if recorded["attempt_id"] != adapter_id:
+        raise ValueError("recorded B13 request names another attempt")
+    if ([m.get("container_path") for m in recorded["target_mounts"]] !=
+            [m["container_path"] for m in expected["target_mounts"]]):
+        raise ValueError("recorded B13 request mounts differ")
+
+
+def recorded_permission_granted(permission: Any, *, run_id: str, job_id: str,
+                                requirement: dict[str, Any], registry_ceiling: Any) -> None:
+    """Re-evaluate the recorded permission decision at its own recorded time; raise unless it was
+    granted for exactly ``requirement``."""
+    import permission_capabilities as pc
+    if not isinstance(permission, dict) or permission.get("requirement") != requirement:
+        raise ValueError("recorded B13 request ran under a different permission requirement")
+    decision = permission["decision"]
+    context = {"run_id": run_id, "job_id": job_id,
+               "source_snapshot_sha256": decision["source_snapshot_sha256"],
+               "now": decision["evaluated_at"], "registry_ceiling": registry_ceiling}
+    pc.require_granted(decision, requirement=requirement, grants=permission["grants"], context=context)

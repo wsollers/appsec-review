@@ -11,13 +11,15 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import threading
 from typing import Any
 import xml.etree.ElementTree as ET
 
 import container_execution as ce
-from execution_state import (Blocked, ROOT, atomic_json, data_path, digest, file_hash, now,
-                             read_json)
+from execution_state import (Blocked, ROOT, atomic_bytes, atomic_json, beneath, data_path, digest, file_hash,
+                             identifier, now, read_json)
+import item_memo
 import native_sast_adapters as adapters
 import permission_capabilities as pc
 from publish_job_output import (ACCEPTED_SCHEMA, coordinate_worker_lifecycle,
@@ -42,6 +44,7 @@ CODE_FILES = (
     "native_sast.py", "native_sast_adapters.py", "container_execution.py",
     "permission_capabilities.py", "publish_job_output.py", "validate_job_output.py",
     registry_paths.contract_rel("native-sast"), registry_paths.template_rel("02-native-sast"),
+    "item_memo.py", "tool_output_cache.py",
 )
 
 
@@ -470,6 +473,69 @@ def excluded_unit_gaps(inputs: dict[str, Any]) -> list[str]:
     return gaps
 
 
+# --- per unit x tool-group memo (brief N, ADR-0014 item 6) --------------------------------------------
+# An unchanged (unit, tool group) analysis reuses its earlier OK trial. B13 binds a trial to the attempt
+# path it ran in, so the trial stays in its owner attempt (the receipt names it) and is re-verified there;
+# this attempt publishes a byte-identical copy of the trial's raw analyzer outputs at the same relative
+# path, and every validation checks that copy against the owner trial.
+
+def _memo_material(inputs: dict[str, Any], unit: dict[str, Any], group: str,
+                   request: dict[str, Any]) -> dict[str, Any]:
+    defaults = ce.host_defaults()
+    return {"run_id": inputs["run_id"], "job": JOB, "unit_id": unit["unit_id"], "tool_group": group,
+            **{key: value for key, value in request.items() if key not in ("attempt_id", "permission", "target_mounts")},
+            "container_paths": [m["container_path"] for m in request["target_mounts"]],
+            "contents": {"/workspace": inputs["source_tree_sha256"],
+                         "compile_database": unit["compile_database"]["adapted_sha256"]},
+            "config_sha256": inputs["config_sha256"], "boundary_sha256": ce.boundary_sha256(),
+            "host": {"host_flavor": defaults["host_flavor"], "docker_executable": str(defaults["docker_executable"]),
+                     "container_user": defaults["container_user"]}}
+
+
+def _scratch_hashes(trial: Path) -> dict[str, str]:
+    scratch = trial / "scratch"
+    values = {}
+    for path in sorted(scratch.rglob("*")) if scratch.is_dir() else []:
+        if path.is_symlink():
+            raise ValueError("trial scratch holds a link")
+        if path.is_file():
+            values[path.relative_to(trial).as_posix()] = _hash(path)
+    return values
+
+
+def _owner_trial(attempt: Path, owner_id: str, trial_path: str) -> Path:
+    owner = beneath(attempt.parent, attempt.parent / identifier(owner_id))
+    if owner == attempt or not owner.is_dir():
+        raise ValueError("memo owner attempt is absent or is this attempt")
+    if not re.fullmatch(r"tools/[0-9a-f]{16}/(clang-cppcheck|csa)", trial_path):
+        raise ValueError("memoised trial path is not a native-SAST tool trial")
+    return beneath(owner, owner / trial_path)
+
+
+def _from_memo(run_id: str, attempt: Path, entry: dict[str, Any], request: dict[str, Any],
+               runtime: ce.ContainerRuntime) -> Path:
+    """Re-verify a memoised trial in its owner attempt and copy its raw outputs here."""
+    trial = _owner_trial(attempt, entry["owner_attempt_id"], entry["trial_path"])
+    recorded = read_json(trial / "logs/container" / ce.REQUEST_FILE)
+    item_memo.same_b13_request(recorded, request, adapter_id=entry["adapter_attempt_id"])
+    item_memo.recorded_permission_granted(recorded["permission"], run_id=run_id, job_id=JOB,
+        requirement=request["permission"]["requirement"], registry_ceiling=[])
+    verified = ce.load_verified_result(trial, run_id=run_id, job_id=JOB, attempt_id=entry["adapter_attempt_id"],
+        request=recorded, images_dir=runtime.images_dir, expected_result_sha256=entry["expected_result_sha256"],
+        **_host(runtime))
+    if verified["execution_status"] != "OK":
+        raise ValueError("memoised trial did not complete OK")
+    hashes = _scratch_hashes(trial)
+    if not hashes or hashes != entry["scratch"]:
+        raise ValueError("memoised raw analyzer outputs changed")
+    local = attempt / entry["trial_path"]
+    for relative in hashes:
+        atomic_bytes(local / relative, (trial / relative).read_bytes())
+    if _scratch_hashes(local) != hashes:
+        raise ValueError("copied raw analyzer outputs differ")
+    return local
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
@@ -511,8 +577,17 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     causes: dict[tuple[str, str], str | None] = {}
     for item in receipt:
         trial = attempt / item["trial_path"]
-        request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
-        errors = ce.verify_container_result(trial, run_id=run_id, job_id=JOB,
+        verified_trial = trial
+        if "owner_attempt_id" in item:   # memoised: B13 evidence in the owner attempt, raw copy here
+            try:
+                verified_trial = _owner_trial(attempt, item["owner_attempt_id"], item["trial_path"])
+                if item.get("failure_cause") is not None or _scratch_hashes(trial) != _scratch_hashes(verified_trial) \
+                        or not _scratch_hashes(trial):
+                    raise ValueError("raw analyzer copy differs from its owner trial")
+            except (OSError, ValueError) as exc:
+                raise Blocked(f"{JOB}: memoised B13 receipt does not resolve to its owner trial") from exc
+        request = read_json(verified_trial / "logs/container" / ce.REQUEST_FILE)
+        errors = ce.verify_container_result(verified_trial, run_id=run_id, job_id=JOB,
             attempt_id=item["adapter_attempt_id"], request=request, images_dir=runtime.images_dir,
             expected_result_sha256=item["expected_result_sha256"], **_host(runtime))
         if errors:
@@ -522,7 +597,7 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
             raise Blocked(f"{JOB}: B13 receipt identity is duplicate or unknown")
         trials[key] = trial
         try:
-            causes[key] = terminal_failure_cause(read_json(trial / "logs/container" / ce.RESULT_FILE))
+            causes[key] = terminal_failure_cause(read_json(verified_trial / "logs/container" / ce.RESULT_FILE))
         except RuntimeError as exc:
             raise Blocked(f"{JOB}: B13 evidence is a job-level failure") from exc
         if item.get("failure_cause") != causes[key]:
@@ -560,14 +635,34 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             folder.mkdir(parents=True)
             atomic_json(folder / "compile_commands.json", unit["adapted"])
         receipts, outcomes = [], []
+        memo = item_memo.Memo(JOB + ":unit-group")
         for ordinal, unit in enumerate(inputs["units"]):
             trials, group_causes = {}, {}
             for group in GROUPS:
                 adapter_id = f"n{ordinal}-{group}"
                 trial = attempt / "tools" / digest(unit["unit_id"])[:16] / group
-                trial.mkdir(parents=True)
                 runtime = _runtime(inputs["source_snapshot_sha256"])
                 request = _request(run_id, adapter_id, inputs, unit, database_root, group)
+                material = _memo_material(inputs, unit, group, request) if memo.enabled else None
+                entry_seen: dict[str, Any] = {}
+
+                def from_memo(entry, request=request, runtime=runtime):
+                    local = _from_memo(run_id, attempt, entry, request, runtime)
+                    entry_seen.update(entry)
+                    return local
+                local = memo.lookup(material, from_memo) if material is not None else None
+                if local is not None:
+                    receipts.append({"unit_id": unit["unit_id"], "tool_group": group,
+                        "adapter_attempt_id": entry_seen["adapter_attempt_id"],
+                        "trial_path": trial.relative_to(attempt).as_posix(),
+                        "expected_result_sha256": entry_seen["expected_result_sha256"], "failure_cause": None,
+                        "owner_attempt_id": entry_seen["owner_attempt_id"]})
+                    trials[group] = local
+                    group_causes[group] = None
+                    continue
+                if trial.exists():   # a partial copy from a memo hit that failed its checks
+                    shutil.rmtree(trial)
+                trial.mkdir(parents=True)
                 terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB,
                     attempt_id=adapter_id, attempt_root=trial, request=request)
                 expected = terminal["result_sha256"]
@@ -581,6 +676,15 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
                     "expected_result_sha256": expected, "failure_cause": failure})
                 trials[group] = trial
                 group_causes[group] = failure
+                if material is not None and failure is None:
+                    try:
+                        scratch = _scratch_hashes(trial)
+                    except ValueError:
+                        scratch = {}
+                    if scratch:   # only a complete trial with raw outputs is memoised
+                        memo.record(material, {"owner_attempt_id": attempt.name,
+                            "trial_path": trial.relative_to(attempt).as_posix(), "adapter_attempt_id": adapter_id,
+                            "expected_result_sha256": expected, "scratch": scratch})
             outcomes.append(unit_outcome(unit, group_causes, target=Path(inputs["target_path"]),
                 attempt=attempt, trials=trials, inputs=inputs))
         result = assemble_result(run_id, allocation["attempt_id"], inputs, outcomes)

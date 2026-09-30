@@ -727,7 +727,11 @@ records and report re-render (WSL), image rebuild and smoke, brief N fingerprint
 - [x] N5 per-item memo for 02-build-resolution units (successful units only): image, verified trial
   and compile DB reused from the owner attempt, which receipts name (`owner_attempt_id`); re-verified
   on every hit and every later validation.
-- [ ] Memo call site not done: IR/SAST invocations (ADR-0014 item 6, cross-run).
+- [x] N6 per-item memo for IR operations (02-ir-capture per clang invocation, 02-ir-link, 02-ir-facts;
+  `ir_b13_toolchain._run`) and 02-native-sast (unit, tool group) runs: OK trials reused from their
+  owner attempt, re-verified on every hit and validation; native SAST publishes a verified copy of the
+  raw analyzer outputs. Within one run only: B13 requests bind the run, so ADR-0014's cross-run reuse
+  needs run-independent trial evidence first.
 - [ ] `control_feature_lifecycle._code` hashes no per-job worker module (`completeness_audit.py`,
   `dynamic_rescope.py`, ...): an edit there does not rerun that job. Not changed (widening).
 - [ ] Controller: set `tool_output_cache` / `item_memo` to `on` for prod after a live dev loop.
