@@ -22,6 +22,17 @@ replay = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(replay)
 
 
+class BundlePermissions(unittest.TestCase):
+    """The lanes run as a non-root uid; the bundle's precompiled query plans must be readable, or every
+    query is recompiled from source and CodeQL runs out of memory (2026-09-30)."""
+
+    def test_both_images_make_the_bundle_world_readable_after_unpacking(self):
+        for name in ("Dockerfile", "Dockerfile.native"):
+            text = (Path(__file__).resolve().parents[1] / "audit-codeql" / name).read_text(encoding="utf-8")
+            unpack = text.index("tar --zstd -xf bundle.tar.zst")
+            self.assertIn("chmod -R a+rX /opt/codeql", text[unpack:unpack + 300], name)
+
+
 class Refusal(unittest.TestCase):
     def test_only_plain_in_image_compiler_invocations_run(self):
         ok = ["/opt/llvm/bin/clang++", "-std=c++17", "-I/workspace/include", "-c", "/workspace/a.cpp"]

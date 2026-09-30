@@ -51,10 +51,14 @@ RUN --mount=type=bind,from=audit-lsp-vendor:local,source=/opt/lsp-vendor,target=
 #     https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.zst
 # Expected: 553280102 bytes, sha256 5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a
 # (the file is .gitignored; it is a build input like the MSVC headers, not source).
+# chmod: the bundle ships precompiled query plans (.codeql/precompiled/*.qlx) readable by root only.
+# The lanes run as a non-root uid, so without it every query is recompiled from source, which needs
+# several GB of heap and ran out of memory at 2 GB (2026-09-30, smoke_codeql_per_language.sh).
 COPY codeql-bundle-linux64.tar.zst /opt/bundle.tar.zst
 RUN cd /opt \
     && echo "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a  bundle.tar.zst" | sha256sum -c - \
     && tar --zstd -xf bundle.tar.zst && rm bundle.tar.zst \
+    && chmod -R a+rX /opt/codeql \
     && /opt/codeql/codeql version --format=json \
     && /opt/codeql/codeql resolve languages
 ENV CODEQL_LICENSE_BASIS=ghas \
