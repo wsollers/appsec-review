@@ -104,7 +104,7 @@ in `src/greet.cpp`, trivy reports Dockerfile misconfigurations, hadolint reports
 
 To update a tool: change `version` in its `tool.json`, `pin`, `check`, `image_build.py build`, `smoke`,
 commit the folder. On hal5000, `image_build.py publish <id>` and commit `images/published.lock.json` so
-other hosts pull it ([ADR-0033](../decisions/ADR-0033-shared-images-lan-registry.md)).
+other hosts pull it ([ADR-0033](../decisions/ADR-0033-shared-images-google-drive.md)).
 
 A Dependabot (or other reviewed) bump of a pip lock changes the lock but not `pin-record.json`, so
 `check` fails. Re-record it without re-resolving: `python -B images/tool_pins.py pin <image_id>

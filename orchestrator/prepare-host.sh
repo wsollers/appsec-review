@@ -9,11 +9,11 @@
 #   orchestrator/prepare-host.sh --no-claude  skip the Claude CLI login probe
 #
 # Steps (host layouts: docs/processes/host-layouts.md):
-#   0. host packages: python3.12 + venv, git, libfuzzy2, jq, docker group (reported; install needs sudo)
+#   0. host packages: python3.12 + venv, git, libfuzzy2, jq, docker group; zstd/rclone for shared images
 #   1. offline Grype/OSV snapshots resolve within the 14-day ceiling (sync is separate; see TODO.md)
 #   2. Dagster stack (compose project appsec-review) is up
-#   3. every image the B13 registry needs has a current successful build here: pulls the published
-#      ones (images/published.lock.json, ADR-0033), builds the rest
+#   3. every image the B13 registry needs has a current successful build here: loads the published
+#      ones from Google Drive (images/published.lock.json, ADR-0033), builds the rest
 #   4. B16 registry records generate and match Docker
 #   5. the host code location is running (started in the background if not) and reloaded
 #   6. the four targets are cloned at their pinned commits (fixtures/populate-targets.sh)
@@ -52,6 +52,15 @@ ldconfig -p 2>/dev/null | grep -q 'libfuzzy.so.2' && ok "libfuzzy2" \
     || bad "libfuzzy" "libfuzzy.so.2 missing (evidence index needs it): sudo apt install libfuzzy2"
 command -v jq >/dev/null && ok "jq $(jq --version)" \
     || bad "jq" "jq missing (model jobs query JSON inputs through input_jq): sudo apt install jq"
+# Shared images (ADR-0033) are optional: without them step 3 builds everything locally.
+if [[ -z "${APPSEC_IMAGE_STORE:-}" ]]; then
+    todo "APPSEC_IMAGE_STORE unset: images are built here, not loaded from Google Drive (docs/processes/host-layouts.md)"
+else
+    command -v zstd >/dev/null && ok "zstd, image store $APPSEC_IMAGE_STORE" \
+        || todo "zstd missing (loading shared images needs it): sudo apt install zstd"
+    [[ "$APPSEC_IMAGE_STORE" == /* ]] || command -v rclone >/dev/null \
+        || todo "rclone missing for the image store $APPSEC_IMAGE_STORE: sudo apt install rclone"
+fi
 id -nG | tr ' ' '\n' | grep -qx docker && ok "$(id -un) in docker group" \
     || bad "docker-group" "$(id -un) not in the docker group: sudo usermod -aG docker $(id -un), then log in again"
 
@@ -116,11 +125,14 @@ if [[ ${#MISSING[@]} -eq 0 ]]; then
 elif [[ $CHECK -eq 1 ]]; then
     todo "missing or stale builds: ${MISSING[*]}"
 else
-    # Shared images first (ADR-0033): pull what images/published.lock.json holds for these sources.
-    # STALE or UNPUBLISHED ones, and a failed pull (registry down or unreachable), fall through to a build.
-    echo "  pulling published images ..."
-    python3 -B images/image_build.py pull "${MISSING[@]}" 2>&1 | sed 's/^/    /'
-    mapfile -t MISSING < <(missing_images)
+    # Shared images first (ADR-0033): load what images/published.lock.json holds for these sources.
+    # STALE or UNPUBLISHED ones, and a failed pull (store unreachable, archive still syncing), fall
+    # through to a build.
+    if [[ -n "${APPSEC_IMAGE_STORE:-}" ]]; then
+        echo "  loading published images from $APPSEC_IMAGE_STORE ..."
+        python3 -B images/image_build.py pull "${MISSING[@]}" 2>&1 | sed 's/^/    /'
+        mapfile -t MISSING < <(missing_images)
+    fi
     # A build that needs another image first reports BLOCKED; keep passing until nothing moves.
     while [[ ${#MISSING[@]} -gt 0 ]]; do
         before=${#MISSING[@]}

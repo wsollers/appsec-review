@@ -508,13 +508,12 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 
 ## Shared images (ADR-0033)
 
-- [x] `image_build.py publish|pull|rekey`, `images/published.lock.json`, `prepare-host.sh` step 3 pulls
+- [x] `image_build.py publish|pull|rekey` (Google Drive archives), `images/published.lock.json`, `prepare-host.sh` step 3 pulls
       before it builds; fingerprints name required images by build identity (tests: `images/tests/test_image_publish.py`).
-- [ ] zarathustra: start `orchestrator/image-registry/compose.yaml`; pin `registry:2.8.3` by digest; add
-      `192.168.1.228:5000` to `insecure-registries`.
-- [ ] hal5000: `insecure-registries` in Docker Desktop, `prepare-host.sh`, `image_build.py publish --all`,
-      commit the lock. First live push.
-- [ ] zarathustra: `prepare-host.sh`; confirm step 3 pulls instead of building.
+- [ ] hal5000: `zstd`, `rclone` remote `gdrive`, `APPSEC_IMAGE_STORE`; `prepare-host.sh`,
+      `image_build.py publish --all`, commit the lock. First live publish to Google Drive.
+- [ ] zarathustra: same setup (`rclone authorize "drive"` from a machine with a browser); `prepare-host.sh`;
+      confirm step 3 loads instead of building.
 - [ ] Remove `image_build.py rekey` and its `prepare-host.sh` call once both hosts have run it.
 
 ## L: shared formats and stricter validator (brief L, branch `formats-2`)

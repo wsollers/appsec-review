@@ -1,4 +1,4 @@
-"""Shared images (ADR-0033): publish on one host, pull on another, with a fake docker CLI.
+"""Shared images (ADR-0033): publish on one host, pull on another, with fake docker, zstd and rclone.
 
     python3 -B -m unittest images.tests.test_image_publish
 """
@@ -22,15 +22,12 @@ sys.path.insert(0, str(IMAGES))
 import registry_records as rr  # noqa: E402
 
 # A docker stand-in. Local image ids are host-specific (FAKE_DOCKER_HOST salts them), as Docker
-# Engine and Docker Desktop's containerd store disagree on the id of the same pulled bytes; the
-# "registry" file is shared between the two hosts.
+# Engine and Docker Desktop's containerd store disagree on the id of the same loaded bytes.
 FAKE_DOCKER = textwrap.dedent('''\
     #!/usr/bin/env python3
     import hashlib, json, os, sys
-    local_path, registry_path = os.environ["FAKE_DOCKER_LOCAL"], os.environ["FAKE_DOCKER_REGISTRY"]
-    def load(path):
-        return json.load(open(path)) if os.path.exists(path) else {}
-    local, registry = load(local_path), load(registry_path)
+    local_path = os.environ["FAKE_DOCKER_LOCAL"]
+    local = json.load(open(local_path)) if os.path.exists(local_path) else {}
     def local_id(content):
         return "sha256:" + hashlib.sha256((os.environ["FAKE_DOCKER_HOST"] + content).encode()).hexdigest()
     args = sys.argv[1:]
@@ -39,22 +36,37 @@ FAKE_DOCKER = textwrap.dedent('''\
     if args[:2] == ["image", "inspect"]:
         if args[-1] not in local: sys.exit(1)
         print(local_id(local[args[-1]])); sys.exit(0)
-    if args[0] == "tag":
-        source = args[1]
-        content = registry.get(source.split("@", 1)[1]) if "@" in source else local.get(source)
-        if content is None: sys.exit(1)
-        local[args[2]] = content
-    elif args[0] == "push":
-        digest = "sha256:" + hashlib.sha256(("manifest" + local[args[1]]).encode()).hexdigest()
-        registry[digest] = local[args[1]]
-        print(f"{args[1].rsplit(':', 1)[1]}: digest: {digest} size: 1234")
-    elif args[0] == "pull":
-        digest = args[1].split("@", 1)[1]
-        if digest not in registry: print("manifest unknown", file=sys.stderr); sys.exit(1)
-        local[args[1]] = registry[digest]
+    if args[0] == "save":
+        if args[1] not in local: sys.exit(1)
+        sys.stdout.write(json.dumps({"tag": args[1], "content": local[args[1]]})); sys.exit(0)
+    if args[0] == "load":
+        image = json.loads(sys.stdin.read())
+        local[image["tag"]] = image["content"]
+        print("Loaded image: " + image["tag"])
     else:
         sys.exit(2)
-    json.dump(local, open(local_path, "w")); json.dump(registry, open(registry_path, "w"))
+    json.dump(local, open(local_path, "w"))
+''')
+# zstd stand-in: -c copies stdin (or the named file) to stdout either way.
+FAKE_ZSTD = textwrap.dedent('''\
+    #!/usr/bin/env python3
+    import sys
+    files = [a for a in sys.argv[1:] if not a.startswith("-")]
+    data = open(files[0], "rb").read() if files else sys.stdin.buffer.read()
+    sys.stdout.buffer.write(data)
+''')
+# rclone stand-in: "copyto SRC DST", where "drive:" names the FAKE_RCLONE_ROOT folder.
+FAKE_RCLONE = textwrap.dedent('''\
+    #!/usr/bin/env python3
+    import os, shutil, sys
+    def path(value):
+        return os.path.join(os.environ["FAKE_RCLONE_ROOT"], value[len("drive:"):]) if value.startswith("drive:") else value
+    assert sys.argv[1] == "copyto"
+    source, target = path(sys.argv[2]), path(sys.argv[3])
+    if not os.path.exists(source):
+        print("not found", file=sys.stderr); sys.exit(3)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    shutil.copyfile(source, target)
 ''')
 
 
@@ -65,12 +77,15 @@ class Hosts(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        docker = self.root / "docker"
-        docker.write_text(FAKE_DOCKER, encoding="utf-8")
-        docker.chmod(0o755)
-        self.docker = docker
+        self.tools = {}
+        for name, script in (("docker", FAKE_DOCKER), ("zstd", FAKE_ZSTD), ("rclone", FAKE_RCLONE)):
+            self.tools[name] = self.root / name
+            self.tools[name].write_text(script, encoding="utf-8")
+            self.tools[name].chmod(0o755)
         self.lock = self.root / "published.lock.json"
-        self.registry_file = self.root / "registry.json"
+        self.drive = self.root / "drive"          # the Google Drive folder, as hal5000 sees it
+        self.stores = {"publisher": str(self.drive / "appsec-review" / "images"),   # a folder
+                       "puller": "drive:appsec-review/images"}                     # an rclone remote
         self.checkouts = {name: self.root / name / "images" for name in ("publisher", "puller")}
         for images in self.checkouts.values():
             self.image(images, "base-one", "FROM scratch\n")
@@ -91,10 +106,10 @@ class Hosts(unittest.TestCase):
         images = self.checkouts[host]
         return mock.patch.dict(os.environ, {
             "APPSEC_IMAGES_ROOT": str(images), "APPSEC_IMAGE_BUILD_STATE": str(images / ".build-state"),
-            "APPSEC_IMAGE_PUBLISH_LOCK": str(self.lock), "APPSEC_DOCKER_BIN": str(self.docker),
-            "APPSEC_IMAGE_REGISTRY": "192.0.2.10:5000/appsec-review",
+            "APPSEC_IMAGE_PUBLISH_LOCK": str(self.lock), "APPSEC_DOCKER_BIN": str(self.tools["docker"]),
+            "APPSEC_ZSTD_BIN": str(self.tools["zstd"]), "APPSEC_RCLONE_BIN": str(self.tools["rclone"]),
+            "APPSEC_IMAGE_STORE": self.stores[host], "FAKE_RCLONE_ROOT": str(self.drive),
             "FAKE_DOCKER_HOST": host, "FAKE_DOCKER_LOCAL": str(self.root / f"{host}-docker.json"),
-            "FAKE_DOCKER_REGISTRY": str(self.registry_file),
         })
 
     def fake_build(self, image_id, attempt="2026-09-30T120000Z-0000beef"):
@@ -124,8 +139,10 @@ class Hosts(unittest.TestCase):
     def test_publish_then_pull_gives_the_puller_valid_records(self):
         self.assertEqual(self.publish_all(), ["PUBLISHED", "PUBLISHED"])
         entry = json.loads(self.lock.read_text())["images"]["tool-one"]
-        self.assertEqual(entry["repository"], "192.0.2.10:5000/appsec-review/tool-one")
-        self.assertRegex(entry["manifest_digest"], r"^sha256:[0-9a-f]{64}$")
+        archive = Path(self.stores["publisher"]) / entry["archive"]
+        self.assertEqual("sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest(), entry["archive_sha256"])
+        self.assertEqual(sorted(p.name for p in archive.parent.iterdir()),   # no .part left behind
+                         sorted(e["archive"] for e in json.loads(self.lock.read_text())["images"].values()))
 
         self.assertEqual(self.pull_all(), ["PULLED", "PULLED"])
         with self.on("puller"):
@@ -203,19 +220,27 @@ class Hosts(unittest.TestCase):
             path.write_text(json.dumps(dict(state, fingerprint="sha256:" + "1" * 64)))
             self.assertEqual(image_build.rekey("tool-one", builds), "STALE")
 
-    def test_lock_entry_outside_the_configured_registry_is_refused(self):
+    def test_archive_that_does_not_match_the_lock_is_not_loaded(self):
         self.publish_all()
-        document = json.loads(self.lock.read_text())
-        document["images"]["base-one"]["repository"] = "192.0.2.99:5000/appsec-review/base-one"
-        self.lock.write_text(json.dumps(document))
+        entry = json.loads(self.lock.read_text())["images"]["base-one"]
+        (Path(self.stores["publisher"]) / entry["archive"]).write_bytes(b"half-synced")
         with self.on("puller"):
             builds = image_build.load_builds()
-            with self.assertRaisesRegex(image_build.BuildFailed, "configured registry"):
+            with self.assertRaisesRegex(image_build.BuildFailed, "PULL_ARCHIVE_MISMATCH"):
+                image_build.pull("base-one", builds, image_build.load_publish_lock())
+            self.assertFalse((image_build.state_root() / "base-one" / "latest.json").exists())
+            self.assertFalse((image_build.state_root() / "base-one" / "transfer").exists())
+
+    def test_missing_store_setting_blocks(self):
+        self.publish_all()
+        with self.on("puller"), mock.patch.dict(os.environ, {"APPSEC_IMAGE_STORE": ""}):
+            builds = image_build.load_builds()
+            with self.assertRaisesRegex(image_build.Blocked, "IMAGE_STORE_UNSET"):
                 image_build.pull("base-one", builds, image_build.load_publish_lock())
 
     def test_malformed_lock_entry_is_refused(self):
         self.lock.write_text(json.dumps({"schema": image_build.LOCK_SCHEMA, "images": {
-            "base-one": {"repository": "192.0.2.10:5000/appsec-review/base-one", "manifest_digest": "latest",
+            "base-one": {"archive": "../../etc/passwd", "archive_sha256": "sha256:" + "0" * 64,
                          "fingerprint": "sha256:" + "0" * 64, "attempt_id": "a", "finished_at": "b"}}}))
         with self.on("puller"):
             builds = image_build.load_builds()

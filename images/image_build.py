@@ -25,14 +25,14 @@ A terminal record is always written before the error is reported, with the log t
     python -B images/image_build.py pull audit-codeql ... | --all
     python -B images/image_build.py rekey --all        (once per host after ADR-0033; no rebuild)
 
-Shared images (ADR-0033). ``publish`` pushes a current successful build to the private registry
-(``APPSEC_IMAGE_REGISTRY``, default the LAN registry on zarathustra, 192.168.1.228:5000/appsec-review;
-orchestrator/image-registry/compose.yaml) and records its manifest digest
-and build identity in the committed ``images/published.lock.json``. ``pull`` fetches that digest on
-another host when the lock's fingerprint equals this checkout's, tags it with the local tag and
-writes ``latest.json`` with the publisher's fingerprint and attempt id and this host's image id, so
-the B16 records and every job work exactly as after a local build. Pull outcomes: PULLED, CURRENT,
-STALE (the sources changed since publication: build locally), UNPUBLISHED, FAILED.
+Shared images (ADR-0033). ``publish`` writes a current successful build as ``docker save | zstd`` to the
+image store (``APPSEC_IMAGE_STORE``: a folder, such as the Google Drive folder on hal5000, or an rclone
+remote such as ``gdrive:appsec-review/images``) and records the archive's name, sha256 and the build
+identity in the committed ``images/published.lock.json``. ``pull`` copies that archive to this host when the
+lock's fingerprint equals this checkout's, checks its sha256, ``docker load``s it and writes
+``latest.json`` with the publisher's fingerprint and attempt id and this host's image id, so the B16
+records and every job work exactly as after a local build. Pull outcomes: PULLED, CURRENT, STALE (the
+sources changed since publication: build locally), UNPUBLISHED, FAILED.
 """
 from __future__ import annotations
 
@@ -48,6 +48,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import uuid
 from typing import Any
@@ -60,7 +61,8 @@ BUILD_KEYS = {"image_id", "tag", "dockerfile", "context", "build_args", "require
               "prebuild", "timeout_seconds"}
 SKIP_DIRS = {".git", "__pycache__"}
 LOCK_SCHEMA = "appsec-review/image-publish-lock/1"
-DEFAULT_REGISTRY = "192.168.1.228:5000/appsec-review"   # zarathustra, orchestrator/image-registry/
+ARCHIVE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*-[0-9a-f]{24}\.tar\.zst\Z")
+TRANSFER_TIMEOUT = 4 * 3600
 SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}\Z")
 
 
@@ -112,11 +114,57 @@ def load_publish_lock() -> dict[str, Any]:
     return document
 
 
-def registry() -> str:
-    value = os.environ.get("APPSEC_IMAGE_REGISTRY", DEFAULT_REGISTRY).rstrip("/")
-    if not re.fullmatch(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+", value):
-        raise Blocked(f"APPSEC_IMAGE_REGISTRY is not a registry repository prefix: {value!r}")
+def image_store() -> str:
+    """Where published archives live: an absolute folder, or an rclone ``remote:path``."""
+    value = os.environ.get("APPSEC_IMAGE_STORE", "").strip().rstrip("/")
+    if not value:
+        raise Blocked("IMAGE_STORE_UNSET: set APPSEC_IMAGE_STORE to the image folder (hal5000: the Google "
+                      "Drive folder under /mnt/g) or an rclone remote (zarathustra: gdrive:appsec-review/images)")
+    if not value.startswith("/") and not re.fullmatch(r"[A-Za-z0-9_-]+:[^\0]*", value):
+        raise Blocked(f"IMAGE_STORE_INVALID: {value!r} is neither an absolute folder nor an rclone remote:path")
     return value
+
+
+def _tool(name: str) -> str:
+    found = os.environ.get(f"APPSEC_{name.upper()}_BIN") or shutil.which(name)
+    if not found:
+        raise Blocked(f"{name.upper()}_MISSING: install {name} (sudo apt install {name}) or set APPSEC_{name.upper()}_BIN")
+    return found
+
+
+def _store_copy(source: str, destination: str) -> None:
+    """Copy one archive between this host and the store (a folder, or an rclone remote)."""
+    if not (source.startswith("/") and destination.startswith("/")):
+        done = _run([_tool("rclone"), "copyto", source, destination], TRANSFER_TIMEOUT)
+        if done.returncode != 0:
+            raise BuildFailed("STORE_COPY_FAILED", f"rclone copyto {source} {destination} failed",
+                              (done.stderr or done.stdout)[-2000:])
+        return
+    part = Path(destination + ".part")
+    part.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copyfile(source, part)
+        os.replace(part, destination)
+    except OSError as exc:
+        part.unlink(missing_ok=True)
+        raise BuildFailed("STORE_COPY_FAILED", f"{source} -> {destination}: {exc}") from exc
+
+
+def _pipe(first: list[str], second: list[str], *, stdout=None) -> tuple[int, int, str]:
+    """first | second, bounded by TRANSFER_TIMEOUT; returns both exit codes and their stderr tail.
+    stderr goes to a temporary file, so a chatty command can never block on a full pipe."""
+    with tempfile.TemporaryFile() as errors:
+        one = subprocess.Popen(first, stdout=subprocess.PIPE, stderr=errors)
+        two = subprocess.Popen(second, stdin=one.stdout, stdout=stdout or subprocess.DEVNULL, stderr=errors)
+        one.stdout.close()
+        try:
+            two.wait(timeout=TRANSFER_TIMEOUT)
+            one.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            one.kill(); two.kill(); one.wait(); two.wait()
+            raise BuildFailed("TRANSFER_TIMEOUT", f"{first[0]} | {second[0]} exceeded {TRANSFER_TIMEOUT}s") from None
+        errors.seek(0)
+        return one.returncode, two.returncode, errors.read().decode(errors="replace")[-2000:]
 
 
 def _relative(value: Any, label: str) -> str:
@@ -600,7 +648,7 @@ def _clone_heads(build: dict[str, Any]) -> dict[str, str]:
 
 
 def publish(image_id: str) -> str:
-    """Push this host's current successful build and record it in the publication lock."""
+    """Save this host's current successful build to the image store and record it in the lock."""
     builds = load_builds()
     if image_id not in builds:
         raise Blocked(f"UNKNOWN_IMAGE: {image_id}")
@@ -614,30 +662,25 @@ def publish(image_id: str) -> str:
     entry = load_publish_lock()["images"].get(image_id) or {}
     if entry.get("fingerprint") == state["fingerprint"] and entry.get("attempt_id") == state["attempt_id"]:
         return "CURRENT"
-    docker = _docker()
-    repository = f"{registry()}/{image_id}"
-    remote = f"{repository}:{state['fingerprint'][len('sha256:'):][:20]}"
-    tagged = _run([str(docker), "tag", build["tag"], remote], 120)
-    if tagged.returncode != 0:
-        raise BuildFailed("PUBLISH_TAG_FAILED", tagged.stderr.strip()[-500:])
-    pushed = _run([str(docker), "push", remote], 7200)
-    if pushed.returncode != 0:
-        raise BuildFailed("PUBLISH_PUSH_FAILED", "docker push failed (is the registry on zarathustra up, and listed under insecure-registries?)",
-                          (pushed.stderr or pushed.stdout)[-2000:])
-    found = re.findall(r"digest: (sha256:[0-9a-f]{64})", pushed.stdout + pushed.stderr)
-    if not found:   # the push output format is not an API; the pushed repo digest is
-        inspected = _run([str(docker), "image", "inspect", "--format", "{{json .RepoDigests}}", remote], 60)
-        try:
-            found = [d.split("@", 1)[1] for d in json.loads(inspected.stdout or "[]")
-                     if d.startswith(repository + "@") and SHA_RE.fullmatch(d.split("@", 1)[1])]
-        except ValueError:
-            found = []
-    if not found:
-        raise BuildFailed("PUBLISH_DIGEST_UNKNOWN", "docker push did not report a manifest digest",
-                          pushed.stdout[-2000:])
+    store, docker, zstd = image_store(), _docker(), _tool("zstd")
+    staging = state_root() / image_id / "transfer"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    try:
+        saved = staging / "image.tar.zst"
+        with saved.open("wb") as stream:
+            saved_rc, zstd_rc, tail = _pipe([str(docker), "save", build["tag"]], [zstd, "-q", "-T0", "-c"],
+                                            stdout=stream)
+        if saved_rc != 0 or zstd_rc != 0:
+            raise BuildFailed("PUBLISH_SAVE_FAILED", f"docker save | zstd exited {saved_rc}/{zstd_rc}", tail)
+        digest = "sha256:" + _file_hash(saved)
+        name = f"{image_id}-{digest[len('sha256:'):][:24]}.tar.zst"
+        _store_copy(str(saved), f"{store}/{name}")
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     lock = load_publish_lock()   # re-read: keep entries another publish wrote meanwhile
     lock["images"][image_id] = {
-        "repository": repository, "manifest_digest": found[-1], "fingerprint": state["fingerprint"],
+        "archive": name, "archive_sha256": digest, "fingerprint": state["fingerprint"],
         "attempt_id": state["attempt_id"], "finished_at": state["finished_at"],
         "clone_heads": _clone_heads(build), "published_at": now(),
     }
@@ -646,31 +689,30 @@ def publish(image_id: str) -> str:
     return "PUBLISHED"
 
 
-def _valid_entry(entry: Any) -> bool:
+def _valid_entry(image_id: str, entry: Any) -> bool:
     return (isinstance(entry, dict)
-            and isinstance(entry.get("repository"), str)
-            and re.fullmatch(r"[a-z0-9.-]+(?::[0-9]+)?(?:/[a-z0-9._-]+)+", entry["repository"]) is not None
-            and all(SHA_RE.fullmatch(str(entry.get(key))) for key in ("manifest_digest", "fingerprint"))
+            and isinstance(entry.get("archive"), str) and ARCHIVE_RE.fullmatch(entry["archive"]) is not None
+            and entry["archive"].startswith(image_id + "-")
+            and all(SHA_RE.fullmatch(str(entry.get(key))) for key in ("archive_sha256", "fingerprint"))
+            and entry["archive"].endswith(entry["archive_sha256"][len("sha256:"):][:24] + ".tar.zst")
             and isinstance(entry.get("attempt_id"), str) and isinstance(entry.get("finished_at"), str))
 
 
 def pull(image_id: str, builds: dict[str, dict[str, Any]], lock: dict[str, Any]) -> str:
-    """Fetch the published image when the lock matches this checkout's sources."""
+    """Load the published archive when the lock matches this checkout's sources."""
     build = effective(builds[image_id])
     entry = lock["images"].get(image_id)
     if entry is None:
         return "UNPUBLISHED"
-    if not _valid_entry(entry):
+    if not _valid_entry(image_id, entry):
         raise BuildFailed("PULL_LOCK_INVALID", f"published.lock.json entry for {image_id} is malformed")
-    if entry["repository"] != f"{registry()}/{image_id}":
-        raise BuildFailed("PULL_LOCK_INVALID", f"{image_id} is published at {entry['repository']}, "
-                                               f"not under the configured registry {registry()}")
     if fingerprint(build)[0] != entry["fingerprint"]:
         return "STALE"
     state = _read_state(image_id) or {}
     if (state.get("fingerprint") == entry["fingerprint"] and state.get("attempt_id") == entry["attempt_id"]
             and state.get("image_digest") and image_id_of(build, build["tag"]) == state["image_digest"]):
         return "CURRENT"
+    store, docker, zstd = image_store(), _docker(), _tool("zstd")
     base = state_root() / image_id
     base.mkdir(parents=True, exist_ok=True)
     lock_file = base / "lock"
@@ -680,25 +722,28 @@ def pull(image_id: str, builds: dict[str, dict[str, Any]], lock: dict[str, Any])
         raise Blocked(f"BUILD_IN_PROGRESS: {lock_file} is held") from None
     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
         json.dump({"attempt_id": "pull", "pid": os.getpid(), "host": socket.gethostname(), "at": now()}, stream)
+    staging = base / "transfer"
     try:
-        docker = _docker()
-        reference = f"{entry['repository']}@{entry['manifest_digest']}"
-        pulled = _run([str(docker), "pull", reference], 7200)
-        if pulled.returncode != 0:
-            raise BuildFailed("PULL_FAILED", "docker pull failed (is the registry on zarathustra up, and listed under insecure-registries?)",
-                              (pulled.stderr or pulled.stdout)[-2000:])
-        tagged = _run([str(docker), "tag", reference, build["tag"]], 120)
-        if tagged.returncode != 0:
-            raise BuildFailed("PULL_TAG_FAILED", tagged.stderr.strip()[-500:])
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        archive = staging / entry["archive"]
+        _store_copy(f"{store}/{entry['archive']}", str(archive))   # never load straight from the store
+        if "sha256:" + _file_hash(archive) != entry["archive_sha256"]:
+            raise BuildFailed("PULL_ARCHIVE_MISMATCH", f"{entry['archive']} does not match the lock's sha256 "
+                                                       "(still syncing, or replaced)")
+        unpacked_rc, loaded_rc, tail = _pipe([zstd, "-q", "-d", "-c", str(archive)], [str(docker), "load"])
+        if unpacked_rc != 0 or loaded_rc != 0:
+            raise BuildFailed("PULL_LOAD_FAILED", f"zstd -d | docker load exited {unpacked_rc}/{loaded_rc}", tail)
         local = image_id_of(build, build["tag"])
         if not local:
-            raise BuildFailed("PULL_IMAGE_MISSING", f"{build['tag']} is not present after the pull")
+            raise BuildFailed("PULL_IMAGE_MISSING", f"{build['tag']} is not present after docker load")
         atomic_json(base / "latest.json", {"image_id": image_id, "tag": build["tag"],
                                             "fingerprint": entry["fingerprint"], "image_digest": local,
                                             "attempt_id": entry["attempt_id"],
                                             "finished_at": entry["finished_at"]})
         return "PULLED"
     finally:
+        shutil.rmtree(staging, ignore_errors=True)
         lock_file.unlink(missing_ok=True)
 
 

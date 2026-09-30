@@ -39,13 +39,15 @@ target runs.
   | `data/feeds/osv/`, `data/feeds/mitre/` | OSV and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `nvd_reference_schedule`, `mitre_feed.py sync` |
 
 - **Runs are not portable.** A run started on one host is resumed on the same host.
-- **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-lan-registry.md)).** hal5000 builds and
-  publishes images to the LAN registry on zarathustra (`192.168.1.228:5000/appsec-review/<id>`) and
-  commits `images/published.lock.json`; every other host pulls them in `prepare-host.sh` step 3 and builds
-  only what the lock does not cover (`image_build.py pull --all` also replaces current local builds with
-  the published ones). Every host, zarathustra included, lists `192.168.1.228:5000` under Docker's
-  `insecure-registries`: `/etc/docker/daemon.json` then `sudo systemctl restart docker` on native Linux;
-  Docker Desktop, Settings, Docker Engine on hal5000.
+- **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-google-drive.md)).** hal5000 builds
+  images and publishes them as `.tar.zst` archives to Google Drive (`appsec-review/images`), then commits
+  `images/published.lock.json`; every other host loads them in `prepare-host.sh` step 3 and builds only
+  what the lock does not cover (`image_build.py pull --all` also replaces current local builds with the
+  published ones). Each host needs `zstd` and `rclone` (`sudo apt install zstd rclone`), an rclone remote
+  named `gdrive` (`rclone config`: new remote, type `drive`, scope `drive.file`; on a host without a
+  browser, run `rclone authorize "drive"` on one that has it and paste the token), and
+  `export APPSEC_IMAGE_STORE=gdrive:appsec-review/images` in `~/.bashrc`. A mounted or synced Drive folder
+  also works: set `APPSEC_IMAGE_STORE` to its absolute path.
 
 ## zarathustra (native Linux)
 
@@ -59,8 +61,6 @@ target runs.
 - `prepare-host.sh` starts the code location in the background with its log at
   `orchestrator/dagster/.host/code-location.log`; stop it with
   `pkill -f 'dagster code-server start'`.
-- Runs the LAN image registry (ADR-0033): `docker compose -f orchestrator/image-registry/compose.yaml up -d`
-  (restarts with Docker). Port 5000 on the LAN; if `ufw` is active, allow it from `192.168.1.0/24` only.
 - Also on this host: Codex worktrees under `~/.codex/worktrees/` and
   `/mnt/projects-drive/projects/appsec-review-*`, plus many prunable `/tmp/appsec-*` worktrees
   (`git worktree prune` clears the missing ones). They share the one Docker engine but not the
@@ -88,7 +88,7 @@ target runs.
   stashes local changes first; `git stash pop` brings them back.
 - Publishing host for images (ADR-0033). After an image change: `orchestrator/prepare-host.sh` (builds
   it), `python3 -B images/image_build.py publish --all` (pushes only what changed), then commit and push
-  `images/published.lock.json`.
+  `images/published.lock.json`. Each publish uploads whole images, so it takes as long as the upload.
 
 ## hal5000, Windows side
 
