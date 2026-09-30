@@ -466,6 +466,12 @@ A low score is only reported as low when enough of the process ran to support it
 %% for m, note in provenance.models
 \VAR{m|tex} & \VAR{note|tex}\\
 %% endfor
+%% if provenance.get('references')
+\midrule
+%% for label, text in provenance.get('references', [])
+\eyebrow{\VAR{label|tex}} & \VAR{text|tex}\\
+%% endfor
+%% endif
 \bottomrule
 \end{tabularx}
 

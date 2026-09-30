@@ -397,6 +397,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
       <tr><td class="eyebrow">Native tier</td><td>{{ report.native_tier }} — {{ report.native_tier_note }}</td></tr>
       {% for name, digest in provenance.images %}<tr><td class="mono">{{ name }}</td><td class="mono">{{ digest }}</td></tr>{% endfor %}
       {% for m, note in provenance.models %}<tr><td>{{ m }}</td><td>{{ note }}</td></tr>{% endfor %}
+      {% for label, text in provenance.get('references', []) %}<tr><td class="eyebrow">{{ label }}</td><td>{{ text }}</td></tr>{% endfor %}
     </tbody></table></div>
   </section>
 

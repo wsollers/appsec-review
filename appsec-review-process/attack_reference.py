@@ -280,9 +280,13 @@ def binding(root: Any = None, *, now: datetime | None = None) -> dict[str, Any]:
     """Stable identity of the reference a stage validated against, for its input fingerprint: the
     derived table's hash and upstream versions when the snapshot is in the ceiling (unchanged across
     re-syncs of the same pins), else only the gap code. Never raises."""
-    reference, gap = load(root, now=now)
+    return binding_of(*load(root, now=now))
+
+
+def binding_of(reference: Reference | None, gap: dict[str, Any] | None) -> dict[str, Any]:
+    """``binding`` of an already loaded ``(reference, gap)`` pair (one load serves several readers)."""
     if reference is None:
-        return {"status": gap["code"]}
+        return {"status": (gap or {}).get("code", GAP_INVALID)}
     return {"status": OK, "reference_sha256": reference.identity["reference_sha256"],
             "attack_versions": reference.attack_versions, "capec_version": reference.capec_version}
 

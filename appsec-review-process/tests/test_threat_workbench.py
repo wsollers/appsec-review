@@ -324,7 +324,8 @@ class FakeCellInvoker:
         pi.write_invoker_output(package, output_root, files=[tw.CELL_FILE], claims=claims,
             usage={"input_bytes": len(package.prompt) + sum(len(item.data) for item in package.inputs),
                    "input_units": 1, "output_units": 1, "tool_calls": 0}, tool_calls=[],
-            verified_invocations=[], injection_suspected=[], limitations=["fake invoker; no model called"])
+            verified_invocations=[], injection_suspected=[], limitations=["fake invoker; no model called"],
+            mitre_reference=None)
 
 
 class WaveRunnerTests(unittest.TestCase):

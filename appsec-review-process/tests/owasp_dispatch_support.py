@@ -120,7 +120,7 @@ class ValidatorInvoker(pi.FixtureInvoker):
             usage={"input_bytes": read, "input_units": (read + 3) // 4, "output_units": (len(data) + 3) // 4,
                    "tool_calls": 0},
             tool_calls=[], verified_invocations=[], injection_suspected=[],
-            limitations=["No model was called; this is a protocol fixture."])
+            limitations=["No model was called; this is a protocol fixture."], mitre_reference=None)
 
 
 class NoCandidate(pi.FixtureInvoker):

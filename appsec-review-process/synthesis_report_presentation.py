@@ -24,6 +24,7 @@ from typing import Any
 
 import container_execution
 from execution_state import Blocked, ROOT, atomic_json, file_hash
+import mitre_reference_report
 
 
 PIPELINE_REPORT = ROOT.parent / "pipeline" / "report"
@@ -282,7 +283,8 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
                  enrichment: dict[str, Any] | None = None,
                  attack_chains: dict[str, Any] | None = None,
                  poc_fix: dict[str, Any] | None = None,
-                 dependency_reachability: dict[str, Any] | None = None) -> dict[str, Any]:
+                 dependency_reachability: dict[str, Any] | None = None,
+                 mitre_reference: dict[str, Any] | None = None) -> dict[str, Any]:
     if (report.get("schema") != "appsec-review/synthesis-report/1.0" or
             report.get("status") != "DRAFT_EVIDENCE_BACKED" or
             report.get("claim_limits", {}).get("final") is not False or
@@ -312,6 +314,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
         raise Blocked("10-synthesis-report: dependency-reachability section belongs to another run")
     if dependency_reachability is not None and dependency_reachability["gaps"]:
         report = {**report, "limitations": sorted(set(report["limitations"]) | set(dependency_reachability["gaps"]))}
+    if mitre_reference is not None and mitre_reference["run_id"] != report["run_id"]:
+        raise Blocked("10-synthesis-report: MITRE reference section belongs to another run")
+    if mitre_reference is not None and mitre_reference["gaps"]:
+        report = {**report, "limitations": sorted(set(report["limitations"]) | set(mitre_reference["gaps"]))}
     if report["limitations"]:
         processes.append({"id": "reported-limitations", "family": "limitations",
             "kind": "preserved synthesis limitations", "status": "OK_WITH_GAPS", "coverage": 0.0,
@@ -352,7 +358,8 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
             "gaps": report.get("threat_model", {}).get("gaps", []),
             "unresolved_candidates": report["unresolved_candidates"],
             "owasp_coverage": report["owasp_coverage"]},
-        "provenance": {"images": [], "models": [], "ledger_head": report["ledger_head_sha256"]},
+        "provenance": {"images": [], "models": [], "ledger_head": report["ledger_head_sha256"],
+                       "references": mitre_reference_report.provenance_rows(mitre_reference)},
         "scoring": {"evidence_weight": {"DIRECT_EVIDENCE": 1.0, "STRONG_INFERENCE": 0.8,
             "WEAK_INFERENCE": 0.5}, "verification_weight": {"VERIFIED": 1.0,
             "UNRESOLVED": 0.7, "REFUTED": 0.0}, "reachability_weight": {"reachable-default": 1.0,
@@ -367,9 +374,11 @@ def build_review(report: dict[str, Any], trace: dict[str, Any],
 def render(report: dict[str, Any], trace: dict[str, Any], output_root: Path,
            generator_sha256: str, enrichment: dict[str, Any] | None = None,
            attack_chains: dict[str, Any] | None = None, poc_fix: dict[str, Any] | None = None,
-           dependency_reachability: dict[str, Any] | None = None) -> dict[str, Any]:
+           dependency_reachability: dict[str, Any] | None = None,
+           mitre_reference: dict[str, Any] | None = None) -> dict[str, Any]:
     output_root = Path(output_root)
-    review = build_review(report, trace, enrichment, attack_chains, poc_fix, dependency_reachability)
+    review = build_review(report, trace, enrichment, attack_chains, poc_fix, dependency_reachability,
+                          mitre_reference)
     atomic_json(output_root / RENDER_INPUT, review)
     render_root = output_root / "presentation"
     _renderer().render(output_root / RENDER_INPUT, render_root)

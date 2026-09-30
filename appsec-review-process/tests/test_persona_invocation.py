@@ -109,13 +109,19 @@ class Case(unittest.TestCase):
 # ---- schemas ---------------------------------------------------------------------------------------
 
 class SchemaConventionTests(unittest.TestCase):
+    # The only optional properties. ``mitre_reference`` (ADR-0034 addendum item 3) is written only by a job
+    # granted MITRE lookups; requiring it would make every invoker output accepted before it existed fail
+    # re-verification (verify_invocation_result re-derives from the manifest) and re-run every model job.
+    OPTIONAL = {("persona-invoker-output.schema.json", "$", "mitre_reference")}
+
     def walk(self, node, name, trail="$"):
         if not isinstance(node, dict):
             return
         if "properties" in node or node.get("type") == "object" or (
                 isinstance(node.get("type"), list) and "object" in node["type"]):
             self.assertIs(node.get("additionalProperties"), False, f"{name} {trail} is open")
-            self.assertEqual(sorted(node["required"]), sorted(node["properties"]),
+            declared = [prop for prop in node["properties"] if (name, trail, prop) not in self.OPTIONAL]
+            self.assertEqual(sorted(node["required"]), sorted(declared),
                              f"{name} {trail}: every declared property must be required")
         for key, value in node.items():
             if key == "properties":

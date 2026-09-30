@@ -25,6 +25,7 @@ import input_mcp
 import mitre_feed
 import mitre_query_mcp as mq
 import tool_guides
+from schema_validate import validate_document
 from test_cwe_feed import Fake, SPECS as CWE_SPECS, cwe_zip, OUTSIDE, DEPRECATED as CWE_DEPRECATED
 from test_mitre_feed import SPECS, T0, attack_bundle, capec_bundle
 
@@ -187,17 +188,40 @@ class GrantTests(unittest.TestCase):
 
     def test_profile_line_and_tunable_gate_the_grant(self):
         with mock.patch.object(mq, "family_enabled", return_value=True):
-            self.assertEqual(invoker.mitre_query_grant(self.package(self.PROFILE), True),
+            self.assertEqual(invoker.mitre_query_grant(self.package(self.PROFILE)),
                              ("mitre_technique", "mitre_cwe"))
-            self.assertEqual(invoker.mitre_query_grant(self.package({"allowed_actions": ["read"]}), True), ())
+            self.assertEqual(invoker.mitre_query_grant(self.package({"allowed_actions": ["read"]})), ())
         with mock.patch.object(mq, "family_enabled", side_effect=lambda family: family != "cwe"):
-            self.assertEqual(invoker.mitre_query_grant(self.package(self.PROFILE), True), ("mitre_technique",))
+            self.assertEqual(invoker.mitre_query_grant(self.package(self.PROFILE)), ("mitre_technique",))
 
     def test_tunables_default_on(self):
         self.assertTrue(all(mq.family_enabled(family) for family in mq.FAMILIES))
 
-    def test_inline_job_gets_no_mitre_tools(self):
-        self.assertEqual(invoker.mitre_query_grant(self.package(self.PROFILE), False), ())
+    MITRE = ("mitre_technique", "mitre_capec", "mitre_cwe")
+
+    @staticmethod
+    def _force(value):
+        original = invoker.tunables.shared
+        return mock.patch.object(invoker.tunables, "shared", side_effect=lambda name: (
+            value if name == "code_query_force_indexed_mode" else original(name)))
+
+    def test_a_mitre_grant_indexes_an_inline_sized_job_like_a_code_grant(self):
+        with self._force(True):
+            self.assertEqual(invoker.input_mode(10, 100, (None, ()), self.MITRE), (True, (None, ()), self.MITRE))
+
+    def test_mitre_tunable_off_keeps_the_job_inline_with_no_mitre_tools(self):
+        with self._force(True), mock.patch.object(mq, "family_enabled", return_value=False):
+            tools = invoker.mitre_query_grant(self.package(self.PROFILE))
+            self.assertEqual(tools, ())
+            self.assertEqual(invoker.input_mode(10, 100, (None, ()), tools), (False, (None, ()), ()))
+
+    def test_comparison_switch_off_keeps_the_job_inline_with_no_tools_at_all(self):
+        code = ("supporting-evidence:02-code-index/attempts/a1/code-index.json", ("code_symbol",))
+        with self._force(False):
+            self.assertEqual(invoker.input_mode(10, 100, (None, ()), self.MITRE), (False, (None, ()), ()))
+            self.assertEqual(invoker.input_mode(10, 100, code, self.MITRE), (False, (None, ()), ()))
+            # a job already over the inline limit keeps every grant either way
+            self.assertEqual(invoker.input_mode(1000, 100, code, self.MITRE), (True, code, self.MITRE))
 
     def test_query_families_accept_each_others_names_and_reject_unknown(self):
         self.assertEqual(code_query_mcp.profile_tools(self.PROFILE), ["code_symbol"])
@@ -242,6 +266,156 @@ class GrantTests(unittest.TestCase):
         self.assertEqual(args[args.index("--mitre-tools") + 1], "mitre_capec")
         self.assertEqual(json.loads(args[args.index("--mitre-binding") + 1]), binding)
         self.assertIn("--mitre-root", args)
+
+
+class RecordTests(FeedCase):
+    """The structured ``mitre_reference`` entry (ADR-0034 addendum item 3)."""
+
+    def assertValid(self, entry):
+        self.assertEqual(validate_document(entry, "mitre-reference-record.schema.json"), [])
+
+    def test_usable_snapshot_records_its_id_table_hash_and_versions(self):
+        self.publish()
+        now = T0 + timedelta(days=1)
+        bound, entry = mq.take(self.root, now=now)
+        self.assertEqual(bound, mq.binding(self.root, now=now))
+        snapshot = json.loads((self.root / "current.json").read_text())["snapshot_id"]
+        self.assertEqual(entry["snapshot_id"], snapshot)
+        self.assertEqual(entry["reference_sha256"], bound["mitre_reference"]["reference_sha256"])
+        self.assertEqual(entry["versions"]["attack"], {"enterprise-attack": "19.2"})
+        self.assertEqual(entry["versions"]["capec"], "3.9")
+        self.assertEqual(entry["versions"]["cwe"], bound["cwe_catalog"]["catalog_version"])
+        self.assertEqual((entry["cwe_source"], entry["gap"], entry["cwe_gap"]), (cwe_catalog.FEED, None, None))
+        self.assertEqual(entry["cwe_catalog_sha256"], bound["cwe_catalog"]["catalog_sha256"])
+        self.assertValid(entry)
+        self.assertNotIn("snapshot_id", json.dumps(bound))   # the binding stays stable across re-syncs
+
+    def test_stale_or_missing_snapshot_records_the_gap_codes(self):
+        _bound, missing = mq.take(self.root, now=T0)
+        self.assertEqual((missing["gap"], missing["cwe_gap"]), ("MITRE_REFERENCE_MISSING", cwe_catalog.GAP_MISSING))
+        self.assertEqual((missing["snapshot_id"], missing["reference_sha256"]), (None, None))
+        self.assertEqual((missing["versions"]["attack"], missing["versions"]["capec"]), ({}, None))
+        self.assertEqual(missing["cwe_source"], cwe_catalog.COMMITTED)   # the curated catalog answered CWE
+        self.assertIsNotNone(missing["versions"]["cwe"])
+        self.assertValid(missing)
+        self.publish()
+        _bound, stale = mq.take(self.root, now=T0 + timedelta(days=15))
+        self.assertEqual((stale["gap"], stale["cwe_gap"]), ("MITRE_REFERENCE_STALE", cwe_catalog.GAP_STALE))
+        self.assertValid(stale)
+
+    def test_unexpected_shapes_are_null_or_invalid_never_copied(self):
+        entry = mq.record({"mitre_reference": {"status": "weird", "reference_sha256": "../x"},
+                           "cwe_catalog": {"catalog_source": None, "catalog_version": "a\nb"}},
+                          snapshot_id="not-an-id")
+        self.assertEqual((entry["gap"], entry["cwe_gap"]), ("MITRE_REFERENCE_INVALID", cwe_catalog.GAP_INVALID))
+        self.assertEqual((entry["snapshot_id"], entry["reference_sha256"], entry["versions"]["cwe"]), (None, None, None))
+        self.assertValid(entry)
+
+    def test_the_entry_is_not_part_of_the_request_identity(self):
+        request = json.loads((ROOT.parent / "schemas" / "persona-invocation-request.schema.json").read_text())
+        self.assertNotIn("mitre_reference", json.dumps(request))
+        output = json.loads((ROOT.parent / "schemas" / "persona-invoker-output.schema.json").read_text())
+        self.assertNotIn("mitre_reference", output["required"])
+
+
+class InvokerRecordTests(unittest.TestCase):
+    """End to end through ClaudeCliInvoker.invoke with a fake dispatch: the entry is written when the
+    tools are granted, absent otherwise, and never changes the prompt or the persona cache key."""
+    PROFILE = {"allowed_actions": ["read", "query tool: mitre_technique", "query tool: mitre_capec",
+                                   "query tool: mitre_cwe"]}
+    OK_BOUND = {"mitre_reference": {"status": "OK", "reference_sha256": "a" * 64,
+                                    "attack_versions": {"enterprise-attack": "19.2"}, "capec_version": "3.9"},
+                "cwe_catalog": {"catalog_source": "mitre-feed", "catalog_version": "4.17",
+                                "catalog_sha256": "sha256:" + "b" * 64}}
+    GAP_BOUND = {"mitre_reference": {"status": "MITRE_REFERENCE_STALE"},
+                 "cwe_catalog": {"catalog_source": "committed-curated", "catalog_version": "CWE List 4.14 (curated subset)",
+                                 "catalog_sha256": "sha256:" + "c" * 64, "reference_gap": "CWE_REFERENCE_STALE"}}
+
+    def invoke(self, profile, bound=None, force=True):
+        import registry_paths
+        import threading
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads(registry_paths.contract("project-discovery").read_text())
+        response = json.dumps({"project_inventory": inventory(), "project_discovery_summary": "# s"})
+        seen = {}
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            seen.update(argv=argv, prompt=prompt)
+            config = argv[argv.index("--mcp-config") + 1] if "--mcp-config" in argv else None
+            seen["server"] = json.loads(Path(config).read_text())["mcpServers"] if config else None
+            return {"timed_out": False, "final_result": {"result": response}}
+
+        def item(path):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x\n", sha256="a" * 64)
+
+        package = SimpleNamespace(
+            composition={"output_contract": contract, "tooling_profile": profile}, prompt=b"OUTER",
+            inputs=(item("configure.ac"), item("Makefile.am")),
+            request={"model": {"family": "claude-sonnet-5"}, "run_id": "r", "job_id": "j", "attempt_id": "a1",
+                     "persona": {"persona_id": "p"}, "budget": {"input_unit_limit": 10 ** 9}},
+            allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        original = invoker.tunables.shared
+        entry = mq.record(bound, snapshot_id="sha256-0123456789abcdef") if bound else None
+        written = {}
+        with tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 0}}), \
+                mock.patch.object(invoker, "_persona_cache_enabled", return_value=False), \
+                mock.patch.object(invoker.size_log, "observe"), \
+                mock.patch.object(invoker.tunables, "shared", side_effect=lambda name: (
+                    force if name == "code_query_force_indexed_mode" else original(name))), \
+                mock.patch.object(mq, "take", return_value=(bound, entry)) as take, \
+                mock.patch.object(invoker.pi, "write_invoker_output",
+                                  side_effect=lambda package, root, **kw: written.update(kw)):
+            invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn).invoke(
+                package, output_root=Path(out), cancel=threading.Event())
+        key = invoker.persona_cache_key(package, seen["prompt"], "claude-sonnet-5", "medium")
+        return written, seen, take, key
+
+    def test_granted_inline_sized_job_goes_indexed_and_records_the_entry(self):
+        written, seen, take, _key = self.invoke(self.PROFILE, self.OK_BOUND)
+        take.assert_called_once()
+        entry = written["mitre_reference"]
+        self.assertEqual(validate_document(entry, "mitre-reference-record.schema.json"), [])
+        self.assertEqual((entry["reference_sha256"], entry["versions"]["capec"], entry["gap"]), ("a" * 64, "3.9", None))
+        self.assertTrue(any(line.startswith("MITRE lookups answered from") for line in written["limitations"]))
+        allowed = seen["argv"][seen["argv"].index("--allowedTools") + 1].split(",")
+        names = invoker.granted_tool_names((), mq.NAMES)
+        self.assertEqual(allowed, [f"mcp__{invoker.INPUT_MCP_SERVER}__{name}" for name in names])
+        args = seen["server"][invoker.INPUT_MCP_SERVER]["args"]
+        self.assertEqual(args[args.index("--mitre-tools") + 1], ",".join(mq.NAMES))
+        text, guides = tool_guides.render(names)
+        self.assertIn("mitre_lookup", [row["guide"] for row in guides])
+        self.assertIn(text.strip(), seen["prompt"])
+
+    def test_gap_is_recorded(self):
+        written, _seen, _take, _key = self.invoke(self.PROFILE, self.GAP_BOUND)
+        entry = written["mitre_reference"]
+        self.assertEqual((entry["gap"], entry["cwe_gap"], entry["cwe_source"]),
+                         ("MITRE_REFERENCE_STALE", "CWE_REFERENCE_STALE", "committed-curated"))
+
+    def test_no_grant_means_no_entry_inline_and_no_snapshot_read(self):
+        written, seen, take, _key = self.invoke({"allowed_actions": ["read"]})
+        take.assert_not_called()
+        self.assertIsNone(written["mitre_reference"])
+        self.assertEqual(seen["argv"][seen["argv"].index("--allowedTools") + 1], "")   # no tools at all
+        self.assertIsNone(seen["server"])
+
+    def test_comparison_switch_off_keeps_the_job_inline_with_no_tools_and_no_entry(self):
+        written, seen, take, _key = self.invoke(self.PROFILE, self.OK_BOUND, force=False)
+        take.assert_not_called()
+        self.assertIsNone(written["mitre_reference"])
+        self.assertEqual(seen["argv"][seen["argv"].index("--allowedTools") + 1], "")
+        self.assertIsNone(seen["server"])
+        self.assertNotIn("mitre_", seen["prompt"])
+
+    def test_entry_never_enters_the_prompt_or_the_cache_key(self):
+        _w1, first, _t1, key1 = self.invoke(self.PROFILE, self.OK_BOUND)
+        _w2, second, _t2, key2 = self.invoke(self.PROFILE, self.GAP_BOUND)
+        self.assertEqual(first["prompt"], second["prompt"])
+        self.assertEqual(key1, key2)
+        for value in ("a" * 64, "19.2", "sha256-0123456789abcdef", "MITRE_REFERENCE_STALE"):
+            self.assertNotIn(value, first["prompt"])
 
 
 class GuideTests(unittest.TestCase):

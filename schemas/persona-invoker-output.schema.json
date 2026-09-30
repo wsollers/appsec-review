@@ -209,6 +209,10 @@
         "type": "string",
         "pattern": "^[^\\x00-\\x1f\\x7f]{1,2000}\\Z"
       }
+    },
+    "mitre_reference": {
+      "description": "Optional. Present only when the job was granted MITRE lookup tools: the tables they answered from (ADR-0034 addendum item 3). Reporting only, never an input.",
+      "$ref": "mitre-reference-record.schema.json"
     }
   }
 }

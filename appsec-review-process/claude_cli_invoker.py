@@ -225,13 +225,11 @@ def granted_tool_names(code_tools: tuple[str, ...] | list[str] = (),
     return [tool["name"] for tool in input_mcp.BASE_TOOLS] + list(code_tools) + list(mitre_tools)
 
 
-def mitre_query_grant(package: Any, indexed: bool) -> tuple[str, ...]:
+def mitre_query_grant(package: Any) -> tuple[str, ...]:
     """MITRE lookup tools for this invocation (ADR-0034 item 5): listed by the job's tooling profile
     (``query tool: mitre_*``) and enabled by ``mitre_query_<family>_enabled``. No per-job pin is needed
-    (the snapshot is host reference data, bound per invocation). Served by the input server, so only
-    in indexed mode; the grant never switches an inline job to indexed mode by itself."""
-    if not indexed:
-        return ()
+    (the snapshot is host reference data, bound per invocation). Served by the input server, so the
+    grant puts the job in indexed mode exactly like a code_* grant (``input_mode``)."""
     import mitre_query_mcp
     return tuple(mitre_query_mcp.grantable(dict(package.composition.get("tooling_profile") or {})))
 
@@ -258,15 +256,18 @@ def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
     return (ref, tools) if tools else (None, ())
 
 
-def input_mode(inline_bytes: int, inline_limit: int, code_grant: tuple[str | None, tuple[str, ...]]
-               ) -> tuple[bool, tuple[str | None, tuple[str, ...]]]:
-    """(indexed, effective code grant). Inputs over the inline limit are always indexed. A job
-    granted code tools is indexed too while ``code_query_force_indexed_mode`` is on; with it off
-    it stays inline and loses the grant, so the prompt, the server and --allowedTools still agree."""
+def input_mode(inline_bytes: int, inline_limit: int, code_grant: tuple[str | None, tuple[str, ...]],
+               mitre_tools: tuple[str, ...] = ()
+               ) -> tuple[bool, tuple[str | None, tuple[str, ...]], tuple[str, ...]]:
+    """(indexed, effective code grant, effective MITRE tools). Inputs over the inline limit are always
+    indexed. A job granted code or MITRE lookup tools is indexed too while
+    ``code_query_force_indexed_mode`` is on; with it off it stays inline and loses every query-tool
+    grant, so the prompt, the server and --allowedTools still agree."""
     over_limit = inline_bytes > inline_limit
-    if code_grant[1] and not over_limit and tunables.shared("code_query_force_indexed_mode") is not True:
-        code_grant = (None, ())
-    return over_limit or bool(code_grant[1]), code_grant
+    granted = bool(code_grant[1]) or bool(mitre_tools)
+    if granted and not over_limit and tunables.shared("code_query_force_indexed_mode") is not True:
+        code_grant, mitre_tools = (None, ()), ()
+    return over_limit or bool(code_grant[1]) or bool(mitre_tools), code_grant, tuple(mitre_tools)
 
 
 def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
@@ -1197,18 +1198,22 @@ class ClaudeCliInvoker:
         cfg = rc.load_model_config()
         inline_bytes = sum(len(item.data) for item in package.inputs)
         code_grant = code_query_grant(package)
-        # Structural query tools exist only in indexed mode (the input server). Tunable
+        # MITRE lookups (ADR-0034) ride on the input server too, answered from one table bound here
+        # for the whole invocation (a gap when no usable snapshot).
+        mitre_tools = mitre_query_grant(package)
+        # Query tools (code_* and mitre_*) exist only in indexed mode (the input server). Tunable
         # code_query_force_indexed_mode (default on): a job granted them is served that way even
         # when its inputs would fit inline. Off: such a job stays inline with no tools at all
-        # (the grant is dropped, so prompt, server and --allowedTools still agree); for comparing runs.
-        indexed, code_grant = input_mode(inline_bytes, _inline_input_limit(cfg), code_grant)
-        # MITRE lookups (ADR-0034) ride on the input server: granted only in indexed mode, answered
-        # from one table bound here for the whole invocation (a gap when no usable snapshot).
-        mitre_tools = mitre_query_grant(package, indexed)
-        mitre_binding = None
+        # (the grants are dropped, so prompt, server and --allowedTools still agree); for comparing runs.
+        indexed, code_grant, mitre_tools = input_mode(inline_bytes, _inline_input_limit(cfg), code_grant,
+                                                      mitre_tools)
+        mitre_binding = mitre_record = None
         if mitre_tools:
             import mitre_query_mcp
-            mitre_binding = mitre_query_mcp.binding()
+            # The record (snapshot id, table hash, versions, gap) is kept for the report only: it is
+            # taken after the prompt's inputs are fixed and never enters the prompt, the persona
+            # cache key or the job's input identity (ADR-0034 addendum item 3).
+            mitre_binding, mitre_record = mitre_query_mcp.take()
         guides_text, guides = "", []
         if indexed:
             import tool_guides
@@ -1377,7 +1382,7 @@ class ClaudeCliInvoker:
                        "output_units": rounds["output_tokens"] or (written_bytes + 3) // 4,
                        "tool_calls": 0},
                 tool_calls=[], verified_invocations=[], injection_suspected=[],
-                limitations=limitations)
+                limitations=limitations, mitre_reference=mitre_record)
         finally:
             # Runs on every path -- success, a raised InvokerOutputError/InvokerUnavailable, a
             # timeout, or cancellation -- so a failed dispatch's transcript is captured too, gated

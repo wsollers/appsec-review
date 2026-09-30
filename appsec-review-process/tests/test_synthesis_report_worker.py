@@ -78,6 +78,38 @@ class SynthesisReportWorkerTests(unittest.TestCase):
         replacement = self._validate(self.run_root, self.run_id)
         self.assertEqual(hashes, {name: file_hash(replacement / name) for name in hashes})
 
+    def test_mitre_reference_section_not_used_then_distinct_versions_and_gap(self):
+        import mitre_reference_report as mitre_report
+        from tests.test_mitre_reference_report import GAP_ENTRY, OK_ENTRY, manifest
+        first = self._run(self.run_root, self.run_id, "test-run", attempt_id_factory=lambda: "report-attempt-1")
+        attempt = self._validate(self.run_root, self.run_id)
+        section = json.loads((attempt / mitre_report.RESULT).read_text())
+        review = json.loads((attempt / presentation.RENDER_INPUT).read_text())
+        self.assertEqual(section["status"], "NOT_USED")
+        self.assertEqual(review["provenance"]["references"], [["MITRE reference", mitre_report.NOT_USED]])
+        self.assertEqual(first["status"], "OK_WITH_GAPS")
+        # a granted model job's accepted attempt with two invocations: one usable table, one gap
+        base = self.run_root / "data/jobs/claim-review-pool-cell"
+        tree = base / "attempts" / "cell-attempt"
+        for name, entry in (("ok", OK_ENTRY), ("gap", GAP_ENTRY)):
+            path = tree / "pools" / name / "outputs/persona/invoker-output.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps(manifest(entry)))
+        hashes = {p.relative_to(tree).as_posix(): file_hash(p) for p in sorted(tree.rglob("*")) if p.is_file()}
+        (base / "accepted.json").write_text(json.dumps({"status": "OK", "attempt_id": "cell-attempt", "hashes": hashes}))
+        with self.assertRaises(Blocked):   # the published report no longer matches the accepted inputs
+            self._validate(self.run_root, self.run_id)
+        self._run(self.run_root, self.run_id, "test-run-2", force=True, attempt_id_factory=lambda: "report-attempt-2")
+        attempt = self._validate(self.run_root, self.run_id)
+        section = json.loads((attempt / mitre_report.RESULT).read_text())
+        review = json.loads((attempt / presentation.RENDER_INPUT).read_text())
+        self.assertEqual((section["status"], len(section["entries"]), len(section["gaps"])), ("USED", 2, 1))
+        labels = [label for label, _text in review["provenance"]["references"]]
+        self.assertEqual(labels, ["MITRE reference", "MITRE reference", "MITRE reference gap"])
+        self.assertIn(section["gaps"][0], review["processes"][-1]["gap"])
+        status = json.loads((attempt / "status.json").read_text())
+        self.assertEqual(status["mitre_reference"], "USED")
+
     def test_upstream_pointer_tampering_and_presentation_promotion_fail_closed(self):
         self._run(self.run_root, self.run_id, "test-run", attempt_id_factory=lambda: "report-attempt")
         pointer_path = self.run_root / "data/jobs/01-component-characterization/accepted.json"

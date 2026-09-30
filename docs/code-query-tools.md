@@ -37,7 +37,8 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 - Persona task prompts (both hunters, claim review) carry a short "Structural queries" paragraph; the details live in
   the tool guides so they cannot drift from the granted set.
 - The same profiles also list the MITRE lookup tools (`mitre_technique`, `mitre_capec`, `mitre_cwe`, ADR-0034), which
-  use the same grant path but need no index pin; see [mitre-feed.md](mitre-feed.md#lookup-tools-adr-0034-item-5).
+  use the same grant path (including indexed mode for an inline-sized job) but need no index pin; see
+  [mitre-feed.md](mitre-feed.md#lookup-tools-adr-0034-item-5).
 
 ## Tunables and metrics
 
@@ -45,11 +46,11 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 records each call; `orchestrator/retrieval-report.py` prints a code-tool block (calls, incomplete answers, truncations
 per tool) beside the "files read" line.
 
-`code_query_force_indexed_mode` (flag, default on): a job granted code tools runs in indexed mode (inventory plus
-lookup tools) even when its inputs would fit inline. Turn it off to compare runs (for example freeciv21 with and
-without the query tools): a small job then stays inline with no tools and its grant is dropped, so the prompt's tool
-guides, the server's tool list and `--allowedTools` still agree. Jobs whose inputs exceed the inline limit keep their
-grant either way.
+`code_query_force_indexed_mode` (flag, default on): a job granted code or MITRE lookup tools runs in indexed mode
+(inventory plus lookup tools) even when its inputs would fit inline. Turn it off to compare runs (for example freeciv21
+with and without the query tools): a small job then stays inline with no tools and its grants are dropped, so the
+prompt's tool guides, the server's tool list and `--allowedTools` still agree. Jobs whose inputs exceed the inline
+limit keep their grants either way.
 
 ## Dependency reachability
 

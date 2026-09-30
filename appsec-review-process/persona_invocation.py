@@ -1561,9 +1561,11 @@ def output_file_record(output_root: Path, relative: str) -> dict[str, Any]:
 def write_invoker_output(package: InvocationPackage, output_root: Path, *, files: list[str],
                          claims: list[dict[str, Any]], usage: Mapping[str, int],
                          tool_calls: list[dict[str, Any]], verified_invocations: list[str],
-                         injection_suspected: list[dict[str, Any]], limitations: list[str]) -> None:
+                         injection_suspected: list[dict[str, Any]], limitations: list[str],
+                         mitre_reference: Mapping[str, Any] | None) -> None:
     """Writes ``invoker-output.json`` last, in the canonical byte form, echoing the identities the
-    package pinned. This is the whole obligation of a real invoker beyond its own files."""
+    package pinned. This is the whole obligation of a real invoker beyond its own files.
+    ``mitre_reference`` (only for a job granted MITRE lookups) is a reporting record, never an input."""
     request = thaw(package.request)
     records = [output_file_record(output_root, relative) for relative in sorted(files)]
     manifest = {
@@ -1574,6 +1576,7 @@ def write_invoker_output(package: InvocationPackage, output_root: Path, *, files
         "tool_calls": tool_calls, "files": records, "claims": claims,
         "verified_invocations": sorted(verified_invocations), "injection_suspected": injection_suspected,
         "limitations": limitations,
+        **({"mitre_reference": thaw(mitre_reference)} if mitre_reference is not None else {}),
     }
     atomic_bytes(Path(output_root) / MANIFEST_FILE, canonical_bytes(manifest))
 
@@ -1605,4 +1608,5 @@ class FixtureInvoker:
                    "tool_calls": 0},
             tool_calls=[],
             verified_invocations=[p["request_sha256"] for p in package.request["producers"]] if reviewing else [],
-            injection_suspected=[], limitations=["No model was called; this is a protocol fixture."])
+            injection_suspected=[], limitations=["No model was called; this is a protocol fixture."],
+            mitre_reference=None)

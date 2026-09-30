@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mitre-reference-record.schema.json",
+  "title": "MITRE reference used by one model job",
+  "description": "The MITRE tables a job granted MITRE lookup tools answered from (ADR-0034 addendum item 3), written by mitre_query_mcp.record(). Reporting only: it is never part of the job's input identity, memo key or prompt. gap / cwe_gap are null when the table was usable; a CWE gap with cwe_source committed-curated means the committed curated catalog answered.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshot_id",
+    "reference_sha256",
+    "versions",
+    "cwe_source",
+    "cwe_catalog_sha256",
+    "gap",
+    "cwe_gap"
+  ],
+  "properties": {
+    "snapshot_id": {
+      "description": "mitre_feed snapshot id, null when no feed snapshot answered.",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256-[0-9a-f]{16}\\Z"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reference_sha256": {
+      "description": "Hash of the derived ATT&CK/CAPEC table (reference.json), null on a gap.",
+      "anyOf": [
+        {
+          "$ref": "common/formats.schema.json#/$defs/sha256_hex"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attack",
+        "capec",
+        "cwe"
+      ],
+      "properties": {
+        "attack": {
+          "description": "ATT&CK domain -> upstream version; empty on a gap.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9-]{0,39}\\Z"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/version"
+          }
+        },
+        "capec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/version"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cwe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/version"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "cwe_source": {
+      "enum": [
+        "mitre-feed",
+        "committed-curated",
+        null
+      ]
+    },
+    "cwe_catalog_sha256": {
+      "anyOf": [
+        {
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gap": {
+      "enum": [
+        null,
+        "MITRE_REFERENCE_MISSING",
+        "MITRE_REFERENCE_STALE",
+        "MITRE_REFERENCE_INVALID"
+      ]
+    },
+    "cwe_gap": {
+      "enum": [
+        null,
+        "CWE_REFERENCE_MISSING",
+        "CWE_REFERENCE_STALE",
+        "CWE_REFERENCE_INVALID"
+      ]
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z .()_+-]{0,79}\\Z"
+    }
+  }
+}

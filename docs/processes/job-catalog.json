@@ -10009,6 +10009,7 @@
     "attack-chains.json",
     "poc-fix-section.json",
     "dependency-reachability-section.json",
+    "mitre-reference-section.json",
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",

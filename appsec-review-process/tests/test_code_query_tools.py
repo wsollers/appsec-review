@@ -213,18 +213,18 @@ class InputModeTests(unittest.TestCase):
 
     def test_forced_mode_indexes_a_small_job_with_code_tools(self):
         with mock.patch.object(invoker.tunables, "shared", return_value=True):
-            self.assertEqual(invoker.input_mode(10, 100, self.GRANT), (True, self.GRANT))
+            self.assertEqual(invoker.input_mode(10, 100, self.GRANT), (True, self.GRANT, ()))
 
     def test_forced_mode_off_keeps_a_small_job_inline_and_drops_the_grant(self):
         with mock.patch.object(invoker.tunables, "shared", return_value=False):
-            self.assertEqual(invoker.input_mode(10, 100, self.GRANT), (False, (None, ())))
+            self.assertEqual(invoker.input_mode(10, 100, self.GRANT), (False, (None, ()), ()))
 
     def test_forced_mode_off_keeps_the_grant_for_a_job_already_indexed(self):
         with mock.patch.object(invoker.tunables, "shared", return_value=False):
-            self.assertEqual(invoker.input_mode(1000, 100, self.GRANT), (True, self.GRANT))
+            self.assertEqual(invoker.input_mode(1000, 100, self.GRANT), (True, self.GRANT, ()))
 
     def test_no_grant_is_unchanged(self):
-        self.assertEqual(invoker.input_mode(10, 100, (None, ())), (False, (None, ())))
+        self.assertEqual(invoker.input_mode(10, 100, (None, ())), (False, (None, ()), ()))
 
 
 class GuideTests(unittest.TestCase):

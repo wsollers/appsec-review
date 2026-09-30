@@ -130,9 +130,11 @@ the `code_*` tools ([code-query-tools.md](code-query-tools.md), ADR-0032):
 - **Grant.** Only when the job's tooling profile lists `query tool: mitre_<...>` (today
   `claim-review-static`, which also covers the lane 14 composer, and `hypothesis-hunt-static`) and the
   tunable `mitre_query_attack_enabled` / `mitre_query_capec_enabled` / `mitre_query_cwe_enabled`
-  (default on) is on. No per-job pin. The tools live on the input server, so only indexed-mode jobs
-  get them; the grant never makes an inline job indexed. `--allowedTools`, the server's tools/list and
-  the `mitre_lookup` tool guide come from one granted list.
+  (default on) is on. No per-job pin. The tools live on the input server, so a granted job runs in
+  indexed mode even when its inputs would fit inline, exactly like a `code_*` grant; with
+  `code_query_force_indexed_mode` off such a job stays inline with no query tools at all (every grant is
+  dropped). `--allowedTools`, the server's tools/list and the `mitre_lookup` tool guide come from one
+  granted list.
 - **One table per invocation.** The invoker takes `mitre_query_mcp.binding()` (the ATT&CK/CAPEC
   `attack_reference.binding()` plus the CWE catalog identity) once and passes it to the server, which
   reopens exactly that table (`attack_reference.bound` / `cwe_catalog.bound`: checked for integrity,
@@ -155,6 +157,19 @@ the `code_*` tools ([code-query-tools.md](code-query-tools.md), ADR-0032):
   binding. Binding it unconditionally would re-run every granted model stage when the snapshot goes
   stale, and ADR-0026 section 5 binds only tagged decisions. The binding is recorded in the attempt
   instead.
+- **Recorded for the report (ADR-0034 addendum item 3).** Every invocation granted the tools writes a
+  structured `mitre_reference` entry into its `invoker-output.json` (`mitre_query_mcp.record`, taken with
+  the binding by `mitre_query_mcp.take`; closed by `schemas/mitre-reference-record.schema.json`):
+  `snapshot_id`, `reference_sha256` (derived ATT&CK/CAPEC table), `versions` (`attack` domain ->
+  version, `capec`, `cwe`), `cwe_source` and `cwe_catalog_sha256`, and `gap` (`null` or
+  `MITRE_REFERENCE_MISSING` / `_STALE` / `_INVALID`) and `cwe_gap` (`null` or `CWE_REFERENCE_*`). A job
+  without the grant has no entry. The entry is written after the prompt is built and never enters the
+  prompt, the persona cache key or the job's input identity; the human-readable limitation line stays.
+  `10-synthesis-report` reads the entries from the accepted attempt trees (each manifest hash-checked
+  against its job's accepted pointer, `mitre_reference_report.py`), publishes
+  `mitre-reference-section.json`, and lists the distinct entries in the report's Provenance table
+  (versions, snapshot, table hash, invocation and job counts), a "MITRE reference gap" row and a
+  limitation for every entry with a gap, or "not used" when no job had the tools.
 
 ## Dagster
 

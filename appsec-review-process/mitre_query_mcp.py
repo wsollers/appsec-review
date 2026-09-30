@@ -8,7 +8,8 @@ profile lists ``query tool: <name>`` and the tunable family ``mitre_query_<famil
 
 The invoker takes one ``binding()`` per invocation and hands it to the server, which re-opens exactly
 that table (``attack_reference.bound`` / ``cwe_catalog.bound``: integrity-checked, not re-aged), so
-every answer in one conversation comes from one table and the attempt records which.
+every answer in one conversation comes from one table and the attempt records which: a limitation
+line and the structured ``mitre_reference`` entry of ``record()`` (reporting only, never an input).
 
 Result contract (every tool): ``status`` (``OK`` / ``UNKNOWN_ID`` / ``DEPRECATED`` /
 ``TACTIC_MISMATCH``, or ``null`` when no table could answer), the snapshot identity (``reference``
@@ -95,14 +96,65 @@ def grantable(profile: dict[str, Any]) -> list[str]:
 def binding(root: Any = None, *, now: datetime | None = None) -> dict[str, Any]:
     """Stable identity of the tables in force (unchanged across re-syncs of the same pins): the
     ATT&CK/CAPEC ``attack_reference.binding`` and the CWE ``cwe_catalog`` identity. Never raises."""
+    return take(root, now=now)[0]
+
+
+def take(root: Any = None, *, now: datetime | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(``binding()``, ``record()`` of it) from one load of each table. The record adds the snapshot
+    id, which the binding leaves out so that it stays stable across re-syncs. Never raises."""
     import cwe_catalog
     now = now or datetime.now(timezone.utc)
+    reference, gap = attack_reference.load(root, now=now)
+    snapshot = reference.identity.get("snapshot_id") if reference is not None else None
     try:
-        cwe = cwe_catalog.current(root, now=now).identity
+        catalog = cwe_catalog.current(root, now=now)
+        cwe, snapshot = catalog.identity, snapshot or catalog.snapshot_id
     except Exception as exc:   # the committed catalog itself failed its lock: no CWE table at all
         cwe = {"reference_gap": cwe_catalog.GAP_INVALID, "catalog_source": None,
                "detail": f"{type(exc).__name__}"}
-    return {"mitre_reference": attack_reference.binding(root, now=now), "cwe_catalog": cwe}
+    bound = {"mitre_reference": attack_reference.binding_of(reference, gap), "cwe_catalog": cwe}
+    return bound, record(bound, snapshot_id=snapshot)
+
+
+# The structured ``mitre_reference`` entry of a job's invoker output (ADR-0034 addendum item 3), closed
+# by schemas/mitre-reference-record.schema.json. Reporting only: never input identity, never the prompt.
+_SNAPSHOT_ID = re.compile(r"sha256-[0-9a-f]{16}")
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+_REF64 = re.compile(r"sha256:[0-9a-f]{64}")
+_VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z .()_+-]{0,79}")
+_DOMAIN = re.compile(r"[a-z][a-z0-9-]{0,39}")
+_CWE_SOURCES = ("mitre-feed", "committed-curated")
+
+
+def _shaped(value: Any, pattern: re.Pattern[str]) -> str | None:
+    return value if isinstance(value, str) and pattern.fullmatch(value) else None
+
+
+def record(bound: dict[str, Any], *, snapshot_id: Any = None) -> dict[str, Any]:
+    """The closed ``mitre_reference`` entry of a job granted MITRE lookups: snapshot id, derived-table
+    hash, ATT&CK / CAPEC / CWE versions and the gap codes. A value of an unexpected shape is null."""
+    import cwe_catalog
+    attack = (bound or {}).get("mitre_reference") or {}
+    cwe = (bound or {}).get("cwe_catalog") or {}
+    ok = attack.get("status") == attack_reference.OK
+    codes = (attack_reference.GAP_MISSING, attack_reference.GAP_STALE, attack_reference.GAP_INVALID)
+    cwe_codes = (cwe_catalog.GAP_MISSING, cwe_catalog.GAP_STALE, cwe_catalog.GAP_INVALID)
+    versions = attack.get("attack_versions") if ok and isinstance(attack.get("attack_versions"), dict) else {}
+    source = cwe.get("catalog_source") if cwe.get("catalog_source") in _CWE_SOURCES else None
+    cwe_gap = cwe.get("reference_gap") or (None if source else cwe_catalog.GAP_INVALID)
+    return {
+        "snapshot_id": _shaped(snapshot_id, _SNAPSHOT_ID),
+        "reference_sha256": _shaped(attack.get("reference_sha256"), _HEX64) if ok else None,
+        "versions": {"attack": {key: value for key, value in sorted(versions.items())
+                                if _shaped(key, _DOMAIN) and _shaped(value, _VERSION)},
+                     "capec": _shaped(attack.get("capec_version"), _VERSION) if ok else None,
+                     "cwe": _shaped(cwe.get("catalog_version"), _VERSION) if source else None},
+        "cwe_source": source,
+        "cwe_catalog_sha256": _shaped(cwe.get("catalog_sha256"), _REF64) if source else None,
+        "gap": None if ok else (attack.get("status") if attack.get("status") in codes
+                                else attack_reference.GAP_INVALID),
+        "cwe_gap": None if cwe_gap is None else (cwe_gap if cwe_gap in cwe_codes else cwe_catalog.GAP_INVALID),
+    }
 
 
 def _describe(value: Any) -> str:
