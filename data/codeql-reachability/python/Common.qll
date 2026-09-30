@@ -10,9 +10,15 @@ string relPath(Location l) {
   if exists(l.getFile().getRelativePath()) then result = l.getFile().getRelativePath() else result = ""
 }
 
-/** Module name, or the qualified name of a function or class (`Scope` itself has no qualified name). */
+/**
+ * Module name, or the qualified name of a function or class (`Scope` itself has no qualified name).
+ * A script (a file run as `__main__`, not importable) has no module name; it is named by its file stem,
+ * or every row naming it would be dropped.
+ */
 string scopeName(Scope s) {
   result = s.(Module).getName()
+  or
+  not exists(s.(Module).getName()) and result = s.(Module).getFile().getStem()
   or
   result = s.(Function).getQualifiedName()
   or
