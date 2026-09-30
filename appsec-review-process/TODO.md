@@ -771,3 +771,15 @@ Design: [`docs/code-query-tools.md`](../docs/code-query-tools.md).
 - [ ] Decide whether `06-cve-reachability` should depend on `02-treesitter-ast` in the job graph (today: consumed when present).
 - [ ] Brief V (lead context) after merge; sealed code-intel sidecar and query-time CodeQL stay deferred.
 
+
+## W: knowledge packs and MITRE lookup tools (ADR-0034, branch `claude/affectionate-bohr-t0gqfl`)
+
+Decision record: [ADR-0034](../docs/decisions/ADR-0034-knowledge-packs.md). Closes section O's "prompt menu" item.
+
+- [ ] W1: `knowledge-pack` registry kind (schema, `pipeline/knowledge-packs/`), persona `knowledge_packs` key,
+      catalog label, `knowledge_packs` prompt section, input-hash coverage, `knowledge_packs.py check` in parity.
+- [ ] W2: read-only `mitre_technique` / `mitre_capec` / `mitre_cwe` tools over the resolved snapshot (ADR-0032 pattern),
+      granted to `claim-review-static` and `hypothesis-hunt-static`.
+- [ ] W3: packs `cloud-exposure`, `injection`, `supply-chain` and their lane-07 persona assignments.
+- [ ] Phase 2: intake adds packs from target traits (`applies_to`); needs a run-specific prompt cache key.
+- [ ] More packs: authn/session, deserialization, memory safety, IAM escalation, LLM tool abuse, business logic.
