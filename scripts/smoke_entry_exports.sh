@@ -34,7 +34,7 @@ report() {  # STATUS NAME DETAIL
 }
 
 rm -rf "$out"; mkdir -p "$out"
-if "$repo/images/audit-buildenv-common/run.sh" "$build_image" "$repo" "$out" -- \
+if bash "$repo/images/audit-buildenv-common/run.sh" "$build_image" "$repo" "$out" -- \
      g++ -shared -fPIC -O0 -g -fvisibility=hidden -o /scratch/libentry.so "/workspace/$fixture/libentry.cpp" \
      > "$out/build.log" 2>&1 && [ -s "$out/libentry.so" ]; then
   report PASS "build libentry.so" "$build_image"
@@ -43,7 +43,7 @@ else
   exit 1
 fi
 
-if "$repo/images/audit-buildenv-common/run.sh" "$binary_image" "$repo" "$out" -- \
+if bash "$repo/images/audit-buildenv-common/run.sh" "$binary_image" "$repo" "$out" -- \
      bash -c 'binary-summary /scratch/libentry.so > /scratch/summary.json' > "$out/summary.log" 2>&1 \
      && [ -s "$out/summary.json" ]; then
   report PASS "binary-summary" "$binary_image"

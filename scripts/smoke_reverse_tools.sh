@@ -25,10 +25,10 @@ if [ "${1:-}" = "--docker" ]; then
   echo "INFO image-size                         $(docker image inspect -f '{{.Size}}' "$tag" | awk '{printf "%.0f MB", $1/1000000}') ($tag)"
   case "$image" in
     audit-binary-analysis)
-      exec "$repo/images/audit-buildenv-common/run.sh" "$tag" "$repo" "$scratch" -- \
+      exec bash "$repo/images/audit-buildenv-common/run.sh" "$tag" "$repo" "$scratch" -- \
         bash /workspace/scripts/smoke_reverse_tools.sh "$image" ;;
     audit-native)
-      AUDIT_NATIVE_IMAGE=$tag exec "$repo/images/audit-native/run.sh" "$repo" - "$scratch" -- \
+      AUDIT_NATIVE_IMAGE=$tag exec bash "$repo/images/audit-native/run.sh" "$repo" - "$scratch" -- \
         bash /workspace/scripts/smoke_reverse_tools.sh "$image" ;;
     *) echo "unknown image id: $image" >&2; exit 2 ;;
   esac
