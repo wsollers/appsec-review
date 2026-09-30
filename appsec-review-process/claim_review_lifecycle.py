@@ -42,7 +42,8 @@ DECISION_KEYS = {
 }
 # Optional reviewer judgment (ADR-0020): CWE at 07/09/12; CVSS v4.0 base metrics + remediation at 12;
 # ATT&CK/CAPEC labels at 07 (ADR-0026).
-OPTIONAL_DECISION_KEYS = {"07-red-team-adversarial": {"cwe", "attack_refs", "capec_refs"}, "08-blue-team-refutation": set(),
+OPTIONAL_DECISION_KEYS = {"07-red-team-adversarial": {"cwe", "attack_refs", "capec_refs"},
+                          "08-blue-team-refutation": set(),
                           "09-independent-verification": {"cwe"},
                           "12-scoring-prioritization": {"cwe", "cvss_v4", "remediation"}}
 
@@ -204,7 +205,8 @@ def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
                 "09-independent-verification": core.verify,
                 "12-scoring-prioritization": core.score}[stage]
     if "mitre_reference" in inputs:
-        return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"], inputs["mitre_reference"])
+        return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"],
+                        inputs["mitre_reference"])
     return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"])
 
 
