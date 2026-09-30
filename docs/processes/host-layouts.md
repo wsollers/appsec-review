@@ -66,8 +66,9 @@ target runs.
   `docker compose -f orchestrator/dagster/compose.yaml up -d webserver daemon` (ADR-0011 addendum
   2026-09-22).
 - Exactly one engine: `systemctl is-active docker` must print `inactive`, and
-  `docker info --format '{{.OperatingSystem}}'` must print `Docker Desktop` (ADR-0011 addendum
-  2026-09-23). A native `docker.service` left running in the distro wedged Docker Desktop three times.
+  `docker info --format '{{.OperatingSystem}}'` must print `Docker Desktop` or, through WSL
+  integration, `Docker Desktop (containerized)` (ADR-0011 addendum 2026-09-23). A native
+  `docker.service` left running in the distro wedged Docker Desktop three times.
 - Recovery from a wedged Docker Desktop: Ctrl+C the code location, `wsl --shutdown` from Windows,
   restart Docker Desktop, `code-location.sh start`, `docker compose ... up -d`, `code-location.sh
   reload`.

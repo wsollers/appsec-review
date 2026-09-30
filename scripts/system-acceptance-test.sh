@@ -273,7 +273,7 @@ stage_services() {
   fi
   local engine_os
   engine_os="$(timeout 30 docker info --format '{{.OperatingSystem}}' 2>/dev/null || true)"
-  if [[ "$engine_os" == "Docker Desktop" ]] && systemctl is-active --quiet docker 2>/dev/null; then
+  if [[ "$engine_os" == "Docker Desktop"* ]] && systemctl is-active --quiet docker 2>/dev/null; then
     die "services: Docker Desktop answers, but a native docker service is also active in this distro; they
   compete for /var/run/docker.sock. Run: sudo systemctl disable --now docker.service docker.socket containerd.service"
   fi
