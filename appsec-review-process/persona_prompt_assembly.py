@@ -9,8 +9,9 @@ Every registry-record section (``persona``, ``role``, ``domain``, ``tooling_prof
 directory. This module never re-derives, paraphrases, or summarizes a registry record -- it reads
 the record, validates it against its own schema (the same schema persona_invocation validates
 against), and writes its canonical JSON form. What the persona reads and what persona_invocation
-pins can never drift apart, because they are read from the same file. When the persona lists
-knowledge packs (ADR-0034), a ``Knowledge Packs`` section follows the persona section: a fixed
+pins can never drift apart, because they are read from the same file. When the persona has
+knowledge packs (ADR-0034: the job template's ``knowledge_packs`` map for that persona, else its
+``persona.json`` default), a ``Knowledge Packs`` section follows the persona section: a fixed
 framing statement, then each pack record rendered the same way.
 
 Two sections are literal file bytes, not a registry record: ``governing_rules``
@@ -112,9 +113,9 @@ def load_job_template(job_template_id: str, store: SchemaStore) -> dict[str, Any
     return template
 
 
-def _render_record(section: str, composition: Mapping[str, str], store: SchemaStore) -> str:
+def _render_record(section: str, template: Mapping[str, Any], store: SchemaStore) -> str:
     directory, schema, composition_key, record_field = RECORD_SECTIONS[section]
-    record_id = composition.get(composition_key)
+    record_id = template["composition"].get(composition_key)
     if not isinstance(record_id, str) or not record_id:
         raise PromptAssemblyError(f"job template composition is missing {composition_key}")
     root, path = persona_registry.record_path(REGISTRY_DIR, directory, identifier(record_id))
@@ -126,7 +127,11 @@ def _render_record(section: str, composition: Mapping[str, str], store: SchemaSt
     if validate_document(record, schema, store) or record.get(record_field) != record_id:
         raise PromptAssemblyError(f"{section} record {record_id!r} is invalid or misnamed")
     if section == "persona":
-        return render_persona_prompt(record_id, record, REGISTRY_DIR, store)
+        try:   # ADR-0034 addendum 1: the job template's map, else the persona default
+            pack_ids = persona_registry.resolve_pack_ids(template, record_id, REGISTRY_DIR, record)
+        except ValueError as exc:
+            raise PromptAssemblyError(str(exc)) from None
+        return render_persona_prompt(record_id, record, REGISTRY_DIR, store, pack_ids=pack_ids)
     return render_record_section(section, record_id, persona_registry.loaded(directory, record))
 
 
@@ -170,12 +175,17 @@ def render_knowledge_packs_section(packs: list[tuple[str, Mapping[str, Any]]]) -
 
 
 def render_persona_prompt(persona_id: str, record: Mapping[str, Any], registry_dir: Path = REGISTRY_DIR,
-                          store: SchemaStore | None = None) -> str:
-    """The persona section and, when the persona lists knowledge packs, the ``knowledge_packs``
-    section right after it. ``record`` is the persona.json as on disk. A persona folder's
-    ``prompt.md`` is this text; a pure function of the registry, so the prompt cache stays valid."""
+                          store: SchemaStore | None = None, *, pack_ids: list[str] | None = None) -> str:
+    """The persona section and, when the persona has knowledge packs, the ``knowledge_packs`` section
+    right after it. ``record`` is the persona.json as on disk. ``pack_ids`` are the packs resolved
+    for a job (``persona_registry.resolve_pack_ids``: the job template's ``knowledge_packs`` map, else
+    the persona default); None means no job context, so the persona.json default -- a persona
+    folder's ``prompt.md`` is that text. A pure function of the registry (template + variant), so
+    the prompt cache path and key stay valid."""
     text = render_record_section("persona", persona_id, persona_registry.loaded("personas", record))
-    packs = load_knowledge_packs(registry_dir, record.get("knowledge_packs") or [], store or SchemaStore())
+    if pack_ids is None:
+        pack_ids = record.get("knowledge_packs") or []
+    packs = load_knowledge_packs(registry_dir, pack_ids, store or SchemaStore())
     return text + ("\n" + render_knowledge_packs_section(packs) if packs else "")
 
 
@@ -201,7 +211,7 @@ def render_section(section: str, template: Mapping[str, Any], store: SchemaStore
     if section in LITERAL_SECTIONS:
         return _render_literal(section)
     if section in RECORD_SECTIONS:
-        return _render_record(section, template["composition"], store)
+        return _render_record(section, template, store)
     raise PromptAssemblyError(f"unknown prompt section {section!r}")
 
 

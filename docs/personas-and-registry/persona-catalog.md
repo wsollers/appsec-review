@@ -43,10 +43,12 @@ The keys, taken from `owasp-validator.json`:
 ```
 
 `best_used_in_lanes` holds job-graph node IDs and is optional; `assumptions` is a free-form object
-whose keys vary by persona. `knowledge_packs` lists at most two knowledge pack ids
-(`appsec-review-process/pipeline/knowledge-packs/`, ADR-0034) and is `[]` unless the persona is an
-attacker or domain specialist that carries an exploit-class focus; in a catalog section, a
-`Knowledge packs:` list of pack ids becomes that field. The prose entries below are the human-readable source of the registry
+whose keys vary by persona. `knowledge_packs` is the persona's default knowledge pack ids
+(`appsec-review-process/pipeline/knowledge-packs/`, ADR-0034), at most the tunable
+`knowledge_packs_per_persona_max`, and `[]` unless an attacker or domain specialist carries an
+exploit-class focus in every job; in a catalog section, a `Knowledge packs:` list of pack ids becomes
+that field. Packs are normally assigned per job in the job template's `knowledge_packs` map (persona
+id -> pack ids), which overrides this default for the personas it names. The prose entries below are the human-readable source of the registry
 records: every persona here has one. Records without a hand-authored file are generated from this
 text by `python3 -B appsec-review-process/catalog_personas.py generate` and carry a `provenance`
 block (`generated_by: catalog_personas.py`, `reviewed: false`); `catalog_personas.py check` fails when
@@ -75,10 +77,6 @@ Best lanes:
 - `15-deployment-hardening`
 
 Must not assume credentials or privileged network position.
-
-Knowledge packs:
-
-- `injection`
 
 ### api-contract-abuser
 
@@ -109,10 +107,6 @@ Outputs:
 - route-to-authz coverage gaps
 - schema drift findings
 - suggested verification requests
-
-Knowledge packs:
-
-- `injection`
 
 ### authenticated-low-priv-user
 
@@ -217,10 +211,6 @@ Inputs:
 
 Must distinguish declared exposure from observed runtime exposure.
 
-Knowledge packs:
-
-- `cloud-exposure`
-
 ### supply-chain-attacker
 
 Models attacks through dependencies, package managers, CI/CD, generated artifacts, and release paths.
@@ -236,10 +226,6 @@ Looks for:
 - lockfile drift
 - vendored code with unclear origin
 
-Knowledge packs:
-
-- `supply-chain`
-
 ### insider-developer
 
 Models a malicious or negligent contributor with source or CI influence.
@@ -253,10 +239,6 @@ Looks for:
 - code generation that changes reviewed behavior
 - secrets accessible to untrusted jobs
 - source-to-artifact divergence
-
-Knowledge packs:
-
-- `supply-chain`
 
 ### native-exploitability-engineer
 

@@ -123,6 +123,23 @@
       "product-owner"
     ]
   },
+  "knowledge_packs": {
+    "opportunistic-public-web-attacker": [
+      "injection"
+    ],
+    "api-contract-abuser": [
+      "injection"
+    ],
+    "cloud-initial-access-operator": [
+      "cloud-exposure"
+    ],
+    "supply-chain-attacker": [
+      "supply-chain"
+    ],
+    "insider-developer": [
+      "supply-chain"
+    ]
+  },
   "role_variants": [
     "red-team-adversary",
     "blue-team-refuter",

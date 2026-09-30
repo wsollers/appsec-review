@@ -1,5 +1,5 @@
-"""Knowledge packs (ADR-0034, W1): the registry kind, the persona key, the prompt section, input identity
-and ``knowledge_packs.py check``.
+"""Knowledge packs (ADR-0034, W1 and W4): the registry kind, the persona key, the job template's
+``knowledge_packs`` map, the prompt section, input identity and ``knowledge_packs.py check``.
 
 Every pack here is a test fixture written into a temporary copy of the registry; no real pack is read.
 """
@@ -23,13 +23,18 @@ import persona_invocation as pi  # noqa: E402
 import persona_prompt_assembly as ppa  # noqa: E402
 import persona_registry  # noqa: E402
 import registry_paths  # noqa: E402
+import tunables  # noqa: E402
 from persona_invocation_support import composition_block, copy_registry  # noqa: E402
 from schema_validate import SCHEMAS_DIR, SchemaStore, validate_document  # noqa: E402
 
 PACK = "fixture-injection"
-ATTACKER = "opportunistic-public-web-attacker"     # 07 stage persona (attacker)
+ATTACKER = "malicious-tenant"                      # 07 stage persona (attacker), not in the template map
 DEFENDER = "defensive-skeptic"                     # 08 stage persona (defender)
 TEMPLATE = "claim-review-pool-cell"
+# The W3 assignments, now in claim-review-pool-cell.json's knowledge_packs map (ADR-0034 addendum 1).
+TEMPLATE_MAP = {"cloud-initial-access-operator": ["cloud-exposure"],
+                "opportunistic-public-web-attacker": ["injection"], "api-contract-abuser": ["injection"],
+                "supply-chain-attacker": ["supply-chain"], "insider-developer": ["supply-chain"]}
 
 
 def fixture_pack(pack_id: str = PACK, **changes) -> dict:
@@ -65,6 +70,19 @@ class Registry:
 
     def persona_path(self, persona_id: str) -> Path:
         return persona_registry.record_path(self.dir, "personas", persona_id)[1]
+
+    def template_path(self, template_id: str = TEMPLATE) -> Path:
+        return registry_paths.template(template_id, self.dir)
+
+    def set_template_map(self, mapping, template_id: str = TEMPLATE) -> None:
+        """Replace the template's ``knowledge_packs`` map (None removes the key)."""
+        path = self.template_path(template_id)
+        template = json.loads(path.read_text(encoding="utf-8"))
+        if mapping is None:
+            template.pop("knowledge_packs", None)
+        else:
+            template["knowledge_packs"] = mapping
+        path.write_text(json.dumps(template, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     def set_packs(self, persona_id: str, packs: list[str]) -> None:
         path = self.persona_path(persona_id)
@@ -106,7 +124,32 @@ class SchemaTests(unittest.TestCase):
     def test_persona_schema_has_knowledge_packs_right_before_provenance(self):
         schema = json.loads((persona_registry.FOLDER_ROOT / "persona.schema.json").read_text(encoding="utf-8"))
         self.assertEqual(list(schema["properties"])[-2:], ["knowledge_packs", "provenance"])
-        self.assertEqual(schema["properties"]["knowledge_packs"]["maxItems"], persona_registry.PACKS_PER_PERSONA_MAX)
+
+    def test_the_cap_is_a_tunable_not_a_schema_limit(self):
+        """ADR-0034 addendum 2: no hard-coded maxItems on persona packs in either schema."""
+        self.assertEqual(tunables.shared("knowledge_packs_per_persona_max"), 2)
+        self.assertEqual(persona_registry.packs_per_persona_max(), 2)
+        persona = json.loads((persona_registry.FOLDER_ROOT / "persona.schema.json").read_text(encoding="utf-8"))
+        self.assertNotIn("maxItems", persona["properties"]["knowledge_packs"])
+        template = json.loads((SCHEMAS_DIR / "job-template.schema.json").read_text(encoding="utf-8"))
+        value = template["properties"]["knowledge_packs"]
+        self.assertNotIn("maxItems", value["additionalProperties"])
+        self.assertNotIn("knowledge_packs", template["required"])
+        store = SchemaStore()
+        base = json.loads(registry_paths.template(TEMPLATE).read_text(encoding="utf-8"))
+        self.assertEqual(validate_document(base, "job-template.schema.json", store), [])
+        self.assertTrue(validate_document({**base, "knowledge_packs": ["injection"]}, "job-template.schema.json", store))
+        self.assertTrue(validate_document({**base, "knowledge_packs": {ATTACKER: "injection"}},
+                                          "job-template.schema.json", store))
+
+    def test_real_template_carries_the_w3_assignments_and_the_defaults_are_empty(self):
+        template = json.loads(registry_paths.template(TEMPLATE).read_text(encoding="utf-8"))
+        self.assertEqual(template["knowledge_packs"], TEMPLATE_MAP)
+        self.assertEqual(list(template)[list(template).index("stage_personas") + 1], "knowledge_packs")
+        for persona_id, packs in TEMPLATE_MAP.items():
+            self.assertEqual(persona_registry.persona_pack_ids(registry_paths.REGISTRY, persona_id), [], persona_id)
+            self.assertEqual(persona_registry.resolve_pack_ids(template, persona_id), packs, persona_id)
+        self.assertEqual(persona_registry.resolve_pack_ids(template, ATTACKER), [])
 
     def test_registry_paths_and_every_real_persona_carry_the_key(self):
         self.assertEqual(registry_paths.KNOWLEDGE_PACKS_DIR, registry_paths.REGISTRY / "knowledge-packs")
@@ -160,6 +203,14 @@ class CheckTests(Base):
         self.assertIn("knowledge-packs/fixture-injection.json: refs.attack_techniques has more than 15 ids",
                       self.check())
 
+    def test_the_cap_comes_from_the_tunable(self):
+        self.registry.write_pack(fixture_pack("fixture-b"))
+        self.registry.set_packs(ATTACKER, [PACK, "fixture-b"])
+        self.assertEqual(self.check(), [])
+        with mock.patch.object(tunables, "shared", side_effect=lambda name: {"knowledge_packs_per_persona_max": 1}[name]):
+            self.assertIn(f"personas/{ATTACKER}: lists more than 1 knowledge packs", self.check())
+        self.assertIn(f"personas/{ATTACKER}: lists more than 1 knowledge packs", self.check(cap=1))
+
     def test_persona_may_list_at_most_two_existing_packs(self):
         for name in ("fixture-b", "fixture-c"):
             self.registry.write_pack(fixture_pack(name))
@@ -198,6 +249,81 @@ class CheckTests(Base):
                       errors)
         self.assertTrue(any("refs.cwe CWE-89" in error for error in errors))
         self.assertFalse(any("format-checked only" in note for note in notes))
+
+
+class TemplateCheckTests(Base):
+    """``knowledge_packs.py check`` validates every job template's map with the persona-default rules."""
+
+    WHERE = f"job-templates/{TEMPLATE}.json: knowledge_packs"
+
+    def test_the_real_template_map_and_a_valid_fixture_map_pass(self):
+        self.assertEqual(self.check(), [])
+        self.registry.set_template_map({ATTACKER: [PACK], DEFENDER: []})
+        self.assertEqual(self.check(), [])
+
+    def test_unknown_persona_and_persona_outside_the_template_fail(self):
+        self.registry.set_template_map({"no-such-persona": [PACK]})
+        errors = self.check()
+        self.assertIn(f"{self.WHERE}['no-such-persona']: persona does not exist", errors)
+        self.registry.set_template_map({"general-red-team-hunter": [PACK]})
+        errors = self.check()
+        self.assertTrue(any(e.startswith(f"{self.WHERE}['general-red-team-hunter']: persona is not one the template runs as")
+                            for e in errors), errors)
+
+    def test_unknown_pack_fails(self):
+        self.registry.set_template_map({ATTACKER: ["no-such-pack"]})
+        self.assertIn(f"{self.WHERE}['{ATTACKER}']: knowledge pack 'no-such-pack' does not exist", self.check())
+
+    def test_category_rule_applies_to_the_map(self):
+        self.registry.set_template_map({DEFENDER: [PACK]})
+        errors = self.check()
+        self.assertTrue(any(e.startswith(f"{self.WHERE}['{DEFENDER}']: only attacker and domain-specialist")
+                            for e in errors), errors)
+
+    def test_cap_applies_to_the_map_from_the_tunable(self):
+        for name in ("fixture-b", "fixture-c"):
+            self.registry.write_pack(fixture_pack(name))
+        self.registry.set_template_map({ATTACKER: [PACK, "fixture-b", "fixture-c"]})
+        self.assertIn(f"{self.WHERE}['{ATTACKER}']: lists more than 2 knowledge packs", self.check())
+        self.registry.set_template_map({ATTACKER: [PACK, "fixture-b"]})
+        self.assertEqual(self.check(), [])
+        self.assertIn(f"{self.WHERE}['{ATTACKER}']: lists more than 1 knowledge packs", self.check(cap=1))
+
+    def test_a_map_that_is_not_a_map_fails(self):
+        self.registry.set_template_map([PACK])
+        self.assertIn(f"{self.WHERE} is not a map of persona id to pack ids", self.check())
+
+
+class ResolutionTests(Base):
+    """One rule (``persona_registry.resolve_pack_ids``): named in the map -> exactly those packs."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.registry.write_pack(fixture_pack("fixture-b"))
+
+    def template(self) -> dict:
+        return json.loads(self.registry.template_path().read_text(encoding="utf-8"))
+
+    def test_override_wins_over_the_persona_default(self):
+        self.registry.set_template_map({ATTACKER: ["fixture-b"]})
+        self.assertEqual(persona_registry.resolve_pack_ids(self.template(), ATTACKER, self.registry.dir), ["fixture-b"])
+
+    def test_empty_list_removes_the_default(self):
+        self.registry.set_template_map({ATTACKER: []})
+        self.assertEqual(persona_registry.resolve_pack_ids(self.template(), ATTACKER, self.registry.dir), [])
+
+    def test_a_persona_not_named_falls_back_to_its_default(self):
+        self.registry.set_template_map({DEFENDER: []})
+        self.assertEqual(persona_registry.resolve_pack_ids(self.template(), ATTACKER, self.registry.dir), [PACK])
+        self.registry.set_template_map(None)
+        self.assertEqual(persona_registry.resolve_pack_ids(self.template(), ATTACKER, self.registry.dir), [PACK])
+        self.assertEqual(persona_registry.resolve_pack_ids(None, ATTACKER, self.registry.dir), [PACK])
+
+    def test_a_malformed_map_is_refused(self):
+        with self.assertRaises(ValueError):
+            persona_registry.resolve_pack_ids({"knowledge_packs": {ATTACKER: "fixture-b"}}, ATTACKER, self.registry.dir)
+        with self.assertRaises(ValueError):
+            persona_registry.resolve_pack_ids({"knowledge_packs": [ATTACKER]}, ATTACKER, self.registry.dir)
 
 
 class PromptTests(Base):
@@ -242,6 +368,41 @@ class PromptTests(Base):
         self.registry.write_pack(fixture_pack(summary="A different focus."))
         self.assertNotEqual(first, ppa.assemble_prompt_text(TEMPLATE, persona_id=ATTACKER)[0])
 
+    def test_template_override_renders_instead_of_the_default(self):
+        self.registry.write_pack(fixture_pack("fixture-b"))
+        self.registry.set_template_map({ATTACKER: ["fixture-b"]})
+        text = ppa.assemble_prompt_text(TEMPLATE, persona_id=ATTACKER)[0]
+        self.assertIn("## Knowledge Pack (fixture-b)", text)
+        self.assertNotIn(f"## Knowledge Pack ({PACK})", text)
+        # prompt.md has no job context: it keeps the persona default
+        folder = self.registry.persona_path(ATTACKER).parent
+        self.assertIn(f"## Knowledge Pack ({PACK})", catalog_personas.prompt_text(folder, "personas"))
+
+    def test_template_empty_list_removes_the_section(self):
+        self.registry.set_template_map({ATTACKER: []})
+        self.assertNotIn("Knowledge Pack", ppa.assemble_prompt_text(TEMPLATE, persona_id=ATTACKER)[0])
+
+    def test_real_template_gives_the_mapped_personas_their_packs(self):
+        with mock.patch.object(ppa, "REGISTRY_DIR", registry_paths.REGISTRY):
+            for persona_id, packs in TEMPLATE_MAP.items():
+                with self.subTest(persona=persona_id):
+                    text = ppa.assemble_prompt_text(TEMPLATE, persona_id=persona_id)[0]
+                    self.assertIn("## Knowledge Packs\n", text)
+                    for pack_id in packs:
+                        self.assertIn(f"## Knowledge Pack ({pack_id})", text)
+            for persona_id in (ATTACKER, DEFENDER, "authenticated-low-priv-user"):
+                with self.subTest(persona=persona_id):
+                    self.assertNotIn("Knowledge Pack", ppa.assemble_prompt_text(TEMPLATE, persona_id=persona_id)[0])
+
+    def test_prompt_cache_path_does_not_depend_on_the_map(self):
+        with mock.patch.object(ppa, "PROMPT_CACHE_DIR", Path(self._tmp.name) / "prompt-cache"), \
+                mock.patch.object(ppa, "PROMPT_ROOT", Path(self._tmp.name)):
+            first = ppa.assemble_outer_prompt(TEMPLATE, persona_id=ATTACKER)
+            self.registry.set_template_map({ATTACKER: []})
+            second = ppa.assemble_outer_prompt(TEMPLATE, persona_id=ATTACKER)
+        self.assertEqual(first["path"], second["path"])
+        self.assertNotEqual(first["sha256"], second["sha256"])
+
     def test_a_missing_pack_stops_assembly(self):
         self.registry.set_packs(ATTACKER, ["no-such-pack"])
         with self.assertRaises(ppa.PromptAssemblyError):
@@ -275,6 +436,53 @@ class IdentityTests(Base):
                  "claim_reviewer_pool.py"]
         self.assertEqual(persona_registry.knowledge_pack_rels(paths, self.registry.dir),
                          [f"pipeline/knowledge-packs/{PACK}.json"])
+
+    def test_knowledge_pack_rels_use_the_packs_the_job_template_resolves(self):
+        self.registry.write_pack(fixture_pack("fixture-b"))
+        paths = [registry_paths.template_rel(TEMPLATE), f"personas/personas/{ATTACKER}/persona.json"]
+        rel = lambda pack_id: f"pipeline/knowledge-packs/{pack_id}.json"   # noqa: E731
+        self.registry.set_template_map({ATTACKER: ["fixture-b"]})
+        self.assertEqual(persona_registry.knowledge_pack_rels(paths, self.registry.dir), [rel("fixture-b")])
+        self.registry.set_template_map({ATTACKER: []})
+        self.assertEqual(persona_registry.knowledge_pack_rels(paths, self.registry.dir), [])
+        self.registry.set_template_map({DEFENDER: []})
+        self.assertEqual(persona_registry.knowledge_pack_rels(paths, self.registry.dir), [rel(PACK)])
+        self.registry.set_template_map(None)
+        real = persona_registry.knowledge_pack_rels(
+            [registry_paths.template_rel(TEMPLATE), *(f"personas/personas/{p}/persona.json" for p in TEMPLATE_MAP)])
+        self.assertEqual(real, sorted({rel(p) for packs in TEMPLATE_MAP.values() for p in packs}))
+
+    def test_composition_uses_the_template_resolved_packs(self):
+        self.registry.write_pack(fixture_pack("fixture-b"))
+        self.registry.set_template_map({ATTACKER: ["fixture-b"]})
+        store = SchemaStore()
+        records = pi.load_composition(self.registry.dir, self._block(ATTACKER), store)
+        self.assertEqual(dict(records["knowledge_packs"]), {"fixture-b": fixture_pack("fixture-b")})
+        overridden = pi.composition_sha256(records)
+        self.registry.set_template_map({ATTACKER: []})
+        records = pi.load_composition(self.registry.dir, self._block(ATTACKER), store)
+        self.assertNotIn("knowledge_packs", records)
+        self.assertNotEqual(pi.composition_sha256(records), overridden)
+
+    def test_handoff_composition_hash_uses_the_template_resolved_packs(self):
+        import create_job_handoff
+        import execution_state
+        run_id = "kp-handoff-fixture"
+        with mock.patch.object(execution_state, "RUNS", Path(self._tmp.name) / "runs"):
+            (execution_state.RUNS / run_id).mkdir(parents=True)
+            calls = []
+
+            def resolve(template, persona_id, registry_dir=None, persona_record=None):
+                calls.append((template.get("job_template_id"), "knowledge_packs" in template, persona_id))
+                return list(resolved)
+
+            with mock.patch.object(create_job_handoff.persona_registry, "resolve_pack_ids", side_effect=resolve):
+                resolved = []
+                without = create_job_handoff.build_handoff(run_id, TEMPLATE, [])
+                resolved = ["injection"]
+                with_pack = create_job_handoff.build_handoff(run_id, TEMPLATE, [])
+        self.assertEqual(calls[0], (TEMPLATE, True, "claim-reviewer"))
+        self.assertNotEqual(without["identity"]["composition_sha256"], with_pack["identity"]["composition_sha256"])
 
 
 class HashCoverageTests(unittest.TestCase):

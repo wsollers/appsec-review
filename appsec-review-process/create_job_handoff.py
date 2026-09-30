@@ -133,8 +133,8 @@ def build_handoff(run_id: str, job_id: str, input_paths: list[str], scope_id: st
         inputs.append({"path": relative.as_posix(), "bytes": size, "sha256": file_hash(path)})
     template_record = _source_record(template_path, template)
     composed = {key: value["record"] for key, value in records.items()}
-    packs = persona_registry.persona_pack_ids(REGISTRY, template["composition"]["persona_id"])
-    if packs:   # ADR-0034: the persona's knowledge packs are part of the composition's identity
+    packs = persona_registry.resolve_pack_ids(template, template["composition"]["persona_id"], REGISTRY)
+    if packs:   # ADR-0034: the packs this job resolves for its persona are part of the composition's identity
         composed["knowledge_packs"] = {pack: read_json(persona_registry.knowledge_pack_path(REGISTRY, pack))
                                        for pack in packs}
     identity = {

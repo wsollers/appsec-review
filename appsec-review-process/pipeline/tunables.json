@@ -295,6 +295,13 @@
       "description": "Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first.",
       "scale": "One per planned unit per run; engine targets can have thousands."
     },
+    "knowledge_packs_per_persona_max": {
+      "description": "Most knowledge packs one persona may be given for a job, from either source: the job template's knowledge_packs map or the persona.json default (ADR-0034 addendum 2). knowledge_packs.py check enforces it on both.",
+      "kind": "safety",
+      "scale": "Each pack adds a fenced JSON section to the persona's prompt; raise only with prompt-budget headroom and a reviewer's sign-off on the extra focus.",
+      "unit": "count",
+      "value": 2
+    },
     "mitre_query_attack_enabled": {
       "description": "Grant the mitre_technique lookup tool to model jobs whose tooling profile lists it (ADR-0034). Off removes it from the prompt's tool guides, the input server and --allowedTools together.",
       "kind": "safety",

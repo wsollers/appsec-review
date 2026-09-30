@@ -72,7 +72,7 @@ class RecordShapeTests(unittest.TestCase):
             with self.subTest(persona=folder.name):
                 self.assertEqual(list(record)[-2:], ["knowledge_packs", "provenance"])
                 self.assertIsInstance(record["knowledge_packs"], list)
-                self.assertLessEqual(len(record["knowledge_packs"]), persona_registry.PACKS_PER_PERSONA_MAX)
+                self.assertLessEqual(len(record["knowledge_packs"]), persona_registry.packs_per_persona_max())
 
     def test_ids_match_their_folder_and_are_unique(self):
         for directory, (_, _, field) in persona_registry.KINDS.items():

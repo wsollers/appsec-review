@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "persona.schema.json",
   "title": "Composable Review Persona",
-  "description": "One persona folder's persona.json (personas/personas/<persona_id>/). Every key is present, in this order; a field that does not apply holds an explicit empty value (best_used_in_lanes [] when the persona names no lanes, knowledge_packs [] when it lists no knowledge pack (ADR-0034; only attacker and domain-specialist personas may list any), provenance {} for a hand-authored record, else the four catalog_personas.py keys). tests/test_persona_folder_uniform.py enforces the order and the provenance shape.",
+  "description": "One persona folder's persona.json (personas/personas/<persona_id>/). Every key is present, in this order; a field that does not apply holds an explicit empty value (best_used_in_lanes [] when the persona names no lanes, knowledge_packs [] when it lists no default knowledge pack (ADR-0034; only attacker and domain-specialist personas may list any; a job template's knowledge_packs map overrides it per job; the per-persona cap is the tunable knowledge_packs_per_persona_max, enforced by knowledge_packs.py check), provenance {} for a hand-authored record, else the four catalog_personas.py keys). tests/test_persona_folder_uniform.py enforces the order and the provenance shape.",
   "type": "object",
   "required": [
     "schema",
@@ -75,7 +75,6 @@
     },
     "knowledge_packs": {
       "type": "array",
-      "maxItems": 2,
       "uniqueItems": true,
       "items": {
         "type": "string",

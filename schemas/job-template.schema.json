@@ -75,6 +75,21 @@
       "items": {
         "type": "string"
       }
+    },
+    "knowledge_packs": {
+      "description": "ADR-0034 addendum 1: persona id -> knowledge pack ids this job gives that persona. A persona named here gets exactly these packs ([] removes its default); a persona not named falls back to its persona.json knowledge_packs. The per-persona cap is the tunable knowledge_packs_per_persona_max and the attacker/domain-specialist rule applies; knowledge_packs.py check enforces both.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        }
+      }
     }
   }
 }

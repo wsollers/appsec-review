@@ -22,11 +22,12 @@ appsec-review-process/personas/
 - `persona.json` / `role.json` is the machine record a job template composes. Every key the schema lists
   is present, in the schema's property order. A field that does not apply holds an explicit empty value
   and is never omitted: `best_used_in_lanes: []` when a persona names no lanes, `knowledge_packs: []`
-  when it lists no knowledge pack, `provenance: {}` for a
+  when it has no default knowledge pack, `provenance: {}` for a
   hand-authored persona (catalog-generated personas carry `generated_by`, `source`, `reviewed`, `note`).
 - `prompt.md` is the exact section the prompt assembler puts in a job's prompt for that record
-  (`## Persona (<id>)` or `## Role (<id>)` and the record as sorted JSON; a persona that lists knowledge
-  packs is followed by its `## Knowledge Packs` section). It is written by
+  (`## Persona (<id>)` or `## Role (<id>)` and the record as sorted JSON; a persona whose `persona.json`
+  lists default knowledge packs is followed by its `## Knowledge Packs` section; `prompt.md` has no job
+  context, so it never shows a job template's `knowledge_packs` map). It is written by
   `catalog_personas.py generate`, never by hand, so opening a folder shows what the model reads.
 - Loading leaves an empty optional field out (`persona_registry.loaded`), so a record reads exactly as it
   did before the fields were made explicit; assembled prompts and pinned record hashes did not move.
@@ -91,15 +92,26 @@ A persona is a point of view; a knowledge pack is an exploit-class focus it can 
 `false_positive_traps` ≤ 8, `refs` {`attack_tactics`, `attack_techniques`, `capec`, `cwe`} ≤ 15 ids each,
 `must_not`).
 
-- A persona lists at most two packs in `knowledge_packs`; only `attacker` and `domain-specialist`
-  personas may list any. Catalog personas take them from a `Knowledge packs:` list in
-  [persona-catalog.md](persona-catalog.md).
+- Packs are assigned per job (ADR-0034 addendum 1). A job template may carry `knowledge_packs`, a map
+  of persona id -> pack ids; red-team pools hold several personas, so the pool's template is where they
+  are focused (`claim-review-pool-cell.json`, next to `stage_personas`). A persona named in the map gets
+  exactly those packs (`[]` removes them); a persona not named falls back to its `persona.json`
+  `knowledge_packs` default (normally `[]`; catalog personas take a default from a `Knowledge packs:`
+  list in [persona-catalog.md](persona-catalog.md)). `persona_registry.resolve_pack_ids(template,
+  persona_id)` is the one resolution rule every reader uses.
+- Either source gives a persona at most the shared tunable `knowledge_packs_per_persona_max` packs
+  (default 2; [tunables](../processes/tunables.md)), and only `attacker` and `domain-specialist` personas
+  may have any. No schema hard-codes the cap.
 - The prompt renders a `## Knowledge Packs` section right after the persona section: a fixed statement
-  that a pack is focus and vocabulary, never evidence, then each pack as fenced canonical JSON
-  (`persona_prompt_assembly.render_persona_prompt`).
-- Every job that hashes a `persona.json` also hashes the packs it lists
-  (`persona_registry.knowledge_pack_rels`), and a persona invocation's composition hash covers them, so a
-  pack edit re-executes the stages that use it.
-- `python3 -B appsec-review-process/knowledge_packs.py check` validates packs, id formats, caps and
-  persona references (against the MITRE snapshot when one resolves, format only otherwise); it also runs
-  from `validate_design_parity.py`.
+  that a pack is focus and vocabulary, never evidence, then each resolved pack as fenced canonical JSON
+  (`persona_prompt_assembly.render_persona_prompt`). The render stays a pure function of the registry
+  (template + persona variant), so the prompt cache path and key do not change.
+- Every job that hashes a `persona.json` also hashes the packs it resolves for that persona under the
+  job templates it hashes (`persona_registry.knowledge_pack_rels`); a persona invocation's composition
+  hash and a job handoff's `composition_sha256` cover the resolved packs, so a pack or map edit
+  re-executes the stages that use it.
+- `python3 -B appsec-review-process/knowledge_packs.py check` validates packs, id formats, caps, persona
+  defaults and every job template's `knowledge_packs` map (persona ids exist and are ones the template
+  runs as: its composed persona, `persona_variants` or `stage_personas`; packs exist; cap; category rule),
+  against the MITRE snapshot when one resolves, format only otherwise; it also runs from
+  `validate_design_parity.py`.

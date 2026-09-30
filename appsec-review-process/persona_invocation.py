@@ -364,7 +364,7 @@ def load_composition(registry_dir: Path, persona: Mapping[str, str], store: Sche
             continue   # a registry-declared role variant of this template (ADR-0024)
         if composed[name + "_id"] != persona[name + "_id"]:
             raise PersonaRequestError(f"persona.{name}_id is not what the named job template composes")
-    packs = load_knowledge_packs(registry_dir, records["persona"], store)
+    packs = load_knowledge_packs(registry_dir, records["persona"], store, records["job_template"])
     if packs:
         records["knowledge_packs"] = packs   # ADR-0034: part of the composition's identity
     errors = composition_errors(records)
@@ -397,11 +397,18 @@ def role_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def load_knowledge_packs(registry_dir: Path, persona: Mapping[str, Any], store: SchemaStore
-                         ) -> dict[str, dict[str, Any]]:
-    """{pack id: record} for every knowledge pack the loaded persona lists (ADR-0034), each loaded,
-    schema-checked and name-checked like any other registry record. Empty when it lists none."""
-    pack_ids = persona.get("knowledge_packs") or []
+def load_knowledge_packs(registry_dir: Path, persona: Mapping[str, Any], store: SchemaStore,
+                         template: Mapping[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """{pack id: record} for every knowledge pack the loaded persona runs with in ``template``
+    (ADR-0034 addendum 1, ``persona_registry.resolve_pack_ids``: the template's ``knowledge_packs``
+    map, else the persona default), each loaded, schema-checked and name-checked like any other
+    registry record. Empty when it has none."""
+    try:
+        pack_ids = persona_registry.resolve_pack_ids(thaw(template) if template is not None else None,
+                                                     persona.get("persona_id", ""), Path(registry_dir),
+                                                     thaw(persona))
+    except ValueError:
+        raise PersonaRequestError("job template or persona knowledge_packs must be lists of registry ids") from None
     if not isinstance(pack_ids, (list, tuple)) or not all(isinstance(v, str) and _REG_RE.match(v) for v in pack_ids):
         raise PersonaRequestError("persona knowledge_packs must be a list of registry ids")
     return {pack_id: _load_record(Path(registry_dir), persona_registry.KNOWLEDGE_PACKS,

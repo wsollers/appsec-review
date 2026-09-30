@@ -112,9 +112,10 @@ File: `../personas/personas/example-project-reviewer/persona.json`
 }
 ```
 
-Every key is required and in this order. `best_used_in_lanes` may be `[]`; `knowledge_packs` lists at
-most two `pipeline/knowledge-packs/` ids (attacker and domain-specialist personas only, ADR-0034), else
-`[]`; `provenance` is `{}` for
+Every key is required and in this order. `best_used_in_lanes` may be `[]`; `knowledge_packs` is the
+persona's default `pipeline/knowledge-packs/` ids (attacker and domain-specialist personas only, at most
+the tunable `knowledge_packs_per_persona_max`, ADR-0034), normally `[]` because packs are assigned per job
+in the job template's `knowledge_packs` map; `provenance` is `{}` for
 a hand-authored persona (catalog-generated ones carry `catalog_personas.py`'s four keys). The
 folder's `prompt.md` is written by `python3 -B appsec-review-process/catalog_personas.py generate`. Persona categories are `attacker`, `defender`, `verifier`,
 `domain-specialist`, `evidence-ingestion`, `stakeholder-output`, `synthesis`, and
@@ -302,6 +303,14 @@ and stop rules. `inputs.required`/`optional` and `outputs.directory`/`files` fol
 conventions; the schema only constrains `inputs` and `outputs` to objects. Prompt section names
 are strings, not executable hooks. A record alone does not implement dispatch or output checks;
 the implementation plan describes the planned job handoff renderer and output validator.
+
+Optional `knowledge_packs` (ADR-0034 addendum 1) focuses the personas a template runs as: a map of
+persona id -> knowledge pack ids, for example `"knowledge_packs": {"opportunistic-public-web-attacker":
+["injection"]}`. A persona named in the map gets exactly those packs (`[]` removes its default); a
+persona not named falls back to its `persona.json` `knowledge_packs`. Name only personas the template
+runs as (composed persona, `persona_variants`, `stage_personas`) that are `attacker` or
+`domain-specialist`, and at most `knowledge_packs_per_persona_max` packs each;
+`python3 -B appsec-review-process/knowledge_packs.py check` enforces all of it.
 
 Checklist:
 

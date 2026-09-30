@@ -8,8 +8,11 @@ key. ``check`` validates, read-only:
 - every pack against its schema, its file name against its ``pack_id``, and its caps;
 - id formats: ``attack_reference.TECHNIQUE_ID`` / ``CAPEC_ID`` / ``CWE_ID``, and tactic shortnames
   against the resolved ATT&CK table when one resolves, else against ``CHAIN_STAGE_TACTICS``;
-- every persona's ``knowledge_packs`` names existing packs (at most two), and only ``attacker`` /
-  ``domain-specialist`` personas list any;
+- every persona's ``knowledge_packs`` default and every job template's ``knowledge_packs`` map
+  (persona id -> pack ids, ADR-0034 addendum 1) names existing packs, at most the shared tunable
+  ``knowledge_packs_per_persona_max`` per persona, and gives packs only to ``attacker`` /
+  ``domain-specialist`` personas; a template map may name only existing personas the template runs as
+  (its composed persona, ``persona_variants`` or ``stage_personas``);
 - when a MITRE snapshot resolves, every technique, CAPEC pattern and tactic is ``OK`` in it (and every
   CWE in the snapshot's CWE catalog when that resolves). With no snapshot the ids are format-checked
   only and the result says so; a missing snapshot is never a failure.
@@ -117,41 +120,85 @@ def _snapshot_errors(packs: dict[str, dict], reference: Any, cwe: Any) -> list[s
     return errors
 
 
-def _persona_errors(registry_dir: Path, known: set[str]) -> list[str]:
+def _pack_list_errors(label: str, packs: Any, category: Any, known: set[str], cap: int) -> list[str]:
+    """The rules one persona's packs obey, whichever source gives them (persona default or template map)."""
+    if not isinstance(packs, list) or not all(isinstance(item, str) for item in packs):
+        return [f"{label}: knowledge_packs is not a list of pack ids"]
     errors = []
+    if len(packs) > cap:
+        errors.append(f"{label}: lists more than {cap} knowledge packs")
+    if len(packs) != len(set(packs)):
+        errors.append(f"{label}: lists a knowledge pack twice")
+    for pack_id in packs:
+        if pack_id not in known:
+            errors.append(f"{label}: knowledge pack {pack_id!r} does not exist")
+    if packs and category not in persona_registry.PACK_CATEGORIES:
+        errors.append(f"{label}: only {' and '.join(persona_registry.PACK_CATEGORIES)} personas may list "
+                      f"knowledge packs (category {category!r})")
+    return errors
+
+
+def _persona_records(registry_dir: Path) -> tuple[dict[str, dict], list[str]]:
+    records, errors = {}, []
     for persona_id in persona_registry.record_ids(registry_dir, "personas"):
-        label = f"personas/{persona_id}"
         path = persona_registry.record_path(registry_dir, "personas", persona_id)[1]
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            errors.append(f"{label}: persona.json unreadable")
+            errors.append(f"personas/{persona_id}: persona.json unreadable")
             continue
+        records[persona_id] = record if isinstance(record, dict) else {}
+    return records, errors
+
+
+def _persona_errors(personas: dict[str, dict], known: set[str], cap: int) -> list[str]:
+    errors = []
+    for persona_id, record in sorted(personas.items()):
+        label = f"personas/{persona_id}"
         if "knowledge_packs" not in record:
             errors.append(f"{label}: has no knowledge_packs key")
             continue
-        packs = record["knowledge_packs"]
-        if not isinstance(packs, list) or not all(isinstance(item, str) for item in packs):
-            errors.append(f"{label}: knowledge_packs is not a list of pack ids")
+        errors += _pack_list_errors(label, record["knowledge_packs"], record.get("category"), known, cap)
+    return errors
+
+
+def _template_errors(registry_dir: Path, personas: dict[str, dict], known: set[str], cap: int) -> list[str]:
+    """Every job template's ``knowledge_packs`` map (ADR-0034 addendum 1): a map of existing persona
+    ids the template runs as, each to packs that obey the same rules as a persona default."""
+    errors = []
+    for path in sorted((registry_dir / registry_paths.JOB_TEMPLATES).glob("*.json")):
+        label = f"{registry_paths.JOB_TEMPLATES}/{path.name}"
+        try:
+            template = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            errors.append(f"{label}: unreadable or not JSON")
             continue
-        if len(packs) > persona_registry.PACKS_PER_PERSONA_MAX:
-            errors.append(f"{label}: lists more than {persona_registry.PACKS_PER_PERSONA_MAX} knowledge packs")
-        if len(packs) != len(set(packs)):
-            errors.append(f"{label}: lists a knowledge pack twice")
-        for pack_id in packs:
-            if pack_id not in known:
-                errors.append(f"{label}: knowledge pack {pack_id!r} does not exist")
-        if packs and record.get("category") not in persona_registry.PACK_CATEGORIES:
-            errors.append(f"{label}: only {' and '.join(persona_registry.PACK_CATEGORIES)} personas may list "
-                          f"knowledge packs (category {record.get('category')!r})")
+        if not isinstance(template, dict) or "knowledge_packs" not in template:
+            continue
+        value = template["knowledge_packs"]
+        if not isinstance(value, dict):
+            errors.append(f"{label}: knowledge_packs is not a map of persona id to pack ids")
+            continue
+        runs_as = persona_registry.template_persona_ids(template)
+        for persona_id, packs in value.items():
+            where = f"{label}: knowledge_packs[{persona_id!r}]"
+            if persona_id not in personas:
+                errors.append(f"{where}: persona does not exist")
+                continue
+            if persona_id not in runs_as:
+                errors.append(f"{where}: persona is not one the template runs as "
+                              "(composition persona, persona_variants or stage_personas)")
+            errors += _pack_list_errors(where, packs, personas[persona_id].get("category"), known, cap)
     return errors
 
 
 def check(registry_dir: Path = registry_paths.REGISTRY, *, reference: Any = _RESOLVE,
-          cwe: Any = _RESOLVE) -> tuple[list[str], list[str]]:
+          cwe: Any = _RESOLVE, cap: int | None = None) -> tuple[list[str], list[str]]:
     """(errors, notes). ``reference`` / ``cwe`` are the resolved ATT&CK/CAPEC table and CWE catalog
-    (``None`` for "no snapshot"); by default they are resolved from this host, never raising."""
+    (``None`` for "no snapshot"); by default they are resolved from this host, never raising. ``cap``
+    is the packs-per-persona limit, by default the tunable ``knowledge_packs_per_persona_max``."""
     registry_dir = Path(registry_dir)
+    cap = persona_registry.packs_per_persona_max() if cap is None else int(cap)
     store = SchemaStore()
     notes: list[str] = []
     if reference is _RESOLVE:
@@ -183,7 +230,11 @@ def check(registry_dir: Path = registry_paths.REGISTRY, *, reference: Any = _RES
         if record is not None:
             packs[pack_id] = record
     errors += _snapshot_errors(packs, reference, cwe)
-    errors += _persona_errors(registry_dir, set(pack_ids(registry_dir)))
+    known = set(pack_ids(registry_dir))
+    personas, problems = _persona_records(registry_dir)
+    errors += problems
+    errors += _persona_errors(personas, known, cap)
+    errors += _template_errors(registry_dir, personas, known, cap)
     return errors, notes
 
 
