@@ -137,7 +137,7 @@ def render() -> str:
             out.append(f"| `{name}` | {_fmt(e)} | {e.get('kind', '')} | {e.get('description', '')} | {e.get('scale', '')} |")
         return out
 
-    lines += [f"## Shared (`{registry_paths.TUNABLES_REL}`)", ""] + table(_shared()) + [""]
+    lines += [f"## Shared (`{registry_paths.repo_rel(registry_paths.TUNABLES_REL)}`)", ""] + table(_shared()) + [""]
     lines += ["## Per job", ""]
     for path in sorted(TEMPLATES.glob("*.json")):
         entries = json.loads(path.read_text(encoding="utf-8")).get("tunables")

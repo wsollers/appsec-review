@@ -1,8 +1,9 @@
 # ADR-0028: Job definitions in one `appsec-review-process/pipeline/` folder
 
-Status: **Proposed 2026-09-29** (brief K, branch `registry-move`). The move and `registry_paths.py`
-come from brief K and decision D-16. Two choices need the controller to confirm: `job-graph.json`
-moved too, and the fingerprint consequence described below.
+Status: **Accepted 2026-09-29** (brief K, branch `registry-move`; decision D-22 in
+`DECISION-LOG-2026-09-29.md`). The move and `registry_paths.py` come from brief K and decision D-16.
+The controller confirmed both open choices: `job-graph.json` moved too, and the fingerprint
+consequence described below.
 
 ## Context
 

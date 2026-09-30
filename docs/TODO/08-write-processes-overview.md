@@ -9,7 +9,7 @@ into short component docs and leave the README as a layout map.
   `environment.md`, `artifacts.md`, `budget-policy.md`.
 - `docs/dagster/run-data-and-job-execution.md`, `docs/adapters/worker-result-envelope.md`
   (do not duplicate; link).
-- `appsec-review-process/registry/README.md`, `docs/personas-and-registry/persona-catalog.md`.
+- `appsec-review-process/pipeline/README.md`, `docs/personas-and-registry/persona-catalog.md`.
 
 ## Steps
 1. `docs/processes/lifecycle.md`: run -> job -> attempt -> accepted; OK/FAILED/BLOCKED/SKIPPED/

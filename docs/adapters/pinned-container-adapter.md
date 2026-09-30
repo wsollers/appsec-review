@@ -332,7 +332,7 @@ prove after every test that no labelled container remains.
 ## Integration follow-ups
 
 1. **Implemented by B16 (2026-09-27):** `qualify_phase1.py contracts()` schema-checks
-   `pipeline/container-images/`; the folder remains part of the code identity hash.
+   `appsec-review-process/pipeline/container-images/`; the folder remains part of the code identity hash.
 2. **Implemented for the 19 current step-4 images by B16:** generate host-local `image-id` records
    at code-location startup. A later registry push may replace them with portable manifest digests.
 3. **Implemented as a standalone integration proof (2026-09-27):** `b13_harmless_container`
