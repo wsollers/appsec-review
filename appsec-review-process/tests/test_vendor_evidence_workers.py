@@ -243,3 +243,51 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ToolFailureReportingTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb: checkov (ran, output path), hadolint (exit 1, wrong input) and
+    kube-linter (could not start) were all reported BLOCKED / image-unavailable."""
+
+    def test_failed_tool_keeps_its_status_and_cause(self):
+        import vendor_evidence_workers as workers
+        header = {"run_id": "r", "job_id": "02-iac-config-scan", "attempt_id": "a",
+                  "source_snapshot_sha256": "sha256:" + "0" * 64}
+        tools = ["hadolint", "kube-linter"]
+        candidates = {"hadolint": ["dockerfiles/case-021/Dockerfile"], "kube-linter": ["k.yaml"]}
+        _, results, coverage, _, _ = workers._aggregate(
+            header, tools, candidates, {}, can_skip=True,
+            failures={"hadolint": ("FAILED", "CONTAINER_EXIT_NONZERO")})
+        by_tool = {i["tool_id"]: i for i in results["tool_instances"]}
+        self.assertEqual((by_tool["hadolint"]["terminal_status"], by_tool["hadolint"]["cause_code"]),
+                         ("FAILED", "tool-error"))
+        self.assertIsNone(by_tool["hadolint"]["exit"]["exit_code"])
+        self.assertEqual(by_tool["kube-linter"]["terminal_status"], "BLOCKED")   # never reported: not run
+        gap_ids = [g["gap_id"] for g in coverage["gaps"]]
+        self.assertIn("gap-hadolint-failed-container-exit-nonzero", gap_ids)
+        self.assertIn("gap-kube-linter-blocked", gap_ids)
+
+
+class HadolintInputTests(unittest.TestCase):
+    def test_hadolint_lints_every_dockerfile_in_the_checkout(self):
+        import tempfile
+        import vendor_evidence_b13 as b13
+        with tempfile.TemporaryDirectory() as root:
+            for rel in ("dockerfiles/case-021/Dockerfile", "svc/api.Dockerfile", "node_modules/x/Dockerfile",
+                        "README.md"):
+                path = Path(root, rel); path.parent.mkdir(parents=True, exist_ok=True); path.write_text("FROM x\n")
+            argv = b13.argv_for("hadolint", Path(root))
+            self.assertEqual(argv[-2:], ["/workspace/dockerfiles/case-021/Dockerfile", "/workspace/svc/api.Dockerfile"])
+            self.assertNotIn("/workspace/Dockerfile", argv)
+            self.assertEqual(b13.argv_for("checkov", Path(root))[-1], "--soft-fail")
+            with tempfile.TemporaryDirectory() as empty:
+                with self.assertRaises(b13.VendorToolBlocked):
+                    b13.argv_for("hadolint", Path(empty))
+
+
+class CheckovFileLevelSpanTests(unittest.TestCase):
+    def test_file_level_check_with_line_zero_cites_line_one(self):
+        doc = [{"check_type": "github_actions", "results": {"failed_checks": [
+            {"check_id": "CKV2_GHA_1", "file_path": "/.github/workflows/ci.yml", "file_line_range": [0, 1]}]}}]
+        self.assertEqual(b13.normalize("checkov", json.dumps(doc).encode()),
+                         [{"rule_id": "CKV2_GHA_1", "path": ".github/workflows/ci.yml", "start_line": 1, "end_line": 1}])

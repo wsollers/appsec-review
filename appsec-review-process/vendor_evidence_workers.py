@@ -213,14 +213,25 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
                                        "ruleset_sha256": "sha256:" + evidence_redaction.RULESET_SHA256}
                                       if output else None)},
             "argv": auth["argv"] if auth else [tool, "--offline", "/inputs"],
-            "exit": {"exit_code": auth["exit_code"] if auth else (0 if started else None), "exit_meaning": meaning, "timed_out": False,
+            "exit": {"exit_code": auth["exit_code"] if auth else (0 if started and status != "FAILED" else None),
+                     "exit_meaning": meaning, "timed_out": False,
                      "nonzero_exit_on_findings": False, "findings_exit_codes": []},
             "outputs": outputs, "result_record_count": records if output else None,
             "execution_receipt": auth["execution_receipt"] if auth else None}
 
 
+def _cause_slug(cause: Any) -> str:
+    return re.sub(r"[^0-9a-z]+", "-", str(cause or "").lower()).strip("-")[:40] or "unknown"
+
+
 def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
-               successful: dict[str, dict], *, can_skip: bool) -> tuple[str, dict, dict, dict | None, dict]:
+               successful: dict[str, dict], *, can_skip: bool,
+               failures: dict[str, tuple[str, Any]] | None = None) -> tuple[str, dict, dict, dict | None, dict]:
+    """``failures`` maps a tool the collector ran (or tried to) to its (FAILED|BLOCKED, cause). Before,
+    every tool without a result was reported BLOCKED / image-unavailable, which hid that checkov had run
+    (output path), hadolint had failed (wrong input) and kube-linter could not start (permissions):
+    run 20261001T032047Z-fd64eb."""
+    failures = failures or {}
     instances, coverage_tools, gaps, probe_tools, raw = [], [], [], [], {}
     any_candidates = any(candidates[t] for t in tools)
     for tool in tools:
@@ -229,6 +240,8 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
             status = "SKIPPED"
         elif tool in successful:
             status = "OK"
+        elif tool in failures and failures[tool][0] in ("FAILED", "BLOCKED"):
+            status = failures[tool][0]
         else:
             status = "BLOCKED"
         output = None
@@ -246,9 +259,11 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                                "candidate_input_count": len(paths), "analyzed_input_count": len(paths) if status == "OK" else 0,
                                "not_analyzed_input_count": len(unanalyzed), "unsupported_input_count": 0,
                                "not_analyzed_inputs": unanalyzed, "unsupported_inputs": [], "input_lists_truncated": False})
-        if status == "BLOCKED":
-            gaps += [{"gap_id": f"gap-{tool}-blocked", "kind": "tool-instance-blocked", "tool_id": tool,
-                      "affected_input_count": None},
+        if status in ("BLOCKED", "FAILED"):
+            cause = failures.get(tool, (status, None))[1]
+            suffix = "-" + _cause_slug(cause) if cause else ""
+            gaps += [{"gap_id": f"gap-{tool}-{status.lower()}{suffix}"[:96], "kind": shapes.INSTANCE_GAP_KIND[status],
+                      "tool_id": tool, "affected_input_count": None},
                      {"gap_id": f"gap-{tool}-inputs", "kind": "inputs-not-analyzed", "tool_id": tool,
                       "affected_input_count": len(paths)}]
         elif status == "OK" and not paths:
@@ -347,8 +362,10 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
         successful["binskim"]["count"] = len(candidates["binskim"])
     if "oci-archive-inventory" in successful:
         successful["oci-archive-inventory"]["count"] = len(candidates["oci-archive-inventory"])
+    failures = {tool: (result.get("status"), result.get("cause")) for tool, result in vendor_results.items()
+                if tool in tools and result.get("status") in ("FAILED", "BLOCKED")}
     status, tool_results, coverage, probe_doc, raw_files = _aggregate(
-        header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory")
+        header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory", failures=failures)
     for value in successful.values():
         if "receipt_data" in value: raw_files[value["receipt_path"]]=value["receipt_data"]
 

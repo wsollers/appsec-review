@@ -51,8 +51,12 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go
     && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
 
 # --- tfsec + kube-linter (STILL FLOATING — pin before a real engagement) ----
-RUN go install github.com/aquasecurity/tfsec/cmd/tfsec@latest \
-    && go install golang.stackrox.io/kube-linter/cmd/kube-linter@latest
+# Installed to /usr/local/bin: B13 runs tools as uid 1000, which cannot enter /root (run
+# 20261001T032047Z-fd64eb: kube-linter CONTAINER_START_FAILED, "stat /root/go/bin/kube-linter:
+# permission denied").
+RUN GOBIN=/usr/local/bin go install github.com/aquasecurity/tfsec/cmd/tfsec@latest \
+    && GOBIN=/usr/local/bin go install golang.stackrox.io/kube-linter/cmd/kube-linter@latest \
+    && chmod 0755 /usr/local/bin/tfsec /usr/local/bin/kube-linter
 
 # --- Terraform (HashiCorp apt repo) -----------------------------------------
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \

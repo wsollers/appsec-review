@@ -414,3 +414,40 @@ class DependencyWorkersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OsvCoverageTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb: osv-scanner exited 127 with no PyPI/Maven database (accepted as a
+    coverage gap), yet every component was listed as evaluated by OSV and no gap was recorded."""
+
+    STDERR = ("Scanned /inputs/sbom/sbom.cdx.json as CycloneDX SBOM and found 16 packages\n"
+              "could not find local databases for ecosystems: Maven, PyPI, github:actions, github:dtolnay\n")
+
+    def test_missing_ecosystems_are_parsed(self):
+        import dependency_workers as workers
+        self.assertEqual(workers.osv_missing_ecosystems(self.STDERR),
+                         ["Maven", "PyPI", "github:actions", "github:dtolnay"])
+        self.assertEqual(workers.osv_missing_ecosystems("Scanned 3 packages\n"), [])
+
+    def test_only_components_with_a_database_count_as_osv_evaluated(self):
+        import dependency_workers as workers
+        missing = workers.osv_missing_ecosystems(self.STDERR)
+        self.assertFalse(workers.osv_covers("pkg:pypi/pyyaml@5.3.1", missing))
+        self.assertFalse(workers.osv_covers("pkg:maven/commons-collections/commons-collections@3.2.1", missing))
+        self.assertFalse(workers.osv_covers("pkg:github/actions/checkout@v4", missing))
+        self.assertTrue(workers.osv_covers("pkg:npm/lodash@4.17.15", missing))
+        self.assertFalse(workers.osv_covers("pkg:unknowntype/x@1", []))
+
+
+class ManifestCoverageTests(unittest.TestCase):
+    def test_manifests_without_components_are_gaps_per_ecosystem(self):
+        import dependency_workers as workers
+        paths = ["projects/javascript/case-031/package.json", "projects/python/case-078/requirements.txt",
+                 "projects/rust/case-033/Cargo.toml", "projects/dotnet/case-035/app.csproj",
+                 "projects/cpp/case-045/third_party/x/package.json", "README.md"]
+        components = [{"source": {"path": "projects/python/case-078/requirements.txt"}}]
+        gaps = workers.uninventoried_manifests(paths, components)
+        self.assertEqual([g.split(":")[1].strip() for g in gaps], ["cargo", "npm", "nuget"])
+        self.assertIn("projects/javascript/case-031/package.json", gaps[1])
+        self.assertNotIn("third_party", " ".join(gaps))
+        self.assertEqual(workers.uninventoried_manifests({}, []), [])

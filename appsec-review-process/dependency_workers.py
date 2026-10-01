@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -446,6 +447,40 @@ def _build_index_rows(request: dict[str, Any], attempt_id: str,
     return rows, evidence_bytes, gaps
 
 
+# Dependency manifests by file name (or suffix) -> ecosystem. Syft's directory scan reads lockfiles and
+# build outputs, not bare manifests, so a manifest without a lockfile yields no component.
+_MANIFEST_NAMES = {"package.json": "npm", "Cargo.toml": "cargo", "go.mod": "golang", "pom.xml": "maven",
+                   "build.gradle": "maven", "build.gradle.kts": "maven", "packages.config": "nuget",
+                   "requirements.txt": "pypi", "pyproject.toml": "pypi", "Pipfile": "pypi",
+                   "composer.json": "composer", "Gemfile": "gem"}
+_MANIFEST_SUFFIXES = {".csproj": "nuget", ".fsproj": "nuget", ".vbproj": "nuget"}
+_VENDORED_PARTS = {"node_modules", "vendor", "third_party", "third-party", "external", ".git"}
+
+
+def uninventoried_manifests(paths: Any, components: list[dict[str, Any]]) -> list[str]:
+    """One gap per ecosystem whose dependency manifests contributed no SBOM component from their
+    directory. Run 20261001T032047Z-fd64eb: the SBOM held only PyPI, Maven and GitHub Actions
+    components with no gap, although npm, Cargo, Go and NuGet manifests declare dependencies (lodash
+    4.17.15, minimist 0.0.8, ...); every dependency case was then missed silently."""
+    covered = {posixpath.dirname(str((row.get("source") or {}).get("path", ""))) for row in components}
+    missing: dict[str, list[str]] = {}
+    for path in sorted(paths or []):
+        name = posixpath.basename(path)
+        ecosystem = _MANIFEST_NAMES.get(name) or next(
+            (eco for suffix, eco in _MANIFEST_SUFFIXES.items() if name.endswith(suffix)), None)
+        if ecosystem is None or _VENDORED_PARTS & set(path.split("/")[:-1]):
+            continue
+        if posixpath.dirname(path) not in covered:
+            missing.setdefault(ecosystem, []).append(path)
+    gaps = []
+    for ecosystem, found in sorted(missing.items()):
+        shown = ", ".join(found[:5]) + (f", ... ({len(found)} total)" if len(found) > 5 else "")
+        gaps.append(f"SBOM_MANIFEST_NOT_INVENTORIED: {ecosystem}: {shown}; no component came from these "
+                    "manifests (Syft's directory scan reads lockfiles, not bare manifests), so their "
+                    "dependencies are not matched against advisories")
+    return gaps
+
+
 def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
     job = JOBS["sbom"][0]; base = _base(request, job)
     tool, receipt, output = _tool(request, job, "syft")
@@ -493,7 +528,8 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     errors = validate_document(result, "sbom-inventory.schema.json")
     errors += build_index_enrichment_errors(result, enrichment_bytes)
     if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors; first: {'; '.join(str(e)[:200] for e in errors[:3])})")
-    gaps = enrichment_gaps or ([] if components else ["no-dependency-components-detected"])
+    gaps = (enrichment_gaps or ([] if components else ["no-dependency-components-detected"])) + \
+        uninventoried_manifests(request.get("source_files"), components)
     return {"outputs/sbom.cdx.json": cdx_bytes, "outputs/sbom-manifest.json": _canonical(result),
             _BUILD_INDEX_ENRICHMENT: enrichment_bytes,
             "outputs/pinned-tool-evidence.json": _canonical(receipt)}, gaps
@@ -576,6 +612,39 @@ def _sca_rows(tool: dict[str, Any], component_by_id: dict[str, dict[str, Any]], 
     return rows
 
 
+# purl type -> OSV ecosystem name, as osv-scanner prints them in "could not find local databases".
+_OSV_ECOSYSTEM_FOR_PURL = {"npm": "npm", "pypi": "PyPI", "maven": "Maven", "cargo": "crates.io",
+                           "golang": "Go", "nuget": "NuGet", "gem": "RubyGems", "composer": "Packagist",
+                           "pub": "Pub", "hex": "Hex", "swift": "SwiftURL"}
+_OSV_MISSING_RE = re.compile(r"could not find local databases for ecosystems:\s*(.+)")
+
+
+def osv_missing_ecosystems(stderr_text: str) -> list[str]:
+    """Ecosystems osv-scanner had no local database for (exit 127, accepted by
+    ``dependency_b13_adapters.osv_exit_accepted`` as a coverage gap)."""
+    found: set[str] = set()
+    for match in _OSV_MISSING_RE.finditer(stderr_text or ""):
+        found.update(item.strip() for item in match.group(1).split(",") if item.strip())
+    return sorted(found)
+
+
+def osv_ecosystem(purl: Any) -> str | None:
+    if not isinstance(purl, str) or not purl.startswith("pkg:"):
+        return None
+    kind, _, rest = purl[4:].partition("/")
+    if kind == "github":
+        return "github:" + rest.split("/", 1)[0].lower()
+    return _OSV_ECOSYSTEM_FOR_PURL.get(kind.lower())
+
+
+def osv_covers(purl: Any, missing: list[str]) -> bool:
+    """Whether OSV actually evaluated this component: its ecosystem is known and had a database.
+    Run 20261001T032047Z-fd64eb listed pyyaml 5.3.1 and commons-collections 3.2.1 as evaluated by OSV
+    while OSV had no PyPI or Maven database (snapshot osv-npm-20260926)."""
+    ecosystem = osv_ecosystem(purl)
+    return ecosystem is not None and ecosystem.lower() not in {item.lower() for item in missing}
+
+
 def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
     job = JOBS["sca"][0]; base = _base(request, job)
     sbom, binding, _ = _upstream(request, "sbom", JOBS["sbom"][0], JOBS["sbom"][2])
@@ -611,10 +680,15 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
         if "osv_b13_attempt" not in request:
             raise WorkerBlocked(f"{job}: applicable OSV scan requires verified offline execution evidence")
         supplemental = _tool(request, job, "osv", "osv_")
+        osv_stderr = Path(request["osv_b13_attempt"]["attempt_root"]) / "logs" / "container" / "stderr.log"
+        osv_missing = osv_missing_ecosystems(
+            osv_stderr.read_text(encoding="utf-8", errors="replace") if osv_stderr.is_file() else "")
     else:
         if "osv_b13_attempt" in request:
             raise WorkerBlocked(f"{job}: non-applicable OSV scan must not carry execution evidence")
         supplemental = None
+    if not osv_executes:
+        osv_missing = []
     gaps, evaluated = [], []
     for component in sbom["components"]:
         reason = required_gap_reason(component)
@@ -622,7 +696,8 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
             gaps.append({"gap_id": "VG-" + component["component_id"][3:], "assertion": "match-coverage-gap",
                          "component_ref": component["component_id"], "ecosystem": component["ecosystem"], "reason": reason})
         else:
-            evaluated_by = ["grype-db"] + (["osv"] if osv_executes and component.get("purl") else [])
+            evaluated_by = ["grype-db"] + (["osv"] if osv_executes and component.get("purl")
+                                           and osv_covers(component["purl"], osv_missing) else [])
             evaluated.append({"component_ref": component["component_id"], "outcome": "no-advisory-matched",
                               "version_scheme": version_scheme_for(component), "evaluated_by": evaluated_by})
     raw_matches = _sca_rows(tool, by_id, "grype", job)
@@ -693,7 +768,9 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
             "outputs/osv-applicability-receipt.json": _canonical(applicability_doc),
             "outputs/pinned-tool-evidence.json": _canonical(receipt)},
             (["SCA_COMPONENT_GAPS"] if gaps else []) +
-            (["OSV_SKIPPED_NA_NO_PURL_COMPONENTS"] if not osv_executes else []))
+            (["OSV_SKIPPED_NA_NO_PURL_COMPONENTS"] if not osv_executes else []) +
+            (["OSV_ECOSYSTEM_DATABASES_MISSING: " + ", ".join(osv_missing) +
+              "; components in these ecosystems were matched by grype-db only"] if osv_missing else []))
 
 
 def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:

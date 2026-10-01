@@ -9,6 +9,7 @@ from __future__ import annotations
 import tunables
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import threading
 import hashlib
@@ -32,14 +33,18 @@ SPECS = {
     "gitleaks": ToolSpec("tool-gitleaks", ("/opt/tool/bin/gitleaks", "dir", "/workspace", "--no-banner",
                                              "--report-format", "json", "--report-path", "/scratch/gitleaks.json",
                                              "--redact", "--exit-code", "0"), "gitleaks.json"),
+    # JSON on stdout: with --output-file-path the pinned checkov printed its results to stdout and left
+    # no results_json.json (run 20261001T032047Z-fd64eb: 646 KB of results discarded, tool BLOCKED).
     "checkov": ToolSpec("tool-checkov", ("/opt/tool/bin/checkov", "-d", "/workspace", "-o", "json",
-                                           "--output-file-path", "/scratch/checkov.json", "--skip-download", "--soft-fail"), "checkov.json/results_json.json"),
+                                           "--skip-download", "--soft-fail"), "stdout.log", True),
     "trivy-config": ToolSpec("tool-trivy", ("/opt/tool/bin/trivy", "config", "--skip-check-update", "--skip-version-check", "--format", "json",
                                                  "--output", "/scratch/trivy-config.json", "/workspace"), "trivy-config.json"),
-    "tfsec": ToolSpec("audit-iac", ("/root/go/bin/tfsec", "--soft-fail", "--format", "json", "--out", "/scratch/tfsec.json",
+    "tfsec": ToolSpec("audit-iac", ("/usr/local/bin/tfsec", "--soft-fail", "--format", "json", "--out", "/scratch/tfsec.json",
                                       "/workspace"), "tfsec.json"),
-    "kube-linter": ToolSpec("audit-iac", ("/root/go/bin/kube-linter", "lint", "--format", "json", "/workspace"),
+    "kube-linter": ToolSpec("audit-iac", ("/usr/local/bin/kube-linter", "lint", "--format", "json", "/workspace"),
                             "stdout.log", True),
+    # The trailing path is replaced by every Dockerfile in the checkout (``_dockerfiles``); a fixed
+    # /workspace/Dockerfile failed on repositories without a root Dockerfile (run 20261001T032047Z-fd64eb).
     "hadolint": ToolSpec("tool-hadolint", ("/opt/tool/bin/hadolint", "--no-fail", "--format", "json", "/workspace/Dockerfile"),
                          "stdout.log", True),
     "oci-archive-inventory": ToolSpec("tool-syft", ("/opt/tool/bin/syft", "scan", "file:/workspace/image.tar",
@@ -66,8 +71,8 @@ class VendorToolFailed(RuntimeError): pass
 
 VERSION_ARGV={
  "gitleaks":["/opt/tool/bin/gitleaks","version"],"checkov":["/opt/tool/bin/checkov","--version"],
- "trivy-config":["/opt/tool/bin/trivy","--version"],"tfsec":["/root/go/bin/tfsec","--version"],
- "kube-linter":["/root/go/bin/kube-linter","version"],"hadolint":["/opt/tool/bin/hadolint","--version"],
+ "trivy-config":["/opt/tool/bin/trivy","--version"],"tfsec":["/usr/local/bin/tfsec","--version"],
+ "kube-linter":["/usr/local/bin/kube-linter","version"],"hadolint":["/opt/tool/bin/hadolint","--version"],
  "oci-archive-inventory":["/opt/tool/bin/syft","version"],
  "image-package-and-config-inspection":["/opt/tool/bin/syft","version"],
  "binskim":["/usr/bin/checksec","--version"],"mobsfscan-android":["/opt/tool/bin/mobsfscan","--version"],
@@ -144,8 +149,10 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
                     raise VendorToolFailed("checkov-shape-invalid")
                 span = item.get("file_line_range")
                 if (not isinstance(span, list) or len(span) != 2 or
-                        not all(isinstance(line, int) and not isinstance(line, bool) and line >= 1 for line in span)):
+                        not all(isinstance(line, int) and not isinstance(line, bool) and line >= 0 for line in span)):
                     raise VendorToolFailed("checkov-shape-invalid")
+                # File-level checks (e.g. CKV2_GHA_1 on a workflow) report [0, n]: cite line 1.
+                span = [max(1, span[0]), max(1, span[1])]
                 if not isinstance(item.get("check_id"), str) or not item["check_id"]:
                     raise VendorToolFailed("checkov-shape-invalid")
                 records.append({"rule_id": item["check_id"], "path": _path(str(item.get("file_path")).lstrip("/")),
@@ -247,6 +254,35 @@ def _runtime(source_sha: str, clock: Callable[[], str]) -> ce.ContainerRuntime:
                                registry_ceiling=[], clock=clock, cancel=threading.Event())
 
 
+MAX_HADOLINT_FILES = 500
+_SKIP_DIRS = {".git", "node_modules"}
+
+
+def _dockerfiles(source_root: Path) -> list[str]:
+    """Checkout-relative Dockerfiles (``Dockerfile``, ``Dockerfile.*``, ``*.Dockerfile``), sorted."""
+    root = Path(source_root)
+    found = []
+    for current, dirs, names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS)
+        for name in names:
+            lower = name.lower()
+            if lower == "dockerfile" or lower.startswith("dockerfile.") or lower.endswith(".dockerfile"):
+                path = Path(current, name)
+                if path.is_file() and not path.is_symlink():
+                    found.append(path.relative_to(root).as_posix())
+    return sorted(found)[:MAX_HADOLINT_FILES]
+
+
+def argv_for(tool_id: str, source_root: Path) -> list[str]:
+    argv = list(SPECS[tool_id].argv)
+    if tool_id == "hadolint":
+        files = _dockerfiles(source_root)
+        if not files:
+            raise VendorToolBlocked("required-input-missing")
+        argv = argv[:-1] + ["/workspace/" + path for path in files]
+    return argv
+
+
 def request(tool_id: str, *, run_id: str, job_id: str, attempt_id: str, source_root: Path,
             scratch_name: str, source_sha: str, now: str) -> dict[str, Any]:
     spec = SPECS[tool_id]
@@ -260,7 +296,7 @@ def request(tool_id: str, *, run_id: str, job_id: str, attempt_id: str, source_r
     decision = pc.evaluate(requirement, [], context)
     pc.require_granted(decision, requirement=requirement, grants=[], context=context)
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": job_id, "attempt_id": attempt_id,
-            "image": {"image_id": image["image_id"], "digest": image["digest"]}, "argv": list(spec.argv),
+            "image": {"image_id": image["image_id"], "digest": image["digest"]}, "argv": argv_for(tool_id, source_root),
             "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
                             {"name": "NO_COLOR", "value": "1"}],
             "target_mounts": [{"host_path": str(source_root.resolve()), "container_path": "/workspace"}],
