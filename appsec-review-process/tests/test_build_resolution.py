@@ -160,6 +160,30 @@ class BuildResolutionTests(unittest.TestCase):
             finally:
                 worker.catalog_root = old
 
+    def test_relaunch_with_a_changed_dockerfile_gets_a_new_catalog_entry(self):
+        # 20261001T032047Z-fd64eb: the relaunch rendered a no-apt Dockerfile for a unit whose first
+        # attempt had catalogued the old one under the same id; _publish_catalog refused to replace it.
+        base = {"digest": "sha256:" + "a" * 64, "build_reference": "audit-buildenv-go:local"}
+        inputs = {"run_id": "run-1", "source_revision": "5c5a776" + "0" * 33,
+                  "plan": {"sha256": "c" * 64}, "base_images": {"audit-buildenv-go": base}}
+        plan = {"image": {"base": "audit-buildenv-go", "apt_packages": []}}
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(worker, "catalog_root", return_value=Path(folder)):
+            ids = []
+            for dockerfile in ("FROM x\nRUN apt-get update\n", "FROM x\n"):
+                attempt = Path(folder, "units", "001-r1"); attempt.mkdir(parents=True, exist_ok=True)
+                image_id, fingerprint = worker._cow_spec("run-1", "abc", 1, base, [], base["digest"],
+                                                         dockerfile, attempt.name)
+                record = worker._cow_record(image_id, base["digest"], dockerfile, fingerprint, attempt)
+                worker._publish_catalog(image_id, record, fingerprint, dockerfile, inputs, plan, attempt, packages=[])
+                worker._publish_catalog(image_id, record, fingerprint, dockerfile, inputs, plan, attempt, packages=[])
+                ids.append(image_id)
+            self.assertNotEqual(ids[0], ids[1])
+            # The same id with a different record is still refused: entries stay immutable.
+            record = worker._cow_record(ids[1], "sha256:" + "d" * 64, "FROM x\n", fingerprint, attempt)
+            with self.assertRaises(state.Blocked):
+                worker._publish_catalog(ids[1], record, fingerprint, "FROM x\n", inputs, plan, attempt, packages=[])
+
     def test_control_is_outside_accepted_intake_inputs(self):
         path = worker.control_path("run-1")
         self.assertEqual(path.relative_to(state.run_path("run-1")).as_posix(),
