@@ -148,6 +148,7 @@ from execution_state import atomic_json, data_path, digest, event, now, Blocked,
 from nvd_feed import sync as sync_nvd
 from osv_feed import sync as sync_osv, feed_root as osv_feed_root
 from mitre_feed import sync as sync_mitre
+from cve_bin_tool_db import build as build_cve_bin_tool_db
 import tunables
 
 
@@ -284,12 +285,26 @@ def mitre_sync_work(context):
     return result["snapshot_id"]
 
 
-# One job, three independent ops: in-process execution continues past a failed step that nothing
+@op(pool=resource_pools.derive_pool('pinned_container', (), memory_heavy=False))
+def cve_bin_tool_db_work(context, nvd_snapshot_id: str):
+    """Derive cve-bin-tool's offline database from the NVD snapshot just published (no download).
+
+    Runs the pinned tool-cve-bin-tool image with --network none over the verified NVD layers; an
+    unchanged NVD snapshot, image and builder is a no-op. 02-binary-component-cve-match BLOCKS until a
+    database built from the NVD snapshot it is bound to exists.
+    """
+    pointer = build_cve_bin_tool_db()
+    context.add_output_metadata({"snapshot_id": pointer["snapshot_id"], "nvd_snapshot_id": nvd_snapshot_id})
+    return pointer["snapshot_id"]
+
+
+# One job, three independent feeds: in-process execution continues past a failed step that nothing
 # depends on, so an NVD, OSV or MITRE outage does not stop the others (the run still ends failed).
+# The cve-bin-tool database is derived from the NVD snapshot, so it runs after the NVD op.
 @job(tags={"nvd_feed_id": "nvd", "osv_feed_id": "osv", "mitre_feed_id": "mitre"}, executor_def=in_process_executor,
      op_retry_policy=RetryPolicy(max_retries=0))
 def nvd_reference_sync():
-    nvd_sync_work()
+    cve_bin_tool_db_work(nvd_sync_work())
     osv_sync_work()
     mitre_sync_work()
 

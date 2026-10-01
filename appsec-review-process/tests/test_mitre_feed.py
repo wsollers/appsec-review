@@ -419,7 +419,7 @@ class MitreDagsterTests(unittest.TestCase):
     def test_job_has_three_independent_ops_and_the_op_publishes(self):
         import dagster
         job = self.definitions.nvd_reference_sync
-        self.assertEqual({n.name for n in job.nodes}, {"nvd_sync_work", "osv_sync_work", "mitre_sync_work"})
+        self.assertEqual({n.name for n in job.nodes}, {"nvd_sync_work", "osv_sync_work", "mitre_sync_work", "cve_bin_tool_db_work"})
         self.assertEqual(job.tags["mitre_feed_id"], "mitre")
         self.assertEqual(sum(1 for _ in job.graph.dependency_structure.input_to_upstream_outputs_for_node("mitre_sync_work")), 0)
         payloads = {"enterprise-attack": attack_bundle(), "capec": OSError("down")}

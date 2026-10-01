@@ -33,6 +33,7 @@ scan jobs themselves (deterministic Python, no persona, configuration passed in)
 | `tool-trivy` | trivy 0.74.0 | 02-iac-config-scan | sigstore-checksums | - |
 | `tool-zizmor` | zizmor 1.30.1 | 02-iac-config-scan (GitHub Actions, D-34) | pip lock, 1 wheel(s) (PyPI sha256) | - |
 | `tool-blint` | blint 3.4.0 | 02-binary-hardening (with checksec) | pip lock, 40 wheels (PyPI sha256) | LIEF 1.0.0 (blint's parser) |
+| `tool-cve-bin-tool` | cve-bin-tool 3.4 (GPL-3.0-or-later, allowed 2026-10-01) | 02-binary-component-cve-match; its database is built by `cve_bin_tool_db.py` from the NVD snapshot | pip lock, 54 wheels (PyPI sha256); `pip_exclude: [gsutil]` | - |
 
 Bases (pinned by index digest): Docker Official Image `ubuntu:24.04` for the static binaries,
 `python:3.12-slim-bookworm` for the pip tools, `php:8.4-cli-bookworm` for the PHP tools,
@@ -77,6 +78,11 @@ signature writes nothing.
 | `vendor-spdx` | Microsoft SBOM Tool | the exact asset's sha256 in Microsoft's accompanying SPDX release manifest |
 | `pgp` | spotbugs, Find Security Bugs, phpstan, psalm, phpcs | detached `.asc` by the pinned key fingerprint (key committed in `keys/`) |
 | pip lock | semgrep, checkov, mobsfscan | `uv pip compile --generate-hashes` for Python 3.12 / glibc 2.36; `pip download --require-hashes` fetches the exact wheels; each wheel's sha256 is matched to PyPI's JSON and declared as a checksummed download |
+
+`pip_exclude` (tool.json, optional): a dependency the tool only runs as an external command on a path the
+pipeline never takes is dropped from the resolution with a uv override whose marker never matches, and
+recorded in `pin-record.json` (`pip_lock.excluded`). Only `tool-cve-bin-tool` uses it: its online OSV
+download shells out to `gsutil`, which ships no wheel; the scan disables that data source.
 
 Trust notes: the PGP keys and gosec's cosign key were taken on first use (keyserver.ubuntu.com, the
 gosec repository) and are now pinned; a key rotation is a deliberate change. A sigstore signature proves

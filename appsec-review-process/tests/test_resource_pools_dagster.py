@@ -226,6 +226,7 @@ class Assignments(unittest.TestCase):
                           ("nvd_reference_sync", "nvd_sync_work"): rp.NETWORK,
                           ("nvd_reference_sync", "osv_sync_work"): rp.NETWORK,
                           ("nvd_reference_sync", "mitre_sync_work"): rp.NETWORK,
+                          ("nvd_reference_sync", "cve_bin_tool_db_work"): rp.DOCKER,
                           ("engagement_workflow", "scope_check"): rp.CPU,
                           ("engagement_workflow", "workflow_intake"): rp.CPU,
                           ("phase1_intake", "intake_work"): rp.CPU,
