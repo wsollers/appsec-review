@@ -20,4 +20,4 @@ ADR-0013; they remain in git history at `2e98423a`.
 
 | Prompt | What it covers |
 |---|---|
-| [2026-09-28-run-to-report.md](2026-09-28-run-to-report.md) | **Start here.** Run `full_review` on hello-autotools, appsec-multi-vuln, freeciv21 and DOOM-3-BFG through to a report, fixing breakage as found. |
+| [2026-10-01-live-run-debugging.md](2026-10-01-live-run-debugging.md) | **Start here.** Live `full_review` debugging loop: run on zarathustra/hal5000, paste output, fix, push to `main`, re-launch; four targets through to a report, currently `appsec-multi-vuln`. |

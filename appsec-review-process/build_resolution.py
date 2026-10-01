@@ -450,6 +450,19 @@ def _publish_catalog(image_id: str, record: dict[str, Any], fingerprint: str, do
         atomic_json(catalog_path, catalog); atomic_json(container_path, record)
 
 
+def _cow_spec(run_id: str, unit_key: str, round_no: int, base_info: dict[str, Any], packages: list[str],
+              image: str, dockerfile: str, attempt_name: str) -> tuple[str, str]:
+    """Catalog identity of a copy-on-write build image. It covers every field of the record
+    _publish_catalog compares: an entry is immutable, so a re-launch that renders a different
+    Dockerfile (f436cbc dropped the apt step for no-package units) or numbers the unit differently
+    needs a new id, not the old one (20261001T032047Z-fd64eb: "refusing to replace")."""
+    fingerprint = "sha256:" + digest({"renderer": RENDERER_VERSION, "base": base_info, "packages": packages,
+                                      "run_id": run_id, "unit": unit_key, "round": round_no, "image": image,
+                                      "dockerfile_sha256": "sha256:" + digest(dockerfile),
+                                      "attempt": attempt_name})
+    return "image_build_" + fingerprint.split(":", 1)[1][:12], fingerprint
+
+
 def _cow_record(image_id: str, image: str, dockerfile: str, fingerprint: str, unit_attempt: Path) -> dict[str, Any]:
     record = {
         "schema": "appsec-review/container-image/1.0", "image_id": image_id,
@@ -530,9 +543,8 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
         packages = sorted(installs["packages"])
         dockerfile = _render({"image": {"apt_packages": [{"name": p} for p in packages]}},
                              base_info["build_reference"], control["apt_mirror"])
-        fingerprint = "sha256:" + digest({"renderer": RENDERER_VERSION, "base": base_info, "packages": packages,
-                                          "run_id": run_id, "unit": unit_key, "round": round_no, "image": image})
-        image_id = "image_build_" + fingerprint.split(":", 1)[1][:12]
+        image_id, fingerprint = _cow_spec(run_id, unit_key, round_no, base_info, packages, image,
+                                          dockerfile, unit_attempt.name)
         record = _cow_record(image_id, image, dockerfile, fingerprint, unit_attempt)
         registry = unit_attempt / "image-registry"; registry.mkdir()
         atomic_json(registry / f"{image_id}.json", record)
