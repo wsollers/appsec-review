@@ -21,3 +21,4 @@ ADR-0013; they remain in git history at `2e98423a`.
 | Prompt | What it covers |
 |---|---|
 | [2026-10-01-live-run-debugging.md](2026-10-01-live-run-debugging.md) | **Start here.** Live `full_review` debugging loop: run on zarathustra/hal5000, paste output, fix, push to `main`, re-launch; four targets through to a report, currently `appsec-multi-vuln`. |
+| [2026-10-01-blint-cve-bin-tool-host-qualification.md](2026-10-01-blint-cve-bin-tool-host-qualification.md) | Build `tool-blint`/`tool-cve-bin-tool`, publish the NVD-derived cve-bin-tool database, and qualify `02-binary-hardening` 1.1 and `02-binary-component-cve-match` inside B13 on a host. |

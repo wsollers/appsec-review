@@ -1395,6 +1395,23 @@ def binary_hardening_lifecycle_work(context, configured, _native_build):
     return result
 
 
+@op(pool=OFFLINE_DOCKER_POOL)
+def binary_component_cve_match_lifecycle_work(context, configured, _native_build):
+    """cve-bin-tool over the accepted native-build binaries, against the database derived from the
+    run's NVD snapshot (docs/proposals/vendor-prepass/blint-cve-bin-tool.md section 3b)."""
+    import binary_component_cve_match
+    result = binary_component_cve_match.execute(
+        run_id=configured['engagement_run_id'], dagster_run_id=context.run_id)
+    base = data_path(configured['engagement_run_id'], 'jobs', '02-binary-component-cve-match', 'whole')
+    attempt = base / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(base)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id'],
+        'input_kind': 'accepted-native-build-binaries'})
+    return result
+
+
 @op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
 def mobile_sast_work(context, configured):
     return run_vendor_evidence_job(context, configured, '02-mobile-sast')
@@ -1721,7 +1738,7 @@ LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
                                  '01-component-characterization','02-full-review-input-assembly','03-threat-model-dfd-stride','03-threat-model-reconciliation','04-asvs-masvs','10-synthesis-report',
-                                 '02-binary-hardening',
+                                 '02-binary-hardening','02-binary-component-cve-match',
                                  '02-ir-capture','02-ir-link','02-ir-facts',
                                  '02-code-property-graph',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
@@ -1747,6 +1764,7 @@ LIFECYCLE_OPS['03-threat-model-reconciliation']=threat_model_reconciliation_work
 LIFECYCLE_OPS['04-asvs-masvs']=owasp_join_lifecycle_work
 LIFECYCLE_OPS['10-synthesis-report']=synthesis_report_work
 LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
+LIFECYCLE_OPS['02-binary-component-cve-match']=binary_component_cve_match_lifecycle_work
 LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
 LIFECYCLE_OPS['02-ir-link']=ir_link_work
 LIFECYCLE_OPS['02-ir-facts']=ir_facts_work

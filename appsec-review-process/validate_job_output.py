@@ -43,6 +43,13 @@ SECRET_PATTERNS = (
 SECRET_FIELD_RE = re.compile(r"(?i)(?:^|[_-])(api[_-]?key|access[_-]?token|password|secret)(?:$|[_-])")
 HIGH_ENTROPY_VALUE_RE = re.compile(r"^[A-Za-z0-9._~+/=-]{16,}$")
 CLAIM_CLASS_POLICIES = {
+    "binary-component-cve-match": {
+        "claim_class_id": "binary_component_cve_lead",
+        "allowed_assertions": {
+            "embedded-component-detected", "embedded-component-cve-range-match",
+            "database-snapshot-identity", "scan-coverage-gap",
+        },
+    },
     "ossf-scorecard-results": {
         "claim_class_id": "supply_chain_posture_evidence",
         "allowed_assertions": {

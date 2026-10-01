@@ -427,6 +427,7 @@
           "02-license-scan",
           "02-dependency-lifecycle",
           "02-binary-hardening",
+          "02-binary-component-cve-match",
           "02-mobile-sast",
           "persona-tool-pool-dispatch",
           "deterministic-pool-merge",
@@ -1464,6 +1465,7 @@
           "02-license-scan",
           "02-dependency-lifecycle",
           "02-binary-hardening",
+          "02-binary-component-cve-match",
           "02-mobile-sast",
           "02-code-index"
         ]
@@ -5885,6 +5887,73 @@
       },
       "gaps": [],
       "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
+    },
+    {
+      "id": "02-binary-component-cve-match",
+      "design_refs": [
+        "docs/proposals/vendor-prepass/blint-cve-bin-tool.md#3b-scan-node-02-binary-component-cve-match-implemented",
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above"
+      ],
+      "graph": {
+        "node": "02-binary-component-cve-match",
+        "implemented": true,
+        "dependencies": [
+          "02-native-build"
+        ]
+      },
+      "registry": {
+        "template": "02-binary-component-cve-match",
+        "persona": "evidence-custodian",
+        "role": "vendor-static-evidence-curator",
+        "domain": "vendor-static-evidence",
+        "tooling_profile": "pinned-vendor-static-evidence",
+        "output_contract": "binary-component-cve-match"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/binary_component_cve_match.py:execute",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "binary-component-cve-match",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/binary-component-cve-match.json",
+        "schema_file": "schemas/binary-component-cve-match.schema.json",
+        "claim_class": "binary_component_cve_lead"
+      },
+      "permissions": [
+        "read-run-data",
+        "read-offline-snapshots",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_binary_component_cve_match.py",
+          "appsec-review-process/tests/test_cve_bin_tool_db.py",
+          "appsec-review-process/tests/fixtures/cve-bin-tool-real/README.md"
+        ]
+      },
+      "gaps": [
+        "Not yet run inside the B13 boundary on a host: tool-cve-bin-tool must be built and its database published by nvd_reference_sync."
+      ],
+      "next_prerequisite": "Build tool-cve-bin-tool, let nvd_reference_sync publish the database, and run full_review on appsec-multi-vuln (case-030 vendors zlib 1.2.11)."
     },
     {
       "id": "02-mobile-sast",

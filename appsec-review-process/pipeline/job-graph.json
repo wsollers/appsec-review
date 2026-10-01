@@ -369,6 +369,14 @@
           ]
         },
         {
+          "job": "02-binary-component-cve-match",
+          "kind": "required",
+          "contract": "binary-component-cve-match",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
           "job": "02-mobile-sast",
           "kind": "required",
           "contract": "mobile-sast",
@@ -2211,6 +2219,32 @@
         "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"
+      ]
+    },
+    "02-binary-component-cve-match": {
+      "lane": "02-evidence-pregather",
+      "contract": "binary-component-cve-match",
+      "template": "02-binary-component-cve-match",
+      "implemented": true,
+      "namespace": "02-binary-component-cve-match",
+      "dependencies": [
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Known-vulnerable components embedded in the immutable binary projection of the accepted 02-native-build attempt: pinned cve-bin-tool 3.4, offline, against the database cve_bin_tool_db.py derives from the run's NVD snapshot (no second download). Matches are vendor/product/version-range leads, never findings or reachability; NVD is the only source loaded.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "permission.json",
+        "lineage.json",
+        "outputs/binary-component-cve-match.json",
+        "outputs/database-identity.json",
+        "outputs/tool-evidence.json",
+        "outputs/redaction-receipt.json"
       ]
     },
     "02-mobile-sast": {

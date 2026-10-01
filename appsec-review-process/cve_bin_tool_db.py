@@ -100,10 +100,9 @@ def pinned_tool() -> dict[str, str]:
 
 
 def builder_sha256() -> str:
-    """One hash over every file the builder mount exposes, so a builder edit is a new identity."""
-    listing = [(path.relative_to(BUILDER_DIR).as_posix(), _sha_file(path))
-               for path in sorted(BUILDER_DIR.rglob("*")) if path.is_file() and "__pycache__" not in path.parts]
-    return hashlib.sha256(_canonical(listing)).hexdigest()
+    """The builder script's hash: editing it is a new database identity. The scan launcher in the same
+    folder (scan.py) does not shape the database, so editing it does not force a rebuild."""
+    return _sha_file(BUILDER_DIR / "build_db.py")
 
 
 def replay_layers(root: Path, identity: dict) -> list[tuple[Path, str, int]]:
@@ -256,7 +255,7 @@ def resolve_db(root: Path, *, nvd_identity: dict, tool: dict[str, str], now: dat
     if now - stamp >= VERSION_MAP_REFRESH:
         raise DbUnavailable("DB_VERSION_MAP_EXPIRED",
                             "the sqlite checker would try to reach sqlite.org (its map is 30 days old); rebuild the database")
-    return {**manifest, "directory": str(directory)}
+    return {**manifest, "manifest_sha256": pointer["manifest_sha256"], "directory": str(directory)}
 
 
 def main(argv: list[str] | None = None) -> int:
