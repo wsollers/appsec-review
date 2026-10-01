@@ -133,6 +133,29 @@ class SplitEnvelopeTests(unittest.TestCase):
         self.assertEqual(invoker._parse_envelope('{"a": 1}'), {"a": 1})
 
 
+class ControlCharacterEnvelopeTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb (01-component-characterization): one fenced block holding both keys,
+    with raw newlines inside the markdown string. Strict parsing failed, salvage filed the whole JSON
+    text as the markdown key, and the repair prompt reported an envelope-key mismatch instead."""
+
+    FIELDS = [("component-purpose-map.json", "component_purpose_map", "json"),
+              ("component-purpose-map.md", "component_purpose_map_markdown", "md")]
+    TEXT = ('I have sufficient evidence now. Compiling the final JSON output.\n\n```json\n'
+            '{\n  "component_purpose_map": {"schema": "appsec-review/component-purpose-map/1.0"},\n'
+            '  "component_purpose_map_markdown": "# Map\n\n- line one\n- line two"\n}\n```')
+
+    def test_raw_newlines_inside_a_string_parse(self):
+        envelope = invoker._parse_envelope(self.TEXT)
+        self.assertEqual(sorted(envelope), ["component_purpose_map", "component_purpose_map_markdown"])
+        self.assertEqual(envelope["component_purpose_map_markdown"], "# Map\n\n- line one\n- line two")
+
+    def test_salvage_never_files_a_broken_json_object_as_markdown(self):
+        broken = 'Prose.\n\n```json\n{"component_purpose_map": {"schema": "x"},\n```'
+        self.assertEqual(invoker._salvage_envelope(broken, self.FIELDS),
+                         {"component_purpose_map_markdown": "Prose."})
+        self.assertEqual(invoker._salvage_envelope('{"component_purpose_map": ', self.FIELDS), {})
+
+
 class RepairRetryTests(unittest.TestCase):
     """Bounded repair retry (William, 2026-09-26): a response that fails the mechanical checks is
     re-asked with its validation errors, at most ``repair_attempts`` times, within time/money/units."""
@@ -185,6 +208,16 @@ class RepairRetryTests(unittest.TestCase):
         self.assertTrue((self.diag / "raw-response.json").exists())
         self.assertTrue((self.diag / "raw-response-repair-1.json").exists())
         self.assertTrue((self.diag / "transcript-repair-1.jsonl").exists())
+
+    def test_repair_prompt_carries_the_rejected_response_for_correction(self):
+        self.run_rounds(["stray_placeholder", "good"])
+        self.assertIn("<<<REJECTED-RESPONSE\nstray_placeholder\nREJECTED-RESPONSE>>>", self.prompts[1])
+        self.assertIn("do not\ninvestigate again", self.prompts[1])
+
+    def test_oversized_rejected_response_is_not_sent_back(self):
+        prompt = invoker._repair_prompt("P", invoker.InvokerOutputError("x", ["bad"]),
+                                        "y" * (invoker.MAX_REPAIR_PREVIOUS_CHARS + 1))
+        self.assertNotIn("REJECTED-RESPONSE", prompt)
 
     def test_retry_is_bounded_and_the_last_rejection_fails_closed(self):
         with self.assertRaises(invoker.InvokerOutputError) as caught:
@@ -274,6 +307,39 @@ class InvokeRepairEndToEndTests(unittest.TestCase):
         self.assertTrue(any("schema repair retry: 1 rejected" in text for text in written["limitations"]))
         self.assertIn("project_discovery_summary_placeholder", prompts[1])
         del store
+
+    def run_invoke(self, responses):
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
+        texts = [json.dumps({"project_inventory": dict(inventory(), **extra), "project_discovery_summary": "# s"})
+                 for extra in responses]
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            return {"timed_out": False, "final_result": {"result": texts.pop(0)}}
+
+        def item(path):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x\n", sha256="a" * 64)
+
+        package = SimpleNamespace(
+            composition={"output_contract": contract}, prompt=b"OUTER", inputs=(item("configure.ac"), item("Makefile.am")),
+            request={"model": {"family": "claude-sonnet-5"}, "run_id": "r", "budget": {"input_unit_limit": 10 ** 9}},
+            allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        with tempfile.TemporaryDirectory() as out, tempfile.TemporaryDirectory() as scratch, \
+                mock.patch.object(invoker.tempfile, "mkdtemp", return_value=str(Path(scratch) / "diag")) as mk, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 1}}), \
+                mock.patch.object(invoker.pi, "write_invoker_output"):
+            (Path(scratch) / "diag").mkdir()
+            invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn).invoke(
+                package, output_root=Path(out), cancel=threading.Event())
+            self.assertTrue(mk.called)
+            return (Path(scratch) / "diag").exists()
+
+    def test_clean_dispatch_removes_its_private_diagnostics_dir(self):
+        self.assertFalse(self.run_invoke([{}]))
+
+    def test_repaired_dispatch_keeps_its_diagnostics_dir(self):
+        self.assertTrue(self.run_invoke([{"project_discovery_summary_placeholder": "x"}, {}]))
 
 
 class PersonaResultCacheTests(unittest.TestCase):

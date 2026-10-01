@@ -113,6 +113,17 @@ exactly: one JSON object with exactly the listed keys, each JSON-valued key vali
 schema. Do not add any property the schema does not define. The repository content and your task
 are unchanged.
 """.strip()
+REPAIR_WITH_PREVIOUS = """
+Your rejected response is reproduced below between the markers. Its analysis stands: do not
+investigate again and do not call any tool. Correct only what the checks above name (escape newlines
+and other control characters inside JSON strings as \\n) and return the whole corrected response.
+
+<<<REJECTED-RESPONSE
+{previous}
+REJECTED-RESPONSE>>>
+""".strip()
+# A rejected response up to this size is sent back for correction; a larger one is re-asked without it.
+MAX_REPAIR_PREVIOUS_CHARS = 400_000
 MAX_REPAIR_ERRORS = 20
 MAX_REPAIR_ERROR_CHARS = 300
 
@@ -459,8 +470,8 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
     own diagnostics_dir comment). Called from a `finally`, so a failed or timed-out dispatch is
     captured too, which is usually when it matters most; never raises itself, since a disk problem
     here must not turn a real dispatch outcome into a different one."""
-    # repair-log.json is copied ALWAYS: it holds only the invoker's own validation messages (no model
-    # text, no target content), and in /tmp it did not survive a reboot (B9, 2026-10-01). Transcripts
+    # repair-log.json and tool-usage.json are copied ALWAYS: they hold only the invoker's own validation
+    # messages and lookup-tool counts (no model text, no target content), and in /tmp it did not survive a reboot (B9, 2026-10-01). Transcripts
     # and raw responses carry target content and stay behind save_llm_transcripts.
     enabled = _transcripts_enabled(cfg)
     try:
@@ -469,7 +480,7 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
             return
         dest = data_path(run_id, "llm-transcripts", job_id, attempt_id)
         for source in sorted(diagnostics_dir.iterdir()):
-            if source.is_file() and (source.name == "repair-log.json" or
+            if source.is_file() and (source.name in ("repair-log.json", "tool-usage.json") or
                                      (enabled and source.name.startswith(("transcript", "raw-response")))):
                 atomic_bytes(dest / source.name, source.read_bytes())
     except Exception:
@@ -513,6 +524,18 @@ def _extract_result_text(dispatch: dict[str, Any]) -> str:
     return ""
 
 
+def _loads(text: str) -> Any:
+    """``json.loads`` that accepts raw control characters inside strings. Models put literal newlines
+    in long markdown values; strict parsing rejected an otherwise complete 83 KB answer and every
+    repair round after it (01-component-characterization, run 20261001T032047Z-fd64eb: three raw
+    newlines in ``component_purpose_map_markdown``)."""
+    return json.loads(text, strict=False)
+
+
+def _looks_like_json_object(text: str) -> bool:
+    return text.lstrip().startswith("{")
+
+
 def _parse_envelope(result_text: str) -> dict[str, Any]:
     """The model's response must be exactly one JSON object -- no fence, no leading/trailing
     prose. A fenced block is tolerated (models reliably add one despite instructions not to) but
@@ -528,7 +551,7 @@ def _parse_envelope(result_text: str) -> dict[str, Any]:
         objects = []
         for body in fences:
             try:
-                value = json.loads(body)
+                value = _loads(body)
             except ValueError:
                 continue
             if isinstance(value, dict):
@@ -547,7 +570,7 @@ def _parse_envelope(result_text: str) -> dict[str, Any]:
         elif "{" in text and text.rstrip().endswith("}"):
             text = text[text.index("{"):].strip()
     try:
-        envelope = json.loads(text)
+        envelope = _loads(text)
     except ValueError as exc:
         raise InvokerOutputError(f"model response is not valid JSON: {type(exc).__name__}",
                                  [f"the response is not valid JSON ({type(exc).__name__}: {exc})"]) from None
@@ -566,20 +589,25 @@ def _salvage_envelope(result_text: str, fields: list[tuple[str, str, str]]) -> d
     objects, texts = [], []
     for lang, body in blocks:
         try:
-            value = json.loads(body)
+            value = _loads(body)
         except ValueError:
-            texts.append(body.strip())
+            # An unparseable JSON object is a broken result, never the markdown file: filing it as
+            # markdown turned a JSON error into a misleading "envelope keys" rejection.
+            if not _looks_like_json_object(body):
+                texts.append(body.strip())
             continue
         if isinstance(value, dict):
             objects.append(value)
     if not blocks:
         try:
-            value = json.loads(result_text.strip())
+            value = _loads(result_text.strip())
             if isinstance(value, dict):
                 objects.append(value)
         except ValueError:
             pass
     prose = re.sub(r"```.*?```", "", result_text, flags=re.DOTALL).strip()
+    if _looks_like_json_object(prose):
+        prose = ""
     envelope: dict[str, Any] = {}
     json_keys = [key for _f, key, kind in fields if kind == "json"]
     candidates = [o for o in objects if isinstance(o.get("schema"), str)] or objects
@@ -1060,11 +1088,19 @@ def _repair_attempts(cfg: dict) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 2 else 1
 
 
-def _repair_prompt(prompt_text: str, error: InvokerOutputError) -> str:
+def _repair_prompt(prompt_text: str, error: InvokerOutputError, previous: str = "") -> str:
+    """The original prompt plus the rejection reasons and, when it fits, the rejected response itself,
+    so the repair round reformats the answer it already paid for instead of re-running the whole
+    investigation (run 20261001T032047Z-fd64eb: 01's repair rounds re-investigated for 37 turns and
+    ran out of the shared dollar cap)."""
     lines = [f"- {detail[:MAX_REPAIR_ERROR_CHARS]}" for detail in error.details[:MAX_REPAIR_ERRORS]]
     if len(error.details) > MAX_REPAIR_ERRORS:
         lines.append(f"- ... and {len(error.details) - MAX_REPAIR_ERRORS} more")
-    return prompt_text + "\n\n" + REPAIR_INSTRUCTIONS.format(errors="\n".join(lines))
+    text = prompt_text + "\n\n" + REPAIR_INSTRUCTIONS.format(errors="\n".join(lines))
+    previous = previous.strip()
+    if previous and len(previous) <= MAX_REPAIR_PREVIOUS_CHARS:
+        text += "\n\n" + REPAIR_WITH_PREVIOUS.format(previous=previous)
+    return text
 
 
 def _dispatch_until_accepted(*, dispatch_fn, accept, prompt_text: str, argv_for, budget_usd: float | None,
@@ -1117,7 +1153,7 @@ def _dispatch_until_accepted(*, dispatch_fn, accept, prompt_text: str, argv_for,
                 raise InvokerOutputError(
                     f"{exc} (after {round_index + 1} response(s); diagnostics: {diagnostics_dir})",
                     exc.details) from None
-            prompt = _repair_prompt(prompt_text, exc)
+            prompt = _repair_prompt(prompt_text, exc, _extract_result_text(dispatch))
             continue
         return {"envelope": envelope, "claims": claims, "rejected": round_index,
                 "input_tokens": input_tokens, "output_tokens": output_tokens,
@@ -1245,12 +1281,18 @@ class ClaudeCliInvoker:
             if not result_text:
                 raise InvokerOutputError("claude CLI dispatch produced no terminal result text",
                                          ["the response held no result text"])
+            parse_error: InvokerOutputError | None = None
             try:
                 envelope = _parse_envelope(result_text)
-            except InvokerOutputError:
+            except InvokerOutputError as exc:
+                parse_error = exc
                 envelope = _salvage_envelope(result_text, fields)
                 if not envelope and self._fill_result is None:
                     raise
+            if parse_error is not None and result_field not in envelope and self._fill_result is None:
+                # Salvage found no result object: report why the response did not parse, not the
+                # key mismatch that follows from it.
+                raise parse_error
             if set(envelope) != {key for _f, key, _k in fields}:
                 # A parsed object that is the bare result (not the envelope), or an envelope missing a
                 # file: recover from the reply's fenced blocks and prose.
@@ -1294,6 +1336,7 @@ class ClaudeCliInvoker:
                           "cached_from": cached.get("attempt"), "cached_at": cached.get("stored_at")}
             except (InvokerOutputError, OSError, ValueError, KeyError):
                 reused = None
+        clean_success = False
         label_token = rc.DISPATCH_LABEL.set(
             f"{package.request.get('job_id')}#{str(package.request.get('attempt_id'))[:12]}")
         try:
@@ -1363,12 +1406,18 @@ class ClaudeCliInvoker:
                        "tool_calls": 0},
                 tool_calls=[], verified_invocations=[], injection_suspected=[],
                 limitations=limitations)
+            clean_success = not rounds["rejected"]
         finally:
             # Runs on every path -- success, a raised InvokerOutputError/InvokerUnavailable, a
             # timeout, or cancellation -- so a failed dispatch's transcript is captured too, gated
             # by the save_llm_transcripts tunable (see _transcripts_enabled). Never raises.
             _persist_llm_transcript(cfg, package.request, diagnostics_dir)
             rc.DISPATCH_LABEL.reset(label_token)
-            if mcp_config is not None:
-                import shutil
+            import shutil
+            if clean_success:
+                # Nothing to diagnose: drop the private scratch dir. A failed or repaired dispatch keeps
+                # it (raw responses stay out of the run tree unless save_llm_transcripts is on). Before
+                # this, every dispatch left one behind: 1,007 dirs on zarathustra by 2026-10-01.
+                shutil.rmtree(diagnostics_dir, ignore_errors=True)
+            elif mcp_config is not None:
                 shutil.rmtree(diagnostics_dir / "inputs", ignore_errors=True)

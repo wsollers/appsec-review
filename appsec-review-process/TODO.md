@@ -561,9 +561,18 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 
 - [x] Dispatch progress lines name the job and attempt; `repair-log.json` always kept under the run.
 - [x] Envelope split across fenced blocks is merged (it was read as missing its result object).
-- [ ] Repair rounds re-investigate: component characterization's repair spent 21.4K output tokens thinking and
-      returned 295 chars, then the next hit the $2 cap. Make a repair cheaper: give it the rejected answer and ask
-      for only the corrected envelope (no tools), or lower effort for repair rounds.
+- [x] Envelope with raw control characters (newlines) inside a JSON string is parsed (`strict=False`); salvage
+      never files an unparseable JSON object as the markdown key, and the real parse error reaches the repair
+      prompt. This, not a split envelope, was 01's failure in `20261001T032047Z-fd64eb`: its round 0 was one
+      fenced block and validates against `component-purpose-map.schema.json` once parsed.
+- [x] Repair rounds re-investigate: component characterization's repair spent 21.4K output tokens thinking and
+      returned 295 chars, then the next hit the $2 cap. A repair round now carries the rejected answer (up to
+      400K chars) and asks for the corrected response only, no new investigation and no tools.
+- [ ] Repair rounds share the call's dollar cap (`budget - spent`): $0.69 was left for 01's last round after a
+      $1.00 round 0. Decide whether repair rounds get their own small cap, or lower effort.
+- [x] The invoker's private `/tmp/claude-cli-invoker-*` dir is removed after a clean dispatch (1,007 had built up
+      on zarathustra); a failed or repaired dispatch keeps it. `tool-usage.json` is copied under the run with
+      `repair-log.json`.
 - [ ] Very large envelopes (83 KB here) are near the CLI's per-message output limit; consider
       CLAUDE_CODE_MAX_OUTPUT_TOKENS for the child, or splitting big maps into a file the model writes.
 - [ ] Decide whether `save_llm_transcripts` stays off by default (transcripts carry target content).
@@ -661,6 +670,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` | 01-component-characterization | FAILED after 3 rounds ($2.22). Round 0 (83 KB, one fenced block, both keys) had 3 raw newlines inside the markdown string: strict `json.loads` failed, `_salvage_envelope` filed the whole JSON text as `component_purpose_map_markdown`, so the repair prompt said "envelope keys do not match". Repair 1 returned a 295-char stub; repair 2 re-investigated (37 turns) and hit the remaining $0.69 cap. 26 downstream steps did not run. 0fb0f60 (split-envelope merge) does not handle this response. 02-devops-project-discovery lost round 0 ($0.54) the same way | Invoker parses with `strict=False`, salvage never treats JSON as markdown, the parse error is reported, repair rounds get the rejected answer and are told not to re-investigate (`claude_cli_invoker.py`, tests `ControlCharacterEnvelopeTests`, repair-prompt tests) |
 | 2026-09-30 | (unit tests) | - | tests.test_resource_pools | `test_op_factories_use_only_these_module_globals` failed on main since `2dab892` (Lane 14 S4): "'exc': attack_chain_lifecycle_op uses a name the module never defines". The op code is correct; the test's name analysis did not count `except ... as exc` (an `ExceptHandler.name` str, not an `ast.Name` Store) as a binding. That false positive also masked that the exact-globals pin compared the whole factory dict, so every factory added since (13) failed it | Test only: `ExceptHandler.name` counts as local; the exact-globals pin applies to the factories other code lifts out of the file (`branch_op`, `blocked_op`, `_control_op`), while every factory must still use only names the module defines |
 | 2026-09-29 | (image build, WSL) | - | image_build audit-native | Wine layer: apt could not resolve `wine32:i386` because `liboss4-salsa-asound2` (temurin-21-jdk's `libasound2` provider) conflicts with `libasound2t64:i386`; audit-binary-analysis built OK | `4c375bc`: audit-native installs `libasound2t64` for amd64 and i386 in the Wine step (`WINE_EXTRA_PACKAGES`), apt replaces the shim; the step checks `java -version`. Reproduced and verified on ubuntu:24.04 in the cloud workspace |
 | 2026-09-28 | appsec-multi-vuln | be3585 | (new) 07-hypothesis-discovery | Nothing read target code to propose vulnerabilities: the ledger held STRIDE templates, OWASP routes and tool leads only, so e.g. `eval(argv[2])` at `projects/javascript/case-010/index.js:2` (no tool lead) could never be reviewed; the red-team prompts were never loaded | Branch `ws-hunt` (ADR-0018): hunter persona pool (general + known-list red team, prompts renamed to `task-hypothesis-hunt-*.md`) over component shards with the P1/P2 lead menu; persona schema + `hypothesis_hunt_derive`; checkout-resolved `hypothesis-discovery.json`; ledger fourth source (`hunter:` claims; hypotheses on a P1/P2 lead line corroborate that claim). be3585 Python replay: strcpy + PHP include corroborate leads, eval = 1 hunter claim, hallucinated file = gap, 151 claims. OPEN: first live run (cost <= 3 x 2 USD default); specialist hunter personas not in the registry yet; different-class hypothesis on a lead line still attaches to the lead |
