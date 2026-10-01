@@ -51,7 +51,7 @@ import sys
 import tempfile
 import urllib.request
 import uuid
-from typing import Any
+from typing import Any, Iterable
 
 ROOT = Path(__file__).resolve().parent
 SCHEMA = "appsec-review/image-build/1"
@@ -634,6 +634,26 @@ def _read_state(image_id: str) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return state if isinstance(state, dict) else None
+
+
+def drifted_images(image_ids: Iterable[str] | None = None) -> list[str]:
+    """Images built (or loaded) on this host whose sources changed since: the recorded fingerprint no
+    longer matches this checkout's. An image never built here is not reported (the registry reports it
+    unavailable). Run 20261001T032047Z-fd64eb ran the relaunched CodeQL lanes on an audit-codeql
+    built before its lane script changed: Go exited 2 on a usage error."""
+    builds = load_builds()
+    drifted = []
+    for image_id in (image_ids if image_ids is not None else sorted(builds)):
+        state = _read_state(image_id)
+        if not state or image_id not in builds:
+            continue
+        try:
+            current = fingerprint(effective(builds[image_id]))[0]
+        except Exception:   # noqa: BLE001 - cannot fingerprint: treat as drifted, never as current
+            current = None
+        if current != state.get("fingerprint"):
+            drifted.append(image_id)
+    return drifted
 
 
 def _clone_heads(build: dict[str, Any]) -> dict[str, str]:

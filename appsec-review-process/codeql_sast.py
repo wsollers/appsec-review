@@ -20,8 +20,8 @@ uses) is replayed under CodeQL's tracer in the pinned ``audit-codeql-native`` im
 ``codeql-cpp-traced`` (only compiler invocations run; no target build script does), and the lane
 also runs the ``queries/appsec-graph-cpp`` call-graph tables (raw CSV kept in the attempt, hashed
 in the receipt). ``--build-mode none`` always runs for cpp as well; without native units the gap
-``language not built`` is recorded. Go (no build-mode none, no Go build step) and Rust (no pinned
-suite) record a gap and no database. A compiled language that cannot be built is never a failure.
+``language not built`` is recorded. Go runs ``autobuild`` (d06d505; module downloads per D-29 when
+``CODEQL_NETWORK`` is unrestricted). Rust (no pinned suite) records a gap and no database. A compiled language that cannot be built is never a failure.
 
 Databases (ADR-0023 decision 3): a completed lane keeps its finalized database; the worker moves
 it into ``<run>/data/codeql-databases/<job>/<attempt>/<key>/`` (outside the attempt) and publishes
@@ -888,7 +888,11 @@ def run(run_id: str, dagster_id: str, language: str, force: bool = False, *,
                f"- Explicit coverage gaps: {len(result['coverage_gaps'])}.\n"), encoding="utf-8")
         status = {"process": job, "status": result["status"], "run_id": run_id, "dagster_run_id": dagster_id,
                   "attempt_id": allocation["attempt_id"], "tools_run": len(result["tools"]),
-                  "leads": len(result["leads"]), "databases": len(result["databases"]), "network": "none",
+                  # containers_run counts every lane container started (tools_run only those with results),
+                  # and network is what the requests asked for (it was hardcoded "none" before D-29).
+                  "containers_run": len(outcomes),
+                  "leads": len(result["leads"]), "databases": len(result["databases"]),
+                  "network": "unrestricted-build" if CODEQL_NETWORK == "unrestricted" else "none",
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         permission, lineage = _producer_receipts(inputs)

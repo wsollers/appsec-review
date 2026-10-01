@@ -170,6 +170,16 @@ class Hosts(unittest.TestCase):
         (self.checkouts["puller"] / "tool-one" / "Dockerfile").write_text("FROM base-one:local\nRUN true\n")
         self.assertEqual(self.pull_all(), ["PULLED", "STALE"])
 
+    def test_changed_sources_are_reported_as_drifted(self):
+        with self.on("publisher"):
+            self.fake_build("base-one")
+            self.fake_build("tool-one")
+            self.assertEqual(image_build.drifted_images(["base-one", "tool-one", "never-built"]), [])
+            scripts = self.checkouts["publisher"] / "tool-one" / "scripts"
+            scripts.mkdir()
+            (scripts / "lane.sh").write_text("#!/bin/sh\n")   # a COPY'd script changed, Dockerfile not
+            self.assertEqual(image_build.drifted_images(), ["tool-one"])
+
     def test_rebuilt_base_makes_the_dependent_stale_until_republished(self):
         self.publish_all()
         with self.on("publisher"):

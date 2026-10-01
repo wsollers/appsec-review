@@ -34,3 +34,28 @@ class WaitTimeoutExit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaleImageGuard(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb: the relaunch ran CodeQL Go on an audit-codeql built before its lane
+    script changed (usage error, exit 2). A new launch now refuses drifted image builds."""
+
+    def test_drifted_image_blocks_a_new_launch(self):
+        with mock.patch.object(launch_job, "drifted_images", return_value=["audit-codeql"]), \
+                mock.patch.dict(launch_job.os.environ, {}, clear=False):
+            launch_job.os.environ.pop("APPSEC_ALLOW_STALE_IMAGES", None)
+            with self.assertRaisesRegex(launch_job.Blocked, "audit-codeql.*prepare-host"):
+                launch_job.check_images("full_review")
+
+    def test_intake_and_explicit_override_are_not_checked(self):
+        with mock.patch.object(launch_job, "drifted_images", return_value=["audit-codeql"]):
+            launch_job.check_images("phase1_intake")
+            with mock.patch.dict(launch_job.os.environ, {"APPSEC_ALLOW_STALE_IMAGES": "1"}):
+                launch_job.check_images("full_review")
+
+    def test_current_images_pass(self):
+        with mock.patch.object(launch_job, "drifted_images", return_value=[]):
+            launch_job.check_images("full_review")
+
+    def test_real_registry_lookup_runs(self):
+        self.assertIsInstance(launch_job.drifted_images(), list)

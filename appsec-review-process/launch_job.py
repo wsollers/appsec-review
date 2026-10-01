@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -59,6 +60,28 @@ CONTROL_JOBS = {
 FINAL_PUBLICATION_JOBS = {'final_publication_gate':'final_publication_gate_work'}
 ASSEMBLY_JOBS = {'full_review_input_assembly': 'full_review_input_assembly_standalone_work'}
 FACTS_FILE_JOBS = {'owasp_join_report': 'owasp_join_report_standalone_work'}
+
+
+def drifted_images():
+    """Image builds on this host whose sources changed since they were built (images/image_build.py)."""
+    images = ROOT.parent/'images'
+    if str(images) not in sys.path:
+        sys.path.insert(0, str(images))
+    import image_build
+    import registry_records
+    return image_build.drifted_images(registry_records.STEP4_IMAGE_IDS)
+
+
+def check_images(job):
+    """A new launch must not run tools from an image built before its Dockerfile or scripts changed
+    (run 20261001T032047Z-fd64eb: the relaunch ran CodeQL Go on a stale audit-codeql, exit 2).
+    APPSEC_ALLOW_STALE_IMAGES=1 overrides, for a deliberate comparison run."""
+    if job == 'phase1_intake' or os.environ.get('APPSEC_ALLOW_STALE_IMAGES') == '1':
+        return
+    drifted = drifted_images()
+    if drifted:
+        raise Blocked('images built from older sources: ' + ', '.join(drifted) +
+                      '; run orchestrator/prepare-host.sh (it rebuilds them), or set APPSEC_ALLOW_STALE_IMAGES=1')
 
 
 def graphql(query, variables):
@@ -178,6 +201,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                     record.get('lifecycle_config', record.get('transform_config')) != lifecycle_config):
                 raise Blocked('launch request configuration cannot change; use a new launch ID')
         else:
+            check_images(job)
             record = {'run_id':run_id,'launch_id':request_id,'job':job,'force':force,'status':'PREPARED',
                       'created_at':now(),'resume_argv':resume}
             if bounded or dependency or vendor or control or final_publication or (assembly and lifecycle_config) or facts_file:
