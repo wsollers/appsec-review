@@ -114,10 +114,9 @@ schema. Do not add any property the schema does not define. The repository conte
 are unchanged.
 """.strip()
 REPAIR_WITH_PREVIOUS = """
-Your rejected response is reproduced below between the markers. Keep its analysis: do not redo work
-the checks above do not mention. Look up only what they name (for example a missing decision's claim,
-obligations and citations), correct exactly that (escape newlines and other control characters inside
-JSON strings as \\n), and return the whole corrected response.
+Your rejected response is reproduced below between the markers. Its analysis stands: do not
+investigate again and do not call any tool. Correct only what the checks above name (escape newlines
+and other control characters inside JSON strings as \\n) and return the whole corrected response.
 
 <<<REJECTED-RESPONSE
 {previous}

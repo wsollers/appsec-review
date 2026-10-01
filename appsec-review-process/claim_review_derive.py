@@ -189,7 +189,8 @@ def _decision_requirements(stage: str, claim_id: str, record: dict[str, Any]) ->
     required, _optional = PERSONA_FIELDS[stage]
     citations = sorted({citation["citation_id"] for field in CITABLE.get(stage, ())
                         for citation in record.get(field) or []})
-    text = f"claim {claim_id} needs a decision with fields {sorted(required)}"
+    text = (f"claim {claim_id} has no decision: write one (read this claim's record in the shard to judge it; "
+            f"that lookup is allowed) with fields {sorted(required)}")
     if citations:
         text += f"; citation_ids from {citations}"
     if "proof_obligations" in required:

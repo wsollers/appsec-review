@@ -225,7 +225,7 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
         reply["decisions"] = reply["decisions"][:1]
         with self.assertRaises(InvokerOutputError) as caught:
             run(BLUE, reply)
-        hint = next(d for d in caught.exception.details if d.startswith(f"claim {B} needs a decision"))
+        hint = next(d for d in caught.exception.details if d.startswith(f"claim {B} has no decision"))
         self.assertIn("citation-b", hint)
         self.assertIn("po-b", hint)
 

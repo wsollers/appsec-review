@@ -212,7 +212,7 @@ class RepairRetryTests(unittest.TestCase):
     def test_repair_prompt_carries_the_rejected_response_for_correction(self):
         self.run_rounds(["stray_placeholder", "good"])
         self.assertIn("<<<REJECTED-RESPONSE\nstray_placeholder\nREJECTED-RESPONSE>>>", self.prompts[1])
-        self.assertIn("Keep its analysis: do not redo work", self.prompts[1])
+        self.assertIn("do not\ninvestigate again", self.prompts[1])
 
     def test_oversized_rejected_response_is_not_sent_back(self):
         prompt = invoker._repair_prompt("P", invoker.InvokerOutputError("x", ["bad"]),
