@@ -32,6 +32,7 @@ scan jobs themselves (deterministic Python, no persona, configuration passed in)
 | `tool-syft` | syft 1.52.0 | 02-sbom-inventory | sigstore-cert-checksums | - |
 | `tool-trivy` | trivy 0.74.0 | 02-iac-config-scan | sigstore-checksums | - |
 | `tool-zizmor` | zizmor 1.30.1 | 02-iac-config-scan (GitHub Actions, D-34) | pip lock, 1 wheel(s) (PyPI sha256) | - |
+| `tool-blint` | blint 3.4.0 | 02-binary-hardening (with checksec) | pip lock, 40 wheels (PyPI sha256) | LIEF 1.0.0 (blint's parser) |
 
 Bases (pinned by index digest): Docker Official Image `ubuntu:24.04` for the static binaries,
 `python:3.12-slim-bookworm` for the pip tools, `php:8.4-cli-bookworm` for the PHP tools,

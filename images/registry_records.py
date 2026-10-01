@@ -41,6 +41,7 @@ TOOL_IMAGE_IDS = (
     "tool-checkov", "tool-gitleaks", "tool-gosec", "tool-grype", "tool-hadolint",
     "tool-microsoft-sbom-tool", "tool-mobsfscan", "tool-phpcs", "tool-phpstan", "tool-psalm", "tool-semgrep",
     "tool-sbomasm", "tool-spotbugs", "tool-syft", "tool-trivy", "tool-osv-scanner", "tool-zizmor",
+    "tool-blint",
 )
 BUILDENV_IMAGE_IDS = (
     "audit-buildenv-cpp", "audit-buildenv-cpp-resolute", "audit-buildenv-dotnet", "audit-buildenv-go", "audit-buildenv-java",

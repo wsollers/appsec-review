@@ -1,6 +1,6 @@
 {
   "attempt_id": "node-attempt-0001",
-  "files_examined_count": 45,
+  "files_examined_count": 50,
   "job_id": "02-binary-hardening",
   "node_applicable": true,
   "probe": {
@@ -29,6 +29,23 @@
       ],
       "matching_input_count": 5,
       "tool_id": "binskim"
+    },
+    {
+      "applicable": true,
+      "detectors": [
+        {
+          "detector_id": "blint-detector",
+          "matching_input_count": 5,
+          "patterns_searched": [
+            "**/*.dll",
+            "**/*.exe",
+            "**/*.so",
+            "**/*.dylib"
+          ]
+        }
+      ],
+      "matching_input_count": 5,
+      "tool_id": "blint"
     }
   ]
 }

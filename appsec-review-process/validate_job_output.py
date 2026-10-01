@@ -840,7 +840,7 @@ def _vendor_prepass_nodes() -> MappingProxyType:
                                 "dockerfile-base-image-inventory"),
         "container-image-inventory": ("oci-archive-inventory", "image-package-and-config-inspection"),
         "mobile-sast": ("mobsfscan-android", "mobsfscan-ios"),
-        "binary-hardening": ("binskim",),
+        "binary-hardening": ("binskim", "blint"),
         "sbom-inventory": ("syft-directory",),
         "sca-vulnerability-match": ("grype",),
         "license-inventory": ("scancode-toolkit",),

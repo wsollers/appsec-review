@@ -36,13 +36,13 @@ SPECS = {
                                                       "hadolint", "zizmor", "dockerfile-base-image-inventory"]),
     "02-container-image-inventory": ("container-image-inventory", ["oci-archive-inventory",
                                                                       "image-package-and-config-inspection"]),
-    "02-binary-hardening": ("binary-hardening", ["binskim"]),
+    "02-binary-hardening": ("binary-hardening", ["binskim", "blint"]),
     "02-mobile-sast": ("mobile-sast", ["mobsfscan-android", "mobsfscan-ios"]),
 }
 REGISTRY = registry_paths.JOB_TEMPLATES_DIR
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
-IMPLEMENTATION = "vendor-evidence-workers-v2-producer-receipts"
+IMPLEMENTATION = "vendor-evidence-workers-v3-binary-observations"
 
 PROBE_PATTERNS = {
     "gitleaks": ["**/*"], "key-material-file-inventory": ["**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx"],
@@ -53,6 +53,7 @@ PROBE_PATTERNS = {
     "oci-archive-inventory": ["**/*.tar", "**/*.oci.tar"],
     "image-package-and-config-inspection": ["**/*.tar", "**/*.oci.tar"],
     "binskim": ["**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib"],
+    "blint": ["**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib"],
     "mobsfscan-android": ["**/AndroidManifest.xml", "**/build.gradle*"],
     "mobsfscan-ios": ["**/Info.plist", "**/*.xcodeproj/*"],
 }
@@ -150,7 +151,7 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
         candidates = {tool: archives for tool in SPECS[job_id][1]}
     elif job_id == "02-binary-hardening":
         binaries = [n for n, p in files if _binary(p)]
-        candidates = {"binskim": binaries}
+        candidates = {"binskim": binaries, "blint": binaries}
     else:
         android_markers=[n for n in paths if _android(n)]; ios_markers=[n for n in paths if _ios(n)]
         candidates = {"mobsfscan-android": ([n for n in paths if n.endswith((".java",".kt",".xml"))] if android_markers else []),
@@ -230,7 +231,7 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
                     "validation": output.get("validation", "schema-validated"),
                     "validated_against": output["schema"]}]
     container = executor == "pinned_container"
-    auth=(output or {}).get("auth") if container and status == "OK" else None
+    auth=(output or {}).get("auth") if container and status in ("OK", "OK_WITH_GAPS") else None
     identity=(auth or {}).get("identity",{})
     return {"tool_id": tool, "attempt_id": auth["attempt_id"] if auth else f"{tool}-attempt-0001", "terminal_status": status,
             "skip_reason": SKIP if status == "SKIPPED" else None, "cause_code": cause,
@@ -263,12 +264,18 @@ def _cause_slug(cause: Any) -> str:
 
 def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                successful: dict[str, dict], *, can_skip: bool,
-               failures: dict[str, tuple[str, Any]] | None = None) -> tuple[str, dict, dict, dict | None, dict]:
+               failures: dict[str, tuple[str, Any]] | None = None,
+               partial: dict[str, dict[str, tuple[str, str]]] | None = None) -> tuple[str, dict, dict, dict | None, dict]:
     """``failures`` maps a tool the collector ran (or tried to) to its (FAILED|BLOCKED, cause). Before,
     every tool without a result was reported BLOCKED / image-unavailable, which hid that checkov had run
     (output path), hadolint had failed (wrong input) and kube-linter could not start (permissions):
-    run 20261001T032047Z-fd64eb."""
+    run 20261001T032047Z-fd64eb.
+
+    ``partial`` maps a tool to the inputs it did not assess: path -> (coverage list, reason), where the
+    list is ``unsupported_inputs`` or ``not_analyzed_inputs``. A successful tool with any is OK_WITH_GAPS
+    (checksec on a PE file; a binary blint silently skipped)."""
     failures = failures or {}
+    partial = partial or {}
     instances, coverage_tools, gaps, probe_tools, raw = [], [], [], [], {}
     any_candidates = any(candidates[t] for t in tools)
     for tool in tools:
@@ -276,7 +283,7 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
         if not paths and can_skip:
             status = "SKIPPED"
         elif tool in successful:
-            status = "OK"
+            status = "OK_WITH_GAPS" if partial.get(tool) else "OK"
         elif tool in failures and failures[tool][0] == "FAILED" and isinstance(failures[tool][2], int):
             status = "FAILED"   # it ran and exited: its exit code is on the instance
         elif tool in failures:
@@ -284,7 +291,7 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
         else:
             status = "BLOCKED"
         output = None
-        if status == "OK":
+        if status in ("OK", "OK_WITH_GAPS"):
             output = successful[tool]
             raw[output["path"]] = output["data"]
         instances.append(_instance(tool, status,
@@ -293,19 +300,38 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                                    else "pinned_container",
                                    records=successful[tool]["count"] if tool in successful else None, output=output,
                                    failure_exit=failures[tool][2] if status == "FAILED" else None))
-        unanalyzed = [] if status in ("OK", "SKIPPED") else [
-            {"path": p, "reason_code": "tool-instance-did-not-complete"} for p in paths]
+        listed = partial.get(tool, {})
+        if status in ("OK", "OK_WITH_GAPS", "SKIPPED"):
+            unanalyzed = [{"path": p, "reason_code": listed[p][1]} for p in paths
+                          if listed.get(p, ("",))[0] == "not_analyzed_inputs"]
+        else:
+            unanalyzed = [{"path": p, "reason_code": "tool-instance-did-not-complete"} for p in paths
+                          if listed.get(p, ("",))[0] != "unsupported_inputs"]
+        unsupported = [{"path": p, "reason_code": listed[p][1]} for p in paths
+                       if listed.get(p, ("",))[0] == "unsupported_inputs"]
+        analyzed = len(paths) - len(unanalyzed) - len(unsupported) if status in ("OK", "OK_WITH_GAPS") else 0
         coverage_tools.append({"tool_id": tool, "applicability": "applicable" if paths or status != "SKIPPED" else SKIP,
-                               "candidate_input_count": len(paths), "analyzed_input_count": len(paths) if status == "OK" else 0,
-                               "not_analyzed_input_count": len(unanalyzed), "unsupported_input_count": 0,
-                               "not_analyzed_inputs": unanalyzed, "unsupported_inputs": [], "input_lists_truncated": False})
+                               "candidate_input_count": len(paths), "analyzed_input_count": analyzed,
+                               "not_analyzed_input_count": len(unanalyzed), "unsupported_input_count": len(unsupported),
+                               "not_analyzed_inputs": unanalyzed, "unsupported_inputs": unsupported,
+                               "input_lists_truncated": False})
         if status in ("BLOCKED", "FAILED"):
             cause = failures.get(tool, (status, None, None))[1]
             suffix = "-" + _cause_slug(cause) if cause else ""
-            gaps += [{"gap_id": f"gap-{tool}-{status.lower()}{suffix}"[:96], "kind": shapes.INSTANCE_GAP_KIND[status],
-                      "tool_id": tool, "affected_input_count": None},
-                     {"gap_id": f"gap-{tool}-inputs", "kind": "inputs-not-analyzed", "tool_id": tool,
-                      "affected_input_count": len(paths)}]
+            gaps.append({"gap_id": f"gap-{tool}-{status.lower()}{suffix}"[:96], "kind": shapes.INSTANCE_GAP_KIND[status],
+                         "tool_id": tool, "affected_input_count": None})
+        elif status == "OK_WITH_GAPS":
+            gaps.append({"gap_id": f"gap-{tool}-partial", "kind": shapes.INSTANCE_GAP_KIND[status],
+                         "tool_id": tool, "affected_input_count": None})
+        if unanalyzed:
+            gaps.append({"gap_id": f"gap-{tool}-inputs", "kind": "inputs-not-analyzed", "tool_id": tool,
+                         "affected_input_count": len(unanalyzed)})
+        if unsupported:
+            gaps.append({"gap_id": f"gap-{tool}-unsupported", "kind": "inputs-unsupported", "tool_id": tool,
+                         "affected_input_count": len(unsupported)})
+        if status in ("OK", "OK_WITH_GAPS") and paths and not analyzed:
+            gaps.append({"gap_id": f"gap-{tool}-zero", "kind": "zero-analyzed-inputs", "tool_id": tool,
+                         "affected_input_count": None})
         elif status == "OK" and not paths:
             gaps.append({"gap_id": f"gap-{tool}-zero", "kind": "zero-analyzed-inputs", "tool_id": tool,
                          "affected_input_count": None})
@@ -361,6 +387,47 @@ def _scan_base_images(root: Path, paths: list[str]) -> list[dict]:
     return values
 
 
+def _binary_observations(source_root: Path, paths: list[str], vendor_results: dict[str, dict],
+                         successful: dict[str, dict]) -> tuple[dict[str, list[dict[str, str]]],
+                                                               dict[str, dict[str, tuple[str, str]]]]:
+    """binary-hardening 1.1: every (tool, check) verdict per binary, and the inputs each successful tool
+    did not assess. checksec reads ELF only, so a PE or Mach-O file is `unsupported-format` for it
+    (before 1.1 such a file was published with every check `present`); a binary a tool ran over but
+    printed nothing for is `parse-failed`. Sets each successful tool's record count."""
+    import vendor_evidence_b13 as b13
+    formats = {path: cmb.detect_format((source_root / path).read_bytes()[:8]) for path in paths}
+    observed: dict[str, list[dict[str, str]]] = {path: [] for path in paths}
+    partial: dict[str, dict[str, tuple[str, str]]] = {}
+    per_tool: dict[str, dict[str, list[dict[str, str]]]] = {}
+    if "binskim" in successful:
+        per_tool["binskim"] = b13.checksec_observations(vendor_results["binskim"]["raw"])
+    if "blint" in successful:
+        by_path: dict[str, list[dict[str, str]]] = {}
+        for record in vendor_results["blint"]["records"]:
+            by_path.setdefault(record["path"], []).append({"check": record["check"], "reported": record["reported"]})
+        per_tool["blint"] = by_path
+    supported = {"binskim": ("elf",), "blint": ("pe", "elf", "macho")}
+    for tool, found in per_tool.items():
+        listed: dict[str, tuple[str, str]] = {}
+        count = 0
+        for path in paths:
+            if formats[path] not in supported[tool]:
+                listed[path] = ("unsupported_inputs", cmb.UNSUPPORTED_FORMAT_REASON)
+            else:
+                usable = [{"tool_id": tool, **item} for item in found.get(path, [])
+                          if formats[path] in cmb.CHECK_FORMATS[item["check"]]]
+                if not usable:
+                    listed[path] = ("not_analyzed_inputs", "parse-failed")
+                    continue
+                count += 1
+                observed[path] += usable
+        partial[tool] = listed
+        successful[tool]["count"] = count
+    for path in paths:
+        observed[path].sort(key=lambda item: (item["check"], item["tool_id"]))
+    return observed, partial
+
+
 def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: str,
                     source_snapshot_sha256: str, vendor_results: dict[str, dict] | None = None) -> dict[str, Any]:
     """Build one deterministic contract document set; no filesystem publication occurs here."""
@@ -392,21 +459,30 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                      **{k:auth["receipt"][k] for k in ("request_sha256","result_sha256","output_sha256","permission_sha256",
                                                         "permission_fingerprint_sha256","image_id","image_digest")}}
         auth={**auth,"execution_receipt":receipt_ref}
+        if tool == "blint":
+            successful[tool] = {"data": result["raw"], "count": 0, "schema": "blint-security-properties-1",
+                "path": cmb.BLINT_PROPERTIES, "role": "normalized-result", "validation": "schema-validated",
+                "auth": auth, "receipt_data": receipt_data, "receipt_path": receipt_path}
+            continue
         path = "outputs/binskim.sarif" if tool == "binskim" else f"outputs/tools/{tool}/" + (
             f"{tool}.sarif" if tool.startswith("mobsfscan-") else "result.json")
         successful[tool] = {"data": result["raw"], "count": len(result["records"]), "schema":
             ("checksec-json-1" if tool == "binskim" else "sarif-2.1.0" if path.endswith(".sarif") else "vendor-json-1"), "path": path,
             "role": "raw-tool-output", "validation": "format-validated", "auth":auth,
             "receipt_data":receipt_data,"receipt_path":receipt_path}
-    if "binskim" in successful:
-        successful["binskim"]["count"] = len(candidates["binskim"])
+    partial: dict[str, dict[str, tuple[str, str]]] = {}
+    binary_observations: dict[str, list[dict[str, str]]] = {}
+    if job_id == "02-binary-hardening":
+        binary_observations, partial = _binary_observations(source_root, candidates["binskim"],
+                                                            vendor_results, successful)
     if "oci-archive-inventory" in successful:
         successful["oci-archive-inventory"]["count"] = len(candidates["oci-archive-inventory"])
     failures = {tool: (result.get("status"), result.get("cause"), result.get("exit_code"))
                 for tool, result in vendor_results.items()
                 if tool in tools and result.get("status") in ("FAILED", "BLOCKED")}
     status, tool_results, coverage, probe_doc, raw_files = _aggregate(
-        header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory", failures=failures)
+        header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory", failures=failures,
+        partial=partial)
     for value in successful.values():
         if "receipt_data" in value: raw_files[value["receipt_path"]]=value["receipt_data"]
 
@@ -476,22 +552,24 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
         mapped={"BA2001":"position_independent","BA2002":"control_flow_guard","BA2004":"fortify_source",
                 "BA2005":"stack_protector","BA2010":"non_executable_data","CHECKSEC-FULL-RELRO":"relro"}
         hits_by={p:[] for p in candidates["binskim"]}
-        for hit in vendor_results.get("binskim",{}).get("records",[]):
-            if hit["path"] in hits_by: hits_by[hit["path"]].append(hit)
+        if "binskim" in successful:
+            for hit in vendor_results.get("binskim",{}).get("records",[]):
+                if hit["path"] in hits_by: hits_by[hit["path"]].append(hit)
         for path in candidates["binskim"]:
             data = (source_root / path).read_bytes()
-            fmt=cmb.detect_format(data[:8]); checks={name:("present" if fmt in formats else "not-applicable-for-format")
-                                                    for name,formats in cmb.CHECK_FORMATS.items()}
-            rule_hits=[]
+            fmt = cmb.detect_format(data[:8])
+            observations = binary_observations.get(path, [])
+            checks, disagreements = cmb.derive_checks(fmt, observations)
+            absent = {item["check"] for item in observations if item["reported"] == "absent"}
+            rule_hits = []
             for hit in hits_by[path]:
-                check=mapped.get(hit["rule_id"],"other")
-                if check != "other" and fmt in cmb.CHECK_FORMATS[check]: checks[check]="absent"
-                rule_hits.append({"rule_id":hit["rule_id"],"check":check})
-            records.append({"binary_id": "bin-" + hashlib.sha256(path.encode()).hexdigest()[:12], "tool_id": "binskim",
-                            "path": path, "sha256": HASH(data), "bytes": len(data), "format": fmt,
-                            "checks": checks if "binskim" in successful else {name:"not-assessed" for name in cmb.CHECK_FORMATS},
-                            "rule_hits": rule_hits if "binskim" in successful else []})
-        docs["binary-hardening.json"] = {"schema": "appsec-review/binary-hardening/1.0", **header, "binaries": records}
+                check = mapped.get(hit["rule_id"], "other")
+                if check == "other" or check in absent:
+                    rule_hits.append({"rule_id": hit["rule_id"], "check": check})
+            records.append({"binary_id": cmb.binary_id(path), "path": path, "sha256": HASH(data),
+                            "bytes": len(data), "format": fmt, "checks": checks, "observations": observations,
+                            "tool_disagreements": disagreements, "rule_hits": rule_hits if observations else []})
+        docs["binary-hardening.json"] = {"schema": "appsec-review/binary-hardening/1.1", **header, "binaries": records}
     else:
         records = []
         image_facts=vendor_results.get("oci-archive-inventory",{}).get("image_facts",{})
@@ -529,7 +607,8 @@ def execute_and_build(job_id: str, source_root: Path, *, run_id: str, attempt_id
         if found["candidates"][t] and t not in {"key-material-file-inventory","dockerfile-base-image-inventory"}]
     collector=collector or b13.collect
     results=collector(job_id,tools,run_id=run_id,node_attempt_id=attempt_id,source_root=source_root,
-                      source_sha=source_snapshot_sha256,attempt_root=execution_root,now=now)
+                      source_sha=source_snapshot_sha256,attempt_root=execution_root,now=now,
+                      candidates=found["candidates"])
     if job_id=="02-container-image-inventory" and results.get("oci-archive-inventory",{}).get("status")=="OK":
         paths=found["candidates"]["oci-archive-inventory"]
         if len(paths)!=1: raise b13.VendorToolFailed("container-batch-association-ambiguous")

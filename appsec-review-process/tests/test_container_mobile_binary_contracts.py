@@ -150,10 +150,11 @@ def build_instance(tool_id: str, status: str, outputs: list[dict], record_count)
     }
 
 
-def raw_output(path: str, document: dict, validated_against: str) -> tuple[dict, bytes]:
+def raw_output(path: str, document: dict, validated_against: str,
+               role: str = "raw-tool-output", validation: str = "format-validated") -> tuple[dict, bytes]:
     data = dump(document)
     return ({"path": path, "sha256": sha_bytes(data), "bytes": len(data),
-             "media_type": "application/json", "role": "raw-tool-output", "validation": "format-validated",
+             "media_type": "application/json", "role": role, "validation": validation,
              "validated_against": validated_against}, data)
 
 
@@ -218,45 +219,69 @@ def build_aggregate(contract_id: str, tools: dict[str, dict]) -> tuple[dict, dic
 
 def finish(contract_id: str, result_body: dict, tools: dict, inputs: dict[str, bytes]) -> dict:
     documents, raw_files = build_aggregate(contract_id, tools)
-    documents["result"] = {"schema": f"appsec-review/{contract_id}/1.0", **header(contract_id), **result_body}
+    version = "1.1" if contract_id == BINARY else "1.0"
+    documents["result"] = {"schema": f"appsec-review/{contract_id}/{version}", **header(contract_id), **result_body}
     status = shapes.supportable_success_status(documents["tool-results"], documents["coverage"])
     return {"contract_id": contract_id, "status": status or "FAILED", "documents": documents,
             "raw_files": raw_files, "inputs": dict(inputs)}
 
 
+# What each tool observes for an assessed binary of a format it supports (binary-hardening 1.1):
+# checksec reads ELF only; blint reads PE, ELF and Mach-O. The two agree in every golden.
+TOOL_FORMATS = {"binskim": ("elf",), "blint": ("pe", "elf", "macho")}
+OBSERVED = {
+    ("binskim", "elf"): {"position_independent": "present", "non_executable_data": "present",
+                         "stack_protector": "absent", "relro": "absent", "fortify_source": "present"},
+    ("blint", "elf"): {"position_independent": "present", "non_executable_data": "present", "stack_protector": "absent"},
+    ("blint", "pe"): {"position_independent": "present", "non_executable_data": "present", "control_flow_guard": "absent"},
+    ("blint", "macho"): {"non_executable_data": "present", "stack_protector": "present"},
+}
+RAW = {"binskim": ("outputs/binskim.sarif", {"version": "2.1.0", "runs": []}, "sarif-2.1.0"),
+       "blint": (contracts.BLINT_PROPERTIES, {"schema": "blint-security-properties-1", "binaries": [], "not_reported": []},
+                 "blint-security-properties-1", "normalized-result", "schema-validated")}
+
+
 def binary_checks(fmt: str, assessed: bool) -> dict:
-    checks = {}
-    for index, (name, formats) in enumerate(sorted(contracts.CHECK_FORMATS.items())):
-        if not assessed:
-            checks[name] = "not-assessed"
-        elif fmt in formats:
-            checks[name] = "present" if index % 2 == 0 else "absent"
-        else:
-            checks[name] = "not-applicable-for-format"
-    return checks
+    """The derived checks of a binary with the golden observations (assessed) or none."""
+    return contracts.derive_checks(fmt, observations_for(fmt) if assessed else [])[0]
+
+
+def observations_for(fmt: str) -> list[dict]:
+    found = [{"tool_id": tool, "check": name, "reported": verdict}
+             for (tool, kind), checks in OBSERVED.items() if kind == fmt for name, verdict in checks.items()]
+    return sorted(found, key=lambda item: (item["check"], item["tool_id"]))
 
 
 def binary_case(binaries: list[tuple[str, str, str]], failed: bool = False) -> dict:
     """binaries: (path, format, state); state is assessed | unsupported-format | parse-failed."""
-    (tool_id,) = TOOLS[BINARY]
-    gaps, records = {}, []
+    tools = TOOLS[BINARY]
+    gaps = {tool: {} for tool in tools}
+    records, counts = [], {tool: 0 for tool in tools}
     for path, fmt, state in binaries:
-        if state == "unsupported-format":
-            gaps[path] = ("unsupported_inputs", "unsupported-format")
-        elif state == "parse-failed":
-            gaps[path] = ("not_analyzed_inputs", "parse-failed")
-        assessed = state == "assessed" and not failed
+        observations = []
+        for tool in tools:
+            if state == "unsupported-format" or fmt not in TOOL_FORMATS[tool]:
+                gaps[tool][path] = ("unsupported_inputs", "unsupported-format")
+            elif state == "parse-failed":
+                gaps[tool][path] = ("not_analyzed_inputs", "parse-failed")
+            elif not failed:
+                observations += [item for item in observations_for(fmt) if item["tool_id"] == tool]
+                counts[tool] += 1
+        observations.sort(key=lambda item: (item["check"], item["tool_id"]))
+        checks, disagreements = contracts.derive_checks(fmt, observations)
+        absent = {item["check"] for item in observations if item["reported"] == "absent"}
+        hits = [{"rule_id": "BA2008", "check": "control_flow_guard"}] if "control_flow_guard" in absent else []
+        hits += [{"rule_id": "BA2005", "check": "stack_protector"}] if fmt == "elf" and "stack_protector" in absent else []
         data = input_bytes(path, fmt)
         records.append({
-            "binary_id": "bin-" + hashlib.sha256(path.encode("utf-8")).hexdigest()[:12], "tool_id": tool_id,
-            "path": path, "sha256": sha_bytes(data), "bytes": len(data), "format": fmt,
-            "checks": binary_checks(fmt, assessed),
-            "rule_hits": [{"rule_id": "BA2008", "check": "control_flow_guard"}] if assessed and fmt == "pe" else [],
+            "binary_id": contracts.binary_id(path), "path": path, "sha256": sha_bytes(data), "bytes": len(data),
+            "format": fmt, "checks": checks, "observations": observations, "tool_disagreements": disagreements,
+            "rule_hits": hits,
         })
-    tools = {tool_id: {"candidates": [b[0] for b in binaries], "gaps": gaps, "failed": failed,
-                       "raw": ("outputs/binskim.sarif", {"version": "2.1.0", "runs": []}, "sarif-2.1.0"),
-                       "records": len(binaries), "patterns": ["**/*.dll", "**/*.exe", "**/*.so", "**/*.dylib"]}}
-    return finish(BINARY, {"binaries": records}, tools, {b[0]: input_bytes(b[0], b[1]) for b in binaries})
+    specs = {tool: {"candidates": [b[0] for b in binaries], "gaps": gaps[tool], "failed": failed, "raw": RAW[tool],
+                    "records": counts[tool], "patterns": ["**/*.dll", "**/*.exe", "**/*.so", "**/*.dylib"]}
+             for tool in tools}
+    return finish(BINARY, {"binaries": records}, specs, {b[0]: input_bytes(b[0], b[1]) for b in binaries})
 
 
 def container_case(archives: list[tuple[str, str, str]]) -> dict:
@@ -372,7 +397,8 @@ def materialize(case: dict, root: Path) -> tuple[Path, Path]:
               contracts.TOOL_RESULTS: dump(docs["tool-results"]), contracts.COVERAGE: dump(docs["coverage"]),
               **case["raw_files"]}
     for relative, data in staged.items():
-        (staging / Path(relative).name).write_bytes(data)
+        (staging / relative.removeprefix("outputs/")).parent.mkdir(parents=True, exist_ok=True)
+        (staging / relative.removeprefix("outputs/")).write_bytes(data)
     attempt.mkdir()
     (attempt / "status.json").write_bytes(dump(status_document(case)))
     receipt = evidence_redaction.redact_tree(staging, attempt / "outputs", on_unhandled=POLICY, limits=LIMITS)
@@ -1020,10 +1046,17 @@ class MobileRuleTests(unittest.TestCase):
             self.assertEqual(names(verify(beyond, attempt, inputs)), {"hit-line"})
 
 
-class BinaryRuleTests(unittest.TestCase):
-    """Acceptance: a hardening 'pass' for an unsupported format is rejected."""
+def rederive(binary: dict) -> None:
+    """Recompute a mutated record's derived fields, so a test isolates the rule it is about."""
+    binary["observations"].sort(key=lambda item: (item["check"], item["tool_id"]))
+    binary["checks"], binary["tool_disagreements"] = contracts.derive_checks(binary["format"], binary["observations"])
 
-    UNSUPPORTED, PARSE_FAILED, PE, ELF = 3, 4, 0, 1
+
+class BinaryRuleTests(unittest.TestCase):
+    """binary-hardening 1.1: checks are derived from per-tool observations; nothing is `present` unless a
+    tool observed it, and two tools that disagree are published as not-assessed, never resolved."""
+
+    PE, ELF, MACHO, UNSUPPORTED, PARSE_FAILED = 0, 1, 2, 3, 4
 
     def expect(self, mutate, expected, exact=True):
         case = GOLDENS["binary-ok-with-gaps"]()
@@ -1031,67 +1064,129 @@ class BinaryRuleTests(unittest.TestCase):
         found = names(check(case))
         self.assertEqual(found, {expected}) if exact else self.assertIn(expected, found)
 
-    def test_an_unsupported_format_can_never_carry_present_or_absent(self):
-        for check_name in contracts.CHECK_FORMATS:
-            for verdict in ("present", "absent"):
-                case = GOLDENS["binary-ok-with-gaps"]()
-                case["documents"]["result"]["binaries"][self.UNSUPPORTED]["checks"][check_name] = verdict
-                errors = check(case)
-                self.assertIn("unsupported-format-assessed", names(errors), f"{check_name}={verdict}")
-                self.assertTrue(any(f"{check_name}={verdict}" in error for error in errors))
-        self.expect(lambda d: d["result"]["binaries"][self.UNSUPPORTED]["checks"].__setitem__("relro", "not-applicable-for-format"),
-                    "unsupported-format-assessed", exact=False)
+    def instance(self, docs, tool):
+        return next(i for i in docs["tool-results"]["tool_instances"] if i["tool_id"] == tool)
+
+    def test_checks_are_derived_from_observations_and_nothing_else(self):
+        for index in (self.PE, self.ELF, self.MACHO, self.UNSUPPORTED, self.PARSE_FAILED):
+            for name in contracts.CHECK_FORMATS:
+                for verdict in ("present", "absent", "not-assessed", "not-applicable-for-format"):
+                    case = GOLDENS["binary-ok-with-gaps"]()
+                    binary = case["documents"]["result"]["binaries"][index]
+                    if binary["checks"][name] == verdict:
+                        continue
+                    binary["checks"][name] = verdict
+                    self.assertEqual(names(check(case)), {"checks-not-derived"}, f"{index} {name}={verdict}")
+
+    def test_an_unobserved_binary_is_never_published_as_hardened(self):
+        # Before 1.1 every check started `present`, so checksec (ELF only) left PE and Mach-O files
+        # published as fully hardened without any tool assessing them.
+        case = GOLDENS["binary-ok-with-gaps"]()
+        pe = case["documents"]["result"]["binaries"][self.PE]
+        self.assertTrue(all(item["tool_id"] == "blint" for item in pe["observations"]))
+        self.assertEqual(pe["checks"]["safe_seh"], "not-assessed")
+        self.assertEqual(pe["checks"]["high_entropy_aslr"], "not-assessed")
+        checks, _ = contracts.derive_checks("pe", [])
+        self.assertEqual({v for k, v in checks.items() if "pe" in contracts.CHECK_FORMATS[k]}, {"not-assessed"})
+
+    def test_a_disagreement_is_not_assessed_and_listed(self):
+        case = GOLDENS["binary-ok-with-gaps"]()
+        elf = case["documents"]["result"]["binaries"][self.ELF]
+        next(i for i in elf["observations"] if i["tool_id"] == "blint" and i["check"] == "stack_protector")["reported"] = "present"
+        rederive(elf)
+        self.assertEqual(elf["checks"]["stack_protector"], "not-assessed")
+        self.assertEqual(elf["tool_disagreements"], ["stack_protector"])
+        self.assertEqual(check(case), [])
+        elf["tool_disagreements"] = []
+        self.assertEqual(names(check(case)), {"checks-not-derived"})
+        elf["tool_disagreements"], elf["checks"]["stack_protector"] = ["stack_protector"], "absent"
+        self.assertEqual(names(check(case)), {"checks-not-derived"})
 
     def test_there_is_no_pass_value_and_no_rollup_field(self):
         for value in ("pass", "passed", "secure", "ok", "fail"):
             self.expect(lambda d, v=value: d["result"]["binaries"][self.UNSUPPORTED]["checks"].__setitem__("relro", v), "schema")
+            self.expect(lambda d, v=value: d["result"]["binaries"][self.ELF]["observations"][0].__setitem__("reported", v), "schema")
         for field in ("overall", "verdict", "pass", "secure", "score", "hardened", "grade"):
             self.expect(lambda d, f=field: d["result"]["binaries"][self.PE].__setitem__(f, "pass"), "schema")
             self.expect(lambda d, f=field: d["result"].__setitem__(f, "pass"), "schema")
 
-    def test_a_format_the_tool_does_not_support_per_coverage_cannot_be_assessed(self):
-        # The ELF binary is relabelled in coverage as unsupported by this tool instance (e.g. a PE-only build).
-        def tool_does_not_support_elf(docs):
-            tool = docs["coverage"]["tools"][0]
-            path = docs["result"]["binaries"][self.ELF]["path"]
-            tool["unsupported_inputs"].append({"path": path, "reason_code": "unsupported-format"})
-            tool["unsupported_inputs"].sort(key=lambda entry: entry["path"])
-            tool["unsupported_input_count"] += 1
-            tool["analyzed_input_count"] -= 1
-            for gap in docs["coverage"]["gaps"]:
-                if gap["kind"] == "inputs-unsupported":
-                    gap["affected_input_count"] += 1
-
+    def test_an_unsupported_format_can_never_be_observed(self):
+        def observe(docs):
+            binary = docs["result"]["binaries"][self.UNSUPPORTED]
+            binary["observations"].append({"tool_id": "blint", "check": "non_executable_data", "reported": "present"})
+            rederive(binary)
         case = GOLDENS["binary-ok-with-gaps"]()
-        tool_does_not_support_elf(case["documents"])
-        self.assertEqual(names(check(case)), {"unsupported-format-assessed", "assessment-coverage-mismatch"})
-        binary = case["documents"]["result"]["binaries"][self.ELF]
-        binary["checks"] = binary_checks("elf", assessed=False)
-        self.assertEqual(check(case), [])
+        observe(case["documents"])
+        self.assertEqual(names(check(case)), {"check-format-mismatch", "assessment-coverage-mismatch", "record-count-mismatch"})
 
-    def test_unsupported_in_the_result_must_be_unsupported_in_coverage_and_vice_versa(self):
+    def test_a_tool_cannot_observe_what_its_coverage_says_it_did_not_assess(self):
+        def checksec_on_pe(docs):
+            binary = docs["result"]["binaries"][self.PE]
+            binary["observations"].append({"tool_id": "binskim", "check": "position_independent", "reported": "present"})
+            rederive(binary)
+        self.expect(checksec_on_pe, "assessment-coverage-mismatch", exact=False)
+        def parse_failed_observed(docs):
+            binary = docs["result"]["binaries"][self.PARSE_FAILED]
+            binary["observations"].append({"tool_id": "blint", "check": "relro", "reported": "present"})
+            rederive(binary)
+        self.expect(parse_failed_observed, "assessment-coverage-mismatch", exact=False)
+
+    def test_a_tool_that_analyzed_a_binary_must_publish_an_observation(self):
+        def drop_blint(docs):
+            binary = docs["result"]["binaries"][self.ELF]
+            binary["observations"] = [i for i in binary["observations"] if i["tool_id"] != "blint"]
+            rederive(binary)
+        case = GOLDENS["binary-ok-with-gaps"]()
+        drop_blint(case["documents"])
+        self.assertEqual(names(check(case)), {"assessment-coverage-mismatch", "record-count-mismatch"})
+
+    def test_unsupported_in_the_result_must_be_unsupported_in_every_ran_tool(self):
         def drop_from_coverage(docs):
-            tool = docs["coverage"]["tools"][0]
-            tool["unsupported_inputs"], tool["unsupported_input_count"] = [], 0
+            tool = next(t for t in docs["coverage"]["tools"] if t["tool_id"] == "blint")
+            path = docs["result"]["binaries"][self.UNSUPPORTED]["path"]
+            tool["unsupported_inputs"] = [e for e in tool["unsupported_inputs"] if e["path"] != path]
+            tool["unsupported_input_count"] -= 1
             tool["analyzed_input_count"] += 1
-            docs["coverage"]["gaps"] = [g for g in docs["coverage"]["gaps"] if g["kind"] != "inputs-unsupported"]
-
+            docs["coverage"]["gaps"] = [g for g in docs["coverage"]["gaps"]
+                                        if not (g["kind"] == "inputs-unsupported" and g["tool_id"] == "blint")]
         case = GOLDENS["binary-ok-with-gaps"]()
         drop_from_coverage(case["documents"])
-        self.assertEqual(names(check(case)), {"unsupported-format-not-in-coverage", "assessment-coverage-mismatch"})
-        # wrong reason code: listed, but not as an unsupported FORMAT
-        self.expect(lambda d: d["coverage"]["tools"][0]["unsupported_inputs"][0].__setitem__("reason_code", "encrypted-or-packed"),
-                    "unsupported-format-not-in-coverage")
-        # an assessed binary relabelled unsupported
-        self.expect(lambda d: d["result"]["binaries"][self.PE].__setitem__("format", "unsupported"), "unsupported-format-assessed", exact=False)
-        # a parse-failed binary given a verdict
-        self.expect(lambda d: d["result"]["binaries"][self.PARSE_FAILED]["checks"].__setitem__("relro", "present"),
-                    "assessment-coverage-mismatch")
-        # an assessed binary blanked without a coverage entry
-        self.expect(lambda d: d["result"]["binaries"][self.PE].update({"checks": binary_checks("pe", False), "rule_hits": []}),
-                    "assessment-coverage-mismatch")
+        self.assertEqual(names(check(case)), {"unsupported-format-not-in-coverage"})
+        def wrong_reason(docs):
+            tool = next(t for t in docs["coverage"]["tools"] if t["tool_id"] == "blint")
+            tool["unsupported_inputs"][0]["reason_code"] = "encrypted-or-packed"
+        self.expect(wrong_reason, "unsupported-format-not-in-coverage")
 
-    def test_invariant_a_binary_is_in_coverage_gaps_iff_all_its_checks_are_not_assessed(self):
+    def test_observations_are_bound_to_format_tool_and_uniqueness(self):
+        def relro_on_pe(docs):
+            binary = docs["result"]["binaries"][self.PE]
+            binary["observations"].append({"tool_id": "blint", "check": "relro", "reported": "absent"})
+            rederive(binary)
+        self.expect(relro_on_pe, "check-format-mismatch")
+        def unknown_tool(docs):
+            docs["result"]["binaries"][self.PE]["observations"][0]["tool_id"] = "checksec"
+        self.expect(unknown_tool, "unknown-tool", exact=False)
+        def twice(docs):
+            binary = docs["result"]["binaries"][self.ELF]
+            binary["observations"].append(dict(binary["observations"][0]))
+            rederive(binary)
+        self.expect(twice, "duplicate-record", exact=False)
+
+    def test_rule_hits_records_and_outputs_are_bound(self):
+        self.expect(lambda d: d["result"]["binaries"][self.UNSUPPORTED]["rule_hits"].append({"rule_id": "BA2001", "check": "other"}),
+                    "rule-hit-on-unassessed-binary")
+        self.expect(lambda d: d["result"]["binaries"][self.ELF]["rule_hits"].append({"rule_id": "BA2008", "check": "control_flow_guard"}),
+                    "rule-hit-on-unassessed-binary")
+        self.expect(lambda d: d["result"]["binaries"][self.ELF]["rule_hits"].append({"rule_id": "BA2010", "check": "non_executable_data"}),
+                    "rule-hit-on-unassessed-binary")
+        self.expect(lambda d: self.instance(d, "binskim").__setitem__("result_record_count", 4), "record-count-mismatch")
+        self.expect(lambda d: self.instance(d, "blint").__setitem__("result_record_count", 1), "record-count-mismatch")
+        self.expect(lambda d: self.instance(d, "binskim")["outputs"][0].__setitem__("path", "outputs/other.sarif"), "raw-output-missing")
+        self.expect(lambda d: self.instance(d, "binskim")["outputs"][0].__setitem__("role", "normalized-result"), "raw-output-missing")
+        self.expect(lambda d: self.instance(d, "blint")["outputs"][0].__setitem__("path", "outputs/tools/blint/result.json"), "raw-output-missing")
+        self.expect(lambda d: d["result"]["binaries"][1].__setitem__("path", d["result"]["binaries"][0]["path"]), "duplicate-record", exact=False)
+
+    def test_invariant_a_binary_has_observations_iff_some_tool_assessed_it(self):
         paths = ["bin/a.dll", "bin/b.so", "bin/c.dylib"]
         options = [("pe", "assessed"), ("elf", "assessed"), ("macho", "assessed"), ("unsupported", "unsupported-format"),
                    ("elf", "unsupported-format"), ("pe", "parse-failed")]
@@ -1101,41 +1196,25 @@ class BinaryRuleTests(unittest.TestCase):
                 case = binary_case([(p, f, s) for p, (f, s) in zip(paths, combo)], failed=failed)
                 status = case["status"] if not failed else "FAILED"
                 self.assertEqual(check(case, status=status), [], f"{combo} failed={failed}")
-                tool = case["documents"]["coverage"]["tools"][0]
-                gap_paths = {e["path"] for e in tool["unsupported_inputs"] + tool["not_analyzed_inputs"]}
+                coverage = {t["tool_id"]: t for t in case["documents"]["coverage"]["tools"]}
                 for binary in case["documents"]["result"]["binaries"]:
-                    blank = all(v == "not-assessed" for v in binary["checks"].values())
-                    self.assertEqual(blank, binary["path"] in gap_paths)
+                    assessed_by = {t for t, tool in coverage.items()
+                                   if binary["path"] not in {e["path"] for e in tool["unsupported_inputs"] + tool["not_analyzed_inputs"]}
+                                   and not failed}
+                    self.assertEqual({i["tool_id"] for i in binary["observations"]}, assessed_by)
+                    blank = all(v in ("not-assessed", "not-applicable-for-format") for v in binary["checks"].values())
+                    self.assertEqual(blank, not binary["observations"])
                     if binary["format"] == "unsupported":
-                        self.assertTrue(blank)
-                        self.assertIn({"path": binary["path"], "reason_code": "unsupported-format"}, tool["unsupported_inputs"])
-                # flipping any one blank check to a verdict always breaks the invariant and is rejected
+                        for tool in coverage.values():
+                            self.assertIn({"path": binary["path"], "reason_code": "unsupported-format"}, tool["unsupported_inputs"])
+                # a verdict on a blank binary is always rejected
                 for index, binary in enumerate(case["documents"]["result"]["binaries"]):
-                    if all(v == "not-assessed" for v in binary["checks"].values()):
+                    if not binary["observations"]:
                         mutated = deepcopy(case)
-                        mutated["documents"]["result"]["binaries"][index]["checks"]["position_independent"] = "present"
+                        mutated["documents"]["result"]["binaries"][index]["checks"]["non_executable_data"] = "present"
                         self.assertTrue(check(mutated, status=status), f"{combo} accepted a verdict on a blank binary")
                 cases += 1
         self.assertEqual(cases, 2 * len(options) ** len(paths))
-
-    def test_check_applicability_per_format_is_bound_both_ways(self):
-        self.expect(lambda d: d["result"]["binaries"][self.PE]["checks"].__setitem__("relro", "present"), "check-format-mismatch")
-        self.expect(lambda d: d["result"]["binaries"][self.ELF]["checks"].__setitem__("safe_seh", "absent"), "check-format-mismatch")
-        self.expect(lambda d: d["result"]["binaries"][self.ELF]["checks"].__setitem__("relro", "not-applicable-for-format"), "check-format-mismatch")
-        partial = GOLDENS["binary-ok-with-gaps"]()
-        partial["documents"]["result"]["binaries"][self.ELF]["checks"]["relro"] = "not-assessed"
-        self.assertEqual(check(partial), [], "a partially assessed binary is a valid state")
-
-    def test_rule_hits_records_and_raw_output_are_bound(self):
-        self.expect(lambda d: d["result"]["binaries"][self.UNSUPPORTED]["rule_hits"].append({"rule_id": "BA2001", "check": "other"}),
-                    "rule-hit-on-unassessed-binary")
-        self.expect(lambda d: d["result"]["binaries"][self.ELF]["rule_hits"].append({"rule_id": "BA2008", "check": "control_flow_guard"}),
-                    "rule-hit-on-unassessed-binary")
-        self.expect(lambda d: d["tool-results"]["tool_instances"][0].__setitem__("result_record_count", 4), "record-count-mismatch")
-        self.expect(lambda d: d["result"]["binaries"][self.PE].__setitem__("tool_id", "checksec"), "unknown-tool", exact=False)
-        self.expect(lambda d: d["tool-results"]["tool_instances"][0]["outputs"][0].__setitem__("path", "outputs/other.sarif"), "raw-output-missing")
-        self.expect(lambda d: d["tool-results"]["tool_instances"][0]["outputs"][0].__setitem__("role", "normalized-result"), "raw-output-missing")
-        self.expect(lambda d: d["result"]["binaries"][1].__setitem__("path", d["result"]["binaries"][0]["path"]), "duplicate-record", exact=False)
 
     def test_the_listed_format_is_rederived_from_the_leading_bytes(self):
         for data, expected in ((b"MZ\x90\x00", "pe"), (b"\x7fELF\x02", "elf"), (b"\xcf\xfa\xed\xfe", "macho"),
@@ -1166,7 +1245,9 @@ class BinaryRuleTests(unittest.TestCase):
     def test_a_failed_tool_supports_no_verdict(self):
         case = binary_case([("bin/a.dll", "pe", "assessed")], failed=True)
         self.assertEqual(check(case, status="FAILED"), [])
-        case["documents"]["result"]["binaries"][0]["checks"] = binary_checks("pe", True)
+        binary = case["documents"]["result"]["binaries"][0]
+        binary["observations"] = observations_for("pe")
+        rederive(binary)
         self.assertEqual(names(check(case, status="FAILED")), {"assessment-coverage-mismatch", "result-from-tool-without-output"})
 
 

@@ -353,6 +353,168 @@ class ChecksecRelroTests(unittest.TestCase):
         self.assertEqual([r["rule_id"] for r in records], ["CHECKSEC-FULL-RELRO"])
 
 
+REAL = ROOT / "tests" / "fixtures" / "binary-hardening-real"
+MAGIC = {"pe": b"MZ\x90\x00", "elf": b"\x7fELF\x02\x01\x01\x00", "macho": b"\xcf\xfa\xed\xfe"}
+
+
+def real_paths():
+    """binary_id -> path, from the recorded run."""
+    return dict(line.split() for line in (REAL / "binary-ids.txt").read_text().splitlines())
+
+
+def real_format(path):
+    return "pe" if path.endswith(".exe") else "macho" if path.startswith("mac/") else "elf"
+
+
+class BinaryHardeningRealOutputTests(unittest.TestCase):
+    """02-binary-hardening 1.1 against output the tools actually printed (fixtures/binary-hardening-real):
+    checksec 2.6.0 and blint 3.4.0 over ELF, PE32, PE32+ and Mach-O files, recorded 2026-10-01."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.tmp = Path(temporary.name)
+        self.paths = real_paths()
+        self.source = self.tmp / "source"
+        for path in self.paths.values():
+            target = self.source / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(MAGIC[real_format(path)] + hashlib.sha256(path.encode()).digest())
+
+    def observations(self, metadata_name):
+        bid = metadata_name.removesuffix("-metadata.json")
+        metadata = json.loads((REAL / "blint-3.4.0" / metadata_name).read_text())
+        return {i["check"]: i["reported"] for i in b13.blint_observations(real_format(self.paths[bid]), metadata)}
+
+    def by_path(self, path):
+        bid = cmb.binary_id(path)
+        return self.observations(f"{bid}-metadata.json")
+
+    def test_checksec_values_map_to_closed_verdicts(self):
+        found = b13.checksec_observations((REAL / "checksec-2.6.0.json").read_bytes())
+        self.assertEqual(set(found), {"case001", "case030", "nowrelro", "u1/a.out", "u2/a.out", "weak"})
+        weak = {i["check"]: i["reported"] for i in found["weak"]}
+        self.assertEqual(weak, {"position_independent": "absent", "non_executable_data": "absent",
+                                "stack_protector": "absent", "relro": "absent", "fortify_source": "absent"})
+        nowrelro = {i["check"]: i["reported"] for i in found["nowrelro"]}
+        self.assertEqual(nowrelro["relro"], "absent")   # no GNU_RELRO segment although BIND_NOW is set
+        self.assertEqual({i["check"]: i["reported"] for i in found["case001"]}["fortify_source"], "present")
+        self.assertEqual(b13.checksec_reported((REAL / "checksec-2.6.0.json").read_bytes()), set(found))
+
+    def test_blint_fields_known_to_be_wrong_are_never_read(self):
+        # relro: blint says "full" for nowrelro (no GNU_RELRO segment): never taken from blint.
+        self.assertNotIn("relro", self.by_path("nowrelro"))
+        # aslr: blint says false for every PE (LIEF 1.0 prints UNKNOWN(64)); pie tracks DYNAMIC_BASE.
+        self.assertEqual(self.by_path("win/t64.exe")["position_independent"], "present")
+        self.assertEqual(self.by_path("win/nodyn.exe")["position_independent"], "absent")
+        # Mach-O: MH_PIE exists only for executables, so a bundle gets no position_independent verdict.
+        self.assertEqual(self.by_path("mac/speedups.so"), {"non_executable_data": "present", "stack_protector": "absent"})
+
+    def test_blint_pe_load_configuration_and_dll_characteristics(self):
+        t32, t64, heva = self.by_path("win/t32.exe"), self.by_path("win/t64.exe"), self.by_path("win/heva.exe")
+        self.assertEqual(t32["safe_seh"], "present")
+        self.assertEqual(t32["control_flow_guard"], "absent")
+        self.assertNotIn("high_entropy_aslr", t32)              # PE32: not observed
+        self.assertNotIn("control_flow_guard", t64)             # no load configuration: not observed
+        self.assertNotIn("stack_protector", t64)
+        self.assertEqual(t64["high_entropy_aslr"], "absent")    # UNKNOWN(64), UNKNOWN(256), UNKNOWN(32768)
+        self.assertEqual(heva["high_entropy_aslr"], "present")  # UNKNOWN(32) set
+        self.assertIsNone(b13._dll_characteristics("UNKNOWN(64), SOMETHING_NEW"))
+        self.assertEqual(b13._dll_characteristics("DYNAMIC_BASE, NX_COMPAT"), 0x140)
+
+    def test_blint_elf_matches_checksec_on_the_shared_checks(self):
+        checksec = b13.checksec_observations((REAL / "checksec-2.6.0.json").read_bytes())
+        for path in ("case001", "case030", "nowrelro", "u1/a.out", "u2/a.out", "weak"):
+            blint = self.by_path(path)
+            ours = {i["check"]: i["reported"] for i in checksec[path]}
+            for name in ("position_independent", "non_executable_data", "stack_protector"):
+                self.assertEqual(blint[name], ours[name], f"{path} {name}")
+
+    def test_view_keeps_same_basename_binaries_apart_and_projection_names_skipped_files(self):
+        view_root = self.tmp / "view"
+        view = b13.blint_view(self.source, sorted(self.paths.values()), view_root)
+        self.assertNotEqual(cmb.binary_id("u1/a.out"), cmb.binary_id("u2/a.out"))
+        self.assertEqual(view, {cmb.binary_id(p): p for p in self.paths.values()})
+        projection = json.loads(b13.blint_projection(REAL / "blint-3.4.0", view, view_root))
+        self.assertEqual(projection["not_reported"], [{"binary_id": cmb.binary_id("win/broken.exe"), "path": "win/broken.exe"}])
+        self.assertEqual(len(projection["binaries"]), len(self.paths) - 1)
+        stray = self.tmp / "stray"; stray.mkdir()
+        (stray / "bin-000000000000-metadata.json").write_text("{}")
+        with self.assertRaises(b13.VendorToolFailed):
+            b13.blint_projection(stray, view, view_root)
+
+    def vendor_results(self, checksec=None):
+        raw_checksec = checksec if checksec is not None else (REAL / "checksec-2.6.0.json").read_bytes()
+        view_root = self.tmp / "view"
+        view = b13.blint_view(self.source, sorted(self.paths.values()), view_root)
+        raw_blint = b13.blint_projection(REAL / "blint-3.4.0", view, view_root)
+        results = {"binskim": {"status": "OK", "raw": raw_checksec, "records": b13.normalize("binskim", raw_checksec)},
+                   "blint": {"status": "OK", "raw": raw_blint, "records": b13.normalize("blint", raw_blint)}}
+        for tool, result in results.items():
+            receipt = {"schema": "appsec-review/vendor-b13-execution-receipt/1", "tool_id": tool,
+                       "attempt_id": f"{tool}-verified-1", "request_sha256": "sha256:" + "1" * 64,
+                       "result_sha256": "sha256:" + "2" * 64,
+                       "output_sha256": "sha256:" + hashlib.sha256(result["raw"]).hexdigest(),
+                       "permission_sha256": "sha256:" + "3" * 64, "permission_fingerprint_sha256": "sha256:" + "4" * 64,
+                       "image_id": "tool-" + tool, "image_digest": "sha256:" + "5" * 64,
+                       "argv": ["/opt/tool/bin/" + tool], "tool_version": "1.0.0", "tool_name": tool}
+            result["auth"] = {"attempt_id": receipt["attempt_id"], "argv": receipt["argv"], "exit_code": 0,
+                              "identity": {"repository": "docker.io/library/" + receipt["image_id"],
+                                           "digest": receipt["image_digest"], "tool_version": "1.0.0", "tool_name": tool},
+                              "receipt": receipt}
+        return results
+
+    def publish(self, vendor):
+        doc = workers.execute_and_build("02-binary-hardening", self.source, run_id="run-1", attempt_id="attempt-1",
+                                        source_snapshot_sha256=SOURCE_SHA, execution_root=self.tmp / "execution",
+                                        now="2026-10-01T12:00:00Z", collector=lambda *a, **k: vendor)
+        attempt = self.tmp / "attempt-1"
+        workers.materialize_attempt(doc, attempt, dagster_run_id="dagster-1",
+                                    started_at="2026-10-01T12:00:00Z", finished_at="2026-10-01T12:00:01Z")
+        errors = cmb.verify_attempt("binary-hardening", attempt, self.source, expected_header=doc["header"],
+                                    expected_dagster_run_id="dagster-1", node_status=doc["status"],
+                                    declared_tool_ids=workers.SPECS["02-binary-hardening"][1],
+                                    permitted_node_statuses=PERMITTED, on_unhandled="refuse",
+                                    limits=evidence_redaction.DEFAULT_LIMITS)
+        self.assertEqual(errors, [])
+        return doc, {b["path"]: b for b in doc["binary-hardening.json"]["binaries"]}
+
+    def test_real_output_publishes_a_valid_attempt_with_honest_verdicts(self):
+        doc, binaries = self.publish(self.vendor_results())
+        self.assertEqual(doc["status"], "OK_WITH_GAPS")
+        self.assertEqual(doc["binary-hardening.json"]["schema"], "appsec-review/binary-hardening/1.1")
+        weak = binaries["weak"]["checks"]
+        self.assertEqual({k: weak[k] for k in ("position_independent", "non_executable_data", "stack_protector", "relro",
+                                               "fortify_source")}, dict.fromkeys(
+            ("position_independent", "non_executable_data", "stack_protector", "relro", "fortify_source"), "absent"))
+        self.assertEqual(binaries["nowrelro"]["checks"]["relro"], "absent")
+        self.assertEqual(binaries["u1/a.out"]["checks"]["stack_protector"], "absent")
+        self.assertEqual(binaries["u2/a.out"]["checks"]["stack_protector"], "present")
+        t64 = binaries["win/t64.exe"]
+        self.assertEqual({i["tool_id"] for i in t64["observations"]}, {"blint"})
+        self.assertEqual(t64["checks"]["control_flow_guard"], "not-assessed")   # was `present` before 1.1
+        self.assertEqual(t64["checks"]["position_independent"], "present")
+        self.assertEqual(binaries["win/heva.exe"]["checks"]["high_entropy_aslr"], "present")
+        self.assertEqual(binaries["mac/speedups.so"]["checks"]["position_independent"], "not-assessed")
+        broken = binaries["win/broken.exe"]
+        self.assertEqual(broken["observations"], [])
+        self.assertEqual({v for v in broken["checks"].values()}, {"not-assessed", "not-applicable-for-format"})
+        coverage = {t["tool_id"]: t for t in doc["coverage.json"]["tools"]}
+        self.assertIn({"path": "win/broken.exe", "reason_code": "parse-failed"}, coverage["blint"]["not_analyzed_inputs"])
+        self.assertIn({"path": "win/t32.exe", "reason_code": "unsupported-format"}, coverage["binskim"]["unsupported_inputs"])
+        instances = {i["tool_id"]: i for i in doc["tool-results.json"]["tool_instances"]}
+        self.assertEqual(instances["binskim"]["result_record_count"], 6)
+        self.assertEqual(instances["blint"]["result_record_count"], 11)
+
+    def test_tools_that_disagree_are_published_as_not_assessed(self):
+        checksec = json.loads((REAL / "checksec-2.6.0.json").read_text())
+        checksec["/workspace/case001"]["canary"] = "no"
+        _doc, binaries = self.publish(self.vendor_results(json.dumps(checksec).encode()))
+        case001 = binaries["case001"]
+        self.assertEqual(case001["checks"]["stack_protector"], "not-assessed")
+        self.assertEqual(case001["tool_disagreements"], ["stack_protector"])
+
+
 class GitHubActionsScanTests(unittest.TestCase):
     """D-34: GitHub Actions workflows are scanned (zizmor, plus checkov's github_actions checks) and published
     as iac_kind github-actions."""

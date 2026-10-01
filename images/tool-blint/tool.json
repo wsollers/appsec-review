@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-blint",
+  "tool": "blint",
+  "version": "3.4.0",
+  "purpose": "binary hardening properties (blint, LIEF), offline; security_properties only.",
+  "feeds": [
+    "02-binary-hardening"
+  ],
+  "executable": "/opt/tool/bin/blint",
+  "version_argv": [
+    "/opt/tool/bin/python",
+    "-c",
+    "import importlib.metadata as m; print('blint', m.version('blint'))"
+  ],
+  "version_expect": "{version}",
+  "pip_lock": "requirements.txt",
+  "pip_package": "blint",
+  "assets": [],
+  "smoke": [
+    {
+      "name": "lint-own-interpreter",
+      "argv": [
+        "/opt/tool/bin/blint",
+        "--no-banner",
+        "-q",
+        "--no-error",
+        "--no-reviews",
+        "--no-wasm-strings",
+        "-i",
+        "/usr/local/bin/python3.12",
+        "-o",
+        "/scratch/blint"
+      ],
+      "exit_codes": [
+        0
+      ],
+      "workspace": "none",
+      "expect_files": [
+        "blint/python3.12-metadata.json"
+      ],
+      "file_contains": "security_properties"
+    }
+  ],
+  "notes": "blint has no --version flag; the version is read from the installed package metadata. The blintdb symbol database (ORAS pull from ghcr.io) is never enabled: no --use-blintdb, no USE_BLINTDB, no db subcommand."
+}

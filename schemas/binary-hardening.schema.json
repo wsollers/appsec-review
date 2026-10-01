@@ -15,7 +15,7 @@
   "additionalProperties": false,
   "properties": {
     "schema": {
-      "const": "appsec-review/binary-hardening/1.0"
+      "const": "appsec-review/binary-hardening/1.1"
     },
     "run_id": {
       "type": "string",

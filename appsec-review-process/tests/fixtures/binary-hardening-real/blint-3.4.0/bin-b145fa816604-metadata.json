@@ -1,0 +1,15 @@
+{
+ "binary_type": "ELF",
+ "exe_type": "genericbinary",
+ "file_path": "/workspace/bin-b145fa816604",
+ "file_type": "DYN",
+ "security_properties": {
+  "canary": true,
+  "is_signed": false,
+  "nx": true,
+  "pie": true,
+  "relro": "full",
+  "stripped": false,
+  "w_xor_x": true
+ }
+}
