@@ -127,8 +127,10 @@ def stage_control(run_id: str, *, authority: str = "Task-authorized engagement o
             "justification": f"Happy-path {job} replay of the accepted build lock through B13.",
             "capabilities": [capability],
         })
+    # D-28 (William, 2026-10-01): replayed builds reach their package managers like the trial did.
     value = {"schema": CONTROL_SCHEMA, "mode": "success", "requirements": requirements,
-             "grants": grants, "timeout_seconds": tunables.value(job, "container_timeout_seconds")}
+             "grants": grants, "timeout_seconds": tunables.value(job, "container_timeout_seconds"),
+             "build_network": "unrestricted"}
     errors = validate_document(value, "build-replay-input.schema.json")
     if errors:
         raise ValueError("invalid build-replay control: " + "; ".join(errors))
@@ -300,7 +302,8 @@ def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], loc
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
         "scratch_path": "scratch", "log_path": "logs/container",
-        "network": {"mode": "none", "destinations": []}, "permission": permission,
+        "network": {"mode": "unrestricted-build" if control.get("build_network") == "unrestricted" else "none",
+                    "destinations": []}, "permission": permission,
         "limits": {**tunables.container_limits(job), "timeout_seconds": control["timeout_seconds"]}}
 
 

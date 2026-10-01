@@ -17,6 +17,9 @@ One request, one registry-pinned image, one argv array, one container, one termi
 * The network is ``none``. A request may *ask* for fixed destinations, and the B11 permission gate
   is evaluated for every request, but boundary 1.0 has no egress filter, so a granted network
   request ends ``BLOCKED`` (``NETWORK_ENFORCEMENT_UNAVAILABLE``) instead of opening a bridge.
+  One exception (William, 2026-10-01, decision log D-28): network mode ``unrestricted-build`` runs
+  the container on Docker's default bridge so target builds can reach their package managers. Only
+  the jobs in :data:`UNRESTRICTED_NETWORK_JOBS` may ask for it, and every other flag stays fixed.
 * The container is always removed by its run-owned name, and the result says so.
 
 Order is part of the contract: every hostile request is rejected before a directory is created or
@@ -94,6 +97,21 @@ BOUNDARY_FLAGS: tuple[str, ...] = (
     # target processes; the JVM alone uses the one run-owned writable scratch mount.
     "--env", "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/scratch",
 )
+# Jobs that run a target's own build and may use network mode ``unrestricted-build`` (D-28): the
+# build fetches its dependencies (Go modules, Maven, crates.io, npm, NuGet, PyPI, Packagist, apt).
+UNRESTRICTED_NETWORK_JOBS = frozenset(("02-build-resolution", "02-build-configure", "02-native-build"))
+
+
+def boundary_flags(network_mode: str) -> tuple[str, ...]:
+    """BOUNDARY_FLAGS for a request's network mode: identical except ``--network bridge`` for
+    ``unrestricted-build``. boundary_sha256 stays the identity of the offline flags, so jobs that
+    keep ``none`` see no fingerprint change."""
+    if network_mode != "unrestricted-build":
+        return BOUNDARY_FLAGS
+    at = BOUNDARY_FLAGS.index("--network")
+    return BOUNDARY_FLAGS[:at + 1] + ("bridge",) + BOUNDARY_FLAGS[at + 2:]
+
+
 # Options that may appear before the image, each with how many times. Anything else is a defect.
 _ALLOWED_OPTION_COUNTS = {
     "--name": 1, "--label": 2, "--pull": 1, "--log-driver": 1, "--network": 1, "--hostname": 1,
@@ -361,10 +379,12 @@ def request_errors(request: Any, *, run_id: str, job_id: str, attempt_id: str,
             errors.append(f"limits.{name} must be an integer within {low}..{high}")
     network = request["network"]
     destinations = network["destinations"]
-    if network["mode"] == "none" and destinations:
-        errors.append("network mode 'none' cannot list destinations")
-    if network["mode"] != "none" and not destinations:
+    if network["mode"] in ("none", "unrestricted-build") and destinations:
+        errors.append(f"network mode {network['mode']!r} cannot list destinations")
+    if network["mode"] == "granted-fixed-destinations" and not destinations:
         errors.append("network mode 'granted-fixed-destinations' must list at least one destination")
+    if network["mode"] == "unrestricted-build" and request["job_id"] not in UNRESTRICTED_NETWORK_JOBS:
+        errors.append("network mode 'unrestricted-build' is only for the target build jobs")
     if len(destinations) > MAX_DESTINATIONS:
         errors.append(f"more than {MAX_DESTINATIONS} network destinations")
     keys = []
@@ -453,7 +473,7 @@ def resolve_image(image: Mapping[str, Any], registry: Mapping[str, Mapping[str, 
 def build_docker_argv(*, docker_executable: str, name: str, user: str, image_ref: str,
                       limits: Mapping[str, int], environment: Iterable[Mapping[str, str]],
                       mounts: Iterable[tuple[str, str]], scratch_source: str,
-                      argv: Iterable[str]) -> tuple[str, ...]:
+                      argv: Iterable[str], network_mode: str) -> tuple[str, ...]:
     """``docker run`` as a list. Every argument is required; nothing here reads the host."""
     argv = tuple(argv)
     if not re.match(r"appsec-[0-9a-f]{32}\Z", name):
@@ -468,7 +488,7 @@ def build_docker_argv(*, docker_executable: str, name: str, user: str, image_ref
         docker_executable, "run", "--name", name,
         "--label", "appsec-review.adapter=" + ADAPTER_ID,
         "--label", "appsec-review.container=" + name,
-        *BOUNDARY_FLAGS,
+        *boundary_flags(network_mode),
         "--user", user,
         "--pids-limit", str(limits["pids"]),
         "--memory", str(limits["memory_bytes"]),
@@ -485,11 +505,11 @@ def build_docker_argv(*, docker_executable: str, name: str, user: str, image_ref
     command += ["--mount", f"type=bind,source={scratch_source},target={SCRATCH_TARGET}"]
     command += ["--entrypoint=" + argv[0], image_ref, *argv[1:]]
     result = tuple(command)
-    assert_boundary(result, image_ref)
+    assert_boundary(result, image_ref, network_mode)
     return result
 
 
-def assert_boundary(command: tuple[str, ...], image_ref: str) -> None:
+def assert_boundary(command: tuple[str, ...], image_ref: str, network_mode: str) -> None:
     """Defence in depth over the built list: exactly the boundary options, exactly once, before
     the image; one writable mount, at the scratch target; nothing else docker would parse."""
     if command[1] != "run" or image_ref not in command:
@@ -522,8 +542,9 @@ def assert_boundary(command: tuple[str, ...], image_ref: str) -> None:
         index += 1 if option in _FLAG_OPTIONS else 2
     if counts != _ALLOWED_OPTION_COUNTS or writable != 1:
         raise ContainerRequestError("docker argv does not carry each boundary option exactly once")
-    width = len(BOUNDARY_FLAGS)
-    if not any(options[at:at + width] == BOUNDARY_FLAGS for at in range(len(options) - width + 1)):
+    flags = boundary_flags(network_mode)
+    width = len(flags)
+    if not any(options[at:at + width] == flags for at in range(len(options) - width + 1)):
         raise ContainerRequestError("docker argv does not carry the boundary flags verbatim and in order")
 
 
@@ -834,7 +855,8 @@ def run_container(runtime: ContainerRuntime, *, run_id: str, job_id: str, attemp
     command = build_docker_argv(
         docker_executable=str(runtime.docker_executable), name=name, user=runtime.container_user,
         image_ref=image_ref, limits=request["limits"], environment=request["environment"],
-        mounts=mounts, scratch_source=scratch_source, argv=request["argv"])
+        mounts=mounts, scratch_source=scratch_source, argv=request["argv"],
+        network_mode=request["network"]["mode"])
     started_at = _now(runtime)
     decision = request["permission"]["decision"]
     permission_fingerprint = pc.fingerprint_material(decision["decision"], decision["capabilities"])["sha256"]
@@ -1125,7 +1147,7 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
             docker_executable=str(docker_executable), name=name, user=container_user,
             image_ref=image_reference(record), limits=request["limits"],
             environment=request["environment"], mounts=mounts, scratch_source=scratch_source,
-            argv=request["argv"])
+            argv=request["argv"], network_mode=request["network"]["mode"])
     except ContainerRequestError:
         return ["the attempt root, the expected request and the host facts do not derive a docker "
                 "run the adapter could have made"]

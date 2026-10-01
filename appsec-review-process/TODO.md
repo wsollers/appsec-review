@@ -531,6 +531,20 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] Merge both PRs with a merge commit (a squash merge plus branch deletion would drop the pinned commit;
       re-pin to the merge commit if squashed). Then `fixtures/populate-targets.sh appsec-multi-vuln` on each host.
 
+## B7: build network (D-28, 2026-10-01)
+
+- [x] Build containers (`02-build-resolution` trial, `02-build-configure`, `02-native-build`) run with
+      unrestricted network (`unrestricted-build`, Docker's default bridge) when the run's build controls say
+      `build_network: unrestricted` (staged by default). Resolver images use `deb.debian.org` on Debian-based
+      buildenvs. A plan with no apt packages runs no apt at all.
+- [ ] **Harden the egress later** (William, 2026-10-01): decide whether build containers can be limited to the
+      package registries (an allowlisting forward proxy on an internal Docker network, boundary 1.1), and what
+      that costs (TLS CONNECT only filters hostnames; per-ecosystem proxy settings; private registries). Also
+      record the Debian mirror in the B11 `package-restore` grant, which still names only archive.ubuntu.com.
+- [ ] Re-stage controls for runs staged before 2026-10-01 (`build_resolution.py stage-control`,
+      `build_replay.py` stage-control) to give them network; older controls stay offline.
+- [ ] Live check on appsec-multi-vuln: the Rust, Go, .NET, TypeScript, Java and Python units build.
+
 ## Shared images (ADR-0033)
 
 - [x] `image_build.py publish|pull|rekey` (Google Drive archives), `images/published.lock.json`, `prepare-host.sh` step 3 pulls
@@ -744,6 +758,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-09-30 | appsec-multi-vuln | `20260930T214459Z-ce7e7f` | 02-repository-partition-discovery | `INVOKER_EXCEPTION` after 1 repair: round 0 returned only `repository_partition_summary` (no `repository_partition_map`); round 1's map failed on one citation, `$.partitions[16].evidence_citations[1]` with a stray key `.` ($1.11 spent) | `model-config.json` `invocation.repair_attempts` 1 -> 2 (the allowed maximum; within the $2 standard per-call cap). Not in any fingerprint, so no accepted job reruns |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution (B8) | 8 of 28 plan commands had a cwd already rooted at the unit (`projects/cpp/case-027`); `_repo_commands` joined the root again and the trial raised before running (cpp 027/030/037, java 034, dotnet 015/071, rust 004, typescript 067) | A cwd equal to or below the unit root is taken as repository-relative; `build_plan.py` unchanged, so no re-plan. Test in `tests/test_build_resolution.py` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution (B7, part) | Resolver image builds wrote Ubuntu apt sources on the Debian-based buildenvs (go, php, python, rust, typescript): `apt-get update` exit 100, 15 of 23 gaps | A plan with no apt packages renders no apt step at all. Debian mirror and package-manager egress: William allowed both 2026-10-01; design in TODO section B7 |
+| 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution/-configure/native-build (B7) | Managed-language builds need their package managers; containers were always `--network none`, and apt on Debian buildenvs used the Ubuntu mirror | D-28: network mode `unrestricted-build` (build jobs only, `--network bridge`), staged via `build_network: unrestricted` in both build controls; apt picks deb.debian.org on Debian images. Tests in test_container_execution and test_build_resolution |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | prepare-host.sh --check (B5) | Step 6 printed OK for any clone (appsec-multi-vuln at 878d5d6 while pinned 5c5a776) | `--check` compares each clone with the pin read from `fixtures/populate-targets.sh` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | launch_job.py --wait (B6) | A 600 s monitoring timeout printed `DAGSTER_LAUNCH_FAILED` although the run had STARTED | `WaitTimeout`: `DAGSTER_WAIT_TIMEOUT`, exit 3 (a real failure stays exit 1). `tests/test_launch_job_wait.py` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | shell scripts (B4) | `images/audit-buildenv-common/run.sh`, `orchestrator/tail-run-log.sh` and 13 more shebang scripts were 100644 (Permission denied) | All set to 100755; `tests/test_script_modes.py` fails on any non-executable shebang script |

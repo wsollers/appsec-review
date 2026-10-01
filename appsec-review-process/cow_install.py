@@ -32,11 +32,17 @@ LABEL_DISPOSABLE = "appsec.review.disposable"
 LABEL_RUN = "appsec.review.run_id"
 LABEL_ROLE = "appsec.review.role"
 RESOLVER_MAX_AGE_SECONDS = tunables.shared("cow_resolver_max_age_days") * 86400
+# One mirror per distribution: Ubuntu buildenvs (cpp, java) use archive.ubuntu.com, the Debian ones
+# (go, php, python, rust, typescript, dotnet) deb.debian.org (William, 2026-10-01, D-28; the Ubuntu
+# sources failed with exit 100 on bookworm).
 APT_SOURCES = (". /etc/os-release && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
-               "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: %s %s-updates\\n"
+               'if [ "$ID" = debian ]; then '
+               "printf 'Types: deb\\nURIs: http://deb.debian.org/debian\\nSuites: %s %s-updates\\n"
+               "Components: main\\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\\n' "
+               '"$VERSION_CODENAME" "$VERSION_CODENAME" > /etc/apt/sources.list.d/debian.sources; '
+               "else printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: %s %s-updates\\n"
                "Components: main universe\\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\\n' "
-               '"$VERSION_CODENAME" "$VERSION_CODENAME" ' 
-               "> /etc/apt/sources.list.d/ubuntu.sources")
+               '"$VERSION_CODENAME" "$VERSION_CODENAME" > /etc/apt/sources.list.d/ubuntu.sources; fi')
 
 
 class InstallFailed(RuntimeError):

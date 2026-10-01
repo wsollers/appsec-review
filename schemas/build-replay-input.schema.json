@@ -4,6 +4,7 @@
   "type": "object", "additionalProperties": false,
   "required": ["schema", "mode", "requirements", "grants", "timeout_seconds"],
   "properties": {
+    "build_network": {"enum": ["none", "unrestricted"], "description": "Network for the containers that run the target build (D-28, William 2026-10-01): unrestricted is Docker's default bridge so package managers can fetch dependencies; absent or none is offline, as before."},
     "schema": {"const": "appsec-review/build-replay-input/1"},
     "mode": {"const": "success"},
     "requirements": {"type": "object", "additionalProperties": false,

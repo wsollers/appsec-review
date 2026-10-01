@@ -80,6 +80,15 @@ class BuildResolutionTests(unittest.TestCase):
         cfg = json.loads(request["argv"][3])
         self.assertEqual([c["argv"] for c in cfg["commands"]],
                          [["autoreconf", "-fi"], ["./configure"], ["make"]])
+        # D-28: a control staged with build_network=unrestricted puts the trial on the default bridge.
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder, "target"); target.mkdir()
+            inputs = {"control": {"value": {**control, "build_network": "unrestricted"}},
+                      "target_path": str(target), "source_snapshot_sha256": "sha256:" + "a" * 64}
+            with mock.patch.object(worker, "_permission", return_value=permission):
+                online = worker._request("run", "attempt", Path(folder), record, self.PLAN, inputs)
+        self.assertEqual(online["network"], {"mode": "unrestricted-build", "destinations": []})
+        self.assertEqual(worker.BUILD_NETWORK, "unrestricted")
 
     def test_permission_model_accepts_only_exact_apt_and_target_execution_grants(self):
         source = "sha256:" + "a" * 64

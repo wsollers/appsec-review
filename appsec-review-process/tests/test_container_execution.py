@@ -512,6 +512,7 @@ def golden_arguments(flavor: str) -> dict:
         "mounts": [(r"D:\review targets\repo (1)" if windows else "/srv/review targets/repo (1)", "/workspace")],
         "scratch_source": r"C:\runs\r1\attempt\scratch" if windows else "/srv/runs/r1/attempt/scratch",
         "argv": ["/usr/bin/tool", "--format", "json", "/workspace"],
+        "network_mode": "none",
     }
 
 
@@ -605,11 +606,36 @@ class ParityTests(unittest.TestCase):
             with self.subTest(omitted=name), self.assertRaises(TypeError):
                 ce.build_docker_argv(**arguments)
 
+    def test_unrestricted_build_network_only_for_build_jobs_and_only_the_network_flag(self):
+        # D-28 (William, 2026-10-01): target builds reach their package managers on the default bridge.
+        build = support.request(None, ["/usr/bin/tool"], job_id="02-build-resolution",
+                                network={"mode": "unrestricted-build", "destinations": []})
+        self.assertEqual(ce.request_errors(build, run_id=build["run_id"], job_id="02-build-resolution",
+                                           attempt_id=build["attempt_id"]), [])
+        other = support.request(None, ["/usr/bin/tool"], network={"mode": "unrestricted-build", "destinations": []})
+        self.assertIn("network mode 'unrestricted-build' is only for the target build jobs",
+                      ce.request_errors(other, run_id=other["run_id"], job_id=other["job_id"],
+                                        attempt_id=other["attempt_id"]))
+        listed = support.request(None, ["/usr/bin/tool"], job_id="02-native-build", network={
+            "mode": "unrestricted-build", "destinations": [{"scheme": "https", "host": "example.org", "port": 443}]})
+        self.assertTrue(ce.request_errors(listed, run_id=listed["run_id"], job_id="02-native-build",
+                                          attempt_id=listed["attempt_id"]))
+        offline = ce.build_docker_argv(**golden_arguments("posix"))
+        bridged = ce.build_docker_argv(**{**golden_arguments("posix"), "network_mode": "unrestricted-build"})
+        self.assertIn(("--network", "none"), list(zip(offline, offline[1:])))
+        self.assertIn(("--network", "bridge"), list(zip(bridged, bridged[1:])))
+        self.assertEqual([a for a in offline if a not in ("none", "bridge")],
+                         [a for a in bridged if a not in ("none", "bridge")])
+        image = golden_arguments("posix")["image_ref"]
+        with self.assertRaises(ce.ContainerRequestError):
+            ce.assert_boundary(bridged, image, "none")      # a bridged argv never passes as offline
+        self.assertEqual(ce.boundary_flags("none"), ce.BOUNDARY_FLAGS)
+
     def test_assert_boundary_rejects_every_widening_of_a_built_argv(self):
         arguments = golden_arguments("posix")
         image = arguments["image_ref"]
         good = ce.build_docker_argv(**arguments)
-        ce.assert_boundary(good, image)
+        ce.assert_boundary(good, image, "none")
         at = good.index(image)
 
         def inserted(*extra):
@@ -642,7 +668,7 @@ class ParityTests(unittest.TestCase):
         ]
         for index, command in enumerate(widened):
             with self.subTest(case=index), self.assertRaises(ce.ContainerRequestError):
-                ce.assert_boundary(tuple(command), image)
+                ce.assert_boundary(tuple(command), image, "none")
 
     def test_boundary_constant_is_equivalent_to_the_audit_native_wrapper(self):
         wrapper = ROOT.parent / "images" / "audit-native" / "run.sh"
@@ -924,7 +950,7 @@ class OutcomeTests(ScriptedCase):
         self.assertEqual(spec.argv[1], "run")
         self.assertEqual((Path(spec.owner_root), Path(spec.log_dir)), (self.attempt, self.log_dir))
         self.assertNotIn("DOCKER_CONTEXT", spec.env)
-        ce.assert_boundary(spec.argv, ce.image_reference(support.fixture_record()))
+        ce.assert_boundary(spec.argv, ce.image_reference(support.fixture_record()), "none")
         self.assertIn(f"type=bind,source={self.attempt / 'scratch'},target=/scratch", spec.argv)
         self.assertIn(f"type=bind,source={self.target},target=/workspace,readonly", spec.argv)
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import tempfile
@@ -60,7 +61,9 @@ class BuildReplayTests(unittest.TestCase):
                        "capabilities": [worker._cap(job)]}
         grant = {"schema": "appsec-review/permission-grant/1.0", "grant_id": "g", "effect": "ALLOW",
                  "authority": {"name": "Owner", "role": "engagement-owner"},
-                 "issued_at": "2026-09-26T00:00:00Z", "expires_at": "2026-09-28T00:00:00Z",
+                 # Relative to now: a fixed window expired on 2026-09-28 and the test began failing.
+                 "issued_at": (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                 "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
                  "binding": {"run_id": "run", "source_snapshot_sha256": source, "job_id": job},
                  "justification": "happy path", "capabilities": requirement["capabilities"]}
         control = {"requirements": {job: requirement}, "grants": [grant]}

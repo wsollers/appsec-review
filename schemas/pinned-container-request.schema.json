@@ -131,7 +131,8 @@
           "type": "string",
           "enum": [
             "none",
-            "granted-fixed-destinations"
+            "granted-fixed-destinations",
+            "unrestricted-build"
           ]
         },
         "destinations": {

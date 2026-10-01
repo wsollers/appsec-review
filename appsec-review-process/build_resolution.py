@@ -43,6 +43,9 @@ CONTROL_SCHEMA = "appsec-review/build-resolution-input/1"
 RENDERER_VERSION = "build-resolution-dockerfile/1"
 RUNNER_VERSION = "build-resolution-runner/1"
 COMMAND_PROFILE = "build-resolution-v1"
+# D-28 (William, 2026-10-01): trial builds run on Docker's default bridge so package managers can
+# fetch dependencies. Staged into the control (fingerprinted); a control without it stays offline.
+BUILD_NETWORK = "unrestricted"
 APT_MIRROR = {"scheme": "http", "host": "archive.ubuntu.com", "port": 80,
               "suite": "noble", "components": ["main", "universe"]}
 CODE_FILES = ("build_resolution.py", "build_plan.py", "container_execution.py",
@@ -111,6 +114,7 @@ def stage_control(run_id: str, mode: str = "success", reuse: str = "auto",
         "schema": CONTROL_SCHEMA, "mode": mode, "build_resolution_attempts": 6,
         "build_image_reuse": reuse, "build_command_timeout_seconds": tunables.value(JOB, "container_timeout_seconds"),
         "image_build_timeout_seconds": 1800, "apt_mirror": APT_MIRROR,
+        "build_network": BUILD_NETWORK,
         "permission": {"requirement": {
             "schema": "appsec-review/permission-requirement/1.0", "job_id": JOB,
             "capabilities": [_cap("package-restore", origin="staged-run-config"),
@@ -221,11 +225,7 @@ def _render(plan: dict[str, Any], base_ref: str, mirror: dict[str, Any]) -> str:
     # buildenvs (go, php, python, rust, typescript) the Ubuntu sources fail with exit 100
     # (appsec-multi-vuln 20261001T032047Z-fd64eb, 15 of 23 gaps).
     apt = [
-        "RUN . /etc/os-release && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
-        "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: %s %s-updates\\n"
-        "Components: main universe\\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\\n' "
-        '"$VERSION_CODENAME" "$VERSION_CODENAME" ' 
-        "> /etc/apt/sources.list.d/ubuntu.sources && apt-get update && "
+        f"RUN {cow.APT_SOURCES} && apt-get update && "
         f"apt-get install -y --no-install-recommends {install} && rm -rf /var/lib/apt/lists/*",
     ] if install else []
     return "\n".join([
@@ -385,7 +385,8 @@ def _request(run_id: str, attempt_id: str, unit_attempt: Path, record: dict[str,
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
         "scratch_path": "scratch", "log_path": "logs/container",
-        "network": {"mode": "none", "destinations": []}, "permission": permission,
+        "network": {"mode": "unrestricted-build" if control.get("build_network") == "unrestricted" else "none",
+                    "destinations": []}, "permission": permission,
         "limits": {**tunables.container_limits(JOB),
                    "timeout_seconds": control["build_command_timeout_seconds"]}}
 
@@ -736,7 +737,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                   "source_revision": inputs["source_revision"], "units": len(units),
                   "permissions": ["package-restore:apt@archive.ubuntu.com:80",
                                   "target-execution:build-resolution-v1@."],
-                  "network": "image-build-only; trial=none", "ended_at": now()}
+                  "network": "image-build; trial=" + ("unrestricted (D-28)" if control.get("build_network") == "unrestricted" else "none"), "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         artifacts = [RESULT, LOCK_FILE, RECEIPTS, SUMMARY, "status.json"] + [
             r["compile_commands_path"] for r in receipts] + install_files

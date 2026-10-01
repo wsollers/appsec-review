@@ -50,7 +50,7 @@ image reference, then `argv[1:]`. Docker stops parsing options at the image, so 
 |---|---|
 | `--pull never` | the adapter never uses the network to obtain an image; an absent digest is `IMAGE_NOT_PROVISIONED` |
 | `--log-driver none` | the daemon keeps no unbounded copy of container output; retention is the adapter's bounded logs |
-| `--network none` | no network, always (see the permission section) |
+| `--network none` | no network, except `--network bridge` for network mode `unrestricted-build` (target build jobs only, D-28; see the permission section) |
 | `--hostname`, `--add-host` | a resolvable self-name under `--network none`, as in `run.sh` |
 | `--read-only` | read-only root filesystem |
 | `--cap-drop ALL` | no Linux capabilities; nothing can add one |
@@ -150,7 +150,20 @@ Network is default deny. `network.mode` is `none`, or `granted-fixed-destination
 `fixed-network-destination` capability ends `NETWORK_NOT_GRANTED`. **Boundary 1.0 has no egress
 filter**, and `--network bridge` would reach every destination, which is wider than the
 capability; so a fully granted network request ends `NETWORK_ENFORCEMENT_UNAVAILABLE` and no
-container starts. Every list this adapter builds carries `--network none`. No granted capability
+container starts. Every list this adapter builds carries `--network none`, with one exception.
+
+**Exception: `unrestricted-build` (D-28, William 2026-10-01).** The jobs that run a target's own
+build (`02-build-resolution`, `02-build-configure`, `02-native-build`, `container_execution.
+UNRESTRICTED_NETWORK_JOBS`) may ask for network mode `unrestricted-build` with no destinations. The
+container then runs on Docker's default bridge (`--network bridge` in place of `--network none`;
+every other flag unchanged) so the build's package managers can fetch dependencies (Go modules,
+Maven, crates.io, npm, NuGet, PyPI, Packagist, apt). The run's build control decides it
+(`build_network: unrestricted`, staged by default from 2026-10-01; absent or `none` stays offline),
+so the choice is part of the job's inputs and fingerprint. The untrusted target build has
+unrestricted egress for those containers: a deliberate, recorded widening, not a gap in the
+boundary. Hardening it (an allowlisting proxy) is an open TODO. Any other job asking for the mode
+is rejected before docker is contacted. `boundary_sha256` stays the identity of the offline flags,
+so no other job's fingerprint changes. No granted capability
 (`debugger-ptrace`, `target-mutation`, `credential-use`, `package-restore`) adds a docker
 capability, device, writable target or credential in 1.0.
 
