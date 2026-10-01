@@ -227,6 +227,29 @@ class PromptGroupingTests(unittest.TestCase):
         self.assertIn("NOT repository evidence", section)
 
 
+    def test_citable_roots_switch_the_upstream_wording_in_both_render_modes(self):
+        """A contract listing upstream-artifacts in citable_roots (only component-map, 01) gets the
+        upstream_lane citation instruction; every other job keeps the exact original wording."""
+        inputs = (item(pd.DEFAULT_READABLE_ROOT, "a.c", b"int x;\n"),
+                  item(pd.UPSTREAM_ROOT_ID, "intel-manifest.json", b"{}\n"))
+        for render in (cci._render_readable_inputs, cci._render_input_inventory):
+            with self.subTest(render=render.__name__):
+                default, citable = render(inputs), render(inputs, upstream_citable=True)
+                self.assertIn("NOT repository evidence", default)
+                self.assertNotIn("NOT repository evidence", citable)
+                self.assertIn('source_type \"upstream_lane\"'.replace("\\", ""), citable)
+
+    def test_only_the_component_map_contract_opts_in_and_every_contract_validates(self):
+        import registry_paths
+        from schema_validate import validate_document
+        opted = []
+        for path in sorted(registry_paths.OUTPUT_CONTRACTS_DIR.glob("*.json")):
+            contract = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(validate_document(contract, "output-contract.schema.json"), [], path.name)
+            if pd.UPSTREAM_ROOT_ID in contract.get("citable_roots", ()):
+                opted.append(contract["contract_id"])
+        self.assertEqual(opted, ["component-map"])
+
 class RequestBuilderTests(unittest.TestCase):
     def test_upstream_root_is_an_optional_build_request_parameter(self):
         parameter = inspect.signature(pd.build_request).parameters["upstream_root"]

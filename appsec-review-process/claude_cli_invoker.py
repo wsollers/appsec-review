@@ -330,7 +330,11 @@ def _inventory_section(items: list, root_label: str) -> list[str]:
 TASK_INPUT_BYTES = 4096
 
 
-def _render_input_inventory(inputs: tuple) -> str:
+UPSTREAM_CITABLE = ("findings that this job may cite: use source_type \"upstream_lane\" and the path "
+                    "exactly as listed, without the root prefix.")
+
+
+def _render_input_inventory(inputs: tuple, upstream_citable: bool = False) -> str:
     target = [item for item in inputs if item.root != pd.UPSTREAM_ROOT_ID]
     upstream = [item for item in inputs if item.root == pd.UPSTREAM_ROOT_ID]
     total = sum(len(item.data) for item in inputs)
@@ -362,13 +366,14 @@ def _render_input_inventory(inputs: tuple) -> str:
     if upstream:
         parts += ["", "### Upstream Accepted Artifacts\n",
                   "Accepted outputs of earlier jobs in this run. They define scope and carry tool "
-                  "findings; they are NOT repository evidence, so do not cite them in "
-                  "evidence_citations.\n"]
+                  + (UPSTREAM_CITABLE if upstream_citable else
+                     "findings; they are NOT repository evidence, so do not cite them in "
+                     "evidence_citations.") + "\n"]
         parts += _inventory_section(upstream, pd.UPSTREAM_ROOT_ID)
     return "\n".join(parts) + "\n"
 
 
-def _render_readable_inputs(inputs: tuple) -> str:
+def _render_readable_inputs(inputs: tuple, upstream_citable: bool = False) -> str:
     """Every readable input's exact bytes, inlined into the prompt text -- the only way the model
     can see them at all, since this invoker grants no tools and no filesystem access. Each is
     fenced and labeled by its pinned root/path, matching ``persona_prompt_assembly``'s own
@@ -394,9 +399,10 @@ def _render_readable_inputs(inputs: tuple) -> str:
         # anyway, since none of them exists in the checkout.
         parts.append("## Upstream Accepted Artifacts\n")
         parts.append("Each artifact below is the accepted output of an earlier job in this run, pinned "
-                     "to the exact bytes shown. It defines your scope. It is NOT repository evidence: "
-                     "do not cite these paths in evidence_citations -- cite only files listed under "
-                     "Target Repository Files.\n")
+                     "to the exact bytes shown. It defines your scope"
+                     + (". It also carries tool " + UPSTREAM_CITABLE if upstream_citable else
+                        ". It is NOT repository evidence: do not cite these paths in evidence_citations "
+                        "-- cite only files listed under Target Repository Files.") + "\n")
         parts.extend(fenced(item) for item in upstream)
     return "\n".join(parts)
 
@@ -439,7 +445,11 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
                 f"to find a schema for the declared result artifact")
         schema_sections.append(_render_json_schema(
             persona_schema or output_contract["result_schema"]["schema_file"], store))
-    parts = [outer, (_render_input_inventory if indexed else _render_readable_inputs)(package.inputs)]
+    # The output contract's citable_roots (default: the target only) decides whether the upstream
+    # artifacts are described as citable evidence or as scope only (01 cites them; 02 must not).
+    upstream_citable = pd.UPSTREAM_ROOT_ID in output_contract.get("citable_roots", ())
+    parts = [outer, (_render_input_inventory if indexed else _render_readable_inputs)(
+        package.inputs, upstream_citable=upstream_citable)]
     if indexed and tool_guides_text:
         parts.append(tool_guides_text.rstrip())
     if schema_sections:

@@ -22,6 +22,10 @@
     "artifact": "component-purpose-map.json",
     "schema_file": "component-purpose-map.schema.json"
   },
+  "citable_roots": [
+    "target-repository",
+    "upstream-artifacts"
+  ],
   "claim_class": {
     "claim_class_id": "component_characterization",
     "allowed_assertions": [

@@ -43,7 +43,10 @@
     },
     "result_schema": {
       "type": "object",
-      "required": ["artifact", "schema_file"],
+      "required": [
+        "artifact",
+        "schema_file"
+      ],
       "additionalProperties": false,
       "properties": {
         "artifact": {
@@ -57,7 +60,11 @@
     },
     "claim_class": {
       "type": "object",
-      "required": ["claim_class_id", "allowed_assertions", "forbidden_promotions"],
+      "required": [
+        "claim_class_id",
+        "allowed_assertions",
+        "forbidden_promotions"
+      ],
       "additionalProperties": false,
       "properties": {
         "claim_class_id": {
@@ -77,10 +84,29 @@
           "minItems": 1,
           "items": {
             "type": "string",
-            "enum": ["finding", "severity", "runtime-state"]
+            "enum": [
+              "finding",
+              "severity",
+              "runtime-state"
+            ]
           }
         }
       }
+    },
+    "citable_roots": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "target-repository",
+          "upstream-artifacts"
+        ]
+      },
+      "contains": {
+        "const": "target-repository"
+      },
+      "description": "Readable roots the model may cite in evidence_citations. Absent means target-repository only. The invoker states this rule in the prompt (claude_cli_invoker.build_prompt_text); a job listing upstream-artifacts must also accept upstream citations in its own validator."
     }
   }
 }
