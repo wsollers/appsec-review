@@ -93,6 +93,34 @@ def _fill_binding(envelope: dict[str, Any], result_field: str) -> None:
     envelope[result_field]["schema"] = "appsec-review/evidence-producer-binding/1.0"
 
 
+NO_MODEL_NOTE = ("No model was called: every producer-binding value is orchestrator-known and filled from the "
+                 "pinned inputs (D-31).")
+
+
+def _no_model_dispatch(argv, prompt, timeout_seconds, transcript_path) -> dict[str, Any]:
+    """Stands in for the claude CLI: the reply carries no values, the orchestrator fills them."""
+    return {"timed_out": False, "final_result": {
+        "result": "Producer binding filled by the orchestrator from the pinned inputs; no model was called.",
+        "total_cost_usd": 0.0, "usage": {"input_tokens": 0, "output_tokens": 0}}}
+
+
+def _fill_binding_without_model(envelope: dict[str, Any], result_field: str) -> list[str]:
+    _fill_binding(envelope, result_field)
+    return [NO_MODEL_NOTE]
+
+
+class OrchestratorFillInvoker(ClaudeCliInvoker):
+    """D-31 (2026-10-01): producer binding makes no model call. Run 20261001T032047Z-fd64eb spent $1.45
+    and 24 minutes on 27 haiku calls whose every value ``_fill_binding`` then replaced (27 of 27 replies
+    differed from the published binding). The envelope, schema validation, claims and pool rendezvous
+    are unchanged; only the dispatch is local."""
+    invoker_id = "orchestrator-fill"
+
+    def __init__(self, *, effort: str) -> None:
+        super().__init__(effort=effort, budget_usd=None, dispatch_fn=_no_model_dispatch,
+                         fill_result=_fill_binding_without_model)
+
+
 def _permission(run_id: str, snapshot: str, now: str) -> dict[str, Any]:
     requirement = {"schema": "appsec-review/permission-requirement/1.0",
                    "job_id": evidence_assembly.JOB, "capabilities": []}
@@ -201,7 +229,7 @@ def prepare(run_id: str, dagster_run_id: str, force: bool = False, *, invoker: A
     """Run the real producer-binding pool and return the exact F02 constructor arguments."""
     run_id, dagster_run_id = identifier(run_id), identifier(dagster_run_id)
     root = run_path(run_id).absolute()
-    selected_invoker_id = getattr(invoker, "invoker_id", "claude-cli")
+    selected_invoker_id = getattr(invoker, "invoker_id", OrchestratorFillInvoker.invoker_id)
     spec, context, rendezvous_parent, snapshot, effort, usd = _build(
         root, run_id, dagster_run_id, force=force, invoker_id=selected_invoker_id)
     plan = pool_specification.plan_expansion(spec, context=context)
@@ -213,7 +241,7 @@ def prepare(run_id: str, dagster_run_id: str, force: bool = False, *, invoker: A
         outcome = verified.manifest["outcome"]
     else:
         runtime = pool_rendezvous.RendezvousRuntime(rendezvous_parent=rendezvous_parent,
-            invoker=invoker or ClaudeCliInvoker(effort=effort, budget_usd=usd, fill_result=_fill_binding), clock=clock or _now,
+            invoker=invoker or OrchestratorFillInvoker(effort=effort), clock=clock or _now,
             stop_grace_seconds=5, cancel=pool_rendezvous.PoolCancel(),
             max_parallel=pool_rendezvous.MAX_PARALLEL,
             wait_limit_seconds=spec["rendezvous_timeout_seconds"], drain_seconds=60)

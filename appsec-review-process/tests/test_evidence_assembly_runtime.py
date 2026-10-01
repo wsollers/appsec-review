@@ -44,6 +44,24 @@ class EvidenceAssemblyRuntimeTests(unittest.TestCase):
                 mock.patch.object(runtime.mvr, "resolve_run_model_versions", return_value={}),
                 mock.patch.object(runtime.mvr, "model_identity_for", return_value=MODEL))
 
+    def test_producer_binding_completes_without_a_model_call_d31(self):
+        """D-31: the default binding invoker fills every value locally; no claude dispatch happens."""
+        with tempfile.TemporaryDirectory() as value:
+            run_root = self.prepared_run(Path(value))
+            p1, p2, p3 = self.patches(run_root)
+            with p1, p2, p3, \
+                    mock.patch("claude_cli_invoker.cbr.resolve_claude_binary", return_value="/usr/bin/claude"), \
+                    mock.patch("claude_cli_invoker.rc._dispatch_streaming",
+                               side_effect=AssertionError("no model call expected")):
+                prepared = runtime.prepare(PLAN["run_id"], "dagster-binding-local",
+                                           clock=lambda: "2026-09-27T00:00:02Z")
+            args = prepared.assembly_arguments()
+            verified = pool_rendezvous.load_verified_manifest(**args)
+            self.assertEqual(verified.manifest["outcome"], pool_rendezvous.COMPLETE)
+            plan = evidence_assembly_input.derive_plan(
+                run_root, run_id=PLAN["run_id"], source_snapshot_sha256=prepared.source_snapshot_sha256, **args)
+            self.assertEqual(len(plan["producers"]), len(evidence_assembly_input._dependencies()))
+
     def test_prepare_uses_exact_graph_denominator_and_returns_f02_arguments(self):
         with tempfile.TemporaryDirectory() as value:
             run_root = self.prepared_run(Path(value))

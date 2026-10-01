@@ -72,6 +72,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+# Job templates whose work is deterministic Python name this pseudo-model; it is not a claude alias.
+# Probing it cost one failing CLI call per run ("issue with the selected model", returncode 1, run
+# 20261001T032047Z-fd64eb).
+NON_MODEL_ALIASES = frozenset({"deterministic-python"})
+
+
 def configured_aliases() -> list[str]:
     """Every model alias this repo's own configuration currently names: model-config.json's
     process-wide default, every `unbuilt_job_defaults` entry's model, and every registry job
@@ -91,7 +97,7 @@ def configured_aliases() -> list[str]:
         model = template.get("model")
         if isinstance(model, dict) and model.get("model"):
             aliases.add(model["model"])
-    return sorted(aliases)
+    return sorted(aliases - NON_MODEL_ALIASES)
 
 
 def _probe_argv(alias: str, binary: str) -> list[str]:

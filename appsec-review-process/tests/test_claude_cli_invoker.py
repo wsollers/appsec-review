@@ -168,7 +168,7 @@ class RepairRetryTests(unittest.TestCase):
         self.budgets: list = []
 
     def run_rounds(self, responses, *, repair_attempts=1, budget_usd=None, timeout=1800,
-                   input_unit_limit=None, costs=None):
+                   input_unit_limit=None, costs=None, repair_budget_usd=None):
         responses = list(responses)
         costs = list(costs or [0.0] * len(responses))
 
@@ -189,7 +189,7 @@ class RepairRetryTests(unittest.TestCase):
             dispatch_fn=dispatch_fn, accept=accept, prompt_text="PROMPT", argv_for=lambda b: [b],
             budget_usd=budget_usd, timeout_seconds=timeout, repair_attempts=repair_attempts,
             input_unit_limit=input_unit_limit, diagnostics_dir=self.diag, cancel=threading.Event(),
-            started=time.time())
+            started=time.time(), repair_budget_usd=repair_budget_usd)
 
     def test_first_response_accepted_needs_no_repair(self):
         rounds = self.run_rounds(["good"])
@@ -237,6 +237,17 @@ class RepairRetryTests(unittest.TestCase):
         self.assertEqual(self.budgets, [1.0, 0.6])
         with self.assertRaises(invoker.InvokerOutputError):
             self.run_rounds(["bad", "good"], budget_usd=1.0, costs=[0.98, 0.0])
+
+    def test_repair_round_gets_its_own_cap_d31(self):
+        """Run 20261001T032047Z-fd64eb: 01's round 0 cost $1.00 of $2.00; the repair got the remainder.
+        With D-31 every repair round has a fixed cap, independent of what round 0 spent."""
+        rounds = self.run_rounds(["bad", "still-bad", "good"], repair_attempts=2, budget_usd=2.0,
+                                 costs=[1.9, 0.3, 0.2], repair_budget_usd=0.5)
+        self.assertEqual(rounds["rejected"], 2)
+        self.assertEqual(self.budgets, [2.0, 0.5, 0.5])
+        self.assertEqual(invoker._repair_budget_fraction({}), 0.25)
+        self.assertEqual(invoker._repair_budget_fraction({"invocation": {"repair_budget_fraction": 0.5}}), 0.5)
+        self.assertEqual(invoker._repair_budget_fraction({"invocation": {"repair_budget_fraction": 3}}), 0.25)
 
     def test_no_retry_when_it_would_exceed_the_input_unit_ceiling(self):
         with self.assertRaises(invoker.InvokerOutputError):

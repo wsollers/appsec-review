@@ -1103,22 +1103,39 @@ def _repair_prompt(prompt_text: str, error: InvokerOutputError, previous: str = 
     return text
 
 
+def _repair_budget_fraction(cfg: dict) -> float:
+    """``model-config.json`` ``invocation.repair_budget_fraction``: each repair round's own dollar cap as a
+    fraction of the per-call cap (D-31, 2026-10-01). Default 0.25; anything outside (0, 1] is 0.25."""
+    value = (cfg.get("invocation") or {}).get("repair_budget_fraction", 0.25)
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= 1 else 0.25
+
+
 def _dispatch_until_accepted(*, dispatch_fn, accept, prompt_text: str, argv_for, budget_usd: float | None,
                              timeout_seconds: int, repair_attempts: int, input_unit_limit: int | None,
-                             diagnostics_dir: Path, cancel: threading.Event, started: float) -> dict[str, Any]:
+                             diagnostics_dir: Path, cancel: threading.Event, started: float,
+                             repair_budget_usd: float | None = None) -> dict[str, Any]:
     """One dispatch, then at most ``repair_attempts`` re-asks when the response fails the
     mechanical checks (envelope, schema, claim builder). Each re-ask is the original prompt plus the
     rejection reasons, and must fit what is left of the call's time, dollar cap and input-unit
     ceiling; otherwise the last rejection is raised unchanged. A timeout, cancellation or missing
     binary is never retried. Every round's transcript and raw response, and ``repair-log.json``,
     stay in the private diagnostics directory. Returns the accepted envelope and claims with the
-    summed token usage and the number of rejected rounds."""
+    summed token usage and the number of rejected rounds.
+
+    With ``repair_budget_usd`` (D-31) a repair round gets that fixed cap instead of whatever round 0
+    left: a repair only reformats the rejected answer, and a remainder cap could be smaller than the
+    work (run 20261001T032047Z-fd64eb: $0.69 left after a $1.00 round 0)."""
     spent_usd, input_tokens, output_tokens = 0.0, 0, 0
     log: list[dict[str, Any]] = []
     prompt = prompt_text
     for round_index in range(repair_attempts + 1):
         suffix = "" if round_index == 0 else f"-repair-{round_index}"
-        budget = None if budget_usd is None else round(budget_usd - spent_usd, 4)
+        if budget_usd is None:
+            budget = None
+        elif round_index and repair_budget_usd is not None:
+            budget = round(repair_budget_usd, 4)
+        else:
+            budget = round(budget_usd - spent_usd, 4)
         remaining_seconds = int(timeout_seconds - (time.time() - started))
         try:
             dispatch = dispatch_fn(argv_for(budget), prompt, max(1, remaining_seconds),
@@ -1147,7 +1164,8 @@ def _dispatch_until_accepted(*, dispatch_fn, accept, prompt_text: str, argv_for,
                          (json.dumps(log, indent=2, sort_keys=True) + "\n").encode("utf-8"))
             last_round = round_index == repair_attempts
             no_time = timeout_seconds - (time.time() - started) < 120
-            no_money = budget_usd is not None and budget_usd - spent_usd < 0.05
+            no_money = budget_usd is not None and (repair_budget_usd < 0.05 if repair_budget_usd is not None
+                                                   else budget_usd - spent_usd < 0.05)
             no_units = bool(input_unit_limit) and input_tokens * (round_index + 2) / (round_index + 1) > input_unit_limit
             if last_round or no_time or no_money or no_units or cancel.is_set():
                 raise InvokerOutputError(
@@ -1347,6 +1365,8 @@ class ClaudeCliInvoker:
                                                        binary, mcp_config, code_grant[1]),
                 budget_usd=self.budget_usd, timeout_seconds=self.timeout_seconds,
                 repair_attempts=_repair_attempts(cfg),
+                repair_budget_usd=(None if self.budget_usd is None
+                                   else round(self.budget_usd * _repair_budget_fraction(cfg), 4)),
                 input_unit_limit=(package.request.get("budget") or {}).get("input_unit_limit"),
                 diagnostics_dir=diagnostics_dir, cancel=cancel, started=started)
             duration_seconds = time.time() - started
