@@ -42,7 +42,8 @@
     ]
   },
   "validation_rules": [
-    "every expected source category (exactly these tokens: first-party, vendored, generated, test-sample, documentation, build-tooling) is either a code_scope_classification classification or a negative_evidence category with that exact token",
+    "category_coverage is a required object with exactly six keys (first-party, vendored, generated, test-sample, documentation, build-tooling), each either {status: classified, scope_ids: [...]} or {status: absent, negative_evidence_id: ...}; each cited scope_id/negative_evidence_id must exist and carry that exact category (component-map/1.0, 2026-10-01: the earlier token-matching rule let 'absent' and 'classified' silently disagree)",
+    "a functional_component's optional candidate_security_tags is a non-binding lead, never a conclusion: Python resolves and overwrites cwe_name/cwe_catalog from the pinned CWE catalog, rejecting an unresolvable cwe_id; it never substitutes for or implies an OWASP/ASVS applicability decision, which is a separate workbench's job",
     "every regular target file has exactly one physical scope; overlap and unassigned paths fail closed",
     "path_patterns are globs anchored at the repository root: 'LICENSE' matches only the top-level LICENSE; use '**/LICENSE' for any depth",
     "each representative_location is a repository-relative target file, optionally suffixed ':<line>' or ':<start>-<end>', and at least one is matched by that component's path_patterns",

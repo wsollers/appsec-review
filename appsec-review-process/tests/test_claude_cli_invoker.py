@@ -352,6 +352,73 @@ class InvokeRepairEndToEndTests(unittest.TestCase):
     def test_repaired_dispatch_keeps_its_diagnostics_dir(self):
         self.assertTrue(self.run_invoke([{"project_discovery_summary_placeholder": "x"}, {}]))
 
+    def test_extra_validate_rejects_the_first_schema_valid_response_and_accepts_the_repair(self):
+        """01-component-characterization, 2026-10-01: a response can be perfectly schema-valid and
+        still semantically wrong (a model silently dropping 'first-party'). extra_validate is the
+        hook that lets a caller's own check reject that and drive the same bounded repair loop a
+        schema failure already uses."""
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
+        text = json.dumps({"project_inventory": inventory(), "project_discovery_summary": "# s"})
+        responses = [text, text]  # schema-identical; only extra_validate tells them apart
+        prompts = []
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            prompts.append(prompt)
+            return {"timed_out": False, "final_result": {"result": responses.pop(0)}}
+
+        def item(path):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x\n", sha256="a" * 64)
+
+        package = SimpleNamespace(
+            composition={"output_contract": contract}, prompt=b"OUTER", inputs=(item("configure.ac"), item("Makefile.am")),
+            request={"model": {"family": "claude-sonnet-5"}, "run_id": "r", "budget": {"input_unit_limit": 10 ** 9}},
+            allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        calls: list[dict] = []
+
+        def extra_validate(result):
+            calls.append(result)
+            return ["category_coverage is missing first-party"] if len(calls) == 1 else []
+
+        written = {}
+        with tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 1}}), \
+                mock.patch.object(invoker.pi, "write_invoker_output",
+                                  side_effect=lambda package, root, **kw: written.update(kw)):
+            invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn,
+                                     extra_validate=extra_validate).invoke(
+                package, output_root=Path(out), cancel=threading.Event())
+        self.assertEqual(len(prompts), 2)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("category_coverage is missing first-party", prompts[1])
+        self.assertTrue(any("schema repair retry: 1 rejected" in text for text in written["limitations"]))
+
+    def test_extra_validate_that_never_passes_fails_closed_with_no_retry_budget(self):
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
+        text = json.dumps({"project_inventory": inventory(), "project_discovery_summary": "# s"})
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            return {"timed_out": False, "final_result": {"result": text}}
+
+        def item(path):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x\n", sha256="a" * 64)
+
+        package = SimpleNamespace(
+            composition={"output_contract": contract}, prompt=b"OUTER", inputs=(item("configure.ac"), item("Makefile.am")),
+            request={"model": {"family": "claude-sonnet-5"}, "run_id": "r", "budget": {"input_unit_limit": 10 ** 9}},
+            allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        with tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 0}}), \
+                mock.patch.object(invoker.pi, "write_invoker_output"):
+            with self.assertRaises(invoker.InvokerOutputError) as caught:
+                invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn,
+                                         extra_validate=lambda result: ["always wrong"]).invoke(
+                    package, output_root=Path(out), cancel=threading.Event())
+        self.assertIn("always wrong", str(caught.exception))
+
 
 class PersonaResultCacheTests(unittest.TestCase):
     def test_identical_request_reuses_the_accepted_response_without_a_model_call(self):
@@ -394,4 +461,48 @@ class PersonaResultCacheTests(unittest.TestCase):
                     other, output_root=Path(out), cancel=threading.Event())
         self.assertEqual(len(calls), 2)
         self.assertTrue(any("persona cache" in text and "a1" in text for text in written[1]["limitations"]))
+
+    def test_reused_response_reports_true_zero_usage_not_a_byte_estimate(self):
+        """01-component-characterization, 2026-10-01, run 20261001T064759Z-4a8586: input_units on
+        reuse was computed as `rounds["input_tokens"] or (read_bytes + 3) // 4`. A reuse sets
+        input_tokens=0 deliberately (no new call made); `or` treated that honest 0 as 'missing' and
+        substituted a bytes/4 estimate over the *entire* available input (31,044,251 bytes -> an
+        estimated 7,761,063 units, against the real live call's actual 44), so a reused answer could
+        fail BUDGET_EXCEEDED purely from being reused."""
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
+        response = json.dumps({"project_inventory": inventory(), "project_discovery_summary": "# s"})
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            return {"timed_out": False, "final_result": {"result": response}}
+
+        def item(path, size):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x" * size, sha256="a" * 64)
+
+        def package(attempt):
+            return SimpleNamespace(
+                composition={"output_contract": contract}, prompt=b"OUTER",
+                inputs=(item("configure.ac", 1_000_000), item("Makefile.am", 1_000_000)),
+                request=invoker.pi.freeze({"model": {"family": "claude-sonnet-5"}, "run_id": "cache-run-2",
+                         "attempt_id": attempt, "job_id": "d02", "persona": {"persona_id": "p"},
+                         "budget": {"input_unit_limit": 10 ** 9}}),
+                allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        written = []
+        with tempfile.TemporaryDirectory() as runs, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 0}}), \
+                mock.patch.object(invoker.pi, "write_invoker_output",
+                                  side_effect=lambda package, root, **kw: written.append(kw)), \
+                mock.patch.object(invoker, "data_path", side_effect=lambda run, *parts: Path(runs, run, "data", *parts)), \
+                mock.patch("execution_state.run_path", side_effect=lambda run: Path(runs, run)):
+            (Path(runs) / "cache-run-2" / "inputs").mkdir(parents=True)
+            for attempt in ("b1", "b2"):
+                with tempfile.TemporaryDirectory() as out:
+                    invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn).invoke(
+                        package(attempt), output_root=Path(out), cancel=threading.Event())
+        live, reused = written
+        self.assertTrue(any("persona cache" in text for text in reused["limitations"]))
+        self.assertGreater(live["usage"]["input_units"], 100_000)  # the real bytes/4 estimate for ~2MB
+        self.assertEqual(reused["usage"]["input_units"], 0)
+        self.assertEqual(reused["usage"]["output_units"], 0)
 
