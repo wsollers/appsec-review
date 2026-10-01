@@ -915,3 +915,23 @@ Design: [`docs/code-query-tools.md`](../docs/code-query-tools.md).
 - [ ] Decide whether `06-cve-reachability` should depend on `02-treesitter-ast` in the job graph (today: consumed when present).
 - [ ] Brief V (lead context) after merge; sealed code-intel sidecar and query-time CodeQL stay deferred.
 
+
+## Per-shard claim review cycles (ADR-0034 proposed)
+
+Design: [`docs/decisions/ADR-0034-per-shard-claim-review-cycles.md`](../docs/decisions/ADR-0034-per-shard-claim-review-cycles.md).
+Goal: 07 → 08 → 09 run as parallel per-shard cycles with one join after 09, instead of three stage-wide barriers.
+
+- [ ] William: accept or amend ADR-0034.
+- [ ] S1 shard plan at `claim-ledger-routing`: routing result carries shard id, claim ids and sha256 from
+      `claim_review_sharding` (atomic units, size limit); `claim_reviewer_pool.plan` reads it instead of re-planning.
+- [ ] S2 per-shard scope: `claim_reviewer_pool` and `claim_review_lifecycle` take a shard id and publish under
+      `data/jobs/<stage>/shards/<shard_id>/`; "every and only upstream claim" checks the shard's claims.
+- [ ] S3 Dagster: routing emits one `DynamicOutput` per shard; `07 → 08 → 09` `.map()`ped per shard on `persona_llm`,
+      bounded by `claim_review_pool_max_parallel`; `.collect()` into the join.
+- [ ] S4 join: deterministic merge publishes the stage-level 07/08/09 results in the existing schemas, checks exact
+      coverage, names a failed shard (stage + claim ids) and blocks; 12, 14, quorum and the report unchanged.
+- [ ] S5 job graph, registry, output contracts and catalog updated; `validate_design_parity.py --check-generated-views`
+      and `job_catalog.py --check` pass; tests for shard-plan stability, single-shard rerun and join coverage.
+- [ ] S6 live run on appsec-multi-vuln: compare claim-review wall-clock and cost against the barrier version; confirm a
+      forced single-shard failure reruns only that shard.
+- [ ] Later: `UNREVIEWED` decisions for a failed shard at the join (ties to the Personas and reviewer pools item).
