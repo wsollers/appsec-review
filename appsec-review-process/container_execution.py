@@ -19,7 +19,8 @@ One request, one registry-pinned image, one argv array, one container, one termi
   request ends ``BLOCKED`` (``NETWORK_ENFORCEMENT_UNAVAILABLE``) instead of opening a bridge.
   One exception (William, 2026-10-01, decision log D-28): network mode ``unrestricted-build`` runs
   the container on Docker's default bridge so target builds can reach their package managers. Only
-  the jobs in :data:`UNRESTRICTED_NETWORK_JOBS` may ask for it, and every other flag stays fixed.
+  the jobs in :data:`UNRESTRICTED_NETWORK_JOBS` may ask for it (the CodeQL lanes too since D-29), and
+  every other flag stays fixed.
 * The container is always removed by its run-owned name, and the result says so.
 
 Order is part of the contract: every hostile request is rejected before a directory is created or
@@ -97,9 +98,13 @@ BOUNDARY_FLAGS: tuple[str, ...] = (
     # target processes; the JVM alone uses the one run-owned writable scratch mount.
     "--env", "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/scratch",
 )
-# Jobs that run a target's own build and may use network mode ``unrestricted-build`` (D-28): the
-# build fetches its dependencies (Go modules, Maven, crates.io, npm, NuGet, PyPI, Packagist, apt).
-UNRESTRICTED_NETWORK_JOBS = frozenset(("02-build-resolution", "02-build-configure", "02-native-build"))
+# Jobs that may use network mode ``unrestricted-build``: those that run a target's own build (D-28) and
+# the CodeQL language lanes (D-29), so dependencies resolve (Go modules, Maven, crates.io, npm, NuGet,
+# PyPI, Packagist, apt).
+UNRESTRICTED_NETWORK_JOBS = frozenset((
+    "02-build-resolution", "02-build-configure", "02-native-build",
+    "02-codeql-cpp", "02-codeql-csharp", "02-codeql-go", "02-codeql-java", "02-codeql-javascript",
+    "02-codeql-python", "02-codeql-ruby", "02-codeql-rust"))
 
 
 def boundary_flags(network_mode: str) -> tuple[str, ...]:
@@ -384,7 +389,7 @@ def request_errors(request: Any, *, run_id: str, job_id: str, attempt_id: str,
     if network["mode"] == "granted-fixed-destinations" and not destinations:
         errors.append("network mode 'granted-fixed-destinations' must list at least one destination")
     if network["mode"] == "unrestricted-build" and request["job_id"] not in UNRESTRICTED_NETWORK_JOBS:
-        errors.append("network mode 'unrestricted-build' is only for the target build jobs")
+        errors.append("network mode 'unrestricted-build' is only for the target build and CodeQL jobs")
     if len(destinations) > MAX_DESTINATIONS:
         errors.append(f"more than {MAX_DESTINATIONS} network destinations")
     keys = []

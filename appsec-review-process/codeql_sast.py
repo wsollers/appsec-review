@@ -94,6 +94,10 @@ BUILD_MODE_NONE = ("cpp", "csharp", "java", "javascript", "python", "ruby")
 # Go has no build-mode none: autobuild runs the image's Go toolchain offline (GOPROXY=off) over each module
 # (2026-10-01; before that Go was UNSUPPORTED_OFFLINE).
 BUILD_MODE_AUTOBUILD = ("go",)
+# D-29 (William, 2026-10-01): the CodeQL lanes run with network (mode unrestricted-build) so
+# dependencies resolve: Go modules through the default proxy, and the Java/C# build-mode-none
+# extractors' own dependency fetching. "none" restores the offline lanes.
+CODEQL_NETWORK = "unrestricted"
 COMPILED = ("cpp", "csharp", "go", "java", "rust")
 OFFLINE_UNSUPPORTED = {
     "rust": ("CodeQL rust not run: language not supported by the pinned CodeQL metadata (images/audit-codeql/"
@@ -104,8 +108,9 @@ FIDELITY_GAPS = {
             "templates are resolved heuristically; treat missing results as unexamined, not clean."),
     "csharp": "CodeQL csharp ran with --build-mode none: unresolved references lower recall.",
     "java": "CodeQL java ran with --build-mode none: unresolved dependencies lower recall.",
-    "go": ("CodeQL go ran with --build-mode autobuild offline (GOPROXY=off): a module whose dependencies are "
-           "neither vendored nor in the standard library does not resolve; treat it as unexamined, not clean."),
+    "go": ("CodeQL go ran with --build-mode autobuild: a module whose dependencies could not be fetched "
+           "(or, offline, are neither vendored nor in the standard library) does not resolve; treat it as "
+           "unexamined, not clean."),
 }
 GAP_CAUSES = ("TIMEOUT", "OOM_KILLED", "CONTAINER_EXIT_NONZERO")
 TRACED_TOOL_ID = "codeql-cpp-traced"
@@ -334,9 +339,11 @@ def build_plan(languages: list[str], registry: dict[str, dict[str, Any]], metada
         else:
             suite = metadata["query_suites"][language]
             mode = "autobuild" if language in BUILD_MODE_AUTOBUILD else "none"
-            row.update(build_mode=mode, query_suite=suite,
-                       argv=[metadata["lane_script"]["path"], language, mode, suite,
-                             str(analysis["threads"]), str(analysis["ram_mb"]), "keep-db"])
+            argv = [metadata["lane_script"]["path"], language, mode, suite,
+                    str(analysis["threads"]), str(analysis["ram_mb"]), "keep-db"]
+            if mode == "autobuild":
+                argv.append("online" if CODEQL_NETWORK == "unrestricted" else "offline")
+            row.update(build_mode=mode, query_suite=suite, argv=argv)
         plan.append(row)
     return plan
 
@@ -468,7 +475,8 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[st
                             {"name": "NO_COLOR", "value": "1"}, {"name": "XDG_CACHE_HOME", "value": "/tmp/cache"}],
             "target_mounts": mounts,
             "scratch_path": "scratch", "log_path": "logs/container",
-            "network": {"mode": "none", "destinations": []},
+            "network": {"mode": "unrestricted-build" if CODEQL_NETWORK == "unrestricted" else "none",
+                        "destinations": []},
             "permission": _permission(run_id, job, inputs["source_snapshot_sha256"], _utc_now()),
             "limits": dict(inputs["limits"])}
 

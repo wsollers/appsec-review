@@ -65,7 +65,7 @@ class CodeqlSastUnitTests(unittest.TestCase):
         # Go runs with autobuild on the image's offline Go toolchain (2026-10-01; was UNSUPPORTED_OFFLINE).
         self.assertEqual((plan["go"]["status"], plan["go"]["build_mode"]), ("READY", "autobuild"))
         self.assertEqual(plan["go"]["argv"], ["/opt/scripts/codeql-sast-lane.sh", "go", "autobuild",
-            "codeql/go-queries:codeql-suites/go-security-extended.qls", "2", "2048", "keep-db"])
+            "codeql/go-queries:codeql-suites/go-security-extended.qls", "2", "2048", "keep-db", "online"])
         self.assertIn("go", worker.FIDELITY_GAPS)
         self.assertTrue(all(row["build_mode"] == "none" for row in plan.values()
                             if row["status"] == "READY" and row["language"] != "go"))
@@ -73,13 +73,17 @@ class CodeqlSastUnitTests(unittest.TestCase):
         self.assertEqual(missing[0]["status"], "UNAVAILABLE")
         self.assertIn("no current B16 record", missing[0]["gap"])
 
-    def test_request_is_offline_read_only_and_valid(self):
+    def test_request_is_read_only_networked_and_valid(self):
         with tempfile.TemporaryDirectory() as folder:
             inputs = {"job": worker.JOBS["cpp"], "target_path": folder, "source_snapshot_sha256": "sha256:" + "b" * 64,
                       "limits": {"timeout_seconds": 60, "memory_bytes": 4 << 30, "cpu_millis": 2000, "pids": 256,
                                  "tmpfs_bytes": 1 << 28, "stdout_limit_bytes": 1 << 20, "stderr_limit_bytes": 1 << 20}}
             request = worker._request("run", "codeql-cpp-a", inputs, _plan()[0])
-        self.assertEqual(request["network"], {"mode": "none", "destinations": []})
+            with mock.patch.object(worker, "CODEQL_NETWORK", "none"):
+                offline = worker._request("run", "codeql-cpp-a", inputs, _plan()[0])
+        # D-29 (William, 2026-10-01): the CodeQL lanes run with network so dependencies resolve.
+        self.assertEqual(request["network"], {"mode": "unrestricted-build", "destinations": []})
+        self.assertEqual(offline["network"], {"mode": "none", "destinations": []})
         self.assertEqual(request["target_mounts"], [{"host_path": folder, "container_path": "/workspace"}])
         self.assertEqual(validate_document(request, "pinned-container-request.schema.json"), [])
         self.assertEqual(ce.request_errors(request, run_id="run", job_id=worker.JOBS["cpp"], attempt_id="codeql-cpp-a"), [])

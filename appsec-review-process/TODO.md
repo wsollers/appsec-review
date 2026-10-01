@@ -534,7 +534,7 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] Merge both PRs with a merge commit (a squash merge plus branch deletion would drop the pinned commit;
       re-pin to the merge commit if squashed). Then `fixtures/populate-targets.sh appsec-multi-vuln` on each host.
 
-## B7: build network (D-28, 2026-10-01)
+## B7: build and CodeQL network (D-28, D-29, 2026-10-01)
 
 - [x] Build containers (`02-build-resolution` trial, `02-build-configure`, `02-native-build`) run with
       unrestricted network (`unrestricted-build`, Docker's default bridge) when the run's build controls say
@@ -544,6 +544,15 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       package registries (an allowlisting forward proxy on an internal Docker network, boundary 1.1), and what
       that costs (TLS CONNECT only filters hostnames; per-ecosystem proxy settings; private registries). Also
       record the Debian mirror in the B11 `package-restore` grant, which still names only archive.ubuntu.com.
+- [x] CodeQL lanes (`02-codeql-<lang>`) run with the same network (D-29, William 2026-10-01): Go modules
+      with third-party dependencies resolve through the default proxy (lane argument `online`); Java/C#
+      build-mode none can fetch dependencies. `codeql_sast.CODEQL_NETWORK = "none"` restores offline lanes.
+      `06-reachability-codeql` stays offline (it reads the retained databases).
+- [ ] **Harden the CodeQL egress too**, with the build egress above: registry hosts only (proxy.golang.org,
+      sum.golang.org, Maven Central, nuget.org, ...), or offline lanes fed by the dependency caches the build
+      jobs fill.
+- [ ] Live check: 02-codeql-go on a module with third-party dependencies resolves them; 02-codeql-java and
+      -csharp recall with network vs the offline baseline.
 - [ ] Re-stage controls for runs staged before 2026-10-01 (`build_resolution.py stage-control`,
       `build_replay.py` stage-control) to give them network; older controls stay offline.
 - [ ] Live check on appsec-multi-vuln: the Rust, Go, .NET, TypeScript, Java and Python units build.

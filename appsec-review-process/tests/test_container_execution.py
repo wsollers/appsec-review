@@ -613,7 +613,7 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(ce.request_errors(build, run_id=build["run_id"], job_id="02-build-resolution",
                                            attempt_id=build["attempt_id"]), [])
         other = support.request(None, ["/usr/bin/tool"], network={"mode": "unrestricted-build", "destinations": []})
-        self.assertIn("network mode 'unrestricted-build' is only for the target build jobs",
+        self.assertIn("network mode 'unrestricted-build' is only for the target build and CodeQL jobs",
                       ce.request_errors(other, run_id=other["run_id"], job_id=other["job_id"],
                                         attempt_id=other["attempt_id"]))
         listed = support.request(None, ["/usr/bin/tool"], job_id="02-native-build", network={

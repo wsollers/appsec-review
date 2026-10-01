@@ -159,7 +159,10 @@ container then runs on Docker's default bridge (`--network bridge` in place of `
 every other flag unchanged) so the build's package managers can fetch dependencies (Go modules,
 Maven, crates.io, npm, NuGet, PyPI, Packagist, apt). The run's build control decides it
 (`build_network: unrestricted`, staged by default from 2026-10-01; absent or `none` stays offline),
-so the choice is part of the job's inputs and fingerprint. The untrusted target build has
+so the choice is part of the job's inputs and fingerprint. Since D-29 the CodeQL language lanes
+(`02-codeql-<lang>`) use the same mode, switched by `codeql_sast.CODEQL_NETWORK`, so their extractors
+can fetch dependencies (Go modules through the default proxy; Java/C# build-mode-none dependency
+fetching). The untrusted target build has
 unrestricted egress for those containers: a deliberate, recorded widening, not a gap in the
 boundary. Hardening it (an allowlisting proxy) is an open TODO. Any other job asking for the mode
 is rejected before docker is contacted. `boundary_sha256` stays the identity of the offline flags,

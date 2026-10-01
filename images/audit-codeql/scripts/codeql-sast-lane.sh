@@ -16,14 +16,14 @@
 # database at /scratch/db for the worker to retain (ADR-0023: the reachability engines reuse it and
 # never rebuild); drop-db removes it.
 set -euo pipefail
-usage() { echo "usage: $0 LANGUAGE none|traced|autobuild SUITE THREADS RAM_MB keep-db|drop-db [COMPILE_COMMANDS [GRAPH_PACK]]" >&2; exit 2; }
+usage() { echo "usage: $0 LANGUAGE none|traced|autobuild SUITE THREADS RAM_MB keep-db|drop-db [COMPILE_COMMANDS [GRAPH_PACK] | online|offline (autobuild)]" >&2; exit 2; }
 [ "$#" -ge 6 ] && [ "$#" -le 8 ] || usage
 language=$1; mode=$2; suite=$3; threads=$4; ram=$5; keep=$6
 case "$keep" in keep-db|drop-db) ;; *) usage ;; esac
 case "$mode" in
   none) [ "$#" -eq 6 ] || usage ;;
   traced) [ "$language" = cpp ] && [ "$#" -ge 7 ] || usage ;;
-  autobuild) [ "$language" = go ] && [ "$#" -eq 6 ] || usage ;;
+  autobuild) [ "$language" = go ] && { [ "$#" -eq 6 ] || { [ "$#" -eq 7 ] && case "$7" in online|offline) true ;; *) false ;; esac; }; } || usage ;;
   *) usage ;;
 esac
 export HOME=/tmp
@@ -34,8 +34,11 @@ case "$mode" in
     # Go only (no build-mode none). Offline: no module proxy, no toolchain download, no cgo; the build
     # cache lives in scratch (/tmp is noexec) and is removed afterwards. A module whose dependencies
     # are neither vendored nor in the standard library does not resolve: a recorded gap.
-    export GOPROXY=off GOTOOLCHAIN=local GOFLAGS=-buildvcs=false CGO_ENABLED=0 GOSUMDB=off \
+    # Optional 7th argument: online (D-29: the job runs with network, modules come from the default proxy)
+    # or offline (default; GOPROXY=off, as the smokes run it).
+    export GOTOOLCHAIN=local GOFLAGS=-buildvcs=false CGO_ENABLED=0 \
            GOCACHE=/scratch/.go/cache GOPATH=/scratch/.go/path GOTMPDIR=/scratch/.go/tmp
+    if [ "${7:-offline}" = offline ]; then export GOPROXY=off GOSUMDB=off; fi
     mkdir -p "$GOCACHE" "$GOPATH" "$GOTMPDIR"
     "$codeql" database create /scratch/db --language=go --source-root=/workspace \
       --build-mode=autobuild --threads="$threads" --ram="$ram" --overwrite
