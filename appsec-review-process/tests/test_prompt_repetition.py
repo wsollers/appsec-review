@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 import prompt_lint
 from schema_validate import SchemaStore
 
-MIGRATED: frozenset[str] = frozenset({"01-component-characterization"})   # R01
+MIGRATED: frozenset[str] = frozenset({"01-component-characterization",   # R01
+                                     "02-repository-partition-discovery"})   # R02
 
 
 class RepetitionTests(unittest.TestCase):

@@ -79,13 +79,13 @@
             "type": "array",
             "minItems": 1,
             "items": {
-              "type": "string"
+              "$ref": "#/$defs/repository-path"
             }
           },
           "exclude_paths": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/$defs/repository-path"
             }
           },
           "primary_persona_id": {
@@ -189,7 +189,28 @@
           "rescope_trigger": {
             "type": "string"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "disposition": {
+                  "const": "deferred"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "disposition_reason": {
+                  "minLength": 1
+                },
+                "rescope_trigger": {
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "coverage": {
@@ -207,19 +228,19 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/repository-path"
           }
         },
         "unassigned_paths": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/repository-path"
           }
         },
         "uninspected_scope": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/repository-path"
           }
         },
         "budget_limitations": {
@@ -241,7 +262,23 @@
             "additionalProperties": false,
             "properties": {
               "category": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "client",
+                  "server",
+                  "api",
+                  "shared-library",
+                  "iac",
+                  "cicd",
+                  "build-release",
+                  "deployment",
+                  "operations",
+                  "test",
+                  "generated",
+                  "vendored",
+                  "documentation"
+                ],
+                "description": "One of the partition kinds (other/unknown excluded). Every category needs exactly one check."
               },
               "result": {
                 "type": "string",
@@ -254,7 +291,7 @@
               "search_scope": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "$ref": "#/$defs/repository-path"
                 }
               },
               "evidence_citations": {
@@ -263,10 +300,197 @@
                   "$ref": "evidence-citation.schema.json"
                 }
               }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "result": {
+                      "const": "not-found"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "search_scope": {
+                      "minItems": 1
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "minItems": 13,
+          "maxItems": 13,
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "client"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "server"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "api"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "shared-library"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "iac"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "cicd"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "build-release"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "deployment"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "operations"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "test"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "generated"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "vendored"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "category": {
+                    "const": "documentation"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
             }
-          }
+          ]
         }
       }
+    }
+  },
+  "$defs": {
+    "repository-path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\)(?!.*//)(?!.*/$)(?!(?:.*/)?\\.\\.?(?:/|$))[^\\x00]+$",
+      "description": "A normalized repository-relative POSIX path or glob (src/**, .github/**, docs/x.md): no leading '/', no '.' or '..' segment, no backslash, no trailing '/'. The same rule validate_job_output._repository_relative applies."
     }
   }
 }

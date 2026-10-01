@@ -24,6 +24,11 @@ from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope
 
 
+# Every partition-map category needs exactly one check (repository-partition-map.schema.json).
+PARTITION_CATEGORIES = ("client", "server", "api", "shared-library", "iac", "cicd", "build-release",
+                        "deployment", "operations", "test", "generated", "vendored", "documentation")
+
+
 def partition_result(content_hash):
     citation = {"source_type": "source_file", "path": "src/main.py", "line_range": None,
                 "tool_name": None, "tool_rule_id": None, "content_hash": content_hash,
@@ -44,7 +49,8 @@ def partition_result(content_hash):
                      "uninspected_scope": [], "budget_limitations": [],
                      "category_checks": [{"category": "server", "result": "found",
                                           "search_scope": ["src/**"],
-                                          "evidence_citations": [citation]}]},
+                                          "evidence_citations": [citation]}] + [{"category": c, "result": "not-found", "search_scope": ["**"], "evidence_citations": []}
+                                          for c in PARTITION_CATEGORIES if c not in ('server',)]},
     }
 
 
@@ -133,7 +139,9 @@ class AdoptionTests(unittest.TestCase):
         invalid = partition_result(self.source_hash)
         invalid["partitions"][0]["include_paths"] = ["../escape"]
         state.atomic_json(supplied, invalid)
-        with self.assertRaises(state.Blocked):
+        # The schema's repository-path pattern rejects it at payload validation (ValueError); before
+        # alignment-plan R02 only publication did (Blocked). Either way the newer attempt fails closed.
+        with self.assertRaises((state.Blocked, ValueError)):
             discovery_gate.run(self.run_id, "dagster-c", discovery_gate.ADOPTED_JOB)
         failed = state.read_json(discovery_gate.root(self.run_id, discovery_gate.ADOPTED_JOB) /
                                  "accepted.json")

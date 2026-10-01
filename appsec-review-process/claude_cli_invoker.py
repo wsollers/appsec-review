@@ -712,14 +712,17 @@ def _claims_from_partition_map(partition_map: dict[str, Any], inputs: tuple,
                     if (c := _citation_for(by_path.get(citation.get("path")), citation.get("source_type"),
                                            citation.get("path"), citation.get("line_range")))
                     is not None] if check.get("evidence_citations") else []
+        if not citations:
+            # An uninspected category the model could not tie to a file stays a coverage gap in the
+            # map itself; it gets no claim, because a claim needs a citation and borrowing an
+            # unrelated input (formerly inputs[0]) would fabricate one.
+            continue
         claims.append({
             "claim_id": f"gap-{_slug(str(check.get('category')))}"[:120],
             "claim_class": gap_class,
             "statement": f"Uninspected: {check.get('category')} (search scope: "
                         f"{', '.join(check.get('search_scope', []))})"[:2000],
-            "file": result_filename, "citations": citations or
-            [{"root": inputs[0].root, "path": inputs[0].path, "sha256": inputs[0].sha256,
-              "locator": "whole file"}] if inputs else [],
+            "file": result_filename, "citations": citations,
         })
     if not claims:
         raise InvokerOutputError("model response named no partitions at all -- nothing to claim")

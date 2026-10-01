@@ -15,6 +15,11 @@ from publish_job_output import ACCEPTED_SCHEMA, NONCURRENT_SCHEMA
 import registry_paths
 
 
+# Every partition-map category needs exactly one check (repository-partition-map.schema.json).
+PARTITION_CATEGORIES = ("client", "server", "api", "shared-library", "iac", "cicd", "build-release",
+                        "deployment", "operations", "test", "generated", "vendored", "documentation")
+
+
 def partition_fixture(valid: bool = True) -> dict:
     source = Path("/targets/freeciv21/CMakeLists.txt")
     if not source.is_file():
@@ -38,9 +43,11 @@ def partition_fixture(valid: bool = True) -> dict:
         }],
         "coverage": {"inventory_scope": ["**/*"], "unassigned_paths": ["common/**"],
                      "uninspected_scope": [], "budget_limitations": ["probe qualification"],
-                     "category_checks": [{"category": "client-server", "result": "found",
+                     "category_checks": [{"category": c, "result": "found",
                                           "search_scope": ["client/**", "server/**"],
-                                          "evidence_citations": [citation]}]},
+                                          "evidence_citations": [citation]} for c in ("client", "server")]
+                                        + [{"category": c, "result": "not-found", "search_scope": ["**"], "evidence_citations": []}
+                                          for c in PARTITION_CATEGORIES if c not in ('client', 'server')]},
     }
     if not valid:
         value["partitions"][0]["include_paths"] = ["../escape"]

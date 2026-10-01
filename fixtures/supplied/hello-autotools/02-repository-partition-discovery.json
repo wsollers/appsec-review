@@ -313,29 +313,34 @@
     ],
     "category_checks": [
       {
-        "category": "native-code",
-        "result": "found",
+        "category": "client",
+        "result": "not-found",
         "search_scope": [
-          "src/**",
-          "vendor/**"
+          "**"
         ],
-        "evidence_citations": [
-          {
-            "source_type": "source_file",
-            "path": "Makefile.am",
-            "line_range": null,
-            "tool_name": null,
-            "tool_rule_id": null,
-            "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
-            "note": "C++ program and C convenience library"
-          }
-        ]
+        "evidence_citations": []
       },
       {
-        "category": "vendored-dependencies",
+        "category": "server",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      },
+      {
+        "category": "api",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      },
+      {
+        "category": "shared-library",
         "result": "found",
         "search_scope": [
-          "vendor/**"
+          "vendor/cJSON-1.7.18/**"
         ],
         "evidence_citations": [
           {
@@ -345,25 +350,7 @@
             "tool_name": null,
             "tool_rule_id": null,
             "content_hash": "0578cc29132912edbc88f83207a8fc76e5db3db0605497e909a9384ef3cc474b",
-            "note": "vendored cJSON header"
-          }
-        ]
-      },
-      {
-        "category": "container-build",
-        "result": "found",
-        "search_scope": [
-          "Dockerfile"
-        ],
-        "evidence_citations": [
-          {
-            "source_type": "source_file",
-            "path": "Dockerfile",
-            "line_range": null,
-            "tool_name": null,
-            "tool_rule_id": null,
-            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
-            "note": "two-stage build and runtime image"
+            "note": "library header carrying the upstream version macros"
           }
         ]
       },
@@ -384,6 +371,27 @@
         "evidence_citations": []
       },
       {
+        "category": "build-release",
+        "result": "found",
+        "search_scope": [
+          ".gitignore",
+          "Dockerfile",
+          "Makefile.am",
+          "configure.ac"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Dockerfile",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+            "note": "build stage runs the autotools chain"
+          }
+        ]
+      },
+      {
         "category": "deployment",
         "result": "not-found",
         "search_scope": [
@@ -398,6 +406,71 @@
           "**"
         ],
         "evidence_citations": []
+      },
+      {
+        "category": "test",
+        "result": "found",
+        "search_scope": [
+          "tests/**"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Makefile.am",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+            "note": "TESTS = tests/run.sh"
+          }
+        ]
+      },
+      {
+        "category": "generated",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      },
+      {
+        "category": "vendored",
+        "result": "found",
+        "search_scope": [
+          "vendor/cJSON-1.7.18/**"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "vendor/cJSON-1.7.18/cJSON.h",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "0578cc29132912edbc88f83207a8fc76e5db3db0605497e909a9384ef3cc474b",
+            "note": "library header carrying the upstream version macros"
+          }
+        ]
+      },
+      {
+        "category": "documentation",
+        "result": "found",
+        "search_scope": [
+          "LICENSE",
+          "README.md",
+          "docs/**",
+          "vendor/cJSON-1.7.18/VENDORED.md"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "docs/ARCHITECTURE.md",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "82c0417c3e1e4b0b4dee858c02ac09fc887fd3622c33ac5421dc212f82d0c8b1",
+            "note": "architecture notes that reference the seeded defects"
+          }
+        ]
       }
     ]
   }

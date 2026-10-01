@@ -1235,17 +1235,15 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
     except (OSError, ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         return [f"declared result artifact/schema cannot be read: {type(exc).__name__}"]
     errors = [f"declared result schema: {error}" for error in schema_errors]
-    errors.extend(_secret_errors(value))
-    errors.extend(_claim_class_errors(contract, value))
     source_root = None
     if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "build-index",
                                        "build-classification", "build-plan"}:
         source_root, source_errors = _source_root(attempt_root, run_id)
         errors.extend(source_errors)
+    errors.extend(result_value_errors(contract, value, registry_root=Path(registry_root),
+                                      source_root=source_root))
     dispatch = {
         "ossf-scorecard-results": lambda: _scorecard_payload_errors(attempt_root, value),
-        "repository-partition-map": lambda: _partition_errors(value, Path(registry_root), source_root),
-        "project-discovery": lambda: _project_discovery_errors(value, source_root),
         "build-index": lambda: _build_index_errors(path, value, source_root),
         "build-classification": lambda: _build_classification_errors(attempt_root, value, source_root, run_id),
         "build-plan": lambda: _build_plan_errors(attempt_root, value, source_root, run_id),
@@ -1253,6 +1251,23 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
     validator = dispatch.get(contract.get("contract_id"))
     if validator is not None:
         errors.extend(validator())
+    return errors
+
+
+def result_value_errors(contract: dict[str, Any], value: Any, *, registry_root: Path,
+                        source_root: Path | None) -> list[str]:
+    """The publication checks that need only the result document and the checkout, not an attempt
+    directory: secrets, claim class, and the per-contract content checks for the discovery maps.
+    Publication runs them here; a persona worker's ``extra_validate`` hook runs the same function
+    before acceptance, so the repair loop rejects exactly what publication would."""
+    errors = list(_secret_errors(value))
+    errors.extend(_claim_class_errors(contract, value))
+    content = {
+        "repository-partition-map": lambda: _partition_errors(value, registry_root, source_root),
+        "project-discovery": lambda: _project_discovery_errors(value, source_root),
+    }.get(contract.get("contract_id"))
+    if content is not None:
+        errors.extend(content())
     return errors
 
 

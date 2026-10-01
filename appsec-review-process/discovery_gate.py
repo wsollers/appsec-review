@@ -22,6 +22,7 @@ inventing an in-Dagster LLM execution model or fabricating repository analysis. 
 'KNOWN, DELIBERATE GAP' comment on build_configure_work in dagster_workflow.py and
 docs/build-discovery/build-discovery-integration.md's gap-status table for the full history.
 """
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
@@ -47,6 +48,7 @@ import persona_dispatch as pd
 import persona_invocation as pi
 import persona_prompt_assembly as ppa
 import phase1
+import registry_paths
 import review_cli as rc
 from claude_cli_invoker import ClaudeCliInvoker
 
@@ -367,6 +369,25 @@ def _backfill_citation_content_hashes(value, by_path):
             _backfill_citation_content_hashes(item, by_path)
 
 
+def partition_in_loop_errors(result, *, source_revision, by_path, target_root):
+    """The automatic partition dispatch's ``extra_validate`` hook: on a copy of the schema-valid
+    answer, apply what ``_dispatch_partition_persona`` applies after return (pinned source_revision,
+    backfilled citation hashes), then run the same checks publication runs
+    (``validate_job_output.result_value_errors``: path syntax, unique ids, resolvable relationship
+    targets and personas, citation freshness, secrets, claim class). A failure goes back to the model
+    as a repair round instead of failing the attempt at publication."""
+    import validate_job_output as vjo
+    candidate = copy.deepcopy(result)
+    candidate['source_revision'] = source_revision
+    _backfill_citation_content_hashes(candidate, by_path)
+    errors = _validate_partition_payload(candidate)
+    if errors:
+        return errors
+    contract = read_json(registry_paths.contract('repository-partition-map'))
+    return vjo.result_value_errors(contract, candidate, registry_root=registry_paths.REGISTRY,
+                                   source_root=Path(target_root))
+
+
 def _validate_partition_payload(value):
     # Structural checks happen before copying; all cross-record/path/freshness semantics are owned
     # by validate_job_output's explicit repository-partition-map contract dispatch.
@@ -600,9 +621,15 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
         target_root=target_root, source_snapshot_sha256=source_snapshot_sha256,
         now=clock(), store=store)
     model_identity = request['model']
+    by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']}
+
+    def extra_validate(result):
+        return partition_in_loop_errors(result, source_revision=record['source_revision'],
+                                        by_path=by_path, target_root=target_root)
 
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd),
+        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
+                                 extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root},
         allowed_models=(model_identity,), source_snapshot_sha256=source_snapshot_sha256,
@@ -636,7 +663,6 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
     # citation's content_hash must be the cited file's exact current SHA-256 (validate_job_
     # output.py's citation-freshness check, downstream of this gate), which the persona cannot
     # reliably reproduce by hand -- the orchestrator already has it, pinned per readable input.
-    by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']}
     _backfill_citation_content_hashes(partition_map, by_path)
     errors = _validate_partition_payload(partition_map)
     if errors:

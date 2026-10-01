@@ -16,23 +16,16 @@
     "confirmed_organizational_ownership"
   ],
   "must_not": [
-    "execute repository scripts or deploy infrastructure",
-    "infer production topology from folder names alone",
-    "silently drop unclassified paths or assume missing evidence proves absence",
-    "replace downstream functional and security component characterization"
+    "treat a specialist route as a statement about which team owns the code",
+    "replace the functional component characterization that 01-component-characterization does from this map"
   ],
   "required_behavior": [
-    "inventory the whole repository including hidden CI directories, workspaces, deployment files, and operations artifacts",
-    "group paths by evidenced product, build, deployment, and operations boundaries rather than directory size alone",
-    "identify clients, servers, APIs, shared libraries, IaC, CI/CD, deployment, and operations areas where present",
-    "record stable partition IDs, path includes and excludes, evidence, confidence, relationships, and unresolved scope",
-    "assign a primary review persona and any supporting personas per partition; review responsibility is not organizational ownership",
-    "allow multiple kinds and specialist routes for mixed areas; identify shared scope explicitly",
-    "keep generated, vendored, test, and documentation areas visible with review disposition and rescope triggers",
-    "record searched-but-not-found categories and uninspected scope separately"
+    "fill partitions: one entry per review area, with kinds, include_paths/exclude_paths, a primary_persona_id and any supporting_persona_ids, routing_rationale, relationships and a disposition",
+    "fill coverage.category_checks with exactly one entry for each of the thirteen area categories",
+    "fill coverage.inventory_scope, unassigned_paths, uninspected_scope and budget_limitations so partial discovery stays visible"
   ],
   "role_id": "repository-partition-mapper",
   "schema": "appsec-review/role/0.1",
-  "summary": "Identifies coarse review areas and routes bounded scopes to developer, DevOps, and SRE specialists before detailed component characterization."
+  "summary": "Splits one repository into a handful of bounded review areas and names which specialist (developer, DevOps or SRE engineer) should own each, so 02-dev-project-discovery, 02-devops-project-discovery, 02-sre-operations-topology, 02-build-index and 01-component-characterization each start from a clear scope."
 }
 ```

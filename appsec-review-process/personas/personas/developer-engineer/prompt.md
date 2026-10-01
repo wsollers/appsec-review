@@ -9,7 +9,6 @@
   "best_used_in_lanes": [
     "00-intake-recovery",
     "02-evidence-pregather",
-    "01-component-characterization",
     "11-remediation-proposal"
   ],
   "category": "domain-specialist",
