@@ -132,3 +132,25 @@ class SupportingEvidenceMenuTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UpstreamOnlyMenuTests(unittest.TestCase):
+    """Run 20261001T064759Z-4a8586: 03's fingerprinted menu listed the 02-codeql-<lang> lanes, which run in
+    parallel with 03; one was accepted after 03 and the claim ledger refused 03's pointer."""
+
+    def test_menu_lists_only_jobs_upstream_of_the_stage(self):
+        import supporting_evidence_menu as sem
+        with tempfile.TemporaryDirectory() as root:
+            for stage in ("03-threat-model-dfd-stride", "07-hypothesis-discovery"):
+                ids = {item["item_id"] for item in sem.build("run-1", stage, [], Path(root) / "jobs")["items"]}
+                upstream = sem.upstream_jobs(stage)
+                self.assertTrue(ids <= upstream, sorted(ids - upstream))
+                self.assertFalse(any(job.startswith("02-codeql-") for job in ids))
+                self.assertNotIn(stage, ids)
+            self.assertIn("01-component-characterization",
+                          {item["item_id"] for item in sem.build("run-1", "03-threat-model-dfd-stride", [],
+                                                                  Path(root) / "jobs")["items"]})
+
+    def test_non_graph_stage_is_not_filtered(self):
+        import supporting_evidence_menu as sem
+        self.assertIsNone(sem.upstream_jobs("not-a-graph-job"))

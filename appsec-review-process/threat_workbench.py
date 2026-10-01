@@ -75,6 +75,23 @@ ADMIN_FILES = frozenset({"permission.json", "lineage.json", "status.json", "resu
 MENU_EXCLUDED = frozenset({"02-standards-source-ingest"})   # a corpus, not target evidence
 
 
+def upstream_jobs(job: str = JOB, graph_path: Path | None = None) -> frozenset[str]:
+    """Every job ``job`` depends on, transitively, in the registry job graph. The menu is part of this
+    job's fingerprinted inputs, so it may only name jobs that are settled before this job runs. Run
+    20261001T064759Z-4a8586: the menu listed the 02-codeql-<lang> lanes, which run in parallel with 03;
+    a lane accepted after 03 changed the menu, and 03's accepted fingerprint no longer matched when the
+    claim ledger re-derived it ("accepted pointer input fingerprint mismatch")."""
+    graph = json.loads(Path(graph_path or registry_paths.JOB_GRAPH).read_text(encoding="utf-8"))["jobs"]
+    seen: set[str] = set()
+    stack = [job]
+    while stack:
+        for dependency in graph.get(stack.pop(), {}).get("dependencies", []):
+            if dependency["job"] not in seen:
+                seen.add(dependency["job"])
+                stack.append(dependency["job"])
+    return frozenset(seen)
+
+
 @dataclass(frozen=True)
 class Workcell:
     workcell_id: str
@@ -251,9 +268,10 @@ def build_menu(run_id: str, evidence_attempt: Path, evidence_attempt_id: str, ev
     if sem is not None:
         jobs = Path(jobs_root) if jobs_root is not None else data_path(run_id, "jobs")
         menu = sem.build(run_id, JOB, [], jobs)
-        menu["items"] = [item for item in menu["items"] if item["item_id"].startswith(("01-", "02-"))
+        upstream = upstream_jobs()
+        menu["items"] = [item for item in menu["items"] if item["item_id"] in upstream
                          and item["item_id"] not in MENU_EXCLUDED]
-        menu["profiles"] = {key: [job for job in value if job.startswith(("01-", "02-"))]
+        menu["profiles"] = {key: [job for job in value if job in upstream]
                             for key, value in menu.get("profiles", {}).items()}
         menu["claims"] = []
         for item in menu["items"]:

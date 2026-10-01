@@ -193,16 +193,41 @@ def _claim_row(record: dict[str, Any]) -> dict[str, Any]:
     return {"claim_id": record["claim_id"], "profile": profile, "locations": sorted(locations)}
 
 
+def upstream_jobs(job: str, graph_path: Path | None = None) -> frozenset[str] | None:
+    """Every job ``job`` depends on, transitively, in the registry job graph; None when ``job`` is not a
+    graph job (then nothing is filtered)."""
+    import registry_paths
+    graph = json.loads(Path(graph_path or registry_paths.JOB_GRAPH).read_text(encoding="utf-8"))["jobs"]
+    if job not in graph:
+        return None
+    seen: set[str] = set()
+    stack = [job]
+    while stack:
+        for dependency in graph.get(stack.pop(), {}).get("dependencies", []):
+            if dependency["job"] not in seen:
+                seen.add(dependency["job"])
+                stack.append(dependency["job"])
+    return frozenset(seen)
+
+
 def build(run_id: str, stage: str, claims: Iterable[dict[str, Any]], jobs_root: Path | None = None) -> dict[str, Any]:
-    """Return the menu (a pure function of the run's accepted pointers and the stage population)."""
+    """Return the menu (a pure function of the run's accepted pointers and the stage population).
+
+    Only jobs upstream of ``stage`` in the job graph are listed: a consumer fingerprints its menu, so a
+    job that can be accepted after the consumer ran (a parallel lane, a later stage, the consumer itself)
+    would change the consumer's inputs after the fact. Run 20261001T064759Z-4a8586: 03's menu listed the
+    02-codeql-<lang> lanes, one was accepted after 03, and the claim ledger refused 03's accepted pointer
+    ("accepted pointer input fingerprint mismatch")."""
     jobs = Path(jobs_root) if jobs_root is not None else data_path(run_id, "jobs")
+    upstream = upstream_jobs(stage)
+    rows = [row for row in MENU if upstream is None or row[0] in upstream]
     items = []
     if jobs.is_dir() and not jobs.is_symlink():
-        items = [_item(jobs, run_id, *row) for row in MENU]
+        items = [_item(jobs, run_id, *row) for row in rows]
     else:
         items = [{"item_id": job, "category": category, "description": description, "status": "NOT_AVAILABLE",
                   "reason": "run has no jobs directory", "attempt_id": None, "files": []}
-                 for job, category, description, _patterns in MENU]
+                 for job, category, description, _patterns in rows]
     pinned_total, seen = 0, set()
     for item in items:   # pin budget in MENU order; a hard-linked duplicate is pinned once
         for entry in item["files"]:
@@ -213,7 +238,7 @@ def build(run_id: str, stage: str, claims: Iterable[dict[str, Any]], jobs_root: 
                 pinned_total += entry["bytes"]; seen.add(identity)
     available = [item for item in items if item["status"] == "AVAILABLE"]
     order = {category: [item["item_id"] for item in available if item["category"] == category]
-             for category in {row[1] for row in MENU}}
+             for category in {row[1] for row in rows}}
     profiles = {name: [job for category in categories for job in order.get(category, [])]
                 for name, categories in sorted(PROFILES.items())}
     return {"schema": SCHEMA, "run_id": run_id, "stage": stage, "root_id": ROOT_ID,
