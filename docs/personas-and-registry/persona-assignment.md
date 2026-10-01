@@ -49,7 +49,7 @@ supply-chain-attacker (CI automation) and insider-developer (build scripts).
 
 | Job / module | Template | Persona | Role | Assessment |
 |---|---|---|---|---|
-| `01-component-characterization` (`component_characterization.py`) | same | developer-engineer | component-characterizer | Fits; architecture-doc-summarizer (parked in `personas-unused/`) or reverse-engineer as a second opinion is a design choice, not a fix |
+| `01-component-characterization` (`component_characterization.py`) | same | component-security-auditor | component-characterizer | Dedicated persona since 2026-10-01 (alignment plan R01, decision D3); was developer-engineer, a build-discovery persona on a security-routing job |
 | `02-evidence-producer-binding` (`evidence_assembly_runtime.py`) | same | evidence-custodian | evidence-assembler | Fits (bookkeeping-heavy binding call) |
 | `02-build-classify` (`build_classify.py`) | same | developer-engineer | build-unit-classifier | Fits |
 | `02-build-plan` (`build_plan.py`) | same | developer-engineer | build-planner | Fits |

@@ -9,6 +9,8 @@ Dagster/graph/catalog/SAT wiring is intentionally outside this isolated core.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 from datetime import datetime, timezone
 import json
 from pathlib import Path, PurePosixPath
@@ -696,8 +698,14 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
         target_root=target_root, source_snapshot_sha256=record["source_snapshot_sha256"],
         now=_clock(), store=store, upstream_root=evidence_root)
     model_identity = request["model"]
+    target_hashes = {item["path"]: item["sha256"] for item in request["readable_inputs"]
+                     if item["root"] == pd.DEFAULT_READABLE_ROOT}
+    evidence_hashes = {item["path"]: item["sha256"] for item in request["readable_inputs"]
+                       if item["root"] == pd.UPSTREAM_ROOT_ID}
+
     def extra_validate(result: dict[str, Any]) -> list[str]:
-        return category_coverage_errors(result) + security_tag_errors(result)
+        return in_loop_errors(result, record=record, target_hashes=target_hashes,
+                              evidence_hashes=evidence_hashes)
 
     runtime = pi.PersonaRuntime(
         invoker=ClaudeCliInvoker(effort=model["effort"], budget_usd=budget_usd,
@@ -720,10 +728,6 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
     value["source_revision"] = record["source_revision"]
     value["source_snapshot_sha256"] = record["source_snapshot_sha256"]
     value["evidence_manifest_lineage"] = _manifest_lineage(record)
-    target_hashes = {item["path"]: item["sha256"] for item in request["readable_inputs"]
-                     if item["root"] == pd.DEFAULT_READABLE_ROOT}
-    evidence_hashes = {item["path"]: item["sha256"] for item in request["readable_inputs"]
-                       if item["root"] == pd.UPSTREAM_ROOT_ID}
     _backfill_citations(value, target_hashes, evidence_hashes)
     summary = (output / SUMMARY).read_text(encoding="utf-8")
     facts = {"budget": budget, "persona": request["persona"], "model": dict(model_identity),
@@ -1032,6 +1036,48 @@ def _record_untagged_gaps(value: dict[str, Any]) -> None:
         })
 
 
+def postprocess(value: dict[str, Any], target_root: Path, evidence_root: Path) -> None:
+    """The deterministic repairs applied to every model answer before ``validate_payload`` (ADR-0013):
+    derived ids, merged tag cloud, relabelled and resolved citations, lane names mapped to lane ids,
+    rebuilt cross-references, unscoped files and untagged components recorded as gaps, CWE names
+    resolved. ``execute`` and ``in_loop_errors`` both call this, so the repair loop and the final gate
+    judge the same document."""
+    _normalize_component_ids(value)
+    _normalize_tag_cloud(value)
+    _retype_citations(value, target_root, evidence_root)
+    _resolve_evidence_paths(value, target_root, evidence_root)
+    _drop_unresolved_relationships(value)
+    _normalize_lanes(value)
+    _normalize_references(value)
+    _repair_against_target(value, target_root)
+    _resolve_security_tags(value)
+    _record_untagged_gaps(value)
+
+
+def in_loop_errors(result: dict[str, Any], *, record: dict[str, Any], target_hashes: dict[str, str],
+                   evidence_hashes: dict[str, str]) -> list[str]:
+    """The ``extra_validate`` hook: everything the final gate in ``execute`` would reject, checked on
+    a copy of the schema-valid answer while the model can still fix it (a repair round), instead of
+    failing the attempt afterwards with no recovery. It applies exactly what ``_dispatch_persona`` and
+    ``execute`` apply -- pinned identity, backfilled citation hashes, ``postprocess`` -- so it never
+    rejects an answer the final gate would accept, and never accepts one it would reject."""
+    errors = security_tag_errors(result)
+    if errors:
+        return errors   # postprocess's CWE resolution would raise on these
+    candidate = deepcopy(result)
+    candidate["target"] = record["target_name"]
+    candidate["source_revision"] = record["source_revision"]
+    candidate["source_snapshot_sha256"] = record["source_snapshot_sha256"]
+    candidate["evidence_manifest_lineage"] = _manifest_lineage(record)
+    _backfill_citations(candidate, target_hashes, evidence_hashes)
+    target_root, evidence_root = Path(record["target_root"]), Path(record["evidence_root"])
+    try:
+        postprocess(candidate, target_root, evidence_root)
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        return [f"the answer could not be normalized: {exc}"]
+    return validate_payload(candidate, target_root=target_root, evidence_root=evidence_root)
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
@@ -1058,16 +1104,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
-        _normalize_component_ids(value)
-        _normalize_tag_cloud(value)
-        _retype_citations(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
-        _resolve_evidence_paths(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
-        _drop_unresolved_relationships(value)
-        _normalize_lanes(value)
-        _normalize_references(value)
-        _repair_against_target(value, Path(inputs["target_root"]))
-        _resolve_security_tags(value)
-        _record_untagged_gaps(value)
+        postprocess(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
         if errors:

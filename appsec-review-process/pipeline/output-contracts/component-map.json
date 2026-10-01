@@ -42,21 +42,8 @@
     ]
   },
   "validation_rules": [
-    "category_coverage is a required object with exactly six keys (first-party, vendored, generated, test-sample, documentation, build-tooling), each either {status: classified, scope_ids: [...]} or {status: absent, negative_evidence_id: ...}; each cited scope_id/negative_evidence_id must exist and carry that exact category (component-map/1.0, 2026-10-01: the earlier token-matching rule let 'absent' and 'classified' silently disagree)",
-    "a functional_component's optional candidate_security_tags is a non-binding lead, never a conclusion: Python resolves and overwrites cwe_name/cwe_catalog from the pinned CWE catalog, rejecting an unresolvable cwe_id; it never substitutes for or implies an OWASP/ASVS applicability decision, which is a separate workbench's job",
-    "every regular target file has exactly one physical scope; overlap and unassigned paths fail closed",
-    "path_patterns are globs anchored at the repository root: 'LICENSE' matches only the top-level LICENSE; use '**/LICENSE' for any depth",
-    "each representative_location is a repository-relative target file, optionally suffixed ':<line>' or ':<start>-<end>', and at least one is matched by that component's path_patterns",
-    "every functional component id appears in at least one tag_cloud entry",
-    "scope, component, review-group, exclusion and rescope identifiers are unique and all references resolve",
-    "component and relationship identifiers and tag ordering are deterministic",
-    "the exact COMPLETE F02 intel-manifest producer attempt, generation, source snapshot and hashes are bound in evidence_manifest_lineage",
-    "only hash-verified assembly-relative artifacts declared by intel-manifest.json are readable upstream evidence",
-    "all repository paths are normalized and repository-relative",
-    "every positive scope, component, ownership, relationship, tag and unknown claim has fresh source or accepted upstream evidence",
-    "excluded vendored, generated, test/sample and documentation scope has an explicit affected boundary, required evidence and at most three re-entry rounds",
-    "downstream routing is evidence prioritization and does not assert applicability or a security conclusion",
-    "the map cannot publish findings, severity, runtime state, remediation status or compliance verdicts",
-    "latest failed attempt blocks reuse of an older accepted map"
+    "the orchestrator overwrites target, source_revision, source_snapshot_sha256, evidence_manifest_lineage and every citation content_hash with the pinned values before validation",
+    "the orchestrator reruns the full semantic validation inside the repair loop: a rejected answer comes back with the list of errors to fix",
+    "the latest failed attempt blocks reuse of an older accepted map"
   ]
 }

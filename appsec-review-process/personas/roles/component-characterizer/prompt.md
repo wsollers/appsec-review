@@ -25,24 +25,18 @@
     "applicability_decision"
   ],
   "must_not": [
-    "publish a vulnerability, verified finding, severity, runtime observation, remediation status, compliance verdict or standards-applicability decision (OWASP/ASVS applicability is a separate, dedicated workbench's job, not this one's)",
-    "treat a directory name alone as proof of purpose or deployability",
-    "leave any of the six fixed source categories neither classified nor recorded as searched-and-absent",
-    "exclude code that is shipped, linked into production, customer modifiable or security critical to build and deployment",
-    "state a candidate security tag as if it were a confirmed weakness, an applicable control, or a compliance finding"
+    "decide OWASP/ASVS applicability: the 04 OWASP workbench owns that (ADR-0010, gate G6)",
+    "exclude a scope without a rescope trigger that brings it back"
   ],
   "required_behavior": [
-    "separate physical source classification from functional and security component inference",
-    "decide, for each of the six fixed source categories (first-party, vendored, generated, test-sample, documentation, build-tooling), whether it applies -- classify it, or record a searched-and-absent negative-evidence entry; never leave one undecided",
-    "cite source or accepted upstream evidence for every positive classification and component",
-    "record evidence-backed ownership without inventing a responsible party, component relationships, unknowns and a deterministic tag cloud",
-    "tag a component with every tag that fits, not just one -- a component may legitimately belong to several tag-cloud entries",
-    "optionally flag a component with a candidate weakness category (CWE) when the evidence clearly suggests one, as a lead for a downstream lane to verify, never as a conclusion",
-    "route components to downstream lanes and independent review groups without asserting a finding or control verdict",
-    "record classification gaps and bounded rescope triggers"
+    "fill code_scope_classification so each regular file sits in exactly one physical scope",
+    "fill category_coverage for all six source categories, backed by a scope or by a negative_evidence search record",
+    "fill functional_components from what the code does, each with path_patterns, representative_locations, ownership, downstream_lanes and a parallel_review_group",
+    "fill component_relationships, the tag_cloud, unknowns, classification_gaps and rescope_triggers",
+    "optionally add candidate_security_tags as CWE leads for a downstream lane"
   ],
   "role_id": "component-characterizer",
   "schema": "appsec-review/role/0.1",
-  "summary": "Reviews a repository the way a security auditor opening an unfamiliar codebase would: classifies physical source scope and builds an evidence-backed functional/security component map -- tagging what each component is and where it sits -- so downstream review lanes know what exists and where to look, without itself concluding on any of it."
+  "summary": "Turns one repository into a review-routing map for the later lanes: which files are shipped first-party code and which are vendored, generated, test, documentation or build tooling; which working components exist; and which lane should look at each. Consumed by 02-full-review-input-assembly, the OWASP and STIG worklists, and every later lane that reads component ids."
 }
 ```

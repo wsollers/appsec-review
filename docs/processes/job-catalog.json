@@ -8279,7 +8279,7 @@
    ],
    "lifecycle_binding": "actual_worker",
    "composition": {
-    "persona_id": "developer-engineer",
+    "persona_id": "component-security-auditor",
     "role_id": "component-characterizer",
     "domain_id": "component-characterization",
     "tooling_profile_id": "component-evidence-router",

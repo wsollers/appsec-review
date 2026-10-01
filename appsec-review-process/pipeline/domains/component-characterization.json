@@ -2,8 +2,30 @@
   "schema": "appsec-review/domain/0.1",
   "domain_id": "component-characterization",
   "display_name": "Source Scope And Functional Component Characterization",
-  "surfaces": ["first-party source", "vendored dependencies", "generated code", "tests and samples", "documentation", "build tooling", "functional components", "security-control surfaces"],
-  "common_failure_modes": ["directory tree repeated without semantic components", "overlapping or unassigned physical paths", "team ownership inferred from a folder name", "relationship asserted without cited evidence", "stale or mixed-generation evidence manifest lineage", "vendored or generated code treated as first party", "test utility shipped but excluded", "absent category silently omitted", "review route mistaken for a security conclusion", "unresolved scope hidden by high-level grouping"],
+  "surfaces": [
+    "first-party source",
+    "vendored dependencies",
+    "generated code",
+    "tests and samples",
+    "documentation",
+    "build tooling",
+    "functional components",
+    "security-control surfaces"
+  ],
+  "common_failure_modes": [
+    "a directory tree copied into the map instead of working components",
+    "vendored or generated code counted as first-party",
+    "a test helper that ships at runtime left excluded",
+    "unresolved scope hidden inside a broad group",
+    "evidence mixed from two different evidence-assembly generations"
+  ],
   "preferred_standards": [],
-  "required_evidence_hints": ["accepted evidence manifest", "repository partition map", "source paths and symbols", "build targets", "API and protocol definitions", "deployment and test artifacts"]
+  "required_evidence_hints": [
+    "accepted evidence manifest",
+    "repository partition map",
+    "source paths and symbols",
+    "build targets",
+    "API and protocol definitions",
+    "deployment and test artifacts"
+  ]
 }

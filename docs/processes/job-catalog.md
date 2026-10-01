@@ -2422,7 +2422,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Worker | `appsec-review-process/component_characterization.py:run` |
 | Resource pool | `persona_llm` |
 | Dagster | standalone: `component_characterization`; lifecycle binding: `actual_worker` |
-| Composition | persona `developer-engineer`, role `component-characterizer`, tooling `component-evidence-router` |
+| Composition | persona `component-security-auditor`, role `component-characterizer`, tooling `component-evidence-router` |
 | Consumes (graph) | [`02-evidence-assembly`](#job-02-evidence-assembly) (required, contract `pregather`) |
 | Declared inputs (pipeline/job-templates/01-component-characterization.json) | target repository path<br>accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts<br>repository partition map *(optional)*<br>symbol and semantic indexes *(optional)*<br>build, source-SAST and operations evidence *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/01-component-characterization/` |

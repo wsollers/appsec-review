@@ -52,7 +52,7 @@ class ComponentCharacterizationTests(unittest.TestCase):
         self.assertEqual(validate_document(self.value, "component-purpose-map.schema.json"), [])
         store = SchemaStore()
         prompt, template = ppa.assemble_prompt_text(cc.TEMPLATE, store)
-        self.assertIn("This job produces evidence organization and routing only", prompt)
+        self.assertIn("It is a map of\nwhere to look. It concludes nothing about any component.", prompt)
         records = pi.load_composition(registry_paths.REGISTRY, {
             "job_template_id": cc.TEMPLATE,
             "job_template_sha256": pi._sha(template),
@@ -121,6 +121,60 @@ class ComponentCharacterizationTests(unittest.TestCase):
                             for e in errors), errors)
 
         self.assertEqual(cc.category_coverage_errors(self.value), [])
+
+    def _record(self) -> dict:
+        evidence = {"job": cc.UPSTREAM_JOB, "attempt_id": "assembly-1", "pointer_sha256": "e" * 64,
+                    "envelope_sha256": "d" * 64, "manifest_sha256": "b" * 64,
+                    "manifest_self_sha256": "sha256:" + "c" * 64, "input_fingerprint": "sha256:" + "f" * 64,
+                    "generation_sha256": "sha256:" + "4" * 64, "graph_sha256": "sha256:" + "5" * 64,
+                    "terminal_manifest_sha256": "sha256:" + "6" * 64,
+                    "terminal_instances_path": "terminal-instances.json",
+                    "terminal_instances_sha256": "sha256:" + "1" * 64,
+                    "terminal_instances_manifest_sha256": "sha256:" + "6" * 64,
+                    "producers_sha256": "2" * 64, "artifact_set_sha256": "3" * 64}
+        return {"target_name": "hello-autotools", "source_revision": None,
+                "source_snapshot_sha256": "sha256:" + "a" * 64, "target_root": str(self.target),
+                "evidence_root": str(self.evidence), "evidence": evidence}
+
+    def _in_loop(self, value: dict) -> list[str]:
+        hashes = {name: state.file_hash(self.target / name) for name in ("src/main.c", "Makefile.am", "README.md")}
+        return cc.in_loop_errors(value, record=self._record(), target_hashes=hashes, evidence_hashes={})
+
+    def test_in_loop_check_rejects_what_the_final_gate_rejects(self):
+        """R01 (prompt/persona/role alignment plan): the repair loop sees every final-gate error, not
+        only category coverage and CWE ids. Before R01 the hook was category_coverage_errors +
+        security_tag_errors, which pass this answer; only the post-return gate caught the overlap."""
+        self.assertEqual(self._in_loop(deepcopy(self.value)), [])
+        overlapping = deepcopy(self.value)
+        overlapping["code_scope_classification"][0]["path_patterns"].append("README.md")
+        errors = self._in_loop(overlapping)
+        self.assertTrue(any("overlapping scope" in error and "README.md" in error for error in errors), errors)
+        self.assertEqual(cc.category_coverage_errors(overlapping) + cc.security_tag_errors(overlapping), [])
+        unresolved = deepcopy(self.value)
+        unresolved["analysis_exclusions"][0]["rescope_trigger_id"] = "no-such-trigger"
+        self.assertIn("exclusion rescope trigger does not resolve: no-such-trigger", self._in_loop(unresolved))
+
+    def test_in_loop_check_accepts_what_postprocess_repairs(self):
+        """It judges the post-processed document, so a defect the orchestrator repairs (an id that is
+        not the slug of its name, hashes left null) is not sent back to the model."""
+        repairable = deepcopy(self.value)
+        repairable["functional_components"][0]["name"] = "Hello Command Line"
+        for citation in cc._citations(repairable):
+            citation["content_hash"] = None
+        self.assertNotEqual(cc.validate_payload(repairable, target_root=self.target,
+                                                evidence_root=self.evidence), [])
+        self.assertEqual(self._in_loop(repairable), [])
+        self.assertEqual(repairable["functional_components"][0]["component_id"], "hello-cli")   # copy only
+
+    def test_the_task_prompt_example_is_the_fixture(self):
+        """The worked example in the task prompt is this fixture with citation hashes left null, so the
+        example the model copies is one the validator accepts on a real three-file checkout."""
+        text = (ROOT / "01-component-characterization/task-component-characterization.md").read_text(encoding="utf-8")
+        block = text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0]
+        example = json.loads(block)
+        for citation in cc._citations(self.value):
+            citation["content_hash"] = None
+        self.assertEqual(example, self.value)
 
     def test_candidate_security_tags_round_trips_through_full_schema_and_repair(self):
         """The published (post-repair) document must validate, not the model's draft: the model's
@@ -345,7 +399,7 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
     def dispatch(self, *_args):
         return deepcopy(self.value), "# Component map\n", {
             "budget": "standard",
-            "persona": {"persona_id": "developer-engineer", "role_id": "component-characterizer",
+            "persona": {"persona_id": "component-security-auditor", "role_id": "component-characterizer",
                         "domain_id": "component-characterization",
                         "tooling_profile_id": "component-evidence-router"},
             "model": {"alias": "fixture", "provider": "fixture", "version": "fixture"},
