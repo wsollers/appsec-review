@@ -39,7 +39,9 @@
       "expect_files": [
         "blint/python3.12-metadata.json"
       ],
-      "file_contains": "security_properties"
+      "file_contains": {
+        "blint/python3.12-metadata.json": "security_properties"
+      }
     }
   ],
   "notes": "blint has no --version flag; the version is read from the installed package metadata. The blintdb symbol database (ORAS pull from ghcr.io) is never enabled: no --use-blintdb, no USE_BLINTDB, no db subcommand."

@@ -168,6 +168,9 @@ def tool_errors(tool: Any, folder: Path) -> list[str]:
             errors.append(f"{where}.argv must start with an absolute executable")
         if not isinstance(run["exit_codes"], list) or not all(isinstance(c, int) for c in run["exit_codes"]):
             errors.append(f"{where}.exit_codes must be integers")
+        if "file_contains" in run and not (isinstance(run["file_contains"], dict) and all(
+                isinstance(k, str) and isinstance(v, str) for k, v in run["file_contains"].items())):
+            errors.append(f"{where}.file_contains must map a scratch file to the text it must contain")
         if "config" in run and not (run["config"] == "smoke-config" and (folder / "smoke-config").is_dir()):
             errors.append(f"{where}.config must be \"smoke-config\" (a committed folder, mounted read-only at /config)")
         if run["workspace"] not in ("none", "target") and not (

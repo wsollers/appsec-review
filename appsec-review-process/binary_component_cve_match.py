@@ -167,8 +167,14 @@ def scan(*, run_id: str, attempt_id: str, source_root: Path, database_dir: Path,
     except ce.ContainerRequestError:
         return {"status": "BLOCKED", "cause": "request-invalid"}
     root = execution_root / "tools" / "cve-bin-tool"
-    terminal = run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=request["attempt_id"],
-                             attempt_root=root, request=request)
+    root.mkdir(parents=True, exist_ok=False)   # run_container requires an existing attempt root
+    try:
+        terminal = run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=request["attempt_id"],
+                                 attempt_root=root, request=request)
+    except ce.ContainerRequestError:
+        # The boundary refused the request or runtime before starting anything (e.g. a root
+        # container user): nothing ran, so this is BLOCKED, never a crash or an empty result.
+        return {"status": "BLOCKED", "cause": "request-invalid"}
     errors = verify(root, run_id=run_id, job_id=JOB, attempt_id=request["attempt_id"], request=request,
                     images_dir=runtime.images_dir, expected_result_sha256=terminal["result_sha256"],
                     host_flavor=runtime.host_flavor, docker_host=runtime.docker_host,

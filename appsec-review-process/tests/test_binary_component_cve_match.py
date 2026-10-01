@@ -155,6 +155,22 @@ class BinaryComponentCveMatchTests(unittest.TestCase):
         self.assertEqual(outcome["status"], "BLOCKED")
         self.assertIn(outcome["cause"], ("docker-unavailable", "image_unavailable"))
 
+    def test_a_boundary_refusal_is_blocked_not_a_crash(self):
+        import container_execution as ce
+        def refuse(runtime, **kwargs):
+            raise ce.ContainerRequestError("runtime.container_user must be a numeric non-root uid:gid")
+        database = json.loads((self.db_root / "current.json").read_text())["snapshot_id"]
+        try:
+            job._request(run_id="run-1", attempt_id="x", source_root=self.source,
+                         database_dir=self.db_root / "snapshots" / database, source_sha=SOURCE_SHA, now="2026-09-30T16:00:00Z")
+        except db.DbUnavailable:
+            self.skipTest("no tool-cve-bin-tool B16 record in this checkout")
+        outcome = job.scan(run_id="run-1", attempt_id="native-1", source_root=self.source,
+                           database_dir=self.db_root / "snapshots" / database, execution_root=self.tmp / "exec",
+                           source_sha=SOURCE_SHA, now="2026-09-30T16:00:00Z",
+                           runtime_factory=lambda sha, now: object(), run_container=refuse)
+        self.assertEqual(outcome, {"status": "BLOCKED", "cause": "request-invalid"})
+
     def test_the_container_request_is_offline_and_mounts_the_database_read_only(self):
         database = json.loads((self.db_root / "current.json").read_text())["snapshot_id"]
         try:
