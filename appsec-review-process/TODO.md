@@ -568,8 +568,26 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [x] Repair rounds re-investigate: component characterization's repair spent 21.4K output tokens thinking and
       returned 295 chars, then the next hit the $2 cap. A repair round now carries the rejected answer (up to
       400K chars) and asks for the corrected response only, no new investigation and no tools.
-- [ ] Repair rounds share the call's dollar cap (`budget - spent`): $0.69 was left for 01's last round after a
-      $1.00 round 0. Decide whether repair rounds get their own small cap, or lower effort.
+- [x] Repair rounds share the call's dollar cap (`budget - spent`): $0.69 was left for 01's last round after a
+      $1.00 round 0. D-31: each repair round has its own cap, `invocation.repair_budget_fraction` (0.25) of
+      the per-call cap.
+- [x] Producer binding makes no model call (D-31, invoker `orchestrator-fill`); `deterministic-python` is not
+      probed as a model.
+
+## Follow-ups from the review of `20261001T032047Z-fd64eb` (D-30 to D-33)
+
+- [ ] Rebuild `audit-codeql` (maven; Go autobuild lane) and `audit-iac` (tfsec/kube-linter in /usr/local/bin):
+      `orchestrator/prepare-host.sh`. A launch is Blocked until then (D-32).
+- [ ] Next run: check `02-codeql-go` exits 0 with leads, Java logs no `Cannot run program "mvn"`, IaC
+      checkov/hadolint/kube-linter are OK, build plans cover Go and TS units, 01 is accepted on round 0.
+- [ ] SAST tools for languages 02-source-sast does not cover (now named gaps): Python, JS/TS, C#, Rust, Bash,
+      PowerShell (e.g. vendored Semgrep rule packs, bandit, shellcheck, PSScriptAnalyzer).
+- [ ] OSV snapshot covers npm only: add PyPI, Maven, Go, crates.io, NuGet, Packagist (gap
+      `OSV_ECOSYSTEM_DATABASES_MISSING`).
+- [ ] Syft directory scans read lockfiles, not bare manifests (gap `SBOM_MANIFEST_NOT_INVENTORIED`): enable
+      the manifest catalogers or generate lockfiles in the build lane.
+- [ ] ir-capture `bitcode-capture-failed` gaps carry unit and path but not the compiler's reason (kept in
+      `tools/<n>-compile/logs`); case-036 ran clang++ in the wrong cwd, case-045 missed its vendored include.
 - [x] The invoker's private `/tmp/claude-cli-invoker-*` dir is removed after a clean dispatch (1,007 had built up
       on zarathustra); a failed or repaired dispatch keeps it. `tool-usage.json` is copied under the run with
       `repair-log.json`.
