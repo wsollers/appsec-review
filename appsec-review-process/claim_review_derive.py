@@ -182,6 +182,22 @@ def _precheck_binding(stage: str, evidence_sha256: str) -> dict[str, Any]:
             "artifact_path": core.STAGES[stage][1], "artifact_sha256": evidence_sha256}
 
 
+MAX_ABSENT_HINTS = 20
+
+
+def _decision_requirements(stage: str, claim_id: str, record: dict[str, Any]) -> str:
+    required, _optional = PERSONA_FIELDS[stage]
+    citations = sorted({citation["citation_id"] for field in CITABLE.get(stage, ())
+                        for citation in record.get(field) or []})
+    text = f"claim {claim_id} needs a decision with fields {sorted(required)}"
+    if citations:
+        text += f"; citation_ids from {citations}"
+    if "proof_obligations" in required:
+        obligations = [item["obligation_id"] for item in record.get("proof_obligations") or []]
+        text += f"; proof_obligations answering every one of {obligations}"
+    return text
+
+
 def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[str, Any],
            request_sha256: str, evidence_sha256: str,
            store: SchemaStore | None = None) -> tuple[dict[str, Any], list[str]]:
@@ -220,6 +236,12 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
     absent = sorted(set(records) - set(by_claim))
     if absent:
         errors.append(f"no decision for upstream claim_id(s) {absent}; every upstream claim needs one")
+        # Name what each missing decision must contain (ids only), so a repair round can write it without
+        # re-reading the whole shard. Run 20261001T064759Z-4a8586 (08, reviewer-00): round 0 skipped one
+        # of 96 claims; the repair, told only "no decision for claim X", guessed and missed its three
+        # proof obligations and its one citation.
+        for claim_id in absent[:MAX_ABSENT_HINTS]:
+            errors.append(_decision_requirements(stage, claim_id, records[claim_id]))
     if errors:
         raise InvokerOutputError(f"reviewer reply does not cover the upstream claims: {len(errors)} error(s)",
                                  errors)
