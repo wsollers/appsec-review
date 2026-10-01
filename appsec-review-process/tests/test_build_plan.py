@@ -66,12 +66,14 @@ class Base(tbc.Base):
         self.classification_sha = file_hash(self.classification_attempt / bc.RESULT)
         self.plan = hello_plan(self.index)
         self.plan_calls = []
+        self.retry_reasons = []
 
     def fake_dispatch(self, run_id, base, record, attempt_id, n=None, unit_id=None, cpath=None, ipath=None,
-                      classification=None):
+                      classification=None, retry_reason=None):
         if n is None:  # the classification stub shares this name in tbc.Base
             return super().fake_dispatch(run_id, base, record, attempt_id)
         self.plan_calls.append(unit_id)
+        self.retry_reasons.append(retry_reason)
         pinned = {p: file_hash(self.target / p) for p in ('configure.ac', 'Makefile.am', 'Dockerfile')}
         return (copy.deepcopy(self.plan), '# unit summary\n', pinned, f'{attempt_id}u{n}',
                 {'family': 'haiku'}, 'e' * 64)
@@ -169,11 +171,25 @@ class Check(Base):
                               (['curl', '-O', 'x'], 'network or package tool'),
                               (['./configure', '--with-src=https://example.invalid/x.tgz'], 'a URL'),
                               (['apt-get', 'install', 'libfoo'], 'network or package tool'),
-                              (['npm', 'install'], 'fetching subcommand'),
+                              (['npm', 'add', 'left-pad'], 'changes declared dependencies'),
+                              (['npm', 'install', 'left-pad'], 'changes declared dependencies'),
+                              (['go', 'get', 'example.com/m'], 'changes declared dependencies'),
+                              (['go', 'install', './...'], 'installs an artifact'),
+                              (['go', 'test', './...'], 'runs or tests'),
+                              (['cargo', 'run'], 'runs or tests'),
+                              (['npm', 'test'], 'runs or tests'),
                               (['make', '-C', '/usr/src'], 'outside /src and /build')):
             with self.subTest(argv=argv):
                 self.assertRejected(lambda v, a=argv: self.command(v).update(argv=a), message)
         self.assertRejected(lambda v: self.command(v).update(cwd='../elsewhere'), 'cwd')
+
+    def test_dependency_restore_is_allowed_d28(self):
+        """D-28: trials have network, so restoring declared dependencies is part of a build plan."""
+        for argv in (['go', 'build', './...'], ['go', 'mod', 'download'], ['npm', 'ci'], ['npm', 'run', 'build'],
+                     ['dotnet', 'restore'], ['dotnet', 'build'], ['cargo', 'fetch'], ['cargo', 'build'],
+                     ['mvn', '-o', 'package'], ['npm', 'install']):
+            with self.subTest(argv=argv):
+                self.assertEqual(bp.argv_errors(argv, 'c'), [])
 
     def test_phase_order_and_build_step(self):
         self.assertRejected(lambda v: v['plans'][0]['commands'].reverse(), 'configure-then-build order')
@@ -275,6 +291,11 @@ class Worker(Base):
         pointer = self.run_plan()
         self.assertEqual(pointer['status'], 'OK_WITH_GAPS')
         self.assertEqual(len(self.plan_calls), 2)  # one retry
+        # The retry carries the rejection, so it is a different request (never a persona-cache hit).
+        self.assertIsNone(self.retry_reasons[0])
+        self.assertIn('failed independent validation', self.retry_reasons[1])
+        unit = bp.unit_request(self.classification, self.classification['units'][0]['unit_id'])
+        self.assertNotEqual(bp.unit_prompt(unit)['sha256'], bp.unit_prompt(unit, self.retry_reasons[1])['sha256'])
         value = read_json(bp.validate(self.run_id) / bp.RESULT)
         self.assertEqual(value['plans'], [])
         self.assertTrue(any(g.startswith('dir:.' + bp.NO_PLAN) and 'failed independent validation' in g
@@ -399,7 +420,7 @@ class UnitMemoTests(Base):
         model.start(); self.addCleanup(model.stop)
 
     def fake_dispatch(self, run_id, base, record, attempt_id, n=None, unit_id=None, cpath=None, ipath=None,
-                      classification=None):
+                      classification=None, retry_reason=None):
         if n is None:
             return super().fake_dispatch(run_id, base, record, attempt_id)
         self.plan_calls.append(unit_id)

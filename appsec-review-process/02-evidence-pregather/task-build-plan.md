@@ -5,8 +5,9 @@ unit named in `plan-unit.json` under **Upstream Accepted Artifacts**. You are al
 target repository (under **Target Repository Files**), the accepted `build-index.json` (deterministic
 build signals), the accepted `build-classification.json` (the unit's class) and `buildenv-catalog.json`
 (the base images you may choose). You plan; you build nothing and run nothing. `02-build-resolution`
-turns your plan into an image and a trial build inside an isolated container with **no network**, and
-comes back to you with the failure if the trial fails.
+turns your plan into an image and a trial build inside an isolated container, and comes back to you
+with the failure if the trial fails. The trial has network (D-28) so the unit's own package manager can
+restore the dependencies its manifests and lockfiles declare.
 
 ## What a plan is
 
@@ -47,9 +48,14 @@ tier `C` with the reason.
 
 - No test, check or install step: no `make check`, `make test`, `make install`, `make distcheck`,
   `ctest`, and no command that runs a built program. Plans have only `configure` and `build` phases.
-- No network: no `curl`, `wget`, `git`, `apt`/`apt-get`, `pip`, `npm install`, `go get`, and no URL
-  anywhere in a command. A build that downloads at configure time fails the trial; move the dependency
-  to `apt_packages` or declare the plan tier `C`.
+- No ad-hoc downloads: no `curl`, `wget`, `git`, `apt`/`apt-get`, `pip`, and no URL anywhere in a
+  command. System libraries go in `apt_packages`.
+- Restoring **declared** dependencies is allowed, with the unit's own tool: `npm ci` (or `npm install`
+  with no package name), `dotnet restore`, `cargo fetch`, `go mod download`, and builds that fetch
+  modules themselves (`go build ./...`, `cargo build`, `dotnet build`, `mvn package`). Never change
+  what is declared (`npm install <pkg>`, `npm add`, `go get`, `... update`/`upgrade`), never install a
+  tool or binary (`go install`, `cargo install`, `mvn install`), never run or test (`go test`,
+  `cargo run`, `npm test`).
 - Argv only: no `sh -c`, `bash -c`, `env`, `sudo`; no `|`, `>`, `<`, `&&`, `;`, `$(...)` or backticks.
 - Paths: relative to `cwd`, or absolute only under `/src` (the checkout copy) or `/build`.
 
@@ -78,7 +84,7 @@ command.
 ## Consumers
 
 - `02-build-resolution` renders the image (`FROM` the base, one `apt-get install` of your packages),
-  runs your commands in a trial with the fixed clang and no network, judges the result, and on
+  runs your commands in a trial with the fixed clang and network (D-28), judges the result, and on
   failure asks for a revised plan with a bounded failure excerpt.
 - The system acceptance test compares the plan's structure with the fixture answer key (build system,
   root, command order, compile-database method).

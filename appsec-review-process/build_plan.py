@@ -88,11 +88,21 @@ COMPILER_VAR_RE = re.compile(r'^(?:CC|CXX|CPP|CXXCPP|LD|CCLD|CXXLD|HOSTCC|BUILD_
 SHELLS = {'sh', 'bash', 'dash', 'zsh', 'ksh', 'fish', 'csh', 'tcsh', 'busybox', 'env', 'sudo', 'su', 'doas',
           'eval', 'exec', 'xargs', 'nohup', 'timeout', 'nice'}
 NETWORK_TOOLS = {'curl', 'wget', 'git', 'svn', 'hg', 'apt', 'apt-get', 'aptitude', 'dpkg', 'snap', 'pip',
-                 'pip3', 'pipx', 'conda', 'gem', 'cpan', 'cpanm', 'go', 'rustup', 'docker', 'podman',
+                 'pip3', 'pipx', 'conda', 'gem', 'cpan', 'cpanm', 'rustup', 'docker', 'podman',
                  'nerdctl', 'scp', 'rsync', 'ssh', 'ftp', 'nc', 'ncat', 'telnet', 'vcpkg', 'conan'}
-# Package managers allowed only for an offline build subcommand (never install/fetch/update).
-FETCH_SUBCOMMANDS = {'install', 'i', 'add', 'update', 'upgrade', 'fetch', 'get', 'download', 'ci', 'restore',
-                     'sync', 'clone', 'pull'}
+# Language package managers (D-28, decided 2026-10-01 after run 20261001T032047Z-fd64eb rejected all 7 Go
+# units and 3 TypeScript units): trial builds have network, so a plan may restore the dependencies the
+# unit's manifests and lockfiles already declare (`npm ci`, `dotnet restore`, `cargo fetch`,
+# `go mod download`, `go build` fetching modules). A plan never changes what is declared (add, update,
+# upgrade, `go get`), never installs a tool or binary (`go install`, `cargo install`), and never runs or
+# tests what it built.
+PACKAGE_TOOLS = {'npm', 'yarn', 'pnpm', 'cargo', 'mvn', 'gradle', 'dotnet', 'composer', 'bundle', 'go'}
+CHANGE_SUBCOMMANDS = {'add', 'update', 'upgrade', 'get', 'sync', 'clone', 'pull', 'remove', 'uninstall',
+                      'publish', 'link'}
+INSTALL_BINARY_TOOLS = {'go', 'cargo', 'mvn', 'gradle'}   # their `install` installs an artifact, not deps
+RUN_SUBCOMMANDS = {'run', 'test', 'exec', 'bench', 'start', 'watch'}
+RUN_TOOLS = {'go', 'cargo', 'dotnet'}                    # npm/yarn `run <script>` builds; `test` is checked
+FETCH_SUBCOMMANDS = {'install', 'i', 'ci', 'restore', 'fetch', 'download'}   # restore only (D-28)
 TEST_RUNNERS = {'ctest', 'meson-test', 'pytest', 'tox', 'nox', 'prove', 'valgrind', 'gdb', 'lldb', 'qemu'}
 MAKE_TOOLS = {'make', 'gmake', 'ninja', 'samu', 'bmake', 'mingw32-make'}
 FORBIDDEN_TARGETS = {'check', 'test', 'tests', 'installcheck', 'distcheck', 'install', 'install-strip',
@@ -120,9 +130,18 @@ def argv_errors(argv, where):
         errors.append(where + f': argv[0] {argv[0]!r} is a shell or command runner; commands are argv only')
     if tool in NETWORK_TOOLS:
         errors.append(where + f': argv[0] {argv[0]!r} is a network or package tool; nothing is fetched')
-    if tool in {'npm', 'yarn', 'pnpm', 'cargo', 'mvn', 'gradle', 'dotnet', 'composer', 'bundle'} and \
-            any(a in FETCH_SUBCOMMANDS for a in argv[1:]):
-        errors.append(where + f': {tool} with a fetching subcommand; dependencies are restored during provisioning only')
+    if tool in PACKAGE_TOOLS:
+        words = [a for a in argv[1:] if not a.startswith('-')]
+        changing = sorted({a for a in words if a in CHANGE_SUBCOMMANDS})
+        if words[:1] in (['install'], ['i']) and len(words) > 1 and tool not in INSTALL_BINARY_TOOLS:
+            changing.append('install <package>')   # `npm install left-pad` edits the manifest
+        if changing:
+            errors.append(where + f': {tool} {changing[0]} changes declared dependencies; restore only what the '
+                                  'manifests and lockfiles declare')
+        if tool in INSTALL_BINARY_TOOLS and 'install' in words:
+            errors.append(where + f': {tool} install installs an artifact; plans only build')
+        if 'test' in words or (tool in RUN_TOOLS and any(a in RUN_SUBCOMMANDS for a in words[:1])):
+            errors.append(where + f': {tool} runs or tests what it built (nothing built is ever run)')
     if tool in TEST_RUNNERS:
         errors.append(where + f': argv[0] {argv[0]!r} runs tests or a built program (nothing built is ever run)')
     if tool in MAKE_TOOLS or tool in {'cmake', 'meson'}:
@@ -421,7 +440,10 @@ def _stage_unit_upstreams(base, record, cpath, ipath, classification, unit_id):
 _PROMPT_SAFE = re.compile(r'^[A-Za-z0-9._/:+@-]{1,200}$')
 
 
-def unit_prompt(unit):
+MAX_RETRY_REASON_CHARS = 2000
+
+
+def unit_prompt(unit, retry_reason=None):
     """The per-unit outer prompt: the job template's prompt with the one unit to plan stated at the top
     and again at the end (appsec-multi-vuln: haiku anchored on the first unit it read and planned
     cpp/case-001 when asked for dotnet/case-050). Written under the prompt cache, never an attempt."""
@@ -434,13 +456,27 @@ def unit_prompt(unit):
     data = (f'# This call plans exactly one unit: {name}\n\n'
             'Plan only this unit, with `unit_id` and `root` exactly as `plan-unit.json` gives them. The other '
             'units in the upstream artifacts are context; a plan for any other unit is rejected.\n\n'
-            + text + f'\n# Reminder\n\nThe one unit to plan in this call is {name}.\n').encode('utf-8')
+            + text + f'\n# Reminder\n\nThe one unit to plan in this call is {name}.\n'
+            + (_retry_section(retry_reason) if retry_reason else '')).encode('utf-8')
     sha = hashlib.sha256(data).hexdigest()
     path = beneath(ppa.PROMPT_CACHE_DIR, ppa.PROMPT_CACHE_DIR / JOB / 'units' / sha[:24] / 'outer_prompt.md')
     if not path.is_file() or file_hash(path) != sha:
         atomic_bytes(path, data)
     return {'path': path.resolve().relative_to(ppa.PROMPT_ROOT.resolve()).as_posix(),
             'sha256': 'sha256:' + sha, 'bytes': len(data)}
+
+
+def _retry_section(reason):
+    """A retry states why the first plan was rejected. Without it the retry was the identical request,
+    which the persona result cache answered with the very plan just rejected (run
+    20261001T032047Z-fd64eb: 11 units, all retries served from cache, no model call)."""
+    reason = str(reason)
+    marker = 'failed independent validation: '
+    reason = reason.split(marker, 1)[1] if marker in reason else reason
+    return ('\n# Your previous plan for this unit was rejected\n\nThe orchestrator\'s independent validation '
+            'rejected it for these reasons. Return a plan that avoids them, or a tier C plan with a coverage '
+            'gap when the unit cannot be built within the rules above:\n\n'
+            + reason[:MAX_RETRY_REASON_CHARS] + '\n')
 
 
 def _derive_plan_bookkeeping(plan, units):
@@ -498,7 +534,7 @@ def _fill_known(classification):
     return fill
 
 
-def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification):
+def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification, retry_reason=None):
     """One live persona invocation for one unit. Returns (value, summary_text, pinned, persona_attempt_id).
     Raises RuntimeError when the invocation did not complete OK: nothing is published from it."""
     upstream_dir = _stage_unit_upstreams(base, record, cpath, ipath, classification, unit_id)
@@ -520,7 +556,7 @@ def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, cl
     request = pd.build_request(JOB, run_id=run_id, job_id=PERSONA_JOB_ID, attempt_id=persona_attempt_id,
                                target_root=target_root, source_snapshot_sha256=snapshot, now=clock(),
                                upstream_root=upstream_dir)
-    request['outer_prompt'] = unit_prompt(unit_request(classification, unit_id))
+    request['outer_prompt'] = unit_prompt(unit_request(classification, unit_id), retry_reason)
     model_identity = request['model']
     runtime = pi.PersonaRuntime(
         invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
@@ -646,13 +682,14 @@ def run(run_id, dagster_id, force=False, dispatch=None):
             return value, summary, dict(target_pinned), entry['persona_attempt_id'], entry['model'], \
                 entry['persona_result_sha256']
 
-        def plan_unit(n, unit_id, material):
-            if material is not None:
+        def plan_unit(n, unit_id, material, retry_reason=None):
+            if material is not None and retry_reason is None:
                 hit = memo.lookup(material, lambda entry: from_memo(entry, unit_id))
                 if hit is not None:
                     return hit, True
+            extra = {'retry_reason': retry_reason} if retry_reason is not None else {}
             value, summary, pinned, persona_attempt_id, model_identity, result_sha = dispatch(
-                run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification)
+                run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification, **extra)
             if not isinstance(value, dict):
                 raise ValueError(f'{JOB}: the persona result for {unit_id} is not a JSON object')
             accepted(value, unit_id, pinned)
@@ -680,9 +717,10 @@ def run(run_id, dagster_id, force=False, dispatch=None):
                     material = unit_memo_material(run_id, record, classification, index, unit_id)
                 except Exception:   # noqa: BLE001 - no key, no memo: the unit is planned fresh
                     material = None
+            reason = None
             for tag in (n, f'{n}r'):
                 try:
-                    outcome, reused = plan_unit(tag, unit_id, material)
+                    outcome, reused = plan_unit(tag, unit_id, material, reason)
                     break
                 except Blocked:
                     raise
