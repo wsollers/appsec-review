@@ -373,6 +373,45 @@ def _retype_citations(value: dict[str, Any], target_root: Path, evidence_root: P
                 break
 
 
+_JOB_SEGMENT = re.compile(r"^\d{2}[a-z]?-[a-z0-9][a-z0-9-]*\Z")
+_ATTEMPT_SEGMENT = re.compile(r"^[0-9a-f]{32}\Z|^auto-[0-9a-f]{24}\Z|^[0-9A-Za-z][0-9A-Za-z._-]*-[0-9a-f]{12,}\Z")
+
+
+def _resolve_evidence_paths(value: dict[str, Any], target_root: Path, evidence_root: Path) -> None:
+    """An upstream citation names a producer job and a file; the attempt directory and the
+    ``evidence/`` prefix are layout. Run 20261001T064759Z-4a8586: the model cited
+    ``outputs/02-dev-project-discovery/project-discovery-summary.md`` for
+    ``evidence/02-dev-project-discovery/<attempt>/project-discovery-summary.md`` (30 citations), and the
+    job failed. A citation that resolves under neither root is rewritten to the evidence file with the
+    same job and relative path when exactly one exists; otherwise it is left for the validator."""
+    for citation in _citations(value):
+        if not isinstance(citation, dict) or not isinstance(citation.get("path"), str):
+            continue
+        cited = citation["path"]
+        for root in (target_root, evidence_root):
+            path = _beneath(root, cited)
+            if path is not None and path.is_file() and not path.is_symlink():
+                break
+        else:
+            parts = [part for part in cited.replace("\\", "/").split("/") if part]
+            index = next((i for i, part in enumerate(parts) if _JOB_SEGMENT.match(part)), None)
+            if index is None or index + 1 >= len(parts):
+                continue
+            job, tail = parts[index], parts[index + 1:]
+            if len(tail) > 1 and _ATTEMPT_SEGMENT.match(tail[0]):
+                tail = tail[1:]
+            job_dir = evidence_root / "evidence" / job
+            if not job_dir.is_dir() or job_dir.is_symlink():
+                continue
+            matches = [candidate for candidate in sorted(job_dir.glob("*/" + "/".join(tail)))
+                       if candidate.is_file() and not candidate.is_symlink()
+                       and _beneath(evidence_root, candidate.relative_to(evidence_root).as_posix()) is not None]
+            if len(matches) == 1:
+                citation["path"] = matches[0].relative_to(evidence_root).as_posix()
+                citation["source_type"] = "upstream_lane"
+                citation["content_hash"] = file_hash(matches[0])
+
+
 def _backfill_citations(value: Any, target_hashes: dict[str, str], evidence_hashes: dict[str, str]) -> None:
     for citation in _citations(value):
         if not isinstance(citation, dict):
@@ -920,6 +959,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         _normalize_component_ids(value)
         _normalize_tag_cloud(value)
         _retype_citations(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
+        _resolve_evidence_paths(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
         _drop_unresolved_relationships(value)
         _normalize_lanes(value)
         _normalize_references(value)

@@ -547,3 +547,27 @@ class RetypeCitationsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EvidencePathResolutionTests(unittest.TestCase):
+    """Run 20261001T064759Z-4a8586: 30 citations named outputs/<job>/<file> for evidence/<job>/<attempt>/<file>."""
+
+    def test_job_and_file_resolve_to_the_unique_evidence_file(self):
+        import component_characterization as cc
+        with tempfile.TemporaryDirectory() as folder:
+            target, evidence = Path(folder) / "target", Path(folder) / "upstream"
+            target.mkdir()
+            real = evidence / "evidence" / "02-dev-project-discovery" / "c5d29a91da674a1c855b884a506673e1"
+            real.mkdir(parents=True)
+            (real / "project-discovery-summary.md").write_text("# s\n")
+            value = {"components": [{"citations": [
+                {"source_type": "upstream_lane", "path": "outputs/02-dev-project-discovery/project-discovery-summary.md"},
+                {"source_type": "upstream_lane", "path": "outputs/02-devops-project-discovery/project-discovery-summary.md"},
+            ]}]}
+            with unittest.mock.patch.object(cc, "_citations", lambda v: v["components"][0]["citations"]):
+                cc._resolve_evidence_paths(value, target, evidence)
+            first, second = value["components"][0]["citations"]
+            self.assertEqual(first["path"],
+                             "evidence/02-dev-project-discovery/c5d29a91da674a1c855b884a506673e1/project-discovery-summary.md")
+            self.assertTrue(first["content_hash"])
+            self.assertEqual(second["path"], "outputs/02-devops-project-discovery/project-discovery-summary.md")
