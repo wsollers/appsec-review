@@ -27,6 +27,18 @@ class BuildResolutionTests(unittest.TestCase):
         "compile_database": {"method": "bear"},
     }
 
+    def test_plan_cwd_is_anchored_once_whether_unit_relative_or_already_rooted(self):
+        # appsec-multi-vuln 20261001T032047Z-fd64eb: a cwd equal to the unit root was joined again.
+        plan = {"root": "projects/cpp/case-027", "commands": [
+            {"phase": "configure", "argv": ["cmake", "-S", ".", "-B", "build"], "cwd": "projects/cpp/case-027"},
+            {"phase": "build", "argv": ["cmake", "--build", "build"], "cwd": "."},
+            {"phase": "build", "argv": ["make"], "cwd": "sub"},
+            {"phase": "build", "argv": ["make"], "cwd": "projects/cpp/case-027/sub"}]}
+        self.assertEqual([c["cwd"] for c in worker._repo_commands(plan)],
+                         ["projects/cpp/case-027", "projects/cpp/case-027", "projects/cpp/case-027/sub",
+                          "projects/cpp/case-027/sub"])
+        self.assertEqual([c["cwd"] for c in worker._repo_commands({"root": ".", "commands": [{"cwd": "src"}]})], ["src"])
+
     def test_renderer_is_deterministic_one_mirror_and_never_copies_target(self):
         base = {"digest": "sha256:" + "a" * 64, "reference": "sha256:" + "a" * 64,
                 "build_reference": "audit-buildenv-cpp:local",
@@ -38,6 +50,12 @@ class BuildResolutionTests(unittest.TestCase):
         self.assertNotIn("security.ubuntu.com", first)
         self.assertNotIn("COPY", first)
         self.assertIn("autoconf libtool", first)
+        # A plan with no apt packages renders no apt step at all (the update alone needs a mirror;
+        # 20261001T032047Z-fd64eb: Debian-based buildenvs failed on the Ubuntu sources).
+        bare = dict(self.PLAN, image=dict(self.PLAN["image"], apt_packages=[]))
+        rendered = worker._render(bare, base["build_reference"], worker.APT_MIRROR)
+        self.assertNotIn("apt-get", rendered)
+        self.assertNotIn("archive.ubuntu.com", rendered)
         image_id, fingerprint = worker._spec(self.PLAN, base, worker.APT_MIRROR)
         self.assertRegex(image_id, r"^image_build_[0-9a-f]{12}$")
         self.assertRegex(fingerprint, r"^sha256:[0-9a-f]{64}$")

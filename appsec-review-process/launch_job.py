@@ -228,7 +228,8 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                 if not wait or remote['status'] in TERMINAL:
                     return record
                 if time.monotonic()-started >= timeout:
-                    raise TimeoutError('wait timed out; Dagster execution continues. Resume monitoring with resume_argv.')
+                    raise WaitTimeout(f"stopped watching after {timeout}s; the Dagster run is still {remote['status']} "
+                                      f"({record.get('url', '')}). Resume monitoring with resume_argv.")
                 time.sleep(2)
                 remote = find_run(request_id,run_id)
                 if remote is None:
@@ -238,6 +239,11 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
             atomic_json(path,record)
             print(json.dumps({'request':str(path),'status':record['status'],'resume_argv':resume}),file=sys.stderr)
             raise
+
+
+class WaitTimeout(TimeoutError):
+    """--wait gave up watching; the Dagster run itself is unaffected (2026-10-01: this read as
+    DAGSTER_LAUNCH_FAILED although the launch had STARTED and the run was healthy)."""
 
 
 def main(argv=None):
@@ -258,7 +264,9 @@ def main(argv=None):
     parser.add_argument('--execution-root')
     parser.add_argument('--launch-id',help='reattach to this existing launch without resubmitting')
     parser.add_argument('--wait',action='store_true')
-    parser.add_argument('--timeout',type=int,default=600)
+    parser.add_argument('--timeout',type=int,default=600,
+                        help='seconds --wait watches (default 600); when it expires the run keeps going and '
+                             'this exits 3 with DAGSTER_WAIT_TIMEOUT (a real launch failure exits 1)')
     args = parser.parse_args(argv)
     if args.timeout <= 0: parser.error('--timeout must be positive')
     try:
@@ -284,6 +292,9 @@ def main(argv=None):
                         mode,force_jobs)
         print(json.dumps(result,indent=2))
         return 0 if result['status'] not in {'FAILURE','CANCELED','REJECTED'} else 1
+    except WaitTimeout as exc:
+        print(f'DAGSTER_WAIT_TIMEOUT: {exc}',file=sys.stderr)
+        return 3
     except (Exception,KeyboardInterrupt) as exc:
         print(f'DAGSTER_LAUNCH_FAILED: {exc}',file=sys.stderr)
         return 1

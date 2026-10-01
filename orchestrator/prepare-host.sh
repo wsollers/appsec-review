@@ -186,10 +186,13 @@ fi
 # ---- 6. targets ------------------------------------------------------------------------------------
 step "6. targets"
 if [[ $CHECK -eq 1 ]]; then
-    for t in hello-autotools appsec-multi-vuln freeciv21 doom3-bfg; do
-        if [[ -d "fixtures/targets/$t/.git" ]]; then ok "$t ($(git -C "fixtures/targets/$t" rev-parse --short HEAD))"
-        else todo "$t not cloned"; fi
-    done
+    # Pins come from populate-targets.sh (one list); a clone at another commit is not OK (it printed
+    # OK for appsec-multi-vuln at 878d5d6 while the pin was 5c5a776, 2026-10-01).
+    while IFS='|' read -r t _url pin; do
+        if [[ ! -d "fixtures/targets/$t/.git" ]]; then todo "$t not cloned: fixtures/populate-targets.sh $t"
+        elif [[ "$(git -C "fixtures/targets/$t" rev-parse HEAD)" == "$pin" ]]; then ok "$t at its pin ${pin:0:7}"
+        else todo "$t at $(git -C "fixtures/targets/$t" rev-parse --short HEAD), pinned ${pin:0:7}: fixtures/populate-targets.sh $t"; fi
+    done < <(sed -n 's/^ *"\([^"|]*|[^"|]*|[0-9a-f]\{40\}\)".*/\1/p' fixtures/populate-targets.sh)
 else
     fixtures/populate-targets.sh 2>&1 | sed 's/^/  /'
     [[ ${PIPESTATUS[0]} -eq 0 ]] && ok "all targets at their pinned commits" || bad "targets" "populate-targets.sh reported a problem"

@@ -8,7 +8,7 @@
 #
 # Each container runs one argv from `dep_reachability_codeql.py plan` (no shell), with no network,
 # the fixture, the pack and the generated symbols model pack mounted read-only, and only
-# scratch/codeql-reachability-smoke/<lang>/scratch writable. One line per check: PASS or FAIL;
+# scratch/codeql-reachability-smoke/<lang>/scratch writable. One line per check: PASS, FAIL or SKIP;
 # exit status 1 if any check FAILs. Logs: scratch/codeql-reachability-smoke/<lang>/step-NN.log.
 set -uo pipefail
 
@@ -31,6 +31,13 @@ else
 fi
 
 for lang in "${langs[@]}"; do
+  # Go is extracted with --build-mode=autobuild, which needs a Go toolchain; audit-codeql has none yet
+  # (TODO: 02-codeql-go). Until it does, Go is a known gap, reported as SKIP like
+  # smoke_codeql_per_language.sh does, not as a failure (zarathustra, 2026-10-01).
+  if [ "$lang" = go ] && ! docker run --rm --network none --entrypoint /bin/sh "$image" -c 'command -v go' >/dev/null 2>&1; then
+    report SKIP "$lang reachability" "no Go toolchain in $image: Go needs autobuild (TODO 02-codeql-go)"
+    continue
+  fi
   out="$repo/scratch/codeql-reachability-smoke/$lang"
   rm -rf "$out"; mkdir -p "$out/scratch/graph" "$out/symbols"
   fixture="$repo/data/codeql-reachability/fixtures/$lang"

@@ -217,16 +217,21 @@ def current_inputs(run_id: str) -> dict[str, Any]:
 def _render(plan: dict[str, Any], base_ref: str, mirror: dict[str, Any]) -> str:
     packages = sorted({p["name"] for p in plan["image"]["apt_packages"]})
     install = " ".join(packages) if packages else ""
-    return "\n".join([
-        f"# {RENDERER_VERSION}", f"FROM {base_ref}", "USER root",
-        "ARG DEBIAN_FRONTEND=noninteractive",
+    # No apt packages, no apt at all: the update alone needs the mirror, and on the Debian-based
+    # buildenvs (go, php, python, rust, typescript) the Ubuntu sources fail with exit 100
+    # (appsec-multi-vuln 20261001T032047Z-fd64eb, 15 of 23 gaps).
+    apt = [
         "RUN . /etc/os-release && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
         "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: %s %s-updates\\n"
         "Components: main universe\\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\\n' "
         '"$VERSION_CODENAME" "$VERSION_CODENAME" ' 
         "> /etc/apt/sources.list.d/ubuntu.sources && apt-get update && "
-        + (f"apt-get install -y --no-install-recommends {install} && " if install else "")
-        + "rm -rf /var/lib/apt/lists/*",
+        f"apt-get install -y --no-install-recommends {install} && rm -rf /var/lib/apt/lists/*",
+    ] if install else []
+    return "\n".join([
+        f"# {RENDERER_VERSION}", f"FROM {base_ref}", "USER root",
+        "ARG DEBIAN_FRONTEND=noninteractive",
+        *apt,
         "USER worker", "WORKDIR /scratch",
         "ENV CC=/opt/llvm/bin/clang CXX=/opt/llvm/bin/clang++", "",
     ])
@@ -348,9 +353,19 @@ def _repo_commands(plan: dict[str, Any]) -> list[dict[str, Any]]:
     repository-relative (appsec-multi-vuln: every projects/cpp/case-* unit ran cmake at the repo
     root and failed with "does not appear to contain CMakeLists.txt")."""
     import posixpath
-    root = plan.get("root") or "."
-    return [{**c, "cwd": posixpath.normpath(posixpath.join(root, c.get("cwd") or "."))}
-            for c in plan["commands"]]
+    root = posixpath.normpath(plan.get("root") or ".")
+
+    def anchored(cwd: str) -> str:
+        cwd = posixpath.normpath(cwd or ".")
+        # A planner sometimes writes the cwd already rooted at the unit (cwd == root, or below it):
+        # joining again doubled it (projects/cpp/case-027/projects/cpp/case-027) and the trial
+        # raised before running anything (appsec-multi-vuln 20261001T032047Z-fd64eb: 8 of 28 plan
+        # commands). build_plan.check accepts both spellings, so read both here.
+        if root != "." and (cwd == root or cwd.startswith(root + "/")):
+            return cwd
+        return posixpath.normpath(posixpath.join(root, cwd))
+
+    return [{**c, "cwd": anchored(c.get("cwd") or ".")} for c in plan["commands"]]
 
 
 def _request(run_id: str, attempt_id: str, unit_attempt: Path, record: dict[str, Any],
