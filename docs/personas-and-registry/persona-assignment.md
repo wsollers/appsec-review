@@ -49,7 +49,7 @@ supply-chain-attacker (CI automation) and insider-developer (build scripts).
 
 | Job / module | Template | Persona | Role | Assessment |
 |---|---|---|---|---|
-| `01-component-characterization` (`component_characterization.py`) | same | developer-engineer | component-characterizer | Fits; architecture-doc-summarizer or reverse-engineer as a second opinion is a design choice, not a fix |
+| `01-component-characterization` (`component_characterization.py`) | same | developer-engineer | component-characterizer | Fits; architecture-doc-summarizer (parked in `personas-unused/`) or reverse-engineer as a second opinion is a design choice, not a fix |
 | `02-evidence-producer-binding` (`evidence_assembly_runtime.py`) | same | evidence-custodian | evidence-assembler | Fits (bookkeeping-heavy binding call) |
 | `02-build-classify` (`build_classify.py`) | same | developer-engineer | build-unit-classifier | Fits |
 | `02-build-plan` (`build_plan.py`) | same | developer-engineer | build-planner | Fits |
@@ -58,7 +58,7 @@ supply-chain-attacker (CI automation) and insider-developer (build scripts).
 | D03 `02-devops-project-discovery` | same | devops-engineer | repo-project-discoverer | Fits |
 | D04 `02-sre-operations-topology` | same | sre-engineer | operations-topology-mapper | Fits |
 | OWASP validator cells (`owasp_workbench_lifecycle.py`) | `04-owasp-validator-cell` | owasp-validator | standards-control-validator | Fits; every cell uses the same persona (candidate for variants: api-contract-abuser, auth-session-specialist, mobile-platform-attacker by chapter) |
-| Intake review pool (`persona_tool_pool_lifecycle.py`) | `intake-review-pool-cell`, `intake-review-pool-independent-cell` | claim-reviewer, reverse-engineer | claim-reviewer | Two distinct personas already; claim-reviewer is generic for an intake check (candidate: completeness-auditor) |
+| Intake review pool (`persona_tool_pool_lifecycle.py`) | `intake-review-pool-cell`, `intake-review-pool-independent-cell` | claim-reviewer, reverse-engineer | claim-reviewer | Two distinct personas already; claim-reviewer is generic for an intake check (candidate: completeness-auditor, parked in `personas-unused/`) |
 | `persona-tool-pool-dispatch` (`control_lane_orchestration.py`) | caller-supplied spec | per spec | per spec | Persona comes from the supplied pool spec |
 
 Not changed here (listed for William): the `07/08/09/12` lifecycle templates themselves name

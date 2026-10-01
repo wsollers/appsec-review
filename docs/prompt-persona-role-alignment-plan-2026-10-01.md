@@ -252,7 +252,7 @@ Out of the queue, noted:
 
 | item | status | branch / commit | notes |
 |---|---|---|---|
-| Phase 0 decisions | open | | |
+| Phase 0 decisions | D1-D3 accepted (2026-10-01): `personas-unused/` sibling, rewritten personas become hand-authored, 01 gets its own persona. D4-D6 open | | |
 | Phase 0 fingerprints + guardrail tests | open | | |
-| Phase U move | open | | |
+| Phase U move | done | this commit | 19 personas + `final-publication-custodian` to `appsec-review-process/personas-unused/`; catalog sections to `docs/personas-and-registry/persona-catalog-unused.md`; `CATEGORY_OVERRIDE` keys removed. All 140 prompt renders byte-identical before/after; `catalog_personas.py check` ok, `generate` writes nothing; persona/claim-review/tool-pool tests pass; design-parity and job-catalog checks exit 0. `qa-negative-test-designer` still held (section 3.2). Proposal YAML `lineage:` mentions left as history. |
 | R01 … R18 | open | | |

@@ -49,7 +49,6 @@ SECTION_CATEGORY = {
 # Catalog personas whose own text makes them verifiers/outputs rather than their section default.
 CATEGORY_OVERRIDE = {
     "evidence-only-verifier": "verifier", "standards-mapping-auditor": "verifier",
-    "completeness-auditor": "verifier", "qa-lead": "stakeholder-output",
 }
 INPUT_LABELS = ("inputs", "consumes")
 OUTPUT_LABELS = ("outputs", "useful outputs")
