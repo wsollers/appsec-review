@@ -6,11 +6,33 @@
   "required": [
     "schema", "target", "source_revision", "source_snapshot_sha256",
     "evidence_manifest_lineage", "characterization_basis", "code_scope_classification",
-    "analysis_exclusions", "functional_components", "component_relationships",
+    "category_coverage", "analysis_exclusions", "functional_components", "component_relationships",
     "parallel_review_groups", "tag_cloud", "negative_evidence", "unknowns",
     "classification_gaps", "rescope_triggers"
   ],
   "additionalProperties": false,
+  "$defs": {
+    "category-coverage-entry": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "scope_ids"],
+          "properties": {
+            "status": {"const": "classified"},
+            "scope_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "negative_evidence_id"],
+          "properties": {
+            "status": {"const": "absent"},
+            "negative_evidence_id": {"type": "string"}
+          }
+        }
+      ]
+    }
+  },
   "properties": {
     "schema": {"const": "appsec-review/component-purpose-map/1.0"},
     "target": {"type": "string"},
@@ -62,6 +84,19 @@
           "confidence": {"enum": ["high", "medium", "low"]},
           "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
         }
+      }
+    },
+    "category_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first-party", "vendored", "generated", "test-sample", "documentation", "build-tooling"],
+      "properties": {
+        "first-party": {"$ref": "#/$defs/category-coverage-entry"},
+        "vendored": {"$ref": "#/$defs/category-coverage-entry"},
+        "generated": {"$ref": "#/$defs/category-coverage-entry"},
+        "test-sample": {"$ref": "#/$defs/category-coverage-entry"},
+        "documentation": {"$ref": "#/$defs/category-coverage-entry"},
+        "build-tooling": {"$ref": "#/$defs/category-coverage-entry"}
       }
     },
     "analysis_exclusions": {
@@ -117,6 +152,21 @@
           "trust_boundary_relevance": {"type": "string"},
           "data_classes": {"type": "array", "items": {"type": "string"}},
           "security_control_relevance": {"type": "string"},
+          "candidate_security_tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["cwe_id", "cwe_name", "rationale", "cwe_catalog", "evidence_citations"],
+              "properties": {
+                "cwe_id": {"type": "string", "pattern": "^CWE-[1-9][0-9]{0,4}$"},
+                "cwe_name": {"type": "string", "minLength": 1},
+                "rationale": {"type": "string", "minLength": 1, "maxLength": 600},
+                "cwe_catalog": {"type": "string", "minLength": 1},
+                "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+              }
+            }
+          },
           "deployability": {"enum": ["deployable", "linked-runtime", "build-time", "non-runtime", "unknown"]},
           "downstream_lanes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "parallel_review_group": {"type": "string"}
@@ -175,9 +225,10 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["category", "search_terms", "search_scope", "confidence", "evidence_citations"],
+        "required": ["negative_evidence_id", "category", "search_terms", "search_scope", "confidence", "evidence_citations"],
         "additionalProperties": false,
         "properties": {
+          "negative_evidence_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
           "category": {"type": "string"},
           "search_terms": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "search_scope": {"type": "array", "minItems": 1, "items": {"type": "string"}},

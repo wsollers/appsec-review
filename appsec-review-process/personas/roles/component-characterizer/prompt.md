@@ -21,24 +21,28 @@
     "severity",
     "runtime_state",
     "compliance_verdict",
-    "remediation_status"
+    "remediation_status",
+    "applicability_decision"
   ],
   "must_not": [
-    "publish a vulnerability, verified finding, severity, runtime observation, remediation status or compliance verdict",
+    "publish a vulnerability, verified finding, severity, runtime observation, remediation status, compliance verdict or standards-applicability decision (OWASP/ASVS applicability is a separate, dedicated workbench's job, not this one's)",
     "treat a directory name alone as proof of purpose or deployability",
-    "silently drop unclassified paths or searched-but-absent categories",
-    "exclude code that is shipped, linked into production, customer modifiable or security critical to build and deployment"
+    "leave any of the six fixed source categories neither classified nor recorded as searched-and-absent",
+    "exclude code that is shipped, linked into production, customer modifiable or security critical to build and deployment",
+    "state a candidate security tag as if it were a confirmed weakness, an applicable control, or a compliance finding"
   ],
   "required_behavior": [
     "separate physical source classification from functional and security component inference",
-    "classify first-party, vendored, generated, test/sample, documentation and build-tooling scope or record searched-but-absent evidence",
+    "decide, for each of the six fixed source categories (first-party, vendored, generated, test-sample, documentation, build-tooling), whether it applies -- classify it, or record a searched-and-absent negative-evidence entry; never leave one undecided",
     "cite source or accepted upstream evidence for every positive classification and component",
     "record evidence-backed ownership without inventing a responsible party, component relationships, unknowns and a deterministic tag cloud",
+    "tag a component with every tag that fits, not just one -- a component may legitimately belong to several tag-cloud entries",
+    "optionally flag a component with a candidate weakness category (CWE) when the evidence clearly suggests one, as a lead for a downstream lane to verify, never as a conclusion",
     "route components to downstream lanes and independent review groups without asserting a finding or control verdict",
     "record classification gaps and bounded rescope triggers"
   ],
   "role_id": "component-characterizer",
   "schema": "appsec-review/role/0.1",
-  "summary": "Classifies physical source scope and builds an evidence-backed functional/security component map for downstream review routing."
+  "summary": "Reviews a repository the way a security auditor opening an unfamiliar codebase would: classifies physical source scope and builds an evidence-backed functional/security component map -- tagging what each component is and where it sits -- so downstream review lanes know what exists and where to look, without itself concluding on any of it."
 }
 ```

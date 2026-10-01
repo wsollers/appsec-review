@@ -95,6 +95,61 @@ class ComponentCharacterizationTests(unittest.TestCase):
         errors = cc.validate_payload(invalid, target_root=self.target, evidence_root=self.evidence)
         self.assertTrue(any("generated" in error for error in errors))
 
+    def test_category_coverage_citation_must_actually_match_the_category(self):
+        """Schema already guarantees all six keys are present in the classified/absent shape; this
+        is the Python cross-check that a citation is real and for the right category -- not, e.g., a
+        model citing a scope classified 'build-tooling' as satisfying 'first-party' (2026-10-01)."""
+        wrong_scope = deepcopy(self.value)
+        wrong_scope["category_coverage"]["first-party"] = {
+            "status": "classified", "scope_ids": ["build-definition"]}  # build-definition is build-tooling
+        errors = cc.category_coverage_errors(wrong_scope)
+        self.assertTrue(any("'first-party'" in e and "'build-definition'" in e and "build-tooling" in e
+                            for e in errors), errors)
+
+        wrong_negative = deepcopy(self.value)
+        wrong_negative["category_coverage"]["vendored"] = {
+            "status": "absent", "negative_evidence_id": "neg-generated"}  # recorded for 'generated'
+        errors = cc.category_coverage_errors(wrong_negative)
+        self.assertTrue(any("'vendored'" in e and "neg-generated" in e and "generated" in e
+                            for e in errors), errors)
+
+        unresolved = deepcopy(self.value)
+        unresolved["category_coverage"]["documentation"] = {
+            "status": "absent", "negative_evidence_id": "neg-does-not-exist"}
+        errors = cc.category_coverage_errors(unresolved)
+        self.assertTrue(any("unresolved negative evidence" in e and "neg-does-not-exist" in e
+                            for e in errors), errors)
+
+        self.assertEqual(cc.category_coverage_errors(self.value), [])
+
+    def test_candidate_security_tags_round_trips_through_full_schema_and_repair(self):
+        """The published (post-repair) document must validate, not the model's draft: the model's
+        placeholder cwe_name/cwe_catalog pass the loosened schema pre-repair, then Python overwrites
+        both from the real catalog, and the result still validates against the full schema."""
+        tagged = deepcopy(self.value)
+        tagged["functional_components"][0]["candidate_security_tags"] = [{
+            "cwe_id": "CWE-79", "cwe_name": "model's guess", "cwe_catalog": "model's guess",
+            "rationale": "Illustrative: not evidenced by this fixture's actual source.",
+            "evidence_citations": [tagged["functional_components"][0]["evidence_citations"][0]],
+        }]
+        self.assertEqual(cc.security_tag_errors(tagged), [])
+        cc._resolve_security_tags(tagged)
+        tag = tagged["functional_components"][0]["candidate_security_tags"][0]
+        self.assertEqual(tag["cwe_id"], "CWE-79")
+        self.assertNotIn("model's guess", (tag["cwe_name"], tag["cwe_catalog"]))
+        self.assertEqual(cc.validate_payload(tagged, target_root=self.target,
+                                             evidence_root=self.evidence), [])
+
+    def test_unresolvable_cwe_id_fails_the_repair_before_publication(self):
+        bad = deepcopy(self.value)
+        bad["functional_components"][0]["candidate_security_tags"] = [{
+            "cwe_id": "CWE-999999", "cwe_name": "x", "cwe_catalog": "x", "rationale": "x",
+            "evidence_citations": [bad["functional_components"][0]["evidence_citations"][0]],
+        }]
+        self.assertTrue(any("CWE-999999" in e for e in cc.security_tag_errors(bad)))
+        with self.assertRaises(ValueError):
+            cc._resolve_security_tags(bad)
+
     def test_rejects_stale_citations_prohibited_conclusions_and_broken_references(self):
         stale = deepcopy(self.value)
         stale["functional_components"][0]["evidence_citations"][0]["content_hash"] = "0" * 64
@@ -115,6 +170,35 @@ class ComponentCharacterizationTests(unittest.TestCase):
         missing["functional_components"][0]["evidence_citations"] = []
         self.assertTrue(cc.validate_payload(missing, target_root=self.target,
                                             evidence_root=self.evidence))
+
+    def test_prohibited_conclusion_text_is_negation_aware_per_sentence(self):
+        """2026-10-01, run 20261001T064759Z-4a8586: a real response wrote '...for routing to the
+        secrets/crypto review lane, without asserting exploitability or a compliance verdict' --
+        exactly the required behavior (route, do not conclude), rejected anyway because the old
+        check had no negation exception for this phrase group and a fixed-width lookbehind could
+        not see 'without asserting' several words before 'compliance verdict' regardless."""
+        live_bug_text = (
+            "This job's own evidence_search for secrets-category markers did not independently "
+            "re-run a secrets scan (that is 02-secrets-inventory's job); it is noted here only that "
+            "support/local.key is a PEM-headed private key for routing to the secrets/crypto review "
+            "lane, without asserting exploitability or a compliance verdict.")
+        self.assertFalse(cc._promotes_prohibited_conclusion({"x": live_bug_text}))
+
+        # A genuine assertion, not a disclaimer, is still caught.
+        self.assertTrue(cc._promotes_prohibited_conclusion(
+            {"x": "This is a verified finding of critical severity."}))
+        self.assertTrue(cc._promotes_prohibited_conclusion(
+            {"x": "severity: critical"}))
+        self.assertTrue(cc._promotes_prohibited_conclusion(
+            {"x": "Routes to the review lane. This is a compliance verdict."}))  # different sentence
+        self.assertFalse(cc._promotes_prohibited_conclusion(
+            {"x": "This is not a verified finding, just routing evidence."}))
+
+        violation = deepcopy(self.value)
+        violation["functional_components"][0]["observed_purpose"] = (
+            "A confirmed vulnerability exists here.")
+        self.assertTrue(any("prohibited conclusion" in e for e in cc.validate_payload(
+            violation, target_root=self.target, evidence_root=self.evidence)))
 
     def test_overlapping_and_unassigned_physical_paths_fail_closed(self):
         overlapping = deepcopy(self.value)
@@ -524,6 +608,41 @@ class NormalizeTagCloudTest(unittest.TestCase):
         parser = value["tag_cloud"][1]
         self.assertEqual((parser["component_ids"], parser["weight"], parser["confidence"]), (["a", "b"], 30, "low"))
         self.assertEqual(parser["evidence_citations"], [cite])
+
+
+class SecurityTagResolutionTest(unittest.TestCase):
+    """candidate_security_tags is optional and non-binding: the model supplies cwe_id + rationale
+    + evidence; Python resolves and overwrites cwe_name/cwe_catalog from the pinned CWE catalog, the
+    same discipline claim_lifecycle_core._cwe_judgment already uses for 07/09/12 (it cannot know our
+    catalog's exact identity string, and guessing the canonical name invites drift)."""
+
+    def _component(self, **tag):
+        return {"component_id": "x", "candidate_security_tags": [{
+            "cwe_id": "CWE-79", "cwe_name": "placeholder", "cwe_catalog": "placeholder",
+            "rationale": "innerHTML assignment from an unsanitized request parameter.",
+            "evidence_citations": [], **tag}]}
+
+    def test_a_real_cwe_id_is_resolved_and_its_name_and_catalog_are_overwritten(self):
+        value = {"functional_components": [self._component()]}
+        self.assertEqual(cc.security_tag_errors(value), [])
+        cc._resolve_security_tags(value)
+        tag = value["functional_components"][0]["candidate_security_tags"][0]
+        self.assertEqual(tag["cwe_id"], "CWE-79")
+        self.assertIn("Cross-site Scripting", tag["cwe_name"])
+        self.assertNotEqual(tag["cwe_catalog"], "placeholder")
+        self.assertTrue(tag["cwe_catalog"])  # Python's value, never the model's
+
+    def test_an_unresolvable_cwe_id_is_reported_pre_repair_and_raises_if_not_fixed(self):
+        value = {"functional_components": [self._component(cwe_id="CWE-999999")]}
+        errors = cc.security_tag_errors(value)
+        self.assertTrue(any("CWE-999999" in e and "does not resolve" in e for e in errors), errors)
+        with self.assertRaises(ValueError):
+            cc._resolve_security_tags(value)
+
+    def test_absent_field_is_not_an_error(self):
+        value = {"functional_components": [{"component_id": "x"}]}
+        self.assertEqual(cc.security_tag_errors(value), [])
+        cc._resolve_security_tags(value)  # must not raise when the optional field is simply absent
 
 
 class RetypeCitationsTest(unittest.TestCase):

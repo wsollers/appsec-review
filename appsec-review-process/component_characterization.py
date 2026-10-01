@@ -18,6 +18,7 @@ from typing import Any
 
 from claude_cli_invoker import ClaudeCliInvoker
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, now, read_json, run_path
+import cwe_catalog
 import intake
 import model_version_registry as mvr
 import persona_dispatch as pd
@@ -59,7 +60,7 @@ ABSENT_SCHEMA_SHA256 = "ABSENT"
 CODE_FILES = (
     "component_characterization.py", "persona_dispatch.py", "persona_invocation.py",
     "persona_prompt_assembly.py", "claude_cli_invoker.py", "publish_job_output.py",
-    "validate_job_output.py", registry_paths.template_rel("01-component-characterization"),
+    "validate_job_output.py", "cwe_catalog.py", registry_paths.template_rel("01-component-characterization"),
     "personas/roles/component-characterizer/role.json", registry_paths.rel(registry_paths.DOMAINS, "component-characterization"),
     registry_paths.rel(registry_paths.TOOLING_PROFILES, "component-evidence-router"),
     registry_paths.contract_rel("component-map"),
@@ -344,6 +345,37 @@ def _walk_text(value: Any):
         yield value
 
 
+# A bare noun phrase (verified finding, confirmed vulnerability, compliance verdict, remediation
+# status, runtime-verified) can appear in a legitimate sentence that explicitly declines to assert
+# it -- this job may route evidence but must not conclude on it (2026-10-01: a real run wrote
+# "...for routing to the secrets/crypto review lane, without asserting exploitability or a
+# compliance verdict", which is exactly the required behavior, not a violation of it). A fixed-width
+# regex lookbehind right before the phrase cannot see a negation several words earlier ("without
+# asserting ... a compliance verdict"), so each of these is checked per sentence: a hit is only a
+# violation if its own sentence carries no negation cue anywhere in it.
+_CONCLUSION_PHRASES = (
+    re.compile(r"(?i)\bverified[- ]finding\b"),
+    re.compile(r"(?i)\bconfirmed[- ]vulnerabilit(?:y|ies)\b"),
+    re.compile(r"(?i)\b(?:runtime[- ]verified|compliance verdict|remediation status)\b"),
+)
+# severity: <level> is an assertion syntax, not natural prose a negation could legitimately modify
+# ("without severity: critical" is not how anyone disclaims a severity) -- always a violation.
+_SEVERITY_ASSERTION = re.compile(r"(?i)\bseverity\s*[:=]\s*(?:critical|high|medium|low)\b")
+_NEGATION_CUE = re.compile(r"(?i)\b(?:not|no|never|without|cannot|can't|doesn't|does not|declin\w*)\b")
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _promotes_prohibited_conclusion(value: dict[str, Any]) -> bool:
+    for text in _walk_text(value):
+        if _SEVERITY_ASSERTION.search(text):
+            return True
+        for sentence in _SENTENCE_SPLIT.split(text):
+            if (any(pattern.search(sentence) for pattern in _CONCLUSION_PHRASES) and
+                    not _NEGATION_CUE.search(sentence)):
+                return True
+    return False
+
+
 def _citations(value: Any):
     if isinstance(value, dict):
         for key, item in value.items():
@@ -482,19 +514,45 @@ def _location_path(location: str) -> str:
     return _LOCATION_LINES.sub("", location)
 
 
+def category_coverage_errors(value: dict[str, Any]) -> list[str]:
+    """Cross-checks `category_coverage` against the scopes/negative-evidence it cites. The schema
+    already guarantees all six expected categories are present in the required classified/absent
+    shape (ADR-0013: a prose-only "record the search" instruction let the model silently omit
+    'first-party' on every real run; see 01-component-characterization/task-component-characterization.md).
+    This only has to check the citation is real and actually matches the category it is cited for --
+    a model could otherwise cite a scope classified 'vendored' as satisfying 'first-party'."""
+    scope_by_id = {item["scope_id"]: item for item in value["code_scope_classification"]}
+    negative_by_id = {item["negative_evidence_id"]: item for item in value["negative_evidence"]}
+    errors: list[str] = []
+    for category, entry in value["category_coverage"].items():
+        if entry["status"] == "classified":
+            for scope_id in entry["scope_ids"]:
+                scope = scope_by_id.get(scope_id)
+                if scope is None:
+                    errors.append(f"category_coverage {category!r} cites unresolved scope {scope_id!r}")
+                elif scope["classification"] != category:
+                    errors.append(f"category_coverage {category!r} cites scope {scope_id!r}, "
+                                  f"which is classified {scope['classification']!r}")
+        else:
+            negative_evidence_id = entry["negative_evidence_id"]
+            negative = negative_by_id.get(negative_evidence_id)
+            if negative is None:
+                errors.append(f"category_coverage {category!r} cites unresolved negative evidence "
+                              f"{negative_evidence_id!r}")
+            elif negative["category"] != category:
+                errors.append(f"category_coverage {category!r} cites negative evidence "
+                              f"{negative_evidence_id!r}, which is recorded for category "
+                              f"{negative['category']!r}")
+    return errors
+
+
 def validate_payload(value: dict[str, Any], *, target_root: Path,
                      evidence_root: Path | None = None) -> list[str]:
     errors = list(validate_document(value, "component-purpose-map.schema.json"))
     if errors:
         return errors
     errors.extend(_walk_keys(value))
-    conclusion_patterns = (
-        re.compile(r"(?i)(?<!not a )(?<!no )\bverified[- ]finding\b"),
-        re.compile(r"(?i)(?<!not a )(?<!no )\bconfirmed[- ]vulnerabilit(?:y|ies)\b"),
-        re.compile(r"(?i)\bseverity\s*[:=]\s*(?:critical|high|medium|low)\b"),
-        re.compile(r"(?i)\b(?:runtime[- ]verified|compliance verdict|remediation status)\b"),
-    )
-    if any(pattern.search(text) for text in _walk_text(value) for pattern in conclusion_patterns):
+    if _promotes_prohibited_conclusion(value):
         errors.append("component map text promotes routing evidence to a prohibited conclusion")
 
     def unique(items: list[dict[str, Any]], key: str, label: str) -> set[str]:
@@ -510,15 +568,8 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
     triggers = unique(value["rescope_triggers"], "trigger_id", "rescope trigger")
     unique(value["unknowns"], "unknown_id", "unknown")
     unique(value["classification_gaps"], "gap_id", "classification gap")
-    covered = {item["classification"] for item in value["code_scope_classification"]}
-    for item in value["negative_evidence"]:
-        # 'generated-code' records negative evidence for 'generated'.
-        covered |= {c for c in EXPECTED_SCOPE_CATEGORIES
-                    if item["category"] == c or item["category"].startswith(c + "-")}
-    missing = EXPECTED_SCOPE_CATEGORIES - covered
-    if missing:
-        errors.append("expected categories are neither classified nor recorded as negative evidence: " +
-                      ", ".join(sorted(missing)))
+    unique(value["negative_evidence"], "negative_evidence_id", "negative evidence")
+    errors.extend(category_coverage_errors(value))
     target_files = _target_files(target_root)
     assignments: dict[str, list[str]] = {path: [] for path in target_files}
     for item in value["code_scope_classification"]:
@@ -645,8 +696,12 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
         target_root=target_root, source_snapshot_sha256=record["source_snapshot_sha256"],
         now=_clock(), store=store, upstream_root=evidence_root)
     model_identity = request["model"]
+    def extra_validate(result: dict[str, Any]) -> list[str]:
+        return category_coverage_errors(result) + security_tag_errors(result)
+
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=model["effort"], budget_usd=budget_usd),
+        invoker=ClaudeCliInvoker(effort=model["effort"], budget_usd=budget_usd,
+                                 extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: evidence_root},
         allowed_models=(model_identity,), source_snapshot_sha256=record["source_snapshot_sha256"],
@@ -912,6 +967,53 @@ def _repair_against_target(value: dict[str, Any], target_root: Path) -> None:
         })
 
 
+def security_tag_errors(value: dict[str, Any]) -> list[str]:
+    """Cheap, pre-repair check for the extra_validate repair loop: only that each cwe_id actually
+    resolves against the pinned catalog in force. cwe_name/cwe_catalog are never trusted from the
+    model (see _resolve_security_tags) so they are not checked here."""
+    errors: list[str] = []
+    catalog = None
+    for component in value.get("functional_components") or []:
+        for tag in component.get("candidate_security_tags") or []:
+            cwe_id = tag.get("cwe_id")
+            if not isinstance(cwe_id, str):
+                continue
+            if catalog is None:
+                catalog = cwe_catalog.current()
+            try:
+                catalog.validate(cwe_id)
+            except cwe_catalog.CWEError as exc:
+                errors.append(f"candidate_security_tags: {cwe_id!r} does not resolve in the "
+                              f"CWE catalog in force: {exc}")
+    return errors
+
+
+def _resolve_security_tags(value: dict[str, Any]) -> None:
+    """ADR-0013/O2: a candidate security tag's cwe_id is the model's lead; cwe_name and cwe_catalog
+    are never the model's to assert (it cannot know our pinned catalog's exact identity string, and
+    guessing the canonical name invites drift) -- Python resolves and overwrites both from the CWE
+    catalog in force, the same discipline claim_lifecycle_core._cwe_judgment uses for 07/09/12.
+    Raises if a cwe_id does not resolve; security_tag_errors already gives the repair loop a chance
+    to fix this before execute() reaches this unconditional, no-recovery step."""
+    catalog = None
+    for component in value.get("functional_components") or []:
+        for tag in component.get("candidate_security_tags") or []:
+            cwe_id = tag.get("cwe_id")
+            if not isinstance(cwe_id, str):
+                raise ValueError(f"component {component.get('component_id')}: candidate_security_tags "
+                                 f"entry has a non-string cwe_id")
+            if catalog is None:
+                catalog = cwe_catalog.current()
+            try:
+                resolved = catalog.validate(cwe_id)
+            except cwe_catalog.CWEError as exc:
+                raise ValueError(f"component {component.get('component_id')}: candidate_security_tags "
+                                 f"cwe_id {cwe_id!r} does not resolve: {exc}") from None
+            tag["cwe_id"] = resolved
+            tag["cwe_name"] = catalog.name(resolved)
+            tag["cwe_catalog"] = catalog.used
+
+
 def _record_untagged_gaps(value: dict[str, Any]) -> None:
     """ADR-0013: a component the model left out of the tag cloud is a routing gap, not a failed map."""
     tagged = {c for item in value.get("tag_cloud") or [] for c in item.get("component_ids") or []}
@@ -964,6 +1066,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         _normalize_lanes(value)
         _normalize_references(value)
         _repair_against_target(value, Path(inputs["target_root"]))
+        _resolve_security_tags(value)
         _record_untagged_gaps(value)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
