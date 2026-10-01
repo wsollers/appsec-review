@@ -7,7 +7,7 @@
     "engagement": "SAMPLE - hello-autotools fixture (illustrative)",
     "run_id": "sample-hello-autotools",
     "sat_id": "20260927T141440Z",
-    "pipeline_commit": "sample; job-graph.json sha256:d1dd81ac70ce (83 jobs)",
+    "pipeline_commit": "sample; job-graph.json sha256:a829b787b571 (84 jobs)",
     "report_date": "2026-09-29",
     "classification": "Internal - sample",
     "native_tier": "A",
@@ -48,7 +48,7 @@
     "family_weight": {
       "00-intake-recovery": 1,
       "01-component-characterization": 3,
-      "02-evidence-pregather": 50,
+      "02-evidence-pregather": 51,
       "03-threat-model-dfd-stride": 2,
       "04-asvs-masvs": 2,
       "05-native-memory": 1,
@@ -87,7 +87,7 @@
     {
       "id": "02-evidence-pregather",
       "name": "Lane 02: evidence pregather",
-      "note": "50 job(s) whose job-graph.json lane is 02-evidence-pregather."
+      "note": "51 job(s) whose job-graph.json lane is 02-evidence-pregather."
     },
     {
       "id": "03-threat-model-dfd-stride",
@@ -595,6 +595,13 @@
       "kind": "pinned_container",
       "status": "OK",
       "tools": "pinned-vendor-static-evidence (vendor_evidence_orchestration.py:execute_binary_from_native)"
+    },
+    {
+      "id": "02-binary-component-cve-match",
+      "family": "02-evidence-pregather",
+      "kind": "pinned_container",
+      "status": "OK",
+      "tools": "pinned-vendor-static-evidence (binary_component_cve_match.py:execute)"
     },
     {
       "id": "02-mobile-sast",

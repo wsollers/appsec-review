@@ -12,7 +12,8 @@ class B13Tests(unittest.TestCase):
         for tool,spec in b.SPECS.items():
             self.assertTrue(spec.argv[0].startswith('/'))
             self.assertNotIn('sh', spec.argv[:1]); self.assertNotIn('-c', spec.argv)
-            self.assertTrue(spec.output.endswith(('.json','.sarif','.log')))
+            # blint writes one report per binary into a directory; vendor_evidence_b13 projects it.
+            self.assertTrue(spec.output.endswith(('.json','.sarif','.log')) or (tool, spec.output) == ('blint', 'blint'))
 
     def call(self,status='OK',verify_errors=(),write=True):
         td=tempfile.TemporaryDirectory(); self.addCleanup(td.cleanup); root=Path(td.name)
