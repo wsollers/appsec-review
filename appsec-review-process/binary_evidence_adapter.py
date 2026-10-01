@@ -130,7 +130,10 @@ def _debug_record(binary: dict[str, Any], raw_root: Path) -> dict[str, Any]:
             "name": match.group(3), "kind": match.group(2), "source_path": None, "line": None})
     symbols = sorted(symbols, key=lambda item: (item["address"], item["name"]))[:100_000]
     has_debug = summary.get("has_debug_sections") is True
-    status = "PRESENT" if has_debug else ("STRIPPED" if symbols else "MISSING")
+    # A symbol table without DWARF sections is PARTIAL; STRIPPED means no symbol table either. Before,
+    # symbols-without-debug read STRIPPED (run 20261001T032047Z-fd64eb: all 9 binaries, although nm
+    # listed their symbols and checksec reported symbols: yes).
+    status = "PRESENT" if has_debug else ("PARTIAL" if symbols else "STRIPPED")
     gaps = []
     if any(item["source_path"] is None for item in symbols):
         gaps.append("source-locations-unavailable")

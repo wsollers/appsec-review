@@ -720,6 +720,8 @@ def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
                             f"refused={replay['refused']}:total={replay['total']}")
         elif language in FIDELITY_GAPS:
             gaps.append(FIDELITY_GAPS[language])
+        if outcome.get("dependency_gap"):
+            gaps.append(outcome["dependency_gap"])
         tools.append(tool)
         if outcome["dropped"]:
             gaps.append(f"codeql-results-outside-checkout:{key}:{outcome['dropped']}")
@@ -761,11 +763,25 @@ def graph_outputs(trial: Path) -> dict[str, str | None]:
     return found
 
 
+def _log_text(trial: Path, name: str, limit: int = 1 << 20) -> str:
+    path = trial / "logs" / "container" / name
+    try:
+        with path.open("rb") as stream:
+            return stream.read(limit).decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 def _outcome(row: dict[str, Any], trial: Path, terminal: Any, target: Path,
              job: str = "02-codeql") -> tuple[dict[str, Any], str | None]:
     label = _label(row)
     gap = terminal_gap(label, terminal, job)
+    stderr = _log_text(trial, "stderr.log")
     if gap is not None:
+        if stderr.lstrip().startswith("usage: /opt/scripts/codeql-sast-lane.sh"):
+            # Run 20261001T032047Z-fd64eb (relaunch): the image's lane script predated the planned mode.
+            gap += (" The image's lane script rejected the planned arguments (usage error): audit-codeql "
+                    "is older than codeql_sast's plan; rebuild it (orchestrator/prepare-host.sh).")
         return {"gap": gap, "leads": [], "dropped": 0}, None
     raw = trial.joinpath(*SARIF.split("/"))
     if not raw.is_file() or raw.is_symlink():
@@ -773,6 +789,10 @@ def _outcome(row: dict[str, Any], trial: Path, terminal: Any, target: Path,
                 "leads": [], "dropped": 0}, None
     leads, dropped = normalize_sarif(row["language"], raw.read_bytes(), target, tool_id=row["tool_id"])
     outcome = {"gap": None, "leads": leads, "dropped": dropped}
+    if row["language"] == "java" and 'Cannot run program "mvn"' in _log_text(trial, "stdout.log") + stderr:
+        # Run 20261001T032047Z-fd64eb: 0 Java leads; the extractor could not resolve dependencies.
+        outcome["dependency_gap"] = ("CodeQL java could not run Maven to resolve dependencies (mvn missing "
+                                     "in the image); types from dependencies are unresolved.")
     if row.get("build_mode") == "traced":
         outcome["replay"] = read_replay(trial)
     return outcome, "sha256:" + file_hash(raw)

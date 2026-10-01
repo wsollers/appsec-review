@@ -170,6 +170,7 @@ def current_inputs(run_id: str) -> dict[str, Any]:
              if path.is_file() and not path.is_symlink()]
     language_plan = language_adapters.build_plan(language_adapters.detected_languages(paths), registry)
     return {
+        "uncovered_language_gaps": language_adapters.uncovered_language_gaps(paths),
         "job": JOB,
         "run_id": run_id,
         "source_snapshot_sha256": source,
@@ -319,6 +320,11 @@ def normalize_semgrep(raw: dict[str, Any], *, target: Path, run_id: str, attempt
     }
 
 
+def _coverage_gaps(inputs: dict[str, Any], executed: set[str]) -> list[str]:
+    return ([RULES_GAP] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
+            + list(inputs.get("uncovered_language_gaps", [])))
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
@@ -360,7 +366,7 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
             "image_id":plan["image_id"],"image_digest":plan["image_digest"],"ruleset_sha256":plan["image_digest"],"records":len(leads)})
     expected["leads"].sort(key=lambda row:(row["path"],row["start_line"],row["tool_id"],row["rule_id"]))
     expected["tools"].sort(key=lambda row:row["tool_id"])
-    expected["coverage_gaps"] = [RULES_GAP] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
+    expected["coverage_gaps"] = _coverage_gaps(inputs, executed)
     if result != expected:
         raise Blocked(f"{JOB}: normalized result no longer matches immutable Semgrep evidence")
     permission, lineage = _producer_receipts(inputs)
@@ -431,7 +437,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         result["leads"].extend(language_leads)
         result["leads"].sort(key=lambda row:(row["path"],row["start_line"],row["tool_id"],row["rule_id"]))
         result["tools"].extend(language_tools); result["tools"].sort(key=lambda row:row["tool_id"])
-        result["coverage_gaps"] = [RULES_GAP] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
+        result["coverage_gaps"] = _coverage_gaps(inputs, executed)
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, {"tools":receipts})
         (attempt / SUMMARY).write_text(
@@ -453,7 +459,9 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
             worker_kind="pinned_container", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status="OK_WITH_GAPS",
-            summary=f"Semgrep produced {len(result['leads'])} normalized static-analysis lead(s).",
+            summary=(f"Source SAST produced {len(result['leads'])} normalized static-analysis lead(s) from "
+                     f"{len(result['tools'])} tool(s): " + ", ".join(
+                         f"{row['tool_id']} {row['records']}" for row in result["tools"]) + "."),
             status_record=status,
             artifact_paths=[RESULT, RECEIPTS, SUMMARY, "status.json", PERMISSION, LINEAGE],
             gaps=result["coverage_gaps"],

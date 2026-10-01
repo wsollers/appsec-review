@@ -272,3 +272,23 @@ class SourceSastTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UncoveredLanguageGapTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb: Python, JS, TS, C#, Rust, Bash and PowerShell had no source SAST tool
+    and no gap said so."""
+
+    def test_each_uncovered_language_is_a_named_gap(self):
+        import source_sast_language_adapters as adapters
+        gaps = adapters.uncovered_language_gaps([
+            "projects/python/case-073/app.py", "projects/typescript/case-012/index.ts",
+            "projects/bash/case-019/run.sh", "projects/powershell/case-020/run.ps1",
+            "projects/rust/case-004/src/main.rs", "node_modules/x/index.js", "projects/go/case-007/main.go"])
+        self.assertEqual([g.split(" ")[0] for g in gaps], ["powershell", "python", "rust", "shell", "typescript"])
+        self.assertIn("02-codeql-python is its only static analysis", gaps[1])
+        self.assertIn("no static analyzer runs on it", gaps[2])
+
+    def test_spotbugs_gap_names_its_cause(self):
+        import source_sast_language_adapters as adapters
+        gaps = adapters.execution_gaps([{"status": "READY", "tool_id": "spotbugs", "language": "java"}], set())
+        self.assertIn("compiled classes", gaps[0])

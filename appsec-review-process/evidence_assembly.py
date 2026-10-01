@@ -410,7 +410,10 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
             "started_at": allocation["started_at"], "ended_at": now()}
         artifact_paths = [RESULT, TERMINAL, "status.json"] + [artifact["path"]
             for producer in manifest["producers"] for artifact in producer["artifacts"]]
-        gaps = [item["detail"] for item in manifest["coverage_gaps"]]
+        # Name the producer: the bare details repeated across producers without attribution (run
+        # 20261001T032047Z-fd64eb: clang-tidy x9, "not-applicable-no-test-plan" x2, ...).
+        gaps = list(dict.fromkeys(f"{item['producer_job_id']}: {item['detail']}"
+                                  for item in manifest["coverage_gaps"]))
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_id, worker_kind=WORKER_KIND, output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],

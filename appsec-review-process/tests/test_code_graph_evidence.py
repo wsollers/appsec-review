@@ -172,3 +172,20 @@ class CodeGraphEvidenceTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class FrontendGapTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb: PHP's frontend FAILED and Rust's was OK with no Rust record kept; the
+    job published only 'frontend-failed' without a language."""
+
+    def test_failed_and_empty_frontends_are_named(self):
+        import joern_cpg
+        result = {"records": [{"source_path": "projects/cpp/case-001/main.cpp"}],
+                  "frontends": [{"language": "NEWC", "unit": "", "status": "OK", "records": 10, "detail": ""},
+                                {"language": "PHP", "unit": "", "status": "FAILED", "records": 0, "detail": "x"},
+                                {"language": "RUST", "unit": "projects/rust/case-004", "status": "OK",
+                                 "records": 1, "detail": ""},
+                                {"language": "RUST", "unit": "projects/rust/case-005", "status": "OK",
+                                 "records": 1, "detail": ""}]}
+        self.assertEqual(joern_cpg.frontend_gaps(result),
+                         ["frontend-failed:PHP", "frontend-no-source-records:RUST"])

@@ -56,11 +56,39 @@ def build_plan(languages:list[str], registry:dict[str,dict[str,Any]])->list[dict
     "gap":None if ready else f"{LANGUAGES[tool_id]} SAST unavailable: authenticated pinned image {image_id} is absent or invalid."})
  return plan
 
+# Languages 02-source-sast has no tool for (run 20261001T032047Z-fd64eb recorded no gap for any of them),
+# with the CodeQL lane that still analyzes them, if any.
+UNCOVERED_SUFFIXES={".py":"python",".js":"javascript",".mjs":"javascript",".cjs":"javascript",".jsx":"javascript",
+                    ".ts":"typescript",".tsx":"typescript",".cs":"csharp",".rs":"rust",".sh":"shell",
+                    ".bash":"shell",".ps1":"powershell",".psm1":"powershell",".rb":"ruby",".kt":"kotlin",
+                    ".swift":"swift"}
+CODEQL_LANE={"python":"02-codeql-python","javascript":"02-codeql-javascript","typescript":"02-codeql-javascript",
+             "csharp":"02-codeql-csharp","ruby":"02-codeql-ruby"}
+_VENDORED={"node_modules","vendor","third_party","third-party",".git"}
+NOT_EXECUTED_CAUSE={"spotbugs":"spotbugs analyzes compiled classes and 02-source-sast runs before any build; "
+                                "02-codeql-java is the Java static analysis"}
+
+def uncovered_language_gaps(paths:list[str])->list[str]:
+ counts:dict[str,int]={}
+ for path in paths:
+  if _VENDORED & set(path.split("/")[:-1]): continue
+  language=next((lang for suffix,lang in UNCOVERED_SUFFIXES.items() if path.lower().endswith(suffix)),None)
+  if language: counts[language]=counts.get(language,0)+1
+ gaps=[]
+ for language,count in sorted(counts.items()):
+  lane=CODEQL_LANE.get(language)
+  gaps.append(f"{language} source ({count} file(s)) has no 02-source-sast tool; "
+              +(f"{lane} is its only static analysis." if lane else "no static analyzer runs on it."))
+ return gaps
+
 def execution_gaps(plan:list[dict[str,Any]], executed:set[str]|None=None)->list[str]:
  executed=executed or set(); gaps=[]
  for item in plan:
   if item["status"]=="UNAVAILABLE": gaps.append(item["gap"])
-  elif item["tool_id"] not in executed: gaps.append(f"{item['language']} SAST tool {item['tool_id']} has no accepted offline B13 receipt.")
+  elif item["tool_id"] not in executed:
+   cause=NOT_EXECUTED_CAUSE.get(item["tool_id"])
+   gaps.append(f"{item['language']} SAST tool {item['tool_id']} has no accepted offline B13 receipt"
+               +(f" ({cause})." if cause else "."))
  return gaps
 
 def accepted_terminal(plan:dict[str,Any], terminal:dict[str,Any])->bool:

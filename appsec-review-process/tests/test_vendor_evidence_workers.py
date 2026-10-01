@@ -291,3 +291,11 @@ class CheckovFileLevelSpanTests(unittest.TestCase):
             {"check_id": "CKV2_GHA_1", "file_path": "/.github/workflows/ci.yml", "file_line_range": [0, 1]}]}}]
         self.assertEqual(b13.normalize("checkov", json.dumps(doc).encode()),
                          [{"rule_id": "CKV2_GHA_1", "path": ".github/workflows/ci.yml", "start_line": 1, "end_line": 1}])
+
+
+class ChecksecRelroTests(unittest.TestCase):
+    def test_partial_relro_is_a_hit(self):
+        doc = {"projects/cpp/case-001/build/case001": {"relro": "partial", "canary": "yes", "nx": "yes",
+                                                        "pie": "yes", "fortify_source": "yes"}}
+        records = b13.normalize("binskim", json.dumps(doc).encode())
+        self.assertEqual([r["rule_id"] for r in records], ["CHECKSEC-FULL-RELRO"])

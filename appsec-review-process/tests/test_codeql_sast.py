@@ -480,3 +480,30 @@ class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LaneLogGapTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb: the relaunched Go lane failed on a stale image's usage error, and Java
+    produced 0 leads because mvn was missing; both gaps were generic."""
+
+    def trial(self, root, stdout="", stderr=""):
+        logs = Path(root) / "logs" / "container"; logs.mkdir(parents=True)
+        (logs / "stdout.log").write_text(stdout); (logs / "stderr.log").write_text(stderr)
+        return Path(root)
+
+    def test_usage_error_names_the_stale_image(self):
+        with tempfile.TemporaryDirectory() as root:
+            trial = self.trial(root, stderr="usage: /opt/scripts/codeql-sast-lane.sh LANGUAGE none|traced SUITE\n")
+            outcome, _ = worker._outcome({"language": "go", "build_mode": "autobuild", "tool_id": "codeql-go"},
+                                              trial, {"execution_status": "FAILED", "cause": "CONTAINER_EXIT_NONZERO",
+                                                      "exit_code": 2}, Path(root))
+        self.assertIn("rebuild it", outcome["gap"])
+
+    def test_missing_maven_is_a_java_gap(self):
+        with tempfile.TemporaryDirectory() as root:
+            trial = self.trial(root, stdout='Cannot run program "mvn": error=2\n')
+            sarif = trial.joinpath(*worker.SARIF.split("/")); sarif.parent.mkdir(parents=True)
+            sarif.write_text(json.dumps({"version": "2.1.0", "runs": []}))
+            outcome, _ = worker._outcome({"language": "java", "build_mode": "none", "tool_id": "codeql-java"},
+                                              trial, {"execution_status": "OK", "exit_code": 0}, Path(root))
+        self.assertIn("mvn missing", outcome["dependency_gap"])

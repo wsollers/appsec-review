@@ -615,7 +615,11 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
     result = pi.run_invocation(runtime, run_id=run_id, job_id=PERSONA_JOB_ID,
                                attempt_id=attempt_id, attempt_root=attempt, request=request)
     if result["execution_status"] != "OK":
-        raise RuntimeError(f"{JOB}: persona dispatch ended {result['execution_status']}")
+        # Name the cause and where the invoker's reasons are (run 20261001T032047Z-fd64eb recorded only
+        # "persona dispatch ended FAILED"; the reasons survived only in an uncleaned /tmp dir).
+        raise RuntimeError(
+            f"{JOB}: persona dispatch ended {result['execution_status']} (cause {result.get('cause')}); "
+            f"rejection reasons, if any: data/llm-transcripts/{PERSONA_JOB_ID}/{attempt_id}/repair-log.json")
     output = attempt / Path(*request["output_root"].split("/"))
     value = read_json(output / RESULT)
     value["target"] = record["target_name"]

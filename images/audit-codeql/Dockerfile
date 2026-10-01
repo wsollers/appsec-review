@@ -20,10 +20,14 @@ FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffb
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CODEQL_BUNDLE=codeql-bundle-v2.27.0
 
+# maven: Java --build-mode none resolves dependencies with `mvn` when it is on PATH (D-29 gives the lane
+# network). Without it the extractor logged `Cannot run program "mvn"` and analyzed with unresolved
+# types (run 20261001T032047Z-fd64eb: 0 Java leads).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl zstd git python3 python3-pip python3-venv \
-      openjdk-21-jre-headless nodejs libicu74 \
-    && rm -rf /var/lib/apt/lists/*
+      openjdk-21-jre-headless nodejs libicu74 maven \
+    && rm -rf /var/lib/apt/lists/* \
+    && mvn -v >/dev/null
 
 # .NET SDK for C# --build-mode none (CodeQL resolves references with `dotnet`; ADR-0017 consequence 2).
 # Copied from the digest-pinned Microsoft SDK image for the same Ubuntu release (noble).

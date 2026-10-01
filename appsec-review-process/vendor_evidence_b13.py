@@ -183,7 +183,10 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
     elif tool_id == "binskim":
         if "runs" in document: records=_sarif(document)
         else:
-            mapping={"pie":"BA2001","nx":"BA2010","canary":"BA2005","fortify_source":"BA2004"}
+            # relro: checksec "partial" lacks BIND_NOW, so full RELRO is absent (run 20261001T032047Z-fd64eb
+            # normalized "partial" to present). No BinSkim rule exists for it; the id names checksec.
+            mapping={"pie":"BA2001","nx":"BA2010","canary":"BA2005","fortify_source":"BA2004",
+                     "relro":"CHECKSEC-FULL-RELRO"}
             for path,facts in document.items():
                 for field,rule in mapping.items():
                     if str(facts.get(field,"")).lower() in ("no","none","partial"):

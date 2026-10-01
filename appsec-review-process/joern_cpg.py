@@ -230,6 +230,36 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         raise Blocked(f"{JOB}: published CPG records file changed")
 
 
+# Source suffixes per Joern frontend, to tell whether an OK frontend left any source-bound record.
+FRONTEND_SUFFIXES = {"NEWC": (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"),
+                     "JAVASRC": (".java",), "CSHARPSRC": (".cs",), "GOLANG": (".go",),
+                     "JSSRC": (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"), "PHP": (".php",),
+                     "PYTHONSRC": (".py",), "RUST": (".rs",)}
+
+
+def frontend_gaps(result: dict[str, Any]) -> list[str]:
+    """Job-level gaps that name the frontend. The closed schema reasons alone published
+    'frontend-failed' without the language, and Rust was 'OK' with no Rust record kept (run
+    20261001T032047Z-fd64eb: PHP FAILED, Rust OK but 0 records under projects/rust)."""
+    gaps = []
+    kept: dict[str, int] = {}
+    for record in result.get("records", []):
+        path = str(record.get("source_path", "")).lower()
+        for language, suffixes in FRONTEND_SUFFIXES.items():
+            if path.endswith(suffixes):
+                kept[language] = kept.get(language, 0) + 1
+    seen = set()
+    for row in result.get("frontends", []):
+        language, unit = row["language"], row["unit"]
+        where = language + (":" + unit if unit else "")
+        if row["status"] == "FAILED":
+            gaps.append(f"frontend-failed:{where}")
+        elif language in FRONTEND_SUFFIXES and not kept.get(language) and language not in seen:
+            gaps.append(f"frontend-no-source-records:{language}")
+            seen.add(language)
+    return gaps
+
+
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
     base = root(run_id)
     def execute(allocation: dict[str, Any], inputs: dict[str, Any], fingerprint: str) -> dict[str, Any]:
@@ -253,6 +283,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             image_id=IMAGE_ID, image_digest=inputs["image"]["digest"],
             exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"],
             frontends=outcomes)
+        named_gaps = frontend_gaps(result)
         result = _split(result, attempt / RECORDS)
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPT, {"adapter_attempt_id": adapter_id, "trial_path": "tool",
@@ -267,7 +298,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                       f"{row['status']}, {row['records']} records{'; ' + row['detail'] if row['detail'] else ''}.\n"
                       for row in result.get("frontends", [])) +
             "- Query hits are locators and require source dereference.\n", encoding="utf-8")
-        status = {"process": JOB, "status": result["status"], "run_id": run_id,
+        execution_status = "OK_WITH_GAPS" if named_gaps else result["status"]
+        status = {"process": JOB, "status": execution_status, "run_id": run_id,
                   "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
                   "records": result["record_count"], "coverage_gaps": len(result["coverage_gaps"]),
                   "network": "none", "qualification": "implemented_not_qualified", "ended_at": now()}
@@ -275,9 +307,9 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
-            execution_status=result["status"], summary=f"Joern published {result['record_count']} locator records.",
+            execution_status=execution_status, summary=f"Joern published {result['record_count']} locator records.",
             status_record=status, artifact_paths=[RESULT, RECORDS, RECEIPT, SUMMARY, "status.json", "permission.json", "lineage.json"],
-            gaps=[gap["reason"] for gap in result["coverage_gaps"]],
+            gaps=[gap["reason"] for gap in result["coverage_gaps"] if gap["reason"] != "frontend-failed"] + named_gaps,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
         worker_kind="pinned_container", output_contract=CONTRACT,

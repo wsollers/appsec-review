@@ -124,7 +124,28 @@ def fail_workflow(run_id, dagster_id, message):
         atomic_json(workflow.root(run_id)/'attempts'/dagster_id/'failure.json',value)
         atomic_json(path,value)
         atomic_json(workflow.root(run_id)/'accepted.json',{'status':'FAILED','dagster_run_id':dagster_id})
+        _mark_run_status_failed(run_id, dagster_id, message)
     notify_discord(run_id, message)
+
+
+def _mark_run_status_failed(run_id, dagster_id, message):
+    """run-status.json/.md are the operator's view; only phase1 wrote them, so a failed full_review still
+    read READY / "Validated reuse; work not invoked" (run 20261001T032047Z-fd64eb). Best effort: the
+    workflow status written above is the authority."""
+    try:
+        root=run_path(run_id)
+        path=root/'run-status.json'
+        data=read_json(path) if path.exists() else {}
+        data.update(status='FAILED',workflow_status='FAILED',workflow_dagster_run_id=dagster_id,
+                    last_message=message,updated_at=now())
+        atomic_json(path,data)
+        (root/'run-status.md').write_text(
+            f"# AppSec run {run_id}\n\nStatus: FAILED\nWorkflow: Dagster run {dagster_id}\n"
+            f"Intake: {data.get('phase1_status','')}\n\n{message}\n\n"
+            "Failure detail: data/workflows/engagement/attempts/" + dagster_id + "/failure.json\n",
+            encoding='utf-8')
+    except (OSError, ValueError) as exc:
+        emergency(exc)
 
 
 @failure_hook(required_resource_keys={'workflow_settings'})
