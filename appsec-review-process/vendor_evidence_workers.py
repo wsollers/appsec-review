@@ -79,6 +79,24 @@ def _dockerfile(path: str) -> bool:
     return Path(path).name == "Dockerfile" or Path(path).name.startswith("Dockerfile.")
 
 
+_CHECKOV_KINDS = {"dockerfile": "dockerfile", "terraform": "terraform", "kubernetes": "kubernetes",
+                  "helm": "helm", "cloudformation": "cloudformation"}
+
+
+def _iac_kind(tool: str, record: dict) -> str | None:
+    """The contract's iac_kind for one hit, or None when the file is not IaC this node publishes. Run
+    20261001T032047Z-fd64eb (relaunch): checkov's github_actions hits on .github/workflows/*.yml were
+    published as kubernetes with a Dockerfile-only address disposition and failed validation."""
+    path = record["path"]
+    if _dockerfile(path):
+        return "dockerfile"
+    if path.endswith(".tf"):
+        return "terraform"
+    if tool == "checkov":
+        return _CHECKOV_KINDS.get(record.get("framework", ""))
+    return "kubernetes" if tool == "kube-linter" else None
+
+
 def _iac(path: str) -> bool:
     return path.endswith((".tf", ".yaml", ".yml")) or _dockerfile(path)
 
@@ -181,12 +199,16 @@ def _header(job_id: str, run_id: str, attempt_id: str, source_sha: str) -> dict[
 
 
 def _instance(tool: str, status: str, *, executor: str, records: int | None = None,
-              output: dict | None = None) -> dict:
+              output: dict | None = None, failure_exit: int | None = None) -> dict:
+    """``failure_exit``: a FAILED tool's container exit code. Non-zero is a tool error; 0 means the tool
+    ended cleanly but its output was unusable (``output-invalid``)."""
     started = status not in ("SKIPPED", "BLOCKED")
     cause = {"OK": None, "OK_WITH_GAPS": "partial-input-coverage", "SKIPPED": None,
              "BLOCKED": "image-unavailable", "FAILED": "tool-error"}[status]
     meaning = {"OK": "findings-present" if records else "clean", "OK_WITH_GAPS": "clean",
                "SKIPPED": "not-started", "BLOCKED": "not-started", "FAILED": "tool-error"}[status]
+    if status == "FAILED" and failure_exit == 0:
+        cause, meaning = "output-invalid", "clean"
     outputs = []
     if output:
         outputs = [{"path": output["path"], "sha256": HASH(output["data"]), "bytes": len(output["data"]),
@@ -213,7 +235,8 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
                                        "ruleset_sha256": "sha256:" + evidence_redaction.RULESET_SHA256}
                                       if output else None)},
             "argv": auth["argv"] if auth else [tool, "--offline", "/inputs"],
-            "exit": {"exit_code": auth["exit_code"] if auth else (0 if started and status != "FAILED" else None),
+            "exit": {"exit_code": auth["exit_code"] if auth else (failure_exit if status == "FAILED"
+                                                                    else 0 if started else None),
                      "exit_meaning": meaning, "timed_out": False,
                      "nonzero_exit_on_findings": False, "findings_exit_codes": []},
             "outputs": outputs, "result_record_count": records if output else None,
@@ -240,8 +263,10 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
             status = "SKIPPED"
         elif tool in successful:
             status = "OK"
-        elif tool in failures and failures[tool][0] in ("FAILED", "BLOCKED"):
-            status = failures[tool][0]
+        elif tool in failures and failures[tool][0] == "FAILED" and isinstance(failures[tool][2], int):
+            status = "FAILED"   # it ran and exited: its exit code is on the instance
+        elif tool in failures:
+            status = "BLOCKED"  # it never produced an exit code (could not start, version probe, request)
         else:
             status = "BLOCKED"
         output = None
@@ -252,7 +277,8 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                                    executor="deterministic_python" if tool in {"key-material-file-inventory",
                                                                               "dockerfile-base-image-inventory"}
                                    else "pinned_container",
-                                   records=successful[tool]["count"] if tool in successful else None, output=output))
+                                   records=successful[tool]["count"] if tool in successful else None, output=output,
+                                   failure_exit=failures[tool][2] if status == "FAILED" else None))
         unanalyzed = [] if status in ("OK", "SKIPPED") else [
             {"path": p, "reason_code": "tool-instance-did-not-complete"} for p in paths]
         coverage_tools.append({"tool_id": tool, "applicability": "applicable" if paths or status != "SKIPPED" else SKIP,
@@ -260,7 +286,7 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                                "not_analyzed_input_count": len(unanalyzed), "unsupported_input_count": 0,
                                "not_analyzed_inputs": unanalyzed, "unsupported_inputs": [], "input_lists_truncated": False})
         if status in ("BLOCKED", "FAILED"):
-            cause = failures.get(tool, (status, None))[1]
+            cause = failures.get(tool, (status, None, None))[1]
             suffix = "-" + _cause_slug(cause) if cause else ""
             gaps += [{"gap_id": f"gap-{tool}-{status.lower()}{suffix}"[:96], "kind": shapes.INSTANCE_GAP_KIND[status],
                       "tool_id": tool, "affected_input_count": None},
@@ -362,7 +388,8 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
         successful["binskim"]["count"] = len(candidates["binskim"])
     if "oci-archive-inventory" in successful:
         successful["oci-archive-inventory"]["count"] = len(candidates["oci-archive-inventory"])
-    failures = {tool: (result.get("status"), result.get("cause")) for tool, result in vendor_results.items()
+    failures = {tool: (result.get("status"), result.get("cause"), result.get("exit_code"))
+                for tool, result in vendor_results.items()
                 if tool in tools and result.get("status") in ("FAILED", "BLOCKED")}
     status, tool_results, coverage, probe_doc, raw_files = _aggregate(
         header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory", failures=failures)
@@ -403,10 +430,13 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
             inst=next(i for i in tool_results["tool_instances"] if i["tool_id"]==tool); out=inst["outputs"][0]
             identity=inst["identity"]["data_identities"][0]
             for record in result["records"]:
-                path=record["path"]; kind="dockerfile" if _dockerfile(path) else "terraform" if path.endswith(".tf") else "kubernetes"
+                path=record["path"]; kind=_iac_kind(tool, record)
+                if kind is None:
+                    continue   # outside this contract's IaC kinds (e.g. checkov github_actions); raw output keeps it
+                disposition="not-applicable" if kind=="dockerfile" else "withheld-unsafe-address"
                 hits.append({"hit_id":f"IC-{len(hits)+1:06d}","assertion":"declared-configuration-rule-hit","tool_id":tool,
                     "rule":{"rule_id":record["rule_id"],"rule_pack":{"kind":identity["kind"],"identity_id":identity["identity_id"],"sha256":identity["sha256"]}},
-                    "category":"other","exposure":None,"resource":{"iac_kind":kind,"address":None,"address_disposition":"not-applicable"},
+                    "category":"other","exposure":None,"resource":{"iac_kind":kind,"address":None,"address_disposition":disposition},
                     "location":{"path":path,"path_disposition":"published","start_line":record["start_line"],"end_line":record["end_line"]},
                     "citation":{"source_class":"raw","producer":job_id,"attempt_id":inst["attempt_id"],"path":out["path"],"sha256":out["sha256"].removeprefix("sha256:")}})
         docs["iac-config-evidence.json"] = {"schema": "appsec-review/iac-config-evidence/1.0", **header,

@@ -257,11 +257,11 @@ class ToolFailureReportingTests(unittest.TestCase):
         candidates = {"hadolint": ["dockerfiles/case-021/Dockerfile"], "kube-linter": ["k.yaml"]}
         _, results, coverage, _, _ = workers._aggregate(
             header, tools, candidates, {}, can_skip=True,
-            failures={"hadolint": ("FAILED", "CONTAINER_EXIT_NONZERO")})
+            failures={"hadolint": ("FAILED", "CONTAINER_EXIT_NONZERO", 1)})
         by_tool = {i["tool_id"]: i for i in results["tool_instances"]}
         self.assertEqual((by_tool["hadolint"]["terminal_status"], by_tool["hadolint"]["cause_code"]),
                          ("FAILED", "tool-error"))
-        self.assertIsNone(by_tool["hadolint"]["exit"]["exit_code"])
+        self.assertEqual(by_tool["hadolint"]["exit"]["exit_code"], 1)
         self.assertEqual(by_tool["kube-linter"]["terminal_status"], "BLOCKED")   # never reported: not run
         gap_ids = [g["gap_id"] for g in coverage["gaps"]]
         self.assertIn("gap-hadolint-failed-container-exit-nonzero", gap_ids)
@@ -290,7 +290,56 @@ class CheckovFileLevelSpanTests(unittest.TestCase):
         doc = [{"check_type": "github_actions", "results": {"failed_checks": [
             {"check_id": "CKV2_GHA_1", "file_path": "/.github/workflows/ci.yml", "file_line_range": [0, 1]}]}}]
         self.assertEqual(b13.normalize("checkov", json.dumps(doc).encode()),
-                         [{"rule_id": "CKV2_GHA_1", "path": ".github/workflows/ci.yml", "start_line": 1, "end_line": 1}])
+                         [{"rule_id": "CKV2_GHA_1", "path": ".github/workflows/ci.yml", "start_line": 1, "end_line": 1,
+                           "framework": "github_actions"}])
+
+
+class IacFailureValidationTests(unittest.TestCase):
+    """Run 20261001T032047Z-fd64eb relaunch: the validator refused 02-iac-config-scan because a tool that
+    never started was FAILED/tool-error with exit_code None, and checkov github_actions hits were published
+    as kubernetes with a Dockerfile-only address disposition."""
+
+    def test_failed_tools_pass_the_real_validator(self):
+        results = {"kube-linter": {"status": "FAILED", "cause": "CONTAINER_START_FAILED", "exit_code": None},
+                   "hadolint": {"status": "FAILED", "cause": "CONTAINER_EXIT_NONZERO", "exit_code": 1},
+                   "checkov": {"status": "FAILED", "cause": "expected-output-missing", "exit_code": 0}}
+        job = "02-iac-config-scan"
+        with tempfile.TemporaryDirectory() as folder:
+            run_id, attempt_id = "run-iac-fail", "attempt-iac-fail"
+            run = Path(folder) / run_id
+            manifest = run / "inputs" / "artifact-manifest.json"; manifest.parent.mkdir(parents=True)
+            manifest.write_bytes(json.dumps({"run_id": run_id}, sort_keys=True).encode() + b"\n")
+            source_sha = "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest()
+            source = run / "data" / "source"; source.mkdir(parents=True)
+            (source / "Dockerfile").write_bytes(b"FROM alpine:3.20\n")
+            (source / "deploy.yaml").write_bytes(b"apiVersion: v1\nkind: Pod\n")
+            documents = workers.build_documents(job, source, run_id=run_id, attempt_id=attempt_id,
+                                                 source_snapshot_sha256=source_sha, vendor_results=results)
+            by_tool = {i["tool_id"]: i for i in documents["tool-results.json"]["tool_instances"]}
+            self.assertEqual((by_tool["hadolint"]["terminal_status"], by_tool["hadolint"]["exit"]["exit_code"]),
+                             ("FAILED", 1))
+            self.assertEqual((by_tool["checkov"]["terminal_status"], by_tool["checkov"]["cause_code"]),
+                             ("FAILED", "output-invalid"))
+            self.assertEqual(by_tool["kube-linter"]["terminal_status"], "BLOCKED")
+            gap_ids = [g["gap_id"] for g in documents["coverage.json"]["gaps"]]
+            self.assertIn("gap-kube-linter-blocked-container-start-failed", gap_ids)
+            attempt = run / "data/jobs" / job / "whole/attempts" / attempt_id
+            workers.materialize_attempt(documents, attempt, dagster_run_id="dagster-iac-fail",
+                started_at="2026-09-27T12:00:00Z", finished_at="2026-09-27T12:00:01Z")
+            contract = json.loads((registry_paths.contract(workers.SPECS[job][0])).read_text())
+            errors = validator.validate_vendor_prepass_attempt(attempt, contract, run_id=run_id,
+                job_id=job, attempt_id=attempt_id, node_status=documents["status"],
+                orchestration=validator.OrchestrationFacts(
+                    "dagster-iac-fail", source_sha, validator.datetime.fromisoformat("2026-09-27T12:00:00+00:00")))
+            self.assertEqual(errors, [])
+
+    def test_iac_kind_by_checkov_framework(self):
+        kind = workers._iac_kind
+        self.assertEqual(kind("checkov", {"path": "dockerfiles/case-021/Dockerfile", "framework": "secrets"}), "dockerfile")
+        self.assertIsNone(kind("checkov", {"path": ".github/workflows/ci.yml", "framework": "github_actions"}))
+        self.assertEqual(kind("checkov", {"path": "k8s/pod.yaml", "framework": "kubernetes"}), "kubernetes")
+        self.assertEqual(kind("tfsec", {"path": "main.tf"}), "terraform")
+        self.assertEqual(kind("kube-linter", {"path": "k8s/pod.yaml"}), "kubernetes")
 
 
 class ChecksecRelroTests(unittest.TestCase):

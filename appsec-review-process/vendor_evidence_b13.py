@@ -67,7 +67,10 @@ SPECS = {
 
 
 class VendorToolBlocked(RuntimeError): pass
-class VendorToolFailed(RuntimeError): pass
+class VendorToolFailed(RuntimeError):
+    def __init__(self, cause: str, exit_code: int | None = None) -> None:
+        super().__init__(cause)
+        self.exit_code = exit_code   # the container's exit code when it ran; None when it never started
 
 VERSION_ARGV={
  "gitleaks":["/opt/tool/bin/gitleaks","version"],"checkov":["/opt/tool/bin/checkov","--version"],
@@ -156,7 +159,8 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
                 if not isinstance(item.get("check_id"), str) or not item["check_id"]:
                     raise VendorToolFailed("checkov-shape-invalid")
                 records.append({"rule_id": item["check_id"], "path": _path(str(item.get("file_path")).lstrip("/")),
-                                "start_line": span[0], "end_line": span[1]})
+                                "start_line": span[0], "end_line": span[1],
+                                "framework": str(framework.get("check_type") or "")})
     elif tool_id == "trivy-config":
         for result in document.get("Results", []):
             path = _path(result.get("Target"))
@@ -323,12 +327,17 @@ def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: 
     if errors:
         raise VendorToolFailed("b13-verification-failed")
     if terminal["execution_status"] == "BLOCKED": raise VendorToolBlocked(terminal.get("cause") or "blocked")
-    if terminal["execution_status"] != "OK": raise VendorToolFailed(terminal.get("cause") or "tool-failed")
+    if terminal["execution_status"] != "OK":
+        raise VendorToolFailed(terminal.get("cause") or "tool-failed", terminal.get("exit_code"))
     spec=SPECS[tool_id]
     output = attempt_root / ("logs/container" if spec.captured_stdout else "scratch") / spec.output
-    if not output.is_file() or output.is_symlink(): raise VendorToolFailed("expected-output-missing")
+    if not output.is_file() or output.is_symlink():
+        raise VendorToolFailed("expected-output-missing", terminal.get("exit_code"))
     data = output.read_bytes()
-    normalize(tool_id, data)
+    try:
+        normalize(tool_id, data)
+    except VendorToolFailed as exc:
+        raise VendorToolFailed(str(exc), terminal.get("exit_code")) from None
     return terminal, data
 
 
@@ -376,5 +385,5 @@ def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: s
         except VendorToolBlocked as exc:
             results[tool_id] = {"status": "BLOCKED", "cause": str(exc)}
         except VendorToolFailed as exc:
-            results[tool_id] = {"status": "FAILED", "cause": str(exc)}
+            results[tool_id] = {"status": "FAILED", "cause": str(exc), "exit_code": exc.exit_code}
     return results
