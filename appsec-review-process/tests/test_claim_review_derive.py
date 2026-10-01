@@ -218,6 +218,17 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
             run(BLUE, self.blue_reply(status_a="FAILED", disposition_a="SURVIVING"))
         self.assertIn("surviving requires", str(caught.exception))
 
+    def test_missing_decision_names_its_obligations_and_citations(self):
+        """Run 20261001T064759Z-4a8586 (08 reviewer-00): one claim was skipped, and the repair, told
+        only 'no decision for claim X', missed its obligations and citation."""
+        reply = self.blue_reply()
+        reply["decisions"] = reply["decisions"][:1]
+        with self.assertRaises(InvokerOutputError) as caught:
+            run(BLUE, reply)
+        hint = next(d for d in caught.exception.details if d.startswith(f"claim {B} has no decision"))
+        self.assertIn("citation-b", hint)
+        self.assertIn("po-b", hint)
+
     def test_verification_derives_verifier_and_rejects_unsupported_verified(self):
         reply = {"decisions": [
             {"claim_id": claim, "disposition": "UNRESOLVED", "method": "static review of cited flow",
