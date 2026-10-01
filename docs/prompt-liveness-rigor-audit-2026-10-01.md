@@ -3,6 +3,8 @@
 Inventory and diagnosis only. No fixes are proposed. Every row below was derived from code or from a command run on
 `main` at `fd94346`; file prose was treated as a claim to verify, never as fact.
 
+> **Superseded in part (2026-10-01, PR #50 `8f5b04e`):** `ClaudeCliInvoker` now has an `extra_validate` hook, and 01 uses it. The "no `extra_validate` hook" statements below describe `fd94346`. The follow-up plan is `docs/prompt-persona-role-alignment-plan-2026-10-01.md`.
+
 ## How the classification was computed
 
 | Check | Command / code | Result |
