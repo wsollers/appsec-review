@@ -133,10 +133,10 @@ class PureRecords(Workspace):
 
 
 class DeclaredSet(unittest.TestCase):
-    def test_b16_set_is_the_shared_images_sixteen_tool_images_and_two_codeql_images(self):
-        self.assertEqual(len(rr.TOOL_IMAGE_IDS), 16)
+    def test_b16_set_is_the_shared_images_seventeen_tool_images_and_two_codeql_images(self):
+        self.assertEqual(len(rr.TOOL_IMAGE_IDS), 17)   # tool-zizmor added (D-34)
         self.assertEqual(rr.CODEQL_IMAGE_IDS, ("audit-codeql", "audit-codeql-native"))
-        self.assertEqual(len(rr.STEP4_IMAGE_IDS), 6 + len(rr.BUILDENV_IMAGE_IDS) + 16 + 2)
+        self.assertEqual(len(rr.STEP4_IMAGE_IDS), 6 + len(rr.BUILDENV_IMAGE_IDS) + 17 + 2)
         self.assertEqual(len(rr.STEP4_IMAGE_IDS), len(set(rr.STEP4_IMAGE_IDS)))
         builds = __import__("image_build").load_builds(IMAGES)
         self.assertEqual(set(rr.STEP4_IMAGE_IDS) - set(builds), set())

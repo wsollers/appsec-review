@@ -47,6 +47,10 @@ SPECS = {
     # /workspace/Dockerfile failed on repositories without a root Dockerfile (run 20261001T032047Z-fd64eb).
     "hadolint": ToolSpec("tool-hadolint", ("/opt/tool/bin/hadolint", "--no-fail", "--format", "json", "/workspace/Dockerfile"),
                          "stdout.log", True),
+    # GitHub Actions workflows and composite actions (D-34): offline audits only, SARIF on stdout, findings
+    # never change the exit code (exit non-zero means the tool failed).
+    "zizmor": ToolSpec("tool-zizmor", ("/opt/tool/bin/zizmor", "--offline", "--no-exit-codes", "--format", "sarif",
+                                       "/workspace"), "stdout.log", True),
     "oci-archive-inventory": ToolSpec("tool-syft", ("/opt/tool/bin/syft", "scan", "file:/workspace/image.tar",
                                                           "-o", "json=/scratch/oci-inventory.json"), "oci-inventory.json"),
     # Syft's archive parser provides the package inventory without a mutable vulnerability DB.
@@ -76,6 +80,7 @@ VERSION_ARGV={
  "gitleaks":["/opt/tool/bin/gitleaks","version"],"checkov":["/opt/tool/bin/checkov","--version"],
  "trivy-config":["/opt/tool/bin/trivy","--version"],"tfsec":["/usr/local/bin/tfsec","--version"],
  "kube-linter":["/usr/local/bin/kube-linter","version"],"hadolint":["/opt/tool/bin/hadolint","--version"],
+ "zizmor":["/opt/tool/bin/zizmor","--version"],
  "oci-archive-inventory":["/opt/tool/bin/syft","version"],
  "image-package-and-config-inspection":["/opt/tool/bin/syft","version"],
  "binskim":["/usr/bin/checksec","--version"],"mobsfscan-android":["/opt/tool/bin/mobsfscan","--version"],
@@ -182,6 +187,19 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
         if not isinstance(document, list): raise VendorToolFailed("hadolint-shape-invalid")
         records = [{"rule_id": i.get("code"), "path": _path(i.get("file", "Dockerfile")),
                     "start_line": i.get("line"), "end_line": i.get("line")} for i in document]
+    elif tool_id == "zizmor":
+        for run in document.get("runs", []) if isinstance(document, dict) else []:
+            for result in run.get("results", []):
+                locations = result.get("locations") or []
+                physical = locations[0].get("physicalLocation", {}) if locations else {}
+                region = physical.get("region", {})
+                start = region.get("startLine", 1)
+                rule = result.get("ruleId")
+                if isinstance(rule, str):
+                    rule = rule.removeprefix("zizmor/")   # the pack is zizmor; ids are its audit names
+                records.append({"rule_id": rule,
+                                "path": _path(physical.get("artifactLocation", {}).get("uri")),
+                                "start_line": start, "end_line": max(start, region.get("endLine", start))})
     elif tool_id.startswith("mobsfscan-"):
         records = _sarif(document)
     elif tool_id == "binskim":

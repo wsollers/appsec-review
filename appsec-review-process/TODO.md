@@ -580,6 +580,8 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       `orchestrator/prepare-host.sh`. A launch is Blocked until then (D-32).
 - [ ] Next run: check `02-codeql-go` exits 0 with leads, Java logs no `Cannot run program "mvn"`, IaC
       checkov/hadolint/kube-linter are OK, build plans cover Go and TS units, 01 is accepted on round 0.
+- [x] GitHub Actions scanning (D-34): `tool-zizmor` in 02-iac-config-scan plus checkov's github_actions checks,
+      iac_kind `github-actions`. Host: prepare-host builds the image and its B16 record.
 - [ ] SAST tools for languages 02-source-sast does not cover (now named gaps): Python, JS/TS, C#, Rust, Bash,
       PowerShell (e.g. vendored Semgrep rule packs, bandit, shellcheck, PSScriptAnalyzer).
 - [ ] OSV snapshot covers npm only: add PyPI, Maven, Go, crates.io, NuGet, Packagist (gap

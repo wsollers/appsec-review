@@ -836,7 +836,7 @@ def _vendor_prepass_nodes() -> MappingProxyType:
     # (docs/proposals/vendor-prepass/job-nodes.proposal.json); a test fails on any drift.
     tools = {
         "secrets-inventory": ("gitleaks", "key-material-file-inventory"),
-        "iac-config-evidence": ("checkov", "trivy-config", "tfsec", "kube-linter", "hadolint",
+        "iac-config-evidence": ("checkov", "trivy-config", "tfsec", "kube-linter", "hadolint", "zizmor",
                                 "dockerfile-base-image-inventory"),
         "container-image-inventory": ("oci-archive-inventory", "image-package-and-config-inspection"),
         "mobile-sast": ("mobsfscan-android", "mobsfscan-ios"),

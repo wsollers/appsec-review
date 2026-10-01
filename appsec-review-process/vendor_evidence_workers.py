@@ -33,7 +33,7 @@ REDACTOR = {"name": evidence_redaction.REDACTOR_NAME,
 SPECS = {
     "02-secrets-inventory": ("secrets-inventory", ["gitleaks", "key-material-file-inventory"]),
     "02-iac-config-scan": ("iac-config-evidence", ["checkov", "trivy-config", "tfsec", "kube-linter",
-                                                      "hadolint", "dockerfile-base-image-inventory"]),
+                                                      "hadolint", "zizmor", "dockerfile-base-image-inventory"]),
     "02-container-image-inventory": ("container-image-inventory", ["oci-archive-inventory",
                                                                       "image-package-and-config-inspection"]),
     "02-binary-hardening": ("binary-hardening", ["binskim"]),
@@ -48,6 +48,7 @@ PROBE_PATTERNS = {
     "gitleaks": ["**/*"], "key-material-file-inventory": ["**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx"],
     "checkov": ["**/*.tf", "**/*.yaml", "**/*.yml"], "trivy-config": ["**/*.tf", "**/*.yaml", "**/*.yml"],
     "tfsec": ["**/*.tf"], "kube-linter": ["**/*.yaml", "**/*.yml"], "hadolint": ["**/Dockerfile*"],
+    "zizmor": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/action.yml", "**/action.yaml"],
     "dockerfile-base-image-inventory": ["**/Dockerfile*"],
     "oci-archive-inventory": ["**/*.tar", "**/*.oci.tar"],
     "image-package-and-config-inspection": ["**/*.tar", "**/*.oci.tar"],
@@ -80,7 +81,16 @@ def _dockerfile(path: str) -> bool:
 
 
 _CHECKOV_KINDS = {"dockerfile": "dockerfile", "terraform": "terraform", "kubernetes": "kubernetes",
-                  "helm": "helm", "cloudformation": "cloudformation"}
+                  "helm": "helm", "cloudformation": "cloudformation", "github_actions": "github-actions"}
+
+
+def _github_actions(path: str) -> bool:
+    """A GitHub Actions workflow (.github/workflows/*.yml) or composite/action metadata (action.yml)."""
+    parts = path.split("/")
+    name = parts[-1]
+    if len(parts) == 3 and parts[:2] == [".github", "workflows"] and name.endswith((".yml", ".yaml")):
+        return True
+    return name in ("action.yml", "action.yaml")
 
 
 def _iac_kind(tool: str, record: dict) -> str | None:
@@ -92,6 +102,8 @@ def _iac_kind(tool: str, record: dict) -> str | None:
         return "dockerfile"
     if path.endswith(".tf"):
         return "terraform"
+    if tool == "zizmor" or (_github_actions(path) and tool in ("checkov", "trivy-config")):
+        return "github-actions" if _github_actions(path) else None
     if tool == "checkov":
         return _CHECKOV_KINDS.get(record.get("framework", ""))
     return "kubernetes" if tool == "kube-linter" else None
@@ -129,8 +141,10 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
         tf = [n for n in paths if n.endswith(".tf")]
         yaml = [n for n in paths if n.endswith((".yaml", ".yml"))]
         docker = [n for n in paths if _dockerfile(n)]
+        actions = [n for n in paths if _github_actions(n)]
         candidates = {"checkov": tf + yaml + docker, "trivy-config": tf + yaml + docker, "tfsec": tf,
-                      "kube-linter": yaml, "hadolint": docker, "dockerfile-base-image-inventory": docker}
+                      "kube-linter": yaml, "hadolint": docker, "zizmor": actions,
+                      "dockerfile-base-image-inventory": docker}
     elif job_id == "02-container-image-inventory":
         archives = [n for n in paths if n.endswith((".tar", ".oci.tar"))]
         candidates = {tool: archives for tool in SPECS[job_id][1]}
@@ -426,14 +440,14 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
             rendered.append(image)
         hits=[]
         for tool,result in vendor_results.items():
-            if tool not in {"checkov","trivy-config","tfsec","kube-linter","hadolint"} or result.get("status") != "OK": continue
+            if tool not in {"checkov","trivy-config","tfsec","kube-linter","hadolint","zizmor"} or result.get("status") != "OK": continue
             inst=next(i for i in tool_results["tool_instances"] if i["tool_id"]==tool); out=inst["outputs"][0]
             identity=inst["identity"]["data_identities"][0]
             for record in result["records"]:
                 path=record["path"]; kind=_iac_kind(tool, record)
                 if kind is None:
                     continue   # outside this contract's IaC kinds (e.g. checkov github_actions); raw output keeps it
-                disposition="not-applicable" if kind=="dockerfile" else "withheld-unsafe-address"
+                disposition="not-applicable" if kind in ("dockerfile","github-actions") else "withheld-unsafe-address"
                 hits.append({"hit_id":f"IC-{len(hits)+1:06d}","assertion":"declared-configuration-rule-hit","tool_id":tool,
                     "rule":{"rule_id":record["rule_id"],"rule_pack":{"kind":identity["kind"],"identity_id":identity["identity_id"],"sha256":identity["sha256"]}},
                     "category":"other","exposure":None,"resource":{"iac_kind":kind,"address":None,"address_disposition":disposition},

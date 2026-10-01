@@ -122,7 +122,8 @@
             "cloudformation",
             "kubernetes",
             "helm",
-            "dockerfile"
+            "dockerfile",
+            "github-actions"
           ]
         },
         "address": {

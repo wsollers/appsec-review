@@ -297,6 +297,10 @@ def _secrets_record_errors(result: dict) -> list[str]:
     return errors
 
 
+# Kinds that have no declared resource address: a Dockerfile, and a GitHub Actions workflow or action (D-34).
+ADDRESSLESS_KINDS = frozenset({"dockerfile", "github-actions"})
+
+
 def _address_ok(address: str) -> bool:
     return all(re.split(r"[./]", address))
 
@@ -330,8 +334,9 @@ def _iac_record_errors(result: dict, base: dict, instances: dict[str, dict], nod
         disposition, address = resource["address_disposition"], resource["address"]
         if (disposition == "published") != (address is not None):
             errors.append(f"resource-address: {hit_id}: address must be set exactly when address_disposition is 'published'")
-        if (disposition == "not-applicable") != (resource["iac_kind"] == "dockerfile"):
-            errors.append(f"resource-address: {hit_id}: address_disposition 'not-applicable' goes exactly with iac_kind 'dockerfile'")
+        if (disposition == "not-applicable") != (resource["iac_kind"] in ADDRESSLESS_KINDS):
+            errors.append(f"resource-address: {hit_id}: address_disposition 'not-applicable' goes exactly with iac_kind "
+                          f"{' or '.join(repr(k) for k in sorted(ADDRESSLESS_KINDS))}")
         if address is not None and not _address_ok(address):
             errors.append(f"resource-address: {hit_id}: address has an empty segment")
         location = hit["location"]

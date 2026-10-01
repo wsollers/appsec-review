@@ -336,7 +336,10 @@ class IacFailureValidationTests(unittest.TestCase):
     def test_iac_kind_by_checkov_framework(self):
         kind = workers._iac_kind
         self.assertEqual(kind("checkov", {"path": "dockerfiles/case-021/Dockerfile", "framework": "secrets"}), "dockerfile")
-        self.assertIsNone(kind("checkov", {"path": ".github/workflows/ci.yml", "framework": "github_actions"}))
+        self.assertEqual(kind("checkov", {"path": ".github/workflows/ci.yml", "framework": "github_actions"}),
+                         "github-actions")
+        self.assertIsNone(kind("checkov", {"path": "conf/app.yml", "framework": "openapi"}))
+        self.assertEqual(kind("zizmor", {"path": ".github/workflows/ci.yml"}), "github-actions")
         self.assertEqual(kind("checkov", {"path": "k8s/pod.yaml", "framework": "kubernetes"}), "kubernetes")
         self.assertEqual(kind("tfsec", {"path": "main.tf"}), "terraform")
         self.assertEqual(kind("kube-linter", {"path": "k8s/pod.yaml"}), "kubernetes")
@@ -348,3 +351,66 @@ class ChecksecRelroTests(unittest.TestCase):
                                                         "pie": "yes", "fortify_source": "yes"}}
         records = b13.normalize("binskim", json.dumps(doc).encode())
         self.assertEqual([r["rule_id"] for r in records], ["CHECKSEC-FULL-RELRO"])
+
+
+class GitHubActionsScanTests(unittest.TestCase):
+    """D-34: GitHub Actions workflows are scanned (zizmor, plus checkov's github_actions checks) and published
+    as iac_kind github-actions."""
+
+    ZIZMOR_SARIF = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "zizmor"}}, "results": [
+        {"ruleId": "zizmor/template-injection", "locations": [{"physicalLocation": {
+            "artifactLocation": {"uri": ".github/workflows/ci.yml"}, "region": {"startLine": 12, "endLine": 12}}}]},
+        {"ruleId": "zizmor/dangerous-triggers", "locations": [{"physicalLocation": {
+            "artifactLocation": {"uri": ".github/workflows/ci.yml"}, "region": {"startLine": 2}}}]}]}]}
+
+    def test_zizmor_sarif_normalizes(self):
+        records = b13.normalize("zizmor", json.dumps(self.ZIZMOR_SARIF).encode())
+        self.assertEqual(records[0], {"rule_id": "template-injection", "path": ".github/workflows/ci.yml",
+                                      "start_line": 12, "end_line": 12})
+        self.assertEqual(records[1]["end_line"], 2)
+
+    def test_probe_finds_workflows_and_actions(self):
+        with tempfile.TemporaryDirectory() as root:
+            for rel in (".github/workflows/ci.yml", ".github/workflows/sub/x.yml", "tools/act/action.yml",
+                        "deploy/k8s.yml", ".github/dependabot.yml"):
+                path = Path(root, rel); path.parent.mkdir(parents=True, exist_ok=True); path.write_text("on: push\n")
+            found = workers.probe("02-iac-config-scan", Path(root))["candidates"]["zizmor"]
+        self.assertEqual(sorted(found), [".github/workflows/ci.yml", "tools/act/action.yml"])
+
+    def test_workflow_hits_pass_the_iac_validator(self):
+        job = "02-iac-config-scan"
+        checkov_raw = json.dumps([{"check_type": "github_actions", "results": {"failed_checks": [
+            {"check_id": "CKV2_GHA_1", "file_path": "/.github/workflows/ci.yml", "file_line_range": [0, 1]}]}}]).encode()
+        vendor = {
+            "zizmor": {"status": "OK", "raw": json.dumps(self.ZIZMOR_SARIF).encode(),
+                       "records": b13.normalize("zizmor", json.dumps(self.ZIZMOR_SARIF).encode())},
+            "checkov": {"status": "OK", "raw": checkov_raw, "records": b13.normalize("checkov", checkov_raw)}}
+        for tool, result in vendor.items():
+            receipt = {"schema": "appsec-review/vendor-b13-execution-receipt/1", "tool_id": tool,
+                       "attempt_id": f"{tool}-verified-1", "request_sha256": "sha256:" + "1" * 64,
+                       "result_sha256": "sha256:" + "2" * 64,
+                       "output_sha256": "sha256:" + hashlib.sha256(result["raw"]).hexdigest(),
+                       "permission_sha256": "sha256:" + "3" * 64, "permission_fingerprint_sha256": "sha256:" + "4" * 64,
+                       "image_id": "tool-" + tool, "image_digest": "sha256:" + "5" * 64,
+                       "argv": ["/opt/tool/bin/" + tool, "--offline"], "tool_version": "1.0.0", "tool_name": tool}
+            result["auth"] = {"attempt_id": receipt["attempt_id"], "argv": receipt["argv"], "exit_code": 0,
+                              "identity": {"repository": "docker.io/library/" + receipt["image_id"],
+                                           "digest": receipt["image_digest"], "tool_version": "1.0.0", "tool_name": tool},
+                              "receipt": receipt}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "source"
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / ".github/workflows/ci.yml").write_bytes(b"on: pull_request_target\n" + b"x: y\n" * 12)
+            doc = workers.execute_and_build(job, root, run_id="run-1", attempt_id="attempt-1",
+                                            source_snapshot_sha256=SOURCE_SHA, execution_root=Path(folder) / "execution",
+                                            now="2026-09-27T12:00:00Z", collector=lambda *a, **k: vendor)
+            hits = doc["iac-config-evidence.json"]["rule_hits"]
+            self.assertEqual(sorted((h["tool_id"], h["resource"]["iac_kind"]) for h in hits),
+                             [("checkov", "github-actions"), ("zizmor", "github-actions"), ("zizmor", "github-actions")])
+            attempt = Path(folder) / "attempt-1"
+            workers.materialize_attempt(doc, attempt, dagster_run_id="dagster-1",
+                                        started_at="2026-09-27T12:00:00Z", finished_at="2026-09-27T12:00:01Z")
+            errors = sic.validate_iac_attempt(attempt, tool_outputs_root=attempt, node_status=doc["status"],
+                declared_tool_ids=workers.SPECS[job][1], permitted_node_statuses=sic.CAN_SKIP, on_unhandled="refuse",
+                limits=evidence_redaction.DEFAULT_LIMITS, expected_dagster_run_id="dagster-1")
+            self.assertEqual(errors, [])
