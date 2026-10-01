@@ -649,6 +649,12 @@ def lane_tools(lane: str) -> list[str]:
     return list(lt.get(lane) or lt.get("default") or ["Read", "Grep", "Glob", "Write"])
 
 
+# Which call a dispatch serves (job and attempt), set by the invoker around _dispatch_streaming so the
+# progress lines name it; "claude:<pid>" alone could not be matched to its unit (B9, 2026-10-01).
+import contextvars
+DISPATCH_LABEL: contextvars.ContextVar[str] = contextvars.ContextVar("dispatch_label", default="")
+
+
 def _progress(message: str, *, level: str = "info", who: str | None = None) -> None:
     """One timestamped line on stderr (Dagster's step log) so a long model call is visibly alive,
     and on the central pipeline log (pipeline_log.py: buffered, capped, never blocks)."""
@@ -684,12 +690,13 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
     )
     started_at = time.time()
     model_flag = argv[argv.index("--model") + 1] if "--model" in argv and argv.index("--model") + 1 < len(argv) else "?"
-    _progress(f"claude dispatch started pid={proc.pid} model={model_flag} prompt_chars={len(prompt_text)} "
-              f"timeout={timeout}s transcript={transcript_path}", who=f"claude:{proc.pid}")
+    label = DISPATCH_LABEL.get()
+    who = f"claude:{label}:{proc.pid}" if label else f"claude:{proc.pid}"
+    _progress(f"claude dispatch started pid={proc.pid}{' for ' + label if label else ''} model={model_flag} "
+              f"prompt_chars={len(prompt_text)} timeout={timeout}s transcript={transcript_path}", who=who)
 
     events: list[dict[str, Any]] = []
     state: dict[str, Any] = {"final_result": None, "last_event_at": started_at}
-    who = f"claude:{proc.pid}"
 
     def _pump_stdout() -> None:
         transcript_path.parent.mkdir(parents=True, exist_ok=True)
@@ -749,7 +756,7 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
                 break
             idle = int(now_ts - state["last_event_at"])
             last = events[-1] if events else {}
-            _progress(f"claude dispatch pid={proc.pid} running {int(now_ts - started_at)}s/{timeout}s "
+            _progress(f"claude dispatch pid={proc.pid}{' ' + label if label else ''} running {int(now_ts - started_at)}s/{timeout}s "
                       f"events={len(events)} last={last.get('type', '-') if isinstance(last, dict) else '-'} "
                       f"idle={idle}s", who=who)
             if idle_warn and idle >= next_warn:
@@ -779,7 +786,7 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
 
     final = state["final_result"]
     cost = final.get("total_cost_usd") if isinstance(final, dict) else None
-    _progress(f"claude dispatch pid={proc.pid} finished after {int(time.time() - started_at)}s "
+    _progress(f"claude dispatch pid={proc.pid}{' ' + label if label else ''} finished after {int(time.time() - started_at)}s "
               f"returncode={proc.returncode} timed_out={timed_out} events={len(events)} "
               f"has_result={final is not None} cost_usd={cost} idle_killed={idle_killed}", who=who)
     return {

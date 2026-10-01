@@ -459,16 +459,18 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
     own diagnostics_dir comment). Called from a `finally`, so a failed or timed-out dispatch is
     captured too, which is usually when it matters most; never raises itself, since a disk problem
     here must not turn a real dispatch outcome into a different one."""
-    if not _transcripts_enabled(cfg):
-        return
+    # repair-log.json is copied ALWAYS: it holds only the invoker's own validation messages (no model
+    # text, no target content), and in /tmp it did not survive a reboot (B9, 2026-10-01). Transcripts
+    # and raw responses carry target content and stay behind save_llm_transcripts.
+    enabled = _transcripts_enabled(cfg)
     try:
         run_id, job_id, attempt_id = request.get("run_id"), request.get("job_id"), request.get("attempt_id")
         if not (run_id and job_id and attempt_id):
             return
         dest = data_path(run_id, "llm-transcripts", job_id, attempt_id)
         for source in sorted(diagnostics_dir.iterdir()):
-            if source.is_file() and (source.name.startswith(("transcript", "raw-response"))
-                                     or source.name == "repair-log.json"):
+            if source.is_file() and (source.name == "repair-log.json" or
+                                     (enabled and source.name.startswith(("transcript", "raw-response")))):
                 atomic_bytes(dest / source.name, source.read_bytes())
     except Exception:
         pass
@@ -523,6 +525,23 @@ def _parse_envelope(result_text: str) -> dict[str, Any]:
         # With lookup tools the model often narrates before its answer: take the last fenced JSON
         # block, else the outermost object.
         fences = re.findall(r"```(?:json)?\s*\n(\{.*?\})\s*\n```", text, re.DOTALL)
+        objects = []
+        for body in fences:
+            try:
+                value = json.loads(body)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                objects.append(value)
+        if len(objects) > 1:
+            # The model split its envelope across fenced blocks (the result object, then the markdown in a
+            # second block). Taking only the last block dropped the result object, and every repair round
+            # failed the same way (01-component-characterization and 02-repository-partition-discovery,
+            # 2026-09-30/10-01). Merge them in order; the exact-key check below still applies.
+            merged: dict[str, Any] = {}
+            for value in objects:
+                merged.update(value)
+            return merged
         if fences:
             text = fences[-1].strip()
         elif "{" in text and text.rstrip().endswith("}"):
@@ -1275,6 +1294,8 @@ class ClaudeCliInvoker:
                           "cached_from": cached.get("attempt"), "cached_at": cached.get("stored_at")}
             except (InvokerOutputError, OSError, ValueError, KeyError):
                 reused = None
+        label_token = rc.DISPATCH_LABEL.set(
+            f"{package.request.get('job_id')}#{str(package.request.get('attempt_id'))[:12]}")
         try:
             started = time.time()
             rounds = reused or _dispatch_until_accepted(
@@ -1347,6 +1368,7 @@ class ClaudeCliInvoker:
             # timeout, or cancellation -- so a failed dispatch's transcript is captured too, gated
             # by the save_llm_transcripts tunable (see _transcripts_enabled). Never raises.
             _persist_llm_transcript(cfg, package.request, diagnostics_dir)
+            rc.DISPATCH_LABEL.reset(label_token)
             if mcp_config is not None:
                 import shutil
                 shutil.rmtree(diagnostics_dir / "inputs", ignore_errors=True)

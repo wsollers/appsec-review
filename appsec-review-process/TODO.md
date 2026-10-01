@@ -557,6 +557,17 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
       `build_replay.py` stage-control) to give them network; older controls stay offline.
 - [ ] Live check on appsec-multi-vuln: the Rust, Go, .NET, TypeScript, Java and Python units build.
 
+## B9 and model-response handling (2026-10-01)
+
+- [x] Dispatch progress lines name the job and attempt; `repair-log.json` always kept under the run.
+- [x] Envelope split across fenced blocks is merged (it was read as missing its result object).
+- [ ] Repair rounds re-investigate: component characterization's repair spent 21.4K output tokens thinking and
+      returned 295 chars, then the next hit the $2 cap. Make a repair cheaper: give it the rejected answer and ask
+      for only the corrected envelope (no tools), or lower effort for repair rounds.
+- [ ] Very large envelopes (83 KB here) are near the CLI's per-message output limit; consider
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS for the child, or splitting big maps into a file the model writes.
+- [ ] Decide whether `save_llm_transcripts` stays off by default (transcripts carry target content).
+
 ## Shared images (ADR-0033)
 
 - [x] `image_build.py publish|pull|rekey` (Google Drive archives), `images/published.lock.json`, `prepare-host.sh` step 3 pulls
@@ -772,6 +783,8 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution (B7, part) | Resolver image builds wrote Ubuntu apt sources on the Debian-based buildenvs (go, php, python, rust, typescript): `apt-get update` exit 100, 15 of 23 gaps | A plan with no apt packages renders no apt step at all. Debian mirror and package-manager egress: William allowed both 2026-10-01; design in TODO section B7 |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution/-configure/native-build (B7) | Managed-language builds need their package managers; containers were always `--network none`, and apt on Debian buildenvs used the Ubuntu mirror | D-28: network mode `unrestricted-build` (build jobs only, `--network bridge`), staged via `build_network: unrestricted` in both build controls; apt picks deb.debian.org on Debian images. Tests in test_container_execution and test_build_resolution |
 | 2026-10-01 | appsec-multi-vuln (zarathustra) | - | 02-codeql-go | Go was `UNSUPPORTED_OFFLINE`: no build-mode none and no Go toolchain in `audit-codeql`, so the smokes skipped it | Go 1.23 in `audit-codeql` (pinned golang image); lane mode `autobuild` (offline env, scratch caches, read-only modcache removed); `codeql_sast` plans Go as autobuild with a fidelity gap; Go suite pinned in `tool.json`; schema accepts `autobuild`; per-language smoke runs Go. Verified locally against codeql-bundle-v2.27.0: lane exit 0, database kept, Go reachability `reachable` |
+| 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 01-component-characterization | `INVOKER_EXCEPTION` after 3 rounds: round 0 (83 KB, the full answer) was rejected as holding only `component_purpose_map_markdown`; round 1 spent 21.4K of 21.6K output tokens thinking and returned 295 chars; round 2 hit `error_max_budget_usd` ($0.91 + $2 cap). `_parse_envelope` kept only the LAST fenced JSON block after prose, dropping the result object (the model split result and markdown into two blocks); same shape as partition discovery's round 0 | Merge all fenced JSON-object blocks in order; the exact-key check still applies. `tests.test_claude_cli_invoker.SplitEnvelopeTests` fails without it. OPEN: repair rounds re-investigate instead of re-emitting (see TODO B9) |
+| 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | dispatch logs (B9) | Progress lines named only `claude:<pid>`; `repair-log.json` lived only in /tmp and was lost on reboot | `review_cli.DISPATCH_LABEL` (set by the invoker): lines read `claude dispatch ... for <job>#<attempt>`; `repair-log.json` is always copied to `runs/<run>/data/llm-transcripts/<job>/<attempt>/` (no target content); transcripts stay behind `save_llm_transcripts` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | prepare-host.sh --check (B5) | Step 6 printed OK for any clone (appsec-multi-vuln at 878d5d6 while pinned 5c5a776) | `--check` compares each clone with the pin read from `fixtures/populate-targets.sh` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | launch_job.py --wait (B6) | A 600 s monitoring timeout printed `DAGSTER_LAUNCH_FAILED` although the run had STARTED | `WaitTimeout`: `DAGSTER_WAIT_TIMEOUT`, exit 3 (a real failure stays exit 1). `tests/test_launch_job_wait.py` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | shell scripts (B4) | `images/audit-buildenv-common/run.sh`, `orchestrator/tail-run-log.sh` and 13 more shebang scripts were 100644 (Permission denied) | All set to 100755; `tests/test_script_modes.py` fails on any non-executable shebang script |

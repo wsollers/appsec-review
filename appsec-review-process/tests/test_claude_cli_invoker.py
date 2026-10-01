@@ -55,6 +55,27 @@ class PersistLlmTranscriptTests(unittest.TestCase):
         invoker._persist_llm_transcript({}, self.request, self.diagnostics_dir)
         self.assertFalse(self._dest().exists())
 
+    def test_repair_log_is_kept_even_when_transcripts_are_off(self):
+        # B9 (2026-10-01): the rejection reasons survive a reboot; target-bearing files stay gated.
+        (self.diagnostics_dir / "repair-log.json").write_text('[{"round": 0, "reason": "x"}]', encoding="utf-8")
+        invoker._persist_llm_transcript({}, self.request, self.diagnostics_dir)
+        self.assertEqual(sorted(p.name for p in self._dest().iterdir()), ["repair-log.json"])
+
+    def test_dispatch_progress_lines_name_the_job_and_attempt(self):
+        import io, subprocess
+        from contextlib import redirect_stderr
+        import review_cli as rc
+        stderr = io.StringIO()
+        token = rc.DISPATCH_LABEL.set("01-component-characterization#92dddfcdd022")
+        try:
+            with redirect_stderr(stderr), mock.patch.object(rc.pipeline_log, "log"):
+                rc._dispatch_streaming(["/bin/echo", "--model", "m"], "prompt", 30,
+                                       self.owner / "t" / "transcript.jsonl")
+        finally:
+            rc.DISPATCH_LABEL.reset(token)
+        started = [line for line in stderr.getvalue().splitlines() if "dispatch started" in line]
+        self.assertTrue(started and "for 01-component-characterization#92dddfcdd022" in started[0], stderr.getvalue())
+
     def test_enabled_copies_both_files_to_the_run_owned_path(self):
         cfg = {"invocation": {"save_llm_transcripts": True}}
         invoker._persist_llm_transcript(cfg, self.request, self.diagnostics_dir)
@@ -93,6 +114,23 @@ import threading
 import time
 from types import SimpleNamespace
 from unittest import mock
+
+
+class SplitEnvelopeTests(unittest.TestCase):
+    """2026-10-01 (zarathustra, 01-component-characterization): the model sent the result object and the
+    markdown in two fenced blocks after some prose; only the last block was kept, so the result object was
+    lost and every repair round failed the same way."""
+
+    def test_fenced_blocks_after_prose_are_merged(self):
+        text = ('I have sufficient evidence now. Compiling the final JSON output.\n\n```json\n'
+                '{"component_purpose_map": {"schema": "appsec-review/component-purpose-map/1.0"}}\n```\n\n'
+                'Summary:\n\n```json\n{"component_purpose_map_markdown": "# Components"}\n```\n')
+        self.assertEqual(sorted(invoker._parse_envelope(text)),
+                         ["component_purpose_map", "component_purpose_map_markdown"])
+
+    def test_single_block_and_bare_object_unchanged(self):
+        self.assertEqual(invoker._parse_envelope('Prose.\n```json\n{"a": 1}\n```\n'), {"a": 1})
+        self.assertEqual(invoker._parse_envelope('{"a": 1}'), {"a": 1})
 
 
 class RepairRetryTests(unittest.TestCase):
