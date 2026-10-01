@@ -161,6 +161,36 @@ class ClaimReviewLifecycleTests(unittest.TestCase):
                 with self.assertRaises(Blocked):
                     lifecycle.run(RUN_ID, "dagster-3", stage)
 
+    def test_cwe_judged_decisions_do_not_block_on_their_own_code_fingerprint(self):
+        # Regression: _code_hashes(stage) was called with no cwe_judged argument at both the
+        # execute() preflight and _validate_attempt()'s reuse check, so it never matched a
+        # current_inputs() snapshot taken with cwe_judged=True (ADR-0020/brief O2: any decision
+        # that carries "cwe" at 07/09/12). Every CWE-judged attempt blocked, even with no code
+        # change and no fixture decision ever exercised this path.
+        stage = "09-independent-verification"
+        upstream = upstreams()[stage]
+        raw_decisions = copy.deepcopy(fixture(DECISIONS[stage])["decisions"])
+        raw_decisions[0]["cwe"] = {"cwe_id": "CWE-22", "rationale": "Path traversal weakness."}
+        merge = pool(stage, decisions=raw_decisions)
+        decisions = lifecycle.decisions_from_pool(stage, upstream, merge)
+        self.assertTrue(lifecycle._cwe_judged(decisions))
+        value = {"run_id": RUN_ID, "stage": stage, "source_generation": SOURCE,
+            "upstream": upstream, "upstream_binding": binding(core.STAGES[stage][0], core.STAGES[stage][1]),
+            "pool": merge, "pool_binding": {"job_id": "deterministic-pool-merge",
+                "attempt_id": "merge-1", "artifact_path": "deterministic-pool-merge.json",
+                "artifact_sha256": "sha256:" + "4" * 64,
+                "accepted_pointer_sha256": "sha256:" + "5" * 64},
+            "decisions": decisions, "applicability": "APPLICABLE",
+            "code": lifecycle._code_hashes(stage, True)}
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder) / stage
+            with mock.patch.object(lifecycle, "root", return_value=base), \
+                    mock.patch.object(lifecycle, "current_inputs", return_value=value):
+                first = lifecycle.run(RUN_ID, "dagster-cwe-1", stage)
+                self.assertEqual(first["status"], "OK")
+                second = lifecycle.run(RUN_ID, "dagster-cwe-2", stage)
+                self.assertEqual(first["attempt_id"], second["attempt_id"])
+
     def test_new_failure_blocks_old_success_and_a_new_attempt_recovers(self):
         stage = "08-blue-team-refutation"
         value = inputs(stage)

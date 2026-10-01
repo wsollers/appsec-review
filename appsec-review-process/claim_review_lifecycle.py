@@ -248,7 +248,8 @@ def _applicability(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_attempt(run_id: str, stage: str, attempt: Path, inputs: dict[str, Any]) -> None:
-    if read_json(attempt / "inputs.json") != inputs or inputs["code"] != _code_hashes(stage):
+    if (read_json(attempt / "inputs.json") != inputs or
+            inputs["code"] != _code_hashes(stage, _cwe_judged(inputs["decisions"]))):
         raise Blocked("claim review lifecycle: immutable inputs or implementation changed")
     if current_inputs(run_id, stage) != inputs:
         raise Blocked("claim review lifecycle: accepted upstream or pool changed")
@@ -268,7 +269,7 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
     artifact = core.STAGES[stage][4]
 
     def execute(allocation: dict[str, Any], inputs: dict[str, Any], fingerprint: str) -> dict[str, Any]:
-        if inputs["code"] != _code_hashes(stage):
+        if inputs["code"] != _code_hashes(stage, _cwe_judged(inputs["decisions"])):
             raise Blocked("claim review lifecycle: implementation changed before execution")
         attempt = allocation["attempt"]
         result = build_result(inputs, allocation["attempt_id"])
