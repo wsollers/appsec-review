@@ -5,7 +5,7 @@
 # lane keeps its database (keep-db), then the 06-reachability-codeql lane runs the pinned pack
 # against that retained database and the decoded tables must make the fixture's vulnerable call
 # REACHABLE. Fixtures: data/codeql-reachability/fixtures/<lang>. Default languages:
-# java csharp javascript python (go is expected to be a gap: no build-mode none, reported as SKIP).
+# java csharp javascript python go (Go runs --build-mode autobuild offline on the image's Go toolchain).
 #
 # Every container runs with --network none, the fixture / database / packs mounted read-only and
 # only scratch/codeql-per-language-smoke/<lang>/<step>/scratch writable, like the B13 requests the
@@ -47,13 +47,11 @@ for lang in "${langs[@]}"; do
   out="$repo/scratch/codeql-per-language-smoke/$lang"
   rm -rf "$out"; mkdir -p "$out"
   fixture="$repo/data/codeql-reachability/fixtures/$lang"
-  if [ "$lang" = go ]; then
-    report SKIP "$lang 02-codeql lane" "Go has no build-mode none: the node records 'language not built' (ADR-0023)"
-    continue
-  fi
+  mode=none
+  [ "$lang" = go ] && mode=autobuild   # Go has no build-mode none: offline autobuild on the image's Go toolchain
   suite="codeql/$lang-queries:codeql-suites/$lang-security-extended.qls"
   MOUNTS=(--mount "type=bind,source=$fixture,target=/workspace,readonly")
-  if run "$out/sast/scratch" "$out/sast.log" /opt/scripts/codeql-sast-lane.sh "$lang" none "$suite" 2 2048 keep-db \
+  if run "$out/sast/scratch" "$out/sast.log" /opt/scripts/codeql-sast-lane.sh "$lang" "$mode" "$suite" 2 2048 keep-db \
      && [ -s "$out/sast/scratch/codeql.sarif" ] && [ -f "$out/sast/scratch/db/codeql-database.yml" ]; then
     report PASS "$lang 02-codeql lane (keep-db)" "SARIF and retained database"
   else

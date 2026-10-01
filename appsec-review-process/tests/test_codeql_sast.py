@@ -60,11 +60,15 @@ class CodeqlSastUnitTests(unittest.TestCase):
         self.assertEqual((rust["status"], rust["argv"]), ("UNSUPPORTED_OFFLINE", []))
         self.assertIn("language not supported", rust["gap"])
         plan = {row["language"]: row for row in _plan(worker.detected_languages(paths))}
-        self.assertEqual(plan["go"]["status"], "UNSUPPORTED_OFFLINE")
         self.assertEqual(plan["cpp"]["argv"], ["/opt/scripts/codeql-sast-lane.sh", "cpp", "none",
             "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls", "2", "2048", "keep-db"])
-        self.assertIn("language not built", plan["go"]["gap"])
-        self.assertTrue(all(row["build_mode"] == "none" for row in plan.values() if row["status"] == "READY"))
+        # Go runs with autobuild on the image's offline Go toolchain (2026-10-01; was UNSUPPORTED_OFFLINE).
+        self.assertEqual((plan["go"]["status"], plan["go"]["build_mode"]), ("READY", "autobuild"))
+        self.assertEqual(plan["go"]["argv"], ["/opt/scripts/codeql-sast-lane.sh", "go", "autobuild",
+            "codeql/go-queries:codeql-suites/go-security-extended.qls", "2", "2048", "keep-db"])
+        self.assertIn("go", worker.FIDELITY_GAPS)
+        self.assertTrue(all(row["build_mode"] == "none" for row in plan.values()
+                            if row["status"] == "READY" and row["language"] != "go"))
         missing = _plan(["cpp"], registry={})
         self.assertEqual(missing[0]["status"], "UNAVAILABLE")
         self.assertIn("no current B16 record", missing[0]["gap"])
@@ -151,9 +155,11 @@ class CodeqlSastUnitTests(unittest.TestCase):
         self.assertEqual((result["status"], result["skip_reason"], result["tools"]),
                          ("SKIPPED", "not-applicable-language-absent", []))
         self.assertEqual(validate_document(result, "codeql-language.schema.json"), [])
-        go = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs(_plan(["go"]), "go"), outcomes={})
+        # Rust is still not run (no pinned suite): a gap, never a failure. (Go was the example until it
+        # gained autobuild on 2026-10-01.)
+        go = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs(_plan(["rust"]), "rust"), outcomes={})
         self.assertEqual((go["status"], go["databases"]), ("OK_WITH_GAPS", []))
-        self.assertIn("language not built", go["coverage_gaps"][0])
+        self.assertIn("language not supported", go["coverage_gaps"][0])
         not_built = worker.assemble(run_id="run", attempt_id="attempt", outcomes={
             "cpp": {"gap": None, "leads": [], "dropped": 0}},
             inputs=_inputs(_plan(), not_built="language not built: no accepted 02-native-build publication; "

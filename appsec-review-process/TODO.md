@@ -366,8 +366,11 @@ OPEN (deferred, not in brief G's first cut):
       `python3 -B images/registry_records.py generate`, then `scripts/smoke_codeql_per_language.sh`.
       Until then every `02-codeql-<lang>` node is `UNAVAILABLE` (gap) and every CodeQL reachability
       row is `unknown`. Expect a QL compile round for `data/codeql-reachability/*` (never compiled here).
-- [ ] `02-codeql-go`: needs the Go toolchain in `audit-codeql` plus an offline Go build (vendored
-      `vendor/`) or a Go build step; until then Go is `language not built`. Image request.
+- [x] `02-codeql-go` (2026-10-01): `audit-codeql` carries Go 1.23 (copied from the pinned golang image
+      audit-buildenv-go uses); the lane runs `--build-mode autobuild` offline (GOPROXY=off, GOTOOLCHAIN=local,
+      CGO_ENABLED=0, caches in scratch). Checked in the build sandbox: appsec-multi-vuln's 7 Go modules extract
+      (7 findings in 6 cases), the Go fixture is `reachable`. Modules needing downloads stay a gap (D-28 network
+      is for build jobs only).
 - [ ] `02-codeql-rust`: pin a rust suite in `images/audit-codeql/tool.json` once the bundle's Rust
       extractor is qualified offline (and add `rust` to `BUILD_MODE_NONE`); Ruby and Rust
       reachability packs do not exist (`no-pack`).
@@ -759,6 +762,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution (B8) | 8 of 28 plan commands had a cwd already rooted at the unit (`projects/cpp/case-027`); `_repo_commands` joined the root again and the trial raised before running (cpp 027/030/037, java 034, dotnet 015/071, rust 004, typescript 067) | A cwd equal to or below the unit root is taken as repository-relative; `build_plan.py` unchanged, so no re-plan. Test in `tests/test_build_resolution.py` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution (B7, part) | Resolver image builds wrote Ubuntu apt sources on the Debian-based buildenvs (go, php, python, rust, typescript): `apt-get update` exit 100, 15 of 23 gaps | A plan with no apt packages renders no apt step at all. Debian mirror and package-manager egress: William allowed both 2026-10-01; design in TODO section B7 |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | 02-build-resolution/-configure/native-build (B7) | Managed-language builds need their package managers; containers were always `--network none`, and apt on Debian buildenvs used the Ubuntu mirror | D-28: network mode `unrestricted-build` (build jobs only, `--network bridge`), staged via `build_network: unrestricted` in both build controls; apt picks deb.debian.org on Debian images. Tests in test_container_execution and test_build_resolution |
+| 2026-10-01 | appsec-multi-vuln (zarathustra) | - | 02-codeql-go | Go was `UNSUPPORTED_OFFLINE`: no build-mode none and no Go toolchain in `audit-codeql`, so the smokes skipped it | Go 1.23 in `audit-codeql` (pinned golang image); lane mode `autobuild` (offline env, scratch caches, read-only modcache removed); `codeql_sast` plans Go as autobuild with a fidelity gap; Go suite pinned in `tool.json`; schema accepts `autobuild`; per-language smoke runs Go. Verified locally against codeql-bundle-v2.27.0: lane exit 0, database kept, Go reachability `reachable` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | prepare-host.sh --check (B5) | Step 6 printed OK for any clone (appsec-multi-vuln at 878d5d6 while pinned 5c5a776) | `--check` compares each clone with the pin read from `fixtures/populate-targets.sh` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | launch_job.py --wait (B6) | A 600 s monitoring timeout printed `DAGSTER_LAUNCH_FAILED` although the run had STARTED | `WaitTimeout`: `DAGSTER_WAIT_TIMEOUT`, exit 3 (a real failure stays exit 1). `tests/test_launch_job_wait.py` |
 | 2026-10-01 | appsec-multi-vuln | `20261001T032047Z-fd64eb` (zarathustra) | shell scripts (B4) | `images/audit-buildenv-common/run.sh`, `orchestrator/tail-run-log.sh` and 13 more shebang scripts were 100644 (Permission denied) | All set to 100755; `tests/test_script_modes.py` fails on any non-executable shebang script |

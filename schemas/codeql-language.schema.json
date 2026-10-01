@@ -78,7 +78,8 @@
       "items": {
         "enum": [
           "none",
-          "traced"
+          "traced",
+          "autobuild"
         ]
       }
     },
@@ -128,7 +129,8 @@
           "build_mode": {
             "enum": [
               "none",
-              "traced"
+              "traced",
+              "autobuild"
             ]
           },
           "query_suite": {

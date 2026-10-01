@@ -51,7 +51,7 @@
     "transient_reasons": [],
     "side_effect_free": true
   },
-  "applicability": "checkouts with Go sources; Go has no build-mode none and the pipeline has no Go build step, so a present language is a 'language not built' gap (OK_WITH_GAPS), never a failure; SKIPPED not-applicable-language-absent when the checkout has no source of this language",
+  "applicability": "checkouts with Go sources; Go has no build-mode none, so it runs --build-mode autobuild on the image's Go toolchain offline (GOPROXY=off): a module whose dependencies are neither vendored nor in the standard library is a gap (OK_WITH_GAPS), never a failure; SKIPPED not-applicable-language-absent when the checkout has no source of this language",
   "permissions": [
     "read-source",
     "write-run-data"

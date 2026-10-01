@@ -91,11 +91,11 @@ LANGUAGE_SUFFIXES = {
     "rust": (".rs",),
 }
 BUILD_MODE_NONE = ("cpp", "csharp", "java", "javascript", "python", "ruby")
+# Go has no build-mode none: autobuild runs the image's Go toolchain offline (GOPROXY=off) over each module
+# (2026-10-01; before that Go was UNSUPPORTED_OFFLINE).
+BUILD_MODE_AUTOBUILD = ("go",)
 COMPILED = ("cpp", "csharp", "go", "java", "rust")
 OFFLINE_UNSUPPORTED = {
-    "go": ("CodeQL go not run: language not built: Go extraction has no build-mode none and the pipeline has "
-           "no Go build step (autobuild needs the Go toolchain and module downloads, which the offline boundary "
-           "forbids); gosec covers Go in 02-source-sast."),
     "rust": ("CodeQL rust not run: language not supported by the pinned CodeQL metadata (images/audit-codeql/"
              "tool.json pins no rust suite); rust-analyzer and tree-sitter hints cover Rust."),
 }
@@ -104,6 +104,8 @@ FIDELITY_GAPS = {
             "templates are resolved heuristically; treat missing results as unexamined, not clean."),
     "csharp": "CodeQL csharp ran with --build-mode none: unresolved references lower recall.",
     "java": "CodeQL java ran with --build-mode none: unresolved dependencies lower recall.",
+    "go": ("CodeQL go ran with --build-mode autobuild offline (GOPROXY=off): a module whose dependencies are "
+           "neither vendored nor in the standard library does not resolve; treat it as unexamined, not clean."),
 }
 GAP_CAUSES = ("TIMEOUT", "OOM_KILLED", "CONTAINER_EXIT_NONZERO")
 TRACED_TOOL_ID = "codeql-cpp-traced"
@@ -200,7 +202,7 @@ def tool_metadata() -> tuple[dict[str, Any], str]:
             value["version_argv"][:1] != [value["executable"]] or not isinstance(bundle, dict) or
             not isinstance(bundle.get("sha256"), str) or pinned != [bundle["sha256"]] or
             f'echo "{bundle["sha256"]}  bundle.tar.zst" | sha256sum -c -' not in dockerfile or
-            not isinstance(suites, dict) or set(suites) != set(BUILD_MODE_NONE) or
+            not isinstance(suites, dict) or set(suites) != set(BUILD_MODE_NONE) | set(BUILD_MODE_AUTOBUILD) or
             any(suite != f"codeql/{lang}-queries:codeql-suites/{lang}-security-extended.qls"
                 for lang, suite in suites.items())):
         raise Blocked(f"{what}: CodeQL tool metadata is invalid or differs from the pinned image build")
@@ -331,8 +333,9 @@ def build_plan(languages: list[str], registry: dict[str, dict[str, Any]], metada
                                                  f"{IMAGE_ID} has no current B16 record.")
         else:
             suite = metadata["query_suites"][language]
-            row.update(build_mode="none", query_suite=suite,
-                       argv=[metadata["lane_script"]["path"], language, "none", suite,
+            mode = "autobuild" if language in BUILD_MODE_AUTOBUILD else "none"
+            row.update(build_mode=mode, query_suite=suite,
+                       argv=[metadata["lane_script"]["path"], language, mode, suite,
                              str(analysis["threads"]), str(analysis["ram_mb"]), "keep-db"])
         plan.append(row)
     return plan

@@ -16,19 +16,31 @@
 # database at /scratch/db for the worker to retain (ADR-0023: the reachability engines reuse it and
 # never rebuild); drop-db removes it.
 set -euo pipefail
-usage() { echo "usage: $0 LANGUAGE none|traced SUITE THREADS RAM_MB keep-db|drop-db [COMPILE_COMMANDS [GRAPH_PACK]]" >&2; exit 2; }
+usage() { echo "usage: $0 LANGUAGE none|traced|autobuild SUITE THREADS RAM_MB keep-db|drop-db [COMPILE_COMMANDS [GRAPH_PACK]]" >&2; exit 2; }
 [ "$#" -ge 6 ] && [ "$#" -le 8 ] || usage
 language=$1; mode=$2; suite=$3; threads=$4; ram=$5; keep=$6
 case "$keep" in keep-db|drop-db) ;; *) usage ;; esac
 case "$mode" in
   none) [ "$#" -eq 6 ] || usage ;;
   traced) [ "$language" = cpp ] && [ "$#" -ge 7 ] || usage ;;
+  autobuild) [ "$language" = go ] && [ "$#" -eq 6 ] || usage ;;
   *) usage ;;
 esac
 export HOME=/tmp
 codeql=/opt/codeql/codeql
 "$codeql" version --format=terse
 case "$mode" in
+  autobuild)
+    # Go only (no build-mode none). Offline: no module proxy, no toolchain download, no cgo; the build
+    # cache lives in scratch (/tmp is noexec) and is removed afterwards. A module whose dependencies
+    # are neither vendored nor in the standard library does not resolve: a recorded gap.
+    export GOPROXY=off GOTOOLCHAIN=local GOFLAGS=-buildvcs=false CGO_ENABLED=0 GOSUMDB=off \
+           GOCACHE=/scratch/.go/cache GOPATH=/scratch/.go/path GOTMPDIR=/scratch/.go/tmp
+    mkdir -p "$GOCACHE" "$GOPATH" "$GOTMPDIR"
+    "$codeql" database create /scratch/db --language=go --source-root=/workspace \
+      --build-mode=autobuild --threads="$threads" --ram="$ram" --overwrite
+    chmod -R u+w /scratch/.go 2>/dev/null || true; rm -rf /scratch/.go   # the module cache is read-only
+    ;;
   none)
     "$codeql" database create /scratch/db --language="$language" --source-root=/workspace \
       --build-mode=none --threads="$threads" --ram="$ram" --overwrite

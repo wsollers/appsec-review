@@ -36,6 +36,7 @@
   },
   "query_suites": {
     "cpp": "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls",
+    "go": "codeql/go-queries:codeql-suites/go-security-extended.qls",
     "csharp": "codeql/csharp-queries:codeql-suites/csharp-security-extended.qls",
     "java": "codeql/java-queries:codeql-suites/java-security-extended.qls",
     "javascript": "codeql/javascript-queries:codeql-suites/javascript-security-extended.qls",

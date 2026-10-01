@@ -36,6 +36,13 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
 RUN ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
     && HOME=/tmp dotnet --list-sdks | grep -E '^9\.0\.318 '
 
+# Go toolchain for Go extraction (--build-mode autobuild; Go has no build-mode none), copied from the same
+# digest-pinned official image audit-buildenv-go builds on. Runs offline in the lane (GOPROXY=off).
+COPY --from=golang:1.23-bookworm@sha256:167053a2bb901972bf2c1611f8f52c44d5fe7e762e5cab213708d82c421614db \
+     /usr/local/go /usr/local/go
+RUN ln -s /usr/local/go/bin/go /usr/local/bin/go && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt \
+    && go version | grep -F "go1.23"
+
 # --- tree-sitter CLI + py-tree-sitter/grammars, vendored in audit-lsp-vendor (docs/language-servers.md §3).
 RUN --mount=type=bind,from=audit-lsp-vendor:local,source=/opt/lsp-vendor,target=/mnt/lsp-vendor \
     install -m 0755 /mnt/lsp-vendor/bin/tree-sitter /usr/local/bin/tree-sitter \
