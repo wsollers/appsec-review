@@ -129,10 +129,18 @@
     {"tag": "native", "weight": 100, "component_ids": ["autotools-build", "hello-cli"], "confidence": "high", "evidence_citations": [{"source_type": "source_file", "path": "Makefile.am", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "MAKE_HASH", "note": "native build target"}]}
   ],
   "negative_evidence": [
-    {"category": "vendored", "search_terms": ["vendor", "third_party"], "search_scope": ["**/*"], "confidence": "high", "evidence_citations": [{"source_type": "source_file", "path": "Makefile.am", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "MAKE_HASH", "note": "complete source membership declaration"}]},
-    {"category": "generated", "search_terms": ["generated", "autogen"], "search_scope": ["**/*"], "confidence": "medium", "evidence_citations": [{"source_type": "source_file", "path": "Makefile.am", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "MAKE_HASH", "note": "no generated source target declared"}]},
-    {"category": "test-sample", "search_terms": ["test", "sample", "example"], "search_scope": ["**/*"], "confidence": "high", "evidence_citations": [{"source_type": "source_file", "path": "README.md", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "README_HASH", "note": "fixture inventory has no test or sample scope"}]}
+    {"negative_evidence_id": "neg-vendored", "category": "vendored", "search_terms": ["vendor", "third_party"], "search_scope": ["**/*"], "confidence": "high", "evidence_citations": [{"source_type": "source_file", "path": "Makefile.am", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "MAKE_HASH", "note": "complete source membership declaration"}]},
+    {"negative_evidence_id": "neg-generated", "category": "generated", "search_terms": ["generated", "autogen"], "search_scope": ["**/*"], "confidence": "medium", "evidence_citations": [{"source_type": "source_file", "path": "Makefile.am", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "MAKE_HASH", "note": "no generated source target declared"}]},
+    {"negative_evidence_id": "neg-test-sample", "category": "test-sample", "search_terms": ["test", "sample", "example"], "search_scope": ["**/*"], "confidence": "high", "evidence_citations": [{"source_type": "source_file", "path": "README.md", "line_range": null, "tool_name": null, "tool_rule_id": null, "content_hash": "README_HASH", "note": "fixture inventory has no test or sample scope"}]}
   ],
+  "category_coverage": {
+    "first-party": {"status": "classified", "scope_ids": ["application-source"]},
+    "vendored": {"status": "absent", "negative_evidence_id": "neg-vendored"},
+    "generated": {"status": "absent", "negative_evidence_id": "neg-generated"},
+    "test-sample": {"status": "absent", "negative_evidence_id": "neg-test-sample"},
+    "documentation": {"status": "classified", "scope_ids": ["project-docs"]},
+    "build-tooling": {"status": "classified", "scope_ids": ["build-definition"]}
+  },
   "unknowns": [
     {
       "unknown_id": "responsible-engineering-owner",

@@ -1219,7 +1219,7 @@ class ClaudeCliInvoker:
 
     def __init__(self, *, effort: str, budget_usd: float | None = None,
                 timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS, dispatch_fn=None,
-                fill_result=None, persona_schema: str | None = None) -> None:
+                fill_result=None, persona_schema: str | None = None, extra_validate=None) -> None:
         self.effort = effort
         self.budget_usd = budget_usd
         self.timeout_seconds = timeout_seconds
@@ -1235,6 +1235,17 @@ class ClaudeCliInvoker:
         if persona_schema is not None and fill_result is None:
             raise ValueError("persona_schema requires a fill_result derive step")
         self._persona_schema = persona_schema
+        # Optional extra_validate(result): a caller's own semantic check beyond the JSON Schema
+        # (a cross-reference a schema cannot express alone -- for example 01-component-
+        # characterization's category_coverage citations actually resolving to a matching scope or
+        # negative-evidence entry, not just existing). Returns a list of error strings, empty when
+        # the result is acceptable. A non-empty return feeds the same bounded, cost-capped repair
+        # loop as a schema failure, instead of accepting a schema-valid-but-semantically-wrong
+        # response with no way back to the model (01-component-characterization, 2026-10-01: a
+        # model dropped 'first-party' from category_coverage; nothing downstream of the schema check
+        # could ask it to fix that). Runs after schema validation, before claims are built, so it
+        # only ever sees a document already shaped like the schema requires.
+        self._extra_validate = extra_validate
 
     def invoke(self, package: Any, *, output_root: Path, cancel: threading.Event) -> None:
         if cancel.is_set():
@@ -1328,6 +1339,13 @@ class ClaudeCliInvoker:
                 envelope = {key: envelope[key] for _filename, key, _kind in fields if key in envelope}
             _fill_pinned_values(envelope, result_field, output_contract, target_inputs)
             _validate_envelope(envelope, fields, output_contract, store)
+            if self._extra_validate is not None:
+                extra_errors = self._extra_validate(envelope[result_field])
+                if extra_errors:
+                    raise InvokerOutputError(
+                        f"envelope[{result_field!r}] failed additional validation: "
+                        f"{len(extra_errors)} error(s) (first: {extra_errors[0]})",
+                        [f"{result_field}: {error}" for error in extra_errors])
             try:
                 claims = _schema_safe_claims(builder(envelope[result_field], target_inputs,
                                                      package.allowed_claim_classes, result_filename))
@@ -1418,11 +1436,21 @@ class ClaudeCliInvoker:
                 limitations.append(f"schema repair retry: {rounds['rejected']} rejected response(s) before "
                                    f"this one; the rejected responses and reasons are kept in the run's "
                                    f"diagnostics, not in this output")
+            # A persona-cache reuse deliberately zeroes input_tokens/output_tokens (no new model call
+            # consumed anything): `or` treats that honest 0 as "missing", silently substituting a
+            # bytes/4 estimate over the *entire* available input instead of the true zero marginal
+            # cost -- a reused answer can then fail BUDGET_EXCEEDED purely from being reused (01-
+            # component-characterization, 2026-10-01: 44 real input_units on the live call became
+            # 7,761,063 estimated ones on replay, against an 800,000 ceiling calibrated for the real
+            # metric). A reuse reports true zero; only a genuine live dispatch with no reported token
+            # count falls back to the byte estimate.
+            input_units = 0 if reused is not None else (rounds["input_tokens"] or (read_bytes + 3) // 4)
+            output_units = 0 if reused is not None else (rounds["output_tokens"] or (written_bytes + 3) // 4)
             pi.write_invoker_output(
                 package, output_root, files=written_files, claims=claims,
                 usage={"input_bytes": read_bytes,
-                       "input_units": rounds["input_tokens"] or (read_bytes + 3) // 4,
-                       "output_units": rounds["output_tokens"] or (written_bytes + 3) // 4,
+                       "input_units": input_units,
+                       "output_units": output_units,
                        "tool_calls": 0},
                 tool_calls=[], verified_invocations=[], injection_suspected=[],
                 limitations=limitations)
