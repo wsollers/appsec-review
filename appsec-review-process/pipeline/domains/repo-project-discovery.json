@@ -14,10 +14,9 @@
   ],
   "common_failure_modes": [
     "monorepo workspaces missed",
-    "generated code or vendored code mistaken for primary project",
-    "unsafe install/build scripts executed too early",
-    "CI-only build requirements undocumented",
-    "test commands unavailable because dependency restore was skipped or unsafe"
+    "generated or vendored code mistaken for a primary project",
+    "CI-only build requirements left undocumented",
+    "test commands unavailable because the dependency restore was skipped"
   ],
   "preferred_standards": [
     "SLSA",

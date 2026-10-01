@@ -173,6 +173,7 @@
   "coverage_gaps": [
     "No dependency lockfile: the only third-party dependency is vendored source (vendor/cJSON-1.7.18/), so dependency identity comes from the vendored tree, not a package manager.",
     "The repository's own Dockerfile build path (debian:bookworm-slim) is not planned; the build runs in the pipeline's pinned C++ build-environment image instead.",
-    "Every planned command executes repository-controlled code (m4 macros, configure, make recipes, tests) and therefore needs the script-execution capability inside the isolated build environment; none needs network."
+    "Every planned command executes repository-controlled code (m4 macros, configure, make recipes, tests) and therefore needs the script-execution capability inside the isolated build environment; none needs network.",
+    "Partition 'docs' is deferred in the accepted partition map, so no project is discovered for it here."
   ]
 }

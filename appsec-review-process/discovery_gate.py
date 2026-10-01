@@ -24,13 +24,13 @@ docs/build-discovery/build-discovery-integration.md's gap-status table for the f
 """
 import copy
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import threading
 import uuid
 
 from create_job_handoff import create_handoff, read_latest_handoff
-from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, data_path, digest,
+from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, beneath, data_path, digest,
                              file_hash, now, read_json, run_path)
 from publish_job_output import (common_pointer, coordinate_worker_lifecycle,
                                 record_terminal_current, validate_published)
@@ -262,7 +262,19 @@ def _require_upstream_inputs(run_id, job, value):
         raise Blocked(job + ': source_revision ' + str(value.get('source_revision'))
                       + ' does not match the accepted ' + upstream + ' (' + str(upstream_value.get('source_revision')) + ')')
     source_root, errors = vjo._source_root(run_path(run_id) / 'data', run_id)
-    errors = list(errors)
+    errors = list(errors) + upstream_content_errors(job, value, source_root)
+    if job in PROJECT_RULE_PERSONA and isinstance(upstream_value, dict):
+        errors += project_rule_errors(job, value, upstream_value, source_root)
+    if errors:
+        raise Blocked(job + ': supplied result is invalid: ' + '; '.join(errors))
+
+
+def upstream_content_errors(job, value, source_root):
+    """The content checks every chained discovery gate applies (``_require_upstream_inputs`` at
+    acceptance, ``project_in_loop_errors`` in the repair loop): normalized paths and citation
+    freshness for the payload kind, no secret-like values, no finding/severity/runtime promotion."""
+    import validate_job_output as vjo
+    errors = []
     if source_root is not None:
         payload_kind = _PAYLOAD_ERRORS[job]
         if payload_kind == 'project_discovery':
@@ -271,8 +283,132 @@ def _require_upstream_inputs(run_id, job, value):
             errors += vjo._operations_topology_errors(value, source_root)
     errors += vjo._secret_errors(value)
     errors += vjo._claim_promotion_errors(value, set(vjo.PROMOTION_FIELDS))
+    return errors
+
+
+# Alignment plan R03: the dev/devops task rules that used to be prose only. Each persona is the
+# specialist whose routed partitions the job covers.
+PROJECT_RULE_PERSONA = {CONSUMER_JOB: 'developer-engineer', DEVOPS_JOB: 'devops-engineer'}
+# Dependency-restore commands: they fetch from a live registry, so they are never read-only or
+# merely script-executing (dev task, "Safe Command Plan").
+_RESTORE_PREFIXES = (('npm', 'install'), ('npm', 'ci'), ('npm', 'i'), ('yarn', 'install'), ('pnpm', 'install'),
+                     ('pip', 'install'), ('pip3', 'install'), ('python', '-m', 'pip', 'install'),
+                     ('python3', '-m', 'pip', 'install'), ('poetry', 'install'), ('pipenv', 'install'),
+                     ('go', 'mod', 'download'), ('cargo', 'fetch'), ('dotnet', 'restore'),
+                     ('bundle', 'install'), ('composer', 'install'), ('gem', 'install'),
+                     ('mvn', 'dependency:resolve'), ('mvn', 'dependency:go-offline'))
+# DevOps plans: never run what a definition builds, never deploy/publish/push, never a native build
+# tool against the checkout (developer discovery owns those), never the Docker socket.
+_DEVOPS_FORBIDDEN_PREFIXES = (('docker', 'run'), ('docker', 'exec'), ('docker', 'start'), ('docker', 'push'),
+                              ('docker', 'login'), ('docker', 'compose', 'up'), ('docker', 'compose', 'run'),
+                              ('docker', 'compose', 'start'), ('docker', 'compose', 'push'),
+                              ('docker-compose', 'up'), ('docker-compose', 'run'), ('docker-compose', 'start'),
+                              ('docker-compose', 'push'), ('podman', 'run'), ('podman', 'exec'), ('podman', 'push'),
+                              ('kubectl', 'apply'), ('kubectl', 'create'), ('kubectl', 'delete'),
+                              ('kubectl', 'replace'), ('helm', 'install'), ('helm', 'upgrade'), ('helm', 'push'),
+                              ('terraform', 'apply'), ('terraform', 'destroy'), ('terraform', 'import'),
+                              ('npm', 'run'), ('yarn', 'run'), ('pnpm', 'run'), ('npm', 'publish'))
+_DEVOPS_FORBIDDEN_TOOLS = frozenset({'autoreconf', 'configure', 'make', 'cmake', 'ninja', 'meson'})
+
+
+def _argv_key(argv):
+    tokens = [str(token) for token in argv] if isinstance(argv, list) else []
+    if tokens:
+        tokens[0] = PurePosixPath(tokens[0]).name
+    return tokens
+
+
+def _starts_with(tokens, prefixes):
+    return next((prefix for prefix in prefixes if tuple(tokens[:len(prefix)]) == prefix), None)
+
+
+def project_rule_errors(job, value, partition_map, source_root):
+    """The dev/devops discovery rules beyond the schema and the shared content checks. Every
+    deferred or unresolved partition routed to the job's specialist is named in a coverage gap.
+    Dev: catalog image ids only (or a gap naming the project), at least one plan entry per project,
+    restore commands marked network-required. DevOps: no run/exec/deploy/publish/push/native-build
+    command and no Docker socket in a plan, and every declared image appears in a file the unit
+    cites."""
+    persona = PROJECT_RULE_PERSONA[job]
+    errors = []
+    gaps = ' '.join(str(gap) for gap in value.get('coverage_gaps') or [])
+    for partition in partition_map.get('partitions') or []:
+        routed = [partition.get('primary_persona_id'), *(partition.get('supporting_persona_ids') or [])]
+        partition_id = str(partition.get('partition_id'))
+        if persona in routed and partition.get('disposition') != 'review' and partition_id not in gaps:
+            errors.append(f'coverage_gaps: partition {partition_id!r} is {partition.get("disposition")} and '
+                          f'routed to {persona}; add a coverage gap that names it')
+    projects = [item for item in value.get('projects') or [] if isinstance(item, dict)]
+    plan = [item for item in value.get('safe_command_plan') or [] if isinstance(item, dict)]
+    if job == CONSUMER_JOB:
+        catalog = {entry['image'] for entry in
+                   read_json(ROOT / 'tooling' / 'buildenv-catalog.json').get('images', [])}
+        planned = {item.get('project_id') for item in plan}
+        for project in projects:
+            project_id = project.get('project_id')
+            unknown = sorted(set(project.get('candidate_buildenv_images') or []) - catalog)
+            if unknown:
+                errors.append(f'projects[{project_id}].candidate_buildenv_images: {unknown} are not images '
+                              'in the Build Environment Catalog')
+            if not project.get('candidate_buildenv_images') and str(project_id) not in gaps:
+                errors.append(f'projects[{project_id}]: no catalog image; add a coverage gap that names '
+                              'the project and says why none fits')
+            if project_id not in planned:
+                errors.append(f'projects[{project_id}]: no safe_command_plan entry for its commands')
+        for index, item in enumerate(plan):
+            restore = _starts_with(_argv_key(item.get('argv')), _RESTORE_PREFIXES)
+            if restore and item.get('authorization') != 'network-required':
+                errors.append(f'safe_command_plan[{index}]: {" ".join(restore)} restores dependencies, so '
+                              'its authorization must be network-required')
+    else:
+        for index, item in enumerate(plan):
+            tokens = _argv_key(item.get('argv'))
+            forbidden = _starts_with(tokens, _DEVOPS_FORBIDDEN_PREFIXES)
+            if forbidden or (tokens and tokens[0] in _DEVOPS_FORBIDDEN_TOOLS):
+                errors.append(f'safe_command_plan[{index}]: {" ".join(forbidden or tokens[:1])} is not '
+                              'planned here (no run, deploy, publish, push or native build command)')
+            if any('docker.sock' in token for token in tokens):
+                errors.append(f'safe_command_plan[{index}]: never mount the Docker socket')
+        for project in projects:
+            texts = []
+            for citation in project.get('evidence_citations') or []:
+                path = _beneath_root(source_root, citation.get('path')) if source_root else None
+                if path is not None:
+                    texts.append(path.read_text(encoding='utf-8', errors='replace'))
+            for image in project.get('candidate_buildenv_images') or []:
+                if texts and not any(str(image) in text for text in texts):
+                    errors.append(f'projects[{project.get("project_id")}].candidate_buildenv_images: {image!r} '
+                                  'does not appear in any file this unit cites')
+    return errors
+
+
+def _beneath_root(root, relative):
+    if not isinstance(relative, str) or not relative:
+        return None
+    try:
+        path = beneath(Path(root), Path(root) / Path(*PurePosixPath(relative).parts))
+    except ValueError:
+        return None
+    return path if path.is_file() and not path.is_symlink() else None
+
+
+def project_in_loop_errors(job, result, *, source_revision, target, by_path, target_root, partition_map):
+    """The automatic D02-D04 dispatch's ``extra_validate`` hook: on a copy, apply what
+    ``_dispatch_project_persona`` applies after return (pinned source_revision and target, backfilled
+    citation hashes), then the schema, ``upstream_content_errors`` and, for dev/devops,
+    ``project_rule_errors`` -- exactly what acceptance checks, while the model can still fix it."""
+    candidate = copy.deepcopy(result)
+    candidate['source_revision'] = source_revision
+    if isinstance(target, str):
+        candidate['target'] = target
+    _backfill_citation_content_hashes(candidate, by_path)
+    errors = validate_document(candidate, SCHEMAS[job])
     if errors:
-        raise Blocked(job + ': supplied result is invalid: ' + '; '.join(errors))
+        return errors
+    errors = upstream_content_errors(job, candidate, Path(target_root))
+    if job in PROJECT_RULE_PERSONA and isinstance(partition_map, dict):
+        errors += project_rule_errors(job, candidate, partition_map, Path(target_root))
+    return errors
 
 
 def _legacy_run(run_id, dagster_id, job, force=False):
@@ -916,8 +1052,19 @@ def _dispatch_project_persona(run_id, base, record):
         target_root=target_root, source_snapshot_sha256=snapshot, now=clock(), store=store,
         upstream_root=upstream_dir)
     model_identity = request['model']
+    upstream_map = read_json(upstream_dir / UPSTREAM_STAGED_NAME[ADOPTED_JOB])
+    upstream_target = upstream_map.get('target') if isinstance(upstream_map, dict) else None
+    by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']
+               if entry['root'] == pd.DEFAULT_READABLE_ROOT}
+
+    def extra_validate(result):
+        return project_in_loop_errors(job, result, source_revision=record['source_revision'],
+                                      target=upstream_target, by_path=by_path, target_root=target_root,
+                                      partition_map=upstream_map)
+
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd),
+        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
+                                 extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: upstream_dir},
         allowed_models=(model_identity,), source_snapshot_sha256=snapshot,
@@ -934,12 +1081,9 @@ def _dispatch_project_persona(run_id, base, record):
 
     output_root = persona_attempt / Path(*request['output_root'].split('/'))
     value = read_json(output_root / spec['result'])
-    upstream_map = read_json(upstream_dir / UPSTREAM_STAGED_NAME[ADOPTED_JOB])
     value['source_revision'] = record['source_revision']
-    if isinstance(upstream_map, dict) and isinstance(upstream_map.get('target'), str):
-        value['target'] = upstream_map['target']
-    by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']
-               if entry['root'] == pd.DEFAULT_READABLE_ROOT}
+    if isinstance(upstream_target, str):
+        value['target'] = upstream_target
     _backfill_citation_content_hashes(value, by_path)
     summary_text = (output_root / spec['summary']).read_text(encoding='utf-8')
     persona = request['persona']

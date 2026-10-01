@@ -28,13 +28,14 @@
       "statically-inferred-build-plan",
       "coverage-gap"
     ],
-    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
   },
   "validation_rules": [
-    "project inventory must cite manifests or explicit gaps",
-    "safe command plan must separate read-only, network-required, and script-executing commands",
-    "each project should name a candidate buildenv image or explain why none fits",
-    "runtime state claims are forbidden",
-    "the result cannot promote discovery evidence to a finding or severity"
+    "the orchestrator overwrites target, source_revision and every citation content_hash with the pinned values",
+    "the orchestrator runs the acceptance checks (path syntax, citation freshness, the job's own command and coverage rules) inside the repair loop: a rejected answer comes back with the errors to fix"
   ]
 }

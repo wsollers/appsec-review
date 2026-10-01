@@ -50,36 +50,6 @@
   "safe_command_plan": [
     {
       "project_id": "container-image",
-      "purpose": "Install the build-stage OS packages the Dockerfile declares (autoconf, automake, build-essential, libtool) before the containerized build runs.",
-      "argv": [
-        "apt-get",
-        "install",
-        "-y",
-        "--no-install-recommends",
-        "autoconf",
-        "automake",
-        "build-essential",
-        "libtool"
-      ],
-      "authorization": "network-required",
-      "side_effects": [
-        "installs OS packages into the build-stage image layer, not the host",
-        "fetches package lists and archives from the configured apt mirror"
-      ],
-      "evidence_citations": [
-        {
-          "source_type": "source_file",
-          "path": "Dockerfile",
-          "line_range": null,
-          "tool_name": null,
-          "tool_rule_id": null,
-          "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
-          "note": "RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake build-essential libtool"
-        }
-      ]
-    },
-    {
-      "project_id": "container-image",
       "purpose": "Build the multi-stage image from the repository's own Dockerfile; the build stage runs autoreconf/configure/make/make check inside the image build, the final stage copies out only the built binary.",
       "argv": [
         "docker",

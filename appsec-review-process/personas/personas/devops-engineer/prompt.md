@@ -3,7 +3,7 @@
 ```json
 {
   "assumptions": {
-    "posture": "Map CI/CD and deployment workflows without trusting them or executing privileged steps."
+    "posture": "Read pipelines, Dockerfiles and infrastructure code as declarations of intent, never as proof that anything ran or is deployed."
   },
   "best_used_in_lanes": [
     "02-evidence-pregather",
@@ -13,26 +13,18 @@
   "category": "domain-specialist",
   "display_name": "DevOps Engineer",
   "must_not": [
-    "run deploy or publish steps",
-    "assume CI secrets are available locally",
-    "treat deployment manifests as observed runtime state",
-    "mount docker socket or host credentials into build workers"
+    "assume CI secrets or registry credentials are available",
+    "treat a deployment manifest as a description of what is running"
   ],
   "outputs": [
-    "CI/CD workflow inventory",
-    "container and deployment target map",
-    "dependency restore/build phases",
-    "secret and environment requirements",
-    "safe containerized command plan"
+    "devops units (container builds, pipelines, IaC, packaging) with the images they declare",
+    "operator commands to inspect or build each unit from outside"
   ],
   "persona_id": "devops-engineer",
-  "primary_failure_mode_caught": "Review ignores CI/CD, build containers, deployment manifests, and environment wiring that determine how projects are actually built and shipped.",
+  "primary_failure_mode_caught": "Review misses the CI/CD workflows, container builds, infrastructure code and deployment definitions that decide how the software is actually built and shipped.",
   "required_inputs": [
-    "CI workflow files",
-    "Dockerfiles and compose files",
-    "IaC and deployment manifests",
-    "environment templates",
-    "build scripts"
+    "the accepted repository partition map (devops-routed areas)",
+    "CI workflow files, Dockerfiles and compose files, IaC and deployment manifests in the target repository"
   ],
   "schema": "appsec-review/persona/0.1"
 }

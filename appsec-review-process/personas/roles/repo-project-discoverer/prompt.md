@@ -17,19 +17,15 @@
     "deploy_or_publish_action"
   ],
   "must_not": [
-    "execute untrusted scripts by default",
-    "write to the target repository",
-    "assume dependency restore is safe or offline",
-    "collapse polyglot monorepos into a single project"
+    "re-derive the partitioning: it is upstream input; disagreement goes in the summary"
   ],
   "required_behavior": [
-    "enumerate manifests, lockfiles, workspace files, solution files, and CI files",
-    "identify project roots, package managers, language versions, build commands, and test commands",
-    "select candidate buildenv image per project",
-    "separate commands to inspect from commands requiring authorization or network"
+    "fill projects with one entry per independently buildable unit in the routed partitions",
+    "fill safe_command_plan with the exact argv, authorization and side_effects of each command the task allows",
+    "fill coverage_gaps with every routed area, unit or command whose answer could not be determined"
   ],
   "role_id": "repo-project-discoverer",
   "schema": "appsec-review/role/0.1",
-  "summary": "Determines which buildable/testable projects exist in a repository and how to inspect them safely."
+  "summary": "Turns the areas the partition map routed to one specialist into a project inventory and a plan of commands someone else may later run in an isolated container; it proposes and runs nothing. Consumed by the build lane (02-build-index, 02-build-plan, 02-build-resolution), 02-sre-operations-topology and 01-component-characterization."
 }
 ```
