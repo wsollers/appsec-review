@@ -161,6 +161,41 @@ def _with_variant(template: dict[str, Any], section: str, record_id: str | None)
     return {**template, "composition": {**template["composition"], key: record_id}}
 
 
+def prompt_source_paths(job_template_id: str) -> tuple[str, ...]:
+    """Every file the assembled prompt for ``job_template_id`` is built from, as paths relative to
+    ``ROOT`` (the form a worker's code fingerprint keys use): the template itself, each declared
+    literal section, the task prompt, and the record of every rendered composition section for the
+    default composition and every ``persona_variants``/``role_variants``/``stage_personas``/
+    ``stage_roles`` entry. A worker adds these to its fingerprint so an edit to any rendered file
+    forces a rerun (the shared governing rules included). Reads the template JSON only; does not
+    validate or render, so it cannot fail on a record the assembler would reject."""
+    template_path = REGISTRY_DIR / "job-templates" / f"{identifier(job_template_id)}.json"
+    template = json.loads(template_path.read_text(encoding="utf-8"))
+    sections = template.get("prompt_sections") or []
+    paths = [template_path]
+    for section in sections:
+        if section in LITERAL_SECTIONS:
+            paths.append(LITERAL_SECTIONS[section][0])
+        elif section == "task" and template.get("task_prompt"):
+            paths.append(ROOT.parent / template["task_prompt"])
+    ids: dict[str, set[str]] = {section: set() for section in RECORD_SECTIONS if section in sections}
+    for section in ids:
+        ids[section].add(template["composition"][RECORD_SECTIONS[section][2]])
+    for section, keys in (("persona", ("persona_variants", "stage_personas")),
+                          ("role", ("role_variants", "stage_roles"))):
+        if section not in ids:
+            continue
+        for key in keys:
+            value = template.get(key) or []
+            for item in (value.values() if isinstance(value, dict) else value):
+                ids[section].update([item] if isinstance(item, str) else item)
+    for section, record_ids in ids.items():
+        directory = RECORD_SECTIONS[section][0]
+        paths += [persona_registry.record_path(REGISTRY_DIR, directory, identifier(record_id))[1]
+                  for record_id in sorted(record_ids)]
+    return tuple(dict.fromkeys(path.resolve().relative_to(ROOT.resolve()).as_posix() for path in paths))
+
+
 def assemble_prompt_text(job_template_id: str, store: SchemaStore | None = None,
                          persona_id: str | None = None, role_id: str | None = None) -> tuple[str, dict]:
     """Pure: resolves the job template and renders every declared section in order. Returns

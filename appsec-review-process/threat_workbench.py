@@ -183,7 +183,9 @@ SCHEMA_FILES = (CELL_SCHEMA, "threat-model-privacy-threat.schema.json", "threat-
 
 
 def code_hashes() -> dict[str, str]:
-    values = {name: file_hash(ROOT / name) for name in CODE_FILES}
+    import persona_prompt_assembly as ppa
+    prompt_files = [path for cell in WORKCELLS for path in ppa.prompt_source_paths(cell.template_id)]
+    values = {name: file_hash(ROOT / name) for name in (*CODE_FILES, *prompt_files)}
     for name in SCHEMA_FILES:
         values[f"schemas/{name}"] = file_hash(ROOT.parent / "schemas" / name)
     return values

@@ -74,6 +74,8 @@ def code_hashes() -> dict[str, str]:
              registry_paths.contract_rel("attack-chain-candidates"),
              registry_paths.template_rel(COMPOSER_TEMPLATE), registry_paths.template_rel(REFUTER_TEMPLATE),
              f"{LANE}/task-{COMPOSER_TEMPLATE}.md", f"{LANE}/task-{REFUTER_TEMPLATE}.md"]
+    paths += [path for template in (COMPOSER_TEMPLATE, REFUTER_TEMPLATE)
+              for path in persona_prompt_assembly.prompt_source_paths(template)]
     values = {path: file_hash(ROOT / path) for path in paths}
     for name in ("attack-chain-seeds.schema.json", "attack-chain-workspace.schema.json",
                  compose.PERSONA_SCHEMA, compose.RECORD_SCHEMA, compose.CANDIDATES_SCHEMA,

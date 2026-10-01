@@ -173,7 +173,7 @@ def gaps_of(value):
 # --- run-level worker -------------------------------------------------------------------------
 
 def _code_hashes():
-    return {name: file_hash(ROOT / name) for name in CODE_FILES} | {
+    return {name: file_hash(ROOT / name) for name in (*CODE_FILES, *ppa.prompt_source_paths(JOB))} | {
         'schemas/build-classification.schema.json': file_hash(ROOT.parent / 'schemas' / 'build-classification.schema.json')}
 
 

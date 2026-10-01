@@ -66,6 +66,7 @@ def _code_hashes() -> dict[str, str]:
              registry_paths.template_rel("intake-review-pool-independent-cell"),
              registry_paths.template_rel("persona-tool-pool-dispatch"),
              registry_paths.contract_rel("persona-tool-pool-dispatch")]
+    names += [path for template in CELL_TEMPLATES for path in persona_prompt_assembly.prompt_source_paths(template)]
     result = {name: file_hash(ROOT / name) for name in names}
     for name in ("persona-tool-pool-dispatch.schema.json", "graph-pool-context.schema.json",
                  "claim-review-pool-candidates.schema.json"):

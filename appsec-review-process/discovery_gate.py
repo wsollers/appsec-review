@@ -539,11 +539,17 @@ def _automatic_partition_inputs(run_id):
         'target_root': str(target_root),
         'source_snapshot_sha256': 'sha256:' + identity['fingerprint'],
         'source_revision': identity.get('revision'),
-        'code': {
-            'discovery_gate.py': file_hash(Path(__file__)),
-            'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
-        },
+        'code': automatic_code(ADOPTED_JOB),
     }
+
+
+def automatic_code(job):
+    """The code fingerprint of an automatic persona dispatch: this path's own modules plus every
+    file the job's assembled prompt is built from (task prompt, persona/role/domain/tooling/contract
+    records, governing rules, buildenv catalog), so an edit to any of them forces a rerun."""
+    return {'discovery_gate.py': file_hash(Path(__file__)),
+            'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
+            **{path: file_hash(ROOT / path) for path in ppa.prompt_source_paths(job)}}
 
 
 def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerprint):
@@ -803,10 +809,7 @@ def _automatic_project_inputs(run_id, job):
         'source_snapshot_sha256': 'sha256:' + identity['fingerprint'],
         'source_revision': identity.get('revision'),
         'upstream': _upstream_record(run_id, job),
-        'code': {
-            'discovery_gate.py': file_hash(Path(__file__)),
-            'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
-        },
+        'code': automatic_code(job),
     }
 
 

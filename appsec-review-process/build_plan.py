@@ -367,7 +367,7 @@ def root(run_id):
 
 
 def _code_hashes():
-    return {name: file_hash(ROOT / name) for name in CODE_FILES} | {
+    return {name: file_hash(ROOT / name) for name in (*CODE_FILES, *ppa.prompt_source_paths(JOB))} | {
         'schemas/build-plan.schema.json': file_hash(ROOT.parent / 'schemas' / 'build-plan.schema.json')}
 
 

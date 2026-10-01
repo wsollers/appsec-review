@@ -57,7 +57,8 @@ def code_hashes() -> dict[str, str]:
              "pool_specification.py", "personas/personas/poc-fix-author/persona.json", "personas/roles/poc-fix-author/role.json",
              "personas/roles/poc-fix-coordinator/role.json", registry_paths.rel(registry_paths.DOMAINS, "poc-and-fix"),
              registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"), registry_paths.contract_rel("poc-fix-candidates"),
-             registry_paths.template_rel(TEMPLATE), f"{LANE}/task-{TEMPLATE}.md"]
+             registry_paths.template_rel(TEMPLATE), f"{LANE}/task-{TEMPLATE}.md",
+             *persona_prompt_assembly.prompt_source_paths(TEMPLATE)]
     values = {path: file_hash(ROOT / path) for path in paths}
     for name in (derive.PERSONA_SCHEMA, derive.RECORD_SCHEMA, derive.CANDIDATES_SCHEMA, derive.WORKSPACE_SCHEMA):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)

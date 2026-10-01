@@ -253,6 +253,6 @@ Out of the queue, noted:
 | item | status | branch / commit | notes |
 |---|---|---|---|
 | Phase 0 decisions | D1-D3 accepted (2026-10-01): `personas-unused/` sibling, rewritten personas become hand-authored, 01 gets its own persona. D4-D6 open | | |
-| Phase 0 fingerprints + guardrail tests | open | | |
+| Phase 0 fingerprints + guardrail tests | done | this commit | `persona_prompt_assembly.prompt_source_paths` added to all 20 dispatched templates' worker fingerprints (`discovery_gate.automatic_code`). `prompt_lint.py` holds the dispatch map (`DISPATCHED`/`NOT_DISPATCHED`), the structure check and the repetition finder (`python3 -B appsec-review-process/prompt_lint.py report`). Tests: `test_prompt_fingerprint_completeness` (fails for all 20 without the worker changes), `test_task_prompt_structure` (`PENDING` = all 20; shrink per item), `test_prompt_repetition` (`MIGRATED` empty; add per item). Repetition threshold 0.6 (overlap coefficient) reproduces the audit's 01 clusters. |
 | Phase U move | done | this commit | 19 personas + `final-publication-custodian` to `appsec-review-process/personas-unused/`; catalog sections to `docs/personas-and-registry/persona-catalog-unused.md`; `CATEGORY_OVERRIDE` keys removed. All 140 prompt renders byte-identical before/after; `catalog_personas.py check` ok, `generate` writes nothing; persona/claim-review/tool-pool tests pass; design-parity and job-catalog checks exit 0. `qa-negative-test-designer` still held (section 3.2). Proposal YAML `lineage:` mentions left as history. |
 | R01 … R18 | open | | |

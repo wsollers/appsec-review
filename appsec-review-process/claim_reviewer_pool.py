@@ -197,7 +197,8 @@ def _code_hashes() -> dict[str, str]:
              registry_paths.contract_rel("claim-review-pool-candidates"),
              "personas/personas/claim-reviewer/persona.json", "personas/roles/claim-reviewer/role.json",
              registry_paths.rel(registry_paths.DOMAINS, "claim-review-lifecycle"),
-             registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"), "claim-review-pool-task.md"]
+             registry_paths.rel(registry_paths.TOOLING_PROFILES, "claim-review-static"), "claim-review-pool-task.md",
+             *persona_prompt_assembly.prompt_source_paths(TEMPLATE)]
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")

@@ -92,7 +92,7 @@ def _target(run_id: str) -> tuple[Path, dict[str, Any]]:
 
 
 def _code_hashes() -> dict[str, str]:
-    values = {name: file_hash(ROOT / name) for name in CODE_FILES}
+    values = {name: file_hash(ROOT / name) for name in (*CODE_FILES, *ppa.prompt_source_paths(TEMPLATE))}
     values["schemas/component-purpose-map.schema.json"] = file_hash(
         SCHEMAS / "component-purpose-map.schema.json")
     for name in INTEL_MANIFEST_SCHEMAS:

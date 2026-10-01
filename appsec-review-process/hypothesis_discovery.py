@@ -114,6 +114,7 @@ def _code_hashes() -> dict[str, str]:
         paths += [registry_paths.template_rel(template), f"personas/personas/{derive.MODES[mode]}/persona.json",
                   f"07-red-team-adversarial/task-{template}.md"]
     paths += [f"07-red-team-adversarial/{name}" for name in sorted({n for v in GUIDE_FILES.values() for n in v})]
+    paths += [path for template in TEMPLATES.values() for path in persona_prompt_assembly.prompt_source_paths(template)]
     values = {path: file_hash(ROOT / path) for path in paths}
     for name in (RESULT_SCHEMA, derive.PERSONA_SCHEMA, derive.CANDIDATES_SCHEMA, derive.RECORD_SCHEMA):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
