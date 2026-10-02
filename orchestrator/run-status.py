@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Print one line per job partition of a run: latest attempt status and accepted status.
 
-    python3 orchestrator/run-status.py <run-id> [--failed]
+    python3 orchestrator/run-status.py [<run-id>] [--failed]
+
+Without a run id it reports the newest run (run ids start with a UTC timestamp).
 """
 import json
 import sys
@@ -31,10 +33,18 @@ def status_of(attempt: Path):
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print(__doc__); return 2
-    run_id, failed_only = sys.argv[1], "--failed" in sys.argv
-    jobs = REPO / "appsec-review-process" / "runs" / run_id / "data" / "jobs"
+    runs = REPO / "appsec-review-process" / "runs"
+    named = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    failed_only = "--failed" in sys.argv
+    if named:
+        run_id = named[0]
+    else:
+        existing = sorted(p.name for p in runs.iterdir() if (p / "data" / "jobs").is_dir()) if runs.is_dir() else []
+        if not existing:
+            print(__doc__); return 2
+        run_id = existing[-1]
+        print(f"run {run_id} (newest)")
+    jobs = runs / run_id / "data" / "jobs"
     if not jobs.is_dir():
         print(f"no jobs directory: {jobs}"); return 2
     counts = {}

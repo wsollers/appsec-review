@@ -43,7 +43,7 @@ the run id; then:
 python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
 ```
 
-`python3 orchestrator/run-status.py <run-id> [--failed]` lists every job's latest status and cause.
+`python3 orchestrator/run-status.py [<run-id>] [--failed]` lists every job's latest status and cause (the newest run when no id is given).
 When Dagster reports FAILURE but no job shows FAILED/BLOCKED, `python3 orchestrator/dagster-failures.py
 orchestrator/dagster/.host/launch-<run-id>.log` prints each failed step's underlying error.
 
