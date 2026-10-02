@@ -37,7 +37,7 @@
 # Windows: scripts/system-acceptance-test.ps1 runs this inside WSL.
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SAT_ROOT="$REPO/appsec-review-process/logs/system-acceptance"
 CONTRACT_PY="$REPO/scripts/sat_contract.py"
 CL="$REPO/orchestrator/dagster/code-location.sh"

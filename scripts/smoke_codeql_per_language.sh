@@ -16,7 +16,7 @@
 #   scripts/smoke_codeql_per_language.sh python java
 set -uo pipefail
 
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 image=${CODEQL_IMAGE:-audit-codeql:local}
 langs=("$@")
 [ ${#langs[@]} -gt 0 ] || langs=(java csharp javascript python go)

@@ -7,7 +7,7 @@
 # them and `git stash pop` restores them. Ignored paths (scratch/, images/.build-state/, downloads/)
 # are left alone. Works on the clone this script lives in; set APPSEC_REPO to sync another one.
 set -euo pipefail
-REPO=${APPSEC_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+REPO=${APPSEC_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}
 BRANCH=${1:-main}
 cd "$REPO"
 

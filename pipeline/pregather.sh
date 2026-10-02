@@ -18,7 +18,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --msvc) MSVC=$2; shift 2;; --compile-db) CDB=$2; shift 2;; --codeql) DO_CODEQL=1; shift;; --csa) DO_CSA=1; shift;;
   *) echo "unknown arg $1"; exit 2;; esac; done
 [ -n "$TARGET" ] && [ -n "$SCRATCH" ] && [ -n "$PROJECT" ] || { echo "--target, --scratch, --project required"; exit 2; }
-HERE=$(cd "$(dirname "$0")/.." && pwd); RUN="$HERE/images/audit-native/run.sh"
+HERE=$(cd "$(dirname "$0")/.." && pwd -P); RUN="$HERE/images/audit-native/run.sh"
 mkdir -p "$SCRATCH"; LOG="$SCRATCH/pregather.log"; exec > >(tee -a "$LOG") 2>&1
 step() { echo; echo "#### [$1] $(date +%T)"; }
 R() { "$RUN" "$TARGET" "$MSVC" "$SCRATCH" -- "$@"; }

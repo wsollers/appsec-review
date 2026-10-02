@@ -4,7 +4,7 @@
 # read-only repo at /workspace). Pass image ids to limit the set. The older initialize-only probe
 # (lsp-smoke.py) is still used by Run-LspSmoke.ps1.
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 IMAGES=("$@")
 [ ${#IMAGES[@]} -gt 0 ] || IMAGES=(audit-buildenv-cpp audit-buildenv-cpp-resolute audit-buildenv-dotnet
   audit-buildenv-go audit-buildenv-java audit-buildenv-php audit-buildenv-python audit-buildenv-rust

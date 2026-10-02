@@ -4,8 +4,8 @@
 #   SOURCE_ROOT=../hello-autotools bash pipeline/report/render-in-docker.sh   # snippets from a checkout
 #   ENGINE=lualatex SKIP_BUILD=1 bash pipeline/report/render-in-docker.sh      # pdf (default) | lualatex | xelatex
 set -euo pipefail
-here="$(cd "$(dirname "$0")" && pwd)"
-repo="$(cd "$here/../.." && pwd)"
+here="$(cd "$(dirname "$0")" && pwd -P)"
+repo="$(cd "$here/../.." && pwd -P)"
 image="${IMAGE:-audit-report:local}"
 data="${1:-examples/hello-autotools.review.json}"
 case "$data" in /*) data_path="$data" ;; *) data_path="$here/$data" ;; esac
@@ -23,7 +23,7 @@ run=(docker run --rm --network none --read-only --tmpfs /tmp:rw,exec,size=512m
      -v "$here:/report:ro" -v "$data_path:/input/review.json:ro" -v "$here/build:/out" -w /out)
 extra=()
 if [ -n "${SOURCE_ROOT:-}" ]; then
-  run+=(-v "$(cd "$SOURCE_ROOT" && pwd):/source:ro")
+  run+=(-v "$(cd "$SOURCE_ROOT" && pwd -P):/source:ro")
   extra+=(--source-root /source)
 fi
 

@@ -18,8 +18,8 @@
 # invoking user: run data are written by the host user directly, not through a container mount.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO="$(cd "$HERE/../.." && pwd -P)"
 PORT=4000   # fixed: workspace.yaml names this port
 BIND="${APPSEC_GRPC_BIND:-}"   # resolved below: WSL NAT -> the distro's own IP, else 0.0.0.0
 VENV="${APPSEC_VENV:-$HOME/.venvs/appsec-review-dagster}"

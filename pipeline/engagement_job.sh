@@ -78,12 +78,12 @@ done
 
 [[ -n "$PROJECT" && -n "$TARGET" && -n "$OUT" ]] || { usage; exit 2; }
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 if [[ -n "$RUN_ID" ]]; then
   python3 -B "$ROOT/appsec-review-process/phase1.py" pipeline-out --reserve --run-id "$RUN_ID" --attempt-id "$ATTEMPT_ID" --out "$(realpath -m "$OUT")"
 fi
 TARGET=$(realpath "$TARGET")
-OUT=$(mkdir -p "$OUT" && cd "$OUT" && pwd)
+OUT=$(mkdir -p "$OUT" && cd "$OUT" && pwd -P)
 STATIC_EVIDENCE="$OUT/static-evidence"
 NATIVE_SCRATCH="$OUT/native-scratch"
 LLM_DIR="$OUT/llm"

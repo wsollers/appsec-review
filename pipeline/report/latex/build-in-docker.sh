@@ -4,8 +4,8 @@
 #   bash pipeline/report/latex/build-in-docker.sh design-doc.tex  # one document
 #   ENGINE=lualatex SKIP_BUILD=1 bash pipeline/report/latex/build-in-docker.sh
 set -euo pipefail
-here="$(cd "$(dirname "$0")" && pwd)"
-repo="$(cd "$here/../../.." && pwd)"
+here="$(cd "$(dirname "$0")" && pwd -P)"
+repo="$(cd "$here/../../.." && pwd -P)"
 image="${IMAGE:-audit-report:local}"
 engine="${ENGINE:-pdf}"
 out="$here/../build/latex"

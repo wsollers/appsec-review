@@ -19,7 +19,7 @@ set -uo pipefail
 
 if [ "${1:-}" = "--docker" ]; then
   image=${2:?usage: $0 --docker IMAGE_ID}
-  repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
   mkdir -p "$repo/scratch/lsp-smoke/$image"
   exec bash "$repo/images/audit-buildenv-common/run.sh" "$image:local" "$repo" "$repo/scratch/lsp-smoke/$image" -- \
     bash /workspace/scripts/smoke_lang_servers.sh "$image"

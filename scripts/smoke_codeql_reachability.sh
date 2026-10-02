@@ -12,7 +12,7 @@
 # exit status 1 if any check FAILs. Logs: scratch/codeql-reachability-smoke/<lang>/step-NN.log.
 set -uo pipefail
 
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 image=${CODEQL_IMAGE:-audit-codeql:local}
 langs=("$@")
 [ ${#langs[@]} -gt 0 ] || langs=(go java csharp javascript python)

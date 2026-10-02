@@ -18,7 +18,7 @@ set -uo pipefail
 
 if [ "${1:-}" = "--docker" ]; then
   image=${2:?usage: $0 --docker IMAGE_ID}
-  repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
   scratch="$repo/scratch/reverse-smoke/$image"
   mkdir -p "$scratch"
   tag=${SMOKE_IMAGE_TAG:-$image:local}

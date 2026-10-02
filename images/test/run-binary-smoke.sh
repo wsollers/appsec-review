@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 RUNNER="$REPO_ROOT/images/audit-buildenv-common/run.sh"
 SCRATCH="$REPO_ROOT/scratch/buildenv-smoke/binary"
 

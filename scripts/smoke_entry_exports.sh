@@ -20,7 +20,7 @@
 # Images: BUILD_IMAGE (default audit-buildenv-cpp:local), BINARY_IMAGE (default audit-binary-analysis:local).
 set -uo pipefail
 
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 build_image=${BUILD_IMAGE:-audit-buildenv-cpp:local}
 binary_image=${BINARY_IMAGE:-audit-binary-analysis:local}
 out="$repo/scratch/entry-exports-smoke"
