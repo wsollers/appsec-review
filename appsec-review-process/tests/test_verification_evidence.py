@@ -118,6 +118,16 @@ class DeriveTests(unittest.TestCase):
         self.assertIn("not a verification-evidence item", " ".join(caught.exception.details))
 
 
+class TaskExampleTests(unittest.TestCase):
+    def test_the_task_prompt_09_example_derives_and_verifies(self):
+        text = (ROOT / "claim-review-pool-task.md").read_text(encoding="utf-8")
+        block = text.split("## Example", 1)[1].split("```json\n")[3].split("\n```", 1)[0]
+        document, notes = DeriveTests.run09(None, json.loads(block))
+        self.assertEqual(notes, [])
+        decisions = decisions_of(document)
+        self.assertEqual((decisions[A]["disposition"], decisions[B]["disposition"]), ("VERIFIED", "UNRESOLVED"))
+
+
 class ReportTests(unittest.TestCase):
     def test_certainty_flows_through_l08_and_renders(self):
         import claim_lifecycle_core as core

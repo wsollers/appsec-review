@@ -13,22 +13,17 @@
   "category": "verifier",
   "display_name": "Standards Mapping Auditor",
   "must_not": [
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
+    "assert a CWE, ASVS or other mapping the cited evidence does not support"
   ],
   "outputs": [
-    "evidence-bound observations within this persona's focus (catalog lists no specific outputs)"
+    "disposition, method and proof-obligation status for each reviewed item, with the evidence items it rests on"
   ],
   "persona_id": "standards-mapping-auditor",
   "primary_failure_mode_caught": "Validates CWE, ASVS, MASVS, NIST, ATT&CK, CIS, DISA, and RFC mappings.",
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership.",
-    "reviewed": false,
-    "source": "docs/personas-and-registry/persona-catalog.md#standards-mapping-auditor"
-  },
   "required_inputs": [
-    "accepted upstream artifacts and cited evidence for the assigned surface (catalog lists no specific inputs)"
+    "09 review shard with its upstream, red and blue citations",
+    "supporting-evidence menu",
+    "verification evidence"
   ],
   "schema": "appsec-review/persona/0.1"
 }

@@ -20,6 +20,7 @@ this task names your stage, your role and the exact decision fields that stage t
 | `stage-upstream:<file>` | your shard: the newest accepted upstream document, restricted to your claims | the stage's array (`candidates` at 07, `hypotheses` at 08, `reviews` at 09, `verifications` at 12); each record has `claim_id`, `hypothesis`, `citations[]` (`citation_id`, `producer_job_id`, `locator_json`, `observed_fact`), `proof_obligations[]` (`obligation_id`, `statement`), and the earlier stages' fields | the claims to decide and the only citation and obligation ids you may use |
 | `evidence-menu:supporting-evidence-menu.json` | the run's accepted non-finding evidence | `items[]` (producer job, description, `status`, `files[]` with exact `ref`), `profiles` (item order per claim kind), `claims[]` (each claim's profile and cited `path:line`) | open it first, then read the first items of each claim's profile |
 | `supporting-evidence:<job>/attempts/<attempt>/<file>` | every menu file marked `pinned: true` | as each file | evidence to read while judging a claim |
+| `verification-evidence:verification-evidence.json` | 09 only: Python's verification evidence for your claims | `claims[]` (`claim_id`, `items[]`: `item_id`, `kind` (`call_graph_reachability` or `dependency_reachability`), `state` (`REACHABLE`, `UNREACHABLE`, `UNKNOWN`), `basis`, `reason`, `witness`) | the independent evidence a 09 verdict may rest on; cite items by `item_id` |
 
 Read large inputs with the `appsec-inputs` tools, index-first: `input_jq` for JSON and JSON Lines (IR
 facts, code property graph, debug symbols, SAST artifacts), `input_read` for numbered lines you
@@ -50,6 +51,7 @@ assertion. Do not write them.
 | `disposition` | 08, 09 | 08: `REFUTED`, `SURVIVING` or `UNRESOLVED`. 09: `VERIFIED`, `REFUTED`, `UNRESOLVED` or `BLOCKED` | the stage's set and consistency with the obligations (repair loop) |
 | `rationale` | 08, 12 | why | required at those stages (repair loop) |
 | `method` | 09 | how you checked | required at 09 (repair loop) |
+| `evidence_ids` | 09 | verification-evidence `item_id`s of this claim that the verdict rests on; Python turns each into a citation `verification-<item_id>` that obligations may cite | each id must be an item of this claim (repair loop) |
 | `proof_obligations` | 08, 09 | every upstream `obligation_id` with `status` (`OPEN`, `SATISFIED`, `FAILED`, `UNRESOLVED`) and its `citation_ids` | every obligation answered once (repair loop) |
 | `factors` | 12 | `impact`, `exploitability`, `exposure`, `confidence`, each 0..4, for a VERIFIED claim; `null` otherwise | enum (schema); null for non-VERIFIED claims (repair loop) |
 | `cvss_v4`, `remediation` | 12 | VERIFIED claims only: the eleven CVSS v4.0 base metrics with one justification each; `{objective, patch_proposal}` | enums (schema); Python computes the vector, score and severity |
@@ -72,7 +74,11 @@ assertion. Do not write them.
    | the attacker case holds and no cited control stops it | `SURVIVING` | every obligation `SATISFIED` |
    | the evidence cannot settle it | `UNRESOLVED` | at least one `UNRESOLVED` |
 
-6. Keep what you cannot settle explicit: an `UNRESOLVED` or `BLOCKED` disposition, an `UNRESOLVED`
+6. At 09, read the claim's cited locations and its verification-evidence items, independently of the
+   red- and blue-team conclusions. Cite the items your verdict rests on in `evidence_ids`. VERIFIED
+   needs every obligation `SATISFIED` and a cited `REACHABLE` item; with `UNKNOWN` or `UNREACHABLE`
+   reachability the claim stays `UNRESOLVED`, and `method` says why.
+7. Keep what you cannot settle explicit: an `UNRESOLVED` or `BLOCKED` disposition, an `UNRESOLVED`
    obligation, or an omitted optional field.
 
 ## Rules
@@ -84,8 +90,12 @@ assertion. Do not write them.
 - 08 and 09: answer every upstream proof obligation. `REFUTED` needs a `FAILED` obligation,
   `SURVIVING` needs every obligation `SATISFIED`, and `UNRESOLVED` or `BLOCKED` keeps an `UNRESOLVED`
   obligation. Enforced by: repair loop (the stage's `claim_lifecycle_core` rules).
-- 09: `VERIFIED` needs every obligation `SATISFIED` and new independent evidence, which this
-  invocation cannot supply, so never write `VERIFIED`. Enforced by: repair loop.
+- 09: `VERIFIED` needs every obligation `SATISFIED` and at least one cited `REACHABLE`
+  verification-evidence item (a call path to a code finding, or a reachable vulnerable function for a
+  dependency). A SAST finding alone never verifies a claim. A claim refuted at 08 cannot become
+  `VERIFIED`. Enforced by: repair loop, and again when the 09 results are merged.
+- 09: judge from the claim's cited locations and the evidence, not from the red- or blue-team
+  conclusion. Enforced by: not checked; reviewers rely on it.
 - 12: factors, CVSS metrics and remediation only for `VERIFIED` claims. Do not write a vector,
   score, severity or reachability: Python computes severity, and a `Critical` severity needs a
   `REACHABLE` verdict from the code property graph (`UNKNOWN` and `UNREACHABLE` cap at `High`).
@@ -158,6 +168,57 @@ whether the route exists in deployed code").
    "rationale": "The only evidence is a document describing the route; nothing cited shows whether deployed code registers it, so neither a control nor its absence can be credited.",
    "citation_ids": [
     "citation-b"
+   ],
+   "proof_obligations": [
+    {
+     "obligation_id": "po-b",
+     "status": "UNRESOLVED",
+     "citation_ids": [
+      "citation-b"
+     ]
+    }
+   ]
+  }
+ ]
+}
+```
+
+A stage-09 reply for the same two claims after stage 08 (`claim-aaaaaaaaaaaaaaaaaaaaaaaa` SURVIVING, `claim-bbbbbbbbbbbbbbbbbbbbbbbb` UNRESOLVED). The
+verification evidence holds `ve-aaaaaaaaaaaaaaaaaaaaaaaa` (`REACHABLE`: a call path from `main()`) for `claim-aaaaaaaaaaaaaaaaaaaaaaaa` and `ve-bbbbbbbbbbbbbbbbbbbbbbbb`
+(`UNKNOWN`: no code property graph) for `claim-bbbbbbbbbbbbbbbbbbbbbbbb`.
+
+```json
+{
+ "decisions": [
+  {
+   "claim_id": "claim-aaaaaaaaaaaaaaaaaaaaaaaa",
+   "disposition": "VERIFIED",
+   "method": "Read the cited flow and the parser entry; the verification evidence shows a call path from main() to the parser, so attacker bytes reach it.",
+   "citation_ids": [
+    "citation-a"
+   ],
+   "evidence_ids": [
+    "ve-aaaaaaaaaaaaaaaaaaaaaaaa"
+   ],
+   "proof_obligations": [
+    {
+     "obligation_id": "po-a",
+     "status": "SATISFIED",
+     "citation_ids": [
+      "verification-ve-aaaaaaaaaaaaaaaaaaaaaaaa"
+     ]
+    }
+   ]
+  },
+  {
+   "claim_id": "claim-bbbbbbbbbbbbbbbbbbbbbbbb",
+   "disposition": "UNRESOLVED",
+   "method": "The route is only documented and the verification evidence could not decide reachability (no code property graph), so nothing shows deployed code serves it.",
+   "citation_ids": [
+    "citation-b"
+   ],
+   "evidence_ids": [
+    "ve-bbbbbbbbbbbbbbbbbbbbbbbb"
    ],
    "proof_obligations": [
     {
