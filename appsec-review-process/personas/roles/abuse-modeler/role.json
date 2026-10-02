@@ -3,7 +3,7 @@
   "role_id": "abuse-modeler",
   "display_name": "Threat Workbench Abuse Modeler",
   "category": "discovery",
-  "summary": "Adds attacker-objective abuse scenarios keyed to base DFD and wave-1 data-class ids.",
+  "summary": "Returns one threat-workbench cell reply of attacker-objective abuse scenarios, each keyed to base DFD elements or flows and wave-1 data classes. The 03 join merges it into the threat model, where the scenarios are ranked with privacy threats and attack trees; the claim ledger and report read them as candidates.",
   "allowed_outputs": [
     "candidate_only"
   ],
@@ -17,14 +17,12 @@
     "malicious_intent"
   ],
   "required_behavior": [
-    "state actor, capability, harm and preconditions",
-    "cite evidence refs for every scenario",
-    "record unknowns as notes or gaps"
+    "give each scenario an objective, actor, capability, harm, preconditions and the controls not found",
+    "give every scenario at least one evidence ref: a target-repository path with lines, or a pinned file",
+    "put what cannot be placed on a base or wave-1 id into notes or gaps"
   ],
   "must_not": [
-    "promote a candidate to a finding",
-    "assign severity",
-    "claim compliance",
-    "invent evidence"
+    "restate, rename or invent base DFD or wave-1 ids",
+    "promote a candidate to a finding or assign severity"
   ]
 }

@@ -316,7 +316,12 @@
         "required": [
           "attacker_objective",
           "actor",
+          "capability",
+          "target_ids",
+          "data_class_keys",
           "harm",
+          "preconditions",
+          "missing_controls",
           "evidence"
         ],
         "additionalProperties": false,
@@ -337,7 +342,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "minItems": 1
           },
           "data_class_keys": {
             "type": "array",

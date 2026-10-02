@@ -19,7 +19,6 @@ from schema_validate import SchemaStore
 
 # docs/prompt-persona-role-alignment-plan-2026-10-01.md, section 5 work queue.
 PENDING = frozenset({
-    "threat-workbench-abuse-scenario-analyst",                                    # R08
     "threat-workbench-attack-tree-builder", "threat-workbench-supply-chain-specialist",     # R09
     "hypothesis-hunt-general", "hypothesis-hunt-known-list",                      # R10
     "claim-review-pool-cell",                                                     # R11-R14

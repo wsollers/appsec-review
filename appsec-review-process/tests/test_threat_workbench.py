@@ -80,8 +80,8 @@ def replies(base):
         "abuse-scenario-analyst": {
             "summary": "abuse",
             "abuse_scenarios": [{"attacker_objective": "Harvest user emails", "actor": "remote user",
-                                 "capability": "network access", "target_ids": [flow, "user-email"],
-                                 "harm": "privacy loss", "preconditions": ["reachable"],
+                                 "capability": "network access", "target_ids": [flow], "data_class_keys": ["user-email"],
+                                 "harm": "privacy loss", "preconditions": ["reachable"], "missing_controls": [],
                                  "evidence": [f"{tw.ASSEMBLY_ROOT}:outputs/sbom.cdx.json"], "confidence": "medium"}]},
         "attack-tree-builder": {
             "summary": "trees",
@@ -165,8 +165,9 @@ class JoinTests(unittest.TestCase):
         import claim_ledger
         replies_ = deepcopy(self.replies)
         replies_["abuse-scenario-analyst"]["abuse_scenarios"].append(
-            {"attacker_objective": "x", "actor": "y", "harm": "this is not a verified finding yet",
-             "evidence": [SOURCE_FILE]})
+            {"attacker_objective": "x", "actor": "y", "capability": "z", "target_ids": ["element-missing"],
+             "data_class_keys": [], "harm": "this is not a verified finding yet", "preconditions": [],
+             "missing_controls": [], "evidence": [SOURCE_FILE]})
         replies_["pii-user-data-mapper"]["gaps"].append({"statement": "see the final report"})
         model = tw.join(self.base, self.record, replies_)
         self.assertEqual(len(model["abuse_scenarios"]), 1)
@@ -515,7 +516,7 @@ class CellPromptExampleTests(unittest.TestCase):
 
     def test_the_task_prompt_examples_are_the_sample_replies(self):
         samples = json.loads(self.SAMPLES.read_text(encoding="utf-8"))
-        for cell in ("pii-user-data-mapper", "deployment-topology-mapper"):
+        for cell in ("pii-user-data-mapper", "deployment-topology-mapper", "abuse-scenario-analyst"):
             with self.subTest(cell=cell):
                 text = (ROOT / f"03-threat-model-dfd-stride/cells/{cell}.md").read_text(encoding="utf-8")
                 example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
@@ -528,6 +529,26 @@ class CellPromptExampleTests(unittest.TestCase):
         self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
         del reply["deployment_zones"][0]["evidence"]
         self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
+
+    def test_an_abuse_scenario_needs_targets_capability_preconditions_and_missing_controls(self):
+        samples = json.loads(self.SAMPLES.read_text(encoding="utf-8"))
+        for field in ("capability", "target_ids", "data_class_keys", "preconditions", "missing_controls"):
+            with self.subTest(field=field):
+                reply = deepcopy(samples["abuse-scenario-analyst"])
+                del reply["abuse_scenarios"][0][field]
+                self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
+        reply = deepcopy(samples["abuse-scenario-analyst"])
+        reply["abuse_scenarios"][0]["target_ids"] = []
+        self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
+
+    def test_the_abuse_example_resolves_every_id_in_the_sample_join(self):
+        sys.path.insert(0, str(ROOT.parent / "pipeline/report"))
+        import sample_data
+        model, _ = sample_data.workbench_model()
+        abuse = model["abuse_scenarios"][0]
+        self.assertEqual((abuse["target_element_ids"], abuse["target_data_class_ids"]),
+                         (["element-hello-cli"], ["data-cli-name"]))
+        self.assertFalse([gap for gap in model["gaps"] if gap["originating_workcell_id"] == "abuse-scenario-analyst"])
 
 
 if __name__ == "__main__":

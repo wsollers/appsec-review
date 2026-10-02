@@ -38,7 +38,7 @@
     "summary": "A local user controls argv and the --report path.",
     "abuse_scenarios": [
       {"attacker_objective": "Corrupt memory through an oversized greeting name", "actor": "local user",
-       "capability": "controls argv", "target_ids": ["element-hello-cli", "cli-name"],
+       "capability": "controls argv", "target_ids": ["element-hello-cli"], "data_class_keys": ["data-cli-name"],
        "harm": "process memory corruption", "preconditions": ["the binary is invoked with an attacker-chosen name"],
        "missing_controls": ["length check before the copy"],
        "evidence": ["target-repository:src/greet.cpp:18"], "confidence": "medium"}
