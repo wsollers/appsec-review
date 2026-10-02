@@ -3,6 +3,15 @@
 ```json
 {
   "assumptions": {
+    "evidence_to_check": [
+      "OpenAPI/Swagger specs",
+      "route inventory",
+      "Postman/Bruno collections",
+      "source handlers/controllers",
+      "API gateway config",
+      "route-to-authz coverage",
+      "API schema drift"
+    ],
     "looks_for": [
       "undocumented parameters",
       "method confusion",
@@ -18,29 +27,16 @@
   "category": "attacker",
   "display_name": "API Contract Abuser",
   "must_not": [
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
+    "treat API documentation as proof of how a route behaves"
   ],
   "outputs": [
-    "API abuse candidates",
-    "route-to-authz coverage gaps",
-    "schema drift findings",
-    "suggested verification requests"
+    "attacker_case for each reviewed item"
   ],
   "persona_id": "api-contract-abuser",
   "primary_failure_mode_caught": "Attacks mismatches between API documentation, route behavior, validation, and authorization.",
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership.",
-    "reviewed": false,
-    "source": "docs/personas-and-registry/persona-catalog.md#api-contract-abuser"
-  },
   "required_inputs": [
-    "OpenAPI/Swagger specs",
-    "route inventory",
-    "Postman/Bruno collections",
-    "source handlers/controllers",
-    "API gateway config"
+    "07 review shard and its upstream citations",
+    "supporting-evidence menu"
   ],
   "schema": "appsec-review/persona/0.1"
 }

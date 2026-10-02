@@ -56,11 +56,11 @@ CITABLE = {"07-red-team-adversarial": ("citations",),
 # Model-facing decision fields per stage: (required, optional).
 PERSONA_FIELDS = {
     "07-red-team-adversarial": ({"claim_id", "attacker_case", "citation_ids"},
-                                {"dissent_ids", "cwe", "attack_refs", "capec_refs"}),
+                                {"cwe", "attack_refs", "capec_refs"}),
     "08-blue-team-refutation": ({"claim_id", "disposition", "rationale", "proof_obligations",
-                                 "citation_ids"}, {"dissent_ids"}),
+                                 "citation_ids"}, set()),
     "09-independent-verification": ({"claim_id", "disposition", "method", "proof_obligations",
-                                     "citation_ids"}, {"dissent_ids", "cwe"}),
+                                     "citation_ids"}, {"cwe"}),
     "12-scoring-prioritization": ({"claim_id", "factors", "rationale"}, {"cwe", "cvss_v4", "remediation"}),
 }
 ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool specification."
@@ -70,8 +70,10 @@ ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool sp
 # only the citation ids a legacy echo names are read. Hand-written, not built with contract_derive,
 # because claim_reviewer_pool.py (which would list that module) is also hashed by the intake
 # persona-tool pool; tests/test_contract_derive.py fails when a schema-derived field is missing here.
+# `dissent_ids` is one too: the ledger carries the threat-workbench challenge ids it was admitted with, and
+# a reviewer has no list of valid ids to add from, so a model-written value is ignored (alignment plan R11).
 _ORCHESTRATOR_KEYS = frozenset({"reviewer", "verifier", "citations", "statement", "candidate_id", "subject_id",
-                                "claim_class", "evidence_sha256", "assertion"})
+                                "claim_class", "evidence_sha256", "assertion", "dissent_ids"})
 _OBLIGATION_KEYS = frozenset({"citations", "statement"})
 _CORE = {"07-red-team-adversarial": core.red_team, "08-blue-team-refutation": core.blue_team,
          "09-independent-verification": core.verify, "12-scoring-prioritization": core.score}
@@ -314,7 +316,7 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
         if obligations is not None:
             decision["proof_obligations"] = obligations
         decision["citations"] = [citable[x] for x in order if x in set(cited)]
-        decision["dissent_ids"] = sorted(set(row.get("dissent_ids") or []))
+        decision["dissent_ids"] = []   # upstream dissent is merged by claim_lifecycle_core, never model-written
         decisions[claim_id] = decision
     if errors:
         raise InvokerOutputError(f"reviewer decisions do not resolve against the upstream claims: "

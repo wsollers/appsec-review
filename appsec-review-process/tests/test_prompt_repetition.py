@@ -28,7 +28,10 @@ MIGRATED: frozenset[str] = frozenset({"01-component-characterization",   # R01
                                      "threat-workbench-abuse-scenario-analyst",   # R08
                                      "threat-workbench-attack-tree-builder",
                                      "threat-workbench-supply-chain-specialist",   # R09
-                                     "hypothesis-hunt-general", "hypothesis-hunt-known-list"})   # R10
+                                     "hypothesis-hunt-general", "hypothesis-hunt-known-list",   # R10
+                                     "claim-review-pool-cell"})   # R11 (default composition; stage renders below)
+# Claim-review stages migrated so far: every stage persona is checked with the stage role (R11-R14).
+MIGRATED_STAGES = ("07-red-team-adversarial",)
 
 
 class RepetitionTests(unittest.TestCase):
@@ -38,6 +41,16 @@ class RepetitionTests(unittest.TestCase):
             with self.subTest(template=template_id):
                 clusters = prompt_lint.repetition(template_id, store=store)
                 self.assertEqual([cluster["clauses"][0][1] for cluster in clusters], [])
+
+    def test_migrated_claim_review_stages_state_each_requirement_once(self):
+        store = SchemaStore()
+        template = prompt_lint.load_template("claim-review-pool-cell")
+        for stage in MIGRATED_STAGES:
+            for persona_id in template["stage_personas"][stage]:
+                with self.subTest(stage=stage, persona=persona_id):
+                    clusters = prompt_lint.repetition("claim-review-pool-cell", persona_id=persona_id,
+                                                      role_id=template["stage_roles"][stage], store=store)
+                    self.assertEqual([cluster["clauses"][0][1] for cluster in clusters], [])
 
     def test_the_check_runs_on_every_dispatched_template(self):
         store = SchemaStore()

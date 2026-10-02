@@ -14,21 +14,15 @@
     "compliance_verdict"
   ],
   "must_not": [
-    "silently omit claims",
-    "weaken independence",
-    "invent evidence",
-    "mutate the target",
     "decide claims outside its own shard"
   ],
   "required_behavior": [
-    "retain exact claim identities",
-    "reuse only upstream citations",
-    "keep unresolved proof obligations explicit",
-    "emit closed JSON decisions",
-    "state an attacker case for every claim, citing only the claim's own upstream citations"
+    "write one decision per claim in the shard, keyed by its unchanged claim_id",
+    "give each decision an attacker_case and the citation_ids of the claim's own citations it rests on",
+    "add cwe, attack_refs or capec_refs only when the cited evidence supports them"
   ],
   "role_id": "red-team-adversary",
   "schema": "appsec-review/role/0.1",
-  "summary": "Produce one evidence-bounded adversarial hypothesis for every accepted upstream claim in its shard."
+  "summary": "At stage 07, reads one shard of the claim ledger's candidates and writes, for every claim, the attacker case: who the attacker is, what they control and how they would use the claim, resting on that claim's own upstream citations. The decisions become the hypotheses in red-team-adversarial.json that stage 08 tries to refute."
 }
 ```

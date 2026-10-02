@@ -6,5 +6,5 @@
   "required_status_fields": [],
   "result_schema": {"artifact": "candidates.json", "schema_file": "claim-review-pool-candidates.schema.json"},
   "claim_class": {"claim_class_id": "verification_observation", "allowed_assertions": ["candidate-only", "refutation", "verification-observation"], "forbidden_promotions": ["finding", "severity", "runtime-state"]},
-  "validation_rules": ["one decision per accepted upstream claim", "assertion is a closed JSON decision validated by the stage coordinator", "citations resolve only through the accepted upstream artifact"]
+  "validation_rules": ["the orchestrator, not the model, writes candidate ids, reviewer identity, citation objects and the assertion", "every citation is an id from the accepted upstream record"]
 }

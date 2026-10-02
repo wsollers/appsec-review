@@ -16,26 +16,23 @@
       "workload identity escalation",
       "broad egress that enables callback/exfiltration",
       "internet-facing resources not reflected in the threat model"
+    ],
+    "evidence_to_check": [
+      "Terraform/CloudFormation/Kubernetes/IaC",
+      "Checkov/Trivy/tfsec/KICS outputs",
+      "cloud architecture docs",
+      "network exposure model"
     ]
   },
   "required_inputs": [
-    "Terraform/CloudFormation/Kubernetes/IaC",
-    "Checkov/Trivy/tfsec/KICS outputs",
-    "cloud architecture docs",
-    "network exposure model"
+    "07 review shard and its upstream citations",
+    "supporting-evidence menu"
   ],
   "outputs": [
-    "evidence-bound observations within this persona's focus (catalog lists no specific outputs)"
+    "attacker_case for each reviewed item"
   ],
   "must_not": [
-    "fail to distinguish declared exposure from observed runtime exposure",
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
+    "treat declared cloud exposure as observed runtime exposure"
   ],
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "source": "docs/personas-and-registry/persona-catalog.md#cloud-initial-access-operator",
-    "reviewed": false,
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership."
-  }
+  "provenance": {}
 }

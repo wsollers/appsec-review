@@ -68,13 +68,35 @@ def decisions_of(document):
     return {c["subject_id"]: json.loads(c["assertion"]) for c in document["candidates"]}
 
 
+class TaskPromptExampleTests(unittest.TestCase):
+    def test_the_task_prompt_example_derives_cleanly_at_07(self):
+        text = (ROOT / "claim-review-pool-task.md").read_text(encoding="utf-8")
+        example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
+        document, notes = run(RED, example)
+        self.assertEqual(notes, [])
+        self.assertEqual(sorted(decisions_of(document)), [A, B])
+        self.assertEqual(decisions_of(document)[A]["cwe"]["cwe_id"], "CWE-20")
+
+
+class DissentTests(unittest.TestCase):
+    def test_model_written_dissent_is_ignored_and_upstream_dissent_survives(self):
+        reply = {"decisions": [{"claim_id": c, "attacker_case": "x", "citation_ids": [cid], "dissent_ids": ["made-up"]}
+                               for c, cid in ((A, "citation-a"), (B, "citation-b"))]}
+        document, _notes = run(RED, reply)
+        for decision in decisions_of(document).values():
+            self.assertEqual(decision["dissent_ids"], [])
+        red = core.red_team(upstream(RED), binding(), {"decisions": list(decisions_of(document).values())})
+        by_id = {row["claim_id"]: row for row in red["hypotheses"]}
+        self.assertEqual(by_id[A]["dissent_ids"], ["dissent-a"])   # the ledger's own dissent is kept
+
+
 class RedTeamDeriveTests(unittest.TestCase):
     def test_bare_ids_without_identity_become_full_strict_decisions(self):
         reply = {"decisions": [
             {"claim_id": B, "attacker_case": "Crafted header overflows the parser.",
              "citation_ids": ["citation-b", "citation-b"]},
             {"claim_id": A, "attacker_case": "Attacker bytes reach the parser.",
-             "citation_ids": ["citation-a"], "dissent_ids": ["d-2", "d-1", "d-2"]}]}
+             "citation_ids": ["citation-a"], "dissent_ids": ["d-2", "d-1", "d-2"]}]}   # ignored (R11)
         document, notes = run(RED, reply)
         self.assertEqual(notes, [])
         self.assertEqual(validate_document(document, "claim-review-pool-candidates.schema.json"), [])
@@ -93,7 +115,7 @@ class RedTeamDeriveTests(unittest.TestCase):
             "permission_receipt_path": f"requests/{REQUEST['attempt_id']}.json",
             "permission_receipt_sha256": REQUEST_SHA, "reason": derive.ACTOR_REASON})
         self.assertEqual(decision["citations"], record["citations"])
-        self.assertEqual(decision["dissent_ids"], ["d-1", "d-2"])
+        self.assertEqual(decision["dissent_ids"], [])   # never model-written; upstream dissent merges in core
         self.assertEqual(len(decisions_of(document)[B]["citations"]), 1)
         # the unchanged merge-side checks accept it
         for value in decisions_of(document).values():

@@ -16,29 +16,26 @@
       "object-level authorization gaps",
       "response overexposure",
       "inconsistent validation between clients and server"
+    ],
+    "evidence_to_check": [
+      "OpenAPI/Swagger specs",
+      "route inventory",
+      "Postman/Bruno collections",
+      "source handlers/controllers",
+      "API gateway config",
+      "route-to-authz coverage",
+      "API schema drift"
     ]
   },
   "required_inputs": [
-    "OpenAPI/Swagger specs",
-    "route inventory",
-    "Postman/Bruno collections",
-    "source handlers/controllers",
-    "API gateway config"
+    "07 review shard and its upstream citations",
+    "supporting-evidence menu"
   ],
   "outputs": [
-    "API abuse candidates",
-    "route-to-authz coverage gaps",
-    "schema drift findings",
-    "suggested verification requests"
+    "attacker_case for each reviewed item"
   ],
   "must_not": [
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
+    "treat API documentation as proof of how a route behaves"
   ],
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "source": "docs/personas-and-registry/persona-catalog.md#api-contract-abuser",
-    "reviewed": false,
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership."
-  }
+  "provenance": {}
 }

@@ -37,7 +37,6 @@
               }
             }
           },
-          "dissent_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
           "factors": {
             "type": ["object", "null"],
             "additionalProperties": false,
