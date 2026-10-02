@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 83 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 84 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/pipeline/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -163,7 +163,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 83-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 84-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -232,6 +232,7 @@ graph job.
 | `03-threat-model-reconciliation` | Implemented not qualified (see the generated readiness view) | Present |
 | `07-hypothesis-discovery` | Implemented not qualified (see the generated readiness view) | Present |
 | `claim-ledger-routing` | Implemented not qualified (see the generated readiness view) | Present |
+| `claim-ledger-decisions` | Implemented not qualified (see the generated readiness view; ADR-0034) | Present |
 | `02-codeql-cpp` | Implemented not qualified (see the generated readiness view; ADR-0023) | Present |
 | `02-codeql-csharp` | Implemented not qualified (see the generated readiness view; ADR-0023) | Present |
 | `02-codeql-go` | Implemented not qualified (see the generated readiness view; ADR-0023) | Present |

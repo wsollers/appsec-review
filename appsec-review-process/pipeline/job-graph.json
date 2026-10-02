@@ -1001,6 +1001,47 @@
         }
       ]
     },
+    "claim-ledger-decisions": {
+      "lane": "09-independent-verification",
+      "contract": "claim-ledger-decisions",
+      "template": "claim-ledger-decisions",
+      "implemented": true,
+      "namespace": "claim-ledger-decisions",
+      "dependencies": [
+        {
+          "job": "claim-ledger-routing",
+          "kind": "required",
+          "contract": "claim-ledger-core",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "07-red-team-adversarial",
+          "kind": "required",
+          "contract": "07-red-team-adversarial",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "08-blue-team-refutation",
+          "kind": "required",
+          "contract": "08-blue-team-refutation",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "09-independent-verification",
+          "kind": "required",
+          "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Append the accepted 07, 08 and 09 claim decisions to the routing ledger as authorized status transitions (ADR-0034 V1); the report reads this ledger.",
+      "required_artifacts": [
+        "claim-decision-ledger.json",
+        "claim-ledger-decisions-summary.md",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
     "11-remediation-proposal": {
       "lane": "11-remediation-proposal",
       "contract": "11-remediation-proposal",
@@ -1180,6 +1221,12 @@
           "job": "09-independent-verification",
           "kind": "required",
           "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "claim-ledger-decisions",
+          "kind": "required",
+          "contract": "claim-ledger-decisions",
           "allowed_skip_reasons": []
         },
         {

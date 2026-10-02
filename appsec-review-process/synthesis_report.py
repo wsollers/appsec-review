@@ -35,7 +35,7 @@ EXPECTED = {
     "component":("01-component-characterization","component-map","component-purpose-map.json"),
     "threat":("03-threat-model-dfd-stride","threat-model-core","integrated-threat-model.json"),
     "owasp":("04-owasp-join-report","owasp-join-report","owasp-control-status-matrix.json"),
-    "ledger":("claim-ledger-routing","claim-ledger-core","claim-decision-ledger.json"),
+    "ledger":("claim-ledger-decisions","claim-ledger-decisions","claim-decision-ledger.json"),
     "verification":("09-independent-verification","09-independent-verification","independent-verification.json"),
     "scoring":("12-scoring-prioritization","12-scoring-prioritization","scoring-prioritization.json")}
 SCHEMAS = {"component": "component-purpose-map.schema.json", "threat": "integrated-threat-model.schema.json",

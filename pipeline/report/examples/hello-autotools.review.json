@@ -7,7 +7,7 @@
     "engagement": "SAMPLE - hello-autotools fixture (illustrative)",
     "run_id": "sample-hello-autotools",
     "sat_id": "20260927T141440Z",
-    "pipeline_commit": "sample; job-graph.json sha256:d1dd81ac70ce (83 jobs)",
+    "pipeline_commit": "sample; job-graph.json sha256:80b43abbb48f (84 jobs)",
     "report_date": "2026-09-29",
     "classification": "Internal - sample",
     "native_tier": "A",
@@ -55,7 +55,7 @@
       "06-cve-reachability": 3,
       "07-red-team-adversarial": 5,
       "08-blue-team-refutation": 1,
-      "09-independent-verification": 2,
+      "09-independent-verification": 3,
       "10-synthesis-report": 4,
       "11-remediation-proposal": 2,
       "12-scoring-prioritization": 1,
@@ -122,7 +122,7 @@
     {
       "id": "09-independent-verification",
       "name": "Lane 09: independent verification",
-      "note": "2 job(s) whose job-graph.json lane is 09-independent-verification."
+      "note": "3 job(s) whose job-graph.json lane is 09-independent-verification."
     },
     {
       "id": "10-synthesis-report",
@@ -714,6 +714,13 @@
       "evidence": [
         "E-040"
       ]
+    },
+    {
+      "id": "claim-ledger-decisions",
+      "family": "09-independent-verification",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "hash-linked-claim-ledger (claim_ledger_decisions.py:run)"
     },
     {
       "id": "evidence-qualified-quorum",

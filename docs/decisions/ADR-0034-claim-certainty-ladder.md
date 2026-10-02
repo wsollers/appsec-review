@@ -67,3 +67,12 @@ Investigating this showed three more gaps on the same path (code read 2026-10-02
   - Certainty published on 09 records and shown in the report.
   - Report assembly accepts the 09 judgment keys (`cwe_judgment`, `mitre_refs`).
 - **R13 and R14** then describe the stages as built.
+
+## Progress
+
+- **V1 done (2026-10-02).**
+  - The claim-review merge restamps stage actors with the accepted attempt id.
+  - The new job `claim-ledger-decisions` appends the 07/08/09 decisions to the routing ledger.
+  - Report assembly and synthesis read that ledger.
+  - The ledger may move `refuted` → `unresolved` (09 cannot confirm an 08 refutation); `refuted` → `verified` stays impossible.
+  - Not yet run on a live target.

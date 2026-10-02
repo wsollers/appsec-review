@@ -29,7 +29,8 @@ SPECS = {
               "owasp-control-status-matrix.schema.json",
               (("owasp-coverage-gaps.json", "owasp-coverage-gaps-report.schema.json"),
                ("owasp-candidate-promotion-routes.json", "owasp-candidate-promotion-routes.schema.json"))),
-    "ledger": ("claim-ledger-routing", "claim-ledger-core", "claim-decision-ledger.json",
+    # The ledger after the 07/08/09 status decisions (ADR-0034 V1), not the routing ledger 07 reviewed.
+    "ledger": ("claim-ledger-decisions", "claim-ledger-decisions", "claim-decision-ledger.json",
                "claim-decision-ledger.schema.json", ()),
     "verification": ("09-independent-verification", "09-independent-verification",
                      "independent-verification.json", "09-independent-verification.schema.json", ()),
@@ -42,6 +43,7 @@ CANONICAL_PERMISSIONS = {
     "03-threat-model-dfd-stride": ["read-source", "read-run-data", "write-run-data"],
     "04-owasp-join-report": ["read-run-data", "write-run-data"],
     "claim-ledger-routing": ["read-run-data", "write-run-data"],
+    "claim-ledger-decisions": ["read-run-data", "write-run-data"],
     "07-red-team-adversarial": ["read-run-data", "write-run-data"],
     "08-blue-team-refutation": ["read-run-data", "write-run-data"],
     "09-independent-verification": ["read-run-data", "write-run-data"],
@@ -216,14 +218,14 @@ def _validate_ledger(ledger: dict[str, Any]) -> dict[str, dict[str, Any]]:
               "runtime_claimed": False, "compliance_claimed": False}
     if (not isinstance(ledger, dict) or set(ledger) != keys or
             ledger.get("schema") != "appsec-review/claim-decision-ledger/1.0" or
-            ledger.get("job_id") != "claim-ledger-routing" or ledger.get("claim_limits") != limits or
+            ledger.get("job_id") != SPECS["ledger"][0] or ledger.get("claim_limits") != limits or
             not isinstance(ledger.get("entries"), list) or not ledger["entries"]):
         raise Blocked(f"{JOB}: claim ledger shape or claim ceiling is invalid")
     transitions = {"candidate": {"under_review", "unresolved", "superseded"},
         "under_review": {"narrowed", "verified", "refuted", "unresolved", "superseded"},
         "narrowed": {"under_review", "verified", "refuted", "unresolved", "superseded"},
         "unresolved": {"under_review", "verified", "refuted", "narrowed", "superseded"},
-        "verified": {"superseded"}, "refuted": {"superseded"}, "superseded": set()}
+        "verified": {"superseded"}, "refuted": {"unresolved", "superseded"}, "superseded": set()}
     previous, latest, events = None, {}, set()
     for sequence, entry in enumerate(ledger["entries"]):
         if (not isinstance(entry, dict) or entry.get("sequence") != sequence or
@@ -476,10 +478,11 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
                 record.get("component_generation") != component_generation):
             raise Blocked(f"{JOB}: verification generation is stale")
         ledger_status = latest[claim_id]["status"]
-        expected_status = {"verified": "VERIFIED", "refuted": "REFUTED",
-                           "unresolved": "UNRESOLVED", "narrowed": "BLOCKED",
-                           "under_review": "BLOCKED", "candidate": "BLOCKED"}.get(ledger_status)
-        if expected_status is None or record.get("status") != expected_status:
+        # claim_ledger.DECISION_PRODUCERS maps 09 BLOCKED to the ledger status unresolved.
+        expected_status = {"verified": {"VERIFIED"}, "refuted": {"REFUTED"},
+                           "unresolved": {"UNRESOLVED", "BLOCKED"}, "narrowed": {"BLOCKED"},
+                           "under_review": {"BLOCKED"}, "candidate": {"BLOCKED"}}.get(ledger_status)
+        if expected_status is None or record.get("status") not in expected_status:
             raise Blocked(f"{JOB}: verification status contradicts the ledger")
         for citation in record.get("verification_citations", []):
             identity = _artifact_identity(citation)

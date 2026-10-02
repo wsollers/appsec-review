@@ -210,17 +210,54 @@ def _cwe_judged(decisions: dict[str, Any]) -> bool:
     return any(isinstance(row, dict) and "cwe" in row for row in decisions["decisions"])
 
 
+ACTOR_FIELDS = {"07-red-team-adversarial": "reviewer", "08-blue-team-refutation": "reviewer",
+                "09-independent-verification": "verifier"}
+
+
+def _stamped(stage: str, decisions: dict[str, Any], attempt_id: str) -> dict[str, Any]:
+    """The pool decisions with each stage actor's attempt id set to this accepted stage attempt.
+
+    The pool derive names the reviewer by its pool instance; the ledger accepts a status decision only
+    from the stage's accepted attempt (claim_ledger.load_decision), so the published actor is this
+    attempt (ADR-0034 V1). The actor's request path and hash still name the pool request it came from.
+    Evidence the actor itself produced (citations under its own job and old attempt) moves with it."""
+    field = ACTOR_FIELDS.get(stage)
+    if field is None or not isinstance(decisions.get("decisions"), list):
+        return decisions
+
+    def stamp(row: Any) -> Any:
+        if not isinstance(row, dict) or not isinstance(row.get(field), dict):
+            return row
+        own = (row[field].get("job_id"), row[field].get("attempt_id"))
+        def moved(items: Any) -> Any:
+            return [{**item, "producer_attempt_id": attempt_id}
+                    if isinstance(item, dict) and (item.get("producer_job_id"), item.get("producer_attempt_id")) == own
+                    else item for item in items] if isinstance(items, list) else items
+
+        stamped = {**row, field: {**row[field], "attempt_id": attempt_id}}
+        if "citations" in row:
+            stamped["citations"] = moved(row["citations"])
+        if isinstance(row.get("proof_obligations"), list):
+            stamped["proof_obligations"] = [{**item, "citations": moved(item.get("citations"))}
+                                            if isinstance(item, dict) and "citations" in item else item
+                                            for item in row["proof_obligations"]]
+        return stamped
+
+    return {**decisions, "decisions": [stamp(row) for row in decisions["decisions"]]}
+
+
 def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
     stage = inputs["stage"]
+    decisions = _stamped(stage, inputs["decisions"], attempt_id)
     function = {"07-red-team-adversarial": core.red_team,
                 "08-blue-team-refutation": core.blue_team,
                 "09-independent-verification": core.verify,
                 "12-scoring-prioritization": core.score}[stage]
     extra = {"cwe_binding": inputs["cwe_catalog"]} if "cwe_catalog" in inputs else {}
     if "mitre_reference" in inputs:
-        return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"],
+        return function(inputs["upstream"], inputs["upstream_binding"], decisions,
                         inputs["mitre_reference"], **extra)
-    return function(inputs["upstream"], inputs["upstream_binding"], inputs["decisions"], **extra)
+    return function(inputs["upstream"], inputs["upstream_binding"], decisions, **extra)
 
 
 def _receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

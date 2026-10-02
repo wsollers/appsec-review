@@ -176,6 +176,13 @@ flowchart TD
   09_independent_verification --> 09_independent_verification_post["09-independent-verification: post-validation and publish"]
   07_red_team_adversarial_post -->|required| 09_independent_verification_config
   08_blue_team_refutation_post -->|required| 09_independent_verification_config
+  claim_ledger_decisions_config["claim-ledger-decisions: resolve job configuration"] --> claim_ledger_decisions_pre["claim-ledger-decisions: pre-validation"]
+  claim_ledger_decisions_pre --> claim_ledger_decisions["claim-ledger-decisions: work or reuse"]
+  claim_ledger_decisions --> claim_ledger_decisions_post["claim-ledger-decisions: post-validation and publish"]
+  claim_ledger_routing_post -->|required| claim_ledger_decisions_config
+  07_red_team_adversarial_post -->|required| claim_ledger_decisions_config
+  08_blue_team_refutation_post -->|required| claim_ledger_decisions_config
+  09_independent_verification_post -->|required| claim_ledger_decisions_config
   11_remediation_proposal_config["11-remediation-proposal: resolve job configuration"] --> 11_remediation_proposal_pre["11-remediation-proposal: pre-validation"]
   11_remediation_proposal_pre --> 11_remediation_proposal["11-remediation-proposal: work or reuse"]
   11_remediation_proposal --> 11_remediation_proposal_post["11-remediation-proposal: post-validation and publish"]
@@ -210,6 +217,7 @@ flowchart TD
   07_red_team_adversarial_post -->|required| 10_synthesis_report_config
   08_blue_team_refutation_post -->|required| 10_synthesis_report_config
   09_independent_verification_post -->|required| 10_synthesis_report_config
+  claim_ledger_decisions_post -->|required| 10_synthesis_report_config
   12_scoring_prioritization_post -->|required| 10_synthesis_report_config
   06_cve_reachability_post -->|required| 10_synthesis_report_config
   14_attack_chain_refutation_post -->|optional| 10_synthesis_report_config

@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 83,
+  "lifecycle_jobs": 84,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2521,6 +2521,24 @@
        ]
       },
       {
+       "ref": "job:claim-ledger-decisions",
+       "id": "claim-ledger-decisions",
+       "name": "Claim Ledger Stage Decisions",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:claim-ledger-routing",
+        "job:07-red-team-adversarial",
+        "job:08-blue-team-refutation",
+        "job:09-independent-verification"
+       ],
+       "produces": [
+        "job:claim-ledger-decisions"
+       ],
+       "declared_inputs": [
+        "accepted claim-ledger-routing ledger"
+       ]
+      },
+      {
        "ref": "job:evidence-qualified-quorum",
        "id": "evidence-qualified-quorum",
        "name": "Evidence Qualified Quorum",
@@ -2647,6 +2665,7 @@
         "job:07-red-team-adversarial",
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
+        "job:claim-ledger-decisions",
         "job:12-scoring-prioritization",
         "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
@@ -2763,6 +2782,7 @@
        "job:deterministic-pool-merge",
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
+       "job:claim-ledger-decisions",
        "job:evidence-qualified-quorum",
        "job:11-remediation-proposal",
        "job:remediation-retest-feedback",
@@ -2786,6 +2806,7 @@
        "accepted complete blue-team persona/tool-pool merge when hypotheses exist",
        "accepted blue-team result",
        "accepted complete verifier persona/tool-pool merge when reviews exist",
+       "accepted claim-ledger-routing ledger",
        "current accepted deterministic merge reference",
        "current accepted independent verification",
        "current accepted native build environment",
@@ -2928,6 +2949,7 @@
      "job:deterministic-pool-merge",
      "job:08-blue-team-refutation",
      "job:09-independent-verification",
+     "job:claim-ledger-decisions",
      "job:evidence-qualified-quorum",
      "job:11-remediation-proposal",
      "job:remediation-retest-feedback",
@@ -3057,6 +3079,7 @@
      "accepted complete blue-team persona/tool-pool merge when hypotheses exist",
      "accepted blue-team result",
      "accepted complete verifier persona/tool-pool merge when reviews exist",
+     "accepted claim-ledger-routing ledger",
      "current accepted deterministic merge reference",
      "current accepted independent verification",
      "current accepted native build environment",
@@ -5555,6 +5578,24 @@
        ]
       },
       {
+       "ref": "job:claim-ledger-decisions",
+       "id": "claim-ledger-decisions",
+       "name": "Claim Ledger Stage Decisions",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:claim-ledger-routing",
+        "job:07-red-team-adversarial",
+        "job:08-blue-team-refutation",
+        "job:09-independent-verification"
+       ],
+       "produces": [
+        "job:claim-ledger-decisions"
+       ],
+       "declared_inputs": [
+        "accepted claim-ledger-routing ledger"
+       ]
+      },
+      {
        "ref": "job:evidence-qualified-quorum",
        "id": "evidence-qualified-quorum",
        "name": "Evidence Qualified Quorum",
@@ -5574,16 +5615,20 @@
       "enters": [
        "job:07-red-team-adversarial",
        "job:08-blue-team-refutation",
+       "job:claim-ledger-routing",
        "job:deterministic-pool-merge"
       ],
       "leaves": [
-       "job:09-independent-verification",
+       "job:claim-ledger-decisions",
        "job:evidence-qualified-quorum"
       ],
-      "passes": [],
+      "passes": [
+       "job:09-independent-verification"
+      ],
       "declared_inputs": [
        "accepted blue-team result",
        "accepted complete verifier persona/tool-pool merge when reviews exist",
+       "accepted claim-ledger-routing ledger",
        "current accepted deterministic merge reference"
       ]
      }
@@ -5785,6 +5830,7 @@
         "job:07-red-team-adversarial",
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
+        "job:claim-ledger-decisions",
         "job:12-scoring-prioritization",
         "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
@@ -5869,6 +5915,7 @@
        "job:07-red-team-adversarial",
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
+       "job:claim-ledger-decisions",
        "job:12-scoring-prioritization",
        "job:06-cve-reachability",
        "job:14-attack-chain-refutation",
@@ -5986,6 +6033,7 @@
      "job:deterministic-pool-merge",
      "job:08-blue-team-refutation",
      "job:09-independent-verification",
+     "job:claim-ledger-decisions",
      "job:evidence-qualified-quorum",
      "job:11-remediation-proposal",
      "job:remediation-retest-feedback",
@@ -6119,6 +6167,7 @@
      "accepted complete blue-team persona/tool-pool merge when hypotheses exist",
      "accepted blue-team result",
      "accepted complete verifier persona/tool-pool merge when reviews exist",
+     "accepted claim-ledger-routing ledger",
      "current accepted deterministic merge reference",
      "current accepted independent verification",
      "current accepted native build environment",
@@ -9554,6 +9603,82 @@
    ]
   },
   {
+   "id": "claim-ledger-decisions",
+   "lane": "09-independent-verification",
+   "name": "Claim Ledger Stage Decisions",
+   "contract": "claim-ledger-decisions",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_ledger_decisions.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "claim-ledger-custodian",
+    "domain_id": "claim-ledger-lifecycle",
+    "tooling_profile_id": "hash-linked-claim-ledger",
+    "output_contract_id": "claim-ledger-decisions"
+   },
+   "depends_on": [
+    {
+     "job": "claim-ledger-routing",
+     "kind": "required",
+     "contract": "claim-ledger-core"
+    },
+    {
+     "job": "07-red-team-adversarial",
+     "kind": "required",
+     "contract": "07-red-team-adversarial"
+    },
+    {
+     "job": "08-blue-team-refutation",
+     "kind": "required",
+     "contract": "08-blue-team-refutation"
+    },
+    {
+     "job": "09-independent-verification",
+     "kind": "required",
+     "contract": "09-independent-verification"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted claim-ledger-routing ledger"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 07, 08 and 09 stage results (a missing stage is a gap)"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/claim-ledger-decisions.json",
+   "output_dir": "runs/<run_id>/data/jobs/claim-ledger-decisions/",
+   "output_files": [
+    "claim-decision-ledger.json",
+    "claim-ledger-decisions-summary.md",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/claim-ledger-decisions.json",
+   "claim_class": "candidate_claim_ledger",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:claim-ledger-routing",
+    "job:07-red-team-adversarial",
+    "job:08-blue-team-refutation",
+    "job:09-independent-verification"
+   ],
+   "produces": [
+    "job:claim-ledger-decisions"
+   ]
+  },
+  {
    "id": "11-remediation-proposal",
    "lane": "11-remediation-proposal",
    "name": "Evidence-bounded Remediation Proposals",
@@ -9945,6 +10070,11 @@
      "contract": "09-independent-verification"
     },
     {
+     "job": "claim-ledger-decisions",
+     "kind": "required",
+     "contract": "claim-ledger-decisions"
+    },
+    {
      "job": "12-scoring-prioritization",
      "kind": "required",
      "contract": "12-scoring-prioritization"
@@ -10036,6 +10166,7 @@
     "job:07-red-team-adversarial",
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
+    "job:claim-ledger-decisions",
     "job:12-scoring-prioritization",
     "job:06-cve-reachability",
     "job:14-attack-chain-refutation",
@@ -14612,7 +14743,8 @@
     "job:claim-ledger-routing"
    ],
    "consumed_by": [
-    "job:07-red-team-adversarial"
+    "job:07-red-team-adversarial",
+    "job:claim-ledger-decisions"
    ]
   },
   "job:07-red-team-adversarial": {
@@ -14626,6 +14758,7 @@
    "consumed_by": [
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
+    "job:claim-ledger-decisions",
     "job:10-synthesis-report"
    ]
   },
@@ -14639,6 +14772,7 @@
    ],
    "consumed_by": [
     "job:09-independent-verification",
+    "job:claim-ledger-decisions",
     "job:10-synthesis-report"
    ]
   },
@@ -14651,11 +14785,24 @@
     "job:09-independent-verification"
    ],
    "consumed_by": [
+    "job:claim-ledger-decisions",
     "job:11-remediation-proposal",
     "job:12-scoring-prioritization",
     "job:14-attack-chain-composition",
     "job:10-synthesis-report",
     "job:remediation-retest-feedback"
+   ]
+  },
+  "job:claim-ledger-decisions": {
+   "id": "job:claim-ledger-decisions",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/claim-ledger-decisions/",
+   "about": "Accepted claim-ledger-decisions output of claim-ledger-decisions.",
+   "produced_by": [
+    "job:claim-ledger-decisions"
+   ],
+   "consumed_by": [
+    "job:10-synthesis-report"
    ]
   },
   "job:11-remediation-proposal": {

@@ -26,7 +26,7 @@ LEDGER_TRANSITIONS = {
     "under_review": {"narrowed", "verified", "refuted", "unresolved", "superseded"},
     "narrowed": {"under_review", "verified", "refuted", "unresolved", "superseded"},
     "unresolved": {"under_review", "verified", "refuted", "narrowed", "superseded"},
-    "verified": {"superseded"}, "refuted": {"superseded"}, "superseded": set(),
+    "verified": {"superseded"}, "refuted": {"unresolved", "superseded"}, "superseded": set(),
 }
 STAGES = {
     "07-red-team-adversarial": ("claim-ledger-core", "claim-decision-ledger.json", LEDGER_SCHEMA,

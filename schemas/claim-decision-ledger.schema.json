@@ -3,7 +3,7 @@
   "type": "object", "additionalProperties": false,
   "required": ["schema", "run_id", "job_id", "attempt_id", "source_generation", "component_generation", "entries", "head_hash", "claim_states", "claim_limits"],
   "properties": {
-    "schema": {"const": "appsec-review/claim-decision-ledger/1.0"}, "run_id": {"type": "string"}, "job_id": {"const": "claim-ledger-routing"}, "attempt_id": {"type": "string"},
+    "schema": {"const": "appsec-review/claim-decision-ledger/1.0"}, "run_id": {"type": "string"}, "job_id": {"enum": ["claim-ledger-routing", "claim-ledger-decisions"]}, "attempt_id": {"type": "string"},
     "source_generation": {"type": "string"}, "component_generation": {"type": "string"},
     "entries": {"type": "array", "minItems": 1, "items": {"$ref": "claim-ledger-entry.schema.json"}},
     "head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},

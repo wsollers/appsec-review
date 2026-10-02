@@ -28,7 +28,9 @@ TRANSITIONS = {
     "under_review": frozenset({"narrowed", "verified", "refuted", "unresolved", "superseded"}),
     "narrowed": frozenset({"under_review", "verified", "refuted", "unresolved", "superseded"}),
     "unresolved": frozenset({"under_review", "verified", "refuted", "narrowed", "superseded"}),
-    "verified": frozenset({"superseded"}), "refuted": frozenset({"superseded"}), "superseded": frozenset(),
+    "verified": frozenset({"superseded"}),
+    # 09 may reopen an 08 refutation it cannot confirm (ADR-0034: uncertainty is kept, never dropped).
+    "refuted": frozenset({"unresolved", "superseded"}), "superseded": frozenset(),
 }
 AUTHORITY = {
     "07-red-team-adversarial": frozenset({"under_review", "unresolved"}),
@@ -859,7 +861,7 @@ def validate_ledger(value: dict[str, Any]) -> list[str]:
 
 def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, Any]],
                  prior: dict[str, Any] | None = None, decisions: Iterable[dict[str, Any]] = (),
-                 decision_jobs_root: Path | None = None) -> dict[str, Any]:
+                 decision_jobs_root: Path | None = None, job_id: str = JOB) -> dict[str, Any]:
     candidates, decisions = list(candidates), list(decisions)
     generations = {(item["source"]["source_generation"], item["source"]["component_generation"])
                    for item in candidates}
@@ -940,7 +942,7 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
         entry["entry_hash"] = _entry_hash(entry); entries.append(entry); claims[claim_id] = entry; previous = entry["entry_hash"]
     states = [{"claim_id": key, "latest_event_id": claims[key]["event_id"], "status": claims[key]["status"]}
               for key in sorted(claims)]
-    ledger = {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": run_id, "job_id": JOB,
+    ledger = {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": run_id, "job_id": job_id,
         "attempt_id": attempt_id, "source_generation": source_generation,
         "component_generation": component_generation, "entries": entries, "head_hash": previous,
         "claim_states": states, "claim_limits": {"candidate_only": True, "finding_created": False,

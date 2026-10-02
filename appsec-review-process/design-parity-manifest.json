@@ -380,6 +380,7 @@
           "07-red-team-adversarial",
           "08-blue-team-refutation",
           "09-independent-verification",
+          "claim-ledger-decisions",
           "11-remediation-proposal",
           "12-scoring-prioritization",
           "14-attack-chain-composition",
@@ -2641,6 +2642,72 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "claim-ledger-decisions",
+      "design_refs": [
+        "docs/decisions/ADR-0034-claim-certainty-ladder.md"
+      ],
+      "graph": {
+        "node": "claim-ledger-decisions",
+        "implemented": true,
+        "dependencies": [
+          "claim-ledger-routing",
+          "07-red-team-adversarial",
+          "08-blue-team-refutation",
+          "09-independent-verification"
+        ]
+      },
+      "registry": {
+        "template": "claim-ledger-decisions",
+        "persona": "developer-engineer",
+        "role": "claim-ledger-custodian",
+        "domain": "claim-ledger-lifecycle",
+        "tooling_profile": "hash-linked-claim-ledger",
+        "output_contract": "claim-ledger-decisions"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/claim_ledger_decisions.py:run",
+        "validator": "appsec-review-process/claim_ledger.py:validate_ledger"
+      },
+      "output": {
+        "contract": "claim-ledger-decisions",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/claim-ledger-decisions.json",
+        "schema_file": "schemas/claim-decision-ledger.schema.json",
+        "claim_class": "candidate_claim_ledger"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger_decisions.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
       "id": "11-remediation-proposal",
       "design_refs": [
         "docs/architecture/design-v3.md#161-remediation-validation"
@@ -2989,6 +3056,7 @@
           "07-red-team-adversarial",
           "08-blue-team-refutation",
           "09-independent-verification",
+          "claim-ledger-decisions",
           "12-scoring-prioritization",
           "06-cve-reachability",
           "14-attack-chain-refutation",
@@ -6698,7 +6766,8 @@
       "jobs": [
         "07-red-team-adversarial",
         "08-blue-team-refutation",
-        "09-independent-verification"
+        "09-independent-verification",
+        "claim-ledger-decisions"
       ],
       "execution_mode": "join_controller",
       "readiness": "implemented_not_qualified",

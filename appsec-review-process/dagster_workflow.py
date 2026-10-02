@@ -55,6 +55,7 @@ import operations_doc_ingest as operations_doc_worker
 import standards_source_ingest as standards_source_worker
 import standards_lifecycle
 import claim_ledger
+import claim_ledger_decisions
 import hypothesis_discovery
 import attack_chain_composition
 import attack_chain_refutation
@@ -857,6 +858,25 @@ def claim_ledger_lifecycle_op():
 
 
 claim_ledger_lifecycle_work = claim_ledger_lifecycle_op()
+
+
+def claim_ledger_decisions_lifecycle_op():
+    @op(name='job_claim_ledger_decisions',
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def claim_ledger_decisions_stage(context, configured, upstream):
+        result = claim_ledger_decisions.run(
+            configured['engagement_run_id'], context.run_id,
+            configured.get('force', False))
+        attempt = claim_ledger_decisions.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / claim_ledger_decisions.LEDGER)),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return claim_ledger_decisions_stage
+
+
+claim_ledger_decisions_lifecycle_work = claim_ledger_decisions_lifecycle_op()
 
 
 def hypothesis_discovery_lifecycle_op():
@@ -1792,6 +1812,7 @@ LIFECYCLE_OPS['14-attack-chain-composition']=attack_chain_composition_lifecycle_
 LIFECYCLE_OPS['14-attack-chain-refutation']=attack_chain_refutation_lifecycle_work
 LIFECYCLE_OPS['12b-poc-and-fix']=poc_fix_lifecycle_work
 LIFECYCLE_OPS['claim-ledger-routing']=claim_ledger_lifecycle_work
+LIFECYCLE_OPS['claim-ledger-decisions']=claim_ledger_decisions_lifecycle_work
 LIFECYCLE_OPS['persona-tool-pool-dispatch']=persona_tool_pool_lifecycle_work
 LIFECYCLE_OPS['deterministic-pool-merge']=deterministic_pool_merge_lifecycle_work
 LIFECYCLE_OPS['evidence-qualified-quorum']=evidence_qualified_quorum_lifecycle_work

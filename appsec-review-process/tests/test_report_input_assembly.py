@@ -165,7 +165,7 @@ class ReportInputAssemblyTests(unittest.TestCase):
         entries = [base, review, narrowed, verified]
         head = self._rehash_entries(entries)
         ledger = {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": RUN_ID,
-                  "job_id": "claim-ledger-routing", "attempt_id": "ledger-1",
+                  "job_id": "claim-ledger-decisions", "attempt_id": "ledger-1",
                   "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT,
                   "entries": entries, "head_hash": head,
                   "claim_states": [{"claim_id": CLAIM, "latest_event_id": verified["event_id"], "status": "verified"}],

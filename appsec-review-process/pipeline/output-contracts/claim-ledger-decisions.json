@@ -1,0 +1,42 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "claim-ledger-decisions",
+  "display_name": "Claim Ledger After Stage Decisions",
+  "required_files": [
+    "claim-decision-ledger.json",
+    "claim-ledger-decisions-summary.md",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "claims",
+    "decisions",
+    "ledger_head_hash",
+    "claim_limit"
+  ],
+  "result_schema": {
+    "artifact": "claim-decision-ledger.json",
+    "schema_file": "claim-decision-ledger.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "candidate_claim_ledger",
+    "allowed_assertions": [
+      "candidate-status",
+      "proof-obligation",
+      "dissent"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "the prior is the exact accepted routing ledger",
+    "every status decision is re-derived from the stage's exact accepted attempt",
+    "a missing or stale stage is a gap, never a guessed status"
+  ]
+}

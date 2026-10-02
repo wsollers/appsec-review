@@ -176,7 +176,7 @@ def materialize(run_root: Path, run_id: str) -> dict[str, str]:
     entries = [base, review, narrowed, verified]
     head = _rehash_entries(entries)
     ledger = {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": run_id,
-        "job_id": "claim-ledger-routing", "attempt_id": "ledger-1", "source_generation": SOURCE,
+        "job_id": "claim-ledger-decisions", "attempt_id": "ledger-1", "source_generation": SOURCE,
         "component_generation": COMPONENT_ATTEMPT, "entries": entries, "head_hash": head,
         "claim_states": [{"claim_id": claim, "latest_event_id": verified["event_id"], "status": "verified"}],
         "claim_limits": {"candidate_only": True, "finding_created": False,

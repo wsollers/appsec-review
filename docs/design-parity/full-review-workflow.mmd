@@ -27,6 +27,7 @@ flowchart TD
   j_07_red_team_adversarial["07-red-team-adversarial<br/>implemented_not_qualified"]
   j_08_blue_team_refutation["08-blue-team-refutation<br/>implemented_not_qualified"]
   j_09_independent_verification["09-independent-verification<br/>implemented_not_qualified"]
+  j_claim_ledger_decisions["claim-ledger-decisions<br/>implemented_not_qualified"]
   j_11_remediation_proposal["11-remediation-proposal<br/>implemented_not_qualified"]
   j_12_scoring_prioritization["12-scoring-prioritization<br/>implemented_not_qualified"]
   j_14_attack_chain_composition["14-attack-chain-composition<br/>implemented_not_qualified"]
@@ -179,6 +180,10 @@ flowchart TD
   j_01_component_characterization --> j_08_blue_team_refutation
   j_07_red_team_adversarial --> j_09_independent_verification
   j_08_blue_team_refutation --> j_09_independent_verification
+  j_claim_ledger_routing --> j_claim_ledger_decisions
+  j_07_red_team_adversarial --> j_claim_ledger_decisions
+  j_08_blue_team_refutation --> j_claim_ledger_decisions
+  j_09_independent_verification --> j_claim_ledger_decisions
   j_09_independent_verification --> j_11_remediation_proposal
   j_09_independent_verification --> j_12_scoring_prioritization
   j_15_deployment_hardening --> j_12_scoring_prioritization
@@ -195,6 +200,7 @@ flowchart TD
   j_07_red_team_adversarial --> j_10_synthesis_report
   j_08_blue_team_refutation --> j_10_synthesis_report
   j_09_independent_verification --> j_10_synthesis_report
+  j_claim_ledger_decisions --> j_10_synthesis_report
   j_12_scoring_prioritization --> j_10_synthesis_report
   j_06_cve_reachability --> j_10_synthesis_report
   j_14_attack_chain_refutation --> j_10_synthesis_report

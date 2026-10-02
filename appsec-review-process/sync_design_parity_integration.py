@@ -17,6 +17,8 @@ MANIFEST = ROOT / "design-parity-manifest.json"
 WORKERS = {
     "claim-ledger-routing": ("deterministic_python", "appsec-review-process/claim_ledger.py:run",
                               "appsec-review-process/claim_ledger.py:validate_ledger"),
+    "claim-ledger-decisions": ("deterministic_python", "appsec-review-process/claim_ledger_decisions.py:run",
+                               "appsec-review-process/claim_ledger.py:validate_ledger"),
     "07-hypothesis-discovery": ("pool_coordinator", "appsec-review-process/hypothesis_discovery.py:run",
                                 "appsec-review-process/hypothesis_discovery.py:_validate_attempt"),
     "14-attack-chain-composition": ("pool_coordinator", "appsec-review-process/attack_chain_composition.py:run",
