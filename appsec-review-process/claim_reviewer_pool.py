@@ -93,9 +93,10 @@ def _runtime_instructions(package: Any) -> str:
         rule = ("attacker_case is your adversarial hypothesis for the claim; citation_ids name the "
                 "claim's own upstream citations that support it")
     elif stage == "08-blue-team-refutation":
-        rule = ("answer every upstream proof obligation of the claim by obligation_id with a status "
-                "and the citation_ids it rests on; REFUTED needs a FAILED obligation, SURVIVING needs "
-                "every obligation SATISFIED, UNRESOLVED keeps an UNRESOLVED obligation")
+        rule = ("disposition is REFUTED, SURVIVING or UNRESOLVED; answer every upstream proof obligation of "
+                "the claim by obligation_id with a status and the citation_ids it rests on; REFUTED needs a "
+                "FAILED obligation, SURVIVING needs every obligation SATISFIED, UNRESOLVED keeps an UNRESOLVED "
+                "obligation")
     elif stage == "09-independent-verification":
         rule = ("answer every upstream proof obligation by obligation_id; this invocation has no new "
                 "independent target evidence, so never emit VERIFIED; UNRESOLVED or BLOCKED keeps an "

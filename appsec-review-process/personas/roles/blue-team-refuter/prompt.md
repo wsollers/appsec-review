@@ -14,21 +14,15 @@
     "compliance_verdict"
   ],
   "must_not": [
-    "silently omit claims",
-    "weaken independence",
-    "invent evidence",
-    "mutate the target",
     "decide claims outside its own shard"
   ],
   "required_behavior": [
-    "retain exact claim identities",
-    "reuse only upstream citations",
-    "keep unresolved proof obligations explicit",
-    "emit closed JSON decisions",
-    "answer every upstream proof obligation with a status and the citations it rests on: REFUTED needs a FAILED obligation, SURVIVING needs every obligation SATISFIED"
+    "write one decision per claim in the shard: a disposition, a rationale and every upstream proof obligation with its status",
+    "rest each decision and obligation on citation_ids from the claim's citations or its red-team review_citations",
+    "name the control, prerequisite or path the rationale relies on, and whether it covers every path"
   ],
   "role_id": "blue-team-refuter",
   "schema": "appsec-review/role/0.1",
-  "summary": "Produce one evidence-bounded refutation decision for every accepted upstream claim in its shard."
+  "summary": "At stage 08, tries to refute or narrow every red-team hypothesis in its shard from cited defenses, missing prerequisites and unreachable paths. Each decision answers the claim's proof obligations and sets a disposition, which the ledger records as refuted, narrowed (SURVIVING) or unresolved; stage 09 then reviews every claim in blue-team-refutation.json independently."
 }
 ```

@@ -47,7 +47,7 @@ assertion. Do not write them.
 | `attacker_case` | 07 | who attacks, what they control, how they would use the claim | required at 07 (repair loop) |
 | `cwe` | 07, 09, 12 | `{cwe_id: "CWE-<n>", rationale}` naming the weakness, with one line grounded in the cited evidence | pattern (schema); must be in the CWE catalog (repair loop, re-checked at merge) |
 | `attack_refs`, `capec_refs` | 07 | up to 8 MITRE ATT&CK technique ids or CAPEC ids labelling the attacker case | labels only; unknown or deprecated ids are dropped with a gap |
-| `disposition` | 08, 09 | `REFUTED`, `SURVIVING`, `VERIFIED`, `UNRESOLVED` or `BLOCKED` | enum; consistency with the obligations (repair loop) |
+| `disposition` | 08, 09 | 08: `REFUTED`, `SURVIVING` or `UNRESOLVED`. 09: `VERIFIED`, `REFUTED`, `UNRESOLVED` or `BLOCKED` | the stage's set and consistency with the obligations (repair loop) |
 | `rationale` | 08, 12 | why | required at those stages (repair loop) |
 | `method` | 09 | how you checked | required at 09 (repair loop) |
 | `proof_obligations` | 08, 09 | every upstream `obligation_id` with `status` (`OPEN`, `SATISFIED`, `FAILED`, `UNRESOLVED`) and its `citation_ids` | every obligation answered once (repair loop) |
@@ -62,7 +62,17 @@ assertion. Do not write them.
    listed items for evidence about your claims wherever it leads; never decide a claim that is not in
    your shard.
 4. Write one decision per claim with your stage's fields, citing the claim's own citation ids.
-5. Keep what you cannot settle explicit: an `UNRESOLVED` or `BLOCKED` disposition, an `UNRESOLVED`
+5. At 08, map what you find onto the three dispositions:
+
+   | what the evidence shows | disposition | obligations |
+   |---|---|---|
+   | a cited control, missing prerequisite or unreachable path defeats the attacker case | `REFUTED` | the obligation it defeats is `FAILED` |
+   | the claim does not apply to this target (wrong component, absent code) | `REFUTED` | the obligation the absence answers is `FAILED` |
+   | a cited control covers some paths but not all (partly mitigated) | `SURVIVING`, naming the control and the uncovered path in `rationale` | every obligation `SATISFIED` |
+   | the attacker case holds and no cited control stops it | `SURVIVING` | every obligation `SATISFIED` |
+   | the evidence cannot settle it | `UNRESOLVED` | at least one `UNRESOLVED` |
+
+6. Keep what you cannot settle explicit: an `UNRESOLVED` or `BLOCKED` disposition, an `UNRESOLVED`
    obligation, or an omitted optional field.
 
 ## Rules
@@ -80,6 +90,10 @@ assertion. Do not write them.
   score, severity or reachability: Python computes severity, and a `Critical` severity needs a
   `REACHABLE` verdict from the code property graph (`UNKNOWN` and `UNREACHABLE` cap at `High`).
   Enforced by: schema and repair loop.
+- 08: credit a defense only when you cite it, and say whether it covers every path; never dismiss a
+  scenario because it sounds unlikely or rests on a generous reading of the code. Enforced by: partly;
+  obligation citations must lie inside the decision's citations (repair loop), but coverage and
+  likelihood reasoning are not checked; reviewers rely on it.
 - Fill an optional field only when the evidence supports it; an omitted field is better than a
   guess. Enforced by: not checked; reviewers rely on it.
 
@@ -108,6 +122,51 @@ parser; citation `citation-a`) and `claim-bbbbbbbbbbbbbbbbbbbbbbbb` (a document 
    "attacker_case": "An unauthenticated user who finds the documented administrative route calls it directly; whether a control stops them depends on code the citation does not show.",
    "citation_ids": [
     "citation-b"
+   ]
+  }
+ ]
+}
+```
+
+A stage-08 reply for the same two claims after stage 07 (each now carries red-team `review_citations`
+and one OPEN obligation: `po-a` "Show attacker-controlled bytes reach the parser", `po-b` "Resolve
+whether the route exists in deployed code").
+
+```json
+{
+ "decisions": [
+  {
+   "claim_id": "claim-aaaaaaaaaaaaaaaaaaaaaaaa",
+   "disposition": "SURVIVING",
+   "rationale": "The modeled flow carries client bytes straight to the parser and no validating control is cited on that path, so the obligation holds and nothing narrows the claim.",
+   "citation_ids": [
+    "citation-a"
+   ],
+   "proof_obligations": [
+    {
+     "obligation_id": "po-a",
+     "status": "SATISFIED",
+     "citation_ids": [
+      "citation-a"
+     ]
+    }
+   ]
+  },
+  {
+   "claim_id": "claim-bbbbbbbbbbbbbbbbbbbbbbbb",
+   "disposition": "UNRESOLVED",
+   "rationale": "The only evidence is a document describing the route; nothing cited shows whether deployed code registers it, so neither a control nor its absence can be credited.",
+   "citation_ids": [
+    "citation-b"
+   ],
+   "proof_obligations": [
+    {
+     "obligation_id": "po-b",
+     "status": "UNRESOLVED",
+     "citation_ids": [
+      "citation-b"
+     ]
+    }
    ]
   }
  ]

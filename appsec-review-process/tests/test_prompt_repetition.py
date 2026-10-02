@@ -31,7 +31,7 @@ MIGRATED: frozenset[str] = frozenset({"01-component-characterization",   # R01
                                      "hypothesis-hunt-general", "hypothesis-hunt-known-list",   # R10
                                      "claim-review-pool-cell"})   # R11 (default composition; stage renders below)
 # Claim-review stages migrated so far: every stage persona is checked with the stage role (R11-R14).
-MIGRATED_STAGES = ("07-red-team-adversarial",)
+MIGRATED_STAGES = ("07-red-team-adversarial", "08-blue-team-refutation")
 
 
 class RepetitionTests(unittest.TestCase):

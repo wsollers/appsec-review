@@ -78,6 +78,25 @@ class TaskPromptExampleTests(unittest.TestCase):
         self.assertEqual(decisions_of(document)[A]["cwe"]["cwe_id"], "CWE-20")
 
 
+    def test_the_task_prompt_08_example_derives_cleanly(self):
+        text = (ROOT / "claim-review-pool-task.md").read_text(encoding="utf-8")
+        block = text.split("## Example", 1)[1].split("```json\n")[2].split("\n```", 1)[0]
+        document, notes = run(BLUE, json.loads(block))
+        self.assertEqual(notes, [])
+        self.assertEqual({k: v["disposition"] for k, v in decisions_of(document).items()},
+                         {A: "SURVIVING", B: "UNRESOLVED"})
+
+    def test_a_disposition_outside_the_stage_set_goes_back_with_the_allowed_set(self):
+        hypotheses = upstream(BLUE)["hypotheses"]
+        reply = {"decisions": [{"claim_id": h["claim_id"], "disposition": "VERIFIED", "rationale": "x",
+                                "citation_ids": [h["citations"][0]["citation_id"]],
+                                "proof_obligations": [{"obligation_id": o["obligation_id"], "status": "SATISFIED"}
+                                                      for o in h["proof_obligations"]]} for h in hypotheses]}
+        with self.assertRaises(InvokerOutputError) as caught:
+            run(BLUE, reply)
+        self.assertIn("use one of ['REFUTED', 'SURVIVING', 'UNRESOLVED']", caught.exception.details[0])
+
+
 class DissentTests(unittest.TestCase):
     def test_model_written_dissent_is_ignored_and_upstream_dissent_survives(self):
         reply = {"decisions": [{"claim_id": c, "attacker_case": "x", "citation_ids": [cid], "dissent_ids": ["made-up"]}

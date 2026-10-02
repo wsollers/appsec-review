@@ -63,6 +63,10 @@ PERSONA_FIELDS = {
                                      "citation_ids"}, {"cwe"}),
     "12-scoring-prioritization": ({"claim_id", "factors", "rationale"}, {"cwe", "cvss_v4", "remediation"}),
 }
+# The dispositions each stage's result schema admits (the persona schema lists the union). A disposition
+# outside the stage's set used to fail later as "normalized decision output fails its closed schema".
+DISPOSITIONS = {"08-blue-team-refutation": ("REFUTED", "SURVIVING", "UNRESOLVED"),
+                "09-independent-verification": ("VERIFIED", "REFUTED", "UNRESOLVED", "BLOCKED")}
 ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool specification."
 # Orchestrator-owned keys a model may still echo out of habit; they are ignored, never trusted.
 # Candidate-wrapper bookkeeping, plus every field the decision schema declares where the persona schema
@@ -228,6 +232,10 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
             continue
         if claim_id not in records:
             errors.append(f"{where}: claim_id {claim_id!r} is not an upstream claim")
+            continue
+        if stage in DISPOSITIONS and row["disposition"] not in DISPOSITIONS[stage]:
+            errors.append(f"{where} ({claim_id}): disposition {row['disposition']} is not used at {stage}; "
+                          f"use one of {list(DISPOSITIONS[stage])}")
             continue
         if claim_id in by_claim:
             if by_claim[claim_id] == row:
