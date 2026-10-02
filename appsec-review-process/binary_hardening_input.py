@@ -89,10 +89,12 @@ def _expected(run_id: str) -> tuple[Path, dict[str, Any], dict[str, Any]]:
     return attempt, manifest, pointer
 
 
-def stage(run_id: str) -> Path:
-    """Return an immutable run-owned directory containing accepted native binaries only."""
+def stage(run_id: str, job: str = JOB) -> Path:
+    """Return an immutable run-owned directory containing accepted native binaries only. ``job`` is
+    the consuming job whose namespace holds the copy (02-binary-component-cve-match stages its own,
+    so two jobs never race on one directory)."""
     attempt, manifest, _pointer = _expected(run_id)
-    base = data_path(run_id, "jobs", JOB, "inputs")
+    base = data_path(run_id, "jobs", job, "inputs")
     destination = base / (manifest["native_build"]["attempt_id"] + "-v2")
     if destination.exists():
         validate(run_id, destination / "binaries")

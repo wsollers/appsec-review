@@ -18,6 +18,7 @@ import base64
 from typing import Any, Callable
 
 import container_execution as ce
+import container_mobile_binary_contracts as cmb
 import permission_capabilities as pc
 
 
@@ -61,6 +62,11 @@ SPECS = {
                                                     "image-inspection.json"),
     "binskim": ToolSpec("audit-binary-analysis", ("/usr/bin/checksec", "--dir=/workspace", "--output=json"),
                         "stdout.log", True),
+    # blint writes one <name>-metadata.json per binary into the output directory (plus findings.json and
+    # an HTML page, neither read). /workspace is the binary_id view (``blint_view``): blint names its
+    # reports by basename, so two `a.out` files would overwrite each other (blint 3.4.0, reproduced).
+    "blint": ToolSpec("tool-blint", ("/opt/tool/bin/blint", "--no-banner", "-q", "--no-error", "--no-reviews",
+                                     "--no-wasm-strings", "-i", "/workspace", "-o", "/scratch/blint"), "blint"),
     "mobsfscan-android": ToolSpec("tool-mobsfscan", ("/opt/tool/bin/mobsfscan", "--sarif", "--output",
                                                           "/scratch/mobsfscan-android.sarif", "/workspace"),
                                       "mobsfscan-android.sarif"),
@@ -84,6 +90,7 @@ VERSION_ARGV={
  "oci-archive-inventory":["/opt/tool/bin/syft","version"],
  "image-package-and-config-inspection":["/opt/tool/bin/syft","version"],
  "binskim":["/usr/bin/checksec","--version"],"mobsfscan-android":["/opt/tool/bin/mobsfscan","--version"],
+ "blint":["/opt/tool/bin/python","-c","import importlib.metadata as m; print('blint', m.version('blint'))"],
  "mobsfscan-ios":["/opt/tool/bin/mobsfscan","--version"]}
 
 
@@ -213,6 +220,13 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
                 for field,rule in mapping.items():
                     if str(facts.get(field,"")).lower() in ("no","none","partial"):
                         records.append({"rule_id":rule,"path":_path(path),"line":1})
+    elif tool_id == "blint":
+        if not isinstance(document, dict) or document.get("schema") != BLINT_PROJECTION:
+            raise VendorToolFailed("blint-shape-invalid")
+        for item in document.get("binaries", []):
+            for observation in item.get("observations", []):
+                records.append({"path": _path(item.get("path")), "check": observation.get("check"),
+                                "reported": observation.get("reported")})
     elif tool_id in ("oci-archive-inventory", "image-package-and-config-inspection"):
         # Container parsers retain only package coordinates; config values and vendor prose are discarded.
         artifacts = document.get("artifacts", []) if "artifacts" in document else [
@@ -229,6 +243,149 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
             if key == "rule_id" and (not isinstance(value, str) or not value):
                 raise VendorToolFailed("output-rule-invalid")
     return records
+
+
+BLINT_PROJECTION = "blint-security-properties-1"
+BLINT_REPORT_MAX_BYTES = 256 * 1024 * 1024
+# IMAGE_DLLCHARACTERISTICS bits. blint 3.4.0 prints the field through LIEF 1.0, which renders every
+# flag as UNKNOWN(<value>), so blint's own `"DYNAMIC_BASE" in ...` test (its `aslr`) is always false.
+_DLL_FLAGS = {"HIGH_ENTROPY_VA": 0x20, "DYNAMIC_BASE": 0x40, "FORCE_INTEGRITY": 0x80, "NX_COMPAT": 0x100,
+              "NO_ISOLATION": 0x200, "NO_SEH": 0x400, "NO_BIND": 0x800, "APPCONTAINER": 0x1000,
+              "WDM_DRIVER": 0x2000, "GUARD_CF": 0x4000, "TERMINAL_SERVER_AWARE": 0x8000}
+
+
+def blint_view(source_root: Path, paths: list[str], destination: Path) -> dict[str, str]:
+    """Copy each candidate binary to ``destination/<binary_id>``; blint names a report after the
+    input's basename, so this is what keeps two `a.out` files from overwriting each other."""
+    destination.mkdir(parents=True, exist_ok=False)
+    view = {}
+    for path in paths:
+        identifier = cmb.binary_id(path)
+        if identifier in view:
+            raise VendorToolBlocked("binary-id-collision")
+        (destination / identifier).write_bytes((Path(source_root) / path).read_bytes())
+        view[identifier] = path
+    return view
+
+
+def _dll_characteristics(value: Any) -> int | None:
+    """The flag bits of blint's `dll_characteristics` text, or None when any item is not a known
+    name or `UNKNOWN(<n>)`: an unreadable field is no observation, never `absent`."""
+    if not isinstance(value, str):
+        return None
+    bits = 0
+    for item in (part.strip() for part in value.split(",")):
+        if not item:
+            continue
+        match = re.fullmatch(r"UNKNOWN\(([0-9]{1,5})\)", item)
+        name = item.rsplit(".", 1)[-1]
+        if match:
+            bits |= int(match.group(1))
+        elif name in _DLL_FLAGS:
+            bits |= _DLL_FLAGS[name]
+        else:
+            return None
+    return bits
+
+
+def blint_observations(fmt: str, metadata: Any) -> list[dict[str, str]]:
+    """Closed per-check verdicts from one blint report's `security_properties`, for the format the
+    worker derived from the file's own bytes. Only fields reproduced against real binaries are read:
+    never `relro` (wrong when GNU_RELRO is missing), never `aslr` (always false under LIEF 1.0),
+    never findings.json (CHECK_CANARY never fires)."""
+    props = metadata.get("security_properties") if isinstance(metadata, dict) else None
+    if not isinstance(props, dict):
+        raise VendorToolFailed("blint-shape-invalid")
+    def flag(key: str) -> bool:
+        value = props.get(key)
+        if not isinstance(value, bool):
+            raise VendorToolFailed("blint-shape-invalid")
+        return value
+    observed: dict[str, bool] = {"non_executable_data": flag("nx")}
+    pie, canary = flag("pie"), flag("canary")
+    if fmt == "elf":
+        observed.update(position_independent=pie, stack_protector=canary)
+    elif fmt == "macho":
+        observed["stack_protector"] = canary
+        if metadata.get("file_type") == "EXECUTE":   # MH_PIE exists only for executables
+            observed["position_independent"] = pie
+    elif fmt == "pe":
+        observed["position_independent"] = pie       # LIEF is_pie = DYNAMIC_BASE (reproduced)
+        config = metadata.get("load_configuration")
+        if isinstance(config, dict) and config:
+            observed["stack_protector"] = canary
+            observed["control_flow_guard"] = props.get("control_flow_guard") is True
+            if metadata.get("exe_type") == "PE32":
+                observed["safe_seh"] = props.get("safe_seh") is True
+        bits = _dll_characteristics(metadata.get("dll_characteristics"))
+        if metadata.get("exe_type") == "PE64" and bits is not None:
+            observed["high_entropy_aslr"] = bool(bits & _DLL_FLAGS["HIGH_ENTROPY_VA"])
+    else:
+        return []
+    return [{"check": name, "reported": "present" if value else "absent"} for name, value in sorted(observed.items())]
+
+
+def blint_projection(report_dir: Path, view: dict[str, str], view_root: Path) -> bytes:
+    """The closed document published for blint: one entry per binary it reported on, and the binaries
+    it silently skipped (it exits 0 for a file LIEF cannot parse). The raw reports carry every string
+    and symbol of the binary and are never published."""
+    reported, missing = [], []
+    expected = {f"{identifier}-metadata.json" for identifier in view}
+    for name in sorted(p.name for p in report_dir.glob("*-metadata.json")):
+        if name not in expected:
+            raise VendorToolFailed("blint-unexpected-report")
+    for identifier, path in sorted(view.items()):
+        report = report_dir / f"{identifier}-metadata.json"
+        if not report.is_file() or report.is_symlink():
+            missing.append({"binary_id": identifier, "path": path})
+            continue
+        if report.stat().st_size > BLINT_REPORT_MAX_BYTES:
+            raise VendorToolFailed("blint-report-too-large")
+        try:
+            metadata = json.loads(report.read_bytes())
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise VendorToolFailed("blint-report-invalid") from exc
+        fmt = cmb.detect_format((view_root / identifier).read_bytes()[:8])
+        reported.append({"binary_id": identifier, "path": path, "format": fmt,
+                         "observations": blint_observations(fmt, metadata)})
+    return (json.dumps({"schema": BLINT_PROJECTION, "binaries": reported, "not_reported": missing},
+                       sort_keys=True, indent=2) + "\n").encode()
+
+
+# checksec 2.6.0 JSON values (recorded: tests/fixtures/binary-hardening-real/checksec-2.6.0.json) -> verdict.
+# relro "partial" lacks BIND_NOW, so full RELRO is absent (D-33). Any other value is no observation.
+_CHECKSEC_VERDICTS = {
+    "position_independent": ("pie", {"yes": "present", "dso": "present", "no": "absent"}),
+    "non_executable_data": ("nx", {"yes": "present", "no": "absent"}),
+    "stack_protector": ("canary", {"yes": "present", "no": "absent"}),
+    "relro": ("relro", {"full": "present", "partial": "absent", "no": "absent"}),
+    "fortify_source": ("fortify_source", {"yes": "present", "no": "absent"}),
+}
+
+
+def checksec_observations(data: bytes) -> dict[str, list[dict[str, str]]]:
+    """Per-path closed verdicts from checksec's `--output=json`; checksec inspects ELF files only."""
+    document = json.loads(data)
+    if not isinstance(document, dict) or "runs" in document:
+        return {}
+    result = {}
+    for path, facts in document.items():
+        if path == "dir" or not isinstance(facts, dict) or "relro" not in facts:
+            continue
+        observed = []
+        for check, (field, verdicts) in sorted(_CHECKSEC_VERDICTS.items()):
+            verdict = verdicts.get(str(facts.get(field, "")).strip().lower())
+            if verdict:
+                observed.append({"check": check, "reported": verdict})
+        result[_path(path)] = observed
+    return result
+
+
+def checksec_reported(data: bytes) -> set[str]:
+    """Paths checksec printed a record for (its JSON also carries a top-level `dir` entry)."""
+    document = json.loads(data)
+    return {_path(path) for path, facts in document.items()
+            if path != "dir" and isinstance(facts, dict) and "relro" in facts}
 
 
 def container_image_facts(data: bytes, archive_path: str) -> dict[str, dict[str, Any]]:
@@ -333,8 +490,10 @@ def request(tool_id: str, *, run_id: str, job_id: str, attempt_id: str, source_r
 def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: str, attempt_id: str,
             attempt_root: Path, request_document: dict[str, Any],
             run_container: Callable[..., dict] = ce.run_container,
-            verify: Callable[..., list[str]] = ce.verify_container_result) -> tuple[dict, bytes]:
-    """Execute, re-verify, then return (terminal, raw output bytes)."""
+            verify: Callable[..., list[str]] = ce.verify_container_result,
+            view: dict[str, str] | None = None, view_root: Path | None = None) -> tuple[dict, bytes]:
+    """Execute, re-verify, then return (terminal, output bytes). For blint the bytes are the closed
+    projection of its report directory (``blint_projection``), built from the verified scratch."""
     terminal = run_container(runtime, run_id=run_id, job_id=job_id, attempt_id=attempt_id,
                              attempt_root=attempt_root, request=request_document)
     errors = verify(attempt_root, run_id=run_id, job_id=job_id, attempt_id=attempt_id,
@@ -349,6 +508,14 @@ def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: 
         raise VendorToolFailed(terminal.get("cause") or "tool-failed", terminal.get("exit_code"))
     spec=SPECS[tool_id]
     output = attempt_root / ("logs/container" if spec.captured_stdout else "scratch") / spec.output
+    if tool_id == "blint":
+        if view is None or view_root is None or not output.is_dir() or output.is_symlink():
+            raise VendorToolFailed("expected-output-missing", terminal.get("exit_code"))
+        try:
+            data = blint_projection(output, view, view_root)
+        except VendorToolFailed as exc:
+            raise VendorToolFailed(str(exc), terminal.get("exit_code")) from None
+        return terminal, data
     if not output.is_file() or output.is_symlink():
         raise VendorToolFailed("expected-output-missing", terminal.get("exit_code"))
     data = output.read_bytes()
@@ -364,23 +531,32 @@ def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: s
             runtime_factory: Callable[[str, Callable[[], str]], ce.ContainerRuntime] = _runtime,
             run_container: Callable[..., dict] = ce.run_container,
             verify: Callable[..., list[str]] = ce.verify_container_result,
-            version_probe: Callable[..., str] = verified_version) -> dict[str, dict[str, Any]]:
-    """Run every applicable declared tool independently; one failure cannot erase sibling evidence."""
+            version_probe: Callable[..., str] = verified_version,
+            candidates: dict[str, list[str]] | None = None) -> dict[str, dict[str, Any]]:
+    """Run every applicable declared tool independently; one failure cannot erase sibling evidence.
+    ``candidates`` (tool -> paths) is required for blint, which scans a binary_id view of them."""
     runtime = runtime_factory(source_sha, lambda: now)
     results = {}
     for position, tool_id in enumerate(tool_ids, 1):
         tool_attempt = f"{tool_id}-{node_attempt_id[:24]}-{position}"
         root = attempt_root / "tools" / tool_id
         try:
+            mount_root, view = source_root, None
+            if tool_id == "blint":
+                if not candidates or not candidates.get("blint"):
+                    raise VendorToolBlocked("required-input-missing")
+                mount_root = (attempt_root / "inputs" / "blint").absolute()
+                view = blint_view(source_root, candidates["blint"], mount_root)
             req = request(tool_id, run_id=run_id, job_id=job_id, attempt_id=tool_attempt,
-                          source_root=source_root, scratch_name="scratch", source_sha=source_sha, now=now)
+                          source_root=mount_root, scratch_name="scratch", source_sha=source_sha, now=now)
             version=version_probe(tool_id,runtime=runtime,run_id=run_id,job_id=job_id,
                 attempt_id=tool_attempt+"-version",attempt_root=attempt_root/"versions"/tool_id,
                 base_request=req,run_container=run_container,verify=verify)
             root.mkdir(parents=True,exist_ok=False)
             terminal, data = execute(tool_id, runtime=runtime, run_id=run_id, job_id=job_id,
                                      attempt_id=tool_attempt, attempt_root=root, request_document=req,
-                                     run_container=run_container, verify=verify)
+                                     run_container=run_container, verify=verify,
+                                     view=view, view_root=mount_root if view is not None else None)
             output_sha="sha256:"+hashlib.sha256(data).hexdigest()
             record=ce.load_image_registry(ce.IMAGES_DIR)[SPECS[tool_id].image_id]
             permission_sha="sha256:"+hashlib.sha256(json.dumps(req["permission"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -394,7 +570,13 @@ def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: s
                      "tool_name":("checksec" if tool_id=="binskim" else "syft" if tool_id in
                                   ("oci-archive-inventory","image-package-and-config-inspection") else
                                   tool_id.replace("-android","").replace("-ios",""))}
-            results[tool_id] = {"status": "OK", "attempt_id": tool_attempt, "request": req,
+            if tool_id == "binskim":
+                extra = {"reported": sorted(checksec_reported(data))}
+            elif tool_id == "blint":
+                extra = {"not_reported": sorted(item["path"] for item in json.loads(data)["not_reported"])}
+            else:
+                extra = {}
+            results[tool_id] = {"status": "OK", "attempt_id": tool_attempt, "request": req, **extra,
                                 "terminal": terminal, "raw": data, "records": normalize(tool_id, data),
                                 "auth":{"attempt_id":tool_attempt,"argv":req["argv"],"exit_code":terminal["exit_code"],
                                         "identity":{"repository":record["repository"],"digest":record["digest"],

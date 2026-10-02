@@ -421,11 +421,18 @@ class InvalidOutputTests(DispatchCase):
                 self.assertEqual(cell["terminal_class"], "failed")
                 self.tearDown_fixture_state()
 
-    def test_prohibited_text_in_the_candidate_itself_fails_at_the_adapter(self):
+    def test_prohibited_text_in_the_candidate_passes_the_adapter_and_t07_refuses_it(self):
+        # ADR-0013 §7: the adapter fails a cell only on an enumerated claim_class, never on free text
+        # (see test_adapter_level_malformed_prohibited_claim_and_identity). The text still never
+        # becomes a valid result: T07's candidate boundary check refuses it.
         def severity(candidate, package):
             candidate["fragment_results"][0]["rationale"] = "This is a critical severity problem."
             support.refresh(candidate)
-        self.refused(ValidatorInvoker(severity), "cell_state", state=pr.FAILED, cause="PROHIBITED_CLAIM")
+        _, cell = self.refused(ValidatorInvoker(severity), "validation_refused", outcome="refused")
+        self.assertIsNone(cell["adapter_cause"])
+        self.assertEqual((cell["terminal_class"], cell["validation"]["status"]), ("invalid", "INVALID"))
+        self.assertIsNone(cell["validation"]["result_sha256"])
+        self.assertEqual(self.result_pointer(1)["status"], "INVALID")
 
     def tearDown_fixture_state(self):
         shutil.rmtree(self.run)

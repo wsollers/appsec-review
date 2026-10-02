@@ -43,6 +43,13 @@ SECRET_PATTERNS = (
 SECRET_FIELD_RE = re.compile(r"(?i)(?:^|[_-])(api[_-]?key|access[_-]?token|password|secret)(?:$|[_-])")
 HIGH_ENTROPY_VALUE_RE = re.compile(r"^[A-Za-z0-9._~+/=-]{16,}$")
 CLAIM_CLASS_POLICIES = {
+    "binary-component-cve-match": {
+        "claim_class_id": "binary_component_cve_lead",
+        "allowed_assertions": {
+            "embedded-component-detected", "embedded-component-cve-range-match",
+            "database-snapshot-identity", "scan-coverage-gap",
+        },
+    },
     "ossf-scorecard-results": {
         "claim_class_id": "supply_chain_posture_evidence",
         "allowed_assertions": {
@@ -840,7 +847,7 @@ def _vendor_prepass_nodes() -> MappingProxyType:
                                 "dockerfile-base-image-inventory"),
         "container-image-inventory": ("oci-archive-inventory", "image-package-and-config-inspection"),
         "mobile-sast": ("mobsfscan-android", "mobsfscan-ios"),
-        "binary-hardening": ("binskim",),
+        "binary-hardening": ("binskim", "blint"),
         "sbom-inventory": ("syft-directory",),
         "sca-vulnerability-match": ("grype",),
         "license-inventory": ("scancode-toolkit",),

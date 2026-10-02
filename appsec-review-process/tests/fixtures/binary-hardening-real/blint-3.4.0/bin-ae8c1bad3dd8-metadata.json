@@ -1,0 +1,22 @@
+{
+ "binary_type": "PE",
+ "dll_characteristics": "UNKNOWN(64), UNKNOWN(256), UNKNOWN(32768)",
+ "exe_type": "PE32",
+ "file_path": "/workspace/bin-ae8c1bad3dd8",
+ "load_configuration": {
+  "guard_cf_flags": [],
+  "guard_flags": null,
+  "runtime_checks": {}
+ },
+ "security_properties": {
+  "aslr": false,
+  "canary": true,
+  "is_signed": false,
+  "nx": true,
+  "pie": true,
+  "relro": "no",
+  "safe_seh": true,
+  "stripped": true,
+  "w_xor_x": true
+ }
+}

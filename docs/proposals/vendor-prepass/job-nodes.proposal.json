@@ -711,6 +711,10 @@
           "legacy_steps": [
             "binskim"
           ]
+        },
+        {
+          "tool_id": "blint",
+          "legacy_steps": []
         }
       ],
       "proposed_output_contract_id": "binary-hardening",

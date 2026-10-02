@@ -1,0 +1,15 @@
+{
+ "binary_type": "ELF",
+ "exe_type": "genericbinary",
+ "file_path": "/workspace/bin-c4dc66d0b263",
+ "file_type": "EXEC",
+ "security_properties": {
+  "canary": false,
+  "is_signed": false,
+  "nx": false,
+  "pie": false,
+  "relro": "partial",
+  "stripped": false,
+  "w_xor_x": true
+ }
+}

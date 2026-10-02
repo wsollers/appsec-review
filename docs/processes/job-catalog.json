@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 84,
+  "lifecycle_jobs": 85,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1196,6 +1196,7 @@
         "job:02-license-scan",
         "job:02-dependency-lifecycle",
         "job:02-binary-hardening",
+        "job:02-binary-component-cve-match",
         "job:02-mobile-sast",
         "job:02-code-index"
        ],
@@ -1826,6 +1827,24 @@
        ]
       },
       {
+       "ref": "job:02-binary-component-cve-match",
+       "id": "02-binary-component-cve-match",
+       "name": "Binary Component CVE Match",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-binary-component-cve-match"
+       ],
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "accepted 02-native-build binary projection",
+        "B16 tool-cve-bin-tool image record",
+        "cve-bin-tool database derived from the run's NVD snapshot"
+       ]
+      },
+      {
        "ref": "job:02-mobile-sast",
        "id": "02-mobile-sast",
        "name": "Mobile SAST",
@@ -1900,6 +1919,7 @@
        "job:02-license-scan",
        "job:02-dependency-lifecycle",
        "job:02-binary-hardening",
+       "job:02-binary-component-cve-match",
        "job:02-mobile-sast"
       ],
       "declared_inputs": [
@@ -1977,6 +1997,8 @@
        "identified run-owned lifecycle reference table",
        "explicit table age ceiling",
        "accepted 02-native-build binary projection",
+       "B16 tool-cve-bin-tool image record",
+       "cve-bin-tool database derived from the run's NVD snapshot",
        "explicit manifest-declared source root"
       ]
      }
@@ -2927,6 +2949,7 @@
      "job:02-license-scan",
      "job:02-dependency-lifecycle",
      "job:02-binary-hardening",
+     "job:02-binary-component-cve-match",
      "job:02-mobile-sast",
      "job:02-evidence-index",
      "job:01-component-characterization",
@@ -3041,6 +3064,8 @@
      "identified run-owned lifecycle reference table",
      "explicit table age ceiling",
      "accepted 02-native-build binary projection",
+     "B16 tool-cve-bin-tool image record",
+     "cve-bin-tool database derived from the run's NVD snapshot",
      "explicit manifest-declared source root",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
@@ -4117,6 +4142,7 @@
         "job:02-license-scan",
         "job:02-dependency-lifecycle",
         "job:02-binary-hardening",
+        "job:02-binary-component-cve-match",
         "job:02-mobile-sast",
         "job:02-code-index"
        ],
@@ -4800,6 +4826,24 @@
        ]
       },
       {
+       "ref": "job:02-binary-component-cve-match",
+       "id": "02-binary-component-cve-match",
+       "name": "Binary Component CVE Match",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-binary-component-cve-match"
+       ],
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "accepted 02-native-build binary projection",
+        "B16 tool-cve-bin-tool image record",
+        "cve-bin-tool database derived from the run's NVD snapshot"
+       ]
+      },
+      {
        "ref": "job:02-mobile-sast",
        "id": "02-mobile-sast",
        "name": "Mobile SAST",
@@ -4873,6 +4917,7 @@
        "job:02-license-scan",
        "job:02-dependency-lifecycle",
        "job:02-binary-hardening",
+       "job:02-binary-component-cve-match",
        "job:02-mobile-sast"
       ],
       "declared_inputs": [
@@ -4956,6 +5001,8 @@
        "identified run-owned lifecycle reference table",
        "explicit table age ceiling",
        "accepted 02-native-build binary projection",
+       "B16 tool-cve-bin-tool image record",
+       "cve-bin-tool database derived from the run's NVD snapshot",
        "explicit manifest-declared source root"
       ]
      }
@@ -6012,6 +6059,7 @@
      "job:02-license-scan",
      "job:02-dependency-lifecycle",
      "job:02-binary-hardening",
+     "job:02-binary-component-cve-match",
      "job:02-mobile-sast",
      "job:01-component-characterization",
      "job:dynamic-rescope",
@@ -6130,6 +6178,8 @@
      "identified run-owned lifecycle reference table",
      "explicit table age ceiling",
      "accepted 02-native-build binary projection",
+     "B16 tool-cve-bin-tool image record",
+     "cve-bin-tool database derived from the run's NVD snapshot",
      "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "run artifact manifest",
@@ -8244,6 +8294,11 @@
      "contract": "binary-hardening"
     },
     {
+     "job": "02-binary-component-cve-match",
+     "kind": "required",
+     "contract": "binary-component-cve-match"
+    },
+    {
      "job": "02-mobile-sast",
      "kind": "required",
      "contract": "mobile-sast"
@@ -8306,6 +8361,7 @@
     "job:02-license-scan",
     "job:02-dependency-lifecycle",
     "job:02-binary-hardening",
+    "job:02-binary-component-cve-match",
     "job:02-mobile-sast",
     "job:02-code-index"
    ],
@@ -12920,6 +12976,75 @@
    ]
   },
   {
+   "id": "02-binary-component-cve-match",
+   "lane": "02-evidence-pregather",
+   "name": "Binary Component CVE Match",
+   "contract": "binary-component-cve-match",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/binary_component_cve_match.py:execute",
+   "resource_pool": "docker",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "vendor-static-evidence-curator",
+    "domain_id": "vendor-static-evidence",
+    "tooling_profile_id": "pinned-vendor-static-evidence",
+    "output_contract_id": "binary-component-cve-match"
+   },
+   "depends_on": [
+    {
+     "job": "02-native-build",
+     "kind": "required",
+     "contract": "native-build"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-native-build binary projection"
+    },
+    {
+     "need": "required",
+     "input": "B16 tool-cve-bin-tool image record"
+    },
+    {
+     "need": "required",
+     "input": "cve-bin-tool database derived from the run's NVD snapshot"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/02-binary-component-cve-match.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-binary-component-cve-match/",
+   "output_files": [
+    "manifest.json",
+    "status.json",
+    "permission.json",
+    "lineage.json",
+    "outputs/binary-component-cve-match.json",
+    "outputs/database-identity.json",
+    "outputs/tool-evidence.json",
+    "outputs/redaction-receipt.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/binary-component-cve-match.json",
+   "claim_class": "binary_component_cve_lead",
+   "gaps": [
+    "Qualified inside B13 in the cloud workspace only (local Docker, NVD from the fkie-cad mirror through the real publisher); not yet on zarathustra/hal5000 or in full_review."
+   ],
+   "next_prerequisite": "Build tool-cve-bin-tool, let nvd_reference_sync publish the database, and run full_review on appsec-multi-vuln (case-030 vendors zlib 1.2.11).",
+   "consumes": [
+    "job:02-native-build"
+   ],
+   "produces": [
+    "job:02-binary-component-cve-match"
+   ]
+  },
+  {
    "id": "02-mobile-sast",
    "lane": "02-evidence-pregather",
    "name": "Mobile SAST",
@@ -15001,7 +15126,8 @@
     "job:02-debug-symbol-index",
     "job:02-binary-triage",
     "job:02-test-execution",
-    "job:02-binary-hardening"
+    "job:02-binary-hardening",
+    "job:02-binary-component-cve-match"
    ]
   },
   "job:02-source-sast": {
@@ -15415,6 +15541,18 @@
    "about": "Accepted binary-hardening output of 02-binary-hardening.",
    "produced_by": [
     "job:02-binary-hardening"
+   ],
+   "consumed_by": [
+    "job:02-evidence-assembly"
+   ]
+  },
+  "job:02-binary-component-cve-match": {
+   "id": "job:02-binary-component-cve-match",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-binary-component-cve-match/",
+   "about": "Accepted binary-component-cve-match output of 02-binary-component-cve-match.",
+   "produced_by": [
+    "job:02-binary-component-cve-match"
    ],
    "consumed_by": [
     "job:02-evidence-assembly"

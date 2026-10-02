@@ -29,6 +29,23 @@
       ],
       "matching_input_count": 0,
       "tool_id": "binskim"
+    },
+    {
+      "applicable": false,
+      "detectors": [
+        {
+          "detector_id": "blint-detector",
+          "matching_input_count": 0,
+          "patterns_searched": [
+            "**/*.dll",
+            "**/*.exe",
+            "**/*.so",
+            "**/*.dylib"
+          ]
+        }
+      ],
+      "matching_input_count": 0,
+      "tool_id": "blint"
     }
   ]
 }

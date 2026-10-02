@@ -136,6 +136,18 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_timeout_seconds` | 900 s (15 min) | resource | Wall-clock limit for the container (binary tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (binary tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 
+### `02-binary-component-cve-match`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 2 GiB | resource | Memory limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 256 count | resource | Process/thread limit (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 1800 s (30 min) | resource | Wall-clock limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+
 ### `02-binary-hardening`
 
 | Tunable | Value | Kind | What it does | Scale |

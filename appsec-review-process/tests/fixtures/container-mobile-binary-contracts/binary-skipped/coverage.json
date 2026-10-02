@@ -16,6 +16,17 @@
       "tool_id": "binskim",
       "unsupported_input_count": 0,
       "unsupported_inputs": []
+    },
+    {
+      "analyzed_input_count": 0,
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "input_lists_truncated": false,
+      "not_analyzed_input_count": 0,
+      "not_analyzed_inputs": [],
+      "tool_id": "blint",
+      "unsupported_input_count": 0,
+      "unsupported_inputs": []
     }
   ]
 }

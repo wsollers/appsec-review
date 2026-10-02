@@ -2,25 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "binary-hardening-binary.schema.json",
   "title": "One supplied binary",
-  "description": "Sibling sub-shape of binary-hardening.schema.json.",
+  "description": "Sibling sub-shape of binary-hardening.schema.json. One record per binary. `observations` are what each tool reported; `checks` is derived from them by a fixed rule (container_mobile_binary_contracts.derive_checks) and re-derived by the validator: present/absent only when at least one tool observed the check and no two tools disagree.",
   "type": "object",
   "required": [
     "binary_id",
-    "tool_id",
     "path",
     "sha256",
     "bytes",
     "format",
     "checks",
+    "observations",
+    "tool_disagreements",
     "rule_hits"
   ],
   "additionalProperties": false,
   "properties": {
     "binary_id": {
-      "type": "string",
-      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
-    },
-    "tool_id": {
       "type": "string",
       "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
     },
@@ -47,7 +44,7 @@
       ]
     },
     "checks": {
-      "description": "One closed verdict per mitigation. `present`/`absent` are static properties of the file, not statements about a running process.",
+      "description": "One derived verdict per mitigation. `present`/`absent` are static properties of the file, not statements about a running process, and only ever come from an observation; `not-assessed` when no tool observed the check or the tools disagree.",
       "type": "object",
       "required": [
         "position_independent",
@@ -133,6 +130,63 @@
             "not-assessed"
           ]
         }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "description": "What each tool reported, one entry per (tool_id, check) the tool assessed for this binary. A check a tool cannot assess, or one it is known to report wrongly (blint 3.4.0 relro), has no entry from that tool.",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool_id",
+          "check",
+          "reported"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+          },
+          "check": {
+            "type": "string",
+            "enum": [
+              "position_independent",
+              "non_executable_data",
+              "stack_protector",
+              "relro",
+              "fortify_source",
+              "control_flow_guard",
+              "safe_seh",
+              "high_entropy_aslr"
+            ]
+          },
+          "reported": {
+            "type": "string",
+            "enum": [
+              "present",
+              "absent"
+            ],
+            "description": "What this tool reported for the file's static property."
+          }
+        }
+      }
+    },
+    "tool_disagreements": {
+      "type": "array",
+      "description": "Checks two tools observed with opposite verdicts. Each is published as not-assessed in `checks`; never resolved by picking a tool.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "position_independent",
+          "non_executable_data",
+          "stack_protector",
+          "relro",
+          "fortify_source",
+          "control_flow_guard",
+          "safe_seh",
+          "high_entropy_aslr"
+        ]
       }
     },
     "rule_hits": {

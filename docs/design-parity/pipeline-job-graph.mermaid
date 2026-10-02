@@ -59,6 +59,7 @@ flowchart LR
     j_02_license_scan["02-license-scan"]
     j_02_dependency_lifecycle["02-dependency-lifecycle"]
     j_02_binary_hardening["02-binary-hardening"]
+    j_02_binary_component_cve_match["02-binary-component-cve-match"]
     j_02_mobile_sast["02-mobile-sast"]
   end
   subgraph lane_01_component_characterization["01-component-characterization"]
@@ -185,6 +186,7 @@ flowchart LR
   j_02_license_scan --> j_02_evidence_assembly
   j_02_dependency_lifecycle --> j_02_evidence_assembly
   j_02_binary_hardening --> j_02_evidence_assembly
+  j_02_binary_component_cve_match --> j_02_evidence_assembly
   j_02_mobile_sast --> j_02_evidence_assembly
   j_02_code_index --> j_02_evidence_assembly
   j_02_evidence_assembly --> j_01_component_characterization
@@ -321,6 +323,7 @@ flowchart LR
   j_02_sbom_inventory --> j_02_dependency_lifecycle
   j_02_license_scan --> j_02_dependency_lifecycle
   j_02_native_build --> j_02_binary_hardening
+  j_02_native_build --> j_02_binary_component_cve_match
   j_00_intake --> j_02_mobile_sast
   j_00_intake --> j_persona_tool_pool_dispatch
   j_persona_tool_pool_dispatch --> j_deterministic_pool_merge

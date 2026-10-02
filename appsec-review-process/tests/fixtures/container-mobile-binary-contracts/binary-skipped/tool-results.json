@@ -13,6 +13,7 @@
       ],
       "attempt_id": "binskim-attempt-0001",
       "cause_code": null,
+      "execution_receipt": null,
       "exit": {
         "exit_code": null,
         "exit_meaning": "not-started",
@@ -34,8 +35,39 @@
       "result_record_count": null,
       "skip_reason": "not-applicable-no-matching-inputs",
       "terminal_status": "SKIPPED",
-      "tool_id": "binskim",
-      "execution_receipt": null
+      "tool_id": "binskim"
+    },
+    {
+      "argv": [
+        "blint",
+        "--offline",
+        "/in"
+      ],
+      "attempt_id": "blint-attempt-0001",
+      "cause_code": null,
+      "execution_receipt": null,
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "findings_exit_codes": [],
+        "nonzero_exit_on_findings": false,
+        "timed_out": false
+      },
+      "identity": {
+        "data_identities": [],
+        "executable_sha256": null,
+        "executor_kind": "pinned_container",
+        "image_digest": "sha256:e608aaf8e4aa5e58d5f91abc38948b497fd01819a3113276031e852dab256eeb",
+        "image_repository": "registry.internal.example:5000/appsec/audit-static",
+        "redactor": null,
+        "tool_name": "blint",
+        "tool_version": null
+      },
+      "outputs": [],
+      "result_record_count": null,
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "terminal_status": "SKIPPED",
+      "tool_id": "blint"
     }
   ]
 }

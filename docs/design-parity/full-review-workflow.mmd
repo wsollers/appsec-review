@@ -75,6 +75,7 @@ flowchart TD
   j_02_license_scan["02-license-scan<br/>implemented_not_qualified"]
   j_02_dependency_lifecycle["02-dependency-lifecycle<br/>implemented_not_qualified"]
   j_02_binary_hardening["02-binary-hardening<br/>implemented_not_qualified"]
+  j_02_binary_component_cve_match["02-binary-component-cve-match<br/>implemented_not_qualified"]
   j_02_mobile_sast["02-mobile-sast<br/>implemented_not_qualified"]
   j_persona_tool_pool_dispatch["persona-tool-pool-dispatch<br/>implemented_not_qualified"]
   j_deterministic_pool_merge["deterministic-pool-merge<br/>implemented_not_qualified"]
@@ -121,6 +122,7 @@ flowchart TD
   j_02_license_scan --> j_02_evidence_assembly
   j_02_dependency_lifecycle --> j_02_evidence_assembly
   j_02_binary_hardening --> j_02_evidence_assembly
+  j_02_binary_component_cve_match --> j_02_evidence_assembly
   j_02_mobile_sast --> j_02_evidence_assembly
   j_02_code_index --> j_02_evidence_assembly
   j_02_evidence_assembly --> j_01_component_characterization
@@ -257,6 +259,7 @@ flowchart TD
   j_02_sbom_inventory --> j_02_dependency_lifecycle
   j_02_license_scan --> j_02_dependency_lifecycle
   j_02_native_build --> j_02_binary_hardening
+  j_02_native_build --> j_02_binary_component_cve_match
   j_00_intake --> j_02_mobile_sast
   j_00_intake --> j_persona_tool_pool_dispatch
   j_persona_tool_pool_dispatch --> j_deterministic_pool_merge

@@ -214,6 +214,18 @@ class PipLock(unittest.TestCase):
                           if line[:1].isalnum()]
                 self.assertEqual(len(record["pip_lock"]["wheels"]), len(pinned))
 
+    def test_an_excluded_dependency_is_declared_recorded_and_absent_from_the_lock(self):
+        folder = IMAGES / "tool-cve-bin-tool"
+        tool = json.loads((folder / "tool.json").read_text())
+        record = json.loads((folder / "pin-record.json").read_text())
+        lock = (folder / "requirements.txt").read_text()
+        self.assertEqual(tool["pip_exclude"], ["gsutil"])
+        self.assertEqual(record["pip_lock"]["excluded"], ["gsutil"])
+        self.assertNotIn("gsutil", [line.split("==")[0].lower() for line in lock.splitlines() if line[:1].isalnum()])
+        for bad in ([], ["gs util"], "gsutil"):
+            broken = dict(tool, pip_exclude=bad)
+            self.assertTrue(any("pip_exclude" in e for e in tp.tool_errors(broken, folder)), bad)
+
 
 if __name__ == "__main__":
     unittest.main()

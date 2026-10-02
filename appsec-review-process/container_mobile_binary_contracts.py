@@ -55,6 +55,12 @@ PUBLISHED_DIR = "outputs"
 HEADER_FIELDS = shapes.HEADER_FIELDS
 UNSUPPORTED_FORMAT_REASON = "unsupported-format"
 BINSKIM_SARIF = "outputs/binskim.sarif"
+BLINT_PROPERTIES = "outputs/tools/blint/security-properties.json"
+# binary-hardening: the one output each tool instance lists, with its (role, validation).
+BINARY_TOOL_OUTPUTS: Mapping[str, tuple[str, str, str]] = MappingProxyType({
+    "binskim": (BINSKIM_SARIF, "raw-tool-output", "format-validated"),
+    "blint": (BLINT_PROPERTIES, "normalized-result", "schema-validated"),
+})
 
 # contract_id -> the facts this module needs. Read-only: a caller cannot widen a contract.
 CONTRACTS: Mapping[str, Mapping[str, str]] = MappingProxyType({
@@ -110,6 +116,12 @@ _SAFE_NAME = re.compile(r"[A-Za-z0-9_.$-]{1,64}\Z")
 _SCHEMA_RULES = (("missing required property", "required"), ("unexpected property", "additionalProperties"),
                  ("expected const", "const"), ("expected type", "type"), ("not in enum", "enum"),
                  ("does not match pattern", "pattern"), ("minItems", "minItems"))
+
+
+def binary_id(path: str) -> str:
+    """The record id of a binary: `bin-` and the first 12 hex digits of the sha256 of its path."""
+    import hashlib
+    return "bin-" + hashlib.sha256(path.encode("utf-8")).hexdigest()[:12]
 
 
 def detect_format(data: bytes) -> str:
@@ -394,6 +406,31 @@ def _mobile_errors(result: dict, agg: _Aggregate, tool_results: dict) -> list[st
 
 # ---- binary-hardening ------------------------------------------------------------------------
 
+def derive_checks(fmt: str, observations: Iterable[Mapping[str, str]]) -> tuple[dict[str, str], list[str]]:
+    """The published `checks` and `tool_disagreements` of one binary, from its observations alone
+    (binary-hardening 1.1). A check that exists for the format is `present`/`absent` only when at
+    least one tool observed it and no two tools disagree; a disagreement is `not-assessed` and is
+    listed, never resolved by preferring a tool. Before 1.1 every existing check started `present`,
+    so a binary checksec never assessed (any PE or Mach-O file) was published as fully hardened."""
+    seen: dict[str, set[str]] = {}
+    for item in observations:
+        seen.setdefault(item["check"], set()).add(item["reported"])
+    checks, disagreements = {}, []
+    for name, formats in sorted(CHECK_FORMATS.items()):
+        verdicts = seen.get(name, set())
+        if fmt == "unsupported":
+            checks[name] = NOT_ASSESSED
+        elif fmt not in formats:
+            checks[name] = NOT_APPLICABLE
+        elif len(verdicts) == 1:
+            (checks[name],) = verdicts
+        else:
+            checks[name] = NOT_ASSESSED
+            if len(verdicts) > 1:
+                disagreements.append(name)
+    return checks, disagreements
+
+
 def _binary_errors(result: dict, agg: _Aggregate, tool_results: dict) -> list[str]:
     errors = []
     binaries = result["binaries"]
@@ -402,60 +439,65 @@ def _binary_errors(result: dict, agg: _Aggregate, tool_results: dict) -> list[st
     for repeated in _duplicates(binary["path"] for binary in binaries):
         errors.append(f"duplicate-record: binary {repeated!r} is listed more than once")
     errors += _complete_coverage_errors(agg, [binary["path"] for binary in binaries], "binaries")
+    ran = [tool_id for tool_id, tool in agg.coverage.items() if tool["applicability"] == "applicable"]
 
     counts: dict[str, int] = {}
     for binary in binaries:
         where = f"binary {binary['binary_id']!r}"
-        path, fmt, checks = binary["path"], binary["format"], binary["checks"]
-        counts[binary["tool_id"]] = counts.get(binary["tool_id"], 0) + 1
+        path, fmt, observations = binary["path"], binary["format"], binary["observations"]
         errors += _path_errors("input-path", where, path)
         if not _nonneg(binary["bytes"]):
             errors.append(f"input-size: {where}: bytes is negative")
-        found = agg.tool_errors(binary["tool_id"], where)
-        errors += found
-        if found:
-            continue
-        assessed = sorted(name for name, verdict in checks.items() if verdict in ASSESSED_VERDICTS)
-        all_not_assessed = all(verdict == NOT_ASSESSED for verdict in checks.values())
-        gap_reason = agg.not_covered(binary["tool_id"]).get(path)
-        unsupported_reason = agg.listed(binary["tool_id"], "unsupported_inputs").get(path)
-
-        if fmt == "unsupported":
-            if not all_not_assessed:
+        observed_by = set()
+        for repeated in _duplicates((item["tool_id"], item["check"]) for item in observations):
+            errors.append(f"duplicate-record: {where}: tool {repeated[0]!r} observes {repeated[1]!r} more than once")
+        for item in observations:
+            tool_id, name = item["tool_id"], item["check"]
+            found = agg.tool_errors(tool_id, where)
+            errors += found
+            if found:
+                continue
+            observed_by.add(tool_id)
+            if not agg.has_output(tool_id):
+                errors.append(f"result-from-tool-without-output: {where}: tool {tool_id!r} has no validated, hashed output")
+            if fmt not in CHECK_FORMATS[name]:
+                errors.append(f"check-format-mismatch: {where}: check {name!r} does not exist for format {fmt!r}, "
+                              f"so tool {tool_id!r} cannot observe it")
+            if path in agg.not_covered(tool_id):
+                errors.append(f"assessment-coverage-mismatch: {where}: coverage.json lists {path!r} as unsupported or "
+                              f"not analyzed by tool {tool_id!r}, which still observes {name!r}")
+        for tool_id in observed_by:
+            counts[tool_id] = counts.get(tool_id, 0) + 1
+        for tool_id in ran:
+            if fmt == "unsupported":
+                if agg.listed(tool_id, "unsupported_inputs").get(path) != UNSUPPORTED_FORMAT_REASON:
+                    errors.append(
+                        f"unsupported-format-not-in-coverage: {where}: format is 'unsupported' but coverage.json does not "
+                        f"list {path!r} under unsupported_inputs of tool {tool_id!r} with reason {UNSUPPORTED_FORMAT_REASON!r}"
+                    )
+            elif (agg.has_output(tool_id) and tool_id not in observed_by
+                  and path not in agg.not_covered(tool_id)):
                 errors.append(
-                    f"unsupported-format-assessed: {where}: format is 'unsupported', so every check must be "
-                    f"{NOT_ASSESSED!r}; got " + ", ".join(f"{name}={checks[name]}" for name in sorted(checks) if checks[name] != NOT_ASSESSED)
+                    f"assessment-coverage-mismatch: {where}: tool {tool_id!r} analyzed {path!r} (coverage.json does not "
+                    "list it as unsupported or not analyzed) but published no observation for it"
                 )
-            if unsupported_reason != UNSUPPORTED_FORMAT_REASON:
-                errors.append(
-                    f"unsupported-format-not-in-coverage: {where}: format is 'unsupported' but coverage.json does not "
-                    f"list {path!r} under unsupported_inputs with reason {UNSUPPORTED_FORMAT_REASON!r}"
-                )
-        elif unsupported_reason == UNSUPPORTED_FORMAT_REASON and assessed:
+        checks, disagreements = derive_checks(fmt, observations)
+        if binary["checks"] != checks:
             errors.append(
-                f"unsupported-format-assessed: {where}: coverage.json says tool {binary['tool_id']!r} does not support "
-                f"{path!r}, so no check can be present or absent; got {', '.join(assessed)}"
+                f"checks-not-derived: {where}: checks must be derived from the observations; differs at "
+                + ", ".join(f"{name}={binary['checks'][name]} (derived {checks[name]})"
+                            for name in sorted(checks) if binary["checks"][name] != checks[name])
             )
-        if all_not_assessed != (gap_reason is not None):
-            errors.append(
-                f"assessment-coverage-mismatch: {where}: every check must be {NOT_ASSESSED!r} exactly when "
-                f"coverage.json lists {path!r} as unsupported or not analyzed"
-            )
-        if assessed and not agg.has_output(binary["tool_id"]):
-            errors.append(f"result-from-tool-without-output: {where}: tool {binary['tool_id']!r} has no validated, hashed output")
-        for name, verdict in sorted(checks.items()):
-            exists = fmt in CHECK_FORMATS[name]
-            if verdict in ASSESSED_VERDICTS and not exists:
-                errors.append(f"check-format-mismatch: {where}: check {name!r} does not exist for format {fmt!r} and cannot be {verdict!r}")
-            if verdict == NOT_APPLICABLE and (exists or fmt == "unsupported"):
-                errors.append(f"check-format-mismatch: {where}: check {name!r} cannot be {NOT_APPLICABLE!r} for format {fmt!r}")
-        if binary["rule_hits"] and all_not_assessed:
-            errors.append(f"rule-hit-on-unassessed-binary: {where}: a binary with no assessed check cannot carry a rule hit")
+        if sorted(binary["tool_disagreements"]) != disagreements:
+            errors.append(f"checks-not-derived: {where}: tool_disagreements must be {disagreements!r}")
+        if binary["rule_hits"] and not observations:
+            errors.append(f"rule-hit-on-unassessed-binary: {where}: a binary with no observation cannot carry a rule hit")
+        absent = {item["check"] for item in observations if item["reported"] == "absent"}
         for hit in binary["rule_hits"]:
-            if hit["check"] != "other" and checks[hit["check"]] not in ASSESSED_VERDICTS:
+            if hit["check"] != "other" and hit["check"] not in absent:
                 errors.append(
                     f"rule-hit-on-unassessed-binary: {where}: rule {hit['rule_id']!r} names check {hit['check']!r}, "
-                    f"which is {checks[hit['check']]!r}"
+                    "which no tool observed as absent"
                 )
     for instance in tool_results["tool_instances"]:
         tool_id = instance["tool_id"]
@@ -466,11 +508,15 @@ def _binary_errors(result: dict, agg: _Aggregate, tool_results: dict) -> list[st
                 f"record-count-mismatch: tool {tool_id!r} reports result_record_count "
                 f"{instance['result_record_count']} but the result attributes {counts.get(tool_id, 0)} binaries to it"
             )
-        sarif = [output for output in instance["outputs"] if output["path"] == BINSKIM_SARIF]
-        if len(sarif) != 1 or sarif[0]["role"] != "raw-tool-output" or sarif[0]["validation"] != "format-validated":
+        expected = BINARY_TOOL_OUTPUTS.get(tool_id)
+        if expected is None:
+            errors.append(f"unknown-tool: tool {tool_id!r} has no declared binary-hardening output")
+            continue
+        listed = [output for output in instance["outputs"] if output["path"] == expected[0]]
+        if len(listed) != 1 or (listed[0]["role"], listed[0]["validation"]) != expected[1:]:
             errors.append(
-                f"raw-output-missing: tool {tool_id!r} produced output, so it must list {BINSKIM_SARIF!r} once as a "
-                "format-validated raw-tool-output"
+                f"raw-output-missing: tool {tool_id!r} produced output, so it must list {expected[0]!r} once as a "
+                f"{expected[2]} {expected[1]}"
             )
     return errors
 

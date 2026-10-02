@@ -67,7 +67,7 @@ DIGEST_FROM_RE = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+\S+)
 PINNED_REF_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}\Z")
 TOOL_KEYS = {"schema", "image_id", "tool", "version", "purpose", "feeds", "executable",
              "version_argv", "version_expect", "assets", "smoke"}
-OPTIONAL_TOOL_KEYS = {"bundles", "pip_lock", "pip_package", "notes"}
+OPTIONAL_TOOL_KEYS = {"bundles", "pip_lock", "pip_package", "pip_exclude", "notes"}
 VERIFY_KINDS = {"vendor-checksums", "vendor-sha256-file", "vendor-spdx", "sigstore-checksums", "sigstore-cert-checksums",
                 "sigstore-key-checksums", "pgp"}
 SMOKE_KEYS = {"name", "argv", "exit_codes", "workspace"}
@@ -168,6 +168,9 @@ def tool_errors(tool: Any, folder: Path) -> list[str]:
             errors.append(f"{where}.argv must start with an absolute executable")
         if not isinstance(run["exit_codes"], list) or not all(isinstance(c, int) for c in run["exit_codes"]):
             errors.append(f"{where}.exit_codes must be integers")
+        if "file_contains" in run and not (isinstance(run["file_contains"], dict) and all(
+                isinstance(k, str) and isinstance(v, str) for k, v in run["file_contains"].items())):
+            errors.append(f"{where}.file_contains must map a scratch file to the text it must contain")
         if "config" in run and not (run["config"] == "smoke-config" and (folder / "smoke-config").is_dir()):
             errors.append(f"{where}.config must be \"smoke-config\" (a committed folder, mounted read-only at /config)")
         if run["workspace"] not in ("none", "target") and not (
@@ -178,6 +181,9 @@ def tool_errors(tool: Any, folder: Path) -> list[str]:
         errors.append("pip_lock file is missing")
     if ("pip_lock" in tool) != ("pip_package" in tool):
         errors.append("pip_lock and pip_package go together")
+    if "pip_exclude" in tool and ("pip_lock" not in tool or not isinstance(tool["pip_exclude"], list) or not tool["pip_exclude"]
+                                  or not all(isinstance(n, str) and re.fullmatch(r"[A-Za-z0-9._-]+", n) for n in tool["pip_exclude"])):
+        errors.append("pip_exclude must be a non-empty list of package names, for a pip tool")
     return errors
 
 
@@ -549,8 +555,16 @@ def lock_pip(folder: Path, tool: dict[str, Any], keep_lock: bool = False) -> dic
             source = Path(tmp, "requirements.in")
             source.write_text(requirement + "\n", encoding="utf-8")
             out = Path(tmp, "requirements.txt")
+            # pip_exclude: a declared dependency the tool only runs as an external command on a path this
+            # pipeline never takes (cve-bin-tool's online OSV download shells out to gsutil, which ships
+            # no wheel). An override whose marker never matches drops it from the resolution.
+            overrides = []
+            if tool.get("pip_exclude"):
+                Path(tmp, "overrides.txt").write_text(
+                    "".join(f'{name} ; sys_platform == "never"\n' for name in tool["pip_exclude"]), encoding="utf-8")
+                overrides = ["--overrides", str(Path(tmp, "overrides.txt"))]
             run_verifier(["uv", "pip", "compile", str(source), "--output-file", str(out), "--generate-hashes",
-                          "--python-version", PIP_PYTHON, "--python-platform", PIP_PLATFORM,
+                          "--python-version", PIP_PYTHON, "--python-platform", PIP_PLATFORM, *overrides,
                           "--only-binary", ":all:", "--no-header", "--no-annotate", "--quiet"])
             body = out.read_text(encoding="utf-8")
         header = (f"# {tool['image_id']}: {requirement} for Python {PIP_PYTHON} on {PIP_PLATFORM}.\n"
@@ -559,9 +573,10 @@ def lock_pip(folder: Path, tool: dict[str, Any], keep_lock: bool = False) -> dic
         lock_path.write_text(header + body, encoding="utf-8", newline="\n")
     packages = [line.split("==")[0] for line in body.splitlines() if re.match(r"^[A-Za-z0-9]", line)]
     wheels = download_wheels(folder, lock_path)
+    excluded = {"excluded": sorted(tool["pip_exclude"])} if tool.get("pip_exclude") else {}
     return {"requirement": requirement, "python": PIP_PYTHON, "platform": PIP_PLATFORM,
             "packages": len(packages), "lock_sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
-            "wheels": wheels}
+            **excluded, "wheels": wheels}
 
 
 def download_wheels(folder: Path, lock_path: Path) -> list[dict[str, Any]]:

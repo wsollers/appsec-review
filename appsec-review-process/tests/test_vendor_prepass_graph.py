@@ -275,8 +275,11 @@ class VendorPrepassGraphTests(unittest.TestCase):
         self.assertEqual(len(skippable), NUMBER_WORDS[count.lower()])
         uses = {(consumer, edge["job"]) for consumer, node in s.jobs.items() for edge in node["dependencies"]
                 if self.reason in edge["allowed_skip_reasons"]}
+        # 02-binary-component-cve-match (cve-bin-tool, docs/proposals/vendor-prepass/blint-cve-bin-tool.md)
+        # skips like 02-binary-hardening but is not one of the ADR-0010 nine nodes.
         self.assertEqual(uses, {(ASSEMBLY, job) for job in skippable} |
-                         {("15-deployment-hardening", "02-iac-config-scan")})
+                         {("15-deployment-hardening", "02-iac-config-scan"),
+                          (ASSEMBLY, "02-binary-component-cve-match")})
         self.assertEqual(s.jobs[ASSEMBLY]["join_policy"]["mode"], s.fixture["consumer_join"]["join_policy_mode"])
         self.assertEqual(s.fixture["consumer_join"]["job"], ASSEMBLY)
 

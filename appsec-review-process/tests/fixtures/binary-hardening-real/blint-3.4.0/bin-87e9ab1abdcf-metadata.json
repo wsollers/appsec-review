@@ -1,0 +1,15 @@
+{
+ "binary_type": "MachO",
+ "exe_type": "MachO",
+ "file_path": "/workspace/bin-87e9ab1abdcf",
+ "file_type": "BUNDLE",
+ "security_properties": {
+  "canary": false,
+  "is_signed": false,
+  "nx": true,
+  "pie": false,
+  "relro": "no",
+  "stripped": true,
+  "w_xor_x": true
+ }
+}
