@@ -58,8 +58,8 @@ supply-chain-attacker (CI automation) and insider-developer (build scripts).
 | D03 `02-devops-project-discovery` | same | devops-engineer | repo-project-discoverer | Fits |
 | D04 `02-sre-operations-topology` | same | sre-engineer | operations-topology-mapper | Fits |
 | OWASP validator cells (`owasp_workbench_lifecycle.py`) | `04-owasp-validator-cell` | owasp-validator | standards-control-validator | Fits; every cell uses the same persona (candidate for variants: api-contract-abuser, auth-session-specialist, mobile-platform-attacker by chapter) |
-| Intake review pool (`persona_tool_pool_lifecycle.py`) | `intake-review-pool-cell`, `intake-review-pool-independent-cell` | claim-reviewer, reverse-engineer | claim-reviewer | Two distinct personas already; claim-reviewer is generic for an intake check (candidate: completeness-auditor, parked in `personas-unused/`) |
-| `persona-tool-pool-dispatch` (`control_lane_orchestration.py`) | caller-supplied spec | per spec | per spec | Persona comes from the supplied pool spec |
+| Intake review pool (`persona_tool_pool_lifecycle.py`) | `intake-review-pool-cell`, `intake-review-pool-independent-cell` | claim-reviewer, reverse-engineer | claim-reviewer | No model call since D4 (2026-10-02): `GraphReviewInvoker` writes the canonical candidates itself. The composition only labels the two cells for the pool protocol; no model reads their prompt |
+| `persona-tool-pool-dispatch` (`control_lane_orchestration.py`) | caller-supplied spec | per spec | per spec | Same deterministic invoker as the intake pool; the spec's cells must read accepted intake |
 
 Not changed here (listed for William): the `07/08/09/12` lifecycle templates themselves name
 evidence-custodian/evidence-assembler, but those jobs are deterministic Python and make no model

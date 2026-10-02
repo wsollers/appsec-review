@@ -18,9 +18,7 @@ import prompt_lint
 from schema_validate import SchemaStore
 
 # docs/prompt-persona-role-alignment-plan-2026-10-01.md, section 5 work queue.
-PENDING = frozenset({
-    "intake-review-pool-cell", "intake-review-pool-independent-cell",             # R18
-})
+PENDING: frozenset[str] = frozenset()   # empty since R18 (the intake cells no longer call a model)
 
 
 class TaskPromptStructureTests(unittest.TestCase):

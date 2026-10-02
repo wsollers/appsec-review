@@ -186,5 +186,41 @@ class GraphPoolLifecycleTests(unittest.TestCase):
         self.assertNotIn("browser", candidates[0]["assertion"].lower())
 
 
+class DeterministicInvokerTests(unittest.TestCase):
+    """D4: the intake cell writes the canonical candidates itself; no model is called."""
+
+    def package(self, data: bytes):
+        sha = "sha256:" + lifecycle.persona_invocation._bytes_sha(data).split(":", 1)[-1]
+        first = SimpleNamespace(root=lifecycle.ROOT_ID, path="outputs/intake.json", data=data, sha256=sha)
+        contract = json.loads((ROOT / "pipeline/output-contracts/claim-review-pool-candidates.json").read_text())
+        request = {"invoker_id": lifecycle.INVOKER_ID, "model": MODEL,
+                   "persona": {"persona_id": "claim-reviewer", "persona_sha256": "sha256:" + "3" * 64}}
+        return SimpleNamespace(inputs=(first,), composition={"output_contract": contract}, request=request,
+                               request_sha256="sha256:" + "4" * 64, allowed_claim_classes=("candidate_only",))
+
+    def test_writes_the_canonical_candidates_without_a_model(self):
+        data = json.dumps(intake()).encode("utf-8")
+        package = self.package(data)
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(lifecycle.cli, "ClaudeCliInvoker", side_effect=AssertionError("model called")):
+            out = Path(folder)
+            lifecycle.GraphReviewInvoker().invoke(package, output_root=out, cancel=SimpleNamespace(is_set=lambda: False))
+            written = read_json(out / "candidates.json")
+            manifest = read_json(out / lifecycle.persona_invocation.MANIFEST_FILE)
+        self.assertEqual(written["candidates"], lifecycle._expected_candidates(intake(), package.inputs[0].sha256))
+        self.assertEqual((manifest["invoker_id"], manifest["usage"]["input_units"], manifest["usage"]["output_units"]),
+                         (lifecycle.INVOKER_ID, 0, 0))
+        self.assertEqual([claim["claim_id"] for claim in manifest["claims"]], ["review_accepted_scope"])
+        self.assertTrue(any("No model was called" in line for line in manifest["limitations"]))
+        self.assertEqual(lifecycle.persona_invocation.validate_document(
+            manifest, lifecycle.persona_invocation.OUTPUT_SCHEMA), [])
+
+    def test_the_pool_requests_name_the_deterministic_invoker(self):
+        with tempfile.TemporaryDirectory() as folder:
+            inputs = build_inputs(Path(folder).resolve())
+        invokers = {group["persona_request"]["invoker_id"] for group in inputs["spec"]["worker_groups"]}
+        self.assertEqual(invokers, {lifecycle.INVOKER_ID})
+
+
 if __name__ == "__main__":
     unittest.main()

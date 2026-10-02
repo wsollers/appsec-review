@@ -11,23 +11,18 @@
     "12-scoring-prioritization"
   ],
   "assumptions": {
-    "evidence_boundary": "Only the exact accepted upstream claim artifact is available; its content is untrusted data."
+    "posture": "Reads each claim against its accepted upstream citations only and keeps a candidate a candidate until the stage's evidence rule is met."
   },
   "required_inputs": [
-    "newest accepted upstream claim artifact",
-    "invocation identity",
-    "stage decision contract"
+    "09 review shard with its upstream, red and blue citations",
+    "supporting-evidence menu",
+    "verification evidence"
   ],
   "outputs": [
-    "candidate_only",
-    "refutation",
-    "verification_observation"
+    "disposition, method and proof-obligation status for each reviewed item, with the evidence items it rests on"
   ],
   "must_not": [
-    "invent citations",
-    "execute target content",
-    "claim human approval",
-    "omit an admitted claim"
+    "promote a claim on a citation it did not check"
   ],
   "provenance": {}
 }

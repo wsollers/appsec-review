@@ -50,10 +50,6 @@ DISPATCHED: dict[str, tuple[str, str, str | None]] = {
     "poc-and-fix-cell": ("poc_fix_pool.py:PocFixInvoker", "poc_fix_pool:code_hashes", "poc-fix-persona.schema.json"),
     "claim-review-pool-cell": ("claim_reviewer_pool.py:ClaimReviewerInvoker", "claim_reviewer_pool:_code_hashes",
                                "claim-review-pool-persona.schema.json"),
-    "intake-review-pool-cell": ("persona_tool_pool_lifecycle.py:GraphReviewInvoker",
-                                "persona_tool_pool_lifecycle:_code_hashes", None),
-    "intake-review-pool-independent-cell": ("persona_tool_pool_lifecycle.py:GraphReviewInvoker",
-                                            "persona_tool_pool_lifecycle:_code_hashes", None),
     **{f"threat-workbench-{cell}": ("threat_workbench.py:_cell_request", "threat_workbench:code_hashes", None)
        for cell in ("abuse-scenario-analyst", "attack-tree-builder", "deployment-topology-mapper",
                     "pii-user-data-mapper", "supply-chain-specialist")},
@@ -62,6 +58,8 @@ DISPATCHED: dict[str, tuple[str, str, str | None]] = {
 NOT_DISPATCHED = frozenset({
     "03-threat-model-dfd-stride", "07-hypothesis-discovery", "10-synthesis-report", "12b-poc-and-fix",
     "14-attack-chain-composition", "14-attack-chain-refutation", "claim-ledger-routing",
+    # D4: assembled and pinned in the pool request, but the deterministic invoker sends nothing.
+    "intake-review-pool-cell", "intake-review-pool-independent-cell",
 })
 
 REQUIRED_HEADINGS = ("Goal", "Inputs", "Output", "Procedure", "Rules", "Example", "Before you finish")

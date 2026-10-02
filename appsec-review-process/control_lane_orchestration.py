@@ -6,7 +6,6 @@ from typing import Any
 import completeness_audit, control_process_worker, deterministic_pool_merge, dynamic_rescope
 import evidence_quorum, final_publication, remediation_retest, synthetic_hypothesis_resynthesis
 import pool_launcher, pool_rendezvous, pool_specification
-from claude_cli_invoker import ClaudeCliInvoker
 import container_execution
 from execution_state import Blocked, beneath, data_path, file_hash, identifier, read_json, run_path
 from publish_job_output import mark_attempt_started, publish_validated
@@ -93,7 +92,8 @@ def execute_pool(*,job_id:str,run_id:str,dagster_run_id:str,input_path:str,outpu
         raise Blocked("control orchestration: pool runtime shape is not closed")
     rendezvous_parent=Path(runtime_cfg["rendezvous_parent"]).absolute(); beneath(owner,rendezvous_parent.parent)
     if job_id=="persona-tool-pool-dispatch":
-        invoker=ClaudeCliInvoker(effort=runtime_cfg["effort"],budget_usd=runtime_cfg["budget_usd"])
+        import persona_tool_pool_lifecycle   # deferred: that module imports this one
+        invoker=persona_tool_pool_lifecycle.GraphReviewInvoker()   # deterministic intake cells, no model (D4)
         runtime=pool_rendezvous.RendezvousRuntime(rendezvous_parent=rendezvous_parent,invoker=invoker,
             clock=lambda:value["generated_at"],stop_grace_seconds=runtime_cfg["stop_grace_seconds"],
             cancel=pool_rendezvous.PoolCancel(),max_parallel=runtime_cfg["max_parallel"],

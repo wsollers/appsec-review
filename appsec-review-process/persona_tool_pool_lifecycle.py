@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import claude_cli_invoker as cli
-import claim_reviewer_pool  # registers the closed pool-candidate builder with the strict invoker
+import claim_reviewer_pool  # the closed pool-candidate claim builder
 import container_execution
 import control_lane_orchestration
 import deterministic_pool_merge
@@ -33,6 +33,7 @@ JOB = "persona-tool-pool-dispatch"
 CONTRACT = JOB
 RESULT = "persona-tool-pool-dispatch.json"
 CELL_TEMPLATES = ("intake-review-pool-cell", "intake-review-pool-independent-cell")
+INVOKER_ID = "intake-canonical"   # deterministic cell, no model call (decision D4)
 ROOT_ID = "accepted-intake"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 VIEW_REQUEST = "downstream/deterministic-pool-merge-request.json"
@@ -109,7 +110,7 @@ def _request(run_id: str, template_id: str, prompt_name: str, intake_path: Path,
     resolved = review_cli.resolve_model(template_id, template["budget_default"])
     model = model_versions.model_identity_for(run_id, resolved["model"])
     data = intake_path.read_bytes()
-    request = {"invocation_role": "produce", "invoker_id": "claude-cli",
+    request = {"invocation_role": "produce", "invoker_id": INVOKER_ID,
         "outer_prompt": {"path": prompt_name, "sha256": persona_invocation._bytes_sha(prompt_bytes),
                          "bytes": len(prompt_bytes)},
         "persona": composition, "model": model, "tools": [],
@@ -180,46 +181,35 @@ def _expected_candidates(intake: dict[str, Any], evidence_sha256: str) -> list[d
         "evidence_sha256": evidence_sha256, "claim_class": "candidate_only"}]
 
 
-def _graph_instructions(package: Any) -> str:
-    intake = json.loads(package.inputs[0].data)
-    expected = _expected_candidates(intake, package.inputs[0].sha256)
-    return "\n\n## Trusted graph-pool runtime (not target data)\n\n" + json.dumps({
-        "required_claim_class": "candidate_only",
-        "evidence_sha256": package.inputs[0].sha256,
-        "candidate_id_format": "review_<letters-digits-underscore-hyphen>",
-        "subject_id_rule": "stable review subject derived from an intake fact",
-        "assertion_exact_fields": ["hypothesis", "rationale", "scope_paths", "source_revision",
-                                   "limitations"],
-        "candidate_rule": "return exactly the canonical candidates below; no findings or verdicts",
-        "canonical_candidates": expected
-    }, indent=2, sort_keys=True)
-
-
 class GraphReviewInvoker:
-    invoker_id = "claude-cli"
+    """Deterministic, model-free intake review cell (decision D4, 2026-10-02).
 
-    def __init__(self, *, effort: str = "high", budget_usd: float | None = None,
-                 timeout_seconds: int = cli.DEFAULT_TIMEOUT_SECONDS, dispatch_fn=None) -> None:
-        self.effort, self.budget_usd, self.timeout_seconds = effort, budget_usd, timeout_seconds
-        self.dispatch_fn = dispatch_fn or review_cli._dispatch_streaming
+    The canonical candidates are fully determined by accepted intake, so the cell writes them itself
+    instead of asking a model to echo them. The persona prompt is still pinned for the pool protocol
+    but never sent; the manifest records zero model usage and says so in its limitations."""
+    invoker_id = INVOKER_ID
 
     def invoke(self, package: Any, *, output_root: Path, cancel: Any) -> None:
-        suffix = _graph_instructions(package)
-
-        def dispatch(argv: list[str], prompt: str, timeout: int, transcript: Path) -> dict[str, Any]:
-            return self.dispatch_fn(argv, prompt + suffix, timeout, transcript)
-
-        intake = json.loads(package.inputs[0].data)
-        expected = _expected_candidates(intake, package.inputs[0].sha256)
-
-        def fill(envelope: dict[str, Any], result_field: str) -> None:
-            # The canonical candidates are fully determined by accepted intake; supply them
-            # rather than depending on the model echoing them exactly (ADR-0013).
-            envelope[result_field] = {"candidates": expected}
-
-        cli.ClaudeCliInvoker(effort=self.effort, budget_usd=self.budget_usd,
-            timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch, fill_result=fill).invoke(
-                package, output_root=output_root, cancel=cancel)
+        if cancel.is_set():
+            raise persona_invocation.InvokerUnavailable("canceled before the intake cell wrote its candidates")
+        first = package.inputs[0]
+        if first.root != ROOT_ID:
+            raise cli.InvokerOutputError("intake review cell: accepted intake must be readable input 0")
+        value = {"candidates": _expected_candidates(json.loads(first.data), first.sha256)}
+        schema = package.composition["output_contract"]["result_schema"]
+        errors = validate_document(value, schema["schema_file"], SchemaStore())
+        if errors:
+            raise cli.InvokerOutputError(f"intake review candidates fail {schema['schema_file']}", errors[:5])
+        atomic_bytes(Path(output_root) / schema["artifact"],
+                     (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+        claims = cli._schema_safe_claims(claim_reviewer_pool._pool_claims(
+            value, (first,), package.allowed_claim_classes, schema["artifact"]))
+        persona_invocation.write_invoker_output(
+            package, output_root, files=[schema["artifact"]], claims=claims,
+            usage={"input_bytes": len(first.data), "input_units": 0, "output_units": 0, "tool_calls": 0},
+            tool_calls=[], verified_invocations=[], injection_suspected=[],
+            limitations=["No model was called: the intake review candidates are fully determined by accepted "
+                         "intake (decision D4); the persona prompt was pinned for the pool protocol, not sent."])
 
 
 def _materialize_context(inputs: dict[str, Any], attempt: Path) -> tuple[pool_specification.PoolContext, Path]:
@@ -237,7 +227,7 @@ def _materialize_context(inputs: dict[str, Any], attempt: Path) -> tuple[pool_sp
     context = pool_specification.PoolContext(pool_parent=pool_parent,
         registry_dir=persona_invocation.REGISTRY_DIR, prompt_root=prompt_root,
         readable_roots={ROOT_ID: Path(inputs["intake_attempt"])}, allowed_models=tuple(models),
-        invoker_id="claude-cli", images_dir=container_execution.IMAGES_DIR,
+        invoker_id=INVOKER_ID, images_dir=container_execution.IMAGES_DIR,
         host_flavor="windows" if os.name == "nt" else "posix", docker_host=None,
         docker_executable=None, container_user=None, mount_roots={},
         source_snapshot_sha256=inputs["source_generation"], registry_ceiling=None)
