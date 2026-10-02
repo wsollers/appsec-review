@@ -157,7 +157,8 @@ minimal input, call or short test that triggers the crash or overflow, or shows 
 flow), a source-to-sink explanation, the cited ranges and a proposed fix as a unified diff.
 
 `poc_fix_derive.py` keeps the books (ADR-0013): ids, hashes and labels are derived; a citation
-outside the workspace windows, a fix touching another file or an oversize PoC goes back through the
+outside the workspace windows, a fix touching another file, an oversize PoC or a sentence calling the
+PoC, fix or vulnerability verified, confirmed or exploited (`wording_guard.py`) goes back through the
 invoker repair loop. `poc_fix_denylist.py` scans the PoC, trigger, the lines the fix adds and (for
 material only) the prose: process spawn or exec, network, file writes outside a temp name,
 destructive actions, encoded blobs, pipes into interpreters and `eval`, credentials, persistence,

@@ -35,7 +35,7 @@ ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthe
 CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", "synthesis_report.py",
     "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py", "entry_exports.py",
     "cvss4.py", "cwe_catalog.py", "mitre_feed.py", "code_snippets.py", "epss_kev_snapshot.py",
-    "attack_chain_report.py", "attack_chain_refute.py", "attack_chain_derive.py",
+    "attack_chain_report.py", "attack_chain_refute.py", "attack_chain_derive.py", "wording_guard.py",
     "poc_fix_report.py", "poc_fix_denylist.py", "dependency_reachability_report.py",
     registry_paths.contract_rel("synthesis-report-publication"),
     registry_paths.template_rel("10-synthesis-report"), registry_paths.GRAPH_REL)

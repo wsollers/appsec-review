@@ -16,18 +16,14 @@
     "human_approval"
   ],
   "must_not": [
-    "write hostile material (shellcode, persistence, exfiltration, credentials, network callbacks, destructive actions, obfuscation)",
-    "copy orchestrator bookkeeping (ids, hashes, labels, statuses)",
-    "claim the PoC ran or the fix is verified"
+    "claim the PoC ran or the fix works"
   ],
   "required_behavior": [
-    "cite only workspace files and line windows",
-    "keep the PoC to a minimal input, call or short test that triggers the crash, overflow or faulty control flow",
-    "explain the code path from source to sink in plain language",
-    "propose a fix as a unified diff of the cited files"
+    "walk the reachability witness from entry to sink before writing the PoC",
+    "prefer the smallest input, call or test, and say when no honest PoC exists"
   ],
   "role_id": "poc-fix-author",
   "schema": "appsec-review/role/0.1",
-  "summary": "For one verified, Critical, reachable finding, write a light static PoC that shows how the defect happens and a proposed fix."
+  "summary": "For one verified, Critical, reachable finding, shows the code's owner how the defect happens with a light static PoC and proposes the change that removes it; both stay unvalidated."
 }
 ```

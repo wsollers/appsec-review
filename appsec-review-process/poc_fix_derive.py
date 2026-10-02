@@ -16,6 +16,9 @@ This module keeps the books (ADR-0013):
   cited range overlaps a finding location. A path, range or hash the workspace does not name is a
   repair error, never published;
 * the fix diff may only touch citable files (``---``/``+++`` headers) and must carry a hunk;
+* wording (:mod:`wording_guard`): a sentence of the trigger condition, explanation or rationale that
+  says the PoC, fix or vulnerability is verified, confirmed, proven or exploited goes back for repair;
+  a negated sentence passes. (A null ``poc`` without a ``no_poc_reason`` is a schema error.)
 * the denylist (:mod:`poc_fix_denylist`) over the PoC text and trigger, the lines the fix adds, and
   (prose rules) the explanation and rationale. A hit is **not** repaired: the part is withheld, its
   rule ids, lines and hash are recorded, and the job records a gap. Re-asking would teach the model
@@ -33,6 +36,7 @@ from typing import Any
 
 import contract_derive
 import poc_fix_denylist as denylist
+import wording_guard
 from claude_cli_invoker import InvokerOutputError
 from execution_state import digest
 from schema_validate import SchemaStore, validate_document
@@ -52,6 +56,10 @@ CLAIM_LIMITS = {"executed": False, "validated": False, "target_modified": False,
 _ORCHESTRATOR_KEYS = contract_derive.orchestrator_keys(RECORD_SCHEMA, PERSONA_SCHEMA)
 _PROMOTION_KEYS = {"severity", "cvss", "cvss_score", "priority", "verified", "validated", "finding", "fixed"}
 _DIFF_FILE = re.compile(r"^(?:---|\+\+\+) (?:[ab]/)?(\S+)")
+_ASSERTION_RE = wording_guard.pattern(
+    r"poc|proof[- ]of[- ]concept|exploit(?:ation)?|vulnerabilit(?:y|ies)|flaw|bug|overflow|crash|fix|patch",
+    r"verified|confirmed|proven|exploited")
+_WORDING_ADVICE = "the PoC and fix are unvalidated proposals (say what the code shows instead)"
 
 
 def _sha_text(text: str) -> str:
@@ -185,8 +193,6 @@ def derive(workspace: dict[str, Any], reply: Any, *, author: dict[str, Any],
         raise InvokerOutputError(f"poc-fix reply fails {PERSONA_SCHEMA}: {len(errors)} error(s)", errors[:40])
     bounds = workspace["bounds"]
     poc, fix = value["poc"], value["fix"]
-    if poc is None and not (isinstance(value["no_poc_reason"], str) and value["no_poc_reason"].strip()):
-        errors.append("poc is null: give a no_poc_reason")
     if poc is not None:
         if len(poc["text"]) > bounds["poc_chars"] or len(poc["text"].splitlines()) > bounds["poc_lines"]:
             errors.append(f"poc.text: at most {bounds['poc_lines']} lines / {bounds['poc_chars']} characters; "
@@ -195,6 +201,9 @@ def derive(workspace: dict[str, Any], reply: Any, *, author: dict[str, Any],
         errors.append(f"explanation: at most {bounds['explanation_chars']} characters")
     if len(value["cited_lines"]) > bounds["cited_lines_max"]:
         errors.append(f"cited_lines: at most {bounds['cited_lines_max']} ranges")
+    for text, where in ((poc and poc["trigger_condition"], "poc.trigger_condition"),
+                        (value["explanation"], "explanation"), (fix["rationale"], "fix.rationale")):
+        errors.extend(wording_guard.errors(text, where, _ASSERTION_RE, _WORDING_ADVICE))
     citations = check_citations(workspace, value["cited_lines"], errors)
     files = _check_fix(workspace, fix, errors)
     if errors:

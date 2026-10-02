@@ -8,9 +8,9 @@
   one outcome per chain of the batch) into outcomes. ``broken`` and ``narrowed`` name the link or
   edge and cite at least one resolvable id: a citation of the chain itself (a linked claim's
   citation id, a fact ref of a link or hop) or a file the supporting-evidence menu pins. Anything
-  else goes back through the invoker repair loop, as does a mechanism that carries code or asserts that a
-  chain, exploit or vulnerability is verified (:func:`attack_chain_derive.assertion_errors`). The refuter cannot change a claim's ledger state;
-  it decides only the chain.
+  else goes back through the invoker repair loop, as does a mechanism that carries code or asserts
+  that a chain, exploit or vulnerability is verified (:func:`attack_chain_derive.assertion_errors`).
+  The refuter cannot change a claim's ledger state; it decides only the chain.
 * :func:`apply` sets each chain's refutation and recomputes its state and weakest link with
   :func:`attack_chain_derive.chain_state`. Refuted chains are dropped from the published list with
   the recorded reason; nothing ever rises above ``supported``.

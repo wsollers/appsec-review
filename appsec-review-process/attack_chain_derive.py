@@ -34,6 +34,7 @@ import re
 from typing import Any
 
 import attack_reference
+import wording_guard
 from claude_cli_invoker import InvokerOutputError
 from execution_state import digest
 from schema_validate import SchemaStore, validate_document
@@ -62,23 +63,13 @@ _PAYLOAD_RE = re.compile(r"```|(?:\\x[0-9a-fA-F]{2}){4,}|(?:%[0-9a-fA-F]{2}){6,}
 # vulnerability is verified, confirmed or proven. Sentence-scoped and negation-aware (alignment plan P8):
 # "the chain is not verified" or "no exploit was confirmed" passes; a claim's own 09 status ("claim X was
 # verified at 09") is a fact about the claim, not the chain, and passes.
-_ASSERTION_RE = re.compile(
-    r"\b(?:chain|attack|exploit(?:ation)?|vulnerabilit(?:y|ies))\b[^.;!?]{0,60}?\b(?:is|was|are|were|has been|have been)\s+"
-    r"(?:fully\s+)?(?:verified|confirmed|proven)\b"
-    r"|\b(?:verified|confirmed|proven)\s+(?:attack\s+)?(?:chain|exploit(?:ation)?|vulnerabilit(?:y|ies)|attack)\b",
-    re.IGNORECASE)
-_NEGATION_RE = re.compile(r"\b(?:not|no|never|cannot|can't|isn't|wasn't|un(?:verified|confirmed|proven))\b", re.IGNORECASE)
+_ASSERTION_RE = wording_guard.pattern(r"chain|attack|exploit(?:ation)?|vulnerabilit(?:y|ies)", r"verified|confirmed|proven")
 
 
 def assertion_errors(text: str, where: str) -> list[str]:
     """Sentences of ``text`` that assert a verified/confirmed chain, exploit or vulnerability."""
-    errors = []
-    for sentence in re.split(r"(?<=[.;!?])\s+", text or ""):
-        match = _ASSERTION_RE.search(sentence)
-        if match and not _NEGATION_RE.search(sentence[:match.end()]):
-            errors.append(f"{where}: {match.group(0)!r} asserts verification; a chain is at most supported "
-                          "(say what the evidence shows instead)")
-    return errors
+    return wording_guard.errors(text, where, _ASSERTION_RE,
+                                "a chain is at most supported (say what the evidence shows instead)")
 
 
 _ORCHESTRATOR_KEYS = {"chain_id", "cluster_id", "state", "weakest", "link_state", "causal_claim_ids",

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "poc-fix-persona.schema.json",
   "title": "Lane-12b PoC-and-fix author reply (judgment only)",
-  "description": "What the poc-fix-author persona writes for one verified, Critical, reachable finding: a light static PoC (or why none), the source-to-sink explanation, the lines it relies on (path and line range only) and a proposed fix. Ids, hashes, labels and statuses are derived by poc_fix_derive.py.",
+  "description": "What the poc-fix-author persona writes for one verified, Critical, reachable finding: a light static PoC (or, when poc is null, a non-empty no_poc_reason), the source-to-sink explanation, the lines it relies on (path and line range only) and a proposed fix. Ids, hashes, labels and statuses are derived by poc_fix_derive.py.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -130,5 +130,30 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "poc"
+        ],
+        "properties": {
+          "poc": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "no_poc_reason"
+        ],
+        "properties": {
+          "no_poc_reason": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      }
+    }
+  ]
 }

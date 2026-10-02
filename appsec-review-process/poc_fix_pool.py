@@ -45,12 +45,13 @@ RULES = (
     "Cite only workspace citable files inside their line windows; at least one range covers a finding location.",
     "The fix is a unified diff of citable files only; it is a proposal and is not applied.",
     "Write only your judgment. Ids, hashes, labels, statuses and the denylist result are derived.",
+    "No severity, and no wording that calls the PoC, fix or vulnerability verified, confirmed or exploited.",
 )
 
 
 def code_hashes() -> dict[str, str]:
     """Implementation files the lane-12b job depends on (the worker adds its own module)."""
-    paths = ["poc_fix_derive.py", "contract_derive.py", "poc_fix_denylist.py", "poc_fix_select.py", "poc_fix_pool.py",
+    paths = ["poc_fix_derive.py", "wording_guard.py", "contract_derive.py", "poc_fix_denylist.py", "poc_fix_select.py", "poc_fix_pool.py",
              "finding_enrichment.py", "reachability.py", "entry_exports.py", "code_snippets.py", "cwe_catalog.py",
              "mitre_feed.py",
              "persona_invocation.py", "deterministic_pool_merge.py", "pool_launcher.py", "pool_rendezvous.py",

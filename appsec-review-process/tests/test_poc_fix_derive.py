@@ -214,11 +214,37 @@ class DeriveTests(Run):
         self.assertEqual(record["poc"]["status"], "PROPOSED_UNVALIDATED")
 
     def test_no_poc_needs_a_reason(self):
-        with self.assertRaises(InvokerOutputError):
-            derive.derive(self.workspace, good_reply(poc=None), author=AUTHOR)
+        for reason in (None, "  "):
+            with self.subTest(reason=reason), self.assertRaises(InvokerOutputError) as caught:
+                derive.derive(self.workspace, good_reply(poc=None, no_poc_reason=reason), author=AUTHOR)
+            self.assertIn("poc-fix-persona.schema.json", str(caught.exception))
+            self.assertTrue(any("no_poc_reason" in detail for detail in caught.exception.details), caught.exception.details)
         record, _ = derive.derive(self.workspace, good_reply(poc=None, no_poc_reason="input is bounded upstream"),
                                   author=AUTHOR)
         self.assertEqual((record["poc"]["status"], record["poc"]["reason"]), ("NOT_PROVIDED", "input is bounded upstream"))
+
+
+    def test_verification_wording_goes_back_and_negation_passes(self):
+        for field, reply in (
+                ("explanation", good_reply(explanation="The overflow was confirmed by the PoC.")),
+                ("fix.rationale", good_reply(fix={**good_reply()["fix"], "rationale": "A verified fix: bound the copy."})),
+                ("poc.trigger_condition", good_reply(poc={**good_reply()["poc"],
+                                                          "trigger_condition": "The vulnerability is exploited with a long argv[1]."}))):
+            with self.subTest(field=field), self.assertRaises(InvokerOutputError) as caught:
+                derive.derive(self.workspace, reply, author=AUTHOR)
+            self.assertTrue(any(detail.startswith(field) and "asserts verification" in detail
+                                for detail in caught.exception.details), caught.exception.details)
+        record, _ = derive.derive(self.workspace, good_reply(fix={**good_reply()["fix"], "rationale":
+                                  "Bound the copy; the fix is not verified and nothing ran."}), author=AUTHOR)
+        self.assertEqual(record["fix"]["status"], "PATCH_PROPOSED_UNVALIDATED")
+
+    def test_the_task_prompt_example_derives_unvalidated(self):
+        text = (ROOT / "12b-poc-and-fix/task-poc-and-fix-cell.md").read_text(encoding="utf-8")
+        example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
+        record, notes = derive.derive(self.workspace, example, author=AUTHOR)
+        self.assertEqual(notes, [])
+        self.assertEqual((record["poc"]["status"], record["fix"]["status"], record["explanation_status"]),
+                         ("PROPOSED_UNVALIDATED", "PATCH_PROPOSED_UNVALIDATED", "ACCEPTED"))
 
 
 class CollectTests(Run):

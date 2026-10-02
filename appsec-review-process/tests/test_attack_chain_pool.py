@@ -176,7 +176,7 @@ class CollectTests(unittest.TestCase):
 
     def test_code_hashes_cover_the_lane_files(self):
         hashes = pool.code_hashes()
-        for path in ("attack_chain_seeds.py", "attack_chain_derive.py", "attack_chain_refute.py",
+        for path in ("attack_chain_seeds.py", "attack_chain_derive.py", "wording_guard.py", "attack_chain_refute.py",
                      "personas/personas/attack-chain-refuter/persona.json", "14-attack-chain/task-attack-chain-refutation-cell.md",
                      "schemas/attack-chain-ledger.schema.json"):
             self.assertIn(path, hashes)
