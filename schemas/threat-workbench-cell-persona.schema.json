@@ -391,6 +391,7 @@
         "type": "object",
         "required": [
           "objective",
+          "target_ids",
           "root",
           "nodes"
         ],
@@ -406,7 +407,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "minItems": 1
           },
           "root": {
             "type": "string",
@@ -449,7 +451,8 @@
                   "type": "array",
                   "items": {
                     "type": "string"
-                  }
+                  },
+                  "description": "AND/OR nodes only: keys of the child nodes."
                 },
                 "prerequisites": {
                   "type": "array",
@@ -464,7 +467,7 @@
                     "assumption",
                     "unresolved"
                   ],
-                  "description": "Leaves only."
+                  "description": "Leaves only: evidence (cite a resolvable ref), assumption or unresolved."
                 },
                 "evidence": {
                   "type": "array",
@@ -473,8 +476,63 @@
                   },
                   "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
                 }
-              }
-            }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "leaf"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "support"
+                    ],
+                    "properties": {
+                      "children": {
+                        "maxItems": 0
+                      }
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "children"
+                    ],
+                    "properties": {
+                      "children": {
+                        "minItems": 1
+                      },
+                      "support": false
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "required": [
+                      "support"
+                    ],
+                    "properties": {
+                      "support": {
+                        "const": "evidence"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "evidence"
+                    ],
+                    "properties": {
+                      "evidence": {
+                        "minItems": 1
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "minItems": 1
           }
         }
       }

@@ -59,7 +59,29 @@
     ]
   },
   "supply-chain-specialist": {
-    "summary": "Vendored cJSON has no package identity in the SBOM.",
+    "summary": "Vendored cJSON 1.7.18 is compiled into hello from in-tree source and has no package identity in the SBOM.",
+    "abuse_scenarios": [
+      {"attacker_objective": "Get modified cJSON code into the hello binary", "actor": "contributor or upstream source with write access to vendor/",
+       "capability": "changes the vendored cJSON sources before a build", "target_ids": ["flow-autotools-build--builds--hello-cli"],
+       "data_class_keys": ["data-json-report"], "harm": "attacker-chosen code runs inside hello and can alter or leak the JSON report",
+       "preconditions": ["the vendored copy is refreshed or edited without a comparison against the upstream release"],
+       "missing_controls": ["checksum or signature pin for vendor/cJSON-1.7.18", "purl or CPE for the vendored copy in the SBOM"],
+       "evidence": ["target-repository:Makefile.am", "target-repository:vendor/cJSON-1.7.18/cJSON.c", "evidence-assembly:outputs/sbom.cdx.json"],
+       "confidence": "low"}
+    ],
+    "attack_trees": [
+      {"objective": "Get modified cJSON code into the hello binary", "target_ids": ["element-autotools-build"], "root": "goal",
+       "nodes": [
+         {"key": "goal", "kind": "AND", "label": "modified cJSON is linked into hello", "children": ["change-source", "built-in"]},
+         {"key": "change-source", "kind": "OR", "label": "the vendored source changes", "children": ["edit-vendor", "refresh-vendor"]},
+         {"key": "edit-vendor", "kind": "leaf", "label": "a commit edits vendor/cJSON-1.7.18 directly", "support": "assumption",
+          "prerequisites": ["write access to the repository"]},
+         {"key": "refresh-vendor", "kind": "leaf", "label": "a maintainer copies a tampered upstream release into vendor/", "support": "unresolved"},
+         {"key": "built-in", "kind": "leaf", "label": "the build compiles vendor/ sources into libcjson.a", "support": "evidence",
+          "evidence": ["target-repository:Makefile.am"]}
+       ],
+       "confidence": "low"}
+    ],
     "gaps": [{"statement": "Vendored cJSON 1.7.18 carries no purl or CPE, so advisory matching could not cover it."}]
   }
 }

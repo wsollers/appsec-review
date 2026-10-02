@@ -516,7 +516,8 @@ class CellPromptExampleTests(unittest.TestCase):
 
     def test_the_task_prompt_examples_are_the_sample_replies(self):
         samples = json.loads(self.SAMPLES.read_text(encoding="utf-8"))
-        for cell in ("pii-user-data-mapper", "deployment-topology-mapper", "abuse-scenario-analyst"):
+        for cell in ("pii-user-data-mapper", "deployment-topology-mapper", "abuse-scenario-analyst",
+                     "attack-tree-builder", "supply-chain-specialist"):
             with self.subTest(cell=cell):
                 text = (ROOT / f"03-threat-model-dfd-stride/cells/{cell}.md").read_text(encoding="utf-8")
                 example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
@@ -540,6 +541,41 @@ class CellPromptExampleTests(unittest.TestCase):
         reply = deepcopy(samples["abuse-scenario-analyst"])
         reply["abuse_scenarios"][0]["target_ids"] = []
         self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
+
+    def test_attack_tree_nodes_follow_the_leaf_and_gate_rules(self):
+        samples = json.loads(self.SAMPLES.read_text(encoding="utf-8"))
+        schema = "threat-workbench-cell-persona.schema.json"
+        tree = samples["attack-tree-builder"]
+        self.assertEqual(validate_document(tree, schema), [])
+
+        def broken(change):
+            reply = deepcopy(tree)
+            nodes = {node["key"]: node for node in reply["attack_trees"][0]["nodes"]}
+            change(nodes)
+            return validate_document(reply, schema)
+        self.assertTrue(broken(lambda n: n["long-name"].pop("support")))           # leaf without support
+        self.assertTrue(broken(lambda n: n["long-name"].update(children=["format"])))   # leaf with children
+        self.assertTrue(broken(lambda n: n["overflow"].pop("children")))           # gate without children
+        self.assertTrue(broken(lambda n: n["overflow"].update(children=[])))
+        self.assertTrue(broken(lambda n: n["overflow"].update(support="assumption")))   # gate with support
+        self.assertTrue(broken(lambda n: n["no-check"].pop("evidence")))           # evidence leaf without a ref
+        self.assertTrue(broken(lambda n: n["no-check"].update(evidence=[])))
+        self.assertEqual(broken(lambda n: n["format"].update(evidence=[])), [])   # refs optional off evidence leaves
+        for field in ("target_ids", "nodes"):
+            with self.subTest(field=field):
+                reply = deepcopy(tree)
+                reply["attack_trees"][0][field] = []
+                self.assertTrue(validate_document(reply, schema))
+
+    def test_the_supply_chain_example_joins_with_no_gaps(self):
+        sys.path.insert(0, str(ROOT.parent / "pipeline/report"))
+        import sample_data
+        model, _ = sample_data.workbench_model()
+        cell = "supply-chain-specialist"
+        self.assertEqual([gap["statement"] for gap in model["gaps"] if gap["originating_workcell_id"] == cell],
+                         ["Vendored cJSON 1.7.18 carries no purl or CPE, so advisory matching could not cover it."])
+        self.assertEqual(len([s for s in model["abuse_scenarios"] if s["originating_workcell_id"] == cell]), 1)
+        self.assertEqual(len([t for t in model["attack_trees"] if t["tree_id"].startswith("tree-get-modified-cjson")]), 1)
 
     def test_the_abuse_example_resolves_every_id_in_the_sample_join(self):
         sys.path.insert(0, str(ROOT.parent / "pipeline/report"))

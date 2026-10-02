@@ -19,12 +19,10 @@
   "outputs": [
     "abuse_scenarios",
     "attack_trees",
+    "notes",
     "gaps"
   ],
   "must_not": [
-    "publish verified findings or severity",
-    "claim runtime or observed state from static evidence",
-    "invent evidence refs",
     "treat an advisory match as a verified vulnerability"
   ],
   "provenance": {}

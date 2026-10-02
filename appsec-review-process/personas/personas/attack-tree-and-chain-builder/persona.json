@@ -19,14 +19,11 @@
   ],
   "outputs": [
     "attack_trees",
-    "questions",
+    "notes",
     "gaps"
   ],
   "must_not": [
-    "publish verified findings or severity",
-    "claim runtime or observed state from static evidence",
-    "invent evidence refs",
-    "mark a leaf evidence without a resolvable evidence ref"
+    "present a plausible step as an evidence leaf"
   ],
   "provenance": {}
 }

@@ -1545,7 +1545,7 @@
       "data_classes": 2,
       "privacy_threats": 1,
       "deployment_zones": 2,
-      "attack_trees": 1
+      "attack_trees": 2
     },
     "data_classes": [
       {
@@ -1603,6 +1603,21 @@
       {
         "id": "tree-corrupt-memory-through-the-greeting-form-c52a1743",
         "objective": "Corrupt memory through the greeting formatter",
+        "nodes": 5,
+        "gates": 2,
+        "leaves": 3,
+        "leaf_support": {
+          "evidence": 1,
+          "assumption": 1,
+          "unresolved": 1
+        },
+        "evidence": "STRONG_INFERENCE",
+        "confidence": "low",
+        "verification_items": []
+      },
+      {
+        "id": "tree-get-modified-cjson-code-into-the-hello-b-6e0ec494",
+        "objective": "Get modified cJSON code into the hello binary",
         "nodes": 5,
         "gates": 2,
         "leaves": 3,
