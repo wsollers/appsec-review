@@ -8,6 +8,7 @@ the common envelope with the persona dispatch stubbed (accept, reuse, gaps, reje
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -177,6 +178,35 @@ class Check(Base):
         self.assertEqual(validate_document(self.response, 'build-classification.schema.json'), [])
 
 
+
+class InLoop(Base):
+    """R05 (alignment plan): the dispatch's extra_validate hook applies finalize and the acceptance
+    checks to a copy, so coverage, id, signal and citation errors become repair rounds."""
+
+    def in_loop(self, value):
+        record = {'upstream': {'attempt_id': self.index_pointer['attempt_id'], bc.UPSTREAM_NAME: self.index_sha},
+                  'source_revision': self.index['source_revision'], 'target_root': str(self.target)}
+        pinned = {p: file_hash(self.target / p) for p in ('configure.ac', 'Makefile.am', 'Dockerfile')}
+        return bc.in_loop_errors(value, index=self.index, record=record, pinned=pinned)
+
+    def test_the_correct_response_passes_and_is_not_modified(self):
+        value = copy.deepcopy(self.response)
+        self.assertEqual(self.in_loop(value), [])
+        self.assertIsNone(value['index'])   # finalize ran on a copy
+
+    def test_acceptance_errors_come_back_to_the_model(self):
+        missing = copy.deepcopy(self.response)
+        missing['units'] = missing['units'][:1]
+        self.assertIn('index unit file:Dockerfile is not classified', self.in_loop(missing))
+        bad_signal = copy.deepcopy(self.response)
+        bad_signal['units'][0]['signal_ids'] = ['s9999']
+        self.assertTrue(any('signal s9999 is not in the accepted index' in e for e in self.in_loop(bad_signal)))
+
+    def test_the_task_prompt_example_is_this_fixture_response(self):
+        text = (ROOT / '02-evidence-pregather/task-build-classify.md').read_text(encoding='utf-8')
+        example = json.loads(text.split('## Example', 1)[1].split('```json\n', 1)[1].split('\n```', 1)[0])
+        self.assertEqual(example, hello_value(self.index))
+
 class Claims(Base):
     def inputs(self, *paths):
         return tuple(cci_item(p) for p in paths)
@@ -341,7 +371,7 @@ class Request(Base):
                          {'build_unit_classification', 'index_review', 'evidence_gap'})
         self.assertEqual(request['model']['family'], 'claude-sonnet-5')
         prompt = (ROOT / request['outer_prompt']['path']).read_text(encoding='utf-8')  # gitignored prompt-cache
-        self.assertIn('# Build Unit Classification', prompt)  # the task prompt section
+        self.assertIn('# Task — Build Unit Classification', prompt)  # the task prompt section
         self.assertIn('build-unit-classifier', prompt)  # the role section
         contract = read_json(registry_paths.contract("build-classification"))
         self.assertEqual([f[0] for f in cci._envelope_fields(contract)], [bc.RESULT, bc.SUMMARY])

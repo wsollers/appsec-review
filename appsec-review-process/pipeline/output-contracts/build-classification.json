@@ -29,18 +29,15 @@
       "index-review",
       "coverage-gap"
     ],
-    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
   },
   "validation_rules": [
-    "build-classification.json must satisfy build-classification.schema.json",
-    "source_revision, index and build_set are orchestrator-owned and set before publication; index names the accepted 02-build-index attempt and the sha256 of its build-index.json",
-    "every unit of the accepted index appears exactly once: as itself (unit_id equal to index_unit_id) or as two or more parts with unit_id '<index_unit_id>::<part>', part matching [a-z0-9][a-z0-9-]*; no unit_id outside the index",
-    "every signal_ids entry exists in the accepted index",
-    "every evidence citation is a repository-relative source_file citation whose content_hash matches the checkout",
-    "an unclassified unit is named in coverage_gaps",
-    "build_set is exactly the unit_ids classed compiled-native, compiled-managed or transpiled",
-    "index_review items are recorded disagreements with the index, never applied to it; they do not by themselves make the result OK_WITH_GAPS",
-    "status OK_WITH_GAPS when any unit is unclassified or coverage_gaps is non-empty",
-    "classes and index review are static inferences; the result cannot promote them to a finding, severity or runtime state, and asserts no successful build"
+    "the orchestrator overwrites source_revision, target, index, build_set and every citation content_hash with the pinned values",
+    "the orchestrator runs the acceptance checks (every index unit once, part ids and roots, signal ids, unclassified units in coverage_gaps, citation freshness) inside the repair loop: a rejected answer comes back with the errors to fix",
+    "status is OK_WITH_GAPS when any unit is unclassified or coverage_gaps is non-empty; index_review alone does not make it so"
   ]
 }

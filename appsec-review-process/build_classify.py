@@ -20,6 +20,7 @@ Status `OK`, or `OK_WITH_GAPS` when a unit is unclassified or `coverage_gaps` is
 """
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 import re
@@ -162,6 +163,22 @@ def finalize(value, *, index, index_attempt_id, index_sha256, source_revision, p
     return value
 
 
+def in_loop_errors(result, *, index, record, pinned):
+    """The persona dispatch's ``extra_validate`` hook: ``finalize`` a copy (the orchestrator-owned
+    fields and citation hashes), then ``check`` and citation freshness -- exactly what
+    ``execute_attempt`` applies after return, so a coverage, id, root, signal or citation error goes
+    back to the model as a repair round instead of failing the attempt."""
+    candidate = copy.deepcopy(result)
+    if not isinstance(candidate, dict):
+        return ['the result is not a JSON object']
+    finalize(candidate, index=index, index_attempt_id=record['upstream']['attempt_id'],
+             index_sha256=record['upstream'][UPSTREAM_NAME], source_revision=record['source_revision'],
+             pinned=pinned)
+    errors = check(candidate, index, index_attempt_id=record['upstream']['attempt_id'],
+                   index_sha256=record['upstream'][UPSTREAM_NAME], source_revision=record['source_revision'])
+    return errors + vjo._citation_errors(candidate, Path(record['target_root']))
+
+
 def gaps_of(value):
     gaps = [str(g) for g in value.get('coverage_gaps', []) if str(g).strip()]
     for unit in value.get('units', []):
@@ -206,7 +223,7 @@ def dispatch(run_id, base, record, attempt_id):
     each checkout path the model was shown to its sha256. Raises RuntimeError when the invocation
     did not complete OK: nothing is published from a failed dispatch. The persona's own attempt tree
     (request, record, result, model output) is kept under persona-attempts/<attempt_id>/."""
-    index_path, _index = _accepted_index(run_id, record)
+    index_path, index = _accepted_index(run_id, record)
     upstream_dir = discovery_gate._stage_upstream_files(
         base, {UPSTREAM_NAME: (index_path, record['upstream'][UPSTREAM_NAME])})
     persona_attempt = base / 'persona-attempts' / attempt_id
@@ -228,8 +245,14 @@ def dispatch(run_id, base, record, attempt_id):
                                target_root=target_root, source_snapshot_sha256=snapshot, now=clock(),
                                store=store, upstream_root=upstream_dir)
     model_identity = request['model']
+    pinned = {e['path']: e['sha256'] for e in request['readable_inputs'] if e['root'] == pd.DEFAULT_READABLE_ROOT}
+
+    def extra_validate(result):
+        return in_loop_errors(result, index=index, record=record, pinned=pinned)
+
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd),
+        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
+                                 extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: upstream_dir},
         allowed_models=(model_identity,), source_snapshot_sha256=snapshot,
@@ -244,7 +267,6 @@ def dispatch(run_id, base, record, attempt_id):
     output_root = persona_attempt / Path(*request['output_root'].split('/'))
     value = read_json(output_root / RESULT)
     summary = (output_root / SUMMARY).read_text(encoding='utf-8')
-    pinned = {e['path']: e['sha256'] for e in request['readable_inputs'] if e['root'] == pd.DEFAULT_READABLE_ROOT}
     facts = {'dispatch_mode': 'automatic', 'persona_job_id': PERSONA_JOB_ID, 'persona_attempt_id': attempt_id,
              'persona_result_sha256': result['result_sha256'], 'model': dict(model_identity)}
     return value, summary, facts, pinned

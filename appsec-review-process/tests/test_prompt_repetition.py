@@ -20,7 +20,8 @@ from schema_validate import SchemaStore
 MIGRATED: frozenset[str] = frozenset({"01-component-characterization",   # R01
                                      "02-repository-partition-discovery",   # R02
                                      "02-dev-project-discovery", "02-devops-project-discovery",   # R03
-                                     "02-sre-operations-topology"})   # R04
+                                     "02-sre-operations-topology",   # R04
+                                     "02-build-classify"})   # R05
 
 
 class RepetitionTests(unittest.TestCase):
