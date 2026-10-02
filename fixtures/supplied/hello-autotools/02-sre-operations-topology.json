@@ -21,7 +21,56 @@
           "note": "final stage FROM debian:bookworm-slim copies only /usr/local/bin/hello-autotools from the build stage and declares ENTRYPOINT [\"/usr/local/bin/hello-autotools\"]; the image runs the binary and exits, it does not start a listening process"
         }
       ],
-      "confidence": "high"
+      "confidence": "high",
+      "controls": {
+        "health_check": {
+          "status": "not-declared",
+          "search_scope": [
+            "**"
+          ]
+        },
+        "restart_policy": {
+          "status": "not-declared",
+          "search_scope": [
+            "**"
+          ]
+        },
+        "resource_limits": {
+          "status": "not-declared",
+          "search_scope": [
+            "**"
+          ]
+        },
+        "logging": {
+          "status": "not-declared",
+          "search_scope": [
+            "**"
+          ]
+        },
+        "monitoring": {
+          "status": "not-declared",
+          "search_scope": [
+            "**"
+          ]
+        }
+      }
+    }
+  ],
+  "live_followups": [
+    {
+      "service_id": "hello-autotools",
+      "question": "Does the binary open any network socket at runtime? None is declared, and only a live run could show one.",
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Dockerfile",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+          "note": "ENTRYPOINT runs the binary directly; no listener is declared"
+        }
+      ]
     }
   ],
   "operational_notes": [
@@ -29,8 +78,8 @@
     "No environment variables, volumes or configuration files are declared for the final-stage image; the binary takes no runtime inputs beyond argv."
   ],
   "coverage_gaps": [
-    "No ports are exposed or declared anywhere in the repository (no EXPOSE, no docker-compose.yaml, no k8s manifest); this record cannot confirm the binary never opens a socket at runtime, only that none is declared.",
     "No orchestration, deployment or IaC manifests exist anywhere in the repository (repository-partition-map coverage.category_checks: iac and deployment both not-found, confirmed again at this revision); there is exactly one service to place because none is declared to run alongside it.",
-    "No logging, metrics or health-check configuration is declared anywhere in the repository; operational observability for this image is entirely unaddressed."
+    "No logging, metrics or health-check configuration is declared anywhere in the repository; operational observability for this image is entirely unaddressed.",
+    "No ports are exposed or declared anywhere in the repository (no EXPOSE, no docker-compose.yaml, no k8s manifest)."
   ]
 }

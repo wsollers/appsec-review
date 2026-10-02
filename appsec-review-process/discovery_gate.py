@@ -263,10 +263,17 @@ def _require_upstream_inputs(run_id, job, value):
                       + ' does not match the accepted ' + upstream + ' (' + str(upstream_value.get('source_revision')) + ')')
     source_root, errors = vjo._source_root(run_path(run_id) / 'data', run_id)
     errors = list(errors) + upstream_content_errors(job, value, source_root)
-    if job in PROJECT_RULE_PERSONA and isinstance(upstream_value, dict):
-        errors += project_rule_errors(job, value, upstream_value, source_root)
+    if job in PROJECT_RULE_PERSONA:
+        partition_map = upstream_value if upstream == ADOPTED_JOB else _accepted_partition_map(run_id)
+        if isinstance(partition_map, dict):
+            errors += project_rule_errors(job, value, partition_map, source_root)
     if errors:
         raise Blocked(job + ': supplied result is invalid: ' + '; '.join(errors))
+
+
+def _accepted_partition_map(run_id):
+    attempt = validate(run_id, ADOPTED_JOB)
+    return read_json(attempt / _upstream_payload_filename(ADOPTED_JOB, attempt)) if attempt is not None else None
 
 
 def upstream_content_errors(job, value, source_root):
@@ -288,7 +295,8 @@ def upstream_content_errors(job, value, source_root):
 
 # Alignment plan R03: the dev/devops task rules that used to be prose only. Each persona is the
 # specialist whose routed partitions the job covers.
-PROJECT_RULE_PERSONA = {CONSUMER_JOB: 'developer-engineer', DEVOPS_JOB: 'devops-engineer'}
+PROJECT_RULE_PERSONA = {CONSUMER_JOB: 'developer-engineer', DEVOPS_JOB: 'devops-engineer',
+                        SRE_JOB: 'sre-engineer'}
 # Dependency-restore commands: they fetch from a live registry, so they are never read-only or
 # merely script-executing (dev task, "Safe Command Plan").
 _RESTORE_PREFIXES = (('npm', 'install'), ('npm', 'ci'), ('npm', 'i'), ('yarn', 'install'), ('pnpm', 'install'),
@@ -326,7 +334,8 @@ def project_rule_errors(job, value, partition_map, source_root):
     """The dev/devops discovery rules beyond the schema and the shared content checks. Every
     deferred or unresolved partition routed to the job's specialist is named in a coverage gap.
     Dev: catalog image ids only (or a gap naming the project), at least one plan entry per project,
-    restore commands marked network-required. DevOps: no run/exec/deploy/publish/push/native-build
+    restore commands marked network-required. SRE: every live follow-up names a service of this
+    record or null. DevOps: no run/exec/deploy/publish/push/native-build
     command and no Docker socket in a plan, and every declared image appears in a file the unit
     cites."""
     persona = PROJECT_RULE_PERSONA[job]
@@ -360,6 +369,12 @@ def project_rule_errors(job, value, partition_map, source_root):
             if restore and item.get('authorization') != 'network-required':
                 errors.append(f'safe_command_plan[{index}]: {" ".join(restore)} restores dependencies, so '
                               'its authorization must be network-required')
+    elif job == SRE_JOB:
+        services = {item.get('service_id') for item in value.get('services') or [] if isinstance(item, dict)}
+        for index, item in enumerate(value.get('live_followups') or []):
+            if isinstance(item, dict) and item.get('service_id') is not None and item['service_id'] not in services:
+                errors.append(f'live_followups[{index}].service_id: {item["service_id"]!r} is not a service '
+                              'in this record (use null for a question about no single service)')
     else:
         for index, item in enumerate(plan):
             tokens = _argv_key(item.get('argv'))

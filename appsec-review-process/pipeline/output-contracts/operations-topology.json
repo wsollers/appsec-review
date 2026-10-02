@@ -28,12 +28,14 @@
       "statically-inferred-service-dependency",
       "coverage-gap"
     ],
-    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
   },
   "validation_rules": [
-    "declared topology must cite static evidence",
-    "observed topology requires live-state evidence and is otherwise forbidden",
-    "health and observability claims must distinguish configured, tested, and observed",
-    "mutation commands are forbidden"
+    "the orchestrator overwrites target, source_revision and every citation content_hash with the pinned values",
+    "the orchestrator runs the acceptance checks (unique service ids, resolvable dependency targets and follow-up services, citation freshness, deferred-partition gaps) inside the repair loop: a rejected answer comes back with the errors to fix"
   ]
 }

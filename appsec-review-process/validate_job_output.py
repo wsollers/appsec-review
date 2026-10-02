@@ -1236,8 +1236,8 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
         return [f"declared result artifact/schema cannot be read: {type(exc).__name__}"]
     errors = [f"declared result schema: {error}" for error in schema_errors]
     source_root = None
-    if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "build-index",
-                                       "build-classification", "build-plan"}:
+    if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "operations-topology",
+                                       "build-index", "build-classification", "build-plan"}:
         source_root, source_errors = _source_root(attempt_root, run_id)
         errors.extend(source_errors)
     errors.extend(result_value_errors(contract, value, registry_root=Path(registry_root),
@@ -1265,6 +1265,7 @@ def result_value_errors(contract: dict[str, Any], value: Any, *, registry_root: 
     content = {
         "repository-partition-map": lambda: _partition_errors(value, registry_root, source_root),
         "project-discovery": lambda: _project_discovery_errors(value, source_root),
+        "operations-topology": lambda: _operations_topology_errors(value, source_root),
     }.get(contract.get("contract_id"))
     if content is not None:
         errors.extend(content())

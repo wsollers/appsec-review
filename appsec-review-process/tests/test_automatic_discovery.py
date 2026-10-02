@@ -110,7 +110,7 @@ class AutomaticDiscoveryLifecycleTests(unittest.TestCase):
 
     def test_one_zero_config_api_publishes_devops_and_sre_contract_artifacts(self):
         topology = {"schema": "appsec-review/operations-topology/1.0", "target": "target",
-            "source_revision": "r", "services": [], "operational_notes": [],
+            "source_revision": "r", "services": [], "live_followups": [], "operational_notes": [],
             "coverage_gaps": ["no service or deployment unit is declared"]}
         cases = ((discovery.DEVOPS_JOB, self.value, "project-inventory.json"),
                  (discovery.SRE_JOB, topology, "service-inventory.json"))

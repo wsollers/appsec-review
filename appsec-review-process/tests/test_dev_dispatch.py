@@ -57,6 +57,10 @@ TOPOLOGY_ALLOWED = ("health_check_inventory", "live_state_followup", "observabil
                     "runtime_dependency_map", "service_inventory")
 
 
+CONTROLS_NOT_DECLARED = {control: {"status": "not-declared", "search_scope": ["**"]}
+                         for control in ("health_check", "restart_policy", "resource_limits", "logging", "monitoring")}
+
+
 def topology(service_cites=("Dockerfile",), dependency_cites=("compose.yaml",)):
     return {
         "schema": "appsec-review/operations-topology/1.0", "target": "t", "source_revision": "r",
@@ -65,12 +69,15 @@ def topology(service_cites=("Dockerfile",), dependency_cites=("compose.yaml",)):
              "ports": [{"port": 8080, "protocol": "tcp", "exposed": True}],
              "dependencies": [{"target_service_id": "db", "kind": "network", "basis": "declared",
                                "evidence_citations": [citation(p) for p in dependency_cites]}],
-             "evidence_citations": [citation(p) for p in service_cites], "confidence": "high"},
+             "evidence_citations": [citation(p) for p in service_cites], "confidence": "high",
+             "controls": CONTROLS_NOT_DECLARED},
             {"service_id": "db", "name": "db", "kind": "daemon", "image_ref": "postgres:16",
              "ports": [], "dependencies": [], "evidence_citations": [citation("compose.yaml")],
-             "confidence": "medium"},
+             "confidence": "medium", "controls": CONTROLS_NOT_DECLARED},
         ],
-        "operational_notes": ["Live follow-up: is 8080 reachable from outside the host? (compose.yaml)"],
+        "live_followups": [{"service_id": "web", "question": "Is 8080 reachable from outside the host?",
+                            "evidence_citations": [citation("compose.yaml")]}],
+        "operational_notes": [],
         "coverage_gaps": [],
     }
 
@@ -422,7 +429,8 @@ class GateTests(unittest.TestCase):
         base = discovery_gate.root(self.run_id, SRE)
         base.mkdir(parents=True)
         value = {"schema": "appsec-review/operations-topology/1.0", "target": "t", "source_revision": "r",
-                 "services": [], "operational_notes": [], "coverage_gaps": ["no runnable unit declared"]}
+                 "services": [], "live_followups": [], "operational_notes": [],
+                 "coverage_gaps": ["no runnable unit declared"]}
         self.record["upstream"] = {"jobs": {DEVOPS: "a", discovery_gate.ADOPTED_JOB: "b"},
                                    "devops-project-inventory.json": "1" * 64,
                                    "repository-partition-map.json": "2" * 64}

@@ -17,18 +17,15 @@
     "production_health_verdict"
   ],
   "must_not": [
-    "run operational mutation commands",
-    "assume service monitors are active from config alone",
-    "treat docker-compose as production topology unless evidence says so"
+    "suggest an operational change (restart, scale, deploy, delete)"
   ],
   "required_behavior": [
-    "distinguish declared topology from observed topology",
-    "cite manifests, runbooks, CI, and monitoring configs",
-    "identify follow-up live checks separately",
-    "surface missing ownership and escalation data as gaps"
+    "fill services: one entry per runnable unit, with kind, image_ref, ports, dependencies and the five controls",
+    "fill live_followups with each question only a live environment could answer",
+    "fill operational_notes and coverage_gaps with what else the files say or leave open"
   ],
   "role_id": "operations-topology-mapper",
   "schema": "appsec-review/role/0.1",
-  "summary": "Maps declared services, runtime dependencies, deployment surfaces, and operational checks from repo evidence."
+  "summary": "Maps what the repository declares will run: services and jobs, their images, ports and links, and which operational controls each declares. Consumed by 03-threat-model-dfd-stride (trust boundaries and flows), 15-deployment-hardening (controls and gaps) and 10-synthesis-report."
 }
 ```

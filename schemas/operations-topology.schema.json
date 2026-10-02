@@ -3,33 +3,89 @@
   "$id": "operations-topology.schema.json",
   "title": "SRE Operations Topology Discovery Result",
   "type": "object",
-  "required": ["schema", "target", "source_revision", "services", "operational_notes", "coverage_gaps"],
+  "required": [
+    "schema",
+    "target",
+    "source_revision",
+    "services",
+    "live_followups",
+    "operational_notes",
+    "coverage_gaps"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema": {"const": "appsec-review/operations-topology/1.0"},
-    "target": {"type": "string"},
-    "source_revision": {"type": "string"},
+    "schema": {
+      "const": "appsec-review/operations-topology/1.0"
+    },
+    "target": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": "string"
+    },
     "services": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["service_id", "name", "kind", "image_ref", "ports", "dependencies", "evidence_citations", "confidence"],
+        "required": [
+          "service_id",
+          "name",
+          "kind",
+          "image_ref",
+          "ports",
+          "dependencies",
+          "evidence_citations",
+          "confidence",
+          "controls"
+        ],
         "additionalProperties": false,
         "properties": {
-          "service_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
-          "name": {"type": "string"},
-          "kind": {"type": "string", "enum": ["service", "daemon", "cli-batch", "job", "other"]},
-          "image_ref": {"type": "string"},
+          "service_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "service",
+              "daemon",
+              "cli-batch",
+              "job",
+              "other"
+            ]
+          },
+          "image_ref": {
+            "type": "string"
+          },
           "ports": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["port", "protocol", "exposed"],
+              "required": [
+                "port",
+                "protocol",
+                "exposed"
+              ],
               "additionalProperties": false,
               "properties": {
-                "port": {"type": "integer", "minimum": 1, "maximum": 65535},
-                "protocol": {"type": "string", "enum": ["tcp", "udp"]},
-                "exposed": {"type": "boolean"}
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "tcp",
+                    "udp"
+                  ]
+                },
+                "exposed": {
+                  "type": "boolean"
+                }
               }
             }
           },
@@ -37,22 +93,183 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["target_service_id", "kind", "basis", "evidence_citations"],
+              "required": [
+                "target_service_id",
+                "kind",
+                "basis",
+                "evidence_citations"
+              ],
               "additionalProperties": false,
               "properties": {
-                "target_service_id": {"type": "string"},
-                "kind": {"type": "string", "enum": ["network", "shared-storage", "orchestration", "other"]},
-                "basis": {"type": "string", "enum": ["declared", "inferred"]},
-                "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+                "target_service_id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "network",
+                    "shared-storage",
+                    "orchestration",
+                    "other"
+                  ]
+                },
+                "basis": {
+                  "type": "string",
+                  "enum": [
+                    "declared",
+                    "inferred"
+                  ]
+                },
+                "evidence_citations": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "evidence-citation.schema.json"
+                  }
+                }
               }
             }
           },
-          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}},
-          "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+          "evidence_citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "controls": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "health_check",
+              "restart_policy",
+              "resource_limits",
+              "logging",
+              "monitoring"
+            ],
+            "properties": {
+              "health_check": {
+                "$ref": "#/$defs/control-entry"
+              },
+              "restart_policy": {
+                "$ref": "#/$defs/control-entry"
+              },
+              "resource_limits": {
+                "$ref": "#/$defs/control-entry"
+              },
+              "logging": {
+                "$ref": "#/$defs/control-entry"
+              },
+              "monitoring": {
+                "$ref": "#/$defs/control-entry"
+              }
+            }
+          }
         }
       }
     },
-    "operational_notes": {"type": "array", "items": {"type": "string"}},
-    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+    "live_followups": {
+      "type": "array",
+      "description": "Questions only a live environment could settle (is a port reachable, does a probe pass, which environment uses this compose file).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "service_id",
+          "question",
+          "evidence_citations"
+        ],
+        "properties": {
+          "service_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            }
+          }
+        }
+      }
+    },
+    "operational_notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "control-entry": {
+      "description": "One operational control of one service, as the repository declares it. 'configured': a file declares it (HEALTHCHECK, restart:, a probe, resource limits, a logging driver, an alert rule). 'tested': a smoke or health test in the repository exercises it. 'not-declared': searched for and not found. There is deliberately no value for 'active' or 'passing': this record is declared topology.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "evidence_citations"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "configured",
+                "tested"
+              ]
+            },
+            "evidence_citations": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "evidence-citation.schema.json"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "search_scope"
+          ],
+          "properties": {
+            "status": {
+              "const": "not-declared"
+            },
+            "search_scope": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }

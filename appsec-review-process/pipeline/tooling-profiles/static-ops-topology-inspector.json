@@ -21,8 +21,7 @@
   ],
   "disallowed_actions": [
     "mutate infrastructure",
-    "query production systems without explicit live-state authorization",
-    "claim alert effectiveness from static config alone"
+    "query production systems"
   ],
   "claim_limits": {
     "declared_topology": "allowed",

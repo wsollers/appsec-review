@@ -12,10 +12,9 @@
     "environment templates"
   ],
   "common_failure_modes": [
-    "declared topology confused with live topology",
-    "critical services lack health checks",
+    "a service with no health check left unremarked",
     "security-sensitive routes absent from smoke tests",
-    "alerts configured but not known to be deployed",
+    "an external database or broker named but its configuration never located",
     "missing ownership and escalation paths"
   ],
   "preferred_standards": [

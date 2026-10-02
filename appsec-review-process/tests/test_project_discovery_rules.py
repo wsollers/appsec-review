@@ -23,6 +23,7 @@ FIXTURES = ROOT.parent / "fixtures/supplied/hello-autotools"
 PARTITIONS = json.loads((FIXTURES / "02-repository-partition-discovery.json").read_text(encoding="utf-8"))
 DEV = json.loads((FIXTURES / "02-dev-project-discovery.json").read_text(encoding="utf-8"))
 DEVOPS = json.loads((FIXTURES / "02-devops-project-discovery.json").read_text(encoding="utf-8"))
+SRE = json.loads((FIXTURES / "02-sre-operations-topology.json").read_text(encoding="utf-8"))
 
 
 def citation(path):
@@ -84,6 +85,48 @@ class DevopsRuleTests(unittest.TestCase):
             self.assertTrue(any("does not appear in any file" in e for e in self.errors(value, root)))
 
 
+
+class SreRuleTests(unittest.TestCase):
+    """R04: controls are schema-structural (configured / tested / not-declared, no 'active'), live
+    follow-ups name real services, deferred SRE partitions are gaps, and publication now runs the
+    operations-topology content checks it used to skip."""
+
+    def test_the_supplied_fixture_passes_schema_and_rules(self):
+        from schema_validate import validate_document
+        self.assertEqual(validate_document(SRE, "operations-topology.schema.json"), [])
+        self.assertEqual(dg.project_rule_errors(dg.SRE_JOB, SRE, PARTITIONS, None), [])
+
+    def test_controls_are_closed_and_cannot_claim_more_than_configured_or_tested(self):
+        from schema_validate import validate_document
+        value = deepcopy(SRE)
+        del value["services"][0]["controls"]["logging"]
+        self.assertTrue(validate_document(value, "operations-topology.schema.json"))
+        value = deepcopy(SRE)
+        value["services"][0]["controls"]["health_check"] = {"status": "active", "evidence_citations": [citation("Dockerfile")]}
+        self.assertTrue(validate_document(value, "operations-topology.schema.json"))
+        value = deepcopy(SRE)
+        value["services"][0]["controls"]["health_check"] = {"status": "configured", "evidence_citations": []}
+        self.assertTrue(validate_document(value, "operations-topology.schema.json"))
+
+    def test_live_followups_name_a_service_and_deferred_sre_partitions_are_gaps(self):
+        value = deepcopy(SRE)
+        value["live_followups"][0]["service_id"] = "no-such-service"
+        self.assertTrue(any("is not a service" in e for e in dg.project_rule_errors(dg.SRE_JOB, value, PARTITIONS, None)))
+        partitions = deepcopy(PARTITIONS)
+        partitions["partitions"][0]["supporting_persona_ids"] = ["sre-engineer"]
+        partitions["partitions"][0]["disposition"] = "deferred"
+        self.assertTrue(any("routed to sre-engineer" in e for e in dg.project_rule_errors(dg.SRE_JOB, SRE, partitions, None)))
+
+    def test_publication_now_checks_operations_topology_content(self):
+        import registry_paths
+        import validate_job_output as vjo
+        contract = json.loads(registry_paths.contract("operations-topology").read_text(encoding="utf-8"))
+        value = deepcopy(SRE)
+        value["services"][0]["dependencies"] = [{"target_service_id": "db", "kind": "network", "basis": "declared",
+                                                 "evidence_citations": [citation("Dockerfile")]}]
+        errors = vjo.result_value_errors(contract, value, registry_root=registry_paths.REGISTRY, source_root=None)
+        self.assertTrue(any("does not resolve to a service" in e for e in errors))
+
 class InLoopTests(unittest.TestCase):
     def test_the_in_loop_check_applies_overwrites_then_the_acceptance_checks(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -110,7 +153,8 @@ class InLoopTests(unittest.TestCase):
 
 class TaskPromptTests(unittest.TestCase):
     def test_the_examples_are_the_supplied_fixtures_with_null_hashes(self):
-        for task, fixture in (("task-dev-project-discovery.md", DEV), ("task-devops-project-discovery.md", DEVOPS)):
+        for task, fixture in (("task-dev-project-discovery.md", DEV), ("task-devops-project-discovery.md", DEVOPS),
+                              ("task-sre-operations-topology.md", SRE)):
             text = (ROOT / "02-evidence-pregather" / task).read_text(encoding="utf-8")
             example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
             expected = json.loads(json.dumps(fixture).replace('"content_hash": "', '"content_hash": "X'))
