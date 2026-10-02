@@ -268,7 +268,8 @@ def l08_adapter(run_id: str, verification: dict[str, Any], scoring: dict[str, An
             "verification_status":verified["status"],
             "verification_citations":verified["verification_citations"],
             "severity":scored["severity"],"priority":scored["priority"],"score":scored["score"],
-            **{key: scored[key] for key in JUDGMENT_FIELDS if key in scored}})
+            **{key: scored[key] for key in JUDGMENT_FIELDS if key in scored},
+            **({"certainty": verified["certainty"]} if "certainty" in verified else {})})
     value = {"schema":"appsec-review/synthesis-l08-adapter/0.1","run_id":run_id,
         "ledger_head_id":verification["ledger_head_id"],
         "ledger_head_sha256":verification["ledger_head_sha256"],"records":records}
@@ -332,11 +333,13 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
                 "severity": l08_row["severity"], "priority": l08_row["priority"], "score": l08_row["score"],
                 "dissent_ids": entry["dissent_ids"], "citations": entry["citations"],
                 "verification_citations": l08_row["verification_citations"],
-                **{key: l08_row[key] for key in JUDGMENT_FIELDS if key in l08_row}})
+                **{key: l08_row[key] for key in JUDGMENT_FIELDS if key in l08_row},
+                **({"certainty": l08_row["certainty"]} if "certainty" in l08_row else {})})
         else:
             unresolved.append({"claim_id": claim_id, "status": entry["status"],
                 "hypothesis": entry["hypothesis"], "component_ids": entry["component_ids"],
-                "proof_obligations": entry["proof_obligations"], "dissent_ids": entry["dissent_ids"]})
+                "proof_obligations": entry["proof_obligations"], "dissent_ids": entry["dissent_ids"],
+                **({"certainty": l08_row["certainty"]} if l08_row is not None and "certainty" in l08_row else {})})
     matrix = docs["owasp"]
     report = {"schema": "appsec-review/synthesis-report/1.0", "status": STATUS,
         "run_id": inputs["run_id"], "source_generation": inputs["source_generation"],
@@ -386,6 +389,7 @@ THREAT_MODEL_KEYS = ("elements", "flows", "trust_boundaries", "data_classes", "d
                      "assumptions", "gaps")
 
 
+CERTAINTY_RUNGS = ("finding", "reachable", "reachable_tainted", "inference_validated", "poc", "patch")   # ADR-0034
 TOOL_LEAD_PREFIX = "Tool lead ("  # claim_ledger.LEAD_HYPOTHESIS_PREFIX (deterministic, not model text)
 HUNTER_PREFIX = "Code-reading hypothesis ("  # claim_ledger.HUNTER_HYPOTHESIS_PREFIX (deterministic prefix)
 
@@ -435,7 +439,18 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
     if workbench["privacy_threats"]:
         categories = sorted({item["linddun_category"] for item in workbench["privacy_threats"]})
         lines += ["LINDDUN categories raised: " + ", ".join(categories) + ".", ""]
-    lines += ["## Major limitations", ""]
+    ladder = [item.get("certainty") for item in findings + report["unresolved_candidates"] if item.get("certainty")]
+    lines += ["## Certainty", "",
+              "Each claim's highest established rung of the evidence ladder (ADR-0034): finding, reachable, "
+              "reachable with tainted data, inference validated, PoC, patch. The appendix lists each claim's rungs "
+              "and the reason for every rung that is uncertain or not assessed.", ""]
+    if ladder:
+        counts = {rung: sum(item["highest"] == rung for item in ladder) for rung in CERTAINTY_RUNGS}
+        lines += ["| Highest rung | Claims |", "|---|---:|"] + [f"| {rung} | {counts[rung]} |"
+                                                               for rung in CERTAINTY_RUNGS if counts[rung]]
+    else:
+        lines.append("No claim carries a certainty ladder (no stage-09 verification evidence was published).")
+    lines += ["", "## Major limitations", ""]
     lines += [f"- {value}" for value in report["limitations"]] or ["- No additional limitation was supplied."]
     appendix = ["# Coverage and unresolved appendix", "", f"Status: `{STATUS}`", "",
         "## OWASP denominators", "", json.dumps(report["owasp_coverage"], sort_keys=True, indent=2), "",
@@ -456,6 +471,19 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
                      for item in workbench["deployment_zones"]]
         appendix += [f"| attack tree | `{item['tree_id']}` | {len(item.get('nodes', []))} nodes |"
                      for item in workbench["attack_trees"]]
+    rows = [item for item in findings + report["unresolved_candidates"] if item.get("certainty")]
+    if rows:
+        appendix += ["", "## Certainty by claim", "", "| Claim | Highest | " +
+                     " | ".join(CERTAINTY_RUNGS) + " |", "|---|---|" + "---|" * len(CERTAINTY_RUNGS)]
+        for item in rows:
+            states = {row["rung"]: row["state"] for row in item["certainty"]["rungs"]}
+            appendix.append(f"| `{item['claim_id']}` | {item['certainty']['highest']} | " +
+                            " | ".join(states.get(rung, "-") for rung in CERTAINTY_RUNGS) + " |")
+        uncertain = [(item["claim_id"], row) for item in rows for row in item["certainty"]["rungs"]
+                     if row["state"] in {"uncertain", "not_established"} and row["rung"] == "reachable"]
+        if uncertain:
+            appendix += ["", "Reachability that was not established:", ""]
+            appendix += [f"- `{claim}` ({row['state']}): {row['reason']}" for claim, row in uncertain]
     appendix += ["", "## Dissent", ""] + ([f"- {item}" for item in report["dissent_ids"]] or ["- None recorded."])
     appendix += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]
     for text in ("\n".join(lines) + "\n", "\n".join(appendix) + "\n"):

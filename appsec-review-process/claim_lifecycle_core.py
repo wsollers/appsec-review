@@ -544,7 +544,11 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
 
 
 def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any], *,
-           cwe_binding: dict[str, Any] | None = None) -> dict[str, Any]:
+           cwe_binding: dict[str, Any] | None = None,
+           verification_evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+    """``verification_evidence`` is the 09 verification-evidence document (ADR-0034 V2); without one no
+    claim can be VERIFIED. Every record carries its certainty ladder."""
+    import verification_evidence as evidence
     reviews = _index(blue["reviews"])
     rows = _decision_index(decisions, set(reviews))
     results = []
@@ -574,16 +578,20 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
             raise Blocked("verification: proof obligation citation is outside the verification evidence")
         if disposition == "VERIFIED" and not (verification_hashes - prior_hashes):
             raise Blocked("verification: verified requires new independent evidence")
+        missing = evidence.verified_errors(decision, verification_evidence)
+        if missing:
+            raise Blocked("verification: " + missing[0])
         if disposition == "VERIFIED" and any(
                 (item["producer_job_id"], item["producer_attempt_id"]) !=
                 (decision["verifier"]["job_id"], decision["verifier"]["attempt_id"])
-                for item in decision["citations"]):
+                for item in decision["citations"] if item["citation_id"] not in prior_hashes):
             raise Blocked("verification: independent evidence identity does not match the verifier")
         results.append(_judged({**_preserved(review), "hypothesis_id": review["hypothesis_id"],
             "status": disposition, "red_reviewer": review["red_reviewer"],
             "blue_reviewer": review["blue_reviewer"], "verifier": decision["verifier"],
             "verification_method": decision["method"], "proof_obligations": obligations,
             "verification_citations": decision["citations"],
+            "certainty": evidence.certainty(decision, verification_evidence),
             "dissent_ids": _merge_ids(review["dissent_ids"], decision.get("dissent_ids", []))},
             review, judgment))
     result = {**_base(blue, binding, "appsec-review/independent-verification/1.0",
@@ -654,7 +662,8 @@ def run_stage(stage: str, accepted_pointer: Path, decisions_path: Path, output_p
 
 
 def run_attempt(stage: str, accepted_pointer: Path, decisions_path: Path, output_root: Path,
-                run_id: str, attempt_id: str, started_at: str, finished_at: str) -> dict[str, Any]:
+                run_id: str, attempt_id: str, started_at: str, finished_at: str,
+                verification_evidence: dict[str, Any] | None = None) -> dict[str, Any]:
     """Publish a lifecycle-ready immutable common-envelope attempt.
 
     The decision document remains untrusted input.  Its exact bytes and the reverified accepted
@@ -670,7 +679,8 @@ def run_attempt(stage: str, accepted_pointer: Path, decisions_path: Path, output
     decisions = read_json(decisions_path)
     function = {"07-red-team-adversarial": red_team, "08-blue-team-refutation": blue_team,
                 "09-independent-verification": verify, "12-scoring-prioritization": score}[stage]
-    result = function(upstream, binding, decisions)
+    extra = {"verification_evidence": verification_evidence} if function is verify else {}
+    result = function(upstream, binding, decisions, **extra)
     input_binding = {"accepted_upstream": binding,
                      "decisions_sha256": "sha256:" + file_hash(Path(decisions_path))}
     return control_process_worker.publish(

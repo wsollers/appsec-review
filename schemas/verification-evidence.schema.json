@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-evidence.schema.json",
+  "title": "Stage-09 verification evidence (ADR-0034 V2)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "stage", "ledger_head_id", "ledger_head_sha256", "bindings", "claims", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/verification-evidence/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "stage": {"const": "09-independent-verification"},
+    "ledger_head_id": {"type": "string", "minLength": 1},
+    "ledger_head_sha256": {"type": "string", "minLength": 1},
+    "bindings": {"type": "object"},
+    "claims": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["claim_id", "items"],
+      "properties": {
+        "claim_id": {"type": "string", "minLength": 1},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/item"}}}}},
+    "gaps": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["item_id", "kind", "state", "basis", "reason", "witness"],
+      "properties": {
+        "item_id": {"type": "string", "pattern": "^ve-[0-9a-f]{24}$"},
+        "kind": {"enum": ["call_graph_reachability", "dependency_reachability"]},
+        "state": {"enum": ["REACHABLE", "UNREACHABLE", "UNKNOWN"]},
+        "basis": {"type": "string"},
+        "reason": {"type": "string"},
+        "witness": {"type": "array"}
+      }
+    },
+    "certainty": {
+      "type": "object", "additionalProperties": false, "required": ["highest", "rungs"],
+      "properties": {
+        "highest": {"enum": ["finding", "reachable", "reachable_tainted", "inference_validated", "poc", "patch"]},
+        "rungs": {"type": "array", "minItems": 6, "maxItems": 6, "items": {
+          "type": "object", "additionalProperties": false, "required": ["rung", "state", "reason", "item_ids"],
+          "properties": {
+            "rung": {"enum": ["finding", "reachable", "reachable_tainted", "inference_validated", "poc", "patch"]},
+            "state": {"enum": ["established", "not_established", "uncertain", "not_assessed"]},
+            "reason": {"type": "string"},
+            "item_ids": {"type": "array", "items": {"type": "string"}}}}}
+      }
+    }
+  }
+}

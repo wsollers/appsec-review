@@ -172,6 +172,11 @@ def _findings(report: dict[str, Any], evidence_ids: dict[str, str],
                       ["publication", "DRAFT_EVIDENCE_BACKED; human decision required"]],
             "evidence": linked, "summary": first["observed_fact"],
             "remediation": "No remediation assertion is present in the retained draft."}
+        ladder = finding.get("certainty")
+        if ladder:   # ADR-0034: the claim's certainty ladder, highest rung and reachability state
+            reach = next((item for item in ladder["rungs"] if item["rung"] == "reachable"), None)
+            row["trail"] = [["certainty", f"{ladder['highest']}" +
+                             (f" (reachable: {reach['state']})" if reach else "")]] + row["trail"]
         if extra:
             cvss, reach, cap = extra["cvss_v4"], extra["reachability"], extra["severity"]["reachability_cap"]
             exploit = extra["epss_kev"]

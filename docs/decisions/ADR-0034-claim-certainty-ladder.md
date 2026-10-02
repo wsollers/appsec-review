@@ -76,3 +76,10 @@ Investigating this showed three more gaps on the same path (code read 2026-10-02
   - Report assembly and synthesis read that ledger.
   - The ledger may move `refuted` → `unresolved` (09 cannot confirm an 08 refutation); `refuted` → `verified` stays impossible.
   - Not yet run on a live target.
+- **V2 done (2026-10-02).**
+  - `verification_evidence.py` builds one reachability item per 09 claim. The pool pins it and the 09 attempt publishes it.
+  - `evidence_ids` become citations produced by the verifier.
+  - VERIFIED needs a cited REACHABLE item.
+  - Each 09 record carries `certainty`, and the report shows it.
+  - `reachable_tainted`, `poc` and `patch` stay `not_assessed` until a producer exists for them.
+  - Not yet run on a live target.

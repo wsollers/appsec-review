@@ -78,7 +78,8 @@ class ClaimLifecycleTests(unittest.TestCase):
         blue = core.blue_team(red, binding("07-red-team-adversarial", "red-team-adversarial.json"),
                               fixture("blue-decisions.json"))
         verification = core.verify(blue, binding("08-blue-team-refutation", "blue-team-refutation.json"),
-                                   fixture("verification-decisions.json"))
+                                   fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json"))
         scoring = core.score(verification,
                              binding("09-independent-verification", "independent-verification.json"),
                              fixture("scoring-decisions.json"))
@@ -141,7 +142,8 @@ class ClaimLifecycleTests(unittest.TestCase):
         refuted = copy.deepcopy(blue)
         refuted["reviews"][0]["status"] = "REFUTED"
         with self.assertRaises(Blocked):
-            core.verify(refuted, binding(), fixture("verification-decisions.json"))
+            core.verify(refuted, binding(), fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json"))
 
     def test_preverification_promotion_and_unverified_scoring_fail_closed(self):
         red_decisions = fixture("red-decisions.json")
@@ -314,8 +316,13 @@ class AcceptedLedgerTests(unittest.TestCase):
             base = jobs_root / job
             attempt_id = f"attempt-{index}"
             attempt = base / "attempts" / attempt_id
+            evidence = None
+            if job == "09-independent-verification":   # the fixture items, keyed by this ledger's claim ids
+                evidence = fixture("verification-evidence.json")
+                for row, claim_id in zip(evidence["claims"], claim_ids):
+                    row["claim_id"] = claim_id
             core.run_attempt(job, upstream_pointer, decision_path, attempt, RUN_ID, attempt_id,
-                f"2026-01-01T00:00:0{index}Z", f"2026-01-01T00:00:1{index}Z")
+                f"2026-01-01T00:00:0{index}Z", f"2026-01-01T00:00:1{index}Z", verification_evidence=evidence)
             envelope = json.loads((attempt / "result.json").read_text())
             atomic_json(base / "latest.json", {"attempt_id": attempt_id})
             atomic_json(base / "accepted.json", {

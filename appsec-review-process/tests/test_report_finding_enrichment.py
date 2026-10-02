@@ -44,7 +44,8 @@ def chain(red_cwe=None, verify_cwe=None, score_extra=None):
                         red_decisions)
     blue = core.blue_team(red, binding("07-red-team-adversarial", "red-team-adversarial.json"),
                           fixture("blue-decisions.json"))
-    verification = core.verify(blue, binding("08-blue-team-refutation", "blue-team-refutation.json"), verify_decisions)
+    verification = core.verify(blue, binding("08-blue-team-refutation", "blue-team-refutation.json"), verify_decisions,
+                               verification_evidence=fixture("verification-evidence.json"))
     return core.score(verification, binding("09-independent-verification", "independent-verification.json"),
                       score_decisions)
 
@@ -81,7 +82,8 @@ class LifecycleJudgmentTests(unittest.TestCase):
             core.score(core.verify(core.blue_team(core.red_team(fixture("claim-ledger.json"),
                 binding("claim-ledger-routing", "l.json"), fixture("red-decisions.json")),
                 binding("07-red-team-adversarial", "r.json"), fixture("blue-decisions.json")),
-                binding("08-blue-team-refutation", "b.json"), fixture("verification-decisions.json")),
+                binding("08-blue-team-refutation", "b.json"), fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json")),
                 binding("09-independent-verification", "v.json"), decisions)
 
 

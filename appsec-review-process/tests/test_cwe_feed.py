@@ -327,7 +327,8 @@ class ClaimPathTests(Base):
         with unittest.mock.patch.object(lifecycle.core, "verify", lambda *a, **k: seen.update(k) or "ok"):
             lifecycle.build_result({"stage": "09-independent-verification", "upstream": {}, "upstream_binding": {},
                                     "decisions": {}, "cwe_catalog": {"catalog_source": "committed-curated"}}, "a1")
-        self.assertEqual(seen, {"cwe_binding": {"catalog_source": "committed-curated"}})
+        self.assertEqual(seen, {"cwe_binding": {"catalog_source": "committed-curated"},
+                                "verification_evidence": None})   # ADR-0034 V2: 09 always passes its evidence
 
 
 class EnrichmentTests(Base):

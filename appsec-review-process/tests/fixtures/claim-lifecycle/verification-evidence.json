@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/verification-evidence/1.0",
+  "run_id": "claim-run",
+  "stage": "09-independent-verification",
+  "ledger_head_id": "fixture",
+  "ledger_head_sha256": "fixture",
+  "bindings": {},
+  "claims": [
+    {
+      "claim_id": "claim-aaaaaaaaaaaaaaaaaaaaaaaa",
+      "items": [
+        {
+          "item_id": "ve-aaaaaaaaaaaaaaaaaaaaaaaa",
+          "kind": "call_graph_reachability",
+          "state": "REACHABLE",
+          "basis": "02-code-property-graph call graph",
+          "reason": "call path of 1 edge(s) from entry point main()",
+          "witness": [
+            {
+              "function": "main",
+              "file": "parser.c",
+              "line": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "claim_id": "claim-bbbbbbbbbbbbbbbbbbbbbbbb",
+      "items": [
+        {
+          "item_id": "ve-bbbbbbbbbbbbbbbbbbbbbbbb",
+          "kind": "call_graph_reachability",
+          "state": "UNKNOWN",
+          "basis": "none",
+          "reason": "no accepted code property graph",
+          "witness": []
+        }
+      ]
+    }
+  ],
+  "gaps": []
+}

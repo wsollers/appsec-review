@@ -354,7 +354,8 @@ def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, An
         raise Blocked(f"{JOB}: lifecycle decision artifact does not support its authority")
 
 
-def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[str]) -> dict[str, dict[str, Any]]:
+def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[str],
+             optional_keys: set[str] = frozenset()) -> dict[str, dict[str, Any]]:
     top_keys = {"schema", "run_id", "stage", "ledger_head_id", "ledger_head_sha256",
                 "upstream", "claim_boundary", key}
     if (set(document) != top_keys or document.get("stage") != stage or
@@ -364,7 +365,8 @@ def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[st
     result = {}
     for row in document[key]:
         claim_id = row.get("claim_id") if isinstance(row, dict) else None
-        if not isinstance(claim_id, str) or claim_id in result or set(row) != record_keys:
+        if (not isinstance(claim_id, str) or claim_id in result or
+                not record_keys <= set(row) <= record_keys | optional_keys):
             raise Blocked(f"{JOB}: duplicate or invalid downstream claim identity")
         result[claim_id] = row
     return result
@@ -458,8 +460,11 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
         "proof_obligations", "dissent_ids", "causal_claim_ids", "supersedes_claim_id",
         "verification_status", "verifier", "verification_citations", "score", "severity",
         "priority", "factors", "scoring_rationale"}
-    verifications = _records(verification, "verifications", "09-independent-verification", verification_keys)
-    priorities = _records(scoring, "priorities", "12-scoring-prioritization", scoring_keys)
+    # Reviewer judgment (ADR-0020/0026) and the certainty ladder (ADR-0034) are optional record keys.
+    verifications = _records(verification, "verifications", "09-independent-verification", verification_keys,
+                             {"certainty", "cwe_judgments", "mitre_refs"})
+    priorities = _records(scoring, "priorities", "12-scoring-prioritization", scoring_keys,
+                          {"cwe_judgments", "mitre_refs", "cvss_v4", "remediation_proposal"})
     if (verification.get("ledger_head_id") != origin_head_id or
             verification.get("ledger_head_sha256") != origin_head_sha256 or
             scoring.get("ledger_head_id") != origin_head_id or

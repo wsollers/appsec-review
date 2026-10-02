@@ -51,7 +51,8 @@ class ClaimTagTests(unittest.TestCase):
         blue = core.blue_team(red, binding("07-red-team-adversarial", "red-team-adversarial.json"),
                               fixture("blue-decisions.json"))
         verification = core.verify(blue, binding("08-blue-team-refutation", "blue-team-refutation.json"),
-                                   fixture("verification-decisions.json"))
+                                   fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json"))
         scoring = core.score(verification, binding("09-independent-verification", "independent-verification.json"),
                              fixture("scoring-decisions.json"))
         return red, blue, verification, scoring

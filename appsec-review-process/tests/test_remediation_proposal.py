@@ -36,7 +36,8 @@ def verification():
     blue = claims.blue_team(red, binding("07-red-team-adversarial", "red-team-adversarial.json"),
                             fixture("blue-decisions.json"))
     return claims.verify(blue, binding("08-blue-team-refutation", "blue-team-refutation.json"),
-                         fixture("verification-decisions.json"))
+                         fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json"))
 
 
 def inputs():

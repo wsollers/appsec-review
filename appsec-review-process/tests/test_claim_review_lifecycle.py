@@ -36,7 +36,8 @@ def upstreams():
     blue = core.blue_team(red, binding("07-red-team-adversarial", "red-team-adversarial.json"),
                           fixture("blue-decisions.json"))
     verification = core.verify(blue, binding("08-blue-team-refutation", "blue-team-refutation.json"),
-                               fixture("verification-decisions.json"))
+                               fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json"))
     return {"07-red-team-adversarial": ledger, "08-blue-team-refutation": red,
             "09-independent-verification": blue, "12-scoring-prioritization": verification}
 
@@ -86,7 +87,9 @@ def inputs(stage):
             "artifact_sha256": "sha256:" + "4" * 64,
             "accepted_pointer_sha256": "sha256:" + "5" * 64},
         "decisions": lifecycle.decisions_from_pool(stage, upstream, merge),
-        "applicability": "APPLICABLE", "code": lifecycle._code_hashes(stage)}
+        "applicability": "APPLICABLE", "code": lifecycle._code_hashes(stage),
+        **({"verification_evidence": fixture("verification-evidence.json")}
+           if stage == "09-independent-verification" else {})}
 
 
 class ClaimReviewLifecycleTests(unittest.TestCase):
@@ -181,7 +184,8 @@ class ClaimReviewLifecycleTests(unittest.TestCase):
                 "artifact_sha256": "sha256:" + "4" * 64,
                 "accepted_pointer_sha256": "sha256:" + "5" * 64},
             "decisions": decisions, "applicability": "APPLICABLE",
-            "code": lifecycle._code_hashes(stage, True)}
+            "code": lifecycle._code_hashes(stage, True),
+            "verification_evidence": fixture("verification-evidence.json")}
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder) / stage
             with mock.patch.object(lifecycle, "root", return_value=base), \

@@ -14,8 +14,9 @@ from typing import Any
 import attack_reference
 import cwe_catalog
 import bounded_analysis_workers
+import verification_evidence
 import claim_lifecycle_core as core
-from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
+from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import validate_document
 import registry_paths
@@ -73,6 +74,8 @@ def _code_hashes(stage: str, cwe_judged: bool = False) -> dict[str, str]:
     names = ("claim_review_lifecycle.py", "claim_lifecycle_core.py", WORKERS[stage],
              "publish_job_output.py", "validate_job_output.py",
              registry_paths.contract_rel(stage))
+    if stage == verification_evidence.STAGE:        # verification evidence and certainty (ADR-0034 V2)
+        names += ("verification_evidence.py",)
     if stage == "07-red-team-adversarial":          # ATT&CK/CAPEC label validation (ADR-0026)
         names += ("attack_reference.py", "mitre_feed.py")
     if cwe_judged and stage != "08-blue-team-refutation":   # CWE catalog in force (brief O2)
@@ -81,6 +84,9 @@ def _code_hashes(stage: str, cwe_judged: bool = False) -> dict[str, str]:
     result["schemas/claim-review-decision.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-decision.schema.json")
     result["schemas/" + core.STAGES[stage][3]] = file_hash(ROOT.parent / "schemas" / core.STAGES[stage][3])
+    if stage == verification_evidence.STAGE:
+        result["schemas/" + verification_evidence.SCHEMA] = file_hash(
+            ROOT.parent / "schemas" / verification_evidence.SCHEMA)
     template = registry_paths.template_rel(stage)
     result[template] = file_hash(ROOT / template)
     return result
@@ -189,11 +195,21 @@ def current_inputs(run_id: str, stage: str) -> dict[str, Any]:
         decisions = decisions_from_pool(stage, upstream, pool)
     else:
         pool, pool_binding, decisions = None, None, {"decisions": []}
+    evidence = None
+    if stage == verification_evidence.STAGE and pool_binding is not None:
+        # The pool pinned this document for its reviewers; load_accepted verified its hash (ADR-0034 V2).
+        path = pool_pointer(run_id, stage).parent / "attempts" / pool_binding["attempt_id"] / verification_evidence.FILE
+        if path.is_file():
+            evidence = json.loads(path.read_bytes())
+            if validate_document(evidence, verification_evidence.SCHEMA):
+                raise Blocked("claim review lifecycle: pool verification evidence fails its schema")
     inputs = {"run_id": run_id, "stage": stage, "source_generation": source,
               "upstream": upstream, "upstream_binding": upstream_binding,
               "pool": pool, "pool_binding": pool_binding, "decisions": decisions,
               "applicability": "APPLICABLE" if records else "SKIPPED_NA_NO_CANDIDATES",
               "code": _code_hashes(stage, _cwe_judged(decisions))}
+    if stage == verification_evidence.STAGE:
+        inputs["verification_evidence"] = evidence
     if stage == "07-red-team-adversarial" and any("attack_refs" in row or "capec_refs" in row
                                                   for row in decisions["decisions"]):
         # ADR-0026: the MITRE reference identity (or its gap) is an input, so a stale or re-pinned
@@ -254,6 +270,14 @@ def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
                 "09-independent-verification": core.verify,
                 "12-scoring-prioritization": core.score}[stage]
     extra = {"cwe_binding": inputs["cwe_catalog"]} if "cwe_catalog" in inputs else {}
+    if stage == verification_evidence.STAGE:
+        evidence = inputs.get("verification_evidence")
+        sha = verification_evidence.sha256(evidence) if evidence else None
+        for row in decisions.get("decisions") or []:
+            if any(item.get("artifact_path") == verification_evidence.FILE and item.get("artifact_sha256") != sha
+                   for item in row.get("citations") or []):
+                raise Blocked("claim review lifecycle: a verification citation names other evidence bytes")
+        extra["verification_evidence"] = evidence
     if "mitre_reference" in inputs:
         return function(inputs["upstream"], inputs["upstream_binding"], decisions,
                         inputs["mitre_reference"], **extra)
@@ -298,6 +322,9 @@ def _validate_attempt(run_id: str, stage: str, attempt: Path, inputs: dict[str, 
             read_json(attempt / "lineage.json") != lineage or
             read_json(attempt / "applicability.json") != _applicability(inputs)):
         raise Blocked("claim review lifecycle: permission or lineage receipt changed")
+    if inputs.get("verification_evidence") and (attempt / verification_evidence.FILE).read_bytes() != \
+            verification_evidence.to_bytes(inputs["verification_evidence"]):
+        raise Blocked("claim review lifecycle: verification evidence changed")
 
 
 def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> dict[str, Any]:
@@ -315,6 +342,11 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
         atomic_json(attempt / "permission.json", permission)
         atomic_json(attempt / "lineage.json", lineage)
         atomic_json(attempt / "applicability.json", _applicability(inputs))
+        evidence_files = []
+        if inputs.get("verification_evidence"):   # the exact bytes the 09 citations hash (ADR-0034 V2)
+            atomic_bytes(attempt / verification_evidence.FILE,
+                         verification_evidence.to_bytes(inputs["verification_evidence"]))
+            evidence_files = [verification_evidence.FILE]
         records = result[OUTPUT_ARRAYS[stage]]
         no_op = inputs["applicability"] == "SKIPPED_NA_NO_CANDIDATES"
         status = {"process": stage, "status": "OK", "result": artifact,
@@ -328,7 +360,7 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
                      "No accepted upstream claims; published an evidence-bound no-op result."),
             status_record=status,
             artifact_paths=[artifact, "permission.json", "lineage.json", "applicability.json",
-                            "status.json"],
+                            *evidence_files, "status.json"],
             gaps=(["No upstream claim candidates were applicable to this stage."] if no_op else None),
             pre_envelope_validate=lambda path, _status:
                 _validate_attempt(run_id, stage, path, inputs))

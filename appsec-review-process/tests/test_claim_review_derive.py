@@ -56,7 +56,8 @@ def upstream(stage):
     if stage == VERIFY:
         return blue
     return core.verify(blue, binding(BLUE, "blue-team-refutation.json"),
-                       fixture("verification-decisions.json"))
+                       fixture("verification-decisions.json"),
+                       verification_evidence=fixture("verification-evidence.json"))
 
 
 def run(stage, reply):

@@ -29,6 +29,7 @@ import json
 from typing import Any
 
 import claim_lifecycle_core as core
+import verification_evidence
 from claude_cli_invoker import InvokerOutputError
 from execution_state import Blocked
 from schema_validate import SchemaStore, validate_document
@@ -60,7 +61,7 @@ PERSONA_FIELDS = {
     "08-blue-team-refutation": ({"claim_id", "disposition", "rationale", "proof_obligations",
                                  "citation_ids"}, set()),
     "09-independent-verification": ({"claim_id", "disposition", "method", "proof_obligations",
-                                     "citation_ids"}, {"cwe"}),
+                                     "citation_ids"}, {"cwe", "evidence_ids"}),
     "12-scoring-prioritization": ({"claim_id", "factors", "rationale"}, {"cwe", "cvss_v4", "remediation"}),
 }
 # The dispositions each stage's result schema admits (the persona schema lists the union). A disposition
@@ -207,7 +208,9 @@ def _decision_requirements(stage: str, claim_id: str, record: dict[str, Any]) ->
 
 def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[str, Any],
            request_sha256: str, evidence_sha256: str,
+           verification: tuple[dict[str, Any], str] | None = None,
            store: SchemaStore | None = None) -> tuple[dict[str, Any], list[str]]:
+    """``verification`` is the pinned 09 verification-evidence document and its sha256 (ADR-0034 V2)."""
     """Return (claim-review-pool-candidates document, limitations) or raise InvokerOutputError."""
     if stage not in POOL_CLASSES:
         raise InvokerOutputError(f"claim review derive: unknown stage {stage!r}")
@@ -284,7 +287,22 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
                                        f"upstream citation of this claim; dropped")
             return known
 
+        minted = []   # 09: verifier-produced citations of verification-evidence items (ADR-0034 V2)
+        if row.get("evidence_ids"):
+            document, sha = verification if verification is not None else (None, "")
+            known = verification_evidence.items(document, claim_id)
+            for item_id in _unique(row["evidence_ids"]):
+                if item_id not in known:
+                    errors.append(f"claim {claim_id}: evidence id {item_id!r} is not a verification-evidence "
+                                  f"item of this claim (allowed: {sorted(known)})")
+                else:
+                    minted.append(verification_evidence.citation(known[item_id], evidence_sha256=sha,
+                                                                 job_id=stage, attempt_id=request["attempt_id"]))
+        for item in minted:   # obligations may cite them by citation id too
+            citable.setdefault(item["citation_id"], item)
+            order.append(item["citation_id"])
         cited = resolve(row["citation_ids"], "decision")
+        cited += [item["citation_id"] for item in minted if item["citation_id"] not in cited]
         obligations = None
         if "proof_obligations" in row:
             upstream_obligations = {item["obligation_id"]: item for item in record["proof_obligations"]}
@@ -340,7 +358,9 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
     # instead of the merge failing after the pool (the merge re-runs the same rules).
     try:
         _CORE[stage](upstream, _precheck_binding(stage, evidence_sha256),
-                     {"decisions": [decisions[key] for key in sorted(decisions)]})
+                     {"decisions": [decisions[key] for key in sorted(decisions)]},
+                     **({"verification_evidence": verification[0] if verification else None}
+                        if stage == "09-independent-verification" else {}))
     except Blocked as exc:
         raise InvokerOutputError(f"reviewer decisions violate the {stage} rules: {exc}",
                                  [f"{stage} rule: {exc}"]) from None

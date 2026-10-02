@@ -27,8 +27,8 @@
               "producer_job_id": "09-independent-verification",
               "producer_attempt_id": "verify-1",
               "artifact_path": "verification-evidence.json",
-              "artifact_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-              "locator_json": "/checks/0",
+              "artifact_sha256": "sha256:2e5a6c0edfb221d1cc9aa6c288b204c894fc810edffbde678e4f43b7c77ff8cb",
+              "locator_json": "{\"item_id\": \"ve-aaaaaaaaaaaaaaaaaaaaaaaa\"}",
               "observed_fact": "Independent reconstruction resolves the path."
             }
           ]
@@ -40,8 +40,8 @@
           "producer_job_id": "09-independent-verification",
           "producer_attempt_id": "verify-1",
           "artifact_path": "verification-evidence.json",
-          "artifact_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-          "locator_json": "/checks/0",
+          "artifact_sha256": "sha256:2e5a6c0edfb221d1cc9aa6c288b204c894fc810edffbde678e4f43b7c77ff8cb",
+          "locator_json": "{\"item_id\": \"ve-aaaaaaaaaaaaaaaaaaaaaaaa\"}",
           "observed_fact": "Independent reconstruction resolves the path."
         }
       ],

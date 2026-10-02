@@ -36,7 +36,8 @@ import resource_pools
 import review_cli
 import supporting_evidence_menu as evidence_menu
 import tunables
-from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
+import verification_evidence
+from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
 import registry_paths
@@ -98,9 +99,11 @@ def _runtime_instructions(package: Any) -> str:
                 "FAILED obligation, SURVIVING needs every obligation SATISFIED, UNRESOLVED keeps an UNRESOLVED "
                 "obligation")
     elif stage == "09-independent-verification":
-        rule = ("answer every upstream proof obligation by obligation_id; this invocation has no new "
-                "independent target evidence, so never emit VERIFIED; UNRESOLVED or BLOCKED keeps an "
-                "UNRESOLVED obligation")
+        rule = ("answer every upstream proof obligation by obligation_id. verification-evidence.json (root "
+                "verification-evidence) lists, per claim, Python's reachability items; cite the ones your verdict "
+                "rests on in evidence_ids (obligations may cite them as 'verification-<item_id>'). VERIFIED needs "
+                "every obligation SATISFIED and at least one cited REACHABLE item; with no REACHABLE item the "
+                "claim is UNRESOLVED (state why). UNRESOLVED or BLOCKED keeps an UNRESOLVED obligation")
     else:
         rule = "factors are null unless the accepted upstream status is VERIFIED; otherwise each factor is 0..4"
     citable = {"07-red-team-adversarial": "the claim's citations",
@@ -124,6 +127,8 @@ def _runtime_instructions(package: Any) -> str:
                         "severity (reachability may cap it later)"),
             "remediation": ("VERIFIED claims only, optional: {objective, patch_proposal}; published as "
                             "PATCH_PROPOSED_UNVALIDATED"),
+            "evidence_ids": ("09: verification-evidence item ids of this claim ('ve-...') that the verdict rests on; "
+                             "Python turns them into citations produced by you"),
             "attack_refs": ("optional: up to 8 MITRE ATT&CK technique ids ('T1190', 'T1059.004') labelling the "
                             "attacker case; labels only, never evidence; unknown or deprecated ids are dropped; "
                             "omit when unsure"),
@@ -144,11 +149,13 @@ def _derive_fill(package: Any):
     stage = package.request["job_id"]
     first = package.inputs[0]
     upstream = derive.upstream_from_bytes(stage, first.data)
+    pinned = next((item for item in package.inputs if item.root == verification_evidence.ROOT_ID), None)
+    verification = (json.loads(pinned.data), pinned.sha256) if pinned is not None else None
 
     def fill(envelope: dict[str, Any], result_field: str) -> list[str]:
         value, limitations = derive.derive(stage, upstream, envelope.get(result_field),
             request=package.request, request_sha256=package.request_sha256,
-            evidence_sha256=first.sha256)
+            evidence_sha256=first.sha256, verification=verification)
         envelope[result_field] = value
         return limitations
 
@@ -203,6 +210,9 @@ def _code_hashes() -> dict[str, str]:
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")
+    for name in ("verification_evidence.py", "finding_enrichment.py", "reachability.py"):   # 09 evidence
+        result[name] = file_hash(ROOT / name)
+    result["schemas/" + verification_evidence.SCHEMA] = file_hash(ROOT.parent / "schemas" / verification_evidence.SCHEMA)
     for persona_id in sorted({item for ids in _stage_personas().values() for item in ids}):
         path = f"personas/personas/{persona_id}/persona.json"
         result[path] = file_hash(ROOT / path)
@@ -257,8 +267,8 @@ def _persona_records(ids: list[str]) -> dict[str, dict[str, Any]]:
 
 def _request_template(run_id: str, stage: str, upstream_path: Path,
                       source: str, evaluated_at: str, menu: dict | None = None,
-                      persona_id: str | None = None, upstream_bytes: bytes | None = None
-                      ) -> tuple[dict, dict]:
+                      persona_id: str | None = None, upstream_bytes: bytes | None = None,
+                      evidence: dict | None = None) -> tuple[dict, dict]:
     """One reviewer instance's request. ``upstream_path`` names the shard file (its bytes given in
     ``upstream_bytes`` when it is not on disk yet); ``persona_id`` one of the template's variants."""
     store = SchemaStore()
@@ -288,6 +298,11 @@ def _request_template(run_id: str, stage: str, upstream_path: Path,
     # The stage upstream stays readable_inputs[0]; the supporting-evidence menu and every file it
     # pins follow, so the reviewer may read exactly what the menu points at.
     readable += evidence_menu.readable_inputs(menu) if menu else []
+    if evidence is not None:   # 09: the verification evidence a reviewer may cite (ADR-0034 V2)
+        data = verification_evidence.to_bytes(evidence)
+        readable.append({"root": verification_evidence.ROOT_ID, "path": verification_evidence.FILE,
+                         "sha256": persona_invocation._bytes_sha(data), "bytes": len(data),
+                         "role": "evidence", "producer_request_sha256": None})
     request = {"invocation_role": "produce", "invoker_id": "claude-cli",
         "outer_prompt": outer, "persona": composition, "model": model, "tools": [],
         "budget": dict(persona_dispatch.PERSONA_BUDGETS[template["budget_default"]]),
@@ -311,12 +326,14 @@ def prepare(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -
         timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     records = upstream[lifecycle.ARRAYS[stage]]
     menu = evidence_menu.build(run_id, stage, records)
+    evidence = (verification_evidence.build(run_id, records, upstream["ledger_head_id"], upstream["ledger_head_sha256"])
+                if stage == verification_evidence.STAGE and records else None)
     shards = plan(stage, upstream)
     groups = []
     for shard in shards:
         request, permission = _request_template(run_id, stage, Path(shard["file"]), source,
             evaluated_at, menu, persona_id=shard["persona_id"], upstream_bytes=_shard_bytes(
-                stage, upstream, shard["claim_ids"]))
+                stage, upstream, shard["claim_ids"]), evidence=evidence)
         groups.append({"group_id": shard["group_id"], "worker_kind": pool_specification.PERSONA,
             "count": 1, "memory_heavy": False, "permission": permission,
             "persona_request": request, "tool_request": None})
@@ -346,7 +363,7 @@ def prepare(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -
         "upstream_attempt": str(attempt_root), "upstream_artifact": artifact,
         "accepted_at": evaluated_at, "spec": spec, "shards": shards,
         "applicability": "APPLICABLE" if records else "SKIPPED_NA_NO_CANDIDATES",
-        "evidence_menu": menu, "code": _code_hashes()}
+        "evidence_menu": menu, "verification_evidence": evidence, "code": _code_hashes()}
 
 
 def _max_parallel() -> int:
@@ -402,6 +419,12 @@ def _context(inputs: dict[str, Any], attempt: Path) -> pool_specification.PoolCo
     if inputs.get("evidence_menu"):
         menu_root = evidence_menu.write(attempt / "evidence-menu", inputs["evidence_menu"])
         roots.update(evidence_menu.readable_roots(inputs["run_id"], inputs["evidence_menu"], menu_root))
+    if inputs.get("verification_evidence"):
+        evidence_root = attempt / verification_evidence.ROOT_ID
+        evidence_root.mkdir()
+        atomic_bytes(evidence_root / verification_evidence.FILE,
+                     verification_evidence.to_bytes(inputs["verification_evidence"]))
+        roots[verification_evidence.ROOT_ID] = evidence_root
     return pool_specification.PoolContext(pool_parent=pool_parent,
         registry_dir=persona_invocation.REGISTRY_DIR, prompt_root=ROOT,
         readable_roots=roots, allowed_models=(model,), invoker_id="claude-cli",
@@ -439,7 +462,8 @@ def _validate_merge(inputs: dict[str, Any], merge: dict[str, Any]) -> None:
     # Validate not only JSON shape and population coverage but the stage's evidence, independence,
     # authority, proof-obligation and monotonic-transition rules before the merge is accepted.
     lifecycle.build_result({"stage": inputs["stage"], "upstream": inputs["upstream"],
-        "upstream_binding": inputs["upstream_binding"], "decisions": decisions}, "pool-validation")
+        "upstream_binding": inputs["upstream_binding"], "decisions": decisions,
+        "verification_evidence": inputs.get("verification_evidence")}, "pool-validation")
 
 
 def _receipts(inputs: dict[str, Any], merge: dict[str, Any], launched: Any) -> tuple[dict, dict, dict]:
@@ -473,6 +497,9 @@ def _validate_attempt(run_id: str, stage: str, attempt: Path, inputs: dict[str, 
         raise Blocked("claim reviewer pool: newest accepted upstream changed")
     merge = read_json(attempt / RESULT)
     _validate_merge(inputs, merge)
+    if inputs.get("verification_evidence") and (attempt / verification_evidence.FILE).read_bytes() != \
+            verification_evidence.to_bytes(inputs["verification_evidence"]):
+        raise Blocked("claim reviewer pool: verification evidence changed")
     if read_json(attempt / COVERAGE) != shard_coverage(inputs, merge):
         raise Blocked("claim reviewer pool: shard coverage record changed")
     receipt = read_json(attempt / "pool-receipt.json")
@@ -521,6 +548,11 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
                           f"{', '.join(failed)} did not return decisions; see {COVERAGE})")
         _validate_merge(inputs, merge)
         atomic_json(attempt / RESULT, merge)
+        evidence_files = []
+        if inputs.get("verification_evidence"):   # the 09 lifecycle republishes these exact bytes
+            atomic_bytes(attempt / verification_evidence.FILE,
+                         verification_evidence.to_bytes(inputs["verification_evidence"]))
+            evidence_files = [verification_evidence.FILE]
         permission, lineage, receipt = _receipts(inputs, merge, launched)
         atomic_json(attempt / "permission.json", permission)
         atomic_json(attempt / "lineage.json", lineage)
@@ -536,7 +568,7 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
             summary=("Reviewer pool was not applicable because the accepted population was empty." if skipped
                      else "Published the C02-verified stage reviewer merge."), status_record=status,
             artifact_paths=[RESULT, "permission.json", "lineage.json", "pool-receipt.json", COVERAGE,
-                            "status.json"],
+                            *evidence_files, "status.json"],
             gaps=(["SKIPPED_NA: no accepted upstream claims; zero reviewer instances were launched."]
                   if skipped else None),
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, stage, path, inputs))
