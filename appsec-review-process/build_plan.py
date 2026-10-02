@@ -23,6 +23,7 @@ disposition (status `OK`); `02-build-resolution` is then the job that skips.
 """
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -534,9 +535,12 @@ def _fill_known(classification):
     return fill
 
 
-def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification, retry_reason=None):
+def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification, retry_reason=None,
+                  in_loop=None):
     """One live persona invocation for one unit. Returns (value, summary_text, pinned, persona_attempt_id).
-    Raises RuntimeError when the invocation did not complete OK: nothing is published from it."""
+    Raises RuntimeError when the invocation did not complete OK: nothing is published from it.
+    ``in_loop(value, pinned)`` (run's acceptance check) becomes the invoker's ``extra_validate``, run
+    on a copy of the filled answer, so an acceptance error is a repair round within this call."""
     upstream_dir = _stage_unit_upstreams(base, record, cpath, ipath, classification, unit_id)
     persona_attempt_id = f'{attempt_id}u{n}'
     persona_attempt = base / 'persona-attempts' / persona_attempt_id
@@ -558,9 +562,11 @@ def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, cl
                                upstream_root=upstream_dir)
     request['outer_prompt'] = unit_prompt(unit_request(classification, unit_id), retry_reason)
     model_identity = request['model']
+    pinned = {e['path']: e['sha256'] for e in request['readable_inputs'] if e['root'] == pd.DEFAULT_READABLE_ROOT}
+    extra_validate = (lambda result: in_loop(copy.deepcopy(result), dict(pinned))) if in_loop else None
     runtime = pi.PersonaRuntime(
         invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
-                                 fill_result=_fill_known(classification)),
+                                 fill_result=_fill_known(classification), extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: upstream_dir},
         allowed_models=(model_identity,), source_snapshot_sha256=snapshot,
@@ -575,7 +581,6 @@ def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, cl
     output_root = persona_attempt / Path(*request['output_root'].split('/'))
     value = read_json(output_root / RESULT)
     summary = (output_root / SUMMARY).read_text(encoding='utf-8')
-    pinned = {e['path']: e['sha256'] for e in request['readable_inputs'] if e['root'] == pd.DEFAULT_READABLE_ROOT}
     return value, summary, pinned, persona_attempt_id, model_identity, result['result_sha256']
 
 
@@ -650,8 +655,10 @@ def run(run_id, dagster_id, force=False, dispatch=None):
         memo = item_memo.Memo(JOB + ':unit')
         target_pinned = {}
 
-        def accepted(value, unit_id, pinned):
-            """Today's acceptance of one unit's plan, fresh or memoised."""
+        def acceptance_errors(value, unit_id, pinned):
+            """Today's acceptance check of one unit's plan (finalizes ``value`` in place). The final gate
+            below and, for a live call, the invoker's repair loop (``dispatch_unit(in_loop=...)``, on a
+            copy) both run it, so they never disagree."""
             finalize(value, classification=classification, index_ref=index_ref,
                      classification_ref=classification_ref, source_revision=record['source_revision'],
                      pinned=pinned)
@@ -659,7 +666,11 @@ def run(run_id, dagster_id, force=False, dispatch=None):
             errors = check(value, classification, index, catalog, index_ref=index_ref,
                            classification_ref=classification_ref, source_revision=record['source_revision'],
                            expected_units=[unit_id])
-            errors += vjo._citation_errors(value, Path(record['target_root']))
+            return errors + vjo._citation_errors(value, Path(record['target_root']))
+
+        def accepted(value, unit_id, pinned):
+            """Today's acceptance of one unit's plan, fresh or memoised."""
+            errors = acceptance_errors(value, unit_id, pinned)
             if errors:
                 raise ValueError(f'{JOB}: the plan for {unit_id} failed independent validation: '
                                  + '; '.join(errors[:20]))
@@ -688,6 +699,8 @@ def run(run_id, dagster_id, force=False, dispatch=None):
                 if hit is not None:
                     return hit, True
             extra = {'retry_reason': retry_reason} if retry_reason is not None else {}
+            if dispatch is dispatch_unit:   # the live call: acceptance errors become repair rounds
+                extra['in_loop'] = lambda value, pinned: acceptance_errors(value, unit_id, pinned)
             value, summary, pinned, persona_attempt_id, model_identity, result_sha = dispatch(
                 run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification, **extra)
             if not isinstance(value, dict):

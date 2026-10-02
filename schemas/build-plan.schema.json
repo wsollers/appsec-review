@@ -343,7 +343,29 @@
               "low"
             ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "feasibility": {
+                  "properties": {
+                    "tier": {
+                      "const": "C"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "commands": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "dispositions": {

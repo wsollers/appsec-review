@@ -260,4 +260,5 @@ Out of the queue, noted:
 | R03 repo-project-discoverer | done | this commit | Kept one role, now generic; the dev and devops differences live in each task. Prose rules are now `project_rule_errors` (acceptance and repair loop), and the content checks are in-loop for D02-D04. Supplied fixtures fixed and used as the examples (test-locked). The shared `repo-project-discovery` domain change also alters the build-classify and build-plan prompts (R05/R06 next). |
 | R04 operations-topology-mapper | done | this commit | Controls and live follow-ups are now schema-structural. SRE rules are checked at acceptance and in the repair loop, and publication now validates operations-topology content. Only the SRE prompt changed. |
 | R05 build-unit-classifier | done | this commit | Full acceptance check in the repair loop (`in_loop_errors`). Prompt in the plan shape with the fixture classification as a test-locked example. Only the build-classify prompt changed. |
-| R06 … R18 | open | | |
+| R06 build-planner | done | this commit | Acceptance check in the repair loop for live calls (`dispatch_unit(in_loop=...)`); the worker retry is kept as the outer fallback (no removal decided). Tier C has no commands is now in the schema. Prompt in the plan shape with a test-locked fixture example. Only the build-plan prompt changed. |
+| R07 … R18 | open | | |
