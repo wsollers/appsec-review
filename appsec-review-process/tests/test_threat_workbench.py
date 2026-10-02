@@ -60,14 +60,17 @@ def replies(base):
                 {"key": "user-email", "name": "User email", "category": "pii", "sensitivity": "confidential",
                  "personal_data": True, "fields": ["email"], "store_element_ids": [element], "flow_ids": [flow],
                  "evidence": [f"target-repository:{SOURCE_FILE}:1"], "confidence": "high"},
-                {"key": "api-token", "name": "API token", "category": "secret", "store_element_ids": [],
+                {"key": "api-token", "name": "API token", "category": "secret", "sensitivity": "restricted",
+                 "personal_data": False, "fields": ["token"], "store_element_ids": [],
                  "flow_ids": ["flow-does-not-exist"], "evidence": ["nowhere/at/all.c"]}],
             "privacy_threats": [
                 {"linddun_category": "identifying", "statement": "Emails identify users across logs.",
                  "target_ids": [element, flow], "data_class_keys": ["user-email"],
                  "regulatory_candidate_notes": ["GDPR Art. 17 erasure may apply"],
-                 "evidence": [SOURCE_FILE]},
-                {"linddun_category": "non_compliance", "statement": "The service is compliant with GDPR."}],
+                 "proof_obligations": ["show where the email is logged"], "evidence": [SOURCE_FILE]},
+                {"linddun_category": "non_compliance", "statement": "The service is compliant with GDPR.",
+                 "target_ids": [element], "data_class_keys": ["user-email"],
+                 "proof_obligations": ["n/a"], "evidence": [SOURCE_FILE]}],
             "notes": [{"record_type": "question", "target": "integrator", "topic": "retention",
                        "statement": "How long are emails retained?", "subject_ids": [element]},
                       {"record_type": "assumption", "statement": "Logs are not shipped off-host.",
@@ -162,7 +165,8 @@ class JoinTests(unittest.TestCase):
         import claim_ledger
         replies_ = deepcopy(self.replies)
         replies_["abuse-scenario-analyst"]["abuse_scenarios"].append(
-            {"attacker_objective": "x", "actor": "y", "harm": "this is not a verified finding yet"})
+            {"attacker_objective": "x", "actor": "y", "harm": "this is not a verified finding yet",
+             "evidence": [SOURCE_FILE]})
         replies_["pii-user-data-mapper"]["gaps"].append({"statement": "see the final report"})
         model = tw.join(self.base, self.record, replies_)
         self.assertEqual(len(model["abuse_scenarios"]), 1)
@@ -503,6 +507,27 @@ class RegistryTests(unittest.TestCase):
             ceiling = pi.claim_ceiling(records["role"], records["tooling_profile"])
             self.assertEqual(ceiling["allowed"], ("candidate_only",))
             self.assertTrue({"finding", "severity", "runtime_state"} <= set(ceiling["prohibited"]))
+
+
+class CellPromptExampleTests(unittest.TestCase):
+    """Each migrated cell task prompt's example is the hello-autotools sample reply the report samples join."""
+    SAMPLES = ROOT.parent / "pipeline/report/examples/hello-autotools.workbench-replies.json"
+
+    def test_the_task_prompt_examples_are_the_sample_replies(self):
+        samples = json.loads(self.SAMPLES.read_text(encoding="utf-8"))
+        for cell in ("pii-user-data-mapper", "deployment-topology-mapper"):
+            with self.subTest(cell=cell):
+                text = (ROOT / f"03-threat-model-dfd-stride/cells/{cell}.md").read_text(encoding="utf-8")
+                example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
+                self.assertEqual(example, samples[cell])
+
+    def test_a_record_without_evidence_is_rejected_by_the_cell_schema(self):
+        samples = json.loads(self.SAMPLES.read_text(encoding="utf-8"))
+        reply = deepcopy(samples["deployment-topology-mapper"])
+        reply["deployment_zones"][0]["evidence"] = []
+        self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
+        del reply["deployment_zones"][0]["evidence"]
+        self.assertTrue(validate_document(reply, "threat-workbench-cell-persona.schema.json"))
 
 
 if __name__ == "__main__":

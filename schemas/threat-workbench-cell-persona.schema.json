@@ -19,7 +19,13 @@
         "required": [
           "key",
           "name",
-          "category"
+          "category",
+          "sensitivity",
+          "personal_data",
+          "fields",
+          "store_element_ids",
+          "flow_ids",
+          "evidence"
         ],
         "additionalProperties": false,
         "properties": {
@@ -99,7 +105,8 @@
             "items": {
               "type": "string"
             },
-            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps.",
+            "minItems": 1
           },
           "confidence": {
             "type": "string",
@@ -118,7 +125,11 @@
         "type": "object",
         "required": [
           "linddun_category",
-          "statement"
+          "statement",
+          "target_ids",
+          "data_class_keys",
+          "proof_obligations",
+          "evidence"
         ],
         "additionalProperties": false,
         "properties": {
@@ -156,7 +167,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "minItems": 1
           },
           "regulatory_candidate_notes": {
             "type": "array",
@@ -170,7 +182,8 @@
             "items": {
               "type": "string"
             },
-            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps.",
+            "minItems": 1
           },
           "confidence": {
             "type": "string",
@@ -190,7 +203,9 @@
         "required": [
           "key",
           "kind",
-          "name"
+          "name",
+          "element_ids",
+          "evidence"
         ],
         "additionalProperties": false,
         "properties": {
@@ -222,7 +237,8 @@
             "items": {
               "type": "string"
             },
-            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps.",
+            "minItems": 1
           },
           "confidence": {
             "type": "string",
@@ -242,7 +258,9 @@
         "required": [
           "key",
           "kind",
-          "reason"
+          "reason",
+          "flow_ids",
+          "evidence"
         ],
         "additionalProperties": false,
         "properties": {
@@ -277,7 +295,8 @@
             "items": {
               "type": "string"
             },
-            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps.",
+            "minItems": 1
           },
           "confidence": {
             "type": "string",
@@ -297,7 +316,8 @@
         "required": [
           "attacker_objective",
           "actor",
-          "harm"
+          "harm",
+          "evidence"
         ],
         "additionalProperties": false,
         "properties": {
@@ -345,7 +365,8 @@
             "items": {
               "type": "string"
             },
-            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps."
+            "description": "Evidence refs: 'target-repository:<path>[:<line>[-<line>]]' for a target file, or '<root>:<path>' for a pinned readable input (see the cell brief). Unresolvable refs become gaps.",
+            "minItems": 1
           },
           "confidence": {
             "type": "string",

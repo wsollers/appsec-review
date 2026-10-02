@@ -24,9 +24,9 @@
     ]
   },
   "validation_rules": [
-    "judgment only: ids, citations, evidence classes and exposure labels are derived by threat_workbench.py",
-    "every reference must name a base DFD, wave-1 or brief id; unresolved references become gaps",
-    "evidence refs must name a pinned input or a target-repository path; unresolvable refs become gaps",
-    "no findings, severity, runtime state, compliance verdict, intent or remediation status"
+    "the orchestrator derives record ids, citations, evidence classes and exposure labels; the reply carries judgment only",
+    "a reference that names no base DFD, wave-1, component or brief id becomes a gap",
+    "an evidence ref that does not resolve becomes a gap; a record left with no resolvable evidence is kept as WEAK_INFERENCE",
+    "text matching the prohibited-claim patterns (verified finding, severity level, compliance verdict, observed runtime, remediated) drops the record and becomes a gap"
   ]
 }

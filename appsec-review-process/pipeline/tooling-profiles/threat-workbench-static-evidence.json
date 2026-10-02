@@ -29,8 +29,7 @@
   "disallowed_actions": [
     "execute target code",
     "access network other than the configured model invocation",
-    "mutate target content",
-    "invent evidence"
+    "mutate target content"
   ],
   "claim_limits": {
     "allowed": [

@@ -17,18 +17,16 @@
     "malicious_intent"
   ],
   "must_not": [
-    "promote a candidate to a finding",
-    "assign severity",
-    "claim compliance",
-    "invent evidence"
+    "restate, rename or invent base DFD ids",
+    "promote a candidate to a finding or assign severity"
   ],
   "required_behavior": [
-    "key every record to base DFD element and flow ids",
-    "cite evidence refs for every record",
-    "record unknowns as notes or gaps"
+    "key every record to base DFD element ids, flow ids or component ids from the cell brief",
+    "give every record at least one evidence ref: a target-repository path with lines, or a pinned bundle file",
+    "put what cannot be placed on a base id into notes or gaps"
   ],
   "role_id": "data-flow-modeler",
   "schema": "appsec-review/role/0.1",
-  "summary": "Adds data-class, personal-data-flow, LINDDUN privacy and deployment-zone overlays keyed to base DFD ids."
+  "summary": "Returns one threat-workbench cell reply that overlays the base DFD with data classes and LINDDUN privacy threats (pii-user-data-mapper) or deployment zones and trust boundaries (deployment-topology-mapper). The 03 join merges it into the threat model; the claim ledger and report read the merged records as candidates."
 }
 ```
