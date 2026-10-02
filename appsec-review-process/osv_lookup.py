@@ -33,7 +33,7 @@ NOTICE = ("Advisory data from OSV.dev and its source databases (licences: see th
 
 def default_root():
     configured = os.environ.get("APPSEC_OSV_ROOT")
-    return Path(configured) if configured else Path(__file__).resolve().parents[1] / "data" / "feeds" / "osv"
+    return Path(configured).resolve() if configured else Path(__file__).resolve().parents[1] / "data" / "feeds" / "osv"
 
 
 def lookup(args, now=None):

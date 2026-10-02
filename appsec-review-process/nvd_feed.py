@@ -59,7 +59,7 @@ def parse_time(value):
 
 def feed_root():
     configured = os.environ.get("APPSEC_NVD_ROOT")
-    return Path(configured) if configured else Path(__file__).resolve().parents[1] / "data" / "feeds" / "nvd"
+    return Path(configured).resolve() if configured else Path(__file__).resolve().parents[1] / "data" / "feeds" / "nvd"
 
 
 def _safe_root(root):

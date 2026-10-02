@@ -58,7 +58,7 @@ class Uncacheable(ValueError):
 
 def cache_root() -> Path:
     configured = os.environ.get("APPSEC_CACHE_ROOT")
-    return Path(configured) if configured else ROOT.parent / "data" / "caches"
+    return Path(configured).resolve() if configured else ROOT.parent / "data" / "caches"
 
 
 def run_mode() -> str | None:

@@ -16,9 +16,10 @@ from dagster import (DefaultScheduleStatus, Definitions, Failure, job, resource,
 # ADR-0011: this file is loaded by a host-owned `dagster api grpc` code location, not a container.
 # The process tree and run-data root resolve from the environment (code-location.sh sets both),
 # falling back to this repository's own layout. The old container paths (/opt/process, /runs) are gone.
+# Resolved: a root reached through a symlink would fail the one-real-spelling checks downstream.
 PROCESS_ROOT = Path(os.environ.get('APPSEC_PROCESS_ROOT')
-                    or Path(__file__).resolve().parents[2] / 'appsec-review-process')
-RUNS_ROOT = Path(os.environ.get('APPSEC_RUNS_ROOT') or PROCESS_ROOT / 'runs')
+                    or Path(__file__).resolve().parents[2] / 'appsec-review-process').resolve()
+RUNS_ROOT = Path(os.environ.get('APPSEC_RUNS_ROOT') or PROCESS_ROOT / 'runs').resolve()
 
 # B15: pool ids, limits and the explicit unassigned state come from resource_pools.py only.
 sys.path.insert(0, str(PROCESS_ROOT))

@@ -155,7 +155,7 @@ def definition_hash(job):
     paths = [ROOT / 'execution_state.py', ROOT / 'process_gate.py', ROOT / 'phase1.py', ROOT / 'intake.py',
              ROOT / 'job_graph.py', ROOT / 'process-manifest.json', ROOT / 'tooling/buildenv-catalog.json', GRAPH]
     paths += sorted((ROOT.parent / 'schemas').glob('*.schema.json'))
-    orchestration = Path(os.environ.get('APPSEC_ORCHESTRATOR_ROOT', ROOT.parent / 'orchestrator/dagster'))
+    orchestration = Path(os.environ.get('APPSEC_ORCHESTRATOR_ROOT', ROOT.parent / 'orchestrator/dagster')).resolve()
     runtime = {name:file_hash(orchestration/name) for name in ('definitions.py','Dockerfile','requirements.txt','requirements.lock.txt','compose.yaml','dagster.yaml')}
     return digest({'job': job, 'records': records, 'registry':registry, 'runtime':runtime, 'files': {str(p.relative_to(ROOT.parent)): file_hash(p) for p in paths}})
 

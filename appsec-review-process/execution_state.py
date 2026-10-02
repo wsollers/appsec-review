@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 import registry_paths
 
 ROOT = Path(__file__).resolve().parent
-RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT', ROOT / 'runs'))
+RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT', ROOT / 'runs')).resolve()   # one real spelling (no symlinked root)
 
 
 class Blocked(RuntimeError):

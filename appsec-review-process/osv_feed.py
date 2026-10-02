@@ -99,7 +99,7 @@ def parse_time(value):
 
 def feed_root():
     configured = os.environ.get("APPSEC_OSV_ROOT")
-    return Path(configured) if configured else Path(__file__).resolve().parents[1] / "data" / "feeds" / "osv"
+    return Path(configured).resolve() if configured else Path(__file__).resolve().parents[1] / "data" / "feeds" / "osv"
 
 
 def _safe_root(root):

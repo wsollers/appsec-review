@@ -91,7 +91,7 @@ class BuildFailed(RuntimeError):
 
 
 def images_root() -> Path:
-    return Path(os.environ.get("APPSEC_IMAGES_ROOT", ROOT))
+    return Path(os.environ.get("APPSEC_IMAGES_ROOT", ROOT)).resolve()
 
 
 def state_root() -> Path:

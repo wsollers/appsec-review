@@ -62,7 +62,7 @@ def control_path(run_id: str) -> Path:
 
 
 def catalog_root() -> Path:
-    return Path(os.environ.get("APPSEC_BUILD_IMAGES_ROOT", ROOT / "data" / "build-images"))
+    return Path(os.environ.get("APPSEC_BUILD_IMAGES_ROOT", ROOT / "data" / "build-images")).resolve()
 
 
 def _utc_now() -> str:

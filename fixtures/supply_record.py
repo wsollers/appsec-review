@@ -21,7 +21,7 @@ import subprocess
 import sys
 
 REPO = Path(__file__).resolve().parent.parent
-RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT') or REPO / 'appsec-review-process' / 'runs')
+RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT') or REPO / 'appsec-review-process' / 'runs').resolve()
 
 
 def fail(message: str) -> int:
