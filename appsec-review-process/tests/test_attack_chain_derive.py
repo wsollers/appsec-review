@@ -222,11 +222,32 @@ class RepairTests(unittest.TestCase):
     def test_link_needs_exactly_one_ref(self):
         chain = two_link_chain()
         chain["links"][0]["claim_id"] = CLAIM
-        self.assertRepair({"chains": [chain]}, "exactly one of claim_id or fact_ref")
+        self.assertRepair({"chains": [chain]}, "no value is allowed here")   # schema oneOf (P4)
+        chain = two_link_chain()
+        del chain["links"][0]["fact_ref"]
+        self.assertRepair({"chains": [chain]}, "matches none of oneOf")
+
+    def test_verification_wording_goes_back_and_negation_passes(self):
+        self.assertRepair({"chains": [two_link_chain(narrative=f"The chain through {CLAIM} is verified.")]},
+                          "asserts verification")
+        self.assertRepair({"chains": [two_link_chain(objective="Use a confirmed exploit of the copy")]},
+                          "asserts verification")
+        document, _notes = run({"chains": [two_link_chain(
+            narrative=f"argv reaches {CLAIM}; the chain is not verified, only supported by the call graph.")]})
+        self.assertEqual(len(document["chains"]), 1)
 
     def test_persona_schema_violation(self):
         chain = two_link_chain(impact_kind="world_domination")
         self.assertRepair({"chains": [chain]}, "not in enum")
+
+
+class TaskExampleTests(unittest.TestCase):
+    def test_the_task_prompt_example_derives_one_chain(self):
+        text = (ROOT / "14-attack-chain/task-attack-chain-composition-cell.md").read_text(encoding="utf-8")
+        example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
+        document, notes = run(example)
+        self.assertEqual(notes, [])
+        self.assertEqual([chain["causal_claim_ids"] for chain in document["chains"]], [[CLAIM]])
 
 
 class StateTests(unittest.TestCase):

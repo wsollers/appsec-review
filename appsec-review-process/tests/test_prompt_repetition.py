@@ -29,7 +29,8 @@ MIGRATED: frozenset[str] = frozenset({"01-component-characterization",   # R01
                                      "threat-workbench-attack-tree-builder",
                                      "threat-workbench-supply-chain-specialist",   # R09
                                      "hypothesis-hunt-general", "hypothesis-hunt-known-list",   # R10
-                                     "claim-review-pool-cell"})   # R11 (default composition; stage renders below)
+                                     "claim-review-pool-cell",   # R11 (default composition; stage renders below)
+                                     "attack-chain-composition-cell"})   # R15
 # Claim-review stages migrated so far: every stage persona is checked with the stage role (R11-R14).
 MIGRATED_STAGES = ("07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification",
                    "12-scoring-prioritization")

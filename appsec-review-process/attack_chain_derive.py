@@ -58,6 +58,29 @@ CLAIM_LIMITS = {"finding_created": False, "severity_assigned": False}
 # Code fences, shell prompts and escaped byte runs are payload material, not a chain description.
 _PAYLOAD_RE = re.compile(r"```|(?:\\x[0-9a-fA-F]{2}){4,}|(?:%[0-9a-fA-F]{2}){6,}|<script\b|\$\(\s*[a-z]",
                          re.IGNORECASE)
+# A chain's ceiling is "supported" (ADR-0016): text must not assert that the chain, an exploit or a
+# vulnerability is verified, confirmed or proven. Sentence-scoped and negation-aware (alignment plan P8):
+# "the chain is not verified" or "no exploit was confirmed" passes; a claim's own 09 status ("claim X was
+# verified at 09") is a fact about the claim, not the chain, and passes.
+_ASSERTION_RE = re.compile(
+    r"\b(?:chain|attack|exploit(?:ation)?|vulnerabilit(?:y|ies))\b[^.;!?]{0,60}?\b(?:is|was|are|were|has been|have been)\s+"
+    r"(?:fully\s+)?(?:verified|confirmed|proven)\b"
+    r"|\b(?:verified|confirmed|proven)\s+(?:attack\s+)?(?:chain|exploit(?:ation)?|vulnerabilit(?:y|ies)|attack)\b",
+    re.IGNORECASE)
+_NEGATION_RE = re.compile(r"\b(?:not|no|never|cannot|can't|isn't|wasn't|un(?:verified|confirmed|proven))\b", re.IGNORECASE)
+
+
+def assertion_errors(text: str, where: str) -> list[str]:
+    """Sentences of ``text`` that assert a verified/confirmed chain, exploit or vulnerability."""
+    errors = []
+    for sentence in re.split(r"(?<=[.;!?])\s+", text or ""):
+        match = _ASSERTION_RE.search(sentence)
+        if match and not _NEGATION_RE.search(sentence[:match.end()]):
+            errors.append(f"{where}: {match.group(0)!r} asserts verification; a chain is at most supported "
+                          "(say what the evidence shows instead)")
+    return errors
+
+
 _ORCHESTRATOR_KEYS = {"chain_id", "cluster_id", "state", "weakest", "link_state", "causal_claim_ids",
                       "fact_refs", "composer", "claim_limits", "refutation", "citations", "basis",
                       "downgraded_from", "index", "adjacency_edge_id", "mitre_reference"}
@@ -310,6 +333,10 @@ def _chain(workspace: dict[str, Any], chain: dict[str, Any], where: str, *, clai
     narrative = _clip(chain["narrative"], NARRATIVE_CHARS)
     if not any(claim_id in narrative for claim_id in causal):
         errors.append(f"{where}: the narrative must name at least one of its claim ids ({causal})")
+    errors.extend(assertion_errors(chain["narrative"], f"{where}.narrative") +
+                  assertion_errors(chain["objective"], f"{where}.objective") +
+                  [error for index, edge in enumerate(chain["edges"])
+                   for error in assertion_errors(edge.get("rationale", ""), f"{where}.edges[{index}].rationale")])
     if _PAYLOAD_RE.search(chain["narrative"]) or _PAYLOAD_RE.search(chain["objective"]):
         errors.append(f"{where}: describe how the reviewed weaknesses combine; do not include code, commands "
                       f"or encoded payloads")

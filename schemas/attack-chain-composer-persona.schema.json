@@ -112,7 +112,26 @@
                   },
                   "description": "Optional: MITRE ATT&CK technique ids (T<nnnn>[.<nnn>]) labelling this link's step, matching its stage's tactics. A label, never evidence; unknown, deprecated or off-tactic ids, and all ids when the MITRE snapshot is missing or stale, are dropped with a recorded limitation."
                 }
-              }
+              },
+              "oneOf": [
+                {
+                  "required": [
+                    "claim_id"
+                  ],
+                  "properties": {
+                    "fact_ref": false
+                  }
+                },
+                {
+                  "required": [
+                    "fact_ref"
+                  ],
+                  "properties": {
+                    "claim_id": false
+                  }
+                }
+              ],
+              "description": "Exactly one of claim_id (a workspace claim) or fact_ref (a workspace fact)."
             }
           },
           "edges": {
