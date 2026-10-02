@@ -23,6 +23,7 @@
   "required_evidence_hints": [
     "workspace claim id or fact ref per link",
     "fact ref per hop",
-    "citation ids of the linked claim"
+    "citation ids of the linked claim",
+    "a cited check, sanitisation or precondition at a named hop for every break"
   ]
 }

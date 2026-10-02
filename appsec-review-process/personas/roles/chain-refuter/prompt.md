@@ -16,18 +16,14 @@
     "human_approval"
   ],
   "must_not": [
-    "invent evidence",
-    "refute by assertion without a cited hop",
-    "decide claims instead of chains",
-    "write exploit code or payloads"
+    "decide a claim's review state instead of the chain"
   ],
   "required_behavior": [
-    "give one outcome per chain of the batch",
-    "name the broken or narrowed link or edge",
-    "cite the evidence that breaks it"
+    "start with the link or edge the chain names as weakest, then try the others",
+    "ground every break in a check, sanitisation, validation or precondition at a named hop"
   ],
   "role_id": "chain-refuter",
   "schema": "appsec-review/role/0.1",
-  "summary": "Try to break each composed attack chain, weakest link first, and record the outcome with citations."
+  "summary": "Tries to break each composed attack chain of one batch, weakest link first, and records whether it is broken, narrowed, holds or cannot be assessed; a broken chain is dropped from the report."
 }
 ```

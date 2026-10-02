@@ -57,7 +57,8 @@ REFUTER_RULES = (
     "'the sink looks safe' is not a refutation.",
     "broken and narrowed name the target link or edge, the mechanism and at least one citation: a citation id or "
     "fact ref of that chain, or supporting-evidence:<pinned path>[#locator].",
-    "You decide the chain only; you cannot change a claim's review state. No code, commands or payloads.",
+    "You decide the chain only; you cannot change a claim's review state. No code, commands or payloads; no "
+    "severity and no wording that calls a chain, exploit or vulnerability verified or confirmed.",
 )
 
 

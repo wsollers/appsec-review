@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -112,6 +113,22 @@ class RefuteDeriveTests(unittest.TestCase):
                                        "mechanism": "send ```python``` first", "target": {"kind": "edge", "index": 0},
                                        "citation_ids": [METHOD]}]}, "do not include code")
         self.assertRepair({"chains": [{"chain_id": self.chain_id, "disposition": "refuted"}]}, "not in enum")
+
+    def test_verification_wording_in_the_mechanism_goes_back_and_negation_passes(self):
+        row = {"chain_id": self.chain_id, "disposition": "narrowed", "target": {"kind": "link", "index": 1},
+               "citation_ids": [METHOD]}
+        self.assertRepair({"chains": [{**row, "mechanism": "The exploit is confirmed only without fortify."}]},
+                          "asserts verification")
+        document, _ = self.outcome({"chains": [{**row, "mechanism": "Only without fortify; the chain is not verified."}]})
+        self.assertEqual(document["outcomes"][0]["disposition"], "narrowed")
+
+    def test_the_task_prompt_example_derives_and_holds(self):
+        text = (ROOT / "14-attack-chain/task-attack-chain-refutation-cell.md").read_text(encoding="utf-8")
+        example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
+        document, notes = self.outcome(example)
+        self.assertEqual(notes, [])
+        self.assertEqual([(row["chain_id"], row["disposition"], len(row["citations"]))
+                          for row in document["outcomes"]], [(self.chain_id, "holds", 3)])
 
     def test_menu_citation_must_be_pinned(self):
         self.assertRepair({"chains": [{"chain_id": self.chain_id, "disposition": "broken", "mechanism": "x",

@@ -25,6 +25,6 @@
   "validation_rules": [
     "the composer reply validates attack-chain-composer-persona.schema.json; the refuter reply validates attack-chain-refuter-persona.schema.json",
     "chain ids, link states, edge bases, citations, states and weakest links are derived, never model-written",
-    "every link cites a workspace claim id or fact ref; unknown ids go back through repair"
+    "every id a reply cites resolves to its workspace or batch, or to a pinned menu file; anything else goes back through repair"
   ]
 }
