@@ -354,6 +354,16 @@ def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, An
         raise Blocked(f"{JOB}: lifecycle decision artifact does not support its authority")
 
 
+def _expected_severity(score: int, cvss: dict[str, Any] | None) -> tuple[str, str]:
+    """(severity, priority) exactly as claim_lifecycle_core.score sets them: the pinned CVSS v4.0
+    severity when a CVSS assessment is present (NONE reads LOW), otherwise the factor-sum bucket."""
+    if isinstance(cvss, dict) and cvss.get("severity"):
+        severity = cvss["severity"] if cvss["severity"] != "NONE" else "LOW"
+        return severity, {"CRITICAL": "P0", "HIGH": "P1", "MEDIUM": "P2", "LOW": "P3"}[severity]
+    return ("CRITICAL", "P0") if score >= 15 else (("HIGH", "P1") if score >= 12 else
+            (("MEDIUM", "P2") if score >= 8 else ("LOW", "P3")))
+
+
 def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[str],
              optional_keys: set[str] = frozenset()) -> dict[str, dict[str, Any]]:
     top_keys = {"schema", "run_id", "stage", "ledger_head_id", "ledger_head_sha256",
@@ -515,8 +525,7 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
             if not isinstance(factors, dict) or set(factors) != {"impact", "exploitability", "exposure", "confidence"}:
                 raise Blocked(f"{JOB}: verified score factors are incomplete")
             score = sum(factors.values())
-            expected = ("CRITICAL", "P0") if score >= 15 else (("HIGH", "P1") if score >= 12 else
-                       (("MEDIUM", "P2") if score >= 8 else ("LOW", "P3")))
+            expected = _expected_severity(score, record.get("cvss_v4"))
             if (record.get("score"), record.get("severity"), record.get("priority")) != (score, *expected):
                 raise Blocked(f"{JOB}: scoring result is inflated or non-deterministic")
     _reject_promotions({"component": component, "threat": threat, "owasp": [matrix, gaps, routes],

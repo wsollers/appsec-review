@@ -52,7 +52,8 @@ COVERAGE = "shard-coverage.json"
 CLASS = lifecycle.POOL_CLASSES
 ROLE = {"07-red-team-adversarial": "red-team-adversary",
         "08-blue-team-refutation": "blue-team-refuter",
-        "09-independent-verification": "independent-verifier"}
+        "09-independent-verification": "independent-verifier",
+        "12-scoring-prioritization": "scorer"}
 
 
 def root(run_id: str, stage: str) -> Path:

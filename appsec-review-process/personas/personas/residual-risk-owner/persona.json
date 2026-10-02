@@ -15,19 +15,14 @@
     ]
   },
   "required_inputs": [
-    "accepted upstream artifacts and cited evidence for the assigned surface (catalog lists no specific inputs)"
+    "12 review shard of independently verified records",
+    "supporting-evidence menu"
   ],
   "outputs": [
-    "evidence-bound observations within this persona's focus (catalog lists no specific outputs)"
+    "factors, rationale and optional CWE, CVSS v4.0 metrics and remediation objective for each reviewed item"
   ],
   "must_not": [
-    "invent evidence, citations or standards mappings",
-    "promote a candidate observation to a verified finding without independent verification"
+    "score a claim that is not VERIFIED; name the evidence gap that keeps it open instead"
   ],
-  "provenance": {
-    "generated_by": "catalog_personas.py",
-    "source": "docs/personas-and-registry/persona-catalog.md#residual-risk-owner",
-    "reviewed": false,
-    "note": "Derived mechanically from the catalog prose; not yet reviewed by a human. Edit the catalog and regenerate, or hand-edit and remove this provenance block to take ownership."
-  }
+  "provenance": {}
 }

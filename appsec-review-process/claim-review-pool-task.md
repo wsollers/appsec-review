@@ -53,7 +53,7 @@ assertion. Do not write them.
 | `method` | 09 | how you checked | required at 09 (repair loop) |
 | `evidence_ids` | 09 | verification-evidence `item_id`s of this claim that the verdict rests on; Python turns each into a citation `verification-<item_id>` that obligations may cite | each id must be an item of this claim (repair loop) |
 | `proof_obligations` | 08, 09 | every upstream `obligation_id` with `status` (`OPEN`, `SATISFIED`, `FAILED`, `UNRESOLVED`) and its `citation_ids` | every obligation answered once (repair loop) |
-| `factors` | 12 | `impact`, `exploitability`, `exposure`, `confidence`, each 0..4, for a VERIFIED claim; `null` otherwise | enum (schema); null for non-VERIFIED claims (repair loop) |
+| `factors` | 12 | `impact`, `exploitability`, `exposure`, `confidence`, each 0..4 on the rubric below, for a VERIFIED claim; `null` otherwise | enum (schema); null for non-VERIFIED claims (repair loop) |
 | `cvss_v4`, `remediation` | 12 | VERIFIED claims only: the eleven CVSS v4.0 base metrics with one justification each; `{objective, patch_proposal}` | enums (schema); Python computes the vector, score and severity |
 
 ## Procedure
@@ -78,7 +78,21 @@ assertion. Do not write them.
    red- and blue-team conclusions. Cite the items your verdict rests on in `evidence_ids`. VERIFIED
    needs every obligation `SATISFIED` and a cited `REACHABLE` item; with `UNKNOWN` or `UNREACHABLE`
    reachability the claim stays `UNRESOLVED`, and `method` says why.
-7. Keep what you cannot settle explicit: an `UNRESOLVED` or `BLOCKED` disposition, an `UNRESOLVED`
+7. At 12, score only `VERIFIED` claims, on this rubric (each factor 0..4, from the verified facts and
+   the claim's certainty; the sum sets severity unless CVSS metrics are given):
+
+   | value | impact | exploitability | exposure | confidence |
+   |---|---|---|---|---|
+   | 0 | no security consequence shown | not exploitable as verified | no attacker position reaches it | — (not VERIFIED) |
+   | 1 | minor: limited information, no state change | needs unusual or privileged preconditions | local or administrator only | — |
+   | 2 | one component's confidentiality, integrity or availability | needs specific conditions (authentication, user action, timing) | authenticated users or an adjacent network | reachable and inference validated (the VERIFIED minimum) |
+   | 3 | significant data exposure, privilege gain, or crash of a service | straightforward with attacker-controlled input | any user of the product | plus a taint path carrying attacker data |
+   | 4 | code execution or full compromise | trivial, a known technique, no preconditions | unauthenticated, internet-facing | plus a working PoC |
+
+   The sum maps to severity: 15-16 Critical (P0), 12-14 High (P1), 8-11 Medium (P2), 0-7 Low (P3).
+   With CVSS v4.0 metrics, the pinned CVSS score sets severity instead; the report caps Critical at
+   High unless reachability is `REACHABLE`.
+8. Keep what you cannot settle explicit: an `UNRESOLVED` or `BLOCKED` disposition, an `UNRESOLVED`
    obligation, or an omitted optional field.
 
 ## Rules
@@ -229,6 +243,58 @@ verification evidence holds `ve-aaaaaaaaaaaaaaaaaaaaaaaa` (`REACHABLE`: a call p
      ]
     }
    ]
+  }
+ ]
+}
+```
+
+A stage-12 reply for the same two claims after stage 09 (`claim-aaaaaaaaaaaaaaaaaaaaaaaa` VERIFIED, `claim-bbbbbbbbbbbbbbbbbbbbbbbb` UNRESOLVED).
+
+```json
+{
+ "decisions": [
+  {
+   "claim_id": "claim-aaaaaaaaaaaaaaaaaaaaaaaa",
+   "factors": {
+    "impact": 3,
+    "exploitability": 3,
+    "exposure": 3,
+    "confidence": 2
+   },
+   "rationale": "Verified at 09: a call path from main() reaches the parser with attacker bytes (reachable, inference validated); impact is a parser crash or memory disclosure, not code execution; no taint path or PoC yet.",
+   "cvss_v4": {
+    "metrics": {
+     "AV": "N",
+     "AC": "L",
+     "AT": "N",
+     "PR": "N",
+     "UI": "N",
+     "VC": "L",
+     "VI": "L",
+     "VA": "H",
+     "SC": "N",
+     "SI": "N",
+     "SA": "N"
+    },
+    "rationale": {
+     "AV": "the cited flow carries bytes from a network client to the parser",
+     "AC": "no race or special configuration is needed: any crafted message reaches the parser",
+     "AT": "the call path from main() needs no deployment precondition",
+     "PR": "the modeled flow accepts input before any authentication step",
+     "UI": "no user action is needed for the message to be parsed",
+     "VC": "an over-read can return adjacent parser memory",
+     "VI": "a malformed length can corrupt parser state",
+     "VA": "a malformed length can crash the parsing process",
+     "SC": "no evidence shows impact beyond the parser process",
+     "SI": "no evidence shows impact beyond the parser process",
+     "SA": "no evidence shows impact beyond the parser process"
+    }
+   }
+  },
+  {
+   "claim_id": "claim-bbbbbbbbbbbbbbbbbbbbbbbb",
+   "factors": null,
+   "rationale": "Not VERIFIED at 09 (reachability unknown): left unscored; the open question is whether deployed code serves the documented route."
   }
  ]
 }

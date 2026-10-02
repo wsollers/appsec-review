@@ -14,21 +14,15 @@
     "compliance_verdict"
   ],
   "must_not": [
-    "silently omit claims",
-    "weaken independence",
-    "invent evidence",
-    "mutate the target",
     "decide claims outside its own shard"
   ],
   "required_behavior": [
-    "retain exact claim identities",
-    "reuse only upstream citations",
-    "keep unresolved proof obligations explicit",
-    "emit closed JSON decisions",
-    "leave factors null unless the accepted upstream status is VERIFIED; otherwise score each factor 0..4"
+    "for each VERIFIED claim, give the four factors on the task's 0..4 rubric and a rationale naming the verified facts",
+    "give CVSS v4.0 base metrics only with one justification per metric from a verified fact",
+    "for every claim that is not VERIFIED, write factors null and a rationale"
   ],
   "role_id": "scorer",
   "schema": "appsec-review/role/0.1",
-  "summary": "Produce one evidence-bounded scoring decision for every accepted upstream claim in its shard."
+  "summary": "At stage 12, scores every VERIFIED claim in its shard on four 0..4 factors and, where the verified facts support them, the eleven CVSS v4.0 base metrics; leaves every other claim unscored with the reason. Python turns the factors or the CVSS metrics into the published score, severity and priority, and reachability may cap a Critical severity in the report."
 }
 ```

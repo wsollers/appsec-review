@@ -128,6 +128,27 @@ class TaskExampleTests(unittest.TestCase):
         self.assertEqual((decisions[A]["disposition"], decisions[B]["disposition"]), ("VERIFIED", "UNRESOLVED"))
 
 
+class ScoringTests(unittest.TestCase):
+    def test_the_task_prompt_12_example_derives_and_scores(self):
+        import claim_lifecycle_core as core
+        from test_claim_review_derive import SCORE, binding, run as derive_stage
+        text = (ROOT / "claim-review-pool-task.md").read_text(encoding="utf-8")
+        block = text.split("## Example", 1)[1].split("```json\n")[4].split("\n```", 1)[0]
+        document, notes = derive_stage(SCORE, json.loads(block))
+        self.assertEqual(notes, [])
+        scored = core.score(upstream(SCORE), binding(VERIFY, "independent-verification.json"),
+                            {"decisions": list(decisions_of(document).values())})
+        rows = {row["claim_id"]: row for row in scored["priorities"]}
+        self.assertEqual((rows[A]["score"], rows[A]["cvss_v4"]["severity"] != "NONE"), (11, True))
+        self.assertEqual((rows[B]["score"], rows[B]["priority"]), (None, "UNRESOLVED"))
+
+    def test_report_expects_the_cvss_severity_when_present(self):
+        import report_input_assembly as assembly
+        self.assertEqual(assembly._expected_severity(11, None), ("MEDIUM", "P2"))
+        self.assertEqual(assembly._expected_severity(11, {"severity": "HIGH"}), ("HIGH", "P1"))
+        self.assertEqual(assembly._expected_severity(16, {"severity": "NONE"}), ("LOW", "P3"))
+
+
 class ReportTests(unittest.TestCase):
     def test_certainty_flows_through_l08_and_renders(self):
         import claim_lifecycle_core as core
