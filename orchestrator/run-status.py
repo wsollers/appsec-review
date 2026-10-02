@@ -6,6 +6,7 @@
 Without a run id it reports the newest run (run ids start with a UTC timestamp).
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -39,7 +40,9 @@ def main() -> int:
     if named:
         run_id = named[0]
     else:
-        existing = sorted(p.name for p in runs.iterdir() if (p / "data" / "jobs").is_dir()) if runs.is_dir() else []
+        stamped = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]+")   # stage-run ids; older names like run-b14 are skipped
+        existing = sorted(p.name for p in runs.iterdir()
+                          if stamped.fullmatch(p.name) and (p / "data" / "jobs").is_dir()) if runs.is_dir() else []
         if not existing:
             print(__doc__); return 2
         run_id = existing[-1]
