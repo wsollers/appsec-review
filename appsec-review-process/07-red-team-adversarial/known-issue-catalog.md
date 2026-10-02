@@ -4,13 +4,10 @@ Use this catalog as hypothesis fuel for the red-team lane. These are not finding
 becomes a candidate only when it is grounded in target-specific evidence, source locations, scanner
 output, or an explicit coverage gap.
 
-For each applicable component, the red-team output should cite:
-
-- component id or component-cloud group
-- attack/security issue class
-- concrete target location or missing-evidence gap
-- why the existing pipeline might miss it
-- minimum check needed to confirm, refute, or route it
+Each `##` section below names what it applies to and lists issue classes. A known-list hunter covers
+every section once: hypotheses whose `catalog_section` is the section name, or one `catalog_coverage`
+entry (`not_applicable` with what was searched, or `not_checked` with why). The fields of both are in
+`task-hypothesis-hunt-known-list.md`; the section names are fixed (`hypothesis_hunt_derive.CATALOG_SECTIONS`).
 
 ## identity-access
 

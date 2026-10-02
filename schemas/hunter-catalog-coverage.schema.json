@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hunter-catalog-coverage.schema.json",
+  "title": "Known-list hunter catalog coverage record (derived, strict)",
+  "description": "One catalog section a known-list hunter marked not_applicable or not_checked, as derived by hypothesis_hunt_derive.py from the persona reply. Carried through the pool merge as a candidate whose assertion is this record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "hunter",
+    "section",
+    "status",
+    "statement",
+    "evidence"
+  ],
+  "properties": {
+    "kind": {
+      "const": "coverage"
+    },
+    "hunter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "persona_id",
+        "shard_id"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "general",
+            "known-list"
+          ]
+        },
+        "persona_id": {
+          "type": "string"
+        },
+        "shard_id": {
+          "type": "string"
+        }
+      }
+    },
+    "section": {
+      "enum": [
+        "identity-access",
+        "network-rpc-transport",
+        "crypto-secrets-trust",
+        "player-social-game-services",
+        "data-storage-records",
+        "admin-operations-management",
+        "client-platform-ui",
+        "content-update-assets",
+        "native-runtime-memory",
+        "build-deploy-infrastructure"
+      ]
+    },
+    "status": {
+      "enum": [
+        "not_applicable",
+        "not_checked"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ref",
+          "kind",
+          "root",
+          "path",
+          "start_line",
+          "end_line"
+        ],
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "target-range",
+              "target-deferred",
+              "pinned-input",
+              "unresolved"
+            ]
+          },
+          "root": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "end_line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

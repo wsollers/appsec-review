@@ -19,7 +19,8 @@
     "evidence",
     "component_id",
     "location_check",
-    "drop_reason"
+    "drop_reason",
+    "catalog_section"
   ],
   "properties": {
     "kind": {
@@ -169,6 +170,22 @@
         "string",
         "null"
       ]
+    },
+    "catalog_section": {
+      "enum": [
+        "identity-access",
+        "network-rpc-transport",
+        "crypto-secrets-trust",
+        "player-social-game-services",
+        "data-storage-records",
+        "admin-operations-management",
+        "client-platform-ui",
+        "content-update-assets",
+        "native-runtime-memory",
+        "build-deploy-infrastructure",
+        null
+      ],
+      "description": "Known-list hunters: the catalog section; null for general hunters."
     }
   }
 }

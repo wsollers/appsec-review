@@ -68,12 +68,12 @@ TEMPLATES = {"general": "hypothesis-hunt-general", "known-list": "hypothesis-hun
 MODE_ORDER = ("general", "known-list")
 GUIDES_ROOT_ID = "hunt-guides"
 GUIDES_DIR = ROOT / "07-red-team-adversarial"
-GUIDE_FILES = {"known-list": ("known-issue-catalog.md", "retrieval-guide.md"), "general": ("retrieval-guide.md",)}
+GUIDE_FILES = {"known-list": ("known-issue-catalog.md",), "general": ()}
 BRIEF_DIR = "hunt-briefs"
 TIERS = ("P1", "P2")
 CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
 GAP_REASONS = frozenset({"dropped-by-derive", "not-in-checkout", "line-out-of-range", "file-changed",
-                         "malformed-record", "worker-missing", "merge-conflict"})
+                         "malformed-record", "worker-missing", "merge-conflict", "catalog-not-checked"})
 RULES = (
     "The lead menu lists static-tool leads in your files. It is a menu, not a limit: read the code and "
     "look anywhere in your files (and, through evidence_search / evidence_read, elsewhere) for "
@@ -116,7 +116,8 @@ def _code_hashes() -> dict[str, str]:
     paths += [f"07-red-team-adversarial/{name}" for name in sorted({n for v in GUIDE_FILES.values() for n in v})]
     paths += [path for template in TEMPLATES.values() for path in persona_prompt_assembly.prompt_source_paths(template)]
     values = {path: file_hash(ROOT / path) for path in paths}
-    for name in (RESULT_SCHEMA, derive.PERSONA_SCHEMA, derive.CANDIDATES_SCHEMA, derive.RECORD_SCHEMA):
+    for name in (RESULT_SCHEMA, derive.PERSONA_SCHEMA, derive.CANDIDATES_SCHEMA, derive.RECORD_SCHEMA,
+                 derive.COVERAGE_SCHEMA):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values
 
@@ -260,7 +261,7 @@ def _runtime_instructions(brief: dict[str, Any]) -> str:
                            derive.TARGET_ROOT_ID: "the target files of your shard (read them)",
                            evidence_menu.MENU_ROOT_ID: "the supporting-evidence menu",
                            evidence_menu.ROOT_ID: "accepted evidence the menu pins",
-                           GUIDES_ROOT_ID: "the retrieval guide / known-issue catalog"},
+                           GUIDES_ROOT_ID: "the known-issue catalog (known-list hunters only)"},
         "reply_shape": ("the candidates envelope value is {\"hypotheses\": [...]} and validates "
                         f"{derive.PERSONA_SCHEMA}; an empty list is a valid answer"),
         "limits": brief["limits"], "rules": brief["rules"],
@@ -481,13 +482,27 @@ def build_result(inputs: dict[str, Any], merge: dict[str, Any], read: Callable[[
         return cache[path]
 
     groups: dict[tuple, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+    coverage: dict[tuple[str, str], dict[str, Any]] = {}     # (shard, section) -> row
+    claimed: dict[tuple[str, str], int] = {}                 # (shard, section) -> hypotheses the hunter wrote
     for candidate in merge.get("candidates", []):
         try:
             record = json.loads(candidate["assertion"])
         except (ValueError, KeyError, TypeError):
             gaps.append(_gap("malformed-record", None, "hunter candidate assertion is not JSON")); continue
+        if isinstance(record, dict) and record.get("kind") == "coverage":
+            if validate_document(record, derive.COVERAGE_SCHEMA, store):
+                gaps.append(_gap("malformed-record", None, "coverage record fails hunter-catalog-coverage.schema.json"))
+                continue
+            shard = record["hunter"]["shard_id"]
+            coverage[(shard, record["section"])] = {"shard_id": shard, "section": record["section"],
+                "status": record["status"], "statement": record["statement"], "evidence": record["evidence"],
+                "hypothesis_ids": []}
+            continue
         if validate_document(record, derive.RECORD_SCHEMA, store):
             gaps.append(_gap("malformed-record", None, "hunter record fails hunter-hypothesis.schema.json")); continue
+        if record["catalog_section"] is not None:
+            key = (record["hunter"]["shard_id"], record["catalog_section"])
+            claimed[key] = claimed.get(key, 0) + 1
         if record["kind"] == "dropped":
             gaps.append(_gap("dropped-by-derive", record, record["drop_reason"] or "dropped")); continue
         data = data_of(record["path"])
@@ -541,6 +556,23 @@ def build_result(inputs: dict[str, Any], merge: dict[str, Any], read: Callable[[
             "confidence": confidence, "component_ids": claim_ledger._components_for(path, components),
             "evidence": evidence, "hunters": hunters, "lead_overlap": overlap})
     hypotheses.sort(key=lambda row: (TIERS.index(row["tier"]), row["path"], row["start_line"], row["hypothesis_id"]))
+    for (path, start, key), members in groups.items():
+        for record, _c in members:
+            if record["catalog_section"] is not None:
+                row = coverage.setdefault((record["hunter"]["shard_id"], record["catalog_section"]), {
+                    "shard_id": record["hunter"]["shard_id"], "section": record["catalog_section"],
+                    "status": "hypothesized", "statement": None, "evidence": [], "hypothesis_ids": []})
+                row["hypothesis_ids"] = sorted(set(row["hypothesis_ids"]) | {derive.subject_id(path, start, key)})
+    for (shard, section), count in claimed.items():
+        if (shard, section) not in coverage:   # every hypothesis of the section was dropped or gapped
+            coverage[(shard, section)] = {"shard_id": shard, "section": section, "status": "not_checked",
+                "statement": f"all {count} hypothesis(es) for this section were dropped; see the gaps",
+                "evidence": [], "hypothesis_ids": []}
+    order = {section: index for index, section in enumerate(derive.CATALOG_SECTIONS)}
+    catalog_coverage = sorted(coverage.values(), key=lambda row: (row["shard_id"], order[row["section"]]))
+    for row in catalog_coverage:
+        if row["status"] == "not_checked":
+            gaps.append(_gap("catalog-not-checked", None, f"{row['section']}: {row['statement']}", shard=row["shard_id"]))
     for worker in merge.get("missing_worker_ids", []):
         gaps.append(_gap("worker-missing", None, f"hunter instance {worker} returned no result", shard=None))
     for conflict in merge.get("conflicts", []):
@@ -557,7 +589,7 @@ def build_result(inputs: dict[str, Any], merge: dict[str, Any], read: Callable[[
                     "component_ids": brief["component_ids"], "pinned_files": len(brief["pinned_files"]),
                     "unpinned_files": brief["unpinned_total"], "lead_menu": brief["lead_menu_total"]}
                    for brief in inputs["briefs"]],
-        "hypotheses": hypotheses, "gaps": gaps,
+        "hypotheses": hypotheses, "catalog_coverage": catalog_coverage, "gaps": gaps,
         "claim_limits": {"candidate_only": True, "finding_created": False, "severity_assigned": False,
                          "runtime_claimed": False}}
     errors = validate_document(result, RESULT_SCHEMA, store)
@@ -576,6 +608,10 @@ def summary(result: dict[str, Any]) -> str:
         label = (row["cwe"] + " " if row["cwe"] else "") + row["vulnerability_class"]
         lines.append(f"| {row['tier']} | `{where}` | {label.replace('|', '/')} | {row['confidence']} | "
                      f"{', '.join(sorted({h['mode'] for h in row['hunters']}))} | {len(row['lead_overlap'])} |")
+    if result["catalog_coverage"]:
+        lines += ["", "## Known-list catalog coverage", "", "| Shard | Section | Status | Hypotheses |", "|---|---|---|---|"]
+        lines += [f"| {row['shard_id']} | {row['section']} | {row['status']} | {len(row['hypothesis_ids'])} |"
+                  for row in result["catalog_coverage"]]
     if result["gaps"]:
         lines += ["", "## Gaps", ""] + [f"- {gap['kind']}: {gap['path'] or '-'}"
                                          f"{':' + str(gap['start_line']) if gap['start_line'] else ''} {gap['reason']}"

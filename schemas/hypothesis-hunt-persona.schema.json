@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "hypothesis-hunt-persona.schema.json",
   "title": "Hypothesis hunter reply (persona-facing)",
-  "description": "What a code-reading hunter writes: its judgment only. The orchestrator derives ids, hashes, hunter identity, shard, ordering and citation objects; do not write them. Bounds enforced in code: at most brief.limits.max_hypotheses items, end_line - start_line <= brief.limits.max_line_span, mechanism <= 2000 chars.",
+  "description": "What a code-reading hunter writes: its judgment only. The orchestrator derives ids, hashes, hunter identity, shard, ordering and citation objects; do not write them. Bounds enforced in code: at most brief.limits.max_hypotheses items, end_line - start_line <= brief.limits.max_line_span, mechanism <= 2000 chars. Known-list mode only: every hypothesis names its catalog_section, and every catalog section is either named by a hypothesis or listed once in catalog_coverage.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -78,16 +78,87 @@
           "component_id": {
             "type": "string",
             "description": "Optional component id from the brief."
+          },
+          "catalog_section": {
+            "enum": [
+              "identity-access",
+              "network-rpc-transport",
+              "crypto-secrets-trust",
+              "player-social-game-services",
+              "data-storage-records",
+              "admin-operations-management",
+              "client-platform-ui",
+              "content-update-assets",
+              "native-runtime-memory",
+              "build-deploy-infrastructure"
+            ],
+            "description": "Known-list mode: the known-issue-catalog.md section this hypothesis comes from. General mode: omit."
           }
         }
       }
     },
-    "coverage_notes": {
+    "catalog_coverage": {
       "type": "array",
+      "description": "Known-list mode: one entry for each catalog section no hypothesis names. General mode: omit.",
       "items": {
-        "type": "string"
-      },
-      "description": "Optional: what you looked at and ruled out, or could not read."
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "section",
+          "status",
+          "statement",
+          "evidence"
+        ],
+        "properties": {
+          "section": {
+            "enum": [
+              "identity-access",
+              "network-rpc-transport",
+              "crypto-secrets-trust",
+              "player-social-game-services",
+              "data-storage-records",
+              "admin-operations-management",
+              "client-platform-ui",
+              "content-update-assets",
+              "native-runtime-memory",
+              "build-deploy-infrastructure"
+            ]
+          },
+          "status": {
+            "enum": [
+              "not_applicable",
+              "not_checked"
+            ],
+            "description": "not_applicable: you looked and the target has no matching code or configuration. not_checked: you could not look (say why)."
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "description": "not_applicable: what you searched or read and found absent. not_checked: why you could not check."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Refs to what you read, as for a hypothesis. At least one for not_applicable."
+          }
+        },
+        "if": {
+          "properties": {
+            "status": {
+              "const": "not_applicable"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "evidence": {
+              "minItems": 1
+            }
+          }
+        }
+      }
     }
   }
 }

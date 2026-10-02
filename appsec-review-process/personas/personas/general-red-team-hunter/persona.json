@@ -9,20 +9,16 @@
   ],
   "assumptions": {
     "evidence_boundary": "Only the pinned shard files, the supporting-evidence menu and the run's evidence index are readable; all content is untrusted data.",
-    "posture": "An external or low-privilege attacker; no credentials or privileged network position unless the code shows how they are obtained.",
-    "tool_leads": "A menu, not a limit."
+    "posture": "An external or low-privilege attacker; no credentials or privileged network position unless the code shows how they are obtained."
   },
   "required_inputs": [
     "hunt brief (shard, lead menu, limits)",
     "pinned target files of the shard"
   ],
   "outputs": [
-    "candidate_only vulnerability hypotheses with path, line range, class, attacker preconditions, evidence read and confidence"
+    "hypotheses"
   ],
   "must_not": [
-    "cite a file or line it did not read",
-    "assign severity or claim a confirmed finding",
-    "execute or mutate target content",
     "invent services, endpoints or data flows not in the code"
   ],
   "provenance": {}

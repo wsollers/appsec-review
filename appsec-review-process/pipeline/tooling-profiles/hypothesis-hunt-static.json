@@ -9,7 +9,7 @@
   ],
   "optional_inputs": [
     "supporting-evidence menu and the files it pins",
-    "known-issue catalog and retrieval guide",
+    "known-issue catalog (known-list hunters)",
     "run evidence index lookups"
   ],
   "allowed_actions": [

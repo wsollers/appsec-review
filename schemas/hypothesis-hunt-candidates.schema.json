@@ -27,12 +27,12 @@
           },
           "subject_id": {
             "type": "string",
-            "pattern": "^hyp-[0-9a-f]{24}$"
+            "pattern": "^(hyp|cov)-[0-9a-f]{24}$"
           },
           "assertion": {
             "type": "string",
             "minLength": 2,
-            "description": "Canonical JSON of one hunter-hypothesis.schema.json record."
+            "description": "Canonical JSON of one hunter-hypothesis.schema.json record (subject hyp-...) or one hunter-catalog-coverage.schema.json record (subject cov-...)."
           },
           "evidence_sha256": {
             "type": "string",

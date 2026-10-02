@@ -13,7 +13,11 @@ preconditions, the evidence it read and a confidence.  This module owns the book
   with ``location_check: deferred`` and resolved against the checkout after the pool;
 * evidence refs classified against the pinned inputs; the hypothesis location is always evidence;
 * ids: ``subject_id`` from the location identity, ``candidate_id`` from the canonical record;
-* the per-instance hypothesis limit (excess items become ``dropped`` records, in reply order).
+* the per-instance hypothesis limit (excess items become ``dropped`` records, in reply order);
+* known-list catalog coverage: every hypothesis names its ``catalog_section`` and every other section
+  of ``known-issue-catalog.md`` is listed once in ``catalog_coverage`` (``not_applicable`` or
+  ``not_checked``). A reply that misses a section goes back to the model; each coverage entry becomes a
+  ``hunter-catalog-coverage.schema.json`` record carried through the pool merge like a hypothesis.
 
 A reply that is not the persona shape is sent back to the model through the invoker's bounded
 repair loop.  Orchestrator-owned keys the model echoes out of habit are ignored; promotion keys
@@ -34,12 +38,17 @@ from schema_validate import SchemaStore, validate_document
 PERSONA_SCHEMA = "hypothesis-hunt-persona.schema.json"
 CANDIDATES_SCHEMA = "hypothesis-hunt-candidates.schema.json"
 RECORD_SCHEMA = "hunter-hypothesis.schema.json"
+COVERAGE_SCHEMA = "hunter-catalog-coverage.schema.json"
 BRIEF_SCHEMA_ID = "appsec-review/hypothesis-hunt-brief/1.0"
 BRIEF_ROOT_ID = "hunt-brief"
 TARGET_ROOT_ID = "target-repository"    # persona_dispatch.DEFAULT_READABLE_ROOT
 # Readable root ids a hunter may cite as 'root:path' (hunt brief, guides, evidence menu and its files).
 KNOWN_ROOTS = frozenset({BRIEF_ROOT_ID, "hunt-guides", "evidence-menu", "supporting-evidence", "upstream-artifacts"})
 MODES = {"general": "general-red-team-hunter", "known-list": "known-list-red-team-hunter"}
+# The '## ' sections of 07-red-team-adversarial/known-issue-catalog.md, in order (a test holds them equal).
+CATALOG_SECTIONS = ("identity-access", "network-rpc-transport", "crypto-secrets-trust", "player-social-game-services",
+                    "data-storage-records", "admin-operations-management", "client-platform-ui",
+                    "content-update-assets", "native-runtime-memory", "build-deploy-infrastructure")
 CONFIDENCE = ("low", "medium", "high")
 MECHANISM_CHARS = 2000
 TEXT_CHARS = 400
@@ -64,7 +73,8 @@ _ALIASES = {"file": "path", "file_path": "path", "filename": "path", "location_p
             "preconditions": "attacker_preconditions", "attacker_precondition": "attacker_preconditions",
             "description": "mechanism", "rationale": "mechanism", "reasoning": "mechanism",
             "explanation": "mechanism", "evidence_read": "evidence", "citations": "evidence",
-            "references": "evidence", "component": "component_id"}
+            "references": "evidence", "component": "component_id", "section": "catalog_section",
+            "catalog_group": "catalog_section", "review_group": "catalog_section"}
 _LIST_ALIASES = ("hypotheses", "findings", "vulnerabilities", "candidates", "results")
 _CWE_RE = re.compile(r"CWE[-_ ]?(\d{1,5})", re.IGNORECASE)
 _LOC_RE = re.compile(r"^(?P<path>.+?):(?P<start>\d+)(?:\s*[-:]\s*L?(?P<end>\d+))?$")
@@ -207,13 +217,41 @@ def normalize(reply: Any) -> tuple[Any, list[str]]:
                 break
     if not isinstance(value, dict) or not isinstance(value.get("hypotheses"), list):
         return value, notes
-    kept = {key: item for key, item in value.items() if key in {"hypotheses", "coverage_notes"}}
+    kept = {key: item for key, item in value.items() if key in {"hypotheses", "catalog_coverage"}}
     for key in sorted(set(value) - set(kept)):
         notes.append(f"ignored top-level key {key!r}")
     kept["hypotheses"] = [_normalize_item(row, index, notes) for index, row in enumerate(value["hypotheses"])]
-    if isinstance(kept.get("coverage_notes"), str):
-        kept["coverage_notes"] = [kept["coverage_notes"]]
+    if isinstance(kept.get("catalog_coverage"), list):
+        kept["catalog_coverage"] = [{**row, "evidence": _evidence_strings(row.get("evidence"))}
+                                    if isinstance(row, dict) and "evidence" in row else row
+                                    for row in kept["catalog_coverage"]]
     return kept, notes
+
+
+def coverage_errors(mode: str, value: dict[str, Any]) -> list[str]:
+    """Known-list mode: each hypothesis names a catalog section, and each section is either named by a
+    hypothesis or listed exactly once in catalog_coverage (never both). General mode: no rule."""
+    if mode != "known-list":
+        return []
+    errors, named = [], set()
+    for index, row in enumerate(value["hypotheses"]):
+        if row.get("catalog_section") is None:
+            errors.append(f"hypotheses[{index}]: known-list hypotheses must name their catalog_section")
+        else:
+            named.add(row["catalog_section"])
+    listed: dict[str, int] = {}
+    for index, row in enumerate(value.get("catalog_coverage") or []):
+        section = row["section"]
+        if section in listed:
+            errors.append(f"catalog_coverage[{index}]: section {section} is listed twice")
+        elif section in named:
+            errors.append(f"catalog_coverage[{index}]: section {section} has a hypothesis; do not also list it "
+                          f"as {row['status']}")
+        listed.setdefault(section, index)
+    missing = [section for section in CATALOG_SECTIONS if section not in named and section not in listed]
+    if missing:
+        errors.append("catalog sections with neither a hypothesis nor a catalog_coverage entry: " + ", ".join(missing))
+    return errors
 
 
 def read_brief(data: bytes) -> dict[str, Any]:
@@ -288,6 +326,13 @@ def derive(brief: dict[str, Any], reply: Any, inputs: Iterable[Any], *, brief_sh
     errors = [f"reply: {error}" for error in validate_document(value, PERSONA_SCHEMA, store)]
     if errors:
         raise InvokerOutputError(f"hunter reply fails {PERSONA_SCHEMA}: {len(errors)} error(s)", errors[:40])
+    errors = [f"reply: {error}" for error in coverage_errors(brief["mode"], value)]
+    if errors:
+        raise InvokerOutputError(f"known-list catalog coverage is incomplete: {len(errors)} error(s)", errors[:40])
+    if brief["mode"] != "known-list":
+        if value.get("catalog_coverage") or any(row.get("catalog_section") for row in value["hypotheses"]):
+            notes.append("ignored catalog_section / catalog_coverage: they are for known-list hunters")
+        value = {"hypotheses": [{k: v for k, v in row.items() if k != "catalog_section"} for row in value["hypotheses"]]}
     limits = brief.get("limits") or {}
     max_items = int(limits.get("max_hypotheses", 20))
     max_span = int(limits.get("max_line_span", 80))
@@ -307,6 +352,7 @@ def derive(brief: dict[str, Any], reply: Any, inputs: Iterable[Any], *, brief_sh
                                              row["attacker_preconditions"][:PRECONDITIONS_MAX]],
                   "confidence": row["confidence"], "evidence": [],
                   "component_id": _clip(row["component_id"], 200) if row.get("component_id") else None,
+                  "catalog_section": row.get("catalog_section"),
                   "location_check": "deferred", "drop_reason": None}
         path, reason = normalize_path(row["path"], pinned.targets)
         start, end = record["start_line"], record["end_line"]
@@ -360,6 +406,23 @@ def derive(brief: dict[str, Any], reply: Any, inputs: Iterable[Any], *, brief_sh
         records[candidate] = {"candidate_id": candidate, "subject_id": subject,
             "assertion": json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
             "evidence_sha256": record["file_sha256"] or brief_sha256, "claim_class": "candidate_only"}
+    for row in value.get("catalog_coverage") or []:
+        evidence, seen = [], set()
+        for ref in row["evidence"][:EVIDENCE_MAX]:
+            item = _evidence(ref, pinned)
+            identity = json.dumps(item, sort_keys=True)
+            if identity not in seen:
+                seen.add(identity); evidence.append(item)
+        record = {"kind": "coverage", "hunter": hunter, "section": row["section"], "status": row["status"],
+                  "statement": _clip(row["statement"], MECHANISM_CHARS), "evidence": evidence}
+        errors_record = validate_document(record, COVERAGE_SCHEMA, store)
+        if errors_record:
+            raise InvokerOutputError("derived catalog coverage record fails its schema", errors_record[:10])
+        candidate = "hunt-" + digest(record)[:24]
+        records[candidate] = {"candidate_id": candidate,
+            "subject_id": "cov-" + digest({"shard_id": hunter["shard_id"], "section": row["section"]})[:24],
+            "assertion": json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+            "evidence_sha256": brief_sha256, "claim_class": "candidate_only"}
     document = {"candidates": [records[key] for key in sorted(records)]}
     problems = validate_document(document, CANDIDATES_SCHEMA, store)
     if problems:
@@ -377,6 +440,13 @@ def hunt_claims(value: dict[str, Any], inputs: tuple, allowed: tuple, result_fil
     claims = []
     for candidate in value["candidates"]:
         record = json.loads(candidate["assertion"])
+        if record["kind"] == "coverage":
+            claims.append({"claim_id": candidate["candidate_id"], "claim_class": "candidate_only",
+                           "statement": f"catalog coverage: {record['section']} {record['status']}",
+                           "file": result_filename, "citations": [{"root": brief.root, "path": brief.path,
+                                                                   "sha256": brief.sha256,
+                                                                   "locator": candidate["subject_id"]}]})
+            continue
         item = pinned.get((TARGET_ROOT_ID, record["path"])) if record["location_check"] == "pinned" else None
         if item is not None:
             citation = {"root": item.root, "path": item.path, "sha256": item.sha256,

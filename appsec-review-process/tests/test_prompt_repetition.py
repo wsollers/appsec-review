@@ -27,7 +27,8 @@ MIGRATED: frozenset[str] = frozenset({"01-component-characterization",   # R01
                                      "threat-workbench-deployment-topology-mapper",   # R07
                                      "threat-workbench-abuse-scenario-analyst",   # R08
                                      "threat-workbench-attack-tree-builder",
-                                     "threat-workbench-supply-chain-specialist"})   # R09
+                                     "threat-workbench-supply-chain-specialist",   # R09
+                                     "hypothesis-hunt-general", "hypothesis-hunt-known-list"})   # R10
 
 
 class RepetitionTests(unittest.TestCase):

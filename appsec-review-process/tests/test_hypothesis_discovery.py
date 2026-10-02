@@ -74,6 +74,15 @@ STRCPY = {"file": "./projects/cpp/case-001/main.cpp", "lines": "5-7", "class": "
           "severity": "high"}
 
 
+def coverage(*, hypothesized=("native-runtime-memory",), not_checked=()):
+    """A known-list catalog_coverage list for every section the hypotheses do not name."""
+    return [{"section": section, "status": "not_checked", "statement": "the shard has no files for it", "evidence": []}
+            if section in not_checked else
+            {"section": section, "status": "not_applicable", "statement": f"no {section} code in the shard",
+             "evidence": ["projects/cpp/case-001/main.cpp:1-10"]}
+            for section in derive.CATALOG_SECTIONS if section not in hypothesized]
+
+
 class DeriveTests(unittest.TestCase):
     def run_derive(self, reply, value=None):
         value = value or brief()
@@ -143,6 +152,53 @@ class DeriveTests(unittest.TestCase):
         document, _ = self.run_derive({"hypotheses": [{**STRCPY, "drop_reason": "model says so"}]})
         row = records(document)[0]
         self.assertEqual((row["kind"], row["drop_reason"]), ("hypothesis", None))
+
+    def test_known_list_replies_must_account_for_every_catalog_section(self):
+        value = brief("known-list", "g02-known-list")
+        hypothesis = {**STRCPY, "catalog_section": "native-runtime-memory"}
+        document, _ = self.run_derive({"hypotheses": [hypothesis], "catalog_coverage": coverage()}, value)
+        rows = records(document)
+        self.assertEqual(sorted(row["kind"] for row in rows), ["coverage"] * 9 + ["hypothesis"])
+        self.assertEqual([row["catalog_section"] for row in rows if row["kind"] == "hypothesis"], ["native-runtime-memory"])
+        self.assertTrue(all(row["subject_id"].startswith("cov-") for row in document["candidates"]
+                            if json.loads(row["assertion"])["kind"] == "coverage"))
+        cases = {
+            "name their catalog_section": {"hypotheses": [STRCPY], "catalog_coverage": coverage()},
+            "neither a hypothesis nor": {"hypotheses": [hypothesis], "catalog_coverage": coverage()[1:]},
+            "listed twice": {"hypotheses": [hypothesis], "catalog_coverage": coverage() + coverage()[:1]},
+            "do not also list it": {"hypotheses": [hypothesis], "catalog_coverage": coverage(hypothesized=())},
+        }
+        for message, reply in cases.items():
+            with self.subTest(message=message), self.assertRaises(InvokerOutputError) as caught:
+                self.run_derive(reply, value)
+            self.assertIn(message, " ".join(caught.exception.details))
+        no_evidence = coverage(); no_evidence[0]["evidence"] = []    # not_applicable needs what was read
+        with self.assertRaises(InvokerOutputError):
+            self.run_derive({"hypotheses": [hypothesis], "catalog_coverage": no_evidence}, value)
+
+    def test_general_replies_ignore_catalog_fields(self):
+        document, notes = self.run_derive({"hypotheses": [{**STRCPY, "catalog_section": "native-runtime-memory"}],
+                                           "catalog_coverage": coverage()})
+        self.assertEqual([row["catalog_section"] for row in records(document)], [None])
+        self.assertTrue(any("known-list hunters" in note for note in notes))
+
+    def test_catalog_sections_are_the_catalog_headings(self):
+        text = (ROOT / "07-red-team-adversarial/known-issue-catalog.md").read_text(encoding="utf-8")
+        import re
+        self.assertEqual(tuple(re.findall(r"^## (\S+)\s*$", text, re.M)), derive.CATALOG_SECTIONS)
+
+    def test_the_task_prompt_examples_derive_cleanly(self):
+        for mode, name in (("general", "general"), ("known-list", "known-list")):
+            with self.subTest(mode=mode):
+                text = (ROOT / f"07-red-team-adversarial/task-hypothesis-hunt-{name}.md").read_text(encoding="utf-8")
+                example = json.loads(text.split("## Example", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0])
+                value = brief(mode, f"g01-{mode}")
+                data = hunt.brief_bytes(value)
+                inputs = (item(derive.BRIEF_ROOT_ID, value["shard_id"] + ".json", data),)
+                document, notes = derive.derive(value, example, inputs, brief_sha256=inputs[0].sha256)
+                self.assertEqual(notes, [])
+                kinds = sorted(row["kind"] for row in records(document))
+                self.assertEqual(kinds, ["hypothesis"] if mode == "general" else ["coverage"] * 9 + ["hypothesis"])
 
     def test_malformed_replies_go_back_for_repair(self):
         for reply in ("no json here", {"hypotheses": "none"},
@@ -355,7 +411,9 @@ class BuildResultTests(unittest.TestCase):
                     "mechanism": "file does not exist", "attacker_preconditions": ["x"], "evidence": [],
                     "confidence": "low"}]}),
                 "g02-known-list": ("known-list", {"hypotheses": [{**STRCPY, "confidence": "medium",
-                    "mechanism": "catalog: unsafe copy", "preconditions": ["local user runs the binary"]}]}),
+                    "mechanism": "catalog: unsafe copy", "preconditions": ["local user runs the binary"],
+                    "catalog_section": "native-runtime-memory"}],
+                    "catalog_coverage": coverage(not_checked=("build-deploy-infrastructure",))}),
                 "g03-general": ("general", {"hypotheses": [{**STRCPY, "file": "projects/cpp/case-001/other.cpp",
                                                              "lines": "99"}]}),
             }, {"projects/cpp/case-001/main.cpp": MAIN_CPP, "projects/cpp/case-001/other.cpp": stale * 10})
@@ -373,7 +431,15 @@ class BuildResultTests(unittest.TestCase):
         js = rows["projects/javascript/case-010/index.js"]           # deferred in the call, resolved here
         self.assertEqual(js["file_sha256"], sha(EVAL_JS)); self.assertEqual(js["component_ids"], ["js"])
         kinds = sorted(gap["kind"] for gap in result["gaps"])
-        self.assertEqual(kinds, ["file-changed", "not-in-checkout", "worker-missing"])
+        self.assertEqual(kinds, ["catalog-not-checked", "file-changed", "not-in-checkout", "worker-missing"])
+        rows = {row["section"]: row for row in result["catalog_coverage"]}
+        self.assertEqual([row["section"] for row in result["catalog_coverage"]], list(derive.CATALOG_SECTIONS))
+        self.assertEqual({row["shard_id"] for row in result["catalog_coverage"]}, {"g02-known-list"})
+        self.assertEqual((rows["native-runtime-memory"]["status"], rows["native-runtime-memory"]["hypothesis_ids"]),
+                         ("hypothesized", [strcpy["hypothesis_id"]]))
+        self.assertEqual(rows["identity-access"]["evidence"][0]["kind"], "target-range")
+        self.assertEqual(rows["build-deploy-infrastructure"]["status"], "not_checked")
+        self.assertIn("Known-list catalog coverage", hunt.summary(result))
         self.assertEqual(result["hypotheses"][0]["path"], "projects/cpp/case-001/main.cpp")   # P1 high first
         self.assertIn("| P1 |", hunt.summary(result))
 

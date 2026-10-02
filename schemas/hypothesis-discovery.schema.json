@@ -13,6 +13,7 @@
     "pool",
     "shards",
     "hypotheses",
+    "catalog_coverage",
     "gaps",
     "claim_limits"
   ],
@@ -346,7 +347,8 @@
               "file-changed",
               "malformed-record",
               "worker-missing",
-              "merge-conflict"
+              "merge-conflict",
+              "catalog-not-checked"
             ]
           },
           "path": {
@@ -394,6 +396,113 @@
         },
         "runtime_claimed": {
           "const": false
+        }
+      }
+    },
+    "catalog_coverage": {
+      "type": "array",
+      "description": "Per known-list shard whose hunter returned: every catalog section with how it was covered.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "shard_id",
+          "section",
+          "status",
+          "statement",
+          "evidence",
+          "hypothesis_ids"
+        ],
+        "properties": {
+          "shard_id": {
+            "type": "string"
+          },
+          "section": {
+            "enum": [
+              "identity-access",
+              "network-rpc-transport",
+              "crypto-secrets-trust",
+              "player-social-game-services",
+              "data-storage-records",
+              "admin-operations-management",
+              "client-platform-ui",
+              "content-update-assets",
+              "native-runtime-memory",
+              "build-deploy-infrastructure"
+            ]
+          },
+          "status": {
+            "enum": [
+              "hypothesized",
+              "not_applicable",
+              "not_checked"
+            ]
+          },
+          "statement": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ref",
+                "kind",
+                "root",
+                "path",
+                "start_line",
+                "end_line"
+              ],
+              "properties": {
+                "ref": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "target-range",
+                    "target-deferred",
+                    "pinned-input",
+                    "unresolved"
+                  ]
+                },
+                "root": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "start_line": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "end_line": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "hypothesis_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^hyp-[0-9a-f]{24}$"
+            }
+          }
         }
       }
     }

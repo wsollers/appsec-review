@@ -23,6 +23,7 @@
   },
   "validation_rules": [
     "the persona reply validates hypothesis-hunt-persona.schema.json",
+    "known-list replies account for every catalog section, by a hypothesis or one catalog_coverage entry",
     "ids, hashes and hunter identity are derived, never model-written",
     "locations resolve against pinned bytes or are recorded as dropped"
   ]
