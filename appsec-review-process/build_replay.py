@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import base64
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shlex
 import shutil
@@ -30,8 +30,12 @@ from schema_validate import validate_document
 
 CONTROL_SCHEMA = "appsec-review/build-replay-input/1"
 CONTROL_FILE = "build-replay.json"
-RUNNER_VERSION = "build-lock-replay/1"
+RUNNER_VERSION = "build-lock-replay/2"
 RECEIPTS = "b13-receipts.json"
+# P35: configure-generated headers (config.h, gnulib replacements) exist only in the build copy.
+HEADER_SUFFIXES = (".h", ".hh", ".hpp", ".hxx", ".inc")
+HEADER_LIMIT, HEADER_MAX_BYTES = 256, 1 << 20
+HEADERS_DIR = "generated-headers"
 
 SPECS: dict[str, dict[str, Any]] = {
     "02-build-configure": {
@@ -242,7 +246,21 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
         "boundary_sha256": ce.boundary_sha256(), "code": _code_hashes(job)}
 
 
-RUNNER = r'''import hashlib,json,os,pathlib,shutil,stat,subprocess,sys
+HEADER_COLLECTOR = r'''import hashlib,os,pathlib
+def generated_headers(src,pristine,limit,max_bytes,suffixes):
+ found=[]; omitted=0
+ for cur,dirs,files in os.walk(src):
+  dirs[:]=sorted(d for d in dirs if d not in ('.git','CMakeFiles'))
+  for name in sorted(files):
+   p=pathlib.Path(cur,name); rel=p.relative_to(src).as_posix()
+   if p.suffix.lower() not in suffixes or p.is_symlink() or not p.is_file() or os.path.lexists(os.path.join(pristine,rel)): continue
+   size=p.stat().st_size
+   if size>max_bytes or len(found)>=limit: omitted+=1; continue
+   found.append({'path':rel,'sha256':'sha256:'+hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':size})
+ return found,omitted
+'''
+
+RUNNER = HEADER_COLLECTOR + r'''import json,shutil,stat,subprocess,sys
 cfg=json.loads(sys.argv[1]); src=pathlib.Path('/scratch/src')
 shutil.copytree('/workspace',src,symlinks=False,ignore_dangling_symlinks=True)
 def executables():
@@ -262,12 +280,13 @@ for item in cfg['commands']:
  p=subprocess.run(argv,cwd=cwd,check=False)
  records.append({'phase':item['phase'],'argv':argv,'cwd':str(cwd),'exit_code':p.returncode})
  if p.returncode: break
-after=executables(); binaries=[]
+after=executables(); binaries=[]; headers=[]; omitted=0
 if cfg['mode']=='native':
  for rel,sha in sorted(after.items()):
   if before.get(rel)!=sha:
    p=src/rel; binaries.append({'path':rel,'sha256':'sha256:'+sha,'size_bytes':p.stat().st_size})
-pathlib.Path('/scratch/replay-result.json').write_text(json.dumps({'runner':cfg['runner'],'commands':records,'binaries':binaries},sort_keys=True)+'\n')
+ h=cfg['headers']; headers,omitted=generated_headers(str(src),'/workspace',h['limit'],h['max_bytes'],h['suffixes'])
+pathlib.Path('/scratch/replay-result.json').write_text(json.dumps({'runner':cfg['runner'],'commands':records,'binaries':binaries,'generated_headers':headers,'generated_headers_omitted':omitted},sort_keys=True)+'\n')
 sys.exit(next((x['exit_code'] for x in records if x['exit_code']),0))'''
 
 
@@ -293,7 +312,8 @@ def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], loc
     phases = spec(job)["phases"]
     commands = [item for phase in phases for item in lock[phase]]
     cfg = {"runner": RUNNER_VERSION, "mode": "native" if job == "02-native-build" else "configure",
-           "compile_database": lock["compile_database"]["method"], "commands": commands}
+           "compile_database": lock["compile_database"]["method"], "commands": commands,
+           "headers": {"limit": HEADER_LIMIT, "max_bytes": HEADER_MAX_BYTES, "suffixes": list(HEADER_SUFFIXES)}}
     encoded = base64.b64encode(RUNNER.encode("utf-8")).decode("ascii")
     trusted = "import base64;exec(base64.b64decode('" + encoded + "'))"
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": job, "attempt_id": adapter_id,
@@ -332,6 +352,34 @@ def _compile_db(path: Path, allowed: list[str]) -> list[dict[str, Any]]:
     return value
 
 
+def _header_path(rel: Any) -> str:
+    pure = PurePosixPath(rel) if isinstance(rel, str) else PurePosixPath("..")
+    if (pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts) or
+            pure.suffix.lower() not in HEADER_SUFFIXES):
+        raise RuntimeError("02-native-build: generated header path is not a normalized header path")
+    return pure.as_posix()
+
+
+def _publish_headers(replay: dict[str, Any], built: Path, out: Path, attempt: Path) -> dict[str, Any]:
+    """P35: copy the runner-declared configure-generated headers out of the build copy, hash-bound."""
+    declared, omitted = replay.get("generated_headers", []), replay.get("generated_headers_omitted", 0)
+    if not isinstance(declared, list) or len(declared) > HEADER_LIMIT or not isinstance(omitted, int) or omitted < 0:
+        raise RuntimeError("02-native-build: generated header listing exceeds its bound")
+    headers = []
+    for item in declared:
+        rel = _header_path(item.get("path") if isinstance(item, dict) else None)
+        source = built / rel
+        if source.is_symlink() or not source.is_file() or source.stat().st_size > HEADER_MAX_BYTES:
+            raise RuntimeError(f"02-native-build: declared generated header is missing: {rel}")
+        target = out / rel
+        target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(source, target)
+        sha = "sha256:" + file_hash(target)
+        if sha != item.get("sha256"):
+            raise RuntimeError(f"02-native-build: generated header changed after the build: {rel}")
+        headers.append({"path": rel, "sha256": sha, "size_bytes": target.stat().st_size})
+    return {"root": out.relative_to(attempt).as_posix(), "headers": headers, "omitted": omitted}
+
+
 def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{job}: immutable attempt inputs changed")
@@ -367,6 +415,11 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
                     raise Blocked(f"{job}: binary artifact changed")
                 if path.read_bytes()[:4] != b"\x7fELF":
                     raise Blocked(f"{job}: published binary is not ELF")
+            generated = unit.get("generated_headers") or {"root": "", "headers": []}
+            for header in generated["headers"]:
+                path = attempt / generated["root"] / _header_path(header["path"])
+                if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != header["sha256"]:
+                    raise Blocked(f"{job}: generated header artifact changed")
 
 
 def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str, Any]:
@@ -435,6 +488,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
                 unit["compile_database"] = {"path": db.relative_to(attempt).as_posix(),
                     "sha256": "sha256:" + file_hash(db), "entries": len(entries)}
                 unit["binaries"] = binaries
+                unit["generated_headers"] = _publish_headers(replay, trial / "scratch" / "src",
+                    attempt / "outputs" / unit_key / HEADERS_DIR, attempt)
             units.append(unit)
             receipts.append({"unit_id": lock["unit_id"], "adapter_attempt_id": adapter_id,
                 "trial_path": trial.relative_to(attempt).as_posix(),
@@ -464,6 +519,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             else:
                 artifacts.append(unit["compile_database"]["path"])
                 artifacts.extend(item["artifact_path"] for item in unit["binaries"])
+                artifacts.extend(unit["generated_headers"]["root"] + "/" + item["path"]
+                                 for item in unit["generated_headers"]["headers"])
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=cfg["contract"],
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=result["status"],

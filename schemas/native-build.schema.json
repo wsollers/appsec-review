@@ -173,6 +173,51 @@
                 }
               }
             }
+          },
+          "generated_headers": {
+            "description": "P35: configure-generated headers present in the build copy but absent from the checkout, published under root and hash-bound; omitted counts headers beyond the count/size bound.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "root",
+              "headers",
+              "omitted"
+            ],
+            "properties": {
+              "root": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "sha256",
+                    "size_bytes"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "size_bytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         }
       }
