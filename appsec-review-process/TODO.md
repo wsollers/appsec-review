@@ -11,7 +11,7 @@ The earlier batch backlog and phase plan were removed on 2026-09-27; see git his
 | # | Target | Source | Pinned commit | What it exercises | Status |
 |---|---|---|---|---|---|
 | 1 | `hello-autotools` | `github.com/wsollers/hello-autotools` | `632522b` | C/autotools, vendored cJSON, Dockerfile; known answer key on branch `with-vulnerabilities-doc` | NEXT |
-| 2 | `appsec-multi-vuln` | `github.com/wsollers/appsec-multi-vuln` | `7a0ce33` | C++, C#, Go, Java, JS/TS, PHP, Python (case-073 to case-080, added 2026-09-30), PowerShell, Rust, Bash and eight Dockerfiles (case-081 end-of-life Debian 10 base, case-082 clean Alpine control, added 2026-10-03); answer key in private `appsec-multi-vuln-guide` | TODO |
+| 2 | `appsec-multi-vuln` | `github.com/wsollers/appsec-multi-vuln` | `d32beee` | C++, C#, Go, Java, JS/TS, PHP, Python (case-073 to case-080, added 2026-09-30), PowerShell, Rust, Bash and eight Dockerfiles (case-081 end-of-life Debian 10 base, case-082 clean Alpine control, added 2026-10-03); answer key in private `appsec-multi-vuln-guide` | TODO |
 | 3 | `freeciv21` | `github.com/longturn/freeciv21` | `0ce1c60` | Large CMake/Qt C++ codebase, many build dependencies | TODO |
 | 4 | `doom3-bfg` | `github.com/id-Software/DOOM-3-BFG` | `1caba19` | Large Windows-oriented C++ (MSVC/clang-cl, ADR-0003); a Linux build is expected to fail and appear as gaps | TODO |
 
@@ -78,7 +78,7 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 ## Target notes
 
-- **appsec-multi-vuln.** case-081 (end-of-life Debian 10 base, digest-pinned, known OS-package CVEs) and case-082 (current Alpine 3.24.2 negative control) merged 2026-10-03 (wsollers/appsec-multi-vuln#39, guide wsollers/appsec-multi-vuln-guide#2); pin `7a0ce33`. Scoring them uses P41/P43 (base-image OS packages). Upstream CI is red on the Rust case-040 (newer rustc denies `dangerous_implicit_autorefs`), unrelated to these cases. OSV has only the npm ecosystem registered; other ecosystems (Go, Maven,
+- **appsec-multi-vuln.** case-081 (end-of-life Debian 10 base, digest-pinned, known OS-package CVEs) and case-082 (current Alpine 3.24.2 negative control) merged 2026-10-03 (wsollers/appsec-multi-vuln#39, guide wsollers/appsec-multi-vuln-guide#2); pin `d32beee`, which also carries the case-040 fix for rustc 1.97 (explicit `(&*raw)` reference, same use-after-free; wsollers/appsec-multi-vuln#40). Scoring them uses P41/P43 (base-image OS packages). Upstream `analyze-*` CodeQL jobs stay red until the owner removes `codeql.yml` or turns off CodeQL default setup. OSV has only the npm ecosystem registered; other ecosystems (Go, Maven,
   crates.io, NuGet, Packagist, PyPI) need their own snapshots for OSV matching, otherwise they are OSV
   gaps (Grype still matches them). Score the report against `appsec-multi-vuln-guide` afterwards.
 - **freeciv21.** Expect the build-plan and build-resolution steps to need Qt and many system
@@ -550,7 +550,7 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 ## appsec-multi-vuln Python cases (2026-09-30)
 
 - [x] case-073 to case-080 on branch `add-python-cases` (wsollers/appsec-multi-vuln#30) and the answer key
-      (wsollers/appsec-multi-vuln-guide#1); `fixtures/populate-targets.sh` pins `7a0ce33` (was `5c5a776` until case-081/082 merged 2026-10-03).
+      (wsollers/appsec-multi-vuln-guide#1); `fixtures/populate-targets.sh` pins `d32beee` (was `5c5a776` until case-081/082 and the case-040 rustc fix merged 2026-10-03).
 - [ ] Merge both PRs with a merge commit (a squash merge plus branch deletion would drop the pinned commit;
       re-pin to the merge commit if squashed). Then `fixtures/populate-targets.sh appsec-multi-vuln` on each host.
 
