@@ -44,6 +44,7 @@ DEPENDENCY_JOBS = {
 ALL_JOBS = VENDOR_JOBS | DEPENDENCY_JOBS
 RESULTS = {
     "02-build-index": "build-index.json",
+    "02-native-build": "native-build.json",
     "02-sbom-inventory": "outputs/sbom-manifest.json",
     "02-sca-vulnerability-match": "outputs/sca-vulnerability-match.json",
     "02-license-scan": "outputs/license-inventory.json",
@@ -250,6 +251,22 @@ def _accepted_binding(run_id: str, job_id: str) -> tuple[dict[str, str], Path]:
             "accepted_path": str(pointer_path)}, attempt / "outputs"
 
 
+def _native_build_binding(run_id: str) -> dict[str, str] | None:
+    """P37: the SBOM's optional 02-native-build edge: the accepted binding, ``{"skipped": reason}`` for a
+    skipped build (no gap), or None when no accepted build exists (the SBOM records that as a gap)."""
+    pointer_path = data_path(run_id, "jobs", "02-native-build", "accepted.json")
+    if not pointer_path.is_file() or pointer_path.is_symlink():
+        return None
+    pointer = read_json(pointer_path)
+    if pointer.get("status") == "SKIPPED":
+        envelope = data_path(run_id, "jobs", "02-native-build", "attempts", identifier(pointer.get("attempt_id")), "result.json")
+        reason = read_json(envelope).get("skip_reason") if envelope.is_file() else None
+        return {"skipped": str(reason or "skipped")}
+    if pointer.get("status") not in {"OK", "OK_WITH_GAPS"}:
+        return None
+    return _accepted_binding(run_id, "02-native-build")[0]
+
+
 def _reference_table(run_id: str, control: dict[str, Any]) -> tuple[Path, str]:
     configured = Path(control["dependency_lifecycle"]["reference_table_path"])
     if not configured.is_absolute() or not configured.is_file() or configured.is_symlink():
@@ -388,7 +405,8 @@ def prepare(run_id: str, job_id: str, dagster_run_id: str, *, generated_at: str 
         payload: dict[str, Any]; tool: dict[str, Any]
         if job_id == "02-sbom-inventory":
             build_index, _ = _accepted_binding(run_id, "02-build-index")
-            payload = {"source_files": source_files, "build_index": build_index}
+            payload = {"source_files": source_files, "build_index": build_index,
+                       "native_build": _native_build_binding(run_id)}
             tool = {"target_path": str(source)}
         elif job_id == "02-sca-vulnerability-match":
             control = _control(run_id); sbom, sbom_root = _accepted_binding(run_id, "02-sbom-inventory")

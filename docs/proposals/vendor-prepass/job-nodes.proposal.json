@@ -368,7 +368,8 @@
         "allowed_assertions": [
           "declared-component-present",
           "component-version-unknown",
-          "inventory-coverage-gap"
+          "inventory-coverage-gap",
+          "build-observed-component-present"
         ],
         "forbidden_promotions": [
           "finding",

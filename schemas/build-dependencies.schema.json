@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "build-dependencies.schema.json",
+  "title": "Build dependencies of one native build unit (outputs/<unit>/build-dependencies.json)",
+  "description": "P36: written inside the build image after a successful 02-native-build replay. files is the closed table every other section indexes into: headers each translation unit included (compiler -M over its own compile-database argv), libraries the traced link lines named (-l resolved over the link's -L dirs), and DT_NEEDED sonames of each built binary (and of the libraries they load) resolved through RPATH, LD_LIBRARY_PATH, RUNPATH, the loader cache and the default dirs. In-checkout paths are relative to the checkout, others absolute. class: checkout, generated (in the build copy but not the checkout, P35), third-party-in-checkout (under a vendor/third_party/external/deps-style directory), toolchain (the compiler's resource dir), system-package (owned by an OS package; packages names it) or unattributed. sha256 is null only when the file was unreadable or over hash_max_bytes (counted in omitted.hashes). Everything beyond a limit is counted in omitted and named in coverage_gaps; nothing is dropped silently.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "distro",
+    "package_manager",
+    "limits",
+    "search_dirs",
+    "files",
+    "packages",
+    "translation_units",
+    "link_commands",
+    "binaries",
+    "omitted",
+    "coverage_gaps"
+  ],
+  "$defs": {
+    "index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "paths": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    }
+  },
+  "properties": {
+    "schema": {
+      "const": "appsec-review/build-dependencies/1"
+    },
+    "distro": {
+      "description": "ID, VERSION_ID and VERSION_CODENAME of the build image's /etc/os-release; null when absent.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version_id",
+        "codename"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9._-]{1,64}\\Z"
+        },
+        "version_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "codename": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
+      }
+    },
+    "package_manager": {
+      "enum": [
+        "dpkg",
+        null
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "translation_units",
+        "link_commands",
+        "edges",
+        "hash_max_bytes",
+        "seconds"
+      ],
+      "properties": {
+        "files": {
+          "$ref": "#/$defs/count"
+        },
+        "translation_units": {
+          "$ref": "#/$defs/count"
+        },
+        "link_commands": {
+          "$ref": "#/$defs/count"
+        },
+        "edges": {
+          "$ref": "#/$defs/count"
+        },
+        "hash_max_bytes": {
+          "$ref": "#/$defs/count"
+        },
+        "seconds": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "search_dirs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "include",
+        "library"
+      ],
+      "properties": {
+        "include": {
+          "$ref": "#/$defs/paths"
+        },
+        "library": {
+          "$ref": "#/$defs/paths"
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "class",
+          "kinds",
+          "sha256",
+          "size_bytes",
+          "packages"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "class": {
+            "enum": [
+              "checkout",
+              "generated",
+              "third-party-in-checkout",
+              "toolchain",
+              "system-package",
+              "unattributed"
+            ]
+          },
+          "kinds": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": {
+              "enum": [
+                "header",
+                "shared-library",
+                "static-library",
+                "needed"
+              ]
+            }
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "packages": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9.+-]*(:[a-z0-9-]+)?\\Z"
+            }
+          }
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "package",
+          "name",
+          "arch",
+          "version",
+          "source",
+          "source_version"
+        ],
+        "properties": {
+          "package": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.+-]*(:[a-z0-9-]+)?\\Z"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.+-]*\\Z"
+          },
+          "arch": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,32}\\Z"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z.+~:-]{1,128}\\Z"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9.+-]*\\Z"
+          },
+          "source_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9A-Za-z.+~:-]{1,128}\\Z"
+          }
+        }
+      }
+    },
+    "translation_units": {
+      "type": "array",
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "exit_code",
+          "headers"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "headers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/index"
+            }
+          }
+        }
+      }
+    },
+    "link_commands": {
+      "type": "array",
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "output",
+          "binary",
+          "argv",
+          "libraries",
+          "library_dirs",
+          "rpath"
+        ],
+        "properties": {
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "binary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "argv": {
+            "type": "array",
+            "maxItems": 8192,
+            "items": {
+              "type": "string",
+              "maxLength": 8192
+            }
+          },
+          "libraries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "spec",
+                "static",
+                "file"
+              ],
+              "properties": {
+                "spec": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "static": {
+                  "type": "boolean"
+                },
+                "file": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/index"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "library_dirs": {
+            "$ref": "#/$defs/paths"
+          },
+          "rpath": {
+            "$ref": "#/$defs/paths"
+          }
+        }
+      }
+    },
+    "binaries": {
+      "type": "array",
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "needed",
+          "runpath",
+          "rpath"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "needed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "soname",
+                "file",
+                "via"
+              ],
+              "properties": {
+                "soname": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "file": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/index"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "via": {
+                  "enum": [
+                    "rpath",
+                    "ld-library-path",
+                    "runpath",
+                    "cache",
+                    "default",
+                    null
+                  ]
+                }
+              }
+            }
+          },
+          "runpath": {
+            "$ref": "#/$defs/paths"
+          },
+          "rpath": {
+            "$ref": "#/$defs/paths"
+          }
+        }
+      }
+    },
+    "omitted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "translation_units",
+        "link_commands",
+        "edges",
+        "hashes"
+      ],
+      "properties": {
+        "files": {
+          "$ref": "#/$defs/count"
+        },
+        "translation_units": {
+          "$ref": "#/$defs/count"
+        },
+        "link_commands": {
+          "$ref": "#/$defs/count"
+        },
+        "edges": {
+          "$ref": "#/$defs/count"
+        },
+        "hashes": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    }
+  }
+}

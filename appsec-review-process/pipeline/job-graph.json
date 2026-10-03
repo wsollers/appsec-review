@@ -2126,9 +2126,18 @@
           "kind": "required",
           "contract": "build-index",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-build",
+          "kind": "optional",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
         }
       ],
-      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot, enriched from exact accepted build-index lineage for conservatively recognized build-referenced vendored members. Enrichment never fabricates purl or CPE identifiers; inferred vendored components remain explicit gaps.",
+      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot, enriched from exact accepted build-index lineage for conservatively recognized build-referenced vendored members. Enrichment never fabricates purl or CPE identifiers; inferred vendored components remain explicit gaps. P36/P37: optionally consumes the accepted 02-native-build's per-unit build-dependencies.json (skip binds nothing): OS packages the build consumed become pkg:deb components scoped runtime (DT_NEEDED) or build, vendored header trees become macro-versioned candidates, and unattributed out-of-checkout files are gaps.",
       "required_artifacts": [
         "result.json",
         "inputs.json",
