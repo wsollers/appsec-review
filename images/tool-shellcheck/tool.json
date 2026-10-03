@@ -1,0 +1,37 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-shellcheck",
+  "tool": "shellcheck",
+  "version": "0.11.0.1",
+  "purpose": "shell script static analysis (ShellCheck), offline, JSON (json1) output; the shell lane of 02-source-sast.",
+  "feeds": [
+    "02-source-sast"
+  ],
+  "executable": "/opt/tool/bin/shellcheck",
+  "version_argv": [
+    "/opt/tool/bin/shellcheck",
+    "--version"
+  ],
+  "version_expect": "version: 0.11.0",
+  "pip_lock": "requirements.txt",
+  "pip_package": "shellcheck-py",
+  "assets": [],
+  "smoke": [
+    {
+      "name": "lint-venv-activate",
+      "argv": [
+        "/opt/tool/bin/shellcheck",
+        "--format=json1",
+        "--norc",
+        "/opt/tool/bin/activate"
+      ],
+      "exit_codes": [
+        0,
+        1
+      ],
+      "workspace": "none",
+      "stdout_contains": "\"comments\""
+    }
+  ],
+  "notes": "shellcheck-py 0.11.0.1 is the PyPI wheel of the upstream ShellCheck 0.11.0 static binary; `shellcheck --version` prints the upstream version, so version_expect names it literally and changes with a version bump. --norc keeps a target's .shellcheckrc from changing the analysis. Exit 1 means comments were reported."
+}
