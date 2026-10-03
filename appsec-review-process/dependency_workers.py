@@ -546,8 +546,9 @@ def _build_dependency_rows(request: dict[str, Any], attempt_id: str, existing: l
     records: list[tuple[str, dict[str, str] | None, dict[str, Any] | None]] = []; gaps: list[str] = []
     if block is None:
         status = "absent"
-        gaps.append("build-dependencies-unavailable: no accepted 02-native-build; the system and vendored "
-                    "libraries and headers the build consumed are not inventoried")
+        # P42: a crashed or BLOCKED build no longer holds the SBOM; what it would have contributed is a gap.
+        gaps.append("native-build-not-published: no accepted 02-native-build (build-dependencies-unavailable); the "
+                    "system and vendored libraries and headers the build consumed are not inventoried")
     elif isinstance(block, dict) and set(block) == {"skipped"} and isinstance(block["skipped"], str):
         status, skip = "skipped", block["skipped"]
     else:

@@ -19,7 +19,7 @@ import bounded_transform_orchestration
 from bounded_analysis_workers import load_accepted
 from bounded_transform_orchestration import REQUEST_SCHEMA as BOUNDED_SCHEMA, FACADES
 from dependency_orchestration import (REQUEST_SCHEMA as DEPENDENCY_SCHEMA,
-                                      JOBS as DEPENDENCY_JOBS, _PAYLOAD_KEYS, _TOOL_KEYS)
+                                      JOBS as DEPENDENCY_JOBS, _OPTIONAL_PAYLOAD_KEYS, _PAYLOAD_KEYS, _TOOL_KEYS)
 import dependency_snapshot_registry as snapshots
 from execution_state import Blocked, atomic_json, digest, file_hash, identifier, read_json, tree_hashes
 import iac_files
@@ -546,7 +546,10 @@ def _dependency(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, di
         raise Blocked("full review input assembly: downstream dependency payload must bind accepted evidence")
     payload = _resolve(raw["payload"], run_root=run_root, sources=sources)
     tool = _resolve(raw["tool"], run_root=run_root, sources=sources)
-    if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS[kind]:
+    if kind == "sbom" and isinstance(payload, dict) and "native_build" not in payload:
+        # P42: the optional native-build edge, bound at assembly; None (no accepted build) is the SBOM's gap.
+        payload["native_build"] = automatic_inputs._native_build_binding(plan["run_id"], run_root / "data/jobs")
+    if not isinstance(payload, dict) or set(payload) - _OPTIONAL_PAYLOAD_KEYS.get(kind, set()) != _PAYLOAD_KEYS[kind]:
         raise Blocked("full review input assembly: dependency payload shape is not closed")
     if not isinstance(tool, dict) or set(tool) != _TOOL_KEYS[kind]:
         raise Blocked("full review input assembly: dependency tool shape is not closed")

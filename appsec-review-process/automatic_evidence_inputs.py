@@ -222,9 +222,9 @@ def _control(run_id: str) -> dict[str, Any]:
     return value
 
 
-def _accepted_binding(run_id: str, job_id: str) -> tuple[dict[str, str], Path]:
+def _accepted_binding(run_id: str, job_id: str, jobs: Path | None = None) -> tuple[dict[str, str], Path]:
     result_rel = RESULTS[job_id]
-    base = data_path(run_id, "jobs", job_id)
+    base = (jobs / job_id) if jobs is not None else data_path(run_id, "jobs", job_id)
     pointer_path = base / "accepted.json"
     if not pointer_path.is_file() or pointer_path.is_symlink():
         raise Blocked(f"automatic evidence inputs: accepted {job_id} is required")
@@ -251,20 +251,22 @@ def _accepted_binding(run_id: str, job_id: str) -> tuple[dict[str, str], Path]:
             "accepted_path": str(pointer_path)}, attempt / "outputs"
 
 
-def _native_build_binding(run_id: str) -> dict[str, str] | None:
+def _native_build_binding(run_id: str, jobs: Path | None = None) -> dict[str, str] | None:
     """P37: the SBOM's optional 02-native-build edge: the accepted binding, ``{"skipped": reason}`` for a
-    skipped build (no gap), or None when no accepted build exists (the SBOM records that as a gap)."""
-    pointer_path = data_path(run_id, "jobs", "02-native-build", "accepted.json")
+    skipped build (no gap), or None when no accepted build exists (P42: a crashed or BLOCKED build does not
+    hold the SBOM, which records ``native-build-not-published``). ``jobs``: the run's jobs root (assembly)."""
+    jobs = jobs if jobs is not None else data_path(run_id, "jobs")
+    pointer_path = jobs / "02-native-build" / "accepted.json"
     if not pointer_path.is_file() or pointer_path.is_symlink():
         return None
     pointer = read_json(pointer_path)
     if pointer.get("status") == "SKIPPED":
-        envelope = data_path(run_id, "jobs", "02-native-build", "attempts", identifier(pointer.get("attempt_id")), "result.json")
+        envelope = jobs / "02-native-build" / "attempts" / identifier(pointer.get("attempt_id")) / "result.json"
         reason = read_json(envelope).get("skip_reason") if envelope.is_file() else None
         return {"skipped": str(reason or "skipped")}
     if pointer.get("status") not in {"OK", "OK_WITH_GAPS"}:
         return None
-    return _accepted_binding(run_id, "02-native-build")[0]
+    return _accepted_binding(run_id, "02-native-build", jobs)[0]
 
 
 def _reference_table(run_id: str, control: dict[str, Any]) -> tuple[Path, str]:
