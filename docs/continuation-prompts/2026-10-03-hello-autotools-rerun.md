@@ -31,7 +31,7 @@ One command does all of the below and prints the run commands at the end:
 
 ```bash
 orchestrator/prepare-host.sh                       # step 3: rebuild stale images; 4: B16 records; 6b: base images
-python3 appsec-review-process/osv_feed.py sync      # E1 (network; now includes Debian and Alpine)
+python3 appsec-review-process/osv_feed.py sync --coordinator-id "manual-$(hostname -s)"   # E1 (network; now includes Debian and Alpine)
 python3 appsec-review-process/osv_feed.py verify
 orchestrator/dagster/code-location.sh reload        # restart it if it was started before step 4 ran
 python3 -B images/registry_records.py check

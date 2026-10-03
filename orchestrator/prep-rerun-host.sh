@@ -76,9 +76,23 @@ if [[ $CHECK -eq 1 ]]; then
     orchestrator/prepare-host.sh --check "${HOST_ARGS[@]}" | sed 's/^/  /'
 else
     echo "  image rebuilds can take a long time on the first pass; output follows"
-    orchestrator/prepare-host.sh "${HOST_ARGS[@]}" | sed 's/^/  /'
-    [[ ${PIPESTATUS[0]} -eq 0 ]] && ok "prepare-host.sh finished" \
-        || bad "prepare-host" "prepare-host.sh reported problems (FAIL lines above); fix them and re-run this script"
+    HOST_OUT="$(mktemp)"
+    orchestrator/prepare-host.sh "${HOST_ARGS[@]}" 2>&1 | tee "$HOST_OUT" | sed 's/^/  /'
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+        ok "prepare-host.sh finished"
+    else
+        bad "prepare-host" "prepare-host.sh reported problems (FAIL lines above); fix them and re-run this script"
+        # For images that failed to build, show the end of the latest attempt's logs.
+        for id in $(sed -n 's/.*still missing: \([^(]*\).*/\1/p' "$HOST_OUT"); do
+            latest="$(ls -td "images/.build-state/$id/attempts"/*/ 2>/dev/null | head -1)"
+            [[ -n "$latest" ]] || { echo "  -- $id: no build attempt recorded"; continue; }
+            echo "  -- $id: last lines of ${latest}logs/"
+            for f in "${latest}logs/stderr.log" "${latest}logs/stdout.log" "${latest}logs/prebuild.log"; do
+                [[ -s "$f" ]] && { echo "     $(basename "$f"):"; tail -n 25 "$f" | sed 's/^/       /'; }
+            done
+        done
+    fi
+    rm -f "$HOST_OUT"
 fi
 
 # ---- 3. OSV feed (E1) ------------------------------------------------------------------------------
@@ -90,7 +104,9 @@ elif [[ $CHECK -eq 1 ]]; then
     else todo "no verified feed: $(echo "$out" | tail -1)"; fi
 else
     echo "  downloading the OSV ecosystems (several GB, network) ..."
-    if python3 -B appsec-review-process/osv_feed.py sync --root "$OSV_ROOT" 2>&1 | tail -5 | sed 's/^/    /' \
+    # sync takes the feed lock under a coordinator identity (Dagster passes its run id); a manual sync names itself.
+    if python3 -B appsec-review-process/osv_feed.py sync --root "$OSV_ROOT" \
+            --coordinator-id "prep-rerun-$(hostname -s)-$(date -u +%Y%m%dT%H%M%SZ)" 2>&1 | tail -5 | sed 's/^/    /' \
         && out="$(python3 -B appsec-review-process/osv_feed.py verify --root "$OSV_ROOT" 2>&1)"; then
         ok "feed verified: $(echo "$out" | tail -1)"
     else
