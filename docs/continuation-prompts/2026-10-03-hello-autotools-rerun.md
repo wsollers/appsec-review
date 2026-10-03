@@ -25,6 +25,10 @@ has them (merged to `main`, or that branch checked out). The breakage log in
 Details: [operator guide, host steps](../report-path/happy-path-operator-guide.md#host-steps-after-the-gap-punch-list-2026-10-03)
 and [tool images, rebuilds](../processes/tool-images.md#rebuilds-required-by-the-2026-10-03-gap-punch-list).
 
+One command does all of the below and prints the run commands at the end:
+`orchestrator/prep-rerun-host.sh` (`--check` to see what is missing first, `--skip-osv`, `--no-claude`,
+`--publish` on hal5000). The individual steps:
+
 ```bash
 orchestrator/prepare-host.sh                       # step 3: rebuild stale images; 4: B16 records; 6b: base images
 python3 appsec-review-process/osv_feed.py sync      # E1 (network; now includes Debian and Alpine)
