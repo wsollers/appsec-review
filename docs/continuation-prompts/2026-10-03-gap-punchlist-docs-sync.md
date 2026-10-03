@@ -61,6 +61,14 @@ identifier that changed. At least these:
   - cJSON purl/CPE
   - the native-build generated-headers artifact (P35)
   - the native-build `build-dependencies.json` record (P36) and SBOM components inferred from it: OS packages with runtime/build scope, vendored header trees (P37)
+- Added after the first draft of this prompt (P36-P43):
+  - `build-dependencies.json` per native unit and `pkg:deb` SBOM components scoped `load-time`/`build-time` (P36/P37)
+  - `iac_files.py` shared IaC name rules (P38)
+  - the OWASP worklist consuming T04 routing and the assembly request shapes (P39/P40)
+  - `base_image_cache.py`, `prepare-host.sh` step 6b, `data/base-image-eol.json`, base-image inventory schema 1.1 (P41)
+  - the `job_02_native_build_published` gate op and tolerant native-build/IaC edges into the SBOM (P42/P43)
+  - `container-base` `image-observed` SBOM components, and Debian/Alpine in the OSV feed ecosystems (P43)
+  - appsec-multi-vuln case-081 (end-of-life Debian 10 base) and case-082 (clean Alpine control), on branch `claude/practical-darwin-yk9370` in `appsec-multi-vuln` and `appsec-multi-vuln-guide`; the target pin in TODO.md waits for their merge
 - Graph and catalog changes: any new optional edges (02-ir-facts and 02-debug-symbol-index into
   02-code-index), new artifacts, and changed output contracts.
 - Image script changes that need a rebuild and re-pin:
@@ -68,6 +76,7 @@ identifier that changed. At least these:
   - `images/audit-native` (`run_native_sast.py` classification)
   - a new `tool-shellcheck` image (if P14 landed)
   - `audit-codeql-native` (E2)
+  - host steps that are not images: `prepare-host.sh` step 6b (base-image fetch) and a re-run of `osv_feed.py sync` for the Debian/Alpine ecosystems
 
 Write the inventory down (scratch file, not committed) before editing so nothing is missed.
 
@@ -175,6 +184,11 @@ that prompt.
 - `python3 -m unittest` for `tests.test_job_catalog`, `tests.test_design_parity`,
   `tests.test_task_prompt_naming` and `tests.test_language_skills`, plus any test that reads docs
   (grep `tests/` for `docs/`). Run them from `appsec-review-process/`.
+
+## 8b. Owner decisions still open (do not decide them; record them)
+
+- P24: OWASP not-applicable routing rules may rest on the bound component map (a narrow exception to the canonical-evidence rule). Document the behaviour as implemented and mark it pending owner confirmation.
+- The four static intelligence ingests do not honour the partition map's `docs/**` deferral (seeded-defect leakage). Document as an open question.
 
 ## 9. Commit and report
 
