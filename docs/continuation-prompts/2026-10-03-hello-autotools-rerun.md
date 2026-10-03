@@ -87,8 +87,8 @@ Should remain (target-intrinsic or named limits): no CODEOWNERS; the deliberatel
 `vendor/cJSON` origin claimed by `VENDORED.md`, not verified upstream; `strcpy` in `greet.cpp` not confirmed
 dynamically; deployed umask/container user unknown; `docs/BUILDING.md` option 2 not built;
 interprocedural/interfile taint (P13); autotools-generated shell scripts (P14); unbuilt wave-3 challenge
-cell and native-parser specialist (P31). Open owner decisions (do not decide): P24's reliance on the bound
-component map, and the static intelligence ingests ignoring the partition map's `docs/**` deferral.
+cell and native-parser specialist (P31). Owner decisions 2026-10-03: P24's reliance on the bound component map is confirmed; docs and tests
+(unit, acceptance, system, load and the rest) are always read, never deferred (P44, P45).
 
 ## 4. Record results
 

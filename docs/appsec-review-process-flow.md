@@ -111,8 +111,8 @@ OWASP, STIG/SRG and deployment hardening are three distinct processes:
    paginated status matrix, gaps and candidate routes. The chain is qualified. Automatic derivation
    of all trusted dispatch facts remains open. The worklist takes its targets and applicability from
    the accepted T04 routing (P39); a positively classified local CLI/library with no network trait is
-   N/A for the ASVS web, API and session chapters on the bound component map (P24, pending owner
-   confirmation), and a partially classified component routes conditionally (P25).
+   N/A for the ASVS web, API and session chapters on the bound component map (P24, confirmed by the
+   owner 2026-10-03), and a partially classified component routes conditionally (P25).
 2. STIG/SRG tailoring selects platform controls and publishes its own validation worklist.
 3. Deployment hardening consumes the tailored worklist plus deployment evidence and reports static
    configuration and exposure observations. It does not certify compliance and does not replace the

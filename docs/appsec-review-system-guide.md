@@ -530,7 +530,7 @@ carries its routing rule as citation and needs no assessment; a partially classi
 worklist gap. T04 emits technical N/A only for the ASVS V3, V4, V7, V9, V10 and V17 chapters of a
 positively classified local CLI or library with no network, HTTP or session trait, citing the bound
 component map (P24, `14d295f`). That a routing rule may rest on the component map rather than
-canonical target evidence is a narrow exception pending owner confirmation.
+canonical target evidence is a narrow exception, confirmed by the owner 2026-10-03: a CLI or library may be not applicable for some components.
 
 The worklist begins `NOT_ASSESSED` (one summary gap with the count, P26); it cannot satisfy a control or create a finding. The later
 ASVS/MASVS accounting/join keeps selected, applicable, assessed, and satisfied as separate
