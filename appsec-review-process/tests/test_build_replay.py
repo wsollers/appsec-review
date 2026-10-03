@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -49,10 +50,21 @@ class BuildReplayTests(unittest.TestCase):
             self.assertEqual(request["target_mounts"], [{"host_path": "/target", "container_path": "/workspace"}])
             self.assertEqual(request["scratch_path"], "scratch")
             self.assertNotIn("\n", request["argv"][2])
+            self.assertEqual(worker.ce._argv_errors(request["argv"]), [])   # each member under the container limit
         self.assertEqual([x["argv"] for x in json.loads(configure["argv"][3])["commands"]],
                          [["autoreconf", "-fi"], ["./configure"]])
         self.assertEqual([x["argv"] for x in json.loads(native["argv"][3])["commands"]],
                          [["autoreconf", "-fi"], ["./configure"], ["make"]])
+
+    def test_runner_argv_reassembles_the_runner_from_members_under_the_limit(self):
+        argv = worker.runner_argv({"probe": 1})
+        self.assertEqual(argv[:4], ["/usr/bin/python3", "-c", worker.RUNNER_BOOTSTRAP, '{"probe": 1}'])
+        self.assertGreater(len(argv), 5)   # the runner no longer fits one member
+        self.assertTrue(all(len(member) <= worker.ce.MAX_ARGV_MEMBER_CHARS for member in argv))
+        # The real bootstrap, writing the reassembled source instead of executing it.
+        show = worker.RUNNER_BOOTSTRAP.replace("exec(", "sys.stdout.buffer.write(")
+        done = subprocess.run([sys.executable, "-c", show, *argv[3:]], capture_output=True, check=True)
+        self.assertEqual(done.stdout.decode("utf-8"), worker.RUNNER)
 
     def test_exact_job_bound_grant_is_required(self):
         source = "sha256:" + "a" * 64

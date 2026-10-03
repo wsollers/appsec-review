@@ -12,7 +12,7 @@
 set -euo pipefail
 exec 3>&1 1>&2   # fd 3 = the caller's stdout, used once at the end; everything else to stderr
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO"
 TARGET_NAME="${1:?usage: stage-run.sh <target> [--goal TEXT]}"; shift
 GOAL="Complete evidence-qualified application security review of $TARGET_NAME with final PDF and HTML publication."

@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Print the underlying error of every failed step in a Dagster run (unwraps retry wrappers).
 
-    python3 orchestrator/dagster-failures.py <dagster-run-id | launch-log.json>
+    python3 orchestrator/dagster-failures.py <review run id | dagster run id | launch request.json>
+
+A review run id (e.g. 20261003T211514Z-ef3fae) uses that run's newest launch record,
+<runs>/<run id>/data/orchestration/launches/*/request.json.
 """
 import json
+import os
+from pathlib import Path
 import sys
 import urllib.request
 
@@ -25,6 +30,12 @@ def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__); return 2
     arg = sys.argv[1]
+    runs = Path(os.environ.get("APPSEC_RUNS_ROOT") or Path(__file__).resolve().parents[1] / "appsec-review-process" / "runs")
+    launches = sorted((runs / arg / "data" / "orchestration" / "launches").glob("*/request.json"),
+                      key=lambda p: p.stat().st_mtime)
+    if launches:
+        arg = str(launches[-1])
+        print("launch record", arg)
     run_id = json.load(open(arg))["dagster_run_id"] if arg.endswith((".json", ".log")) else arg
     print("dagster run", run_id)
     cursor, seen = None, set()

@@ -22,7 +22,7 @@
 #   7. the Claude CLI answers (persona jobs use its subscription login)
 set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO"
 CHECK=0; BUILDENVS=0; CLAUDE=1
 for arg in "$@"; do

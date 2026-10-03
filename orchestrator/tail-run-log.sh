@@ -7,7 +7,7 @@
 # Output: HH:MM:SS level job/step [who] message. Banner lines (###) are shown as-is so a new session
 # (intake or resume) is easy to spot. Needs jq; --raw prints the file unchanged (pipe it to rg).
 set -euo pipefail
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 RUNS="${APPSEC_RUNS_ROOT:-$REPO/appsec-review-process/runs}"
 RUN=""; RAW=0; LEVEL=""; JOB=""; WHO=""; START="-n 50"
 while [[ $# -gt 0 ]]; do
