@@ -20,6 +20,7 @@ from bounded_transform_orchestration import REQUEST_SCHEMA as BOUNDED_SCHEMA, FA
 from dependency_orchestration import (REQUEST_SCHEMA as DEPENDENCY_SCHEMA,
                                       JOBS as DEPENDENCY_JOBS, _PAYLOAD_KEYS, _TOOL_KEYS)
 from execution_state import Blocked, atomic_json, digest, file_hash, identifier, read_json, tree_hashes
+import iac_files
 import intake
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
@@ -53,11 +54,6 @@ NATIVE_SUFFIXES = {".c": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp",
                    ".m": "objective-c", ".mm": "objective-cpp"}
 MOBILE_MARKERS = {"androidmanifest.xml", "build.gradle", "build.gradle.kts", "info.plist",
                   "podfile", "project.pbxproj"}
-# Deployment-config inputs 02-iac-config-scan's tools read (checkov/trivy-config/tfsec, kube-linter,
-# hadolint, zizmor): a Dockerfile- or workflow-only target is not "no IaC".
-IAC_SUFFIXES = {".tf", ".tfvars"}
-IAC_YAML_TOKENS = ("deploy", "k8s", "helm", "terraform")
-CONTAINERFILES = {"dockerfile", "containerfile"}
 # Dependency request 1.1: the SBOM worker enriches Syft rows from the accepted build index.
 BUILD_INDEX_SOURCE = {
     "alias": "build-index", "job_id": "02-build-index", "contract": "build-index",
@@ -199,12 +195,11 @@ def _build_index_current(document: dict[str, Any], run_root: Path) -> None:
         raise Blocked("full review input assembly: build index is stale for the staged target")
 
 
+# Deployment-config inputs 02-iac-config-scan's tools read (checkov/trivy-config/tfsec, kube-linter,
+# hadolint, zizmor): a Dockerfile- or workflow-only target is not "no IaC". Rules shared with the
+# vendor probe (P38).
 def _iac_input(relative: str) -> bool:
-    path = PurePosixPath(relative.lower())
-    return (path.suffix in IAC_SUFFIXES or
-            (path.suffix in {".yaml", ".yml"} and any(token in path.as_posix() for token in IAC_YAML_TOKENS)) or
-            path.name in CONTAINERFILES or path.name.startswith("dockerfile.") or path.suffix == ".dockerfile" or
-            (path.parts[:2] == (".github", "workflows") and path.suffix in {".yaml", ".yml"}))
+    return iac_files.iac_input(relative)
 
 
 def _load_dependency_source(pointer: Path, *, run_id: str, spec: dict[str, Any]

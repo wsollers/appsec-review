@@ -19,6 +19,7 @@ from typing import Any, Iterable
 
 import container_mobile_binary_contracts as cmb
 import evidence_redaction
+import iac_files
 import permission_capabilities as permissions
 import secrets_iac_contracts as sic
 import tool_instance_shapes as shapes
@@ -42,14 +43,15 @@ SPECS = {
 REGISTRY = registry_paths.JOB_TEMPLATES_DIR
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
-IMPLEMENTATION = "vendor-evidence-workers-v3-binary-observations"
+IMPLEMENTATION = "vendor-evidence-workers-v4-containerfile-names"
 
+DOCKERFILE_PATTERNS = ["**/Dockerfile", "**/Dockerfile.*", "**/*.Dockerfile", "**/Containerfile"]
 PROBE_PATTERNS = {
     "gitleaks": ["**/*"], "key-material-file-inventory": ["**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx"],
     "checkov": ["**/*.tf", "**/*.yaml", "**/*.yml"], "trivy-config": ["**/*.tf", "**/*.yaml", "**/*.yml"],
-    "tfsec": ["**/*.tf"], "kube-linter": ["**/*.yaml", "**/*.yml"], "hadolint": ["**/Dockerfile*"],
+    "tfsec": ["**/*.tf"], "kube-linter": ["**/*.yaml", "**/*.yml"], "hadolint": DOCKERFILE_PATTERNS,
     "zizmor": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/action.yml", "**/action.yaml"],
-    "dockerfile-base-image-inventory": ["**/Dockerfile*"],
+    "dockerfile-base-image-inventory": DOCKERFILE_PATTERNS,
     "oci-archive-inventory": ["**/*.tar", "**/*.oci.tar"],
     "image-package-and-config-inspection": ["**/*.tar", "**/*.oci.tar"],
     "binskim": ["**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib"],
@@ -77,8 +79,7 @@ def _files(root: Path) -> list[tuple[str, Path]]:
     return values
 
 
-def _dockerfile(path: str) -> bool:
-    return Path(path).name == "Dockerfile" or Path(path).name.startswith("Dockerfile.")
+_dockerfile = iac_files.containerfile
 
 
 _CHECKOV_KINDS = {"dockerfile": "dockerfile", "terraform": "terraform", "kubernetes": "kubernetes",

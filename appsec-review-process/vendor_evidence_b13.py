@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 import container_execution as ce
 import container_mobile_binary_contracts as cmb
+import iac_files
 import permission_capabilities as pc
 
 
@@ -441,14 +442,13 @@ _SKIP_DIRS = {".git", "node_modules"}
 
 
 def _dockerfiles(source_root: Path) -> list[str]:
-    """Checkout-relative Dockerfiles (``Dockerfile``, ``Dockerfile.*``, ``*.Dockerfile``), sorted."""
+    """Checkout-relative Dockerfiles and Containerfiles (``iac_files.containerfile``), sorted."""
     root = Path(source_root)
     found = []
     for current, dirs, names in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS)
         for name in names:
-            lower = name.lower()
-            if lower == "dockerfile" or lower.startswith("dockerfile.") or lower.endswith(".dockerfile"):
+            if iac_files.containerfile(name):
                 path = Path(current, name)
                 if path.is_file() and not path.is_symlink():
                     found.append(path.relative_to(root).as_posix())

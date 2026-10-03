@@ -114,6 +114,9 @@ class TopologyClaimBuilderTests(unittest.TestCase):
         empty["coverage_gaps"] = []
         with self.assertRaises(cci.InvokerOutputError):
             cci._claims_from_operations_topology(empty, self.target, TOPOLOGY_ALLOWED, "s.json")
+        empty["absence_observations"] = [{"statement": "no runnable unit is declared", "basis": {
+            "search_scope": ["**"], "inventory_count": 0, "evidence_citations": []}}]
+        self.assertEqual(cci._claims_from_operations_topology(empty, self.target, TOPOLOGY_ALLOWED, "s.json"), [])
 
     def test_the_topology_claim_classes_are_inside_the_registry_ceiling(self):
         import persona_invocation as pi
@@ -170,6 +173,13 @@ class ClaimBuilderTests(unittest.TestCase):
         empty["coverage_gaps"] = []
         with self.assertRaises(cci.InvokerOutputError):
             cci._claims_from_project_inventory(empty, self.target, ALLOWED, "f.json")
+        note = {"statement": "no devops unit is declared", "basis": {
+            "search_scope": ["**"], "inventory_count": 0, "evidence_citations": []}}
+        empty["informational_notes"] = [note]
+        with self.assertRaises(cci.InvokerOutputError):
+            cci._claims_from_project_inventory(empty, self.target, ALLOWED, "f.json")
+        empty["absence_observations"] = [note]
+        self.assertEqual(cci._claims_from_project_inventory(empty, self.target, ALLOWED, "f.json"), [])
 
     def test_citation_for_an_unpinned_path_returns_none_instead_of_raising(self):
         self.assertIsNone(cci._citation_for(None, "source_file", "x", None))
@@ -469,6 +479,17 @@ class GateTests(unittest.TestCase):
         staged.write_text("tampered\n", encoding="utf-8")
         with self.assertRaises(state.Blocked):
             discovery_gate._stage_upstream_partition_map(self.base, source, digest)
+
+
+class DiscoveryNoteValidationTests(unittest.TestCase):
+    def test_note_search_scope_is_repository_relative(self):
+        """P30/P34: an absence observation or note names a repository-relative scope, never a host path."""
+        import validate_job_output as validator
+        note = {"statement": "no CI", "basis": {"search_scope": [".github/workflows/*", "/etc/x", "../y"],
+                                                "inventory_count": 0, "evidence_citations": []}}
+        errors = validator._discovery_note_errors({"absence_observations": [note], "informational_notes": [note]})
+        self.assertEqual(len(errors), 4)
+        self.assertTrue(errors[0].startswith("$.absence_observations[0].basis.search_scope[1]"))
 
 
 if __name__ == "__main__":

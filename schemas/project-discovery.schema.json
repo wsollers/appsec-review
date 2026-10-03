@@ -44,6 +44,29 @@
         }
       }
     },
-    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}, "description": "What could not be determined or examined. Only these make the job OK_WITH_GAPS."},
+    "absence_observations": {"type": "array", "items": {"$ref": "#/$defs/discovery_note"}, "description": "Verified absence: something the job searched for and the target does not declare (no CI/CD workflow, no IaC, no registry). Reported, never a coverage gap."},
+    "informational_notes": {"type": "array", "items": {"$ref": "#/$defs/discovery_note"}, "description": "By-design or scope notes that are not gaps (vendored tree built by its parent, no lockfile because dependencies are vendored, a capability the plan needs)."}
+  },
+  "$defs": {
+    "discovery_note": {
+      "type": "object",
+      "required": ["statement", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "statement": {"type": "string", "minLength": 1},
+        "basis": {
+          "type": "object",
+          "description": "What was searched, so the note is evidenced (AGENTS.md rule 2): repository-relative path globs, how many listed target files in that scope declare what the statement is about (0 for an absence), and the files read, if any.",
+          "required": ["search_scope", "inventory_count", "evidence_citations"],
+          "additionalProperties": false,
+          "properties": {
+            "search_scope": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+            "inventory_count": {"type": "integer", "minimum": 0},
+            "evidence_citations": {"type": "array", "items": {"$ref": "evidence-citation.schema.json"}}
+          }
+        }
+      }
+    }
   }
 }
