@@ -378,7 +378,9 @@ def load_native_units(native_build_root: Path, run_id: str, fingerprint: str,
     if upstream["target"] != target:
         raise Blocked(f"{JOBS['cpp']}: accepted native build is for another checkout")
     units = [{"unit_id": unit["unit_id"], "key": digest(unit["unit_id"])[:16],
-              "adapted_sha256": unit["compile_database"]["adapted_sha256"], "adapted": unit["adapted"]}
+              "adapted_sha256": unit["compile_database"]["adapted_sha256"], "adapted": unit["adapted"],
+              # P35: the adapted entries search the verified configure-generated headers first
+              "generated_headers_root": (unit.get("generated_headers") or {}).get("host_path")}
              for unit in upstream["units"]]
     return upstream["binding"], units
 
@@ -468,6 +470,11 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[st
             raise Blocked(f"{job}: traced CodeQL needs the adapted compile databases")
         mounts += [{"host_path": str(database_root), "container_path": DB_MOUNT},
                    {"host_path": str(GRAPH_PACK), "container_path": QUERY_MOUNT}]
+        headers = next((unit.get("generated_headers_root") for unit in inputs.get("native_units", [])
+                        if unit["unit_id"] == plan.get("unit_id")), None)
+        if headers:
+            import native_sast  # deferred, as in load_native_units
+            mounts.append({"host_path": headers, "container_path": native_sast.HEADERS_MOUNT})
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": job, "attempt_id": adapter_id,
             "image": {"image_id": plan["image_id"], "digest": plan["image_digest"]},
             "argv": list(plan["argv"]),

@@ -7,5 +7,5 @@
   "result_schema": {"artifact": "native-build.json", "schema_file": "native-build.schema.json"},
   "claim_class": {"claim_class_id": "build_replay", "allowed_assertions": ["native-build-succeeded", "compile-database-produced", "binary-produced"],
     "forbidden_promotions": ["finding", "severity", "runtime-state"]},
-  "validation_rules": ["bind the accepted stage-13 lock and configured build", "replay only locked configure/build argv", "require non-empty fixed-clang compile database", "hash published binaries without running them", "re-verify caller-held B13 result hash"]
+  "validation_rules": ["bind the accepted stage-13 lock and configured build", "replay only locked configure/build argv", "require non-empty fixed-clang compile database", "hash published binaries without running them", "publish configure-generated headers absent from the checkout as bounded hash-bound artifacts and count any omitted", "re-verify caller-held B13 result hash"]
 }
