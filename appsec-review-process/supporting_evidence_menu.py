@@ -131,7 +131,12 @@ def _records(path: Path, raw: bytes) -> dict[str, int]:
     if isinstance(value, list):
         return {"items": len(value)}
     if isinstance(value, dict):
-        return {key: len(item) for key, item in sorted(value.items()) if isinstance(item, list)}
+        counts = {key: len(item) for key, item in sorted(value.items()) if isinstance(item, list)}
+        totals = value.get("test_kind_totals")  # P45: test files per kind
+        if isinstance(totals, dict):
+            counts.update({f"test_kind_totals.{key}": item for key, item in sorted(totals.items())
+                           if isinstance(item, int) and not isinstance(item, bool)})
+        return counts
     return {}
 
 

@@ -65,7 +65,8 @@ NOT_INDEXABLE = {job: "vendor producer publishes no F02 permission/lineage recei
 _TEXT_KEYS = frozenset({"title", "summary", "name", "kind", "description", "purpose", "method",
                         "route", "status", "semantics", "symbol", "function", "test_name", "outcome",
                         "full_name", "caller", "type_name", "code", "search_text", "source_path",
-                        "rule_id", "rule_name", "category", "cwe", "language", "path", "detail"})
+                        "rule_id", "rule_name", "category", "cwe", "language", "path", "detail",
+                        "test_kind", "framework"})
 _IDENTITY_KEYS = ("record_id", "lead_id", "fact_id", "partition_id", "component_id", "relationship_id",
                   "test_id", "artifact_id", "binary_id", "symbol_id", "cfg_id", "location_id", "path")
 
