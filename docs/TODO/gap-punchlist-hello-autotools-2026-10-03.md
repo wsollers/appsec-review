@@ -107,3 +107,34 @@ each appears once.
 4. P07, P09, P10, P12 (code index and native SAST coverage).
 5. P13, P14, P17 (new analysis coverage).
 6. P15, P16, P18, P29-P34 (report honesty: absence is not a gap).
+
+## Fix plan (coordinated, 2026-10-03)
+
+Fixes run in three waves of up to four agents. Each agent owns a disjoint set of files, works in its
+own git worktree and commits there; the coordinator merges each branch into
+`claude/practical-darwin-yk9370`, runs the full gate below, and records each fix in the TODO.md
+breakage log. An item is closed when its `@unittest.expectedFailure` decorator is removed and the
+test passes.
+
+| Wave | Agent | Items | Files owned |
+|---|---|---|---|
+| 1 | dep | P19, P20 | `dependency_workers.py`, `reachability_engine_jobs.py`, SBOM schemas/contracts if needed |
+| 1 | ir | P04, P05 | `ir_evidence.py` |
+| 1 | binary | P01, P02, P03, P06 | `binary_evidence_adapter.py`, `binary_evidence_core.py`, `images/audit-binary-analysis/` |
+| 1 | owasp | P22, P23, P24, P25 | `owasp_join_report.py`, `owasp_applicability.py`, `owasp_component_routing.py` |
+| 2 | standards | P26, P27, P28 (+ 4 pre-existing errors in `test_full_review_input_assembly`) | `standards_lifecycle.py`, `full_review_input_assembly.py` |
+| 2 | cpg | P07, P08, P09, P10 | `code_graph_evidence.py`, `pipeline/joern_export_records.sc`, `code_index.py`, `code_index_job.py`, `code_query_mcp.py`, `pipeline/job-graph.json` and generated views |
+| 2 | native | P11, P12 | `codeql_sast.py`, `native_sast.py`, `images/audit-native/scripts/run_native_sast.py` |
+| 2 | intel | P16, P17, P18, P21 | `static_intelligence_core.py`, `standards_source_ingest.py`, `automatic_evidence_inputs.py`, `tooling/buildenv-catalog.json`, their schemas |
+| 3 | sast | P13, P14 | `data/source-sast/`, `source_sast*.py`, new `images/tool-shellcheck/` |
+| 3 | misc | P15, P29, P33 | `treesitter_ast.py`, `bounded_analysis_workers.py`, `control_feature_lifecycle.py` |
+| 3 | discovery | P30, P34 | discovery schemas, `02-evidence-pregather/task-*.md` prompts, `automatic_discovery.py` |
+| 3 | threat | P31, P32 | `threat_workbench.py`, `threat_model_core.py`, `threat_model_reconciliation.py` |
+
+Gate after each merge: the four `test_gap_punchlist_*` modules, every existing test module for the
+touched files, `python3 appsec-review-process/validate_design_parity.py --check-generated-views`, and
+`python3 docs/processes/job_catalog.py --check`. Image changes (P03, P12, P14) also need a rebuild
+and re-pin on the run host before the re-run (E3 plus `audit-native`, `tool-shellcheck`).
+
+Then: E1 and E2 on the host, and a fresh `full_review` of `hello-autotools` to compare gap counts against
+run `20261003T000827Z-a02791`.
