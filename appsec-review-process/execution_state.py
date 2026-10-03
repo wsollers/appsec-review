@@ -23,7 +23,8 @@ from datetime import datetime, timezone
 import registry_paths
 
 ROOT = Path(__file__).resolve().parent
-RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT', ROOT / 'runs'))
+# Real spelling: a runs root reached through a symlink would fail every mount and pool check downstream.
+RUNS = Path(os.environ.get('APPSEC_RUNS_ROOT', ROOT / 'runs')).resolve()
 
 
 class Blocked(RuntimeError):
