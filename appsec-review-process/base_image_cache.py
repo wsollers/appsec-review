@@ -79,12 +79,12 @@ def _now() -> str:
 
 # ---- references -----------------------------------------------------------------------------------
 
-def parse_reference(token: str) -> dict[str, Any]:
+def parse_reference(image_ref: str) -> dict[str, Any]:
     """``[registry/]repository[:tag][@digest]``. The digest is split off first and a tag is looked for
     only after the last '/', so neither ``repo:tag@sha256:...`` (P41: the tag ended up in the repository)
     nor a registry port (``host:5000/x``) is misread. ``name`` is the reference as declared, without
     tag or digest; ``registry``/``path`` are the normalized pull coordinates."""
-    name, _, digest = token.partition("@")
+    name, _, digest = image_ref.partition("@")
     head, slash, last = name.rpartition("/")
     last, colon, tag = last.partition(":")
     name = head + slash + last
@@ -106,7 +106,7 @@ def reference_key(reference: dict, platform: str) -> str:
 
 
 def from_lines(text: str) -> list[tuple[int, str, str]]:
-    """(line, form, token) per FROM: ``literal``, ``scratch``, ``build-arg-parameterized`` or
+    """(line, form, image_ref) per FROM: ``literal``, ``scratch``, ``build-arg-parameterized`` or
     ``build-stage-alias`` (a name an earlier ``FROM ... AS name`` introduced). ``--platform=`` and other
     flags are skipped, never taken for the image."""
     values, aliases = [], set()
@@ -117,25 +117,25 @@ def from_lines(text: str) -> list[tuple[int, str, str]]:
         words = [w for w in match.group(1).split() if not w.startswith("--")]
         if not words:
             continue
-        token = words[0]
-        if token.lower() == "scratch": form = "scratch"
-        elif "$" in token: form = "build-arg-parameterized"
-        elif token.lower() in aliases: form = "build-stage-alias"
+        image_ref = words[0]
+        if image_ref.lower() == "scratch": form = "scratch"
+        elif "$" in image_ref: form = "build-arg-parameterized"
+        elif image_ref.lower() in aliases: form = "build-stage-alias"
         else: form = "literal"
         if len(words) >= 3 and words[1].lower() == "as":
             aliases.add(words[2].lower())
-        values.append((line_no, form, token))
+        values.append((line_no, form, image_ref))
     return values
 
 
 def dockerfile_references(sources: Iterable[Path]) -> list[str]:
-    tokens = set()
+    image_refs = set()
     for source in sources:
         for path in sorted(Path(source).rglob("*")):
             relative = path.relative_to(source).as_posix()
             if path.is_file() and not path.is_symlink() and "/.git/" not in f"/{relative}" and iac_files.containerfile(relative):
-                tokens |= {t for _, form, t in from_lines(path.read_text(errors="replace")) if form == "literal"}
-    return sorted(tokens)
+                image_refs |= {t for _, form, t in from_lines(path.read_text(errors="replace")) if form == "literal"}
+    return sorted(image_refs)
 
 
 # ---- the published cache --------------------------------------------------------------------------
@@ -190,7 +190,7 @@ def publish_refs(root: Path, entries: dict[str, dict], now: str) -> dict:
     return refs
 
 
-def lookup(root: Path, token: str, platform: str = DEFAULT_PLATFORM) -> tuple[dict | None, str | None]:
+def lookup(root: Path, image_ref: str, platform: str = DEFAULT_PLATFORM) -> tuple[dict | None, str | None]:
     """(entry, None) for a published reference, or (None, reason): cache-unavailable, not-in-cache, or
     the CacheInvalid reason."""
     try:
@@ -199,7 +199,7 @@ def lookup(root: Path, token: str, platform: str = DEFAULT_PLATFORM) -> tuple[di
         return None, str(exc)
     if loaded is None:
         return None, "cache-unavailable"
-    entry = loaded[0]["entries"].get(reference_key(parse_reference(token), platform))
+    entry = loaded[0]["entries"].get(reference_key(parse_reference(image_ref), platform))
     return (entry, None) if entry else (None, "not-in-cache")
 
 
@@ -306,24 +306,24 @@ def _platform_match(entry: dict, platform: str) -> bool:
         not variant or found.get("variant") == variant[0])
 
 
-def fetch_one(token: str, root: Path, *, platform: str, transport: Transport, now: str,
+def fetch_one(image_ref: str, root: Path, *, platform: str, transport: Transport, now: str,
               mirrors: dict[str, str] | None = None) -> dict:
     """The registry first; on failure, a configured mirror of it (``docker.io=mirror.gcr.io`` when Docker
     Hub rate-limits the host). Every blob is hash-checked either way; ``served_by`` records the host."""
-    reference = parse_reference(token)
+    reference = parse_reference(image_ref)
     hosts = [None] + ([mirrors[reference["registry"]]] if (mirrors or {}).get(reference["registry"]) else [])
     tried = []
     for host in hosts:
-        tried.append(_fetch_from(reference, token, root, platform=platform, transport=transport, now=now, host=host))
+        tried.append(_fetch_from(reference, image_ref, root, platform=platform, transport=transport, now=now, host=host))
         if tried[-1]["status"] == "resolved":
             return tried[-1]
     return tried[0]   # the registry's own cause (e.g. http-429), not the mirror's
 
 
-def _fetch_from(reference: dict, token: str, root: Path, *, platform: str, transport: Transport, now: str,
+def _fetch_from(reference: dict, image_ref: str, root: Path, *, platform: str, transport: Transport, now: str,
                 host: str | None) -> dict:
     registry = _Registry(reference, transport, host)
-    entry = {"reference": token, "registry": reference["registry"], "repository": reference["path"],
+    entry = {"reference": image_ref, "registry": reference["registry"], "repository": reference["path"],
              "tag": reference["tag"], "declared_digest": reference["digest"], "platform": platform,
              "mutable": reference["digest"] is None, "status": "failed", "cause": None, "index_digest": None,
              "manifest_digest": None, "config_digest": None, "layers": [], "resolved_at": now,
@@ -364,7 +364,7 @@ def _fetch_from(reference: dict, token: str, root: Path, *, platform: str, trans
     return entry
 
 
-def fetch(tokens: Iterable[str], root: Path, *, platform: str = DEFAULT_PLATFORM,
+def fetch(image_refs: Iterable[str], root: Path, *, platform: str = DEFAULT_PLATFORM,
           transport: Transport | None = None, now: str | None = None, mirrors: dict[str, str] | None = None) -> dict:
     """Resolve and store each reference, then publish the merged table. A digest-pinned reference
     already resolved is kept (its content cannot change); a tag is re-resolved every time."""
@@ -374,8 +374,8 @@ def fetch(tokens: Iterable[str], root: Path, *, platform: str = DEFAULT_PLATFORM
     except CacheInvalid:
         loaded = None
     entries = dict(loaded[0]["entries"]) if loaded else {}
-    for token in tokens:
-        key = reference_key(parse_reference(token), platform)
+    for image_ref in image_refs:
+        key = reference_key(parse_reference(image_ref), platform)
         previous = entries.get(key)
         if previous and previous["status"] == "resolved" and not previous["mutable"]:
             try:
@@ -384,7 +384,7 @@ def fetch(tokens: Iterable[str], root: Path, *, platform: str = DEFAULT_PLATFORM
                 continue
             except CacheInvalid:
                 pass
-        entry = fetch_one(token, root, platform=platform, transport=transport, now=now, mirrors=mirrors)
+        entry = fetch_one(image_ref, root, platform=platform, transport=transport, now=now, mirrors=mirrors)
         # A tag that fails to re-resolve keeps its last good resolution (and its resolved_at).
         entries[key] = previous if entry["status"] != "resolved" and previous and previous["status"] == "resolved" else entry
     return publish_refs(root, entries, now)
@@ -563,18 +563,18 @@ def main(argv: list[str] | None = None) -> int:
                         help="fallback host for a registry, e.g. docker.io=mirror.gcr.io (content is hash-checked)")
     args = parser.parse_args(argv)
     root = (args.root or cache_root()).absolute()
-    tokens = dockerfile_references([s for s in args.sources if s.is_dir()])
+    image_refs = dockerfile_references([s for s in args.sources if s.is_dir()])
     if args.command == "fetch":
-        fetch(tokens, root, platform=args.platform, mirrors=dict(m.split("=", 1) for m in args.mirror))
+        fetch(image_refs, root, platform=args.platform, mirrors=dict(m.split("=", 1) for m in args.mirror))
     missing = 0
-    for token in tokens:
-        entry, reason = lookup(root, token, args.platform)
+    for image_ref in image_refs:
+        entry, reason = lookup(root, image_ref, args.platform)
         state = entry["status"] if entry else reason
         cause = f" ({entry['cause']})" if entry and entry["cause"] else ""
         digest = f" {entry['manifest_digest']}" if entry and entry["manifest_digest"] else ""
         missing += state != "resolved"
-        print(f"{state:<16} {token}{digest}{cause}")
-    print(f"{len(tokens) - missing}/{len(tokens)} base images resolved in {root}")
+        print(f"{state:<16} {image_ref}{digest}{cause}")
+    print(f"{len(image_refs) - missing}/{len(image_refs)} base images resolved in {root}")
     return 1 if missing else 0
 
 
