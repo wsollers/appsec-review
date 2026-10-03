@@ -375,6 +375,7 @@ flowchart TD
   00_intake_post -->|required| 02_sbom_inventory_config
   02_build_index_post -->|required| 02_sbom_inventory_config
   02_native_build_post -->|optional| 02_sbom_inventory_config
+  02_iac_config_scan_post -->|optional| 02_sbom_inventory_config
   02_sca_vulnerability_match_config["02-sca-vulnerability-match: resolve job configuration"] --> 02_sca_vulnerability_match_pre["02-sca-vulnerability-match: pre-validation"]
   02_sca_vulnerability_match_pre --> 02_sca_vulnerability_match["02-sca-vulnerability-match: work or reuse"]
   02_sca_vulnerability_match --> 02_sca_vulnerability_match_post["02-sca-vulnerability-match: post-validation and publish"]

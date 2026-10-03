@@ -16,7 +16,8 @@
     "sbom_document",
     "enrichment_document",
     "components",
-    "build_dependency_document"
+    "build_dependency_document",
+    "base_image_document"
   ],
   "properties": {
     "schema": {
@@ -128,6 +129,9 @@
     },
     "build_dependency_document": {
       "$ref": "sbom-build-dependency-document.schema.json"
+    },
+    "base_image_document": {
+      "$ref": "sbom-base-image-document.schema.json"
     }
   }
 }

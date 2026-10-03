@@ -41,8 +41,10 @@ SCHEMA = "appsec-review/osv-snapshot-manifest/1"
 POINTER_SCHEMA = "appsec-review/osv-current-pointer/1"
 FEED_ID = "osv"
 BASE_URL = "https://storage.googleapis.com/osv-vulnerabilities"
-# Directory names exactly as the GCS bucket uses them (verified against the bucket 2026-09-29).
-ECOSYSTEMS = ("npm", "Go", "Maven", "crates.io", "NuGet", "Packagist", "PyPI")
+# Directory names exactly as the GCS bucket uses them (verified against the bucket 2026-09-29). P43: Debian and
+# Alpine, OSV's names for the base-image OS ecosystems (records carry the release: Debian:10, Alpine:v3.24), so OSV
+# corroborates Grype on base-image packages. Ubuntu is not fetched: P37's ubuntu build packages stay Grype-only.
+ECOSYSTEMS = ("npm", "Go", "Maven", "crates.io", "NuGet", "Packagist", "PyPI", "Debian", "Alpine")
 USER_AGENT = "appsec-review-osv-publisher/1"
 DEFAULT_KEEP = 3
 MAX_ARCHIVE_BYTES = 2 * 1024 ** 3          # transport cap per ecosystem archive
@@ -55,6 +57,8 @@ _SNAPSHOT_ID = re.compile(r"sha256-[0-9a-f]{16}")
 # Licence by advisory-id prefix, from the OSV data-licence documentation. Anything not listed is
 # recorded as "unspecified" so the NOTICE never over-claims. Verify against the upstream before
 # redistributing anything: snapshots are NOT to be redistributed outside the run/host cache.
+# P43 gap: the Debian (DLA, DTSA, DEBIAN; DSA as before) and Alpine (ALPINE) prefixes have no licence the repo can
+# cite from OSV's documentation, so they are left out (recorded "unspecified") until verified upstream.
 LICENCE_BY_PREFIX = {
     "GHSA": "CC-BY-4.0", "GO": "CC-BY-4.0", "PYSEC": "CC-BY-4.0", "OSV": "CC-BY-4.0",
     "RUSTSEC": "CC0-1.0", "MAL": "Apache-2.0", "GSD": "CC0-1.0", "CVE": "CC-BY-4.0",

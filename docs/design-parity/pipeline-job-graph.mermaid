@@ -314,6 +314,7 @@ flowchart LR
   j_00_intake --> j_02_sbom_inventory
   j_02_build_index --> j_02_sbom_inventory
   j_02_native_build -.->|optional| j_02_sbom_inventory
+  j_02_iac_config_scan -.->|optional| j_02_sbom_inventory
   j_02_sbom_inventory --> j_02_sca_vulnerability_match
   j_00_intake --> j_02_license_scan
   j_02_sbom_inventory --> j_02_license_scan

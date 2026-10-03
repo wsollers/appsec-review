@@ -129,7 +129,8 @@ class DagsterWiringTests(unittest.TestCase):
         def probe():
             configured = stub_config()
             outputs = {name: seed.alias("seed_" + name.replace("-", "_"))(configured)
-                       for name in ("00-intake", "02-build-index", "02-build-configure")}
+                       for name in ("00-intake", "02-build-index", "02-build-configure",
+                                    "02-iac-config-scan")}  # P43: the SBOM's other optional edge
             dw.wire_lifecycle(configured, outputs, ops)
 
         with patch.object(dw.native_build_worker, "run", side_effect=Blocked("stub native build crashed")), \

@@ -142,7 +142,7 @@ CONTRACT_POLICIES = MappingProxyType({
         document_schemas=MappingProxyType({SBOM_MANIFEST_FILE: "sbom-inventory.schema.json"}),
         claim_class_id="dependency_inventory_evidence",
         allowed_assertions=("declared-component-present", "component-version-unknown", "inventory-coverage-gap",
-                            "build-observed-component-present"),
+                            "build-observed-component-present", "base-image-component-present"),
     ),
     SCA_CONTRACT_ID: _frozen(
         job_id="02-sca-vulnerability-match",
@@ -401,6 +401,81 @@ def build_dependency_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) 
                 errors.append("build-dependency-vendored: a vendored tree carries only pkg:generic/<name>@<version> (cJSON: its fixed identifiers)")
         else:
             errors.append("build-dependency-declaration: produced components are build-observed or inferred-vendored")
+    return errors
+
+
+BASE_IMAGE_FILE = f"{OUTPUTS_DIR}/base-image-components.json"
+BASE_IMAGE_PRODUCER = "base-image-package-inventory"
+BASE_IMAGE_INVENTORY = "outputs/base-image-inventory.json"
+_IMAGE_PURL = re.compile(r"pkg:(deb|apk|rpm)/[^/?#]+/[^?#]+@[^?#]+\?(?:[^#]*&)?distro=[^&#]+")
+
+
+def base_image_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) -> list[str]:
+    """P43: validate the base-image package enrichment and the components it produced.
+
+    Its components are exactly its members, cite this document, are image-observed OS packages (pkg:deb/apk/rpm
+    with a distro qualifier, no CPE, scope container-base) sourced from the bound 02-iac-config-scan inventory, and
+    cite inventory records the document lists. The inventory is bound, skipped or absent; an unresolved or
+    not-inventoried image requires a coverage gap.
+    """
+    descriptor = manifest.get("base_image_document")
+    produced = [component for component in manifest.get("components", []) if component.get("tool_id") == BASE_IMAGE_PRODUCER]
+    if descriptor is None:
+        return ["base-image-document-missing: components cite the base-image producer without its document"] if produced else []
+    errors = []
+    if (descriptor.get("path") != BASE_IMAGE_FILE or descriptor.get("producer_id") != BASE_IMAGE_PRODUCER or
+            "sha256:" + hashlib.sha256(raw).hexdigest() != descriptor.get("sha256")):
+        errors.append("base-image-document: path, producer or sha256 does not bind the retained bytes")
+    try:
+        document = _parse(raw)
+    except (ValueError, RecursionError):
+        return errors + ["base-image-invalid: the document is not strict UTF-8 JSON with unique keys"]
+    required = {"schema", "run_id", "job_id", "attempt_id", "producer_id", "inventory", "images", "members",
+                "deduplicated", "coverage_gaps"}
+    if not isinstance(document, dict) or set(document) != required:
+        return errors + ["base-image-invalid: the document has an open or incomplete shape"]
+    if (document["schema"] != "appsec-review/base-image-sbom-enrichment/1.0" or
+            any(document[key] != manifest.get(key) for key in ("run_id", "job_id", "attempt_id")) or
+            document["producer_id"] != BASE_IMAGE_PRODUCER):
+        errors.append("base-image-identity: document identity differs from the SBOM manifest")
+    inventory, images, members, gaps = document["inventory"], document["images"], document["members"], document["coverage_gaps"]
+    if (not isinstance(inventory, dict) or not isinstance(images, list) or not isinstance(members, list) or
+            not isinstance(gaps, list) or not all(isinstance(image, dict) for image in images)):
+        return errors + ["base-image-invalid: inventory, images, members and coverage_gaps are malformed"]
+    binding = inventory.get("binding")
+    if inventory.get("status") == "accepted":
+        if (not isinstance(binding, dict) or set(binding) != {"job_id", "attempt_id", "path", "sha256"} or
+                binding.get("job_id") != "02-iac-config-scan" or binding.get("path") != BASE_IMAGE_INVENTORY or
+                not _SHA_RE.match(str(binding.get("sha256")))):
+            errors.append("base-image-lineage: an accepted base-image inventory must be bound exactly")
+    elif inventory.get("status") not in ("absent", "skipped") or binding is not None or images or (
+            inventory.get("status") == "skipped") != isinstance(inventory.get("skip_reason"), str):
+        errors.append("base-image-lineage: inventory status is not accepted, skipped or absent, or binds without an acceptance")
+    if any(image.get("resolution") == "unresolved" or image.get("package_inventory") == "not-inventoried"
+           for image in images) and not gaps:
+        errors.append("base-image-gap: an unresolved or not-inventoried base image requires a coverage gap")
+    projection = lambda row: json.dumps([row.get(key) for key in ("name", "version", "purl", "cpe", "ecosystem",
+                                                                  "declaration", "source", "scope", "image_evidence")], sort_keys=True)
+    listed = [{**component, "source": {k: v for k, v in component.get("source", {}).items() if k != "evidence_kind"}}
+              for component in produced]
+    if sorted(map(projection, listed)) != sorted(map(projection, [m for m in members if isinstance(m, dict)])):
+        errors.append("base-image-projection: produced components differ from the retained members")
+    records = {image.get("reference_id") for image in images}
+    for component in produced:
+        citation, source, purl = component.get("citation", {}), component.get("source", {}), component.get("purl")
+        evidence = component.get("image_evidence") or {}
+        if (citation.get("producer") != "02-sbom-inventory" or citation.get("attempt_id") != manifest.get("attempt_id") or
+                citation.get("path") != BASE_IMAGE_FILE or citation.get("sha256") != hashlib.sha256(raw).hexdigest() or
+                component.get("scope") != "container-base" or component.get("declaration") != "image-observed" or
+                component.get("build_evidence") is not None):
+            errors.append("base-image-citation: a produced component is not an image-observed, container-base row of the producer document")
+            continue
+        if (not isinstance(purl, str) or not _IMAGE_PURL.match(purl) or purl[4:].split("/", 1)[0] != component.get("ecosystem") or
+                component.get("cpe") is not None or source.get("evidence_kind") != "base-image-inventory-evidence" or
+                not isinstance(binding, dict) or source.get("path") != BASE_IMAGE_INVENTORY or source.get("sha256") != binding.get("sha256")):
+            errors.append("base-image-package: a base-image package must be a distro-qualified OS purl sourced from the bound inventory")
+        if not evidence.get("images") or any(image.get("reference_id") not in records for image in evidence["images"]):
+            errors.append("base-image-evidence: a base-image package must cite inventory records the document lists")
     return errors
 
 
@@ -1006,9 +1081,11 @@ def _component_errors(components: list[dict]) -> list[str]:
         label = f"SC-{index:06d}"
         source, declaration = component["source"], component["declaration"]
         # P37: a build-observed OS package is sourced from a native-build record, not a snapshot file;
-        # build_dependency_enrichment_errors binds that record.
-        observed = declaration == "build-observed"
-        derived = "build-dependency-evidence" if observed else declaration_kind(component["ecosystem"], source["path"])
+        # build_dependency_enrichment_errors binds that record. P43: an image-observed one is sourced from the
+        # accepted base-image inventory; base_image_enrichment_errors binds it.
+        observed, imaged = declaration == "build-observed", declaration == "image-observed"
+        derived = ("build-dependency-evidence" if observed else "base-image-inventory-evidence" if imaged else
+                   declaration_kind(component["ecosystem"], source["path"]))
         if source["evidence_kind"] != derived:
             errors.append(f"evidence-kind-mismatch: {label}: source.evidence_kind must be {derived!r}, which is what the name "
                           "of source.path is for this ecosystem")
@@ -1017,7 +1094,10 @@ def _component_errors(components: list[dict]) -> list[str]:
                           "a manifest or lockfile of the component's ecosystem; an inferred vendored component is never declared")
         if observed and component.get("tool_id") != BUILD_DEPENDENCY_PRODUCER:
             errors.append(f"build-observed-producer: {label}: only the build-dependency producer observes OS packages")
-        wanted = ("build-observed-component-present" if observed else "inventory-coverage-gap" if declaration != "declared" else
+        if imaged and component.get("tool_id") != BASE_IMAGE_PRODUCER:
+            errors.append(f"image-observed-producer: {label}: only the base-image producer observes base-image packages")
+        wanted = ("build-observed-component-present" if observed else "base-image-component-present" if imaged else
+                  "inventory-coverage-gap" if declaration != "declared" else
                   "component-version-unknown" if component["version"] is None else "declared-component-present")
         if component["assertion"] != wanted:
             errors.append(f"assertion-mismatch: {label}: assertion must be {wanted!r} for this declaration and version")
@@ -1108,13 +1188,20 @@ def verify_sbom_attempt(attempt_root: Any, *, source_root: Any, tool_outputs_roo
                    [f"build-dependency-document-missing: {BUILD_DEPENDENCY_FILE} is absent, linked or over max_file_bytes"])
     else:
         errors += build_dependency_enrichment_errors(manifest, b"")
+    if manifest.get("base_image_document") is not None:
+        raw = _read_bytes(Path(attempt_root), BASE_IMAGE_FILE, limits)
+        errors += (base_image_enrichment_errors(manifest, raw) if raw is not None else
+                   [f"base-image-document-missing: {BASE_IMAGE_FILE} is absent, linked or over max_file_bytes"])
+    else:
+        errors += base_image_enrichment_errors(manifest, b"")
     labelled = [(f"SC-{index:06d}", component) for index, component in enumerate(components, 1)]
     tool_labelled = [(label, component) for label, component in labelled
-                     if component.get("tool_id") not in ("build-index-vendored-member", BUILD_DEPENDENCY_PRODUCER)]
+                     if component.get("tool_id") not in ("build-index-vendored-member", BUILD_DEPENDENCY_PRODUCER,
+                                                         BASE_IMAGE_PRODUCER)]
     errors += _citation_errors(tool_labelled, CONTRACT_POLICIES[SBOM_CONTRACT_ID]["job_id"], state, declared)
     errors += _source_file_errors(Path(source_root).absolute(),
                                   [(label, item["source"]["path"], item["source"]["sha256"], None) for label, item in labelled
-                                   if item["declaration"] != "build-observed"],
+                                   if item["declaration"] not in ("build-observed", "image-observed")],
                                   limits)
     return errors
 

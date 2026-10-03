@@ -19,7 +19,8 @@
       "B16 Syft image record"
     ],
     "optional": [
-      "accepted 02-native-build per-unit build-dependencies.json (P36)"
+      "accepted 02-native-build per-unit build-dependencies.json (P36)",
+      "accepted 02-iac-config-scan base-image-inventory.json (P41/P43)"
     ]
   },
   "outputs": {

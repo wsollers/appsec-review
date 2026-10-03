@@ -1345,8 +1345,33 @@ def automatic_evidence_lifecycle_op(job_id, pool):
     return automatic_evidence
 
 
+def tolerant_automatic_evidence_op(job_id, pool):
+    """P43 (the P42 pattern): never raises in the full review. A crash or BLOCKED returns NOT_PUBLISHED for the
+    optional consumers (the SBOM records the gap); published_gate re-raises it for the required consumers."""
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def automatic_evidence(context, configured, upstream):
+        try:
+            return run_automatic_evidence_job(context, configured, job_id)
+        except Exception as exc:
+            context.log.warning(f'{job_id} did not publish ({type(exc).__name__}: {exc}); '
+                                'optional consumers record the gap, required consumers are held')
+            return {'job_id': job_id, 'status': 'NOT_PUBLISHED', 'error': f'{type(exc).__name__}: {exc}'[:500]}
+    return automatic_evidence
+
+
+def published_gate(job_id):
+    @op(name='job_' + job_id.replace('-', '_') + '_published', ins={'result': In(dict)}, tags=COORDINATION)
+    def published(context, result):
+        if result.get('status') == 'NOT_PUBLISHED':
+            raise Failure(f'{job_id} did not publish: ' + result['error'])
+        return result
+    return published
+
+
 secrets_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-secrets-inventory', OFFLINE_DOCKER_POOL)
-iac_config_scan_lifecycle_work = automatic_evidence_lifecycle_op('02-iac-config-scan', OFFLINE_DOCKER_POOL)
+# P43: 02-sbom-inventory takes 02-iac-config-scan's base-image inventory over an optional edge.
+iac_config_scan_lifecycle_work = tolerant_automatic_evidence_op('02-iac-config-scan', OFFLINE_DOCKER_POOL)
 container_image_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-container-image-inventory', OFFLINE_DOCKER_POOL)
 mobile_sast_lifecycle_work = automatic_evidence_lifecycle_op('02-mobile-sast', OFFLINE_DOCKER_POOL)
 sbom_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-sbom-inventory', OFFLINE_DOCKER_POOL)
@@ -1849,7 +1874,7 @@ ITEM_JOBS=job_executor.register_item_ops(LIFECYCLE,LIFECYCLE_OPS,CPU_POOL)
 
 # P42: a tolerant op returns NOT_PUBLISHED instead of raising; its optional consumers take that observation,
 # its required consumers take the gate's output, so only they are held by a crashed or BLOCKED producer.
-TOLERANT_OPS={'02-native-build':native_build_published}
+TOLERANT_OPS={'02-native-build':native_build_published,'02-iac-config-scan':published_gate('02-iac-config-scan')}
 
 
 def wire_lifecycle(configured, outputs, ops, discovered=None):
@@ -1857,6 +1882,9 @@ def wire_lifecycle(configured, outputs, ops, discovered=None):
     observed={}
     pending=dict(ops)
     while pending:
+        if not any(all(d['job'] in outputs for d in LIFECYCLE[name]['dependencies'] if d.get('enabled',True))
+                   for name in pending):
+            raise ValueError('wire_lifecycle: no op has its dependencies wired: '+', '.join(sorted(pending)))
         for name in list(pending):
             deps=[d for d in LIFECYCLE[name]['dependencies'] if d.get('enabled',True)]
             if all(d['job'] in outputs for d in deps):

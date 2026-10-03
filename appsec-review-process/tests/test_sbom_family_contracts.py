@@ -261,7 +261,7 @@ def component(number, ecosystem, name, version, purl, cpe, path, declaration="de
             "version": version, "purl": purl, "cpe": cpe, "ecosystem": ecosystem,
             "source": {"evidence_kind": kind, "path": path, "sha256": sha(SOURCE_FILES[path])},
             "tool_id": TOOLS[SBOM], "citation": citation("02-sbom-inventory", TOOLS[SBOM]),
-            "scope": None, "build_evidence": None}
+            "scope": None, "build_evidence": None, "image_evidence": None}
 
 
 def sbom_components(variant: str) -> list:
@@ -312,7 +312,7 @@ def sbom_spec(variant: str) -> Spec:
                 "enrichment_document": {"path": contracts.SBOM_ENRICHMENT_FILE,
                                         "sha256": sha(enrichment_bytes),
                                         "producer_id": "build-index-vendored-member"},
-                "build_dependency_document": None, "components": components}
+                "build_dependency_document": None, "base_image_document": None, "components": components}
     documents = {contracts.SBOM_CDX_FILE: cdx, contracts.SBOM_MANIFEST_FILE: manifest,
                  contracts.SBOM_ENRICHMENT_FILE: enrichment,
                  **build_aggregate(header, TOOLS[SBOM], EXECUTORS[SBOM], len(components), [], 6, [])}

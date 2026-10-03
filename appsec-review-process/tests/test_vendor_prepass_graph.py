@@ -242,11 +242,13 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 for edge in declared:
                     # 02-native-build feeds the SBOM's build-dependency inference (punch list P37) as an
                     # optional, ordering-tolerant edge (P42): a crashed build never holds the SBOM.
-                    optional = (job, edge["job"]) == ("02-sbom-inventory", "02-native-build")
+                    # Likewise 02-iac-config-scan's base-image inventory (P43), skipped with no matching inputs.
+                    optional = {("02-sbom-inventory", "02-native-build"):
+                                    ["not-applicable-non-native", "not-applicable-no-native-binaries"],
+                                ("02-sbom-inventory", "02-iac-config-scan"): [self.reason]}.get((job, edge["job"]))
                     self.assertEqual(edge["kind"], "optional" if optional else "required")
                     self.assertEqual(edge["contract"], s.jobs[edge["job"]]["contract"])
-                    self.assertEqual(edge["allowed_skip_reasons"],
-                                     ["not-applicable-non-native", "not-applicable-no-native-binaries"] if optional else [])
+                    self.assertEqual(edge["allowed_skip_reasons"], optional or [])
                 legacy = {step for tool in s.adopted[job]["tool_instances"] for step in tool.get("legacy_steps", [])}
                 mapped = [step for step in steps if step.get("proposed_job_id") == job]
                 self.assertEqual({step["legacy_step"] for step in mapped}, legacy)
@@ -281,9 +283,12 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 if self.reason in edge["allowed_skip_reasons"]}
         # 02-binary-component-cve-match (cve-bin-tool, docs/proposals/vendor-prepass/blint-cve-bin-tool.md)
         # skips like 02-binary-hardening but is not one of the ADR-0010 nine nodes. The four static
-        # intelligence ingests skip when the inventory holds no applicable input (punch list P16).
+        # intelligence ingests skip when the inventory holds no applicable input (punch list P16). The SBOM
+        # reads 02-iac-config-scan's base-image inventory over an optional edge (punch list P43); a skipped scan
+        # binds nothing.
         self.assertEqual(uses, {(ASSEMBLY, job) for job in skippable} |
                          {("15-deployment-hardening", "02-iac-config-scan"),
+                          ("02-sbom-inventory", "02-iac-config-scan"),
                           (ASSEMBLY, "02-binary-component-cve-match")} |
                          {(ASSEMBLY, job) for job in ("02-api-collection-intelligence-ingest",
                                                       "02-operations-doc-ingest", "02-test-intelligence-ingest",
@@ -333,6 +338,9 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 with self.assertRaisesRegex(Blocked, "dependency not accepted"):
                     job_graph.dependency_ok(edge, {"status": "FAILED"})
                 for inner in s.jobs[job]["dependencies"]:
+                    if (job, inner["job"]) == ("02-sbom-inventory", "02-iac-config-scan"):  # P43: optional, may skip
+                        self.assertIsNone(job_graph.dependency_ok(inner, {"status": "SKIPPED", "reason": self.reason}))
+                        continue
                     with self.assertRaisesRegex(Blocked, "incompatible skip"):
                         job_graph.dependency_ok(inner, {"status": "SKIPPED", "reason": self.reason})
 

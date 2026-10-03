@@ -549,6 +549,10 @@ def _dependency(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, di
     if kind == "sbom" and isinstance(payload, dict) and "native_build" not in payload:
         # P42: the optional native-build edge, bound at assembly; None (no accepted build) is the SBOM's gap.
         payload["native_build"] = automatic_inputs._native_build_binding(plan["run_id"], run_root / "data/jobs")
+    if kind == "sbom" and isinstance(payload, dict) and "base_image_inventory" not in payload:
+        # P43: likewise the optional base-image inventory of the accepted 02-iac-config-scan of this generation.
+        payload["base_image_inventory"] = automatic_inputs._base_image_binding(
+            plan["run_id"], plan["source_generation"], run_root / "data/jobs")
     if not isinstance(payload, dict) or set(payload) - _OPTIONAL_PAYLOAD_KEYS.get(kind, set()) != _PAYLOAD_KEYS[kind]:
         raise Blocked("full review input assembly: dependency payload shape is not closed")
     if not isinstance(tool, dict) or set(tool) != _TOOL_KEYS[kind]:

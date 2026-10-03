@@ -23,10 +23,11 @@ from typing import Any, Callable
 from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 import evidence_redaction
+import iac_files
 import container_execution as ce
 import dependency_b13_adapters as dependency_adapters
 from sbom_family_contracts import (
-    build_dependency_enrichment_errors, build_index_enrichment_errors, canonical_advisory_id, cjson_identifiers, databases_digest, declaration_kind, lifecycle_row_for,
+    base_image_enrichment_errors, build_dependency_enrichment_errors, build_index_enrichment_errors, canonical_advisory_id, cjson_identifiers, databases_digest, declaration_kind, lifecycle_row_for,
     required_gap_reason, spdx_expression_shape_ok, version_scheme_for,
 )
 import registry_paths
@@ -667,6 +668,95 @@ def _build_dependency_rows(request: dict[str, Any], attempt_id: str, existing: l
     return rows, document_bytes, gaps
 
 
+_BASE_IMAGE_DOCUMENT = "outputs/base-image-components.json"
+_BASE_IMAGE_TOOL_ID = "base-image-package-inventory"
+_BASE_IMAGE_INVENTORY = "outputs/base-image-inventory.json"
+
+
+def _image_reference(image: dict[str, Any]) -> str:
+    return ((image["repository"] or image["reference_form"]) + (f":{image['tag']}" if image["tag"] else "") +
+            (f"@{image['digest']}" if image["digest"] else ""))
+
+
+def _base_image_rows(request: dict[str, Any], attempt_id: str,
+                     existing: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bytes | None, list[str]]:
+    """P43: installed OS packages of the resolved Dockerfile base images in the accepted 02-iac-config-scan's
+    base-image-inventory.json (P41), as ``image-observed`` components scoped ``container-base``.
+
+    Each keeps the inventory's pkg:deb/pkg:apk purl (arch and distro qualifiers) and cites every image record that
+    lists it: declared repository/tag/digest, resolved manifest, Dockerfile line, layer and the distribution's EOL
+    status. A purl Syft or the P37 inference already lists (compared without qualifiers) is not repeated; the
+    document records it as deduplicated. Unresolved or not-inventoried images are gaps; a missing inventory is a gap
+    only when the snapshot holds a Dockerfile; a skipped scan binds nothing. No key: the request predates the edge.
+    """
+    job = JOBS["sbom"][0]
+    if "base_image_inventory" not in request:
+        return [], None, []
+    block, binding, status, skip = request["base_image_inventory"], None, "accepted", None
+    images: list[dict[str, Any]] = []; gaps: list[str] = []
+    if block is None:
+        status = "absent"
+        dockerfiles = sorted(path for path in _source_files(request, job) if iac_files.containerfile(path))
+        if dockerfiles:
+            gaps.append(f"base-image-inventory-not-published: no accepted 02-iac-config-scan; the base images of "
+                        f"{len(dockerfiles)} Dockerfile(s) are not inventoried: " + ", ".join(dockerfiles[:5]) +
+                        (" ..." if len(dockerfiles) > 5 else ""))
+    elif isinstance(block, dict) and set(block) == {"skipped"} and isinstance(block["skipped"], str):
+        status, skip = "skipped", block["skipped"]
+    else:
+        inventory, binding, _path = _upstream(request, "base_image_inventory", "02-iac-config-scan", _BASE_IMAGE_INVENTORY)
+        if (validate_document(inventory, "iac-config-base-image-inventory.schema.json") or
+                inventory["run_id"] != request["run_id"] or
+                inventory["source_snapshot_sha256"] != request["source_snapshot_sha256"]):
+            raise WorkerBlocked(f"{job}: accepted base-image inventory has an unsupported shape or mixed source lineage")
+        images = inventory["base_images"]
+    packages: dict[str, dict[str, Any]] = {}
+    for image in images:
+        resolution, inventoried = image["resolution"], image["package_inventory"]
+        if resolution["status"] == "unresolved" or inventoried["status"] == "not-inventoried":
+            gaps.append(f"base-image-unresolved:{image['reference_id']}:{_image_reference(image)}: "
+                        f"{resolution['reason'] or inventoried['reason'] or 'not-inventoried'}; its OS packages are not "
+                        "inventoried")
+            continue
+        system = image["operating_system"] or {"id": None, "version_id": None, "eol_status": "not-listed", "eol": None}
+        for component in image["components"]:
+            entry = {"reference_id": image["reference_id"], "repository": image["repository"], "tag": image["tag"],
+                     "digest": image["digest"], "manifest_digest": resolution["resolved"]["manifest"]["digest"],
+                     "platform": resolution["resolved"]["platform"], "mutable": bool(image["mutable"]),
+                     "dockerfile": {"path": image["location"]["path"], "start_line": image["location"]["start_line"]},
+                     "layer_digest": component["layer"]["digest"],
+                     "operating_system": {"id": system["id"] or component["purl"][4:].split("/")[1],
+                                          "version_id": system["version_id"]},
+                     "eol_status": system["eol_status"], "support_end": (system["eol"] or {}).get("support_end")}
+            packages.setdefault(component["purl"], {"component": component, "images": []})["images"].append(entry)
+    seen = {str(row.get("purl")).split("?", 1)[0] for row in existing if row.get("purl")}
+    rows: list[dict[str, Any]] = []; deduplicated: list[str] = []
+    for purl, package in sorted(packages.items()):
+        if purl.split("?", 1)[0] in seen:
+            deduplicated.append(purl); continue
+        component = package["component"]
+        rows.append({"name": component["name"], "version": component["version"], "purl": purl, "cpe": None,
+                     "ecosystem": purl[4:].split("/", 1)[0], "declaration": "image-observed",
+                     "source": {"path": _BASE_IMAGE_INVENTORY, "sha256": binding["sha256"]}, "scope": "container-base",
+                     "image_evidence": {"images": sorted(package["images"], key=lambda item: item["reference_id"])}})
+    document = {"schema": "appsec-review/base-image-sbom-enrichment/1.0", "run_id": request["run_id"], "job_id": job,
+        "attempt_id": attempt_id, "producer_id": _BASE_IMAGE_TOOL_ID,
+        "inventory": {"status": status, "binding": binding, "skip_reason": skip},
+        "images": [{"reference_id": image["reference_id"], "resolution": image["resolution"]["status"],
+                    "package_inventory": image["package_inventory"]["status"], "components": len(image["components"])}
+                   for image in images],
+        "members": [{key: row[key] for key in ("name", "version", "purl", "cpe", "ecosystem", "declaration", "source",
+                                               "scope", "image_evidence")} for row in rows],
+        "deduplicated": deduplicated, "coverage_gaps": gaps}
+    document_bytes = _canonical(document)
+    citation = {"source_class": "raw", "producer": job, "attempt_id": attempt_id,
+                "path": _BASE_IMAGE_DOCUMENT, "sha256": _hash_bytes(document_bytes).split(":", 1)[1]}
+    for row in rows:
+        row["tool_id"] = _BASE_IMAGE_TOOL_ID
+        row["citation"] = citation
+    return rows, document_bytes, gaps
+
+
 # Dependency manifests by file name (or suffix) -> ecosystem. Syft's directory scan reads lockfiles and
 # build outputs, not bare manifests, so a manifest without a lockfile yields no component.
 _MANIFEST_NAMES = {"package.json": "npm", "Cargo.toml": "cargo", "go.mod": "golang", "pom.xml": "maven",
@@ -710,7 +800,8 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     target = Path(request["b13_attempt"]["request"]["target_mounts"][0]["host_path"])
     enriched_rows, enrichment_bytes, enrichment_gaps = _build_index_rows(request, attempt_id, syft_rows, target)
     built_rows, built_bytes, built_gaps = _build_dependency_rows(request, attempt_id, syft_rows + enriched_rows, target)
-    rows = syft_rows + enriched_rows + built_rows
+    image_rows, image_bytes, image_gaps = _base_image_rows(request, attempt_id, syft_rows + enriched_rows + built_rows)
+    rows = syft_rows + enriched_rows + built_rows + image_rows
     components = []
     for raw in rows:
         if not isinstance(raw, dict) or not isinstance(raw.get("source"), dict):
@@ -720,21 +811,25 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
             raise WorkerBlocked(f"{job}: component source evidence is incomplete")
         declaration = raw.get("declaration")
         observed = declaration == "build-observed" and raw.get("tool_id") == _BUILD_DEPENDENCY_TOOL_ID
-        evidence_kind = "build-dependency-evidence" if observed else declaration_kind(str(raw.get("ecosystem")), str(source["path"]))
+        imaged = declaration == "image-observed" and raw.get("tool_id") == _BASE_IMAGE_TOOL_ID
+        evidence_kind = ("build-dependency-evidence" if observed else "base-image-inventory-evidence" if imaged else
+                         declaration_kind(str(raw.get("ecosystem")), str(source["path"])))
         if declaration == "declared" and evidence_kind == "vendored-file-evidence":
             raise WorkerBlocked(f"{job}: vendored evidence cannot be promoted to a declared component")
-        if declaration not in {"declared", "inferred-vendored"} and not observed:
+        if declaration not in {"declared", "inferred-vendored"} and not observed and not imaged:
             raise WorkerBlocked(f"{job}: component declaration is invalid")
         identity = {key: raw.get(key) for key in ("name", "version", "purl", "cpe", "ecosystem")}
         assertion = ("inventory-coverage-gap" if declaration == "inferred-vendored" else
                      "build-observed-component-present" if observed else
+                     "base-image-component-present" if imaged else
                      "component-version-unknown" if raw.get("version") is None else "declared-component-present")
         component = {"component_id": _component_id({**identity, "source": source}), "assertion": assertion,
                      "declaration": declaration, **identity,
                      "source": {"evidence_kind": evidence_kind, **source},
                      "tool_id": raw.get("tool_id", receipt["tool_id"]),
                      "citation": raw.get("citation", _citation(receipt, output)),
-                     "scope": raw.get("scope"), "build_evidence": raw.get("build_evidence")}
+                     "scope": raw.get("scope"), "build_evidence": raw.get("build_evidence"),
+                     "image_evidence": raw.get("image_evidence")}
         components.append(component)
     components.sort(key=lambda row: row["component_id"])
     if len({row["component_id"] for row in components}) != len(components):
@@ -756,17 +851,22 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
               "build_dependency_document": None if built_bytes is None else {
                   "path": _BUILD_DEPENDENCY_DOCUMENT, "sha256": _hash_bytes(built_bytes),
                   "producer_id": _BUILD_DEPENDENCY_TOOL_ID},
+              "base_image_document": None if image_bytes is None else {
+                  "path": _BASE_IMAGE_DOCUMENT, "sha256": _hash_bytes(image_bytes), "producer_id": _BASE_IMAGE_TOOL_ID},
               "components": components}
     errors = validate_document(result, "sbom-inventory.schema.json")
     errors += build_index_enrichment_errors(result, enrichment_bytes)
     if built_bytes is not None:
         errors += build_dependency_enrichment_errors(result, built_bytes)
+    if image_bytes is not None:
+        errors += base_image_enrichment_errors(result, image_bytes)
     if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors; first: {'; '.join(str(e)[:200] for e in errors[:3])})")
-    gaps = enrichment_gaps + built_gaps + ([] if components or enrichment_gaps else ["no-dependency-components-detected"]) + \
+    gaps = enrichment_gaps + built_gaps + image_gaps + ([] if components or enrichment_gaps else ["no-dependency-components-detected"]) + \
         uninventoried_manifests(request.get("source_files"), components)
     return {"outputs/sbom.cdx.json": cdx_bytes, "outputs/sbom-manifest.json": _canonical(result),
             _BUILD_INDEX_ENRICHMENT: enrichment_bytes,
             **({_BUILD_DEPENDENCY_DOCUMENT: built_bytes} if built_bytes is not None else {}),
+            **({_BASE_IMAGE_DOCUMENT: image_bytes} if image_bytes is not None else {}),
             "outputs/pinned-tool-evidence.json": _canonical(receipt)}, gaps
 
 
@@ -775,11 +875,27 @@ def _cdx_build_fields(row: dict[str, Any]) -> dict[str, Any]:
     the build was observed to consume, so the exported SBOM carries what the manifest does."""
     if row.get("scope") is None:
         return {}
+    if row["scope"] == "container-base":
+        return _cdx_image_fields(row)
     evidence = row.get("build_evidence") or {"paths": []}
     return {"scope": "required" if row["scope"] == "load-time" else "excluded",
             "evidence": {"occurrences": [{"location": path} for path in evidence["paths"]]},
             "properties": [{"name": "appsec-review:dependency-scope", "value": row["scope"]},
                            {"name": "appsec-review:evidence-path-count", "value": str(evidence.get("path_count", 0))}]}
+
+
+def _cdx_image_fields(row: dict[str, Any]) -> dict[str, Any]:
+    """P43: a base-image package carries no CycloneDX scope (presence in the image is not use); properties name
+    the scope, each image reference with its resolved manifest, and the distribution's EOL status (end-of-life wins)."""
+    images = row["image_evidence"]["images"]
+    statuses = {image["eol_status"] for image in images}
+    eol = next(status for status in ("end-of-life", "not-listed", "supported") if status in statuses)
+    support = sorted({image["support_end"] for image in images if image["support_end"]})
+    return {"properties": [{"name": "appsec-review:dependency-scope", "value": "container-base"},
+                           *({"name": "appsec-review:base-image",
+                              "value": f"{_image_reference(image)} manifest {image['manifest_digest']}"} for image in images),
+                           {"name": "appsec-review:base-image-eol-status", "value": eol},
+                           *({"name": "appsec-review:base-image-support-end", "value": value} for value in support[:1])]}
 
 
 def _database_block(raw: dict[str, Any], evaluated: str, max_age: int) -> dict[str, Any]:
@@ -810,6 +926,9 @@ def _component_for(component_by_id: dict[str, dict[str, Any]], *, purl: Any = No
     # ecosystem tuple back to one and only one purl-bearing SBOM component.
     aliases = {"RubyGems": "gem", "Go": "golang", "PyPI": "pypi", "Maven": "maven",
                "npm": "npm", "NuGet": "nuget", "crates.io": "cargo", "Packagist": "composer"}
+    # P43: OS ecosystems carry the release (Debian:10, Alpine:v3.24); the purl's distro qualifier holds it.
+    if isinstance(ecosystem, str) and ecosystem.split(":", 1)[0] in _OSV_OS_ECOSYSTEMS:
+        ecosystem = _OSV_OS_ECOSYSTEMS[ecosystem.split(":", 1)[0]]
     normalized_ecosystem = aliases.get(ecosystem, str(ecosystem).lower() if isinstance(ecosystem, str) else None)
     if isinstance(name, str) and isinstance(version, str) and normalized_ecosystem:
         candidates = [(identifier, component) for identifier, component in component_by_id.items()
@@ -863,6 +982,9 @@ def _sca_rows(tool: dict[str, Any], component_by_id: dict[str, dict[str, Any]], 
 _OSV_ECOSYSTEM_FOR_PURL = {"npm": "npm", "pypi": "PyPI", "maven": "Maven", "cargo": "crates.io",
                            "golang": "Go", "nuget": "NuGet", "gem": "RubyGems", "composer": "Packagist",
                            "pub": "Pub", "hex": "Hex", "swift": "SwiftURL"}
+# P43: OS packages: the OSV ecosystem follows the purl namespace (pkg:deb/debian -> Debian, pkg:apk/alpine -> Alpine).
+_OSV_OS_ECOSYSTEMS = {"Debian": "deb", "Ubuntu": "deb", "Alpine": "apk"}
+_OSV_ECOSYSTEM_FOR_NAMESPACE = {("deb", "debian"): "Debian", ("deb", "ubuntu"): "Ubuntu", ("apk", "alpine"): "Alpine"}
 _OSV_MISSING_RE = re.compile(r"could not find local databases for ecosystems:\s*(.+)")
 
 
@@ -881,6 +1003,8 @@ def osv_ecosystem(purl: Any) -> str | None:
     kind, _, rest = purl[4:].partition("/")
     if kind == "github":
         return "github:" + rest.split("/", 1)[0].lower()
+    if kind.lower() in {"deb", "apk"}:
+        return _OSV_ECOSYSTEM_FOR_NAMESPACE.get((kind.lower(), rest.split("/", 1)[0].lower()))
     return _OSV_ECOSYSTEM_FOR_PURL.get(kind.lower())
 
 
@@ -889,7 +1013,10 @@ def osv_covers(purl: Any, missing: list[str]) -> bool:
     Run 20261001T032047Z-fd64eb listed pyyaml 5.3.1 and commons-collections 3.2.1 as evaluated by OSV
     while OSV had no PyPI or Maven database (snapshot osv-npm-20260926)."""
     ecosystem = osv_ecosystem(purl)
-    return ecosystem is not None and ecosystem.lower() not in {item.lower() for item in missing}
+    # A release-scoped database name (Debian:10) also leaves its base ecosystem's component uncovered.
+    absent = {item.lower() for item in missing} | {item.split(":", 1)[0].lower() for item in missing
+                                                   if item.split(":", 1)[0] in _OSV_OS_ECOSYSTEMS}
+    return ecosystem is not None and ecosystem.lower() not in absent
 
 
 def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
@@ -1052,8 +1179,9 @@ def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, b
                               detection.get("key"))
                 if not isinstance(expression, str) or not expression: continue
                 component_ref = None
-                owners = [row for row in sbom["components"]
-                          if path == row["source"]["path"] or path.startswith(str(PurePosixPath(row["source"]["path"]).parent) + "/")]
+                # Observed OS packages (P37/P43) cite a record outside the checkout; they own no checkout file.
+                owners = [row for row in sbom["components"] if row["declaration"] not in {"build-observed", "image-observed"} and (
+                          path == row["source"]["path"] or path.startswith(str(PurePosixPath(row["source"]["path"]).parent) + "/"))]
                 if len(owners) == 1: component_ref = owners[0]["component_id"]
                 raw_records.append({"assertion": "license-text-detected", "component_ref": component_ref,
                     "license_expression": expression, "expression_state": "spdx-expression",

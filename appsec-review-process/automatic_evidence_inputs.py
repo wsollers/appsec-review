@@ -45,6 +45,7 @@ ALL_JOBS = VENDOR_JOBS | DEPENDENCY_JOBS
 RESULTS = {
     "02-build-index": "build-index.json",
     "02-native-build": "native-build.json",
+    "02-iac-config-scan": "outputs/base-image-inventory.json",
     "02-sbom-inventory": "outputs/sbom-manifest.json",
     "02-sca-vulnerability-match": "outputs/sca-vulnerability-match.json",
     "02-license-scan": "outputs/license-inventory.json",
@@ -225,6 +226,7 @@ def _control(run_id: str) -> dict[str, Any]:
 def _accepted_binding(run_id: str, job_id: str, jobs: Path | None = None) -> tuple[dict[str, str], Path]:
     result_rel = RESULTS[job_id]
     base = (jobs / job_id) if jobs is not None else data_path(run_id, "jobs", job_id)
+    base = base / "whole" if job_id in VENDOR_JOBS else base  # vendor jobs publish in their whole scope
     pointer_path = base / "accepted.json"
     if not pointer_path.is_file() or pointer_path.is_symlink():
         raise Blocked(f"automatic evidence inputs: accepted {job_id} is required")
@@ -267,6 +269,25 @@ def _native_build_binding(run_id: str, jobs: Path | None = None) -> dict[str, st
     if pointer.get("status") not in {"OK", "OK_WITH_GAPS"}:
         return None
     return _accepted_binding(run_id, "02-native-build", jobs)[0]
+
+
+def _base_image_binding(run_id: str, generation: str, jobs: Path | None = None) -> dict[str, str] | None:
+    """P43: the SBOM's optional 02-iac-config-scan edge (base-image-inventory.json): the accepted binding,
+    ``{"skipped": reason}`` for a skipped scan (no gap), or None when no accepted scan of this source generation
+    exists (a failed scan does not hold the SBOM, which records the gap if the snapshot has a Dockerfile)."""
+    jobs = jobs if jobs is not None else data_path(run_id, "jobs")
+    pointer_path = jobs / "02-iac-config-scan" / "whole" / "accepted.json"
+    if not pointer_path.is_file() or pointer_path.is_symlink():
+        return None
+    pointer = read_json(pointer_path)
+    if pointer.get("status") == "SKIPPED":
+        envelope = pointer_path.parent / "attempts" / identifier(pointer.get("attempt_id")) / "result.json"
+        reason = pointer.get("reason") or (read_json(envelope).get("skip_reason") if envelope.is_file() else None)
+        return {"skipped": str(reason or "skipped")}
+    if pointer.get("status") not in {"OK", "OK_WITH_GAPS"}:
+        return None
+    binding = _accepted_binding(run_id, "02-iac-config-scan", jobs)[0]
+    return binding if read_json(Path(binding["path"])).get("source_snapshot_sha256") == generation else None
 
 
 def _reference_table(run_id: str, control: dict[str, Any]) -> tuple[Path, str]:
@@ -408,7 +429,8 @@ def prepare(run_id: str, job_id: str, dagster_run_id: str, *, generated_at: str 
         if job_id == "02-sbom-inventory":
             build_index, _ = _accepted_binding(run_id, "02-build-index")
             payload = {"source_files": source_files, "build_index": build_index,
-                       "native_build": _native_build_binding(run_id)}
+                       "native_build": _native_build_binding(run_id),
+                       "base_image_inventory": _base_image_binding(run_id, generation)}
             tool = {"target_path": str(source)}
         elif job_id == "02-sca-vulnerability-match":
             control = _control(run_id); sbom, sbom_root = _accepted_binding(run_id, "02-sbom-inventory")

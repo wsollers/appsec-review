@@ -5535,7 +5535,8 @@
         "dependencies": [
           "00-intake",
           "02-build-index",
-          "02-native-build"
+          "02-native-build",
+          "02-iac-config-scan"
         ]
       },
       "registry": {

@@ -44,6 +44,9 @@ PAYLOADS = {
     "crates.io": archive([advisory("RUSTSEC-2026-1", [], "tokio", "crates.io", [{"introduced": "0"}, {"last_affected": "1.0.0"}])]),
     "NuGet": archive([advisory("GHSA-nnnn-0004", [], "Newtonsoft.Json", "NuGet", [{"introduced": "0"}, {"fixed": "13.0.1"}])]),
     "Packagist": archive([advisory("GHSA-pppp-0005", [], "Vendor/Pkg", "Packagist", [{"introduced": "0"}, {"fixed": "3.0"}])]),
+    # P43: the registered OS ecosystems; records carry the release in the ecosystem name.
+    "Debian": archive([advisory("DLA-2026-1", [], "zlib", "Debian:10", [{"introduced": "0"}])]),
+    "Alpine": archive([advisory("ALPINE-CVE-2026-4444", [], "musl", "Alpine:v3.24", [{"introduced": "0"}])]),
 }
 
 
@@ -62,7 +65,7 @@ class IndexAndLookupTests(unittest.TestCase):
     def test_index_is_hash_listed_and_verified(self):
         manifest = json.loads((Path(self.resolution.index_path).parent / "manifest.json").read_text())
         self.assertEqual(manifest["index"]["status"], "OK")
-        self.assertEqual(manifest["index"]["counts"]["advisories"], 8)
+        self.assertEqual(manifest["index"]["counts"]["advisories"], 10)
         self.assertEqual(osv_feed.verify(self.root)["index"], "OK")
         Path(self.resolution.index_path).chmod(0o644)
         with open(self.resolution.index_path, "ab") as handle:

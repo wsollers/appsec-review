@@ -1745,7 +1745,8 @@
        "consumes": [
         "job:00-intake",
         "job:02-build-index",
-        "job:02-native-build"
+        "job:02-native-build",
+        "job:02-iac-config-scan"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -4724,7 +4725,8 @@
        "consumes": [
         "job:00-intake",
         "job:02-build-index",
-        "job:02-native-build"
+        "job:02-native-build",
+        "job:02-iac-config-scan"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -12541,6 +12543,11 @@
      "job": "02-native-build",
      "kind": "optional",
      "contract": "native-build"
+    },
+    {
+     "job": "02-iac-config-scan",
+     "kind": "optional",
+     "contract": "iac-config-evidence"
     }
    ],
    "declared_inputs": [
@@ -12563,6 +12570,10 @@
     {
      "need": "optional",
      "input": "accepted 02-native-build per-unit build-dependencies.json (P36)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-iac-config-scan base-image-inventory.json (P41/P43)"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-sbom-inventory.json",
@@ -12587,7 +12598,8 @@
    "consumes": [
     "job:00-intake",
     "job:02-build-index",
-    "job:02-native-build"
+    "job:02-native-build",
+    "job:02-iac-config-scan"
    ],
    "produces": [
     "job:02-sbom-inventory"
@@ -15345,7 +15357,8 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:15-deployment-hardening"
+    "job:15-deployment-hardening",
+    "job:02-sbom-inventory"
    ]
   },
   "job:02-container-image-inventory": {

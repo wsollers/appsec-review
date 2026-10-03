@@ -36,7 +36,9 @@ _PAYLOAD_KEYS = {
     "reachability": {"sca", "reachability_evidence", "reachability_evidence_sha256"},
 }
 # P37: the SBOM's optional 02-native-build edge; requests built before it (or by the full-review assembly) omit it.
-_OPTIONAL_PAYLOAD_KEYS = {"sbom": {"native_build"}}
+# P43: likewise the optional 02-iac-config-scan base-image inventory.
+_OPTIONAL_PAYLOAD_KEYS = {"sbom": {"native_build", "base_image_inventory"}}
+_OPTIONAL_BINDINGS = {"native_build", "base_image_inventory"}  # None (absent) or {"skipped": reason} bind no file
 _TOOL_KEYS = {
     "sbom": {"target_path"},
     "sca": {"sbom_root", "snapshot_registry", "max_database_age_seconds", "snapshot_identities"},
@@ -72,8 +74,8 @@ def _offline_registry(value: Any) -> Path:
 
 
 def _binding_paths(payload: dict[str, Any], owner: Path, kind: str) -> None:
-    for key in ("build_index", "native_build", "sbom", "license", "sca"):
-        if key not in payload or (key == "native_build" and (payload[key] is None or set(payload[key]) == {"skipped"})):
+    for key in ("build_index", "native_build", "base_image_inventory", "sbom", "license", "sca"):
+        if key not in payload or (key in _OPTIONAL_BINDINGS and (payload[key] is None or set(payload[key]) == {"skipped"})):
             continue
         binding = payload[key]
         if not isinstance(binding, dict):
