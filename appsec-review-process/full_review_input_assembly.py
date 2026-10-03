@@ -53,6 +53,17 @@ NATIVE_SUFFIXES = {".c": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp",
                    ".m": "objective-c", ".mm": "objective-cpp"}
 MOBILE_MARKERS = {"androidmanifest.xml", "build.gradle", "build.gradle.kts", "info.plist",
                   "podfile", "project.pbxproj"}
+# Deployment-config inputs 02-iac-config-scan's tools read (checkov/trivy-config/tfsec, kube-linter,
+# hadolint, zizmor): a Dockerfile- or workflow-only target is not "no IaC".
+IAC_SUFFIXES = {".tf", ".tfvars"}
+IAC_YAML_TOKENS = ("deploy", "k8s", "helm", "terraform")
+CONTAINERFILES = {"dockerfile", "containerfile"}
+# Dependency request 1.1: the SBOM worker enriches Syft rows from the accepted build index.
+BUILD_INDEX_SOURCE = {
+    "alias": "build-index", "job_id": "02-build-index", "contract": "build-index",
+    "artifact": "build-index.json", "artifact_schema": "build-index.schema.json",
+    "generation_pointer": "/source_fingerprint",
+}
 DEPENDENCY_SOURCES = {
     "02-sbom-inventory": ("sbom-inventory", "outputs/sbom-manifest.json", "sbom-inventory.schema.json"),
     "02-sca-vulnerability-match": ("sca-vulnerability-match", "outputs/sca-vulnerability-match.json",
@@ -162,21 +173,38 @@ def _referenced_aliases(value: Any) -> set[str]:
     return aliases | set().union(*(_referenced_aliases(item) for item in value.values()), set())
 
 
-def _component_source_current(document: dict[str, Any], run_root: Path) -> None:
-    """Bind the component map to the current target rather than conflating two generations.
-
-    Component characterization records the checkout fingerprint.  Adapter requests intentionally
-    record the artifact-manifest hash.  Both are required and they are not interchangeable.
-    """
+def _target_fingerprint(run_root: Path) -> str:
     manifest = read_json(run_root / "inputs/artifact-manifest.json")
     target = manifest.get("target") if isinstance(manifest, dict) else None
     value = target.get("repo_path") if isinstance(target, dict) else None
     path = Path(value) if isinstance(value, str) else Path()
     if not value or not path.is_absolute() or not path.is_dir() or path.is_symlink():
         raise Blocked("full review input assembly: manifest target is unavailable")
-    identity = intake.source_identity(str(path.resolve()))
-    if document.get("source_snapshot_sha256") != HASH + identity["fingerprint"]:
+    return intake.source_identity(str(path.resolve()))["fingerprint"]
+
+
+def _component_source_current(document: dict[str, Any], run_root: Path) -> None:
+    """Bind the component map to the current target rather than conflating two generations.
+
+    Component characterization records the checkout fingerprint.  Adapter requests intentionally
+    record the artifact-manifest hash.  Both are required and they are not interchangeable.
+    """
+    if document.get("source_snapshot_sha256") != HASH + _target_fingerprint(run_root):
         raise Blocked("full review input assembly: component map is stale for the staged target")
+
+
+def _build_index_current(document: dict[str, Any], run_root: Path) -> None:
+    """The build index records the accepted intake's bare checkout fingerprint."""
+    if document.get("source_fingerprint") != _target_fingerprint(run_root):
+        raise Blocked("full review input assembly: build index is stale for the staged target")
+
+
+def _iac_input(relative: str) -> bool:
+    path = PurePosixPath(relative.lower())
+    return (path.suffix in IAC_SUFFIXES or
+            (path.suffix in {".yaml", ".yml"} and any(token in path.as_posix() for token in IAC_YAML_TOKENS)) or
+            path.name in CONTAINERFILES or path.name.startswith("dockerfile.") or path.suffix == ".dockerfile" or
+            (path.parts[:2] == (".github", "workflows") and path.suffix in {".yaml", ".yml"}))
 
 
 def _load_dependency_source(pointer: Path, *, run_id: str, spec: dict[str, Any]
@@ -326,9 +354,7 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
     launches.append({"adapter": "vendor", "job_id": "02-secrets-inventory",
                      "source_root": {"$run_path": target_relative, "kind": "directory"}})
     names = {path.name.lower() for path in target.rglob("*") if path.is_file() and not path.is_symlink()}
-    iac_present = any(path.suffix.lower() in {".tf", ".tfvars"} or
-                      (path.suffix.lower() in {".yaml", ".yml"} and
-                       any(token in path.as_posix().lower() for token in ("deploy", "k8s", "helm", "terraform")))
+    iac_present = any(_iac_input(path.relative_to(target).as_posix())
                       for path in target.rglob("*") if path.is_file() and not path.is_symlink())
     if iac_present:
         launches.append({"adapter": "vendor", "job_id": "02-iac-config-scan",
@@ -349,9 +375,25 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
     else:
         skipped.append({"job_id": "02-container-image-inventory", "status": "SKIPPED_NA",
                         "reason": "no container image or OCI layout is staged"})
-    if "02-sbom-inventory" not in available:
+    build_index = run_root / "data/jobs" / BUILD_INDEX_SOURCE["job_id"] / "accepted.json"
+    if "02-sbom-inventory" not in available and (not build_index.is_file() or build_index.is_symlink()):
+        skipped.extend([
+            {"job_id": "02-sbom-inventory", "status": "SKIPPED_NA",
+             "reason": "requires the accepted 02-build-index that SBOM enrichment binds"},
+            {"job_id": "02-sca-vulnerability-match", "status": "SKIPPED_NA",
+             "reason": "requires the accepted SBOM produced by this first-wave dispatch"},
+            {"job_id": "02-license-scan", "status": "SKIPPED_NA",
+             "reason": "requires the accepted SBOM produced by this first-wave dispatch"},
+        ])
+    elif "02-sbom-inventory" not in available:
+        spec = {**BUILD_INDEX_SOURCE, "pointer_path": build_index.relative_to(run_root).as_posix()}
+        index_value, _ = load_accepted(build_index, run_id=run_id, job_id=spec["job_id"],
+            contract=spec["contract"], artifact=spec["artifact"], schema=spec["artifact_schema"])
+        _build_index_current(index_value, run_root)
+        source_specs.append(spec)
         launches.append({"adapter": "dependency", "job_id": "02-sbom-inventory",
-                         "payload": {"source_files": {"$source_files": target_relative}},
+                         "payload": {"source_files": {"$source_files": target_relative},
+                                     "build_index": {"$binding": BUILD_INDEX_SOURCE["alias"]}},
                          "tool": {"target_path": {"$run_path": target_relative, "kind": "directory"}}})
         skipped.extend([
             {"job_id": "02-sca-vulnerability-match", "status": "SKIPPED_NA",
@@ -441,6 +483,8 @@ def _load_sources(plan: dict[str, Any], run_root: Path) -> dict[str, dict[str, A
                 contract=source["contract"], artifact=source["artifact"], schema=source["artifact_schema"])
         if source["job_id"] == COMPONENT_SOURCE["job_id"]:
             _component_source_current(document, run_root)
+        elif source["job_id"] == BUILD_INDEX_SOURCE["job_id"]:
+            _build_index_current(document, run_root)
         elif _pointer(document, source["generation_pointer"], f"{alias} source generation") != plan["source_generation"]:
             raise Blocked("full review input assembly: accepted sources contain a stale or mixed generation")
         sources[alias] = {"document": document, "binding": binding, "pointer": pointer, "spec": source}

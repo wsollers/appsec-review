@@ -156,7 +156,6 @@ class StandardsLifecycleGapTests(unittest.TestCase):
                 prepared = lifecycle.prepare_worklist("run-a", "04-owasp-validation-worklist")
                 return prepared, execution_state.read_json(prepared["request_path"])
 
-    @unittest.expectedFailure
     def test_p26_assessment_gap_is_one_summary_not_per_row(self):
         """P26: per-control rows do not each carry "control-specific assessment has not been performed"."""
         lanes = ["04-asvs-masvs"]
@@ -171,7 +170,6 @@ class StandardsLifecycleGapTests(unittest.TestCase):
         repeated = sum(control["gaps"].count(ASSESSMENT_GAP) for control in controls)
         self.assertLessEqual(repeated, 1, f"{repeated} rows repeat the assessment gap")
 
-    @unittest.expectedFailure
     def test_p26_no_fallback_to_all_components_when_none_routed(self):
         """P26: with no component routed to the lane, the worklist does not fall back to every component."""
         component = {"source_snapshot_sha256": H, "functional_components": [
@@ -179,7 +177,6 @@ class StandardsLifecycleGapTests(unittest.TestCase):
         prepared, _request = self._worklist(component, [(self.standards.STANDARD["records"][0], self.standards.WRAPPER)])
         self.assertEqual(prepared["control_count"], 0, "unrouted components were assessed by fallback")
 
-    @unittest.expectedFailure
     def test_p28_hit_under_component_path_pattern_matches(self):
         """P28: an IaC hit whose location.path is under the component's path patterns yields one assessment."""
         component = {"source_snapshot_sha256": H, "functional_components": [{
@@ -214,7 +211,6 @@ class FullReviewIacPresenceTests(unittest.TestCase):
     _accepted_fuzz = _cls._accepted_fuzz
     _accepted_component = _cls._accepted_component
 
-    @unittest.expectedFailure
     def test_p27_dockerfile_launches_iac_config_scan(self):
         """P27: a Dockerfile-only target launches 02-iac-config-scan instead of SKIPPED_NA."""
         (self.target / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
