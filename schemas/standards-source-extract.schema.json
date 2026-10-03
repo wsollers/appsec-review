@@ -44,6 +44,15 @@
       }
     },
     "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+    "not_applicable_families": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "reason"],
+        "properties": {"family": {"type": "string", "minLength": 1}, "reason": {"type": "string", "minLength": 1}}
+      }
+    },
     "claim_boundary": {"const": "REFERENCE_MATERIAL_ONLY_NOT_PROOF_OR_COMPLIANCE"}
   }
 }

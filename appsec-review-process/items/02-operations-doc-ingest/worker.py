@@ -35,8 +35,9 @@ def main(argv=None) -> int:
                                           'permissions': core._permissions(job)})
     atomic_json(out / 'lineage.json', {'schema': core.LINEAGE_SCHEMA, 'run_id': args.run_id, 'job_id': job,
                                        'source_snapshot_sha256': source_hash, 'build_lineage_sha256': None})
+    skip = {'skip_reason': core.SKIP_REASON} if result['status'] == 'SKIPPED' else {}
     atomic_json(out / 'worker-result.json', {
-        'execution_status': result['status'], 'gaps': result['coverage_gaps'],
+        'execution_status': result['status'], 'gaps': result['coverage_gaps'], **skip,
         'summary': f"Published {len(result['records'])} redacted static intelligence record(s).",
         'artifacts': [result_name, 'permission.json', 'lineage.json'],
         'status': {'process': job, 'sources': len(result['sources']), 'records': len(result['records']),

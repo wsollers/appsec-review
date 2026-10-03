@@ -38,6 +38,22 @@ TEST_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".py", ".js", ".ts",
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
 MAX_PARSE_NODES = 10000
 MAX_PARSE_DEPTH = 40
+# P16: absence of a specialized input is N/A, never a coverage gap; only a fully examined inventory
+# (every entry a regular file) may claim it.
+APPLICABLE = "APPLICABLE"
+SKIPPED_NA = "SKIPPED_NA_NO_APPLICABLE_INPUTS"
+SKIP_REASON = "not-applicable-no-matching-inputs"
+CONSUMER = "02-evidence-assembly"  # the edge that authorizes SKIP_REASON
+OPS_TOKENS = ("runbook", "operations", "operational", "incident", "support", "deploy", "oncall", "playbook",
+              "build", "install")
+# P17: shell `test_x()`/`function test_x`/`run_test x`, C `void test_x(`, Unity/CUnit `RUN_TEST(x)`.
+TEST_PATTERNS = (r"\bdef\s+(test_[A-Za-z0-9_]+)", r"\b(?:TEST|TEST_F)\s*\(\s*([^,)]+)\s*,\s*([^,)]+)",
+                 r"\b(?:it|test|describe)\s*\(\s*['\"]([^'\"]+)",
+                 r"^\s*(?:function\s+)?(test_[A-Za-z0-9_]+)\s*\(\s*\)\s*\{?\s*$",
+                 r"^\s*function\s+(test_[A-Za-z0-9_]+)\b", r"^\s*run_test\s+['\"]?([A-Za-z0-9_.-]+)",
+                 r"^\s*(?:static\s+)?(?:inline\s+)?(?:void|int|bool)\s+(test_[A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:\{|$)",
+                 r"\b(?:RUN_TEST|CU_ADD_TEST)\s*\(\s*(?:[^,()]+,\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\)",
+                 r"\bCU_add_test\s*\([^,]+,\s*\"([^\"]+)\"")
 
 
 def root(run_id: str, job: str) -> Path:
@@ -110,8 +126,7 @@ def _candidate(job: str, path: str) -> bool:
     if job == "02-test-intelligence-ingest":
         return suffix in TEST_SUFFIXES and (any(part in {"test", "tests", "spec", "specs"} for part in p.parts[:-1])
             or name.startswith(("test_", "spec_")) or ".test." in name or ".spec." in name)
-    return suffix in TEXT_SUFFIXES and any(token in low for token in
-        ("runbook", "operations", "operational", "incident", "support", "deploy", "oncall", "playbook"))
+    return suffix in TEXT_SUFFIXES and any(token in low for token in OPS_TOKENS)
 
 
 def _redacted(path: str, data: bytes) -> tuple[str | None, str, int]:
@@ -188,7 +203,7 @@ def _bruno_summaries(text: str) -> list[dict[str, str]]:
     return records
 
 
-def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
+def _summaries(job: str, path: str, text: str, executable: bool = False) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     if job in {"02-doc-intelligence-ingest", "02-operations-doc-ingest"}:
         for number, line in enumerate(text.splitlines(), 1):
@@ -197,14 +212,15 @@ def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
                     ("must", "should", "actor", "service", "incident", "deploy", "data", "auth"))):
                 records.append({"kind": "document-statement", "locator": f"line:{number}", "text": value[:500]})
     elif job == "02-test-intelligence-ingest":
-        patterns = (r"\bdef\s+(test_[A-Za-z0-9_]+)", r"\b(?:TEST|TEST_F)\s*\(\s*([^,)]+)\s*,\s*([^,)]+)",
-                    r"\b(?:it|test|describe)\s*\(\s*['\"]([^'\"]+)")
+        if executable or PurePosixPath(path).suffix.lower() in {".sh", ".bash"} or text.startswith("#!"):
+            records.append({"kind": "test-entrypoint", "locator": "file", "text": f"runnable test script {path}"[:500]})
         for number, line in enumerate(text.splitlines(), 1):
-            for pattern in patterns:
+            for pattern in TEST_PATTERNS:
                 match = re.search(pattern, line)
                 if match:
                     records.append({"kind": "documented-test", "locator": f"line:{number}",
                                     "text": "/".join(part.strip() for part in match.groups() if part)[:500]})
+                    break
     else:
         if PurePosixPath(path).suffix.lower() == ".bru":
             return _bruno_summaries(text)
@@ -240,6 +256,8 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
             source: dict[str, Any], source_files: dict[str, Any]) -> dict[str, Any]:
     candidates = [path for path, meta in source_files.items() if meta.get("kind") == "file" and _candidate(job, path)]
     readmes = [path for path in source_files if PurePosixPath(path).name.lower().startswith("readme")]
+    examined = sum(1 for meta in source_files.values() if meta.get("kind") == "file")
+    unexamined = sorted(path for path, meta in source_files.items() if meta.get("kind") != "file")
     gaps: list[str] = []
     size_log.observe(run_id, job, "applicable_inputs", len(candidates), tunables.value(job, "files_logged"))
     sources, records, identities = [], [], set()
@@ -256,7 +274,7 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
                         "status": disposition.upper(), "redactions": count})
         if text is None:
             gaps.append(f"withheld-input:{relative}:{disposition}"); continue
-        extracted = _summaries(job, relative, text)
+        extracted = _summaries(job, relative, text, bool(meta.get("executable")))
         if job == "02-api-collection-intelligence-ingest" and not extracted:
             gaps.append(f"malformed-or-empty-api-collection:{relative}")
         for item in extracted:
@@ -271,13 +289,18 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
     size_log.observe(run_id, job, "extracted_records", len(records), tunables.value(job, "records_logged"))
     records.sort(key=lambda x: (x["path"], x["locator"], x["record_id"]))
     sources.sort(key=lambda x: x["path"])
-    if not candidates:
-        gaps.append("readme-only-no-specialized-inputs" if readmes else "no-applicable-inputs")
-    elif not records:
+    skipped = not candidates and not unexamined
+    if not candidates and unexamined:
+        # Links and unreadable entries were not followed, so absence is not established.
+        gaps.append(("readme-only-no-specialized-inputs" if readmes else "no-applicable-inputs")
+                    + f":{len(unexamined)}-non-file-entries-unexamined")
+    elif candidates and not records:
         gaps.append("zero-indexable-records")
     contract, _name, _schema = SPECS[job]
     return {"schema": f"appsec-review/{contract}/1", "run_id": run_id, "job_id": job,
-        "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if gaps else "OK",
+        "attempt_id": attempt_id, "status": "SKIPPED" if skipped else "OK_WITH_GAPS" if gaps else "OK",
+        "applicability": SKIPPED_NA if skipped else APPLICABLE,
+        "inventory": {"files_examined": examined, "non_file_entries": len(unexamined), "candidates": len(candidates)},
         "source": source, "sources": sources, "records": records,
         "coverage_gaps": sorted(set(gaps)), "static_only": True}
 
@@ -326,7 +349,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Published {len(result['records'])} redacted static intelligence record(s).",
             status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"],
-            gaps=result["coverage_gaps"] or None,
+            gaps=result["coverage_gaps"] or None, skip_reason=SKIP_REASON if result["status"] == "SKIPPED" else None,
+            consumer_job_id=CONSUMER,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
         worker_kind="deterministic_python", output_contract=contract,
@@ -334,6 +358,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
         derive_inputs=lambda: current_inputs(run_id, job), fingerprint_inputs=lambda value: _hash(value),
         execute_attempt=execute, preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(job)}, force=force,
+        consumer_job_id=CONSUMER,
         post_validate=lambda attempt, _envelope, inputs: _validate_attempt(run_id, job, attempt, inputs),
         blocked_summary=f"{job} source validation blocked.", failed_summary=f"{job} did not publish.")
 
@@ -341,7 +366,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
 def validate(run_id: str, job: str, pointer=None) -> Path:
     inputs = current_inputs(run_id, job); base = root(run_id, job)
     pointer = pointer or read_json(base / "accepted.json")
-    attempt, _ = validate_published(base, pointer, _hash(inputs), expected_run_id=run_id, expected_job_id=job)
+    attempt, _ = validate_published(base, pointer, _hash(inputs), expected_run_id=run_id, expected_job_id=job,
+                                    consumer_job_id=CONSUMER)
     _validate_attempt(run_id, job, attempt, inputs)
     return attempt
 

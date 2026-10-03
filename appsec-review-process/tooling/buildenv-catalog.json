@@ -18,7 +18,30 @@
         "CMakeLists.txt",
         "*.vcxproj",
         "Makefile",
-        "*.sln"
+        "*.sln",
+        "configure.ac",
+        "Makefile.am",
+        "configure"
+      ],
+      "tools": [
+        "clang",
+        "clang++",
+        "clang-tidy",
+        "gcc",
+        "g++",
+        "cmake",
+        "ninja",
+        "make",
+        "autoconf",
+        "automake",
+        "libtool",
+        "libtoolize",
+        "pkg-config",
+        "bear",
+        "gdb",
+        "lldb",
+        "clangd",
+        "tree-sitter"
       ],
       "lsp": [
         "clangd"
@@ -38,7 +61,27 @@
         "CMakeLists.txt",
         "*.vcxproj",
         "Makefile",
-        "*.sln"
+        "*.sln",
+        "configure.ac",
+        "Makefile.am",
+        "configure"
+      ],
+      "tools": [
+        "clang",
+        "clang++",
+        "gcc",
+        "g++",
+        "cmake",
+        "ninja",
+        "make",
+        "autoconf",
+        "automake",
+        "libtool",
+        "libtoolize",
+        "pkg-config",
+        "bear",
+        "clangd",
+        "tree-sitter"
       ],
       "notes": "Ubuntu 26.04 LTS userland (Qt 6.10, KDE Frameworks 6 6.24, newer libraries) with the same clang 21.1.0. Choose it when a C/C++ project needs dependencies newer than Ubuntu 24.04 packages (e.g. Qt >= 6.5, KF6). Build resolution also falls back to it automatically on a version conflict."
     },

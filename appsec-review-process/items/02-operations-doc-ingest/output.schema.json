@@ -6,7 +6,8 @@
   "additionalProperties": false,
   "required": ["execution_status", "gaps", "summary", "status", "artifacts"],
   "properties": {
-    "execution_status": {"enum": ["OK", "OK_WITH_GAPS"]},
+    "execution_status": {"enum": ["OK", "OK_WITH_GAPS", "SKIPPED"]},
+    "skip_reason": {"const": "not-applicable-no-matching-inputs"},
     "gaps": {"type": "array", "items": {"type": "string"}},
     "summary": {"type": "string"},
     "artifacts": {"type": "array", "items": {"enum": ["operations-doc-intelligence.json", "permission.json", "lineage.json"]}},

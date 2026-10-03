@@ -199,7 +199,8 @@
           "kind": "required",
           "contract": "api-collection-intelligence",
           "allowed_skip_reasons": [
-            "not-applicable-after-partition-review"
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
           ]
         },
         {
@@ -217,7 +218,8 @@
           "kind": "required",
           "contract": "doc-intelligence",
           "allowed_skip_reasons": [
-            "not-applicable-after-partition-review"
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
           ]
         },
         {
@@ -233,7 +235,8 @@
           "kind": "required",
           "contract": "test-intelligence",
           "allowed_skip_reasons": [
-            "not-applicable-after-partition-review"
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
           ]
         },
         {
@@ -296,6 +299,7 @@
           "contract": "operations-doc-intelligence",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs",
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
