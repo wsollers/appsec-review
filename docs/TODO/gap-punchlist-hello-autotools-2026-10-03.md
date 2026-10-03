@@ -82,6 +82,7 @@ output the prompt asks for. They are **absence**/**limit** notes; see P34.
 | P32 | 03 and 03-reconciliation repeat the same unknowns (CODEOWNERS, seeded fixture, BUILDING.md option 2, VENDORED.md origin) | defect | `threat_model_core.py` counts every assumption as a gap next to `classification_gaps`; `threat_model_reconciliation.py` repeats unresolved assumptions as gaps. | Assumptions stay assumptions; reconciliation gaps only for assumptions that changed against the baseline. |
 | P33 | dynamic-rescope `initial-intake-change-rescopes-current-graph` | defect | `control_feature_lifecycle.py` always passes `changed_nodes=["00-intake"]`, `max_iterations=1`, and returns `OK_WITH_GAPS` with this gap. | First run with no prior accepted generation: `OK`, no gap, state `INITIAL_BASELINE`. |
 | P34 | dev-project-discovery notes listed under C | absence/limit | Persona schema has only `coverage_gaps`. | `informational_notes` in the persona output schema and prompt (same shape as P30). |
+| P35 | root cause of P12: clang-tidy (and likely traced CodeQL) compile errors | defect | Found while fixing P12. The native build runs configure/make in a private `/scratch/src` copy where `config.h` is generated; `build_replay.py` keeps only `compile_commands.json` and binaries; native-sast mounts the pristine checkout, so `-DHAVE_CONFIG_H -I.` finds no `config.h`. | `build_replay.py` publishes configure-generated headers as hash-bound artifacts; native-sast (and the traced CodeQL replay if affected) mounts them read-only and adds them as an include path. |
 
 ## Environment items (no code test)
 
@@ -129,6 +130,7 @@ test passes.
 | 3 | sast | P13, P14 | `data/source-sast/`, `source_sast*.py`, new `images/tool-shellcheck/` |
 | 3 | misc | P15, P29, P33 | `treesitter_ast.py`, `bounded_analysis_workers.py`, `control_feature_lifecycle.py` |
 | 3 | discovery | P30, P34 | discovery schemas, `02-evidence-pregather/task-*.md` prompts, `automatic_discovery.py` |
+| 2b | headers | P35 | `build_replay.py`, `native_sast.py` (mount/include only), traced CodeQL replay if affected |
 | 3 | threat | P31, P32 | `threat_workbench.py`, `threat_model_core.py`, `threat_model_reconciliation.py` |
 
 Gate after each merge: the four `test_gap_punchlist_*` modules, every existing test module for the
