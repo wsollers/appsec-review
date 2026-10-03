@@ -2408,7 +2408,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-binary-component-cve-match/` |
 | Output files (pipeline/output-contracts/binary-component-cve-match.json) | manifest.json<br>status.json<br>permission.json<br>lineage.json<br>outputs/binary-component-cve-match.json<br>outputs/database-identity.json<br>outputs/tool-evidence.json<br>outputs/redaction-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `Not yet run inside the B13 boundary on a host: tool-cve-bin-tool must be built and its database published by nvd_reference_sync.` |
+| Gaps | `Qualified inside B13 in the cloud workspace only (local Docker, NVD from the fkie-cad mirror through the real publisher); not yet on zarathustra/hal5000 or in full_review.` |
 | Next prerequisite | Build tool-cve-bin-tool, let nvd_reference_sync publish the database, and run full_review on appsec-multi-vuln (case-030 vendors zlib 1.2.11). |
 
 <a id="job-02-mobile-sast"></a>

@@ -12903,7 +12903,7 @@
    "outputs_source": "pipeline/output-contracts/binary-component-cve-match.json",
    "claim_class": "binary_component_cve_lead",
    "gaps": [
-    "Not yet run inside the B13 boundary on a host: tool-cve-bin-tool must be built and its database published by nvd_reference_sync."
+    "Qualified inside B13 in the cloud workspace only (local Docker, NVD from the fkie-cad mirror through the real publisher); not yet on zarathustra/hal5000 or in full_review."
    ],
    "next_prerequisite": "Build tool-cve-bin-tool, let nvd_reference_sync publish the database, and run full_review on appsec-multi-vuln (case-030 vendors zlib 1.2.11).",
    "consumes": [
