@@ -15,7 +15,8 @@
     "generated_at",
     "sbom_document",
     "enrichment_document",
-    "components"
+    "components",
+    "build_dependency_document"
   ],
   "properties": {
     "schema": {
@@ -101,11 +102,22 @@
       "description": "Required deterministic enrichment receipt derived from an accepted build-index generation. Its producer is distinct from the Syft producer and the document retains the exact upstream binding; an empty members list is still retained.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256", "producer_id"],
+      "required": [
+        "path",
+        "sha256",
+        "producer_id"
+      ],
       "properties": {
-        "path": {"const": "outputs/build-index-vendored-members.json"},
-        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
-        "producer_id": {"const": "build-index-vendored-member"}
+        "path": {
+          "const": "outputs/build-index-vendored-members.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "producer_id": {
+          "const": "build-index-vendored-member"
+        }
       }
     },
     "components": {
@@ -113,6 +125,9 @@
       "items": {
         "$ref": "sbom-inventory-component.schema.json"
       }
+    },
+    "build_dependency_document": {
+      "$ref": "sbom-build-dependency-document.schema.json"
     }
   }
 }

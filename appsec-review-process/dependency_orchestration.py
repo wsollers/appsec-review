@@ -35,6 +35,8 @@ _PAYLOAD_KEYS = {
     "lifecycle": {"sbom", "license", "reference_table", "reference_table_sha256", "max_reference_age_days"},
     "reachability": {"sca", "reachability_evidence", "reachability_evidence_sha256"},
 }
+# P37: the SBOM's optional 02-native-build edge; requests built before it (or by the full-review assembly) omit it.
+_OPTIONAL_PAYLOAD_KEYS = {"sbom": {"native_build"}}
 _TOOL_KEYS = {
     "sbom": {"target_path"},
     "sca": {"sbom_root", "snapshot_registry", "max_database_age_seconds", "snapshot_identities"},
@@ -70,8 +72,8 @@ def _offline_registry(value: Any) -> Path:
 
 
 def _binding_paths(payload: dict[str, Any], owner: Path, kind: str) -> None:
-    for key in ("build_index", "sbom", "license", "sca"):
-        if key not in payload:
+    for key in ("build_index", "native_build", "sbom", "license", "sca"):
+        if key not in payload or (key == "native_build" and (payload[key] is None or set(payload[key]) == {"skipped"})):
             continue
         binding = payload[key]
         if not isinstance(binding, dict):
@@ -184,7 +186,8 @@ def execute(*, job_id: str, run_id: str, input_path: str, output_root: str,
 
     kind = JOBS[job_id]
     payload, tool = request.get("payload"), request.get("tool")
-    if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS[kind]:
+    optional = _OPTIONAL_PAYLOAD_KEYS.get(kind, set())
+    if not isinstance(payload, dict) or set(payload) - optional != _PAYLOAD_KEYS[kind]:
         raise Blocked("dependency orchestration: worker payload shape is not closed")
     expected_tool_keys = _LEGACY_TOOL_KEYS[kind] if legacy else _TOOL_KEYS[kind]
     if not isinstance(tool, dict) or set(tool) != expected_tool_keys:

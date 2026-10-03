@@ -141,7 +141,8 @@ CONTRACT_POLICIES = MappingProxyType({
         result_schema=(SBOM_MANIFEST_FILE, "sbom-inventory.schema.json"),
         document_schemas=MappingProxyType({SBOM_MANIFEST_FILE: "sbom-inventory.schema.json"}),
         claim_class_id="dependency_inventory_evidence",
-        allowed_assertions=("declared-component-present", "component-version-unknown", "inventory-coverage-gap"),
+        allowed_assertions=("declared-component-present", "component-version-unknown", "inventory-coverage-gap",
+                            "build-observed-component-present"),
     ),
     SCA_CONTRACT_ID: _frozen(
         job_id="02-sca-vulnerability-match",
@@ -322,6 +323,84 @@ def build_index_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) -> li
     if any(not isinstance(member, dict) or member.get("purl") is None or member.get("cpe") is None
            for member in members) and not gaps:
         errors.append("enrichment-gap: a vendored member without package identifiers requires an explicit coverage gap")
+    return errors
+
+
+BUILD_DEPENDENCY_FILE = f"{OUTPUTS_DIR}/build-dependency-components.json"
+BUILD_DEPENDENCY_PRODUCER = "native-build-dependency"
+_BUILD_RECORD_PATH = re.compile(r"outputs/[A-Za-z0-9._-]+/build-dependencies\.json\Z")
+
+
+def build_dependency_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) -> list[str]:
+    """P37: validate the native-build dependency enrichment and the components it produced.
+
+    Its components are exactly its members, cite this document, carry scope and build evidence, and are
+    either OS packages the build consumed (build-observed, ``pkg:deb`` with a distro qualifier, sourced from
+    a unit's build-dependencies.json) or vendored trees (inferred-vendored, ``pkg:generic/<name>@<version>``
+    without a CPE, or cJSON's fixed identifiers). The native build is bound, skipped or absent; absent is a gap.
+    """
+    descriptor = manifest.get("build_dependency_document")
+    produced = [component for component in manifest.get("components", []) if component.get("tool_id") == BUILD_DEPENDENCY_PRODUCER]
+    if descriptor is None:
+        return ["build-dependency-document-missing: components cite the build-dependency producer without its document"] if produced else []
+    errors = []
+    if (descriptor.get("path") != BUILD_DEPENDENCY_FILE or descriptor.get("producer_id") != BUILD_DEPENDENCY_PRODUCER or
+            "sha256:" + hashlib.sha256(raw).hexdigest() != descriptor.get("sha256")):
+        errors.append("build-dependency-document: path, producer or sha256 does not bind the retained bytes")
+    try:
+        document = _parse(raw)
+    except (ValueError, RecursionError):
+        return errors + ["build-dependency-invalid: the document is not strict UTF-8 JSON with unique keys"]
+    required = {"schema", "run_id", "job_id", "attempt_id", "producer_id", "native_build", "units", "members", "coverage_gaps"}
+    if not isinstance(document, dict) or set(document) != required:
+        return errors + ["build-dependency-invalid: the document has an open or incomplete shape"]
+    if (document["schema"] != "appsec-review/build-dependency-sbom-enrichment/1.0" or
+            any(document[key] != manifest.get(key) for key in ("run_id", "job_id", "attempt_id")) or
+            document["producer_id"] != BUILD_DEPENDENCY_PRODUCER):
+        errors.append("build-dependency-identity: document identity differs from the SBOM manifest")
+    native, members, gaps = document["native_build"], document["members"], document["coverage_gaps"]
+    if not isinstance(native, dict) or not isinstance(members, list) or not isinstance(gaps, list) or not isinstance(document["units"], list):
+        return errors + ["build-dependency-invalid: native_build, units, members and coverage_gaps are malformed"]
+    binding = native.get("binding")
+    if native.get("status") == "accepted":
+        if (not isinstance(binding, dict) or set(binding) != {"job_id", "attempt_id", "path", "sha256"} or
+                binding.get("job_id") != "02-native-build" or not _SHA_RE.match(str(binding.get("sha256")))):
+            errors.append("build-dependency-lineage: an accepted native build must be bound exactly")
+    elif native.get("status") == "absent":
+        if binding is not None or not gaps:
+            errors.append("build-dependency-gap: an absent native build is a coverage gap and binds nothing")
+    elif native.get("status") != "skipped" or binding is not None or not isinstance(native.get("skip_reason"), str):
+        errors.append("build-dependency-lineage: native_build status is not accepted, skipped or absent")
+    records = {unit.get("record", {}).get("path"): unit["record"] for unit in document["units"]
+               if isinstance(unit, dict) and isinstance(unit.get("record"), dict)}
+    if any(isinstance(unit, dict) and unit.get("record") is None for unit in document["units"]) and not gaps:
+        errors.append("build-dependency-gap: a unit without a build-dependencies record requires a coverage gap")
+    projection = lambda row: json.dumps([row.get(key) for key in ("name", "version", "purl", "cpe", "ecosystem",
+                                                                  "declaration", "source", "scope", "build_evidence")], sort_keys=True)
+    listed = [{**component, "source": {k: v for k, v in component.get("source", {}).items() if k != "evidence_kind"}}
+              for component in produced]
+    if sorted(map(projection, listed)) != sorted(map(projection, [m for m in members if isinstance(m, dict)])):
+        errors.append("build-dependency-projection: produced components differ from the retained members")
+    for component in produced:
+        citation, source = component.get("citation", {}), component.get("source", {})
+        if (citation.get("producer") != "02-sbom-inventory" or citation.get("attempt_id") != manifest.get("attempt_id") or
+                citation.get("path") != BUILD_DEPENDENCY_FILE or citation.get("sha256") != hashlib.sha256(raw).hexdigest() or
+                component.get("scope") not in ("load-time", "build-time") or not isinstance(component.get("build_evidence"), dict)):
+            errors.append("build-dependency-citation: a produced component is not bounded to the producer document")
+            continue
+        purl, version, name = component.get("purl"), component.get("version"), component.get("name")
+        if component.get("declaration") == "build-observed":
+            if (component.get("ecosystem") != "deb" or not isinstance(purl, str) or not purl.startswith("pkg:deb/") or
+                    "?arch=" not in purl or component.get("cpe") is not None or
+                    source.get("evidence_kind") != "build-dependency-evidence" or
+                    not _BUILD_RECORD_PATH.match(str(source.get("path"))) or records.get(source.get("path"), {}).get("sha256") != source.get("sha256")):
+                errors.append("build-dependency-package: an observed OS package must be a pkg:deb component sourced from a bound unit record")
+        elif component.get("declaration") == "inferred-vendored":
+            expected = (cjson_identifiers(version) if str(name).lower() == "cjson" else (f"pkg:generic/{name}@{version}", None))
+            if not isinstance(version, str) or (purl, component.get("cpe")) != expected:
+                errors.append("build-dependency-vendored: a vendored tree carries only pkg:generic/<name>@<version> (cJSON: its fixed identifiers)")
+        else:
+            errors.append("build-dependency-declaration: produced components are build-observed or inferred-vendored")
     return errors
 
 
@@ -926,14 +1005,19 @@ def _component_errors(components: list[dict]) -> list[str]:
     for index, component in enumerate(components, 1):
         label = f"SC-{index:06d}"
         source, declaration = component["source"], component["declaration"]
-        derived = declaration_kind(component["ecosystem"], source["path"])
+        # P37: a build-observed OS package is sourced from a native-build record, not a snapshot file;
+        # build_dependency_enrichment_errors binds that record.
+        observed = declaration == "build-observed"
+        derived = "build-dependency-evidence" if observed else declaration_kind(component["ecosystem"], source["path"])
         if source["evidence_kind"] != derived:
             errors.append(f"evidence-kind-mismatch: {label}: source.evidence_kind must be {derived!r}, which is what the name "
                           "of source.path is for this ecosystem")
         if (declaration == "declared") != (derived in ("manifest", "lockfile")):
             errors.append(f"inferred-promoted-to-declared: {label}: declaration must be 'declared' exactly when source.path is "
                           "a manifest or lockfile of the component's ecosystem; an inferred vendored component is never declared")
-        wanted = ("inventory-coverage-gap" if declaration != "declared" else
+        if observed and component.get("tool_id") != BUILD_DEPENDENCY_PRODUCER:
+            errors.append(f"build-observed-producer: {label}: only the build-dependency producer observes OS packages")
+        wanted = ("build-observed-component-present" if observed else "inventory-coverage-gap" if declaration != "declared" else
                   "component-version-unknown" if component["version"] is None else "declared-component-present")
         if component["assertion"] != wanted:
             errors.append(f"assertion-mismatch: {label}: assertion must be {wanted!r} for this declaration and version")
@@ -1018,12 +1102,19 @@ def verify_sbom_attempt(attempt_root: Any, *, source_root: Any, tool_outputs_roo
     errors += _component_errors(components)
     errors += _cdx_errors(state.raw[SBOM_CDX_FILE], manifest)
     errors += build_index_enrichment_errors(manifest, state.raw[SBOM_ENRICHMENT_FILE])
+    if manifest.get("build_dependency_document") is not None:
+        raw = _read_bytes(Path(attempt_root), BUILD_DEPENDENCY_FILE, limits)
+        errors += (build_dependency_enrichment_errors(manifest, raw) if raw is not None else
+                   [f"build-dependency-document-missing: {BUILD_DEPENDENCY_FILE} is absent, linked or over max_file_bytes"])
+    else:
+        errors += build_dependency_enrichment_errors(manifest, b"")
     labelled = [(f"SC-{index:06d}", component) for index, component in enumerate(components, 1)]
     tool_labelled = [(label, component) for label, component in labelled
-                     if component.get("tool_id") != "build-index-vendored-member"]
+                     if component.get("tool_id") not in ("build-index-vendored-member", BUILD_DEPENDENCY_PRODUCER)]
     errors += _citation_errors(tool_labelled, CONTRACT_POLICIES[SBOM_CONTRACT_ID]["job_id"], state, declared)
     errors += _source_file_errors(Path(source_root).absolute(),
-                                  [(label, item["source"]["path"], item["source"]["sha256"], None) for label, item in labelled],
+                                  [(label, item["source"]["path"], item["source"]["sha256"], None) for label, item in labelled
+                                   if item["declaration"] != "build-observed"],
                                   limits)
     return errors
 

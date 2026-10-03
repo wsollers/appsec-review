@@ -1744,7 +1744,8 @@
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake",
-        "job:02-build-index"
+        "job:02-build-index",
+        "job:02-native-build"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -4722,7 +4723,8 @@
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake",
-        "job:02-build-index"
+        "job:02-build-index",
+        "job:02-native-build"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -12534,6 +12536,11 @@
      "job": "02-build-index",
      "kind": "required",
      "contract": "build-index"
+    },
+    {
+     "job": "02-native-build",
+     "kind": "optional",
+     "contract": "native-build"
     }
    ],
    "declared_inputs": [
@@ -12552,6 +12559,10 @@
     {
      "need": "required",
      "input": "B16 Syft image record"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-native-build per-unit build-dependencies.json (P36)"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-sbom-inventory.json",
@@ -12575,7 +12586,8 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake",
-    "job:02-build-index"
+    "job:02-build-index",
+    "job:02-native-build"
    ],
    "produces": [
     "job:02-sbom-inventory"
@@ -15003,6 +15015,7 @@
     "job:02-debug-symbol-index",
     "job:02-binary-triage",
     "job:02-test-execution",
+    "job:02-sbom-inventory",
     "job:02-binary-hardening",
     "job:02-binary-component-cve-match"
    ]
