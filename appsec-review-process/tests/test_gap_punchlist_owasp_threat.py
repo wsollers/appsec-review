@@ -264,7 +264,6 @@ class DiscoverySchemaTests(unittest.TestCase):
 class ThreatWorkbenchGapTests(unittest.TestCase):
     setUp = workbench_tests.JoinTests.setUp
 
-    @unittest.expectedFailure
     def test_p31_unbuilt_cells_are_one_gap(self):
         """P31: with native traits, unbuilt ADR-0019 cells are reported in exactly one gap naming them."""
         model = tw.join(self.base, workbench_tests.record(self.base), self.replies)
@@ -277,7 +276,6 @@ class ThreatWorkbenchGapTests(unittest.TestCase):
 
 
 class ThreatModelAssumptionGapTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p32_core_assumptions_are_not_counted_as_gaps(self):
         """P32: assumptions from component-map unknowns are not also published as threat-model gaps."""
         component = json.loads((ROOT / "tests/fixtures/component-characterization/hello-autotools.json").read_text())
@@ -305,7 +303,6 @@ class ThreatModelAssumptionGapTests(unittest.TestCase):
         self.assertEqual([gap for gap in captured["gaps"] if gap in statements], [],
                          "assumptions are double-counted as gaps")
 
-    @unittest.expectedFailure
     def test_p32_reconciliation_unchanged_assumptions_are_not_gaps(self):
         """P32: reconciliation with unchanged generations does not re-emit unchanged assumptions as gaps."""
         case = reconciliation_tests.ThreatModelReconciliationTests("test_unchanged_generations_preserve_unresolved_assumptions_without_promotion")

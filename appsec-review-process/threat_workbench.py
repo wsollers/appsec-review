@@ -1157,6 +1157,7 @@ class _Join:
                               "persona_id": CELLS[cid].persona_id, "prompt_hash": None, "model_identity_hash": None})
             if selection["selected"]:   # selected but never ran (disabled): that is a gap
                 self.gap(cid, "omitted_workcell", f"workcell {cid} was selected but did not run: {reason}")
+        unbuilt: list[str] = []
         for cid, wave, trait, reason in NOT_BUILT:
             workcells.append({"workcell_id": cid, "instance_id": None, "wave": wave, "selection": "omitted",
                               "omission_reason": reason if trait is None or trait in traits else
@@ -1167,10 +1168,11 @@ class _Join:
                     "kind": "trait_without_specialist",
                     "statement": f"Target trait {trait!r} ({'; '.join(traits[trait])}) selects {cid}, which this "
                                  "workbench slice does not run.", "affected_record_ids": []})
-                self.gap(cid, "omitted_workcell", f"{cid} is selected by trait {trait!r} but not built", [])
+                unbuilt.append(f"{cid} (selected by trait {trait!r})")
             elif cid == "challenge-refutation-cell":
-                self.gap(cid, "omitted_workcell", "No challenge/refutation cell ran; overlay records are "
-                         "unchallenged candidates (ADR-0019 slice 1).", [])
+                unbuilt.append(f"{cid} (overlay records are unchallenged candidates)")
+        if unbuilt:   # one gap naming every unbuilt cell this target selects: those analyses did not run
+            self.gap(ROUTER, "omitted_workcell", "ADR-0019 slice-1 cells not built: " + "; ".join(unbuilt) + ".", [])
         model["coverage"]["workcells"] = workcells
         model["coverage"]["wave_4"] = "omitted_no_challenges"
         model["assumptions"] = sorted([*model["assumptions"], *self.assumptions], key=lambda item: item["assumption_id"])

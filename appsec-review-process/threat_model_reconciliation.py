@@ -271,7 +271,10 @@ def build_result(inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
             "record_ids":[item["target_record_id"]] if item["target_record_id"] else [],
             "statement":"Evaluate this non-authoritative input against accepted evidence.",
             "citation_ids":["reconciliation-input"]})
-    gaps = bool(assumptions or external or conflicts or regenerate)
+    # An assumption is a reconciliation gap only when it is new or changed against the baseline;
+    # unchanged open questions stay listed as unresolved assumptions without being re-counted.
+    moved = {*model_delta["added"], *model_delta["removed"], *model_delta["changed"]}
+    gaps = bool(any(item["assumption_id"] in moved for item in assumptions) or external or conflicts or regenerate)
     return {"schema":"appsec-review/threat-model-reconciliation/1.0", "run_id":inputs["run_id"],
         "job_id":JOB, "attempt_id":attempt_id, "source_snapshot_sha256":inputs["source_snapshot_sha256"],
         "status":"OK_WITH_GAPS" if gaps else "OK", "baseline":inputs["baseline"], "current":inputs["current"],
@@ -359,7 +362,9 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             "evidence_generation_changed":value["comparison"]["evidence_generation_changed"],
             "unresolved_assumptions":len(value["unresolved_assumptions"]),"external_inputs":len(value["external_inputs"]),
             "conflicts":len(value["conflicts"]),"claim_limit":"reconciliation-only-no-promotion"}
-        gaps=[item["statement"] for item in value["conflicts"]] + [item["statement"] for item in value["unresolved_assumptions"]]
+        moved={key for change in ("added","removed","changed") for key in value["comparison"]["model_records"][change]}
+        gaps=[item["statement"] for item in value["conflicts"]] + [item["statement"]
+              for item in value["unresolved_assumptions"] if item["assumption_id"] in moved]
         return record_terminal_current(base,attempt,run_id=run_id,job_id=JOB,dagster_run_id=dagster_id,
             worker_kind="deterministic_python",output_contract=CONTRACT,input_fingerprint=fingerprint,
             started_at=allocation["started_at"],execution_status=value["status"],
