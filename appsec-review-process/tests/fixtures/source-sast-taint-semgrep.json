@@ -1,0 +1,341 @@
+{
+ "results": [
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.printf-nonliteral",
+   "end": {
+    "line": 20,
+    "col": 20,
+    "offset": 637
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 20,
+    "col": 5,
+    "offset": 622
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.format-string",
+   "end": {
+    "line": 20,
+    "col": 19,
+    "offset": 636
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 20,
+    "col": 12,
+    "offset": 629
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.info-leak-on-non-formated-string",
+   "end": {
+    "line": 20,
+    "col": 21,
+    "offset": 638
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 20,
+    "col": 5,
+    "offset": 622
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-printf-fn",
+   "end": {
+    "line": 20,
+    "col": 20,
+    "offset": 637
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 20,
+    "col": 5,
+    "offset": 622
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.strcpy",
+   "end": {
+    "line": 21,
+    "col": 25,
+    "offset": 717
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 21,
+    "col": 5,
+    "offset": 697
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.unsafe-copy",
+   "end": {
+    "line": 21,
+    "col": 24,
+    "offset": 716
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 21,
+    "col": 17,
+    "offset": 709
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-string-copy-fn",
+   "end": {
+    "line": 21,
+    "col": 25,
+    "offset": 717
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 21,
+    "col": 5,
+    "offset": 697
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.unsafe-copy",
+   "end": {
+    "line": 22,
+    "col": 21,
+    "offset": 786
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 22,
+    "col": 17,
+    "offset": 782
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-strcat-fn",
+   "end": {
+    "line": 22,
+    "col": 22,
+    "offset": 787
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 22,
+    "col": 5,
+    "offset": 770
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.system",
+   "end": {
+    "line": 24,
+    "col": 21,
+    "offset": 912
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 24,
+    "col": 9,
+    "offset": 900
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.command-injection",
+   "end": {
+    "line": 24,
+    "col": 20,
+    "offset": 911
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 24,
+    "col": 16,
+    "offset": 907
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.format-string",
+   "end": {
+    "line": 25,
+    "col": 29,
+    "offset": 1000
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 25,
+    "col": 25,
+    "offset": 996
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.command-injection",
+   "end": {
+    "line": 28,
+    "col": 14,
+    "offset": 1122
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 28,
+    "col": 11,
+    "offset": 1119
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.memcpy",
+   "end": {
+    "line": 30,
+    "col": 29,
+    "offset": 1264
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 30,
+    "col": 5,
+    "offset": 1240
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.memcpy-length",
+   "end": {
+    "line": 30,
+    "col": 28,
+    "offset": 1263
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 30,
+    "col": 22,
+    "offset": 1257
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-scanf-fn",
+   "end": {
+    "line": 31,
+    "col": 28,
+    "offset": 1343
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 31,
+    "col": 9,
+    "offset": 1324
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.memcpy",
+   "end": {
+    "line": 32,
+    "col": 33,
+    "offset": 1382
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 32,
+    "col": 9,
+    "offset": 1358
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.memcpy-length",
+   "end": {
+    "line": 32,
+    "col": 32,
+    "offset": 1381
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 32,
+    "col": 27,
+    "offset": 1376
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.taint.command-injection",
+   "end": {
+    "line": 33,
+    "col": 41,
+    "offset": 1471
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 33,
+    "col": 34,
+    "offset": 1464
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.correctness.incorrect-use-ato-fn",
+   "end": {
+    "line": 34,
+    "col": 42,
+    "offset": 1566
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 34,
+    "col": 29,
+    "offset": 1553
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.system",
+   "end": {
+    "line": 35,
+    "col": 15,
+    "offset": 1583
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 35,
+    "col": 5,
+    "offset": 1573
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-printf-fn",
+   "end": {
+    "line": 36,
+    "col": 28,
+    "offset": 1690
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 36,
+    "col": 5,
+    "offset": 1667
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.system",
+   "end": {
+    "line": 37,
+    "col": 24,
+    "offset": 1756
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 37,
+    "col": 5,
+    "offset": 1737
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.memcpy",
+   "end": {
+    "line": 38,
+    "col": 34,
+    "offset": 1838
+   },
+   "path": "/workspace/src/hello.c",
+   "start": {
+    "line": 38,
+    "col": 5,
+    "offset": 1809
+   }
+  }
+ ],
+ "version": "1.178.0"
+}

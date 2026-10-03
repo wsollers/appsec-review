@@ -214,7 +214,6 @@ class NativeSastCompileErrors(unittest.TestCase):
 
 
 class SourceSastCoverage(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p13_repository_rules_include_a_taint_rule(self):
         """P13: rules-v1.yml has a mode: taint rule with a known category, and RULES_GAP no longer denies taint."""
         import yaml
@@ -224,7 +223,6 @@ class SourceSastCoverage(unittest.TestCase):
         self.assertTrue(set(taint) <= set(source_sast.RULE_CATEGORIES))
         self.assertNotIn("do not cover taint", source_sast.RULES_GAP)
 
-    @unittest.expectedFailure
     def test_p14_shell_has_a_shellcheck_plan_row_and_no_uncovered_gap(self):
         """P14: a target with tests/run.sh gets a shellcheck plan row and no 'no static analyzer' shell gap."""
         paths = ["tests/run.sh", "src/hello.c"]

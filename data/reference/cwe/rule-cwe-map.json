@@ -302,6 +302,98 @@
    "cwe_ids": [
     "CWE-78"
    ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.taint.command-injection",
+   "cwe_ids": [
+    "CWE-78"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.taint.format-string",
+   "cwe_ids": [
+    "CWE-134"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.taint.memcpy-length",
+   "cwe_ids": [
+    "CWE-787",
+    "CWE-120"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.taint.unsafe-copy",
+   "cwe_ids": [
+    "CWE-120"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2046",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2048",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2068",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2086",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2091",
+   "cwe_ids": [
+    "CWE-78"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2156",
+   "cwe_ids": [
+    "CWE-78"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2206",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2207",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "shellcheck",
+   "rule_id": "SC2294",
+   "cwe_ids": [
+    "CWE-78"
+   ]
   }
  ]
 }

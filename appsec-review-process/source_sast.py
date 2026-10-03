@@ -46,6 +46,10 @@ RULE_CATEGORIES = {
     "appsec.c.printf-nonliteral": "format-string",
     "appsec.c.memcpy": "memory-copy",
     "appsec.c.system": "command-execution",
+    "appsec.c.taint.command-injection": "command-execution",
+    "appsec.c.taint.format-string": "format-string",
+    "appsec.c.taint.unsafe-copy": "unsafe-copy",
+    "appsec.c.taint.memcpy-length": "memory-copy",
 }
 SEMGREP_RULE_PREFIX = "inputs.source-sast-rules."
 # Vendored opengrep C rules (William, 2026-09-27): verbatim files from opengrep/opengrep-rules at a
@@ -55,9 +59,11 @@ VENDORED_RULES_DIR = RULES.parent / "opengrep-rules"
 VENDORED_RULES_LOCK = RULES.parent / "opengrep-rules.lock.json"
 VENDORED_TOOL_ID = "semgrep-opengrep-rules-f1d2b562"
 VENDORED_RULE_PREFIX = SEMGREP_RULE_PREFIX + "opengrep-rules."
-RULES_GAP = ("C/C++ Semgrep rules cover 20 pattern families (4 repository-owned C/C++ rules and 16 vendored "
-             "opengrep C rules); the vendored rules match C sources only, and pattern rules do not cover "
-             "taint or interprocedural data flow.")
+RULES_GAP = ("C/C++ Semgrep rules cover 24 families (4 repository-owned pattern rules, 4 repository-owned "
+             "intraprocedural taint rules and 16 vendored opengrep C rules); the vendored rules match C sources "
+             "only. Semgrep CE taint is intraprocedural: interprocedural and interfile data flow is not "
+             "covered, and taint does not propagate through a C copy call (strcpy, snprintf, ...) whose "
+             "source argument is a named variable.")
 
 
 def _vendored_lock() -> dict[str, Any]:
@@ -168,9 +174,11 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     record = registry[IMAGE_ID]
     paths = [path.relative_to(target).as_posix() for path in target.rglob("*")
              if path.is_file() and not path.is_symlink()]
-    language_plan = language_adapters.build_plan(language_adapters.detected_languages(paths), registry)
+    language_plan = language_adapters.build_plan(
+        language_adapters.detected_languages(paths, target), registry,
+        {"shell": language_adapters.shell_files(paths, target)[0]})
     return {
-        "uncovered_language_gaps": language_adapters.uncovered_language_gaps(paths),
+        "uncovered_language_gaps": language_adapters.uncovered_language_gaps(paths, target),
         "job": JOB,
         "run_id": run_id,
         "source_snapshot_sha256": source,
