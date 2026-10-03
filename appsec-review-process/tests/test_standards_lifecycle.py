@@ -17,6 +17,14 @@ STANDARDS_BIND={"job_id":"02-standards-source-ingest","attempt_id":"s1","artifac
 STANDARD={"records":[{"family":"owasp_asvs","record_type":"control","record_id":"V1.1.1","path":"standards/x.json","sha256":H}]}
 WRAPPER={"family":"owasp_asvs","edition":"5.0.0","record_type":"control","record_id":"V1.1.1",
          "record":{"proof_obligations":[{"minimum_evidence_modes":["static_source"]}]}}
+# P39: the OWASP worklist routes from the accepted T04 routing request bound to the same component map.
+ROUTED={"component_map":{"attempt_id":"c1","artifact_sha256":"a"*64},
+        "components":[{"component_id":"cli","scope_status":"in_scope"}],
+        "rules":[{"rule_id":"auto-cli-owasp-asvs","component_id":"cli",
+                  "selector":{"standard_family":"owasp_asvs","control_ids":[],"domain_ids":[],"all_controls":True},
+                  "decision":{"status":"applicable","rationale":"fixture","signals":[],"citations":[],
+                              "source_completeness":"adequate","conditional_expression":None}}]}
+ROUTING_BIND={"job_id":"04-owasp-component-routing","attempt_id":"r1","artifact_path":"owasp-applicability-request.json","artifact_sha256":H,"accepted_pointer_sha256":H}
 
 class StandardsLifecycleTests(unittest.TestCase):
     def setup_paths(self, folder):
@@ -28,6 +36,7 @@ class StandardsLifecycleTests(unittest.TestCase):
     def loader(self, run_id, spec):
         if spec[0]==lifecycle.COMPONENT[0]: return COMPONENT,COMPONENT_BIND
         if spec[0]==lifecycle.STANDARDS[0]: return STANDARD,STANDARDS_BIND
+        if spec[0]==lifecycle.ROUTING[0]: return ROUTED,ROUTING_BIND
         raise AssertionError(spec)
 
     def test_owasp_request_is_target_and_standard_derived_and_reused(self):
@@ -40,7 +49,9 @@ class StandardsLifecycleTests(unittest.TestCase):
             self.assertEqual(first,second); request=read_json(first["request_path"])
             control=request["payload"]["controls"][0]
             self.assertEqual(control["target_id"],"cli")
-            self.assertEqual(control["applicability"],"cannot_determine")
+            self.assertEqual(control["applicability"],"applicable")
+            self.assertIn("auto-cli-owasp-asvs",control["citation_ids"])
+            self.assertEqual(request["upstream"][-1]["job_id"],"04-owasp-component-routing")
             self.assertEqual(control["evidence_mode"],"manual")
             self.assertEqual(control["gaps"],[])
             self.assertEqual(request["payload"]["gaps"],
@@ -76,12 +87,14 @@ class StandardsLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder)/"job"
             with mock.patch.object(lifecycle,"prepare_worklist",return_value=prepared), \
+                 mock.patch.object(lifecycle,"_route_owasp") as route, \
                  mock.patch.object(lifecycle,"data_path",return_value=base), \
                  mock.patch("bounded_transform_orchestration.execute",return_value={"attempt_id":"auto-a"}) as execute, \
                  mock.patch.object(lifecycle,"_publish_bounded",return_value=pointer):
                 self.assertEqual(lifecycle.run_worklist("run-a","dagster-a","04-owasp-validation-worklist"),pointer)
-                execute.assert_called_once()
+                execute.assert_called_once(); route.assert_called_once_with("run-a","dagster-a")
             with mock.patch.object(lifecycle,"prepare_worklist",return_value=prepared), \
+                 mock.patch.object(lifecycle,"_route_owasp"), \
                  mock.patch.object(lifecycle,"data_path",return_value=base), \
                  mock.patch.object(lifecycle,"_reusable",return_value=pointer), \
                  mock.patch("bounded_transform_orchestration.execute") as execute:

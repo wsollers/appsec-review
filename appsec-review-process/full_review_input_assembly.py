@@ -14,17 +14,20 @@ import os
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import automatic_evidence_inputs as automatic_inputs
 import bounded_transform_orchestration
 from bounded_analysis_workers import load_accepted
 from bounded_transform_orchestration import REQUEST_SCHEMA as BOUNDED_SCHEMA, FACADES
 from dependency_orchestration import (REQUEST_SCHEMA as DEPENDENCY_SCHEMA,
                                       JOBS as DEPENDENCY_JOBS, _PAYLOAD_KEYS, _TOOL_KEYS)
+import dependency_snapshot_registry as snapshots
 from execution_state import Blocked, atomic_json, digest, file_hash, identifier, read_json, tree_hashes
 import intake
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from vendor_evidence_orchestration import REQUEST_SCHEMA as VENDOR_SCHEMA, WORKERS
 import vendor_evidence_orchestration
+import vendor_evidence_workers as vendor_workers
 import dependency_orchestration
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 
@@ -70,6 +73,8 @@ DEPENDENCY_SOURCES = {
                                     "sca-vulnerability-match.schema.json"),
     "02-license-scan": ("license-inventory", "outputs/license-inventory.json", "license-inventory.schema.json"),
 }
+# Dependency request 1.1: the SCA tool names the exact offline snapshots the orchestrator re-resolves.
+SNAPSHOT_IDENTITY_KEYS = ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")
 
 
 def _closed(value: Any, keys: set[str], label: str) -> dict[str, Any]:
@@ -285,19 +290,16 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
     _component_source_current(document, run_root)
     manifest = run_root / "inputs/artifact-manifest.json"
     generation = HASH + file_hash(manifest)
-    target_value = read_json(manifest).get("target", {}).get("repo_path")
-    target = Path(target_value).resolve()
+    # P40: the vendor and dependency orchestrators accept only the run-owned, hash-bound source
+    # projection (the tree the automatic evidence jobs read), never the staged checkout itself.
     try:
+        target = automatic_inputs.source_projection(run_id)[0].resolve()
         target_relative = target.relative_to(run_root.resolve()).as_posix()
-    except ValueError:
-        # Fixture targets live outside the run (every target so far). Dispatch from the run-owned,
-        # hash-bound source projection instead, the same tree the automatic evidence jobs read.
-        import automatic_evidence_inputs
-        try:
-            target = automatic_evidence_inputs.source_projection(run_id)[0].resolve()
-            target_relative = target.relative_to(run_root.resolve()).as_posix()
-        except (ValueError, OSError) as exc:
-            raise Blocked("full review input assembly: staged target must be run-owned for dispatch") from exc
+    except (ValueError, OSError) as exc:
+        raise Blocked("full review input assembly: staged target must be run-owned for dispatch") from exc
+    # The plan schema takes whole-second UTC ('...Z'); Dagster passes isoformat with micros and +00:00.
+    from datetime import datetime, timezone
+    stamp =datetime.fromisoformat(generated_at.replace("Z", "+00:00")).astimezone(timezone.utc)
     source_spec = {"alias": "component-map",
         "pointer_path": component_pointer.relative_to(run_root).as_posix(), **COMPONENT_SOURCE}
     source_specs = [source_spec]
@@ -418,10 +420,17 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
             sbom_path = (run_root / "data/jobs/02-sbom-inventory/attempts" /
                          sbom_accepted["attempt_id"] /
                          "outputs/sbom-manifest.json")
+            try:
+                identities = [{key: row[key] for key in SNAPSHOT_IDENTITY_KEYS} for row in (
+                    snapshots.resolve(kind, Path(registry), max_age_seconds=int(max_age), now=stamp)
+                    for kind in sorted(snapshots.KINDS))]
+            except (snapshots.SnapshotBlocked, snapshots.SnapshotInvalid, snapshots.SnapshotStale) as exc:
+                raise Blocked(f"full review input assembly: offline snapshot validation failed: {exc}") from exc
             launches.append({"adapter": "dependency", "job_id": "02-sca-vulnerability-match",
                              "payload": {"sbom": sbom_binding},
                              "tool": {"sbom_root": str(sbom_path.parent), "snapshot_registry": registry,
-                                      "max_database_age_seconds": int(max_age)}})
+                                      "max_database_age_seconds": int(max_age),
+                                      "snapshot_identities": identities}})
         else:
             skipped.append({"job_id": "02-sca-vulnerability-match", "status": "SKIPPED_NA",
                             "reason": "offline snapshot registry and explicit age ceiling are not configured"})
@@ -452,9 +461,6 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
                         "reason": "requires accepted SCA and staged reachability evidence"})
     skipped.append({"job_id": "02-binary-hardening", "status": "SKIPPED_NA",
                     "reason": "requires an accepted built-binary projection"})
-    # The plan schema takes whole-second UTC ('...Z'); Dagster passes isoformat with micros and +00:00.
-    from datetime import datetime, timezone
-    stamp = datetime.fromisoformat(generated_at.replace("Z", "+00:00")).astimezone(timezone.utc)
     plan = {"schema": PLAN_SCHEMA, "run_id": run_id, "source_generation": generation,
             "generated_at": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "accepted_sources": source_specs,
             "launches": sorted(launches, key=lambda row: row["job_id"]),
@@ -491,7 +497,8 @@ def _load_sources(plan: dict[str, Any], run_root: Path) -> dict[str, dict[str, A
     return sources
 
 
-def _bounded(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[str, Any]], run_root: Path) -> dict[str, Any]:
+def _bounded(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[str, Any]], run_root: Path,
+             source_binding: dict[str, Any] | None) -> dict[str, Any]:
     job = raw["job_id"]
     if job not in FACADES or not isinstance(raw["upstream"], list) or not raw["upstream"]:
         raise Blocked("full review input assembly: bounded launch job or upstream is invalid")
@@ -515,19 +522,27 @@ def _bounded(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[
             "source_generation": plan["source_generation"], "upstream": upstream, "payload": payload}
 
 
-def _vendor(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[str, Any]], run_root: Path) -> dict[str, Any]:
+def _vendor(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[str, Any]], run_root: Path,
+            source_binding: dict[str, Any] | None) -> dict[str, Any]:
     job = raw["job_id"]
     if job not in WORKERS:
         raise Blocked("full review input assembly: vendor launch job is invalid")
     source_root = _resolve(raw["source_root"], run_root=run_root, sources=sources)
     if not isinstance(source_root, str):
         raise Blocked("full review input assembly: vendor source root did not resolve to a path")
+    # Vendor request 1.1: the same probe receipt the orchestrator re-derives before any scanner runs.
+    probe = vendor_workers.probe(job, Path(source_root))
+    applicable = any(probe["candidates"].values()) or job == "02-secrets-inventory"
+    applicability = {"decision": "EXECUTE" if applicable else "SKIPPED_NA",
+                     "skip_reason": None if applicable else vendor_workers.SKIP,
+                     "probe_sha256": HASH + digest(probe), "probe": probe}
     return {"schema": VENDOR_SCHEMA, "run_id": plan["run_id"], "job_id": job,
             "source_generation": plan["source_generation"], "generated_at": plan["generated_at"],
-            "source_root": source_root}
+            "source_root": source_root, "source_binding": source_binding, "applicability": applicability}
 
 
-def _dependency(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[str, Any]], run_root: Path) -> dict[str, Any]:
+def _dependency(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, dict[str, Any]], run_root: Path,
+                source_binding: dict[str, Any] | None) -> dict[str, Any]:
     job = raw["job_id"]
     if job not in DEPENDENCY_JOBS:
         raise Blocked("full review input assembly: dependency launch job is invalid")
@@ -542,7 +557,7 @@ def _dependency(raw: dict[str, Any], plan: dict[str, Any], sources: dict[str, di
         raise Blocked("full review input assembly: dependency tool shape is not closed")
     return {"schema": DEPENDENCY_SCHEMA, "run_id": plan["run_id"], "job_id": job,
             "source_generation": plan["source_generation"], "generated_at": plan["generated_at"],
-            "payload": payload, "tool": tool}
+            "source_binding": source_binding, "payload": payload, "tool": tool}
 
 
 def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: str,
@@ -573,8 +588,12 @@ def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: 
     if plan["source_generation"] != generation:
         raise Blocked("full review input assembly: plan source generation is stale")
     sources = _load_sources(plan, run_root)
+    # P40: vendor and dependency requests bind the accepted source projection lineage they run on.
+    source_binding = (automatic_inputs.source_projection(plan["run_id"])[1] if any(
+        isinstance(raw, dict) and raw.get("adapter") in {"vendor", "dependency"} for raw in plan["launches"]) else None)
     attempt = output_root / "attempts" / attempt_id
-    fingerprint = HASH + digest({"plan": plan, "source_bindings": {key: row["binding"] for key, row in sources.items()}})
+    fingerprint = HASH + digest({"plan": plan, "source_bindings": {key: row["binding"] for key, row in sources.items()},
+                                 "source_projection": source_binding})
     if attempt.exists():
         raise Blocked("full review input assembly: immutable attempt already exists")
     (attempt / "requests").mkdir(parents=True)
@@ -589,7 +608,7 @@ def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: 
         if not isinstance(job, str) or job in seen:
             raise Blocked("full review input assembly: launch job identities must be unique")
         seen.add(job)
-        request = builders[adapter](raw, plan, sources, run_root)
+        request = builders[adapter](raw, plan, sources, run_root, source_binding)
         relative = f"requests/{job}.json"
         atomic_json(attempt / relative, request)
         paths.append(relative)

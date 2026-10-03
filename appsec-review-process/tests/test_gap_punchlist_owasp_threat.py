@@ -144,16 +144,23 @@ class StandardsLifecycleGapTests(unittest.TestCase):
     setup_paths = standards_tests.StandardsLifecycleTests.setup_paths
     standards = standards_tests
 
-    def _worklist(self, component, records):
+    def _worklist(self, component, records, job_id="04-owasp-validation-worklist"):
+        # P39: OWASP targets come from the accepted routing; route every map component as applicable.
+        routed = dict(self.standards.ROUTED, components=[
+            {"component_id": row["component_id"], "scope_status": "in_scope"} for row in component["functional_components"]],
+            rules=[dict(self.standards.ROUTED["rules"][0], rule_id="auto-" + row["component_id"],
+                        component_id=row["component_id"]) for row in component["functional_components"]])
+
         def load(_run, spec):
             if spec[0] == lifecycle.COMPONENT[0]: return component, self.standards.COMPONENT_BIND
             if spec[0] == lifecycle.STANDARDS[0]: return self.standards.STANDARD, self.standards.STANDARDS_BIND
+            if spec[0] == lifecycle.ROUTING[0]: return routed, self.standards.ROUTING_BIND
             raise AssertionError(spec)
         with tempfile.TemporaryDirectory() as folder:
             _run, p1, p2 = self.setup_paths(folder)
             with p1, p2, mock.patch.object(lifecycle, "_load", side_effect=load), \
                  mock.patch.object(lifecycle, "_record_documents", return_value=records):
-                prepared = lifecycle.prepare_worklist("run-a", "04-owasp-validation-worklist")
+                prepared = lifecycle.prepare_worklist("run-a", job_id)
                 return prepared, execution_state.read_json(prepared["request_path"])
 
     def test_p26_assessment_gap_is_one_summary_not_per_row(self):
@@ -172,9 +179,12 @@ class StandardsLifecycleGapTests(unittest.TestCase):
 
     def test_p26_no_fallback_to_all_components_when_none_routed(self):
         """P26: with no component routed to the lane, the worklist does not fall back to every component."""
+        # P39: OWASP now routes from the T04 routing; downstream_lanes routing remains for STIG/SRG.
         component = {"source_snapshot_sha256": H, "functional_components": [
             {"component_id": "cli", "downstream_lanes": ["05-native-memory"]}]}
-        prepared, _request = self._worklist(component, [(self.standards.STANDARD["records"][0], self.standards.WRAPPER)])
+        wrapper = dict(self.standards.WRAPPER, family="disa_srg", record_id="SRG-APP-1")
+        prepared, _request = self._worklist(component, [(self.standards.STANDARD["records"][0], wrapper)],
+                                            "15-stig-srg-validation-worklist")
         self.assertEqual(prepared["control_count"], 0, "unrouted components were assessed by fallback")
 
     def test_p28_hit_under_component_path_pattern_matches(self):

@@ -10,6 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import automatic_evidence_inputs
 import bounded_analysis_workers as bounded
 import build_index
 import bounded_transform_orchestration as orchestration
@@ -23,6 +24,8 @@ import intake
 
 
 STAMP = "2026-09-27T12:00:00Z"
+# The accepted-intake source projection lineage; the fixture projection is the staged in-run target.
+PROJECTION_BINDING = {key: "fixture-" + key for key in automatic_evidence_inputs.SOURCE_BINDING_KEYS}
 
 
 class FullReviewInputAssemblyTests(unittest.TestCase):
@@ -37,6 +40,10 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
         atomic_json(self.manifest, {"target": {"repo_path": str(self.target)}})
         self.generation = "sha256:" + file_hash(self.manifest)
         self.source = self._accepted_fuzz("data/upstream/fuzz", self.generation)
+        projection = patch.object(automatic_evidence_inputs, "source_projection", side_effect=lambda _run_id: (
+            self.target, dict(PROJECTION_BINDING), assembly._source_files(self.target)))
+        projection.start()
+        self.addCleanup(projection.stop)
 
     def tearDown(self):
         self.temp.cleanup()
