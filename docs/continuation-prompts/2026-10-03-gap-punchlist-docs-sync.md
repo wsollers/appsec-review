@@ -19,7 +19,7 @@ that resolves (cite file:line or commit); a skipped thing is a gap, never "no is
    it is in scope: `git log --stat 1fda938^..HEAD`.
 2. Read, in order:
    - `AGENTS.md`, `docs/README.md`, `docs/agent-reader.md`.
-   - `docs/TODO/gap-punchlist-hello-autotools-2026-10-03.md`: every item P01-P35, E1-E3 and the
+   - `docs/continuation-prompts/2026-10-03-gap-punchlist-hello-autotools.md` (moved from `docs/TODO/`): every item P01-P35, E1-E3 and the
      fix plan. Treat the code as authoritative where they disagree.
    - `appsec-review-process/TODO.md`: the "Breakage log" (newest rows describe these fixes) and the
      sections the fixes touch (C, G, Native lane granularity, Threat workbench, OSV feed).
