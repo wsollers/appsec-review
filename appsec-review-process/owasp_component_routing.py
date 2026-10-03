@@ -4,8 +4,10 @@
 This bridge closes the hand-authored T04 request gap.  It binds the newest accepted
 ``01-component-characterization`` result to the newest accepted T03 OWASP lane-in manifest,
 projects every functional component exactly once, and emits deterministic rules only where the
-approved selection scope and a complete component classification positively match.  Ambiguity is
-left unmatched so T04 emits ``cannot_determine``; this worker never invents technical N/A.
+approved selection scope and the component classification positively match; a partial classification
+yields a conditional rule carrying its unknowns.  Technical N/A is emitted only for the web, session and
+API chapters of a positively classified CLI/library with no network trait; other ambiguity is left
+unmatched so T04 emits ``cannot_determine``.
 """
 from __future__ import annotations
 
@@ -28,6 +30,13 @@ LANE_IN_JOB = owasp_applicability.UPSTREAM_JOB
 CONTRACT = "owasp-applicability-request"
 REQUEST = "owasp-applicability-request.json"
 ROUTING = "owasp-component-routing.json"
+# ASVS 5.0 chapters that only exist for a web/HTTP/session surface: V3 Web Frontend, V4 API and Web
+# Service, V7 Session Management, V9 Self-contained Tokens, V10 OAuth and OIDC, V17 WebRTC.
+NON_WEB_NA_DOMAINS = {"owasp_asvs": frozenset({"V3", "V4", "V7", "V9", "V10", "V17"})}
+LOCAL_KINDS = frozenset({"cli", "command", "commandline", "library", "libraries", "lib"})
+NETWORK_TRAITS = frozenset({"network", "networking", "http", "https", "web", "webapp", "api", "server", "service",
+                            "daemon", "socket", "sockets", "tcp", "udp", "tls", "rest", "grpc", "rpc", "websocket",
+                            "url", "browser", "html", "oauth", "oidc", "session", "cookie", "jwt", "webrtc"})
 
 
 def root(run_id: str) -> Path:
@@ -184,7 +193,23 @@ def _classification_state(component: dict[str, Any], component_map: dict[str, An
 def _tokens(component: dict[str, Any], tags: list[str]) -> set[str]:
     values = [component["component_type"], component["coarse_group"], component["observed_purpose"],
               component["security_control_relevance"], *component["aliases"], *tags]
+    return _words(*values)
+
+
+def _words(*values: str) -> set[str]:
     return {token for value in values for token in re.findall(r"[a-z0-9]+", value.lower())}
+
+
+def _unknowns(component: dict[str, Any], component_map: dict[str, Any]) -> list[dict[str, Any]]:
+    return [row for row in component_map["unknowns"] if component["component_id"] in row["affected_component_ids"]]
+
+
+def _local_only(component: dict[str, Any], tags: list[str], unknowns: list[dict[str, Any]]) -> bool:
+    """Positive classification as a CLI/library with no network trait and no open question touching one."""
+    kind = _words(component["component_type"], component["coarse_group"], *component["aliases"])
+    traits = _tokens(component, tags) | _words(component["trust_boundary_relevance"], *component["search_terms"],
+        *(text for row in unknowns for text in (row["subject"], row["question"], row["impact"])))
+    return (component["confidence"] == "high" and bool(kind & LOCAL_KINDS) and not traits & NETWORK_TRAITS)
 
 
 def _family_match(family: str, enabled_scope: list[str], tokens: set[str]) -> bool:
@@ -255,35 +280,62 @@ def assemble(run_id: str, *, reference_root: Path | None = None) -> tuple[dict[s
             "deployability": component["deployability"],
         }
         components.append(context)
-        if state != "known":
+        if state == "unknown":
             gaps.append({"gap_id": "gap-" + digest((component_id, "classification"))[:20],
                          "component_id": component_id, "kind": "cannot_determine",
                          "summary": "Component classification is incomplete; OWASP targets require reviewer resolution.",
                          "rescope_required": True})
             continue
         tokens = _tokens(component, tag_map[component_id])
+        unknowns = _unknowns(component, component_map)
+        citation = {"input_id": component_entry["input_id"],
+                    "artifact_path": component_entry["artifact"]["path"],
+                    "sha256": component_entry["artifact"]["sha256"],
+                    "locator": f"$.functional_components[?component_id={component_id}]",
+                    "observed_fact": f"Accepted characterization identifies {component['name']} as {component['component_type']}."}
+        if state == "known":
+            decision = {"status": "applicable",
+                        "rationale": "The approved OWASP selection scope positively matches the accepted component classification.",
+                        "source_completeness": "adequate", "conditional_expression": None}
+            conditions = []
+        else:
+            conditions = [row["question"] for row in unknowns] or [
+                f"Confirm the {component['confidence']}-confidence classification of {component['name']} as {component['component_type']}."]
+            decision = {"status": "conditional",
+                        "rationale": "The approved OWASP selection scope matches a partially classified component; applicability holds only if its open classification questions resolve as characterized.",
+                        "source_completeness": "partial", "conditional_expression": " AND ".join(conditions)}
         matched = False
         for family in sorted({row["standard_family"] for row in controls}):
+            domains = sorted(NON_WEB_NA_DOMAINS.get(family, set()) & {
+                owasp_applicability._domain(row) for row in controls if row["standard_family"] == family})
+            if domains and _local_only(component, tag_map[component_id], unknowns):
+                rules.append({
+                    "rule_id": f"auto-{component_id}-{family.replace('_', '-')}-non-web-na",
+                    "component_id": component_id,
+                    "selector": {"standard_family": family, "control_ids": [], "domain_ids": domains, "all_controls": False},
+                    "decision": {"status": "not_applicable",
+                                 "rationale": "The accepted characterization positively classifies this component as a local CLI/library with no network, HTTP or session trait; web, API and session chapters do not apply.",
+                                 "signals": [{"signal_type": "positive_exclusion",
+                                              "fact": f"{component['component_type']} ({component['coarse_group']}) has no network/http trait in its classification.",
+                                              "input_id": component_entry["input_id"]}],
+                                 "citations": [citation], "source_completeness": "adequate",
+                                 "conditional_expression": None},
+                })
             selected = selections.get(family)
             if not selected or not _family_match(family, selected["enabled_scope"], tokens):
                 continue
             matched = True
-            citation = {"input_id": component_entry["input_id"],
-                        "artifact_path": component_entry["artifact"]["path"],
-                        "sha256": component_entry["artifact"]["sha256"],
-                        "locator": f"$.functional_components[?component_id={component_id}]",
-                        "observed_fact": f"Accepted characterization identifies {component['name']} as {component['component_type']}."}
             rules.append({
                 "rule_id": f"auto-{component_id}-{family.replace('_', '-')}",
                 "component_id": component_id,
                 "selector": {"standard_family": family, "control_ids": [], "domain_ids": [], "all_controls": True},
-                "decision": {"status": "applicable",
-                             "rationale": "The approved OWASP selection scope positively matches the accepted component classification.",
+                "decision": {**decision,
                              "signals": [{"signal_type": "positive_presence",
                                           "fact": f"{component['component_type']} matches approved scope {selected['enabled_scope']}.",
-                                          "input_id": component_entry["input_id"]}],
-                             "citations": [citation], "source_completeness": "adequate",
-                             "conditional_expression": None},
+                                          "input_id": component_entry["input_id"]},
+                                         *({"signal_type": "unresolved_condition", "fact": text,
+                                            "input_id": component_entry["input_id"]} for text in conditions)],
+                             "citations": [citation]},
             })
         if not matched:
             gaps.append({"gap_id": "gap-" + digest((component_id, "selection-scope"))[:20],
@@ -314,7 +366,7 @@ def assemble(run_id: str, *, reference_root: Path | None = None) -> tuple[dict[s
         "gaps": sorted(gaps, key=lambda row: row["gap_id"]),
         "claim_limits": ["Routing does not assess or satisfy a control.",
                          "Unknown or unmatched classification remains cannot_determine and requires rescope.",
-                         "No technical not_applicable decision is generated by this assembler."],
+                         "not_applicable is generated only for ASVS web/API/session chapters of a positively classified local CLI/library."],
     }
     errors = validate_document(routing, "owasp-component-routing.schema.json")
     if errors:

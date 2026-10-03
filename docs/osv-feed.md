@@ -26,7 +26,13 @@ because the worker's fixed mount contract (`/inputs/osv-db`, `XDG_CACHE_HOME`) i
 `dependency_workers.py` and must not change.
 
 Ecosystems (GCS directory names, verified against the bucket): `npm`, `Go`, `Maven`, `crates.io`,
-`NuGet`, `Packagist`, `PyPI`. Source: `https://storage.googleapis.com/osv-vulnerabilities/<ECOSYSTEM>/all.zip`.
+`NuGet`, `Packagist`, `PyPI`, and since P43 (`2e180f2`) `Debian` and `Alpine`, so OSV can corroborate
+Grype on base-image OS packages (records name the release, `Debian:10`, `Alpine:v3.24`). Ubuntu is not
+fetched: the `pkg:deb/ubuntu` build packages from P37 stay Grype-only. An existing feed picks up the new
+ecosystems on its next `sync`. `osv_lookup.py by-package --ecosystem` takes this list (`c87f694`).
+There is no C/C++ ecosystem: OSV's C advisories carry `GIT` commit ranges, which this feed neither
+fetches nor evaluates, so CPE matching through Grype/NVD is the realistic CVE source for vendored C
+components such as cJSON (see [dependency-reachability.md](dependency-reachability.md) §4.1). Source: `https://storage.googleapis.com/osv-vulnerabilities/<ECOSYSTEM>/all.zip`.
 
 ## Modules
 
@@ -63,9 +69,19 @@ the op only publishes. `APPSEC_OSV_ROOT` is exported by `orchestrator/dagster/co
 
 Mixed. The manifest's `licences` lists each advisory-id prefix with its record count and the licence
 recorded for it (`GHSA`/`GO`/`PYSEC`/`OSV` CC-BY-4.0, `RUSTSEC`/`GSD` CC0-1.0, `MAL` Apache-2.0, Ubuntu
-CC-BY-SA-4.0; unlisted prefixes such as `DRUPAL` are recorded as `unspecified`). The table is our reading of OSV's
+CC-BY-SA-4.0; unlisted prefixes such as `DRUPAL` are recorded as `unspecified`; so are the Debian `DLA`,
+`DTSA`, `DEBIAN` and Alpine `ALPINE` prefixes until their licence is verified upstream). The table is our reading of OSV's
 documentation: verify before relying on it. `NOTICE.txt` ships with every snapshot. Do not redistribute
 snapshots or the index outside the run/host cache.
+
+## Run hosts (punch list E1)
+
+`06-reachability-codeql` and `06-reachability-ir` read the feed through `APPSEC_OSV_ROOT`, which
+`code-location.sh` sets to `data/feeds/osv`. On zarathustra that directory did not exist for run
+`20261003T000827Z-a02791` (`osv-unusable:DATA_ROOT_MISSING`). Publish it once per host with
+`osv_feed.py sync` (network), then let `nvd_reference_sync` refresh it. Since P20 (`3436f9c`) the
+job-level gap appears only when a row needed OSV symbols, so a missing feed no longer gaps a run
+whose matches all have symbols from the reviewed map.
 
 ## Commands
 

@@ -1498,7 +1498,9 @@
        "consumes": [
         "job:02-code-property-graph",
         "job:02-treesitter-ast",
-        "job:02-binary-triage"
+        "job:02-binary-triage",
+        "job:02-ir-facts",
+        "job:02-debug-symbol-index"
        ],
        "produces": [
         "job:02-code-index"
@@ -1742,7 +1744,9 @@
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake",
-        "job:02-build-index"
+        "job:02-build-index",
+        "job:02-native-build",
+        "job:02-iac-config-scan"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -4458,7 +4462,9 @@
        "consumes": [
         "job:02-code-property-graph",
         "job:02-treesitter-ast",
-        "job:02-binary-triage"
+        "job:02-binary-triage",
+        "job:02-ir-facts",
+        "job:02-debug-symbol-index"
        ],
        "produces": [
         "job:02-code-index"
@@ -4718,7 +4724,9 @@
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake",
-        "job:02-build-index"
+        "job:02-build-index",
+        "job:02-native-build",
+        "job:02-iac-config-scan"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -6982,7 +6990,7 @@
     "job:02-native-build",
     "native-build"
    ],
-   "notes": "Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. Fault/recovery qualification remains."
+   "notes": "Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries, and per unit the configure-generated headers (P35, `e4eb405`) and a hash-bound build-dependencies.json of headers, link lines, DT_NEEDED and owning OS packages (P36, `fcc1058`). Fault/recovery qualification remains."
   },
   {
    "id": "source-sast",
@@ -7003,7 +7011,7 @@
     "job:02-source-sast",
     "source-sast-leads"
    ],
-   "notes": "Implemented with pinned offline C/C++, Go, Java and PHP adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain."
+   "notes": "Implemented with pinned offline C/C++ (including four Semgrep CE taint rules, P13), Go, Java, PHP and shell (tool-shellcheck, P14) adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain."
   },
   {
    "id": "native-memory-analysis",
@@ -7020,7 +7028,7 @@
    "produces": [
     "job:05-native-memory"
    ],
-   "notes": "Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations. Full-review input assembly and live qualification remain gaps."
+   "notes": "Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations; zero candidates is OK with no runtime-verification gap (P29). Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "fuzz-target-triage",
@@ -7057,7 +7065,7 @@
    "produces": [
     "job:04-owasp-validation-worklist"
    ],
-   "notes": "Standalone OWASP-only worklist transform. Applicability and evidence requirements remain NOT_ASSESSED; it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
+   "notes": "Standalone OWASP-only worklist transform. Targets and per-row applicability come from the accepted 04-owasp-component-routing rules (P39, `4622a7f`): not_applicable rows carry the rule citation, partial classifications are conditional, unmatched rows are cannot_determine with one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "stig-srg-validation-worklist",
@@ -7074,7 +7082,7 @@
    "produces": [
     "job:15-stig-srg-validation-worklist"
    ],
-   "notes": "Standalone DISA STIG/SRG-only worklist transform. Platform tailoring remains NOT_ASSESSED; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
+   "notes": "Standalone DISA STIG/SRG-only worklist transform. Targets are the components whose downstream_lanes route to 15 (no fallback to every component, P26); platform tailoring remains NOT_ASSESSED behind one summary gap; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "deployment-hardening",
@@ -7092,7 +7100,7 @@
    "produces": [
     "job:15-deployment-hardening"
    ],
-   "notes": "Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps."
+   "notes": "Standalone static deployment-hardening transform. IaC hits match a work item by the component's path patterns (P28); runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "threat-model-reconciliation-active",
@@ -7126,7 +7134,7 @@
    "produces": [
     "job:02-sbom-inventory"
    ],
-   "notes": "Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Full-review input assembly and live Docker qualification remain gaps."
+   "notes": "Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Enriched from the build index (vendored cJSON with purl/CPE from its hash-bound cJSON.h, P19), the native build's build-dependencies.json (pkg:deb load-time/build-time and macro-versioned vendored trees, P37) and the 02-iac-config-scan base-image inventory (container-base pkg:deb/pkg:apk, P43); a crashed native build or IaC scan is a gap, not a stop (P42). Full-review input assembly and live Docker qualification remain gaps."
   },
   {
    "id": "sca-vulnerability-match",
@@ -11517,6 +11525,16 @@
      "job": "02-binary-triage",
      "kind": "required",
      "contract": "binary-triage"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "optional",
+     "contract": "ir-facts"
+    },
+    {
+     "job": "02-debug-symbol-index",
+     "kind": "optional",
+     "contract": "debug-symbol-index"
     }
    ],
    "declared_inputs": [
@@ -11531,6 +11549,14 @@
     {
      "need": "optional",
      "input": "accepted binary triage export tables"
+    },
+    {
+     "need": "optional",
+     "input": "accepted IR facts"
+    },
+    {
+     "need": "optional",
+     "input": "accepted debug-symbol index records"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-code-index.json",
@@ -11552,7 +11578,9 @@
    "consumes": [
     "job:02-code-property-graph",
     "job:02-treesitter-ast",
-    "job:02-binary-triage"
+    "job:02-binary-triage",
+    "job:02-ir-facts",
+    "job:02-debug-symbol-index"
    ],
    "produces": [
     "job:02-code-index"
@@ -12510,6 +12538,16 @@
      "job": "02-build-index",
      "kind": "required",
      "contract": "build-index"
+    },
+    {
+     "job": "02-native-build",
+     "kind": "optional",
+     "contract": "native-build"
+    },
+    {
+     "job": "02-iac-config-scan",
+     "kind": "optional",
+     "contract": "iac-config-evidence"
     }
    ],
    "declared_inputs": [
@@ -12528,6 +12566,14 @@
     {
      "need": "required",
      "input": "B16 Syft image record"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-native-build per-unit build-dependencies.json (P36)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-iac-config-scan base-image-inventory.json (P41/P43)"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-sbom-inventory.json",
@@ -12551,7 +12597,9 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake",
-    "job:02-build-index"
+    "job:02-build-index",
+    "job:02-native-build",
+    "job:02-iac-config-scan"
    ],
    "produces": [
     "job:02-sbom-inventory"
@@ -12903,7 +12951,7 @@
    "outputs_source": "pipeline/output-contracts/binary-component-cve-match.json",
    "claim_class": "binary_component_cve_lead",
    "gaps": [
-    "Not yet run inside the B13 boundary on a host: tool-cve-bin-tool must be built and its database published by nvd_reference_sync."
+    "Qualified inside B13 in the cloud workspace only (local Docker, NVD from the fkie-cad mirror through the real publisher); not yet on zarathustra/hal5000 or in full_review."
    ],
    "next_prerequisite": "Build tool-cve-bin-tool, let nvd_reference_sync publish the database, and run full_review on appsec-multi-vuln (case-030 vendors zlib 1.2.11).",
    "consumes": [
@@ -14979,6 +15027,7 @@
     "job:02-debug-symbol-index",
     "job:02-binary-triage",
     "job:02-test-execution",
+    "job:02-sbom-inventory",
     "job:02-binary-hardening",
     "job:02-binary-component-cve-match"
    ]
@@ -15180,7 +15229,8 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:05-native-memory",
-    "job:06-reachability-ir"
+    "job:06-reachability-ir",
+    "job:02-code-index"
    ]
   },
   "job:02-debug-symbol-index": {
@@ -15192,6 +15242,7 @@
     "job:02-debug-symbol-index"
    ],
    "consumed_by": [
+    "job:02-code-index",
     "job:02-binary-cfg"
    ]
   },
@@ -15306,7 +15357,8 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:15-deployment-hardening"
+    "job:15-deployment-hardening",
+    "job:02-sbom-inventory"
    ]
   },
   "job:02-container-image-inventory": {

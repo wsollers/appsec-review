@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/targets"
 # name|origin|pinned commit (full SHA; bump deliberately when the fixture changes)
 FIXTURES=(
     "hello-autotools|https://github.com/wsollers/hello-autotools.git|632522b6801caa5810f0c6bf71bf3783c90068ac"
-    "appsec-multi-vuln|https://github.com/wsollers/appsec-multi-vuln.git|5c5a776f4192d9e720689735cf8600a83adea3a3"
+    "appsec-multi-vuln|https://github.com/wsollers/appsec-multi-vuln.git|d32beee0818eb8ef187af1fb735b9bc6d18b855b"
     "freeciv21|https://github.com/longturn/freeciv21.git|0ce1c60acf1140d6c5c5a5cd6bef2507bd072319"
     "doom3-bfg|https://github.com/id-Software/DOOM-3-BFG.git|1caba1979589971b5ed44e315d9ead30b278d8b4"
 )

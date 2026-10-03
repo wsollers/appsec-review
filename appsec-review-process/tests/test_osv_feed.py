@@ -63,7 +63,8 @@ class OsvFeedTests(unittest.TestCase):
         return osv_feed.sync(self.root, "run-1", clock=lambda: at, fetch_file=FakeDownloader(payloads))
 
     def test_ecosystem_names_match_gcs_directories(self):
-        self.assertEqual(set(osv_feed.ECOSYSTEMS), {"npm", "Go", "Maven", "crates.io", "NuGet", "Packagist", "PyPI"})
+        self.assertEqual(set(osv_feed.ECOSYSTEMS), {"npm", "Go", "Maven", "crates.io", "NuGet", "Packagist", "PyPI",
+                                                      "Debian", "Alpine"})  # P43: base-image OS ecosystems
         self.assertEqual(osv_feed.source_url("crates.io"),
                          "https://storage.googleapis.com/osv-vulnerabilities/crates.io/all.zip")
         with self.assertRaises(ValueError):
@@ -79,7 +80,7 @@ class OsvFeedTests(unittest.TestCase):
         manifest = json.loads((snap / "manifest.json").read_text())
         self.assertEqual(manifest["ecosystems"]["npm"]["record_count"], 2)
         self.assertEqual(manifest["licences"]["GHSA"]["licence"], "CC-BY-4.0")
-        self.assertEqual(manifest["licences"]["PYSEC"]["records"], 7)
+        self.assertEqual(manifest["licences"]["PYSEC"]["records"], len(osv_feed.ECOSYSTEMS))  # one per archive
         self.assertEqual(manifest["data_timestamp"], "2026-09-29T00:00:00Z")
 
     def test_bad_archive_is_a_recorded_gap_and_does_not_break_publication(self):

@@ -524,8 +524,15 @@ The OWASP source-ingest process selects exact content-addressed ASVS, MASVS, MAS
 characterized target. `04-owasp-validation-worklist` creates one work item per selected control with
 standard version, target/component, applicability (`applicable`, `conditional`,
 `not_applicable`, or `cannot_determine`), tailoring, evidence mode, citations, and gaps.
+Applicability comes from the accepted T04 component routing (P39, `4622a7f`): a `not_applicable` row
+carries its routing rule as citation and needs no assessment; a partially classified component is
+`conditional` on its open questions (P25); a row no rule decides is `cannot_determine`, counted in one
+worklist gap. T04 emits technical N/A only for the ASVS V3, V4, V7, V9, V10 and V17 chapters of a
+positively classified local CLI or library with no network, HTTP or session trait, citing the bound
+component map (P24, `14d295f`). That a routing rule may rest on the component map rather than
+canonical target evidence is a narrow exception, confirmed by the owner 2026-10-03: a CLI or library may be not applicable for some components.
 
-The worklist begins `NOT_ASSESSED`; it cannot satisfy a control or create a finding. The later
+The worklist begins `NOT_ASSESSED` (one summary gap with the count, P26); it cannot satisfy a control or create a finding. The later
 ASVS/MASVS accounting/join keeps selected, applicable, assessed, and satisfied as separate
 denominators and emits a status matrix, coverage gaps, and candidate promotion routes. Top 10 and
 OpenCRE records guide routing and cross-reference; they do not prove target behavior.
@@ -544,7 +551,10 @@ answered from an application repository alone.
 `15-deployment-hardening` consumes the accepted STIG/SRG worklist plus accepted IaC/deployment
 evidence. It assesses the checked-in configuration and declared exposure for the tailored target.
 Its result explicitly says `STATIC_EVIDENCE_ONLY`, `runtime_observed: false`, and carries runtime
-gaps. It does not replace either standards worklist and does not issue a compliance certification.
+gaps. It does not replace either standards worklist and does not issue a compliance certification. An IaC
+hit belongs to a work item when its path matches the component's path patterns or representative
+locations (P28); Dockerfiles, `*.Dockerfile`, `Containerfile` and `.github/workflows` YAML count as IaC
+inputs (`iac_files.py`, P27/P38), so a Dockerfile-only target is scanned.
 
 All three workers have deterministic standalone cores. Their full-review input assemblers, shared
 Dagster bindings, and live accepted qualifications remain separate work.

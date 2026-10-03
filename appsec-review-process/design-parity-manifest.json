@@ -4448,7 +4448,9 @@
         "dependencies": [
           "02-code-property-graph",
           "02-treesitter-ast",
-          "02-binary-triage"
+          "02-binary-triage",
+          "02-ir-facts",
+          "02-debug-symbol-index"
         ]
       },
       "registry": {
@@ -5532,7 +5534,9 @@
         "implemented": true,
         "dependencies": [
           "00-intake",
-          "02-build-index"
+          "02-build-index",
+          "02-native-build",
+          "02-iac-config-scan"
         ]
       },
       "registry": {

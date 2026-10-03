@@ -10,6 +10,7 @@ from __future__ import annotations
 import tunables
 from datetime import datetime, timezone
 import json
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import threading
@@ -116,27 +117,50 @@ def _bounded_json(path: Path) -> dict[str, Any]:
     return value
 
 
-_NM = re.compile(r"^\s*([0-9A-Fa-f]+)\s+(\S)\s+(.+?)\s*$")
+_NM = re.compile(r"^\s*([0-9A-Fa-f]+)\s+(\S)\s+([^\t]+?)"
+                 r"(?:\t(.+):(\d+)(?:\s+\(discriminator \d+\))?)?\s*$")
+# nm kinds a (STT_FILE; -a lists them at address 0, so crtstuff.c from crtbegin/crtend always
+# collided) and N (debugging entries) are not program symbols.
+_NM_SKIP = {"a", "N"}
+_SOURCE_PREFIXES = ("/scratch/src/", "/workspace/")
+# Toolchain startup code from crt*.o is never compiled with the target's -g.
+_CRT_TEXT = {"_start", "_init", "_fini", "deregister_tm_clones", "register_tm_clones",
+             "__do_global_dtors_aux", "frame_dummy", "__libc_csu_init", "__libc_csu_fini",
+             "_dl_relocate_static_pie"}
+
+
+def _source_path(value: str) -> str | None:
+    """nm -l location to a checkout-relative path; None outside the build checkout."""
+    prefix = next((item for item in _SOURCE_PREFIXES if value.startswith(item)), None)
+    if prefix is None or "\\" in value: return None
+    path = PurePosixPath(posixpath.normpath(value.removeprefix(prefix)))
+    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts): return None
+    return path.as_posix()
 
 
 def _debug_record(binary: dict[str, Any], raw_root: Path) -> dict[str, Any]:
     summary = _bounded_json(raw_root / "summary.json")
-    symbols = []
+    symbols, unlocated = [], False
     for line in _bounded_text(raw_root / "nm-symbols.txt").splitlines():
         match = _NM.match(line)
-        if not match:
+        if not match or match.group(2) in _NM_SKIP:
             continue
-        symbols.append({"address": "0x" + match.group(1).lower(), "size": 0,
-            "name": match.group(3), "kind": match.group(2), "source_path": None, "line": None})
+        address, kind, name, location, number = match.groups()
+        located = location is not None and location != "??" and int(number) > 0
+        source = _source_path(location) if located else None
+        unlocated |= (not located and kind in "Tt" and name not in _CRT_TEXT
+                      and not name.startswith("__x86.get_pc_thunk."))
+        symbols.append({"address": "0x" + address.lower(), "size": 0, "name": name, "kind": kind,
+            "source_path": source, "line": int(number) if source is not None else None})
     symbols = sorted(symbols, key=lambda item: (item["address"], item["name"]))[:100_000]
     has_debug = summary.get("has_debug_sections") is True
     # A symbol table without DWARF sections is PARTIAL; STRIPPED means no symbol table either. Before,
     # symbols-without-debug read STRIPPED (run 20261001T032047Z-fd64eb: all 9 binaries, although nm
     # listed their symbols and checksec reported symbols: yes).
     status = "PRESENT" if has_debug else ("PARTIAL" if symbols else "STRIPPED")
-    gaps = []
-    if any(item["source_path"] is None for item in symbols):
-        gaps.append("source-locations-unavailable")
+    # A location outside the checkout (system header, libc) is placed, not a gap; target text that
+    # nm -l could not place while DWARF exists is one.
+    gaps = (["source-locations-unavailable"] if unlocated else []) if has_debug else ["debug-info-absent"]
     return {"binary_id": binary["binary_id"], "binary_sha256": binary["sha256"],
         "build_identity_sha256": binary["build_identity_sha256"], "symbol_status": status,
         "symbol_identity": _hash({"binary": binary["sha256"], "symbols": symbols}),
@@ -164,6 +188,53 @@ def _hardening(checksec: str) -> dict[str, str]:
     }
 
 
+def _optional_text(path: Path) -> str | None:
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_RAW_BYTES: return None
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+_DIE_PACKED = {"packer", "protector", "cryptor"}
+_DIE_TYPES = _DIE_PACKED | {"compiler", "linker", "library", "tool", "installer", "sfx", "joiner",
+    "format", "language", "operation system", "archive", "overlay", "debug data", "sign tool"}
+_DIE_LINE = re.compile(r"^\s*([A-Za-z][A-Za-z ]*?)\s*:\s*\S")
+_DIE_FILETYPE = re.compile(r"^(?:ELF(?:32|64)|PE(?:32|64)|MACHO(?:32|64)?|Mach-O\S*|MSDOS|Binary)\b")
+
+
+def _die_types(raw_root: Path) -> set[str] | None:
+    """Detection types DIE reported (lower case); None when no DIE output parsed."""
+    text = _optional_text(raw_root / "die.json")
+    try:
+        value = json.loads(text) if text is not None else None
+    except ValueError:
+        value = None
+    if isinstance(value, dict) and isinstance(value.get("detects"), list):
+        # diec 3.x nests detects[].values[]{type,name}; older diec lists detects[]{type,name}.
+        found, stack = set(), list(value["detects"])
+        while stack:
+            item = stack.pop()
+            if not isinstance(item, dict): continue
+            if isinstance(item.get("type"), str) and "name" in item: found.add(item["type"].strip().lower())
+            if isinstance(item.get("values"), list): stack.extend(item["values"])
+        return found
+    # Text: `diec -j` failed over to die.txt, or a diec without -j wrote text into die.json.
+    for name in ("die.txt", "die.json"):
+        lines = (_optional_text(raw_root / name) or "").splitlines()
+        types = {match.group(1).lower() for match in map(_DIE_LINE.match, lines) if match}
+        if any(_DIE_FILETYPE.match(line) for line in lines) or types & _DIE_TYPES:
+            return types & _DIE_TYPES
+    return None
+
+
+def _packed_state(kind: str, sections: list[str], raw_root: Path) -> str:
+    """YES on a DIE packer/protector or UPX marker; NO only when DIE parsed clean over normal sections."""
+    die, names = _die_types(raw_root), set(sections)
+    strings = _optional_text(raw_root / "strings.txt") or ""
+    if (die or set()) & _DIE_PACKED or "UPX!" in strings or names & {"UPX0", "UPX1", "UPX2"}:
+        return "YES"
+    normal = ".text" in names and bool(names & {".data", ".rodata", ".rdata"})
+    return "NO" if die is not None and kind in {"ELF", "PE"} and normal else "UNKNOWN"
+
+
 def _triage_record(binary: dict[str, Any], raw_root: Path) -> dict[str, Any]:
     summary = _bounded_json(raw_root / "summary.json")
     kind = str(summary.get("format", "unknown")).upper()
@@ -174,13 +245,15 @@ def _triage_record(binary: dict[str, Any], raw_root: Path) -> dict[str, Any]:
     if not isinstance(imports, list): imports = []
     sections = summary.get("sections", [])
     if not isinstance(sections, list): sections = []
+    sections = [str(item) for item in sections[:10_000]]
+    packed = _packed_state(kind, sections, raw_root)
     return {"binary_id": binary["binary_id"], "binary_sha256": binary["sha256"],
         "build_identity_sha256": binary["build_identity_sha256"], "format": kind,
         "architecture": _architecture(summary.get("machine")),
         "hardening": _hardening(_bounded_text(raw_root / "checksec.txt")),
-        "sections": [str(item) for item in sections[:10_000]],
-        "imports": [str(item) for item in imports[:10_000]], "packed": "UNKNOWN",
-        "stripped": stripped, "gaps": ["static-packer-classification-inconclusive"]}
+        "sections": sections, "imports": [str(item) for item in imports[:10_000]],
+        "packed": packed, "stripped": stripped,
+        "gaps": ["static-packer-classification-inconclusive"] if packed == "UNKNOWN" else []}
 
 
 def _cfg_record(binary: dict[str, Any], stdout: Path, upstream: dict[str, Any]) -> dict[str, Any]:
@@ -254,8 +327,10 @@ def materialize(run_id: str, job: str, attempt: Path, native_attempt: Path,
                        trial / "scratch/evidence/nm-symbols.txt"]
         elif job == "02-binary-triage":
             record = _triage_record(binary, trial / "scratch/evidence")
-            outputs = [trial / "scratch/evidence/summary.json",
-                       trial / "scratch/evidence/checksec.txt"]
+            evidence = trial / "scratch/evidence"
+            # Packer classification reads DIE and strings output; bind whichever the image wrote.
+            outputs = [evidence / "summary.json", evidence / "checksec.txt"] + [evidence / name
+                       for name in ("strings.txt", "die.json", "die.txt") if (evidence / name).is_file()]
         else:
             outputs = [trial / "logs/container/stdout.log"]
             record = _cfg_record(binary, outputs[0], inputs["upstream"])

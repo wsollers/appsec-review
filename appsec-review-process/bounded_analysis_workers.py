@@ -150,10 +150,11 @@ def native_memory(*, run_id: str, attempt_id: str, source_generation: str,
                 "status": "OPEN", "citation_ids": citation_ids})
     result = {**_base("appsec-review/native-memory-analysis/1.0", "05-native-memory", run_id,
                       attempt_id, source_generation, bindings),
-              "status": "OK_WITH_GAPS", "candidates": sorted(rows, key=lambda row: row["candidate_id"]),
+              # No candidates, nothing awaiting runtime proof; claim_limits.runtime_claimed already says it.
+              "status": "OK_WITH_GAPS" if rows else "OK", "candidates": sorted(rows, key=lambda row: row["candidate_id"]),
               "coverage": sorted(coverage, key=lambda row: row["unit_id"]),
               "proof_obligations": sorted(obligations, key=lambda row: row["obligation_id"]),
-              "gaps": ["Host/runtime verification was not performed; every candidate remains candidate_only."],
+              "gaps": ["Host/runtime verification was not performed; every candidate remains candidate_only."] if rows else [],
               "claim_limits": {"finding_created": False, "severity_assigned": False,
                                "runtime_claimed": False, "compliance_claimed": False}}
     return _validate(result, "native-memory-analysis.schema.json")
@@ -184,7 +185,11 @@ def fuzz_triage(*, run_id: str, attempt_id: str, source_generation: str,
 
 
 def standards_worklist(*, family: str, run_id: str, attempt_id: str, source_generation: str,
-                       bindings: list[dict[str, Any]], controls: list[dict[str, Any]]) -> dict[str, Any]:
+                       bindings: list[dict[str, Any]], controls: list[dict[str, Any]],
+                       gaps: list[str] = ()) -> dict[str, Any]:
+    """``gaps`` are worklist-level statements (a counted summary, or why the worklist is empty)."""
+    if any(not isinstance(gap, str) or not gap.strip() for gap in gaps):
+        raise Blocked("standards worklist: summary gaps must be non-empty statements")
     jobs = {"owasp": ("04-owasp-validation-worklist", "appsec-review/owasp-validation-worklist-core/1.0", "owasp-validation-worklist-core.schema.json"),
             "stig_srg": ("15-stig-srg-validation-worklist", "appsec-review/stig-srg-validation-worklist/1.0", "stig-srg-validation-worklist.schema.json")}
     if family not in jobs: raise Blocked("standards worklist: unknown family")
@@ -207,11 +212,12 @@ def standards_worklist(*, family: str, run_id: str, attempt_id: str, source_gene
                 "compliance_claimed": False}
         rows.append(item)
     job, schema_id, schema_file = jobs[family]
+    all_gaps = sorted({gap for row in rows for gap in row["gaps"]} | set(gaps))
     result = {**_base(schema_id, job, run_id,
                       attempt_id, source_generation, bindings), "family": family,
-              "status": "OK_WITH_GAPS" if any(row["gaps"] for row in rows) else "OK",
+              "status": "OK_WITH_GAPS" if all_gaps else "OK",
               "work_items": sorted(rows, key=lambda row: row["work_item_id"]),
-              "gaps": sorted({gap for row in rows for gap in row["gaps"]}),
+              "gaps": all_gaps,
               "claim_limits": {"finding_created": False, "control_satisfied": False,
                                "compliance_claimed": False}}
     return _validate(result, schema_file)

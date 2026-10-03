@@ -94,6 +94,8 @@ def check_item(item: Item) -> list[str]:
     for key in ('output_contract', 'worker_kind'):
         if not isinstance(spec.get(key), str) or not spec[key]:
             errors.append(f'{key} is required')
+    if spec.get('skip_consumer') is not None and not (isinstance(spec['skip_consumer'], str) and spec['skip_consumer']):
+        errors.append('skip_consumer names the consumer job whose edge authorizes a SKIPPED result')
     for name in ('input.schema.json', 'output.schema.json'):
         if not (item.root / name).is_file():
             errors.append(f'{name} is missing')
@@ -423,7 +425,8 @@ def _execute(item: Item, run_id: str, dagster_id: str, mode: str, decision: dict
         input_fingerprint=fingerprint, started_at=allocation['started_at'], execution_status=status,
         summary=result['summary'][:1000], status_record=result['status'],
         artifact_paths=list(item['outputs']['artifacts']), gaps=gaps or None,
-        skip_reason=result.get('skip_reason'), pre_envelope_validate=pre_envelope)
+        skip_reason=result.get('skip_reason'), consumer_job_id=item.get('skip_consumer'),
+        pre_envelope_validate=pre_envelope)
 
 
 def _worker_result_errors(result: Any) -> list[str]:
@@ -449,7 +452,7 @@ def _worker_result_errors(result: Any) -> list[str]:
 def _verify_reuse(item: Item, run_id: str, pointer: dict, attempt: Path, receipt: dict) -> None:
     base = root(run_id, item.job_id)
     validate_published(base, pointer, pointer['fingerprint'], expected_run_id=run_id,
-                       expected_job_id=item.job_id, reuse=True)
+                       expected_job_id=item.job_id, consumer_job_id=item.get('skip_consumer'), reuse=True)
     for name, value in receipt['outputs'].items():
         if dr.observe_file(attempt / name) != value:
             raise Blocked(f'{item.job_id}: reused {name} does not match its receipt')
@@ -535,7 +538,7 @@ def run_item(job_id: str, run_id: str, dagster_id: str, *, mode: str | None = No
         fingerprint_inputs=lambda record: 'sha256:' + digest(record), execute_attempt=execute_attempt,
         preflight_failure_inputs=lambda exc: {'schema': RECORD_SCHEMA, 'run_id': run_id, 'job_id': job_id,
                                               'mode': mode, 'preflight_error': f'{type(exc).__name__}: {exc}'},
-        force=rerun, post_validate=post_validate, on_reuse=on_reuse,
+        force=rerun, consumer_job_id=item.get('skip_consumer'), post_validate=post_validate, on_reuse=on_reuse,
         blocked_summary=f'{job_id} item preflight did not complete.',
         failed_summary=f'{job_id} item did not publish.')
     if holder.get('reused'):

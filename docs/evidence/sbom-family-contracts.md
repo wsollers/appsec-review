@@ -43,6 +43,16 @@ values, so they are reduced to `aggregate:<v03-error-name>` plus caller-declared
   exact accepted SBOM and validated OSV snapshot. OSV Scanner executes only when that SBOM contains
   a purl-bearing component; otherwise the receipt records `SKIPPED_NA` with
   `no-purl-bearing-components`, Grype still executes, and the SCA node remains `OK_WITH_GAPS`.
+- `sbom-inventory` enrichment beyond Syft (gap punch list, 2026-10-03). Each source is retained as its
+  own output and re-verified: build-index vendored members (`build_index_enrichment_errors`; cJSON carries
+  exactly `cjson_identifiers(version)`, `pkg:github/davegamble/cjson@v<ver>` and
+  `cpe:2.3:a:cjson_project:cjson:<ver>`, P19), native-build `build-observed` components in
+  `outputs/build-dependency-components.json` (`build_dependency_enrichment_errors`; `pkg:deb` scoped
+  `load-time` or `build-time`, P37) and base-image `image-observed` components in
+  `outputs/base-image-components.json` (`base_image_enrichment_errors`; `pkg:deb`/`pkg:apk` scoped
+  `container-base`, with image evidence and end-of-life status, P43). CycloneDX carries the scope
+  (`load-time` -> `required`, `build-time` -> `excluded`), evidence occurrences and properties. Rows
+  dedupe by purl. A vendored member without identifiers still needs an explicit coverage gap.
 - `dependency-lifecycle` also requires `outputs/tool-results.json`: V03's coverage rules are defined
   against the tool instance, and the transform's reference-table identity lives in its
   `data_identities`.

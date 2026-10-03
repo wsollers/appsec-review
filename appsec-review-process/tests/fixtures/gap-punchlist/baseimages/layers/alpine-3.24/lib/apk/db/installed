@@ -1,0 +1,16 @@
+P:musl
+V:1.2.5-r10
+A:x86_64
+S:410177
+I:991232
+T:the musl c library (libc) implementation
+o:musl
+L:MIT
+
+P:busybox
+V:1.37.0-r20
+A:x86_64
+T:Size optimized toolbox of many common UNIX utilities
+o:busybox
+L:GPL-2.0-only
+

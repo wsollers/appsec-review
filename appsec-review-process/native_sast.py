@@ -10,6 +10,7 @@ import tunables
 from datetime import datetime, timezone
 import os
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 import threading
 from typing import Any
@@ -200,6 +201,95 @@ def generated_gaps(paths: list[str]) -> list[str]:
             [f"generated-source-not-in-checkout:{path}" for path in ordered[:GENERATED_SAMPLE]])
 
 
+HEADERS_MOUNT = "/inputs/generated-headers"
+_INCLUDE_FLAGS = ("-iquote", "-isystem", "-idirafter", "-I")
+
+
+def generated_headers(attempt: Path, unit: dict[str, Any], artifact_hashes: dict[str, str]) -> dict[str, Any] | None:
+    """P35: E02's configure-generated headers, re-hashed against the result and envelope; None when
+    the publication predates them (an explicit gap, see header_gaps)."""
+    record = unit.get("generated_headers")
+    if record is None:
+        return None
+    root_rel = record["root"]
+    files = set()
+    for header in record["headers"]:
+        relative = f"{root_rel}/{header['path']}"
+        path = _owned(attempt, relative, f"{unit['unit_id']} generated header")
+        if _hash(path) != header["sha256"] or artifact_hashes.get(relative) != header["sha256"]:
+            raise Blocked(f"{JOB}: native-build generated header hash/contract mismatch")
+        files.add(path)
+    host = None
+    if files:
+        host = attempt.resolve().joinpath(*PurePosixPath(root_rel).parts)
+        if host.is_symlink() or {p for p in host.rglob("*") if not p.is_dir()} != files:
+            raise Blocked(f"{JOB}: native-build generated header directory holds unrecorded files")
+        host = str(host)
+    return {"root": root_rel, "host_path": host, "headers": record["headers"], "omitted": record["omitted"]}
+
+
+def _include_dirs(entry: dict[str, Any]) -> list[str]:
+    """Build-copy-relative include directories of one raw entry, in search order."""
+    words, directory, found = entry["arguments"], entry["directory"], []
+    index = 1
+    while index < len(words):
+        word = words[index]
+        for flag in _INCLUDE_FLAGS:
+            if word == flag and index + 1 < len(words):
+                found.append(words[index + 1]); index += 1
+                break
+            if word.startswith(flag) and len(word) > len(flag):
+                found.append(word[len(flag):])
+                break
+        index += 1
+    result = []
+    for value in found:
+        path = posixpath.normpath(posixpath.join(directory, value))
+        if path == adapters.SOURCE_PREFIX.rstrip("/"):
+            result.append("")
+        elif path.startswith(adapters.SOURCE_PREFIX):
+            result.append(path[len(adapters.SOURCE_PREFIX):])
+    return result
+
+
+def with_generated_includes(raw: list[Any], headers: dict[str, Any] | None) -> list[Any]:
+    """Prepend the mounted generated-header directory for each entry whose source directory
+    (``-iquote``) or include directory (``-I``) held a generated header in the build copy.  The mount
+    holds only files absent from the checkout, so searching it first shadows no checkout header."""
+    dirs = {posixpath.dirname(item["path"]) for item in (headers or {}).get("headers", [])}
+    if not dirs:
+        return raw
+
+    def mount(rel: str) -> str:
+        return HEADERS_MOUNT + ("/" + rel if rel else "")
+
+    out = []
+    for entry in raw:
+        if (not isinstance(entry, dict) or not isinstance(entry.get("arguments"), list) or not entry["arguments"]
+                or not all(isinstance(w, str) for w in entry["arguments"]) or not isinstance(entry.get("directory"), str)
+                or not isinstance(entry.get("file"), str) or not entry["file"].startswith(adapters.SOURCE_PREFIX)):
+            out.append(entry)  # the adapter rejects or skips it
+            continue
+        here = posixpath.dirname(entry["file"][len(adapters.SOURCE_PREFIX):])
+        extra = ["-iquote", mount(here)] if here in dirs else []
+        for rel in dict.fromkeys(_include_dirs(entry)):
+            if rel in dirs:
+                extra.append("-I" + mount(rel))
+        words = entry["arguments"]
+        out.append({**entry, "arguments": [words[0], *extra, *words[1:]]} if extra else entry)
+    return out
+
+
+def header_gaps(unit: dict[str, Any]) -> list[str]:
+    """A native build that published no header set, or omitted some past its bound, is a gap."""
+    if "generated_headers" not in unit:
+        return []
+    record = unit["generated_headers"]
+    if record is None:
+        return ["generated-headers-not-published"]
+    return [f"generated-headers-omitted:{record['omitted']}"] if record["omitted"] else []
+
+
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     values["data/native-sast/config-v1.json"] = file_hash(CONFIG)
@@ -270,9 +360,10 @@ def load_native_build(native_build_root: Path, *, run_id: str,
         raw = read_json(db)
         if len(raw) != db_record["entries"]:
             raise Blocked(f"{JOB}: native-build compile database entry count changed")
+        headers = generated_headers(attempt, unit, artifact_hashes)
         try:
             adapted, unsupported = adapters.adapt_compile_database(
-                raw, directory_exists=lambda rel: (target / rel).is_dir())
+                with_generated_includes(raw, headers), directory_exists=lambda rel: (target / rel).is_dir())
         except adapters.AdapterError as exc:
             raise Blocked(f"{JOB}: native-build compile database rejected ({exc})") from exc
         sources = {}
@@ -305,7 +396,7 @@ def load_native_build(native_build_root: Path, *, run_id: str,
                           "adapted_path": f"adapted-inputs/{digest(unit['unit_id'])[:16]}/compile_commands.json",
                           "adapted_sha256": adapters.canonical_sha(adapted)},
                       "adapted": adapted, "unsupported": unsupported, "generated": generated,
-                      "sources": sources})
+                      "sources": sources, "generated_headers": headers})
     return {"attempt": attempt, "pointer": pointer, "envelope": envelope, "result": result,
             "inputs": inputs, "target": target.resolve(), "units": units,
             "excluded_units": excluded_units,
@@ -367,6 +458,7 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], unit: dict[st
              database_root: Path, tool_group: str) -> dict[str, Any]:
     db = f"/inputs/native-sast/{digest(unit['unit_id'])[:16]}/compile_commands.json"
     config = inputs["config"]
+    headers = (unit.get("generated_headers") or {}).get("host_path")
     if tool_group == "clang-cppcheck":
         argv = ["/opt/scripts/run_native_sast.py", "--compile-commands", db,
                 "--out", "/scratch/native-sast", "--jobs", "1",
@@ -384,7 +476,8 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], unit: dict[st
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
                         {"name": "NO_COLOR", "value": "1"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"},
-                          {"host_path": str(database_root), "container_path": "/inputs/native-sast"}],
+                          {"host_path": str(database_root), "container_path": "/inputs/native-sast"}] +
+                         ([{"host_path": headers, "container_path": HEADERS_MOUNT}] if headers else []),
         "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []},
         "permission": _permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
@@ -395,6 +488,16 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], unit: dict[st
 
 def _raw(path: Path, attempt: Path) -> dict[str, Any]:
     return {"path": path.relative_to(attempt).as_posix(), "sha256": _hash(path)}
+
+
+_MISSING_HEADER = re.compile(r"'([A-Za-z0-9_][A-Za-z0-9_./+-]{0,95})' file not found\Z")
+
+
+def _missing_header(first: Any) -> str:
+    """``:missing-header:<name>`` when the runner's first compile error is a missing include (the
+    autotools config.h case); other compiler messages quote target code and stay in the attempt."""
+    match = _MISSING_HEADER.fullmatch(str(first.get("message", ""))) if isinstance(first, dict) else None
+    return f":missing-header:{match.group(1)}" if match and ".." not in match.group(1) else ""
 
 
 def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
@@ -419,13 +522,19 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     supported = len(unit["adapted"])
     gaps = [f"unsupported-translation-unit:{path}" for path in unit["unsupported"]]
     gaps.extend(generated_gaps(unit.get("generated", [])))
+    gaps.extend(header_gaps(unit))
     if dropped:
         gaps.append(f"analyzer-records-outside-checkout:{len(dropped)}")
-    tidy_failed = int(native_manifest["clang_tidy"]["files_nonzero_exit"])
+    tidy = native_manifest["clang_tidy"]
+    tidy_compile = int(tidy.get("files_compile_error", 0))  # absent from pre-P12 runner manifests
+    tidy_failed = int(tidy["files_nonzero_exit"]) - tidy_compile
     cpp_exit = int(native_manifest["cppcheck"]["exit_code"])
     csa_failed = int(csa_summary["tu_error"]) + int(csa_summary["tu_timeout"])
     if tidy_failed:
         gaps.append(f"clang-tidy-tool-error:{tidy_failed}-translation-units")
+    if tidy_compile:
+        gaps.append(f"clang-tidy-compile-error:{tidy_compile}-translation-units" +
+                    _missing_header(tidy.get("first_compile_error")))
     if cpp_exit:
         gaps.append(f"cppcheck-tool-error:exit-{cpp_exit}")
     if csa_failed:
@@ -435,7 +544,8 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     tools = [
         {"tool_id": "clang-tidy", "tool": "clang-tidy", "version": config["tools"]["clang-tidy"],
          "image_id": image["image_id"], "image_digest": image["digest"],
-         "config_sha256": inputs["config_sha256"], "status": "PARTIAL" if tidy_failed else "COMPLETE",
+         "config_sha256": inputs["config_sha256"],
+         "status": "PARTIAL" if tidy_failed or tidy_compile else "COMPLETE",
          "translation_units": supported, "analyzed_units": supported - tidy_failed,
          "records": len([x for x in leads if x["tool_id"] == "clang-tidy"]),
          "raw_evidence": [_raw(clang_trial / "scratch/native-sast/findings-clang-tidy.json", attempt),

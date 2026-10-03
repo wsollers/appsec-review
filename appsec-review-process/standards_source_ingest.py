@@ -269,14 +269,18 @@ def _render(*, run_id: str, attempt_id: str,
             "content_digest": manifest["content_digest"], "extractor": manifest["extractor"],
             "record_count": len(records),
         })
-    gaps = [f"unselected-family:{item['family']}:{item['reason']}"
-            for item in sorted(inputs["binding"]["unselected_families"], key=lambda item: item["family"])]
+    # P18: a family the routing deselected is N/A for this target, not a coverage gap; a selected
+    # family that published no records is.
+    not_applicable = [{"family": item["family"], "reason": item["reason"]}
+                      for item in sorted(inputs["binding"]["unselected_families"], key=lambda item: item["family"])]
+    gaps = [f"selected-family-without-records:{item['family']}" for item in summaries if not item["record_count"]]
     result = {
         "schema": "appsec-review/standards-source-extract/1.0", "run_id": run_id,
         "job_id": JOB, "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if gaps else "OK",
         "source_snapshot_sha256": "sha256:" + inputs["intake"]["source_fingerprint"],
         "source_lock": {"path": "data/reference/source-lock.json", "sha256": inputs["source_lock_sha256"]},
         "snapshots": summaries, "records": index, "coverage_gaps": gaps,
+        "not_applicable_families": not_applicable,
         "claim_boundary": "REFERENCE_MATERIAL_ONLY_NOT_PROOF_OR_COMPLIANCE",
     }
     if validate_document(result, "standards-source-extract.schema.json"):

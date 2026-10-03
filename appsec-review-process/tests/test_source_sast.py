@@ -153,6 +153,61 @@ class SourceSastTests(unittest.TestCase):
                             for row in result["leads"]))
         self.assertEqual(result["coverage_gaps"], [worker.RULES_GAP])
 
+    TAINT_FIXTURE = ROOT / "tests" / "fixtures" / "source-sast-taint"
+    TAINT_RECORDED = ROOT / "tests" / "fixtures" / "source-sast-taint-semgrep.json"
+
+    def _taint_expected(self):
+        """(line, category) of every `TAINT <category>` comment in the fixture; SAFE lines must stay silent."""
+        lines = (self.TAINT_FIXTURE / "src" / "hello.c").read_text().splitlines()
+        taint = {(number, text.split("TAINT ")[1].split()[0].rstrip(":")) for number, text in enumerate(lines, 1)
+                 if "/* TAINT " in text}
+        safe = {number for number, text in enumerate(lines, 1) if "SAFE" in text and "/*" in text}
+        return taint, safe
+
+    def _taint_leads(self, raw):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder).resolve()
+            (target / "src").mkdir()
+            (target / "src" / "hello.c").write_bytes((self.TAINT_FIXTURE / "src" / "hello.c").read_bytes())
+            result = worker.normalize_semgrep(raw, target=target, run_id="run", attempt_id="attempt",
+                source_snapshot_sha256="sha256:" + "b" * 64, image=self.IMAGE)
+        self.assertEqual(validate_document(result, "source-sast.schema.json"), [])
+        return {(row["start_line"], row["category"]) for row in result["leads"] if row["rule_id"].startswith("appsec.c.taint.")}
+
+    def test_recorded_taint_rules_report_each_source_to_sink_flow_and_no_safe_line(self):
+        """P13: replay of semgrep 1.178.0 (both configs) on tests/fixtures/source-sast-taint; the rule
+        categories match the fixture's TAINT comments (memory-copy is the memcpy length rule)."""
+        taint, safe = self._taint_expected()
+        leads = self._taint_leads(json.loads(self.TAINT_RECORDED.read_text()))
+        self.assertEqual(leads, taint)
+        self.assertFalse({line for line, _ in leads} & safe)
+
+    def test_live_semgrep_taint_rules_when_semgrep_is_installed(self):
+        import shutil, subprocess
+        semgrep = shutil.which("semgrep")
+        if semgrep is None: self.skipTest("semgrep is not installed on this host")
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder, "out.json")
+            subprocess.run([semgrep, "scan", "--metrics=off", "--disable-version-check", "--oss-only", "--strict", "-q",
+                            "--config", str(worker.RULES), "--json", "-o", str(out), "src/hello.c"],
+                           cwd=self.TAINT_FIXTURE, check=True, timeout=300)
+            raw = json.loads(out.read_text())
+        self.assertEqual(raw["errors"], [])
+        for item in raw["results"]:
+            item["check_id"] = worker.SEMGREP_RULE_PREFIX + item["check_id"].rsplit("source-sast.", 1)[1]
+        self.assertEqual(self._taint_leads(raw), self._taint_expected()[0])
+
+    def test_every_repository_rule_has_a_category_and_a_pinned_cwe(self):
+        import yaml, cwe_catalog
+        rules = yaml.safe_load(worker.RULES.read_text())["rules"]
+        self.assertEqual(sorted(rule["id"] for rule in rules), sorted(worker.RULE_CATEGORIES))
+        self.assertTrue({rule["id"] for rule in rules if rule.get("mode") == "taint"})
+        catalog = cwe_catalog.Catalog()
+        for rule_id in worker.RULE_CATEGORIES:
+            self.assertTrue(catalog.for_lead(worker.TOOL_ID, rule_id)[0], rule_id)
+        self.assertNotIn("do not cover taint", worker.RULES_GAP)
+        self.assertIn("interprocedural", worker.RULES_GAP)
+
     def test_undeclared_vendored_rule_id_fails_closed(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder).resolve(); (target / "a.c").write_text("x\n")
@@ -284,7 +339,8 @@ class UncoveredLanguageGapTests(unittest.TestCase):
             "projects/python/case-073/app.py", "projects/typescript/case-012/index.ts",
             "projects/bash/case-019/run.sh", "projects/powershell/case-020/run.ps1",
             "projects/rust/case-004/src/main.rs", "node_modules/x/index.js", "projects/go/case-007/main.go"])
-        self.assertEqual([g.split(" ")[0] for g in gaps], ["powershell", "python", "rust", "shell", "typescript"])
+        # P14: shell has the shellcheck lane now and is no longer an uncovered language.
+        self.assertEqual([g.split(" ")[0] for g in gaps], ["powershell", "python", "rust", "typescript"])
         self.assertIn("02-codeql-python is its only static analysis", gaps[1])
         self.assertIn("no static analyzer runs on it", gaps[2])
 
@@ -292,3 +348,60 @@ class UncoveredLanguageGapTests(unittest.TestCase):
         import source_sast_language_adapters as adapters
         gaps = adapters.execution_gaps([{"status": "READY", "tool_id": "spotbugs", "language": "java"}], set())
         self.assertIn("compiled classes", gaps[0])
+
+
+class ShellcheckLaneTests(unittest.TestCase):
+    """P14: shell source has a pinned ShellCheck lane (tool-shellcheck, json1, hit exit 1)."""
+    FIXTURE = ROOT / "tests" / "fixtures" / "source-sast-shell"
+    RECORDED = ROOT / "tests" / "fixtures" / "source-sast-shell-shellcheck.json"
+    REGISTRY = {"tool-shellcheck": {"image_id": "tool-shellcheck", "digest": "sha256:" + "a" * 64}}
+
+    def test_shebang_and_suffix_select_shell_and_generated_scripts_are_a_gap(self):
+        import source_sast_language_adapters as adapters
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder).resolve()
+            files = {"bootstrap": "#!/usr/bin/env bash\n", "configure": "#! /bin/sh\n", "build-aux/install-sh": "#!/bin/sh\n",
+                     "scripts/run.sh": "echo\n", "README": "#!not a shell\n", "vendor/x.sh": "echo\n", "tool.py": "#!/bin/sh\n"}
+            for name, text in files.items():
+                (target / name).parent.mkdir(parents=True, exist_ok=True)
+                (target / name).write_text(text)
+            paths = sorted(files)
+            self.assertEqual(adapters.shell_files(paths, target), (["bootstrap", "scripts/run.sh"],
+                                                                   ["build-aux/install-sh", "configure"]))
+            self.assertIn("shell", adapters.detected_languages(paths, target))
+            gaps = adapters.uncovered_language_gaps(paths, target)
+        self.assertEqual([gap for gap in gaps if "shellcheck" in gap],
+                         ["generated build scripts (2 file(s): build-aux/install-sh, configure) are not analyzed by shellcheck."])
+        self.assertEqual(adapters.detected_languages(["configure"], None), [])
+
+    def test_plan_lists_files_offline_and_accepts_hit_exit_one(self):
+        import source_sast_language_adapters as adapters
+        plan = adapters.build_plan(["shell"], self.REGISTRY, {"shell": ["tests/run.sh"]})[0]
+        self.assertEqual((plan["tool_id"], plan["status"], plan["output"]), ("shellcheck", "READY", "logs/container/stdout.log"))
+        self.assertEqual(plan["argv"], ["/opt/tool/bin/shellcheck", "--format=json1", "--norc", "/workspace/tests/run.sh"])
+        request = worker._language_request("run", "attempt", {"target_path": str(self.FIXTURE),
+            "source_snapshot_sha256": "sha256:" + "b" * 64}, plan)
+        self.assertEqual(request["network"], {"mode": "none", "destinations": []})
+        self.assertEqual(validate_document(request, "pinned-container-request.schema.json"), [])
+        hit = {"execution_status": "FAILED", "cause": "CONTAINER_EXIT_NONZERO", "exit_code": 1}
+        self.assertTrue(adapters.accepted_terminal(plan, hit))
+        self.assertFalse(adapters.accepted_terminal(plan, {**hit, "exit_code": 3}))
+        self.assertEqual(adapters.build_plan(["shell"], {})[0]["status"], "UNAVAILABLE")
+
+    def test_recorded_json1_normalizes_to_categorized_schema_valid_leads(self):
+        """Replay of shellcheck 0.11.0 (shellcheck-py 0.11.0.1) --format=json1 on the fixture."""
+        import cwe_catalog
+        import source_sast_language_adapters as adapters
+        leads = adapters.normalize("shellcheck", self.RECORDED.read_bytes(), self.FIXTURE)
+        self.assertEqual([(row["start_line"], row["rule_id"], row["category"]) for row in leads],
+                         [(5, "SC2006", "style"), (5, "SC2045", "shell-correctness"),
+                          (5, "SC2086", "shell-word-splitting"), (6, "SC2086", "shell-word-splitting")])
+        self.assertTrue(all(row["path"] == "tests/run.sh" for row in leads))
+        enum = json.loads((ROOT.parent / "schemas" / "source-sast.schema.json").read_text())[
+            "properties"]["leads"]["items"]["properties"]["category"]["enum"]
+        self.assertLessEqual(set(adapters.SHELLCHECK_CATEGORIES.values()) | {"style", "shell-correctness"}, set(enum))
+        catalog = cwe_catalog.Catalog()
+        for rule in adapters.SHELLCHECK_CATEGORIES:
+            self.assertTrue(catalog.for_lead("shellcheck", rule)[0], rule)
+        with self.assertRaises(ValueError):
+            adapters.normalize("shellcheck", b"[]", self.FIXTURE)

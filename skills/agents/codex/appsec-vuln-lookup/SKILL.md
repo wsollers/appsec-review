@@ -9,7 +9,7 @@ Run `python appsec-review-process/osv_lookup.py <command>` (JSON on stdout; read
 
 - `by-id <ID>`: you hold an OSV/GHSA/GO/PYSEC/RUSTSEC id and want the record.
 - `by-alias <CVE-or-GHSA>`: you hold a CVE (or any alias) and want the advisories that cover it; the id itself also matches.
-- `by-package --ecosystem <npm|Go|Maven|crates.io|NuGet|Packagist|PyPI> --name <name> [--version <v>]`: you hold a dependency from the SBOM. Add `--version` to keep only advisories whose ranges or version lists include it; entries marked `version_match: unknown` could not be evaluated and must be checked by hand.
+- `by-package --ecosystem <npm|Go|Maven|crates.io|NuGet|Packagist|PyPI|Debian|Alpine> --name <name> [--version <v>]`: you hold a dependency from the SBOM. Add `--version` to keep only advisories whose ranges or version lists include it; entries marked `version_match: unknown` could not be evaluated and must be checked by hand.
 - `by-symbol <symbol> [--package <name-or-purl>]`: you hold a called function and want advisories that name it. Only Go (and rarely others) publish affected symbols, so use this to narrow or confirm reachability leads, never to rule a package out.
 
 Rules:

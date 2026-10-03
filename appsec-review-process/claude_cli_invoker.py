@@ -732,6 +732,11 @@ def _resolved_citations(raw: Any, by_path: dict[str, Any]) -> list[dict[str, Any
     return resolved
 
 
+# What may explain an empty discovery result: a gap (could not determine) or a verified, scoped
+# absence (P30). An informational note alone does not explain an empty result.
+_EMPTY_RESULT_REASONS = ("coverage_gaps", "absence_observations")
+
+
 def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
                                    allowed_claim_classes: tuple[str, ...],
                                    result_filename: str) -> list[dict[str, Any]]:
@@ -742,10 +747,12 @@ def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
     never a padded or borrowed one. ``coverage_gaps`` are plain strings with no evidence of their
     own, so they stay in the artifact and are not turned into ``evidence_gap`` claims here (a claim
     needs a citation, and borrowing an unrelated file's would be fabricating evidence).
+    ``absence_observations`` and ``informational_notes`` (P30/P34) also stay in the artifact: they
+    report what was searched, not a claim about a cited file.
 
     A discovery that legitimately finds no unit at all (no projects, no commands) is a valid result
-    when ``coverage_gaps`` says why -- governing rule 4, partial discovery stays visible: the gaps
-    *are* the finding, and ``persona-invoker-output.schema.json`` places no minimum on ``claims``. So
+    when ``coverage_gaps`` or ``absence_observations`` says why -- governing rule 4, partial discovery
+    stays visible: the gaps or the scoped absence *are* the finding, and ``persona-invoker-output.schema.json`` places no minimum on ``claims``. So
     that case returns no claims. With no gap to explain the emptiness it is still rejected, since
     silence is not a result."""
     by_path = {item.path: item for item in inputs}
@@ -781,10 +788,10 @@ def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
                           f"[{command.get('authorization')}]")[:2000],
             "file": result_filename, "citations": citations,
         })
-    if not claims and not inventory.get("coverage_gaps"):
+    if not claims and not any(inventory.get(field) for field in _EMPTY_RESULT_REASONS):
         raise InvokerOutputError(
-            "model response named no projects or commands and recorded no coverage gap explaining "
-            "why -- nothing to claim and no stated reason")
+            "model response named no projects or commands and recorded no coverage gap or absence "
+            "observation explaining why -- nothing to claim and no stated reason")
     return claims
 
 
@@ -795,11 +802,11 @@ def _claims_from_operations_topology(topology: dict[str, Any], inputs: tuple,
     ``service_inventory`` claim per declared service and one ``runtime_dependency_map`` claim per
     declared or inferred dependency, each citing only evidence that resolves to a pinned target
     input; a claim left with no resolvable citation is a hard rejection (governing rule 2).
-    ``operational_notes`` and ``coverage_gaps`` are plain strings with no evidence of their own and
-    stay in the artifact, as in the project-inventory builder.
+    ``operational_notes``, ``coverage_gaps`` and ``absence_observations`` stay in the artifact, as in
+    the project-inventory builder.
 
     Same zero-result rule as D03 (William, 2026-09-25): no service at all is valid only when
-    ``coverage_gaps`` says why; silence is rejected."""
+    ``coverage_gaps`` or ``absence_observations`` says why; silence is rejected."""
     by_path = {item.path: item for item in inputs}
     for claim_class in ("service_inventory", "runtime_dependency_map"):
         if claim_class not in allowed_claim_classes:
@@ -834,10 +841,10 @@ def _claims_from_operations_topology(topology: dict[str, Any], inputs: tuple,
                               f"({dependency.get('kind')}, {dependency.get('basis')})")[:2000],
                 "file": result_filename, "citations": dep_citations,
             })
-    if not claims and not topology.get("coverage_gaps"):
+    if not claims and not any(topology.get(field) for field in _EMPTY_RESULT_REASONS):
         raise InvokerOutputError(
-            "model response named no services and recorded no coverage gap explaining why -- "
-            "nothing to claim and no stated reason")
+            "model response named no services and recorded no coverage gap or absence observation "
+            "explaining why -- nothing to claim and no stated reason")
     return claims
 
 

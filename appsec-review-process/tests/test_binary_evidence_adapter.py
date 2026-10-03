@@ -61,10 +61,12 @@ class BinaryEvidenceAdapterTests(unittest.TestCase):
         if request["argv"][0].endswith("analyze-binary"):
             out = trial / "scratch/evidence"; out.mkdir(parents=True)
             atomic_json(out / "summary.json", {"format":"elf","machine":"EM_X86_64",
-                "sections":[".text",".debug_info"],"symbol_count":2,
+                "sections":[".text",".rodata",".debug_info"],"symbol_count":2,
                 "has_debug_sections":True,"lief":{"libraries":["libc.so.6"]}})
             (out / "nm-symbols.txt").write_text("0000000000001000 T main\n", encoding="utf-8")
             (out / "checksec.txt").write_text("Full RELRO Canary found NX enabled PIE enabled\n", encoding="utf-8")
+            (out / "strings.txt").write_text("GCC: (GNU) 13.2.0\n", encoding="utf-8")
+            atomic_json(out / "die.json", {"detects":[{"values":[{"type":"Compiler","name":"GCC"}]}]})
         else:
             (logs / "stdout.log").write_text(json.dumps({"architecture":"AMD64",
                 "functions":[{"address":"0x1000","name":"main","block_count":2}],
@@ -97,6 +99,11 @@ class BinaryEvidenceAdapterTests(unittest.TestCase):
             self.assertIn({"name":"USER", "value":"appsec-worker"}, request["environment"])
             self.assertIn({"name":"LOGNAME", "value":"appsec-worker"}, request["environment"])
             self.assertFalse(receipt["target_execution"])
+            if job == "02-binary-triage":
+                self.assertEqual([item["path"] for item in receipt["operations"][0]["output_files"]],
+                    ["scratch/evidence/" + name for name in
+                     ("summary.json", "checksec.txt", "strings.txt", "die.json")])
+                self.assertEqual((raw["records"][0]["packed"], raw["records"][0]["gaps"]), ("NO", []))
         self.assertEqual(self.requests[0]["argv"][0], "/usr/local/bin/analyze-binary")
 
     def test_cfg_joins_accepted_symbols_without_executing_binary(self):
@@ -123,6 +130,37 @@ class BinaryEvidenceAdapterTests(unittest.TestCase):
         receipt = json.loads((attempt / adapter.RECEIPT_FILE).read_text())
         self.assertEqual(receipt["operations"], [])
         self.assertEqual(receipt["native_build"], {k:v for k,v in native(False).items() if k != "binaries"})
+
+    def test_packer_state_reads_die_text_fallback_and_stays_unknown_without_die(self):
+        out = self.root / "evidence"; out.mkdir()
+        atomic_json(out / "summary.json", {"format":"elf","machine":"EM_X86_64",
+            "sections":[".text",".rodata"],"symbol_count":1})
+        (out / "checksec.txt").write_text("NX enabled\n", encoding="utf-8")
+        binary = native()["binaries"][0]
+        record = adapter._triage_record(binary, out)
+        self.assertEqual((record["packed"], record["gaps"]),
+                         ("UNKNOWN", ["static-packer-classification-inconclusive"]))
+        (out / "die.json").write_text("diec: unknown option -j\n", encoding="utf-8")
+        (out / "die.txt").write_text("ELF64\n    Packer: UPX(4.0.2)[NRV,brute]\n", encoding="utf-8")
+        self.assertEqual(adapter._triage_record(binary, out)["packed"], "YES")
+        (out / "die.txt").write_text("ELF64\n    Compiler: GCC(13.2.0)\n", encoding="utf-8")
+        self.assertEqual(adapter._triage_record(binary, out)["packed"], "NO")
+
+    def test_debug_locations_outside_checkout_and_absent_dwarf(self):
+        out = self.root / "evidence"; out.mkdir()
+        atomic_json(out / "summary.json", {"has_debug_sections":True})
+        (out / "nm-symbols.txt").write_text("0000000000001000 T _start\n"
+            "0000000000001010 t helper\t/usr/include/c++/13/bits/move.h:48\n"
+            "0000000000001020 T main\t/workspace/src/../src/main.c:3\n", encoding="utf-8")
+        binary = native()["binaries"][0]
+        record = adapter._debug_record(binary, out)
+        self.assertEqual([(item["name"], item["source_path"], item["line"]) for item in record["symbols"]],
+            [("_start", None, None), ("helper", None, None), ("main", "src/main.c", 3)])
+        self.assertEqual(record["gaps"], [])
+        (out / "nm-symbols.txt").write_text("0000000000001020 T parse\n", encoding="utf-8")
+        self.assertEqual(adapter._debug_record(binary, out)["gaps"], ["source-locations-unavailable"])
+        atomic_json(out / "summary.json", {"has_debug_sections":False})
+        self.assertEqual(adapter._debug_record(binary, out)["gaps"], ["debug-info-absent"])
 
     def test_missing_or_oversized_raw_output_fails_closed(self):
         missing = self.root / "missing"; missing.mkdir()

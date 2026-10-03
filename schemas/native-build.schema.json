@@ -173,13 +173,80 @@
                 }
               }
             }
+          },
+          "generated_headers": {
+            "description": "P35: configure-generated headers present in the build copy but absent from the checkout, published under root and hash-bound; omitted counts headers beyond the count/size bound.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "root",
+              "headers",
+              "omitted"
+            ],
+            "properties": {
+              "root": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "sha256",
+                    "size_bytes"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+                    },
+                    "size_bytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "build_dependencies": {
+            "description": "P36: the unit's build-dependencies.json (schemas/build-dependencies.schema.json), captured in the build image after the successful replay and bound by sha256; path is relative to the attempt.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^outputs/[A-Za-z0-9._-]+/build-dependencies\\.json\\Z"
+              },
+              "sha256": {
+                "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+              }
+            }
           }
         }
       }
     },
     "coverage_gaps": {
+      "description": "Run-level gaps; only a lock with no unit produces one (no-resolved-build-units). Per-unit capture gaps live in each build-dependencies.json.",
       "type": "array",
-      "maxItems": 0
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   }
 }

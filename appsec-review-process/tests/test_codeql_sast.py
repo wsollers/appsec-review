@@ -284,7 +284,17 @@ class CodeqlTracedUnitTests(unittest.TestCase):
                          ("unit-a", replay, "audit-codeql-native"))
         self.assertIn("codeql-traced-replay-incomplete:codeql-cpp-traced:0123456789abcdef:ok=3:failed=1:refused=0:total=4",
                       result["coverage_gaps"])
-        self.assertEqual(result["coverage_gaps"].count(worker.FIDELITY_GAPS["cpp"]), 1)
+        self.assertNotIn(worker.FIDELITY_GAPS["cpp"], result["coverage_gaps"])
+        two = _traced(UNITS + [{**UNITS[0], "unit_id": "unit-b", "key": "fedcba9876543210"}])
+        partial = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs(_plan() + two), outcomes={
+            **outcomes, "codeql-cpp-traced:fedcba9876543210": {"gap": "CodeQL cpp traced unit timed out",
+                                                              "leads": [], "dropped": 0}})
+        self.assertIn("traced replay covered 1 of 2 native units", " ".join(partial["coverage_gaps"]))
+        unavailable = worker.assemble(run_id="run", attempt_id="attempt", inputs=_inputs(_plan() + _traced(registry={})),
+                                      outcomes={"cpp": outcomes["cpp"]})
+        [fidelity] = [gap for gap in unavailable["coverage_gaps"] if gap.startswith(worker.FIDELITY_GAPS["cpp"])]
+        self.assertIn("covered 0 of 1 native units: CodeQL cpp traced unavailable: authenticated pinned image "
+                      "audit-codeql-native has no current B16 record.", fidelity)
         with self.assertRaisesRegex(worker.Blocked, "codeql-cpp-traced:0123456789abcdef has no receipt"):
             worker.assemble(run_id="run", attempt_id="attempt", inputs=inputs, outcomes={"cpp": outcomes["cpp"]})
 
@@ -446,9 +456,10 @@ class CodeqlTracedScriptedPublishTests(CodeqlSastScriptedPublishTests):
 
         with mock.patch.object(worker, "_outcome", side_effect=outcome):
             envelope = worker.run("run-codeql", "dagster-1", "cpp", **self.wired())
-        self.assertEqual(envelope["status"], "OK_WITH_GAPS")
+        self.assertEqual(envelope["status"], "OK")  # every native unit ran traced: no none-mode fidelity gap (P11)
         attempt = worker.root("run-codeql", "cpp") / "attempts" / envelope["attempt_id"]
         result = json.loads((attempt / worker.RESULT).read_text())
+        self.assertEqual(result["coverage_gaps"], [])
         self.assertEqual([row["tool_id"] for row in result["tools"]], ["codeql-cpp", "codeql-cpp-traced"])
         self.assertEqual(result["build_modes"], ["none", "traced"])
         self.assertFalse(any(gap.startswith("language not built") for gap in result["coverage_gaps"]))

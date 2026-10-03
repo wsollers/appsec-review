@@ -15,9 +15,6 @@
     "analysis-hash.schema.json": {
       "sha256_ref": 1
     },
-    "api-collection-intelligence.schema.json": {
-      "ok_status": 1
-    },
     "applicability-probe-receipt.schema.json": {
       "dotted_id": 2,
       "lower_dotted_id": 3,
@@ -255,9 +252,6 @@
     "disa-control-record.schema.json": {
       "confidence": 1
     },
-    "doc-intelligence.schema.json": {
-      "ok_status": 1
-    },
     "engine-reachability-row.schema.json": {
       "sha256_ref": 2
     },
@@ -434,9 +428,6 @@
     },
     "opencre-crosswalk-record.schema.json": {
       "sha256_ref": 1
-    },
-    "operations-doc-intelligence.schema.json": {
-      "ok_status": 1
     },
     "operations-topology.schema.json": {
       "confidence": 1
@@ -883,9 +874,6 @@
     },
     "test-execution.schema.json": {
       "sha256_ref": 8
-    },
-    "test-intelligence.schema.json": {
-      "ok_status": 1
     },
     "test-native-build-lineage.schema.json": {
       "sha256_ref": 4

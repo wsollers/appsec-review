@@ -293,6 +293,8 @@ flowchart LR
   j_02_code_property_graph --> j_02_code_index
   j_02_treesitter_ast --> j_02_code_index
   j_02_binary_triage --> j_02_code_index
+  j_02_ir_facts -.->|optional| j_02_code_index
+  j_02_debug_symbol_index -.->|optional| j_02_code_index
   j_02_native_build --> j_02_native_sast
   j_02_native_build --> j_02_ir_capture
   j_02_ir_capture --> j_02_ir_link
@@ -311,6 +313,8 @@ flowchart LR
   j_00_intake --> j_02_container_image_inventory
   j_00_intake --> j_02_sbom_inventory
   j_02_build_index --> j_02_sbom_inventory
+  j_02_native_build -.->|optional| j_02_sbom_inventory
+  j_02_iac_config_scan -.->|optional| j_02_sbom_inventory
   j_02_sbom_inventory --> j_02_sca_vulnerability_match
   j_00_intake --> j_02_license_scan
   j_02_sbom_inventory --> j_02_license_scan

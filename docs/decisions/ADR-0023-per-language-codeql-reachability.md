@@ -51,6 +51,10 @@ advisory ("package X, function Y") to the names a language uses was a single nam
      runs per unit (ADR-0017 decision 4's second tool id); `--build-mode none` always runs as well
      (ADR-0017 decision 1: CodeQL always runs). Without units the node records the gap
      `language not built: <cause>; ran --build-mode none only`.
+     *Amended 2026-10-03 by `f0fcc17` (gap punch list P11):* with native units, the none-mode row's
+     fidelity gap states how many units the traced replay covered ("N of M") or why none ran, and is
+     dropped when every unit ran traced; since `e4eb405` (P35) the traced replay mounts the unit's
+     configure-generated headers read-only.
    * `go` has no build-mode none and the pipeline has no Go build step; a checkout with Go
      publishes `OK_WITH_GAPS` with `language not built: ...` and no database. `rust` has no
      suite pinned in `images/audit-codeql/tool.json`; a checkout with Rust publishes

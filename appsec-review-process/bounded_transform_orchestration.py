@@ -82,10 +82,13 @@ def execute(*, job_id: str, run_id: str, input_path: str, output_root: str,
         bindings.append(binding)
 
     payload = request.get("payload")
-    if not isinstance(payload, dict) or set(payload) != {payload_name} or not isinstance(payload[payload_name], list):
+    # Standards worklists may also carry worklist-level summary gaps beside their controls.
+    optional = {"gaps"} if payload_name == "controls" else set()
+    if (not isinstance(payload, dict) or not {payload_name} <= set(payload) <= {payload_name} | optional or
+            not all(isinstance(value, list) for value in payload.values())):
         raise Blocked(f"bounded transform: payload must contain only {payload_name}")
     started = now()
     result = getattr(facade, function_name)(
         run_id=run_id, attempt_id=attempt_id, source_generation=generation,
-        bindings=bindings, **{payload_name: payload[payload_name]})
+        bindings=bindings, **payload)
     return facade.publish_attempt(expected_output, result, started_at=started, finished_at=now())

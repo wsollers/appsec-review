@@ -145,6 +145,7 @@ main.panes{display:block;min-height:auto}
 </main>
 
 <script id="docs" type="application/json">{{ docs|jsonscript }}</script>
+<script>(0,eval)(atob("{{ purify_js }}"));</script>
 {% if viewer %}<script>(0,eval)(atob("{{ katex_js }}"));</script>{% else %}<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>{% endif %}
 <script>
 /* A small LaTeX-to-HTML previewer. Not a TeX engine: it covers the report template's vocabulary
@@ -183,6 +184,15 @@ var ARG1={textbf:"font-weight:700",textit:"font-style:italic",emph:"font-style:i
   MakeLowercase:"text-transform:lowercase",textrm:"font-family:var(--f-body)"};
 
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+// Links come from document text, which can carry target-derived content: only http(s), mailto,
+// relative and fragment targets become links; any other scheme (javascript:, data:, ...) stays text.
+function safeUrl(u){var t=u.replace(/[\u0000-\u0020\u007f]+/g,"");return /^(https?:|mailto:|#|\/|\.{0,2}\/|[^:\/?#]+(?:[\/?#]|$))/i.test(t)?t:null;}
+// Rendered HTML passes DOMPurify (vendor/purify-3.4.16.min.js) before it is shown; link and source
+// attributes additionally go through safeUrl.
+DOMPurify.addHook("uponSanitizeAttribute",function(node,data){
+  if(/^(href|src|xlink:href|action|formaction|poster|background)$/i.test(data.attrName) && safeUrl(data.attrValue)===null) data.keepAttr=false;
+});
+function showHtml(el,html){ el.innerHTML=DOMPurify.sanitize(html,{ADD_ATTR:["target"]}); }
 
 function Ctx(){ this.colors=Object.assign({},BASE_COLORS); this.macros={}; this.envs={}; this.unknown={};
   this.sec=[0,0,0]; this.appendix=false; this.meta={}; this.title=null; this.author=null; this.date=null; this.katexMacros={}; }
@@ -307,7 +317,7 @@ P.prototype.expand=function(n){
 
 /* returns undefined when not a builtin */
 P.prototype.builtin=function(n,star){
-  var ctx=this.ctx, a, b;
+  var ctx=this.ctx, a, b, u;
   switch(n){
     case "section": this.rawOpt(); return this.heading(0,star,this.sub(this.rawGroup()));
     case "subsection": this.rawOpt(); return this.heading(1,star,this.sub(this.rawGroup()));
@@ -326,8 +336,8 @@ P.prototype.builtin=function(n,star){
       return '<div class="titleblock"><div class="t">'+(ctx.title||"")+"</div>"+(ctx.author?"<div>"+ctx.author+"</div>":"")+(ctx.date?'<div class="eyebrow">'+ctx.date+"</div>":"")+"</div>";
     case "texttt": case "mono": case "path": case "code": return '<span class="tt">'+this.sub(this.rawArg())+"</span>";
     case "textsf": return '<span class="sf">'+this.sub(this.rawArg())+"</span>";
-    case "url": case "nolinkurl": a=this.rawGroup(); return '<a class="tt" href="'+esc(a)+'" target="_blank" rel="noopener">'+esc(a)+"</a>";
-    case "href": a=this.rawGroup(); b=this.rawGroup(); return '<a href="'+esc(a)+'" target="_blank" rel="noopener">'+this.sub(b)+"</a>";
+    case "url": case "nolinkurl": a=this.rawGroup(); u=safeUrl(a); return u===null?'<span class="tt">'+esc(a)+"</span>":'<a class="tt" href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(a)+"</a>";
+    case "href": a=this.rawGroup(); b=this.rawGroup(); u=safeUrl(a); return u===null?this.sub(b):'<a href="'+esc(u)+'" target="_blank" rel="noopener">'+this.sub(b)+"</a>";
     case "hyperref": a=this.rawOpt(); b=this.rawGroup(); return '<a href="#'+esc(a||"")+'">'+this.sub(b)+"</a>";
     case "label": a=this.rawGroup(); return '<a id="'+esc(a)+'"></a>';
     case "ref": case "autoref": case "pageref": case "cref": a=this.rawGroup(); return '<a href="#'+esc(a)+'">'+esc(a)+"</a>";
@@ -564,8 +574,8 @@ function load(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; 
 var timer=null;
 function update(){
   var t0=performance.now(), r;
-  try{ r=renderLatex(srcEl.value); out.innerHTML=r.html; }
-  catch(e){ out.innerHTML='<p class="err">Render error: '+esc(String(e&&e.message||e))+"</p>"; r={unknown:{}}; }
+  try{ r=renderLatex(srcEl.value); showHtml(out,r.html); }
+  catch(e){ showHtml(out,'<p class="err">Render error: '+esc(String(e&&e.message||e))+"</p>"); r={unknown:{}}; }
   var keys=Object.keys(r.unknown);
   unk.hidden=!keys.length;
   unk.textContent=keys.length?"Not rendered: "+keys.map(function(k){return k+(r.unknown[k]>1?" ×"+r.unknown[k]:"");}).join(", "):"";

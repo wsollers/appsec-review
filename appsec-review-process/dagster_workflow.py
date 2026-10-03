@@ -427,7 +427,21 @@ def run_native_build(context, configured):
 
 @op(name='job_02_native_build',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
 def native_build_work(context, configured, upstream):
-    return run_native_build(context, configured)
+    """P42: never raises in the full review. A crash or BLOCKED returns NOT_PUBLISHED (as lane 14 does) for the
+    SBOM's optional edge; native_build_published re-raises it for the required consumers."""
+    try:
+        return run_native_build(context, configured)
+    except Exception as exc:
+        context.log.warning(f'02-native-build did not publish ({type(exc).__name__}: {exc}); '
+                            '02-sbom-inventory records the gap, required consumers are held')
+        return {'job_id': '02-native-build', 'status': 'NOT_PUBLISHED', 'error': f'{type(exc).__name__}: {exc}'[:500]}
+
+
+@op(name='job_02_native_build_published',ins={'native_build':In(dict)},tags=COORDINATION)
+def native_build_published(context, native_build):
+    if native_build.get('status')=='NOT_PUBLISHED':
+        raise Failure('02-native-build did not publish: '+native_build['error'])
+    return native_build
 
 
 @op(pool=DOCKER_POOL)
@@ -1331,8 +1345,33 @@ def automatic_evidence_lifecycle_op(job_id, pool):
     return automatic_evidence
 
 
+def tolerant_automatic_evidence_op(job_id, pool):
+    """P43 (the P42 pattern): never raises in the full review. A crash or BLOCKED returns NOT_PUBLISHED for the
+    optional consumers (the SBOM records the gap); published_gate re-raises it for the required consumers."""
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def automatic_evidence(context, configured, upstream):
+        try:
+            return run_automatic_evidence_job(context, configured, job_id)
+        except Exception as exc:
+            context.log.warning(f'{job_id} did not publish ({type(exc).__name__}: {exc}); '
+                                'optional consumers record the gap, required consumers are held')
+            return {'job_id': job_id, 'status': 'NOT_PUBLISHED', 'error': f'{type(exc).__name__}: {exc}'[:500]}
+    return automatic_evidence
+
+
+def published_gate(job_id):
+    @op(name='job_' + job_id.replace('-', '_') + '_published', ins={'result': In(dict)}, tags=COORDINATION)
+    def published(context, result):
+        if result.get('status') == 'NOT_PUBLISHED':
+            raise Failure(f'{job_id} did not publish: ' + result['error'])
+        return result
+    return published
+
+
 secrets_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-secrets-inventory', OFFLINE_DOCKER_POOL)
-iac_config_scan_lifecycle_work = automatic_evidence_lifecycle_op('02-iac-config-scan', OFFLINE_DOCKER_POOL)
+# P43: 02-sbom-inventory takes 02-iac-config-scan's base-image inventory over an optional edge.
+iac_config_scan_lifecycle_work = tolerant_automatic_evidence_op('02-iac-config-scan', OFFLINE_DOCKER_POOL)
 container_image_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-container-image-inventory', OFFLINE_DOCKER_POOL)
 mobile_sast_lifecycle_work = automatic_evidence_lifecycle_op('02-mobile-sast', OFFLINE_DOCKER_POOL)
 sbom_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-sbom-inventory', OFFLINE_DOCKER_POOL)
@@ -1833,6 +1872,35 @@ import job_executor
 ITEM_JOBS=job_executor.register_item_ops(LIFECYCLE,LIFECYCLE_OPS,CPU_POOL)
 
 
+# P42: a tolerant op returns NOT_PUBLISHED instead of raising; its optional consumers take that observation,
+# its required consumers take the gate's output, so only they are held by a crashed or BLOCKED producer.
+TOLERANT_OPS={'02-native-build':native_build_published,'02-iac-config-scan':published_gate('02-iac-config-scan')}
+
+
+def wire_lifecycle(configured, outputs, ops, discovered=None):
+    """Compose ``ops`` in job-graph order onto ``outputs`` (job id -> output) inside a job body."""
+    observed={}
+    pending=dict(ops)
+    while pending:
+        if not any(all(d['job'] in outputs for d in LIFECYCLE[name]['dependencies'] if d.get('enabled',True))
+                   for name in pending):
+            raise ValueError('wire_lifecycle: no op has its dependencies wired: '+', '.join(sorted(pending)))
+        for name in list(pending):
+            deps=[d for d in LIFECYCLE[name]['dependencies'] if d.get('enabled',True)]
+            if all(d['job'] in outputs for d in deps):
+                upstream=[observed.get(d['job'],outputs[d['job']]) if d['kind']=='optional' else outputs[d['job']]
+                          for d in deps]
+                if name=='02-repository-partition-discovery': upstream.append(discovered)
+                if name=='04-asvs-masvs':
+                    # The join reads the accepted T10 accounting; produce T03-T06 and dispatch first.
+                    handoffs=owasp_validator_handoffs_work(configured,list(upstream))
+                    upstream.append(owasp_validator_dispatch_work(configured,[handoffs]))
+                output=pending.pop(name)(configured,upstream)
+                if name in TOLERANT_OPS: observed[name],output=output,TOLERANT_OPS[name](output)
+                outputs[name]=output
+    return outputs
+
+
 @job(resource_defs={'workflow_settings':workflow_settings},
      executor_def=multiprocess_executor.configured({'max_concurrent':3}),
      hooks={workflow_failed},op_retry_policy=RetryPolicy(max_retries=0))
@@ -1841,18 +1909,7 @@ def full_review():
     intake=workflow_intake(configured)
     discovered=build_discovery_work(intake)
     outputs={'00-intake':intake, '02-evidence-index': evidence_index_work(intake, discovered)}
-    pending=dict(LIFECYCLE_OPS)
-    while pending:
-        for name in list(pending):
-            deps=[d['job'] for d in LIFECYCLE[name]['dependencies'] if d.get('enabled',True)]
-            if all(dep in outputs for dep in deps):
-                upstream=[outputs[dep] for dep in deps]
-                if name=='02-repository-partition-discovery': upstream.append(discovered)
-                if name=='04-asvs-masvs':
-                    # The join reads the accepted T10 accounting; produce T03-T06 and dispatch first.
-                    handoffs=owasp_validator_handoffs_work(configured,list(upstream))
-                    upstream.append(owasp_validator_dispatch_work(configured,[handoffs]))
-                outputs[name]=pending.pop(name)(configured,upstream)
+    wire_lifecycle(configured,outputs,LIFECYCLE_OPS,discovered)
 
 
 

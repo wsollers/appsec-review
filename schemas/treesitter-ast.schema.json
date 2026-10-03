@@ -44,7 +44,7 @@
     "totals": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["files", "bytes", "functions", "calls", "imports", "error_nodes", "gaps"],
+      "required": ["files", "bytes", "functions", "calls", "imports", "error_nodes", "non_source", "gaps"],
       "properties": {
         "files": {"type": "integer"},
         "bytes": {"type": "integer"},
@@ -52,6 +52,7 @@
         "calls": {"type": "integer"},
         "imports": {"type": "integer"},
         "error_nodes": {"type": "integer"},
+        "non_source": {"type": "integer", "minimum": 0, "description": "Files skipped as build/doc/config, not program source; not a coverage gap."},
         "gaps": {"type": "integer"}
       }
     },

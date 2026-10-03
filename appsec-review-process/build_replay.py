@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import base64
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shlex
 import shutil
@@ -30,8 +30,17 @@ from schema_validate import validate_document
 
 CONTROL_SCHEMA = "appsec-review/build-replay-input/1"
 CONTROL_FILE = "build-replay.json"
-RUNNER_VERSION = "build-lock-replay/1"
+RUNNER_VERSION = "build-lock-replay/2"
 RECEIPTS = "b13-receipts.json"
+# P35: configure-generated headers (config.h, gnulib replacements) exist only in the build copy.
+HEADER_SUFFIXES = (".h", ".hh", ".hpp", ".hxx", ".inc")
+HEADER_LIMIT, HEADER_MAX_BYTES = 256, 1 << 20
+HEADERS_DIR = "generated-headers"
+# P36: build-dependency capture bounds (counts, hashed bytes per file, wall clock); beyond them = gaps.
+DEPENDENCY_LIMITS = {"files": 8192, "translation_units": 8192, "link_commands": 1024, "edges": 1 << 20,
+                     "hash_max_bytes": 256 << 20, "seconds": 1800}
+DEPENDENCIES_FILE, DEPENDENCIES_SCHEMA = "build-dependencies.json", "build-dependencies.schema.json"
+DEPENDENCIES_MAX_BYTES = 64 << 20
 
 SPECS: dict[str, dict[str, Any]] = {
     "02-build-configure": {
@@ -186,6 +195,8 @@ def _code_hashes(job: str) -> dict[str, str]:
     for name in ("build-replay-input.schema.json", spec(job)["schema"],
                  "container-image.schema.json", "pinned-container-result.schema.json"):
         result["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
+    if job == "02-native-build":
+        result["schemas/" + DEPENDENCIES_SCHEMA] = file_hash(ROOT.parent / "schemas" / DEPENDENCIES_SCHEMA)
     return result
 
 
@@ -242,9 +253,301 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
         "boundary_sha256": ce.boundary_sha256(), "code": _code_hashes(job)}
 
 
-RUNNER = r'''import hashlib,json,os,pathlib,shutil,stat,subprocess,sys
-cfg=json.loads(sys.argv[1]); src=pathlib.Path('/scratch/src')
-shutil.copytree('/workspace',src,symlinks=False,ignore_dangling_symlinks=True)
+HEADER_COLLECTOR = r'''import hashlib,os,pathlib
+def generated_headers(src,pristine,limit,max_bytes,suffixes):
+ found=[]; omitted=0
+ for cur,dirs,files in os.walk(src):
+  dirs[:]=sorted(d for d in dirs if d not in ('.git','CMakeFiles'))
+  for name in sorted(files):
+   p=pathlib.Path(cur,name); rel=p.relative_to(src).as_posix()
+   if p.suffix.lower() not in suffixes or p.is_symlink() or not p.is_file() or os.path.lexists(os.path.join(pristine,rel)): continue
+   size=p.stat().st_size
+   if size>max_bytes or len(found)>=limit: omitted+=1; continue
+   found.append({'path':rel,'sha256':'sha256:'+hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':size})
+ return found,omitted
+'''
+
+# P36: what the build consumed, captured in the build image after a successful replay. Link lines come
+# from the clang driver's own job log (CC_PRINT_OPTIONS_FILE, set for build-phase commands): every job
+# the driver runs is logged with its full argv, including the linker job with the driver's resolved -L
+# dirs, -l, -rpath and crt objects. That is independent of PATH (CC is absolute in the buildenv images),
+# of bear (cmake units have no bear) and of make recursion, and needs no ptrace; bear 3 only emits
+# compile entries and `make -n` misses recursive and generated rules. A link the clang driver did not run
+# (a bare `ld`) is not logged: a built binary with no link line is a gap. Headers per TU come from the
+# compiler itself (-M over each compile-DB entry's own argv, output to a pipe, never the tree); DT_NEEDED
+# and RUNPATH from binutils readelf (installed in audit-buildenv-cpp); ownership from dpkg-query -S/-W.
+DEPENDENCY_COLLECTOR = r'''import re,shlex,shutil,subprocess,time
+VENDOR_DIRS={'vendor','vendored','third_party','third-party','thirdparty','3rdparty','external','externals','extern','deps'}
+LINKER=re.compile(r'(?:.*/)?(?:[A-Za-z0-9_.+-]*-)?(?:ld|ld\.bfd|ld\.gold|ld\.lld|lld|mold)\Z')
+DROP_ARG={'-o','-MF','-MT','-MQ','-MJ','--serialize-diagnostics','-Xclang'}
+DROP={'-c','-S','-E','-M','-MM','-MD','-MMD','-MP','-MG','-fsyntax-only'}
+INCLUDE_FLAGS=('-isystem','-iquote','-idirafter','-I')
+LINK_VALUE_OPTIONS={'-dynamic-linker','--dynamic-linker','-soname','-h','-plugin','-plugin-opt','-T','--version-script','-m','-z','-e','--sysroot','-y'}
+def _run(argv,cwd=None,timeout=120):
+ try:
+  p=subprocess.run(argv,cwd=cwd,capture_output=True,text=True,errors='replace',timeout=timeout,check=False)
+  return p.returncode,p.stdout,p.stderr
+ except (OSError,subprocess.SubprocessError) as e: return None,'',type(e).__name__
+def link_commands(text):
+ """Linker argvs in a clang driver job log, and the count of job lines that did not parse."""
+ found=[]; bad=0
+ for line in text.splitlines():
+  if not line.startswith(' "'): continue
+  try: argv=shlex.split(line)
+  except ValueError: bad+=1; continue
+  if argv and LINKER.match(argv[0]): found.append(argv)
+ return found,bad
+def parse_link(argv):
+ out=None; dirs=[]; libs=[]; rpath=[]; static=False; i=1
+ while i<len(argv):
+  a=argv[i]; nxt=argv[i+1] if i+1<len(argv) else None
+  if a=='-o' and nxt is not None: out=nxt; i+=2; continue
+  if a in ('-L','--library-path') and nxt is not None: dirs.append(nxt); i+=2; continue
+  if a in ('-l','--library') and nxt is not None: libs.append({'spec':'-l'+nxt,'static':static}); i+=2; continue
+  if a in ('-rpath','-R','--rpath') and nxt is not None: rpath.extend(x for x in nxt.split(':') if x); i+=2; continue
+  if a in LINK_VALUE_OPTIONS: i+=2; continue  # -dynamic-linker /lib64/ld-linux-x86-64.so.2 is no input
+  if a.startswith(('-rpath=','--rpath=')): rpath.extend(x for x in a.split('=',1)[1].split(':') if x)
+  elif a.startswith('--library-path='): dirs.append(a.split('=',1)[1])
+  elif a.startswith('-L') and len(a)>2: dirs.append(a[2:])
+  elif a.startswith('-l') and len(a)>2: libs.append({'spec':a,'static':static})
+  elif a in ('-Bstatic','-static','-dn','-non_shared','--Bstatic'): static=True
+  elif a in ('-Bdynamic','-dy','-call_shared','--Bdynamic'): static=False
+  elif not a.startswith('-') and (a.endswith('.a') or re.search(r'\.so(\.[0-9]+)*\Z',a)): libs.append({'spec':a,'static':a.endswith('.a')})
+  i+=1
+ return {'output':out,'libraries':libs,'library_dirs':dirs,'rpath':rpath}
+def _deps_argv(words):
+ out=[]; skip=False
+ for w in words:
+  if skip: skip=False; continue
+  if w in DROP_ARG: skip=True; continue
+  if w in DROP or w.startswith(('-MF','-MT','-MQ','-MJ','-Wp,-M')): continue
+  out.append(w)
+ return out+['-M','-w']
+def _deps(text):
+ body=text.replace('\\\n',' ').split(':',1)
+ if len(body)<2: return []
+ return [t.replace('\\ ',' ').replace('$$','$') for t in re.findall(r'(?:\\ |\S)+',body[1])]
+def _elf_id(path):
+ try:
+  with open(path,'rb') as f: head=f.read(20)
+ except OSError: return None
+ return (head[4],head[5],head[18:20]) if head[:4]==b'\x7fELF' and len(head)==20 else None
+def _dynamic(readelf,path):
+ rc,out,_=_run([readelf,'-d','--wide',path],timeout=60)
+ if rc!=0: return None
+ needed=re.findall(r'\(NEEDED\)\s+Shared library: \[([^\]]+)\]',out)
+ field=lambda tag:[x for m in re.findall(r'\('+tag+r'\)\s+Library \w+: \[([^\]]*)\]',out) for x in m.split(':') if x]
+ return needed,field('RUNPATH'),field('RPATH')
+def _os_release(path):
+ values={}
+ try:
+  for line in open(path,encoding='utf-8',errors='replace'):
+   k,_,v=line.strip().partition('=')
+   if k: values[k]=v.strip().strip('"').strip("'")
+ except OSError: return None
+ ident=values.get('ID','').lower()
+ return {'id':ident,'version_id':values.get('VERSION_ID') or None,'codename':values.get('VERSION_CODENAME') or None} if re.fullmatch(r'[a-z0-9._-]{1,64}',ident) else None
+def _usrmerge(path):
+ for a,b in (('/usr/lib/','/lib/'),('/usr/lib64/','/lib64/'),('/usr/bin/','/bin/'),('/usr/sbin/','/sbin/')):
+  if path.startswith(a): return b+path[len(a):]
+  if path.startswith(b): return a+path[len(b):]
+ return None
+def build_dependencies(cfg):
+ src,pristine=os.path.normpath(cfg['src']),os.path.normpath(cfg['pristine']); lim=cfg['limits']; tools=cfg['tools']
+ deadline=time.monotonic()+lim['seconds']; gaps=[]
+ omitted={'files':0,'translation_units':0,'link_commands':0,'edges':0,'hashes':0}
+ files=[]; index={}; resources=set()
+ def classify(path):
+  path=os.path.normpath(path)
+  for root in (src,pristine):
+   if path==root: return '.','checkout'
+   if path.startswith(root+'/'):
+    rel=path[len(root)+1:]
+    if not os.path.lexists(os.path.join(pristine,rel)): return rel,'generated'
+    return rel,('third-party-in-checkout' if VENDOR_DIRS & {p.lower() for p in rel.split('/')[:-1]} else 'checkout')
+  if any(path.startswith(r+'/') for r in resources): return path,'toolchain'
+  return path,None
+ def add(path,kind):
+  key,cls=classify(path)
+  if key in index:
+   item=files[index[key]]
+   if kind not in item['kinds']: item['kinds'].append(kind)
+   return index[key]
+  if len(files)>=lim['files']: omitted['files']+=1; return None
+  real=os.path.join(src,key) if cls in ('checkout','generated','third-party-in-checkout') else path
+  sha=size=None
+  try:
+   size=os.stat(real).st_size
+   if size<=lim['hash_max_bytes']:
+    h=hashlib.sha256()
+    with open(real,'rb') as f:
+     for chunk in iter(lambda:f.read(1<<20),b''): h.update(chunk)
+    sha='sha256:'+h.hexdigest()
+  except OSError: pass
+  if sha is None: omitted['hashes']+=1
+  index[key]=len(files); files.append({'path':key,'class':cls,'kinds':[kind],'sha256':sha,'size_bytes':size,'packages':[]})
+  return index[key]
+ def located(cwd,p): return os.path.normpath(p if os.path.isabs(p) else os.path.join(cwd,p))
+ # Compiler defaults: the resource dir (toolchain), the default include list and library search dirs.
+ entries=[e for e in cfg['entries'] if isinstance(e,dict) and (e.get('arguments') or shlex.split(e.get('command','')))[1:2]!=['-cc1']]
+ include_dirs=[]; library_dirs=[]; probed=set()
+ def note(seq,value):
+  if value not in seq and len(seq)<1024: seq.append(value)
+ for e in entries:
+  words=e.get('arguments') or shlex.split(e.get('command','')); lang='c++' if re.search(r'\.(cc|cpp|cxx|c\+\+|C)\Z',e.get('file','')) else 'c'
+  if (words[0],lang) in probed: continue
+  probed.add((words[0],lang))
+  rc,out,_=_run([words[0],'-print-resource-dir'],timeout=30)
+  if rc==0 and out.strip().startswith('/'): resources.add(os.path.normpath(out.strip()))
+  rc,_,err=_run([words[0],'-E','-v','-x',lang,os.devnull],timeout=30)
+  inside=False
+  for line in err.splitlines():
+   if line.startswith('#include'): inside=True; continue
+   if line.startswith('End of search list'): inside=False
+   elif inside and line.startswith(' /'): note(include_dirs,os.path.normpath(line.split(' (')[0].strip()))
+  rc,out,_=_run([words[0],'-print-search-dirs'],timeout=30)
+  for line in out.splitlines():
+   if line.startswith('libraries:'):
+    for d in line.split('=',1)[-1].split(':'):
+     if d.startswith('/'): note(library_dirs,os.path.normpath(d))
+ # (1) headers per translation unit.
+ units=[]; failed=0; edges=0
+ for e in entries:
+  if len(units)>=lim['translation_units'] or time.monotonic()>deadline: omitted['translation_units']+=1; continue
+  words=e.get('arguments') or shlex.split(e.get('command','')); cwd=e.get('directory') or src
+  flag=None
+  for w in words:
+   if flag: note(include_dirs,classify(located(cwd,w))[0]); flag=None; continue
+   if w in INCLUDE_FLAGS: flag=w; continue
+   for f in INCLUDE_FLAGS:
+    if w.startswith(f) and len(w)>len(f): note(include_dirs,classify(located(cwd,w[len(f):]))[0]); break
+  rc,out,_=_run(_deps_argv(words),cwd=cwd)
+  tu=located(cwd,e.get('file',''))
+  headers=[]
+  if rc!=0: failed+=1
+  else:
+   for p in _deps(out):
+    p=located(cwd,p)
+    if p==tu: continue
+    if edges>=lim['edges']: omitted['edges']+=1; continue
+    i=add(p,'header')
+    if i is not None and i not in headers: headers.append(i); edges+=1
+  units.append({'file':classify(tu)[0],'exit_code':rc,'headers':sorted(headers)})
+ if failed: gaps.append(f'dependency-listing-failed:{failed} translation unit(s)')
+ # (2) link lines from the driver job log.
+ try: text=open(cfg['clang_log'],encoding='utf-8',errors='replace').read() if cfg.get('clang_log') else ''
+ except OSError: text=''
+ argvs,bad=link_commands(text)
+ if bad: gaps.append(f'link-log-unparsed:{bad} job line(s)')
+ binaries=list(cfg['binaries']); links=[]
+ def library(spec,static,dirs):
+  if not spec.startswith('-l'): return spec if os.path.isabs(spec) and os.path.isfile(spec) else None
+  name=spec[2:]; names=[name[1:]] if name.startswith(':') else (['lib'+name+'.a'] if static else ['lib'+name+'.so','lib'+name+'.a'])
+  for d in dirs:
+   for n in names:
+    if os.path.isabs(d) and os.path.isfile(os.path.join(d,n)): return os.path.join(d,n)
+  return None
+ for argv in argvs:
+  if len(links)>=lim['link_commands']: omitted['link_commands']+=1; continue
+  parsed=parse_link(argv); out=parsed['output']; binary=None
+  if out:
+   o=os.path.normpath(out)
+   if o.startswith(src+'/'): o=o[len(src)+1:]
+   match=[b for b in binaries if b==o or b.endswith('/'+o)]
+   binary=match[0] if len(match)==1 else None
+  for lib in parsed['libraries']:
+   path=library(lib['spec'],lib['static'],parsed['library_dirs'])
+   lib['file']=add(path,'static-library' if path.endswith('.a') else 'shared-library') if path else None
+   # a relative direct input (.libs/libx.so) is a build-tree product; an -l nothing resolves is a gap
+   if path is None and lib['spec'].startswith('-l'): gaps.append(f"library-unresolved:{lib['spec']}"+(f':{binary}' if binary else ''))
+  for d in parsed['library_dirs']:
+   if d.startswith('/'): note(library_dirs,classify(d)[0])
+  links.append({'output':out,'binary':binary,'argv':argv[:8192],**parsed})
+ for b in binaries:
+  if not any(l['binary']==b for l in links): gaps.append(f'link-command-not-captured:{b}')
+ # (3) DT_NEEDED and RUNPATH of each built binary, resolved like the loader would, then transitively.
+ records=[]; cache={}
+ rc,out,_=_run([tools['ldconfig'],'-p'],timeout=60)
+ for m in re.finditer(r'^\s+(\S+) \(([^)]*)\) => (\S+)$',out,re.M): cache.setdefault(m.group(1),[]).append(m.group(3))
+ defaults=sorted(d for d in os.listdir('/usr/lib') if d.endswith('-linux-gnu')) if os.path.isdir('/usr/lib') else []
+ defaults=[p for d in defaults for p in ('/lib/'+d,'/usr/lib/'+d)]+['/lib64','/usr/lib64','/lib','/usr/lib']
+ env_dirs=[d for d in os.environ.get('LD_LIBRARY_PATH','').split(':') if d.startswith('/')]
+ def resolve(soname,origin,runpath,rpath,elf):
+  if '/' in soname: return (soname,None) if _elf_id(soname)==elf else (None,None)
+  expand=lambda d:d.replace('${ORIGIN}',origin).replace('$ORIGIN',origin)
+  for via,dirs in (('rpath',[] if runpath else rpath),('ld-library-path',env_dirs),('runpath',runpath),('cache',None),('default',defaults)):
+   for p in (cache.get(soname,[]) if dirs is None else [os.path.join(expand(d),soname) for d in dirs]):
+    if _elf_id(p)==elf: return os.path.normpath(p),via
+  return None,None
+ if shutil.which(tools['readelf']) is None and binaries: gaps.append('readelf-unavailable: DT_NEEDED not recorded')
+ else:
+  queue=[(os.path.join(src,b),b) for b in binaries]; seen=set()
+  while queue:
+   path,label=queue.pop(0)
+   if time.monotonic()>deadline: gaps.append(f'needed-walk-stopped:{len(queue)+1} object(s) beyond the time bound'); break
+   if path in seen: continue
+   seen.add(path); dyn=_dynamic(tools['readelf'],path); elf=_elf_id(path)
+   if dyn is None: gaps.append(f'dynamic-section-unreadable:{label}'); continue
+   needed,runpath,rpath=dyn; resolved=[]
+   for soname in needed:
+    p,via=resolve(soname,os.path.dirname(path),runpath,rpath,elf)
+    i=add(p,'needed') if p else None
+    if p is None: gaps.append(f'needed-unresolved:{label}:{soname}')
+    else: queue.append((p,files[i]['path'] if i is not None else p))  # what the loaded library loads, too
+    resolved.append({'soname':soname,'file':i,'via':via})
+   if label in binaries: records.append({'path':label,'needed':resolved,'runpath':runpath,'rpath':rpath})
+ # (4) OS package ownership of every out-of-checkout file.
+ distro=_os_release(cfg['os_release']); manager=None
+ outside=[f for f in files if f['class'] is None]
+ if shutil.which(tools['dpkg_query']) is None or not os.path.isdir('/var/lib/dpkg'):
+  gaps.append(f"package-manager-unavailable:{(distro or {}).get('id') or 'unknown'}: no dpkg; out-of-checkout files are unattributed")
+ else:
+  manager='dpkg'; spell={}
+  for f in outside:
+   p=f['path']; real=os.path.realpath(p)
+   spell[f['path']]=[s for s in dict.fromkeys([p,_usrmerge(p),real,_usrmerge(real)]) if s and not re.search(r'[*?\[\]\\]',s)]
+  owners={}; names=sorted({s for v in spell.values() for s in v})
+  for k in range(0,len(names),256):
+   _,out,_=_run([tools['dpkg_query'],'-S',*names[k:k+256]],timeout=300)
+   for line in out.splitlines():
+    if line.startswith('diversion '): continue
+    pkgs,sep,path=line.partition(': /')
+    if sep: owners['/'+path]=sorted(x.strip() for x in pkgs.split(','))
+  for f in outside: f['packages']=next((owners[s] for s in spell[f['path']] if s in owners),[])[:16]
+  wanted=sorted({p for f in outside for p in f['packages']}); packages={}
+  fmt='${binary:Package}\t${Package}\t${Architecture}\t${Version}\t${source:Package}\t${source:Version}\n'
+  for k in range(0,len(wanted),256):
+   _,out,_=_run([tools['dpkg_query'],'-W','-f',fmt,*wanted[k:k+256]],timeout=300)
+   for line in out.splitlines():
+    v=line.split('\t')
+    if len(v)==6 and v[3]: packages[v[0]]={'package':v[0],'name':v[1],'arch':v[2],'version':v[3],'source':v[4] or None,'source_version':v[5] or None}
+  for f in outside:
+   f['packages']=[p for p in f['packages'] if p in packages or p.split(':')[0] in packages]
+ for f in files:
+  if f['class'] is None: f['class']='system-package' if f['packages'] else 'unattributed'
+ unattributed=[f['path'] for f in files if f['class']=='unattributed']
+ if unattributed: gaps.append(f"unattributed-files:{len(unattributed)}: "+', '.join(unattributed[:5])+(' ...' if len(unattributed)>5 else ''))
+ owned={p for f in files for p in f['packages']}
+ table=[packages[p] if p in packages else packages[p.split(':')[0]] for p in sorted(owned)] if manager else []
+ for key,n in omitted.items():
+  if n: gaps.append(f'{key}-omitted:{n} beyond the capture bound')
+ return {'schema':'appsec-review/build-dependencies/1','distro':distro,'package_manager':manager,
+  'limits':{k:lim[k] for k in ('files','translation_units','link_commands','edges','hash_max_bytes','seconds')},
+  'search_dirs':{'include':include_dirs,'library':library_dirs},'files':files,'packages':table,
+  'translation_units':units,'link_commands':links,'binaries':records,'omitted':omitted,'coverage_gaps':gaps[:256]}
+def empty_dependencies(lim,gap):
+ return {'schema':'appsec-review/build-dependencies/1','distro':None,'package_manager':None,
+  'limits':{k:lim[k] for k in ('files','translation_units','link_commands','edges','hash_max_bytes','seconds')},
+  'search_dirs':{'include':[],'library':[]},'files':[],'packages':[],'translation_units':[],'link_commands':[],
+  'binaries':[],'omitted':{'files':0,'translation_units':0,'link_commands':0,'edges':0,'hashes':0},'coverage_gaps':[gap]}
+'''
+
+RUNNER = HEADER_COLLECTOR + DEPENDENCY_COLLECTOR + r'''import json,shutil,stat,sys
+cfg=json.loads(sys.argv[1]); roots=cfg.get('roots',{'workspace':'/workspace','scratch':'/scratch'})
+work,scratch=roots['workspace'],pathlib.Path(roots['scratch']); src=scratch/'src'; deps=cfg.get('dependencies')
+shutil.copytree(work,src,symlinks=False,ignore_dangling_symlinks=True)
+log=scratch/'build-deps'/'clang-jobs.log'
+if deps: log.parent.mkdir(parents=True,exist_ok=True)
 def executables():
  out={}
  for p in src.rglob('*'):
@@ -259,15 +562,26 @@ for item in cfg['commands']:
  argv=list(item['argv']); cwd=src/item['cwd']
  if item['phase']=='build' and cfg['compile_database']=='bear':
   argv=['bear','--output',str(src/'compile_commands.json'),'--',*argv]
- p=subprocess.run(argv,cwd=cwd,check=False)
+ env=dict(os.environ,CC_PRINT_OPTIONS='1',CC_PRINT_OPTIONS_FILE=str(log)) if deps and item['phase']=='build' else None
+ p=subprocess.run(argv,cwd=cwd,check=False,env=env)
  records.append({'phase':item['phase'],'argv':argv,'cwd':str(cwd),'exit_code':p.returncode})
  if p.returncode: break
-after=executables(); binaries=[]
+after=executables(); binaries=[]; headers=[]; omitted=0
 if cfg['mode']=='native':
  for rel,sha in sorted(after.items()):
   if before.get(rel)!=sha:
    p=src/rel; binaries.append({'path':rel,'sha256':'sha256:'+sha,'size_bytes':p.stat().st_size})
-pathlib.Path('/scratch/replay-result.json').write_text(json.dumps({'runner':cfg['runner'],'commands':records,'binaries':binaries},sort_keys=True)+'\n')
+ h=cfg['headers']; headers,omitted=generated_headers(str(src),work,h['limit'],h['max_bytes'],h['suffixes'])
+ if deps and not any(x['exit_code'] for x in records):
+  try:
+   entries=json.loads((src/'compile_commands.json').read_text()) if (src/'compile_commands.json').is_file() else []
+   record=build_dependencies({'src':str(src),'pristine':work,'entries':entries,'clang_log':str(log),
+    'binaries':[b['path'] for b in binaries],'limits':deps['limits'],'os_release':'/etc/os-release',
+    'tools':{'readelf':'readelf','dpkg_query':'dpkg-query','ldconfig':'ldconfig'}})
+  except Exception as exc:  # the capture never fails a build that succeeded; its failure is a gap
+   record=empty_dependencies(deps['limits'],f'capture-failed:{type(exc).__name__}')
+  (scratch/deps['record']).write_text(json.dumps(record,sort_keys=True)+'\n')
+(scratch/'replay-result.json').write_text(json.dumps({'runner':cfg['runner'],'commands':records,'binaries':binaries,'generated_headers':headers,'generated_headers_omitted':omitted},sort_keys=True)+'\n')
 sys.exit(next((x['exit_code'] for x in records if x['exit_code']),0))'''
 
 
@@ -293,7 +607,10 @@ def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], loc
     phases = spec(job)["phases"]
     commands = [item for phase in phases for item in lock[phase]]
     cfg = {"runner": RUNNER_VERSION, "mode": "native" if job == "02-native-build" else "configure",
-           "compile_database": lock["compile_database"]["method"], "commands": commands}
+           "compile_database": lock["compile_database"]["method"], "commands": commands,
+           "headers": {"limit": HEADER_LIMIT, "max_bytes": HEADER_MAX_BYTES, "suffixes": list(HEADER_SUFFIXES)}}
+    if job == "02-native-build":
+        cfg["dependencies"] = {"limits": DEPENDENCY_LIMITS, "record": DEPENDENCIES_FILE}
     encoded = base64.b64encode(RUNNER.encode("utf-8")).decode("ascii")
     trusted = "import base64;exec(base64.b64decode('" + encoded + "'))"
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": job, "attempt_id": adapter_id,
@@ -332,6 +649,83 @@ def _compile_db(path: Path, allowed: list[str]) -> list[dict[str, Any]]:
     return value
 
 
+def _header_path(rel: Any) -> str:
+    pure = PurePosixPath(rel) if isinstance(rel, str) else PurePosixPath("..")
+    if (pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts) or
+            pure.suffix.lower() not in HEADER_SUFFIXES):
+        raise RuntimeError("02-native-build: generated header path is not a normalized header path")
+    return pure.as_posix()
+
+
+def _publish_headers(replay: dict[str, Any], built: Path, out: Path, attempt: Path) -> dict[str, Any]:
+    """P35: copy the runner-declared configure-generated headers out of the build copy, hash-bound."""
+    declared, omitted = replay.get("generated_headers", []), replay.get("generated_headers_omitted", 0)
+    if not isinstance(declared, list) or len(declared) > HEADER_LIMIT or not isinstance(omitted, int) or omitted < 0:
+        raise RuntimeError("02-native-build: generated header listing exceeds its bound")
+    headers = []
+    for item in declared:
+        rel = _header_path(item.get("path") if isinstance(item, dict) else None)
+        source = built / rel
+        if source.is_symlink() or not source.is_file() or source.stat().st_size > HEADER_MAX_BYTES:
+            raise RuntimeError(f"02-native-build: declared generated header is missing: {rel}")
+        target = out / rel
+        target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(source, target)
+        sha = "sha256:" + file_hash(target)
+        if sha != item.get("sha256"):
+            raise RuntimeError(f"02-native-build: generated header changed after the build: {rel}")
+        headers.append({"path": rel, "sha256": sha, "size_bytes": target.stat().st_size})
+    return {"root": out.relative_to(attempt).as_posix(), "headers": headers, "omitted": omitted}
+
+
+def _dependency_record(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > DEPENDENCIES_MAX_BYTES:
+        raise RuntimeError(f"02-native-build: {DEPENDENCIES_FILE} is missing or over its byte bound")
+    record = read_json(path)
+    if validate_document(record, DEPENDENCIES_SCHEMA):
+        raise RuntimeError(f"02-native-build: {DEPENDENCIES_FILE} fails its closed schema")
+    count = len(record["files"])
+    if (count > record["limits"]["files"] or len(record["translation_units"]) > record["limits"]["translation_units"] or
+            any(i >= count for unit in record["translation_units"] for i in unit["headers"]) or
+            any(item["file"] is not None and item["file"] >= count for link in record["link_commands"] for item in link["libraries"]) or
+            any(item["file"] is not None and item["file"] >= count for binary in record["binaries"] for item in binary["needed"])):
+        raise RuntimeError(f"02-native-build: {DEPENDENCIES_FILE} exceeds its bound or indexes outside its file table")
+    return record
+
+
+def _publish_dependencies(scratch: Path, out: Path, attempt: Path) -> dict[str, str]:
+    """P36: copy the runner's build-dependencies.json out of the trial, hash-bound. In-tree files it hashed
+    are re-hashed from the trial's build copy; a record that disagrees with the bytes is refused."""
+    record = _dependency_record(scratch / DEPENDENCIES_FILE)
+    for item in record["files"]:
+        if item["class"] in ("checkout", "generated", "third-party-in-checkout") and item["sha256"]:
+            built = scratch / "src" / _tree_path(item["path"])
+            if built.is_symlink() or not built.is_file() or "sha256:" + file_hash(built) != item["sha256"]:
+                raise RuntimeError(f"02-native-build: build-dependency file differs from the build copy: {item['path']}")
+    target = out / DEPENDENCIES_FILE
+    target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(scratch / DEPENDENCIES_FILE, target)
+    return {"path": target.relative_to(attempt).as_posix(), "sha256": "sha256:" + file_hash(target)}
+
+
+def _verify_dependencies(attempt: Path, unit: dict[str, Any]) -> None:
+    descriptor = unit.get("build_dependencies")
+    if descriptor is None:
+        return
+    path = attempt / _tree_path(descriptor["path"])
+    if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != descriptor["sha256"]:
+        raise Blocked("02-native-build: build-dependencies artifact changed")
+    try:
+        _dependency_record(path)
+    except RuntimeError as exc:
+        raise Blocked(str(exc)) from None
+
+
+def _tree_path(rel: Any) -> str:
+    pure = PurePosixPath(rel) if isinstance(rel, str) else PurePosixPath("..")
+    if pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts):
+        raise RuntimeError("02-native-build: build-dependency path is not a normalized relative path")
+    return pure.as_posix()
+
+
 def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{job}: immutable attempt inputs changed")
@@ -367,6 +761,12 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
                     raise Blocked(f"{job}: binary artifact changed")
                 if path.read_bytes()[:4] != b"\x7fELF":
                     raise Blocked(f"{job}: published binary is not ELF")
+            generated = unit.get("generated_headers") or {"root": "", "headers": []}
+            for header in generated["headers"]:
+                path = attempt / generated["root"] / _header_path(header["path"])
+                if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != header["sha256"]:
+                    raise Blocked(f"{job}: generated header artifact changed")
+            _verify_dependencies(attempt, unit)
 
 
 def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str, Any]:
@@ -435,6 +835,9 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
                 unit["compile_database"] = {"path": db.relative_to(attempt).as_posix(),
                     "sha256": "sha256:" + file_hash(db), "entries": len(entries)}
                 unit["binaries"] = binaries
+                unit["generated_headers"] = _publish_headers(replay, trial / "scratch" / "src",
+                    attempt / "outputs" / unit_key / HEADERS_DIR, attempt)
+                unit["build_dependencies"] = _publish_dependencies(trial / "scratch", attempt / "outputs" / unit_key, attempt)
             units.append(unit)
             receipts.append({"unit_id": lock["unit_id"], "adapter_attempt_id": adapter_id,
                 "trial_path": trial.relative_to(attempt).as_posix(),
@@ -464,6 +867,9 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             else:
                 artifacts.append(unit["compile_database"]["path"])
                 artifacts.extend(item["artifact_path"] for item in unit["binaries"])
+                artifacts.extend(unit["generated_headers"]["root"] + "/" + item["path"]
+                                 for item in unit["generated_headers"]["headers"])
+                artifacts.append(unit["build_dependencies"]["path"])
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=cfg["contract"],
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=result["status"],

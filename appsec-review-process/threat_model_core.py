@@ -413,7 +413,9 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         atomic_json(attempt / RESULT, model)
         shown = record if record is not None else tw.EMPTY_RECORD
         projections = tw.write_projections(attempt, model, shown, records, run_id)
-        gaps = [item["statement"] for item in model["gaps"]] + [item["statement"] for item in model["assumptions"]]
+        # Assumptions (component-map unknowns, open questions) stay assumptions in the model and the
+        # report's limitations; only real gaps are envelope gaps, so each open question appears once.
+        gaps = [item["statement"] for item in model["gaps"]]
         status_name = "OK_WITH_GAPS" if gaps else "OK"
         atomic_bytes(attempt / SUMMARY, _summary(model, shown).encode())
         permission, lineage = _receipts(inputs, record)

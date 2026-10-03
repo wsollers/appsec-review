@@ -6,9 +6,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import bounded_analysis_workers as workers
+import component_characterization as cc
 import deployment_hardening
 from execution_state import Blocked, atomic_json, beneath, data_path, digest, file_hash, identifier, now, read_json, run_path
 import model_version_registry as mvr
+import owasp_applicability
+import owasp_component_routing
 import owasp_dispatch
 import owasp_validation_worklist
 from publish_job_output import mark_attempt_started, publish_validated, validate_published
@@ -22,6 +25,8 @@ STANDARDS = ("02-standards-source-ingest", "standards-source-extract", "standard
              "standards-source-extract.schema.json")
 IAC = ("02-iac-config-scan", "iac-config-evidence", "outputs/iac-config-evidence.json",
        "iac-config-evidence.schema.json")
+ROUTING = (owasp_component_routing.JOB, owasp_component_routing.CONTRACT, owasp_component_routing.REQUEST,
+           "owasp-applicability-request.schema.json")
 
 
 def _base(run_id: str, job: str) -> Path:
@@ -69,8 +74,37 @@ def _record_documents(run_id: str, standards: dict[str, Any]) -> list[tuple[dict
 
 
 def _component_targets(component: dict[str, Any], lane: str) -> list[dict[str, Any]]:
-    rows = [row for row in component["functional_components"] if lane in row["downstream_lanes"]]
-    return rows or list(component["functional_components"])
+    """Only components the accepted map routes to ``lane``; an unrouted component is not assessed by fallback."""
+    return [row for row in component["functional_components"] if lane in row["downstream_lanes"]]
+
+
+def _owasp_routing(run_id: str, component_binding: dict[str, Any]) -> dict[str, Any]:
+    """P39: the accepted T04 routing request (components and rules), bound to this exact component map."""
+    routed, _binding = _load(run_id, ROUTING)
+    bound = routed.get("component_map") or {}
+    if (bound.get("attempt_id") != component_binding["attempt_id"] or
+            "sha256:" + str(bound.get("artifact_sha256")) != component_binding["artifact_sha256"]):
+        raise Blocked("standards lifecycle: accepted OWASP routing is bound to a different component map")
+    return routed
+
+
+def _routed_rule(routed: dict[str, Any], component_id: str, wrapper: dict[str, Any]) -> dict[str, Any] | None:
+    """T04's precedence: the unique most specific matching rule decides; none or a tie stays undecided."""
+    control = {"standard_family": wrapper["family"], "control_id": wrapper["record_id"],
+               "group": wrapper["record"].get("group", {})}
+    ranked = [(owasp_applicability._rule_priority(rule, control), rule) for rule in routed["rules"]
+              if rule["component_id"] == component_id]
+    top = max((priority for priority, _ in ranked), default=0)
+    winners = [rule for priority, rule in ranked if top and priority == top]
+    return winners[0] if len(winners) == 1 else None
+
+
+def _component_path(component: dict[str, Any], path: Any) -> bool:
+    """A hit path lies in a component by its path_patterns (repo-root anchored globs) or representative locations."""
+    if not isinstance(path, str) or not path:
+        return False
+    return (any(cc._matches(path, pattern) for pattern in component.get("path_patterns", [])) or
+            path in {cc._location_path(value) for value in component.get("representative_locations", [])})
 
 
 def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
@@ -78,11 +112,19 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
     run_id = identifier(run_id)
     if job_id not in {owasp_validation_worklist.JOB, stig_srg_validation_worklist.JOB}:
         raise Blocked("standards lifecycle: unsupported worklist job")
-    component, _component_binding = _load(run_id, COMPONENT)
+    component, component_binding = _load(run_id, COMPONENT)
     standards, standards_binding = _load(run_id, STANDARDS)
     family = "owasp" if job_id == owasp_validation_worklist.JOB else "stig_srg"
     lane = "04-asvs-masvs" if family == "owasp" else "15-deployment-hardening"
-    targets = _component_targets(component, lane)
+    upstream = [COMPONENT, STANDARDS]
+    if family == "owasp":
+        # P39: OWASP targets and applicability come from the accepted T04 routing; STIG/SRG has no
+        # routing equivalent and keeps the component map's downstream_lanes.
+        routed = _owasp_routing(run_id, component_binding)
+        targets = [row for row in routed["components"] if row["scope_status"] == "in_scope"]
+        upstream.append(ROUTING)
+    else:
+        routed, targets = None, _component_targets(component, lane)
     controls = []
     for index, wrapper in _record_documents(run_id, standards):
         record = wrapper["record"]
@@ -98,31 +140,51 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
                             for mode in obligation.get("minimum_evidence_modes", [])})
             needs_runtime = "dynamic_runtime" in modes
             citation = "std-" + digest({"record": index, "component": target["component_id"]})[:20]
-            controls.append({"control_id": wrapper["record_id"],
+            rule = _routed_rule(routed, target["component_id"], wrapper) if routed else None
+            status = rule["decision"]["status"] if rule else "cannot_determine"
+            row = {"control_id": wrapper["record_id"],
                 "standard_family": "OWASP" if family == "owasp" else "DISA_STIG_SRG",
                 "standard_version": wrapper["edition"], "target_id": target["component_id"],
-                "applicability": "cannot_determine",
+                "applicability": status,
                 "tailoring": "Target-derived component; applicability awaits control-specific assessment.",
                 "evidence_mode": "hybrid" if needs_runtime else "manual",
-                "citation_ids": [citation],
-                "gaps": ["runtime evidence unavailable" if needs_runtime else
-                         "control-specific assessment has not been performed"]})
+                "citation_ids": [citation] + ([rule["rule_id"]] if rule else []),
+                "gaps": ["runtime evidence unavailable"] if needs_runtime else []}
+            if status == "not_applicable":
+                # Accounted, not assessed: the routing rule is the citation and nothing remains to examine.
+                row.update(tailoring=f"Routed not applicable by {rule['rule_id']}: {rule['decision']['rationale']}",
+                           evidence_mode="static", gaps=[])
+            elif rule:
+                condition = rule["decision"]["conditional_expression"]
+                row["tailoring"] = (f"Routed {status} by {rule['rule_id']}" + (f" if {condition}" if condition else "") +
+                                    "; control-specific assessment pending.")
+            elif routed:
+                row["tailoring"] = "No unique OWASP routing rule decides this target; applicability awaits reviewer resolution."
+            controls.append(row)
+    # P26: every row is NOT_ASSESSED; one summary gap carries the count instead of one gap per row.
+    # An N/A-routed row is accounted with its rule citation and needs no assessment.
+    pending = sum(row["applicability"] != "not_applicable" for row in controls)
+    undecided = sum(row["applicability"] == "cannot_determine" for row in controls) if routed else 0
+    if not targets:
+        source = "the accepted OWASP routing" if routed else lane
+        gaps = [f"No functional component is routed to {source}; the {family} worklist is empty."]
+    else:
+        gaps = [f"Control-specific assessment has not been performed for {pending} control x component work items."] if pending else []
+        if undecided:
+            gaps.append(f"The accepted OWASP routing decides no applicability for {undecided} control x component work items; reviewer resolution is required.")
     generation = _generation(run_id)
-    payload = {"controls": controls}
+    payload = {"controls": controls, "gaps": gaps}
     request = {"schema": "appsec-review/bounded-transform-request/1.0", "run_id": run_id,
         "job_id": job_id, "source_generation": generation,
-        "upstream": [{"pointer_path": str(_base(run_id, COMPONENT[0]) / "accepted.json"),
-                      "job_id": COMPONENT[0], "contract": COMPONENT[1], "artifact": COMPONENT[2],
-                      "schema": COMPONENT[3]},
-                     {"pointer_path": str(_base(run_id, STANDARDS[0]) / "accepted.json"),
-                      "job_id": STANDARDS[0], "contract": STANDARDS[1], "artifact": STANDARDS[2],
-                      "schema": STANDARDS[3]}], "payload": payload}
+        "upstream": [{"pointer_path": str(_base(run_id, spec[0]) / "accepted.json"), "job_id": spec[0],
+                      "contract": spec[1], "artifact": spec[2], "schema": spec[3]} for spec in upstream],
+        "payload": payload}
     path = data_path(run_id, "jobs", job_id, "inputs", _attempt_id(job_id, generation, payload) + ".json")
     if path.exists() and read_json(path) != request:
         raise Blocked("standards lifecycle: immutable derived request changed")
     if not path.exists(): atomic_json(path, request)
     return {"request_path": path, "attempt_id": _attempt_id(job_id, generation, payload),
-            "control_count": len(controls), "generation": generation}
+            "control_count": len(controls), "target_count": len(targets), "generation": generation}
 
 
 def _publish_bounded(run_id: str, job_id: str, attempt_id: str) -> dict[str, Any]:
@@ -144,10 +206,27 @@ def _reusable(base: Path, run_id: str, job_id: str, attempt_id: str) -> dict[str
     return pointer
 
 
+def _route_owasp(run_id: str, dagster_run_id: str) -> None:
+    """P39: produce, or reuse on unchanged inputs, the T03 lane-in and routing the OWASP worklist reads.
+
+    The join's T03-T06 chain runs the same deterministic workers later and reuses these publications;
+    ``force`` stays with the worklist itself.
+    """
+    import owasp_lane_in
+    import owasp_workbench_lifecycle as workbench
+    owasp_lane_in.admit(run_id, workbench._write_request(run_id, "owasp-lane-in-request.json",
+                                                         workbench.lane_in_request(run_id)))
+    owasp_component_routing.run(run_id, dagster_run_id)
+
+
 def run_worklist(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> dict[str, Any]:
     import bounded_transform_orchestration as orchestration
+    if job_id == owasp_validation_worklist.JOB:
+        _route_owasp(run_id, dagster_run_id)
     prepared = prepare_worklist(run_id, job_id)
-    if prepared["control_count"] == 0:
+    # No routed component publishes an empty worklist with its reason; routed components without
+    # accepted controls are a failure to examine.
+    if prepared["target_count"] and prepared["control_count"] == 0:
         raise Blocked("standards lifecycle: no accepted controls exist for the requested standards family")
     base = data_path(run_id, "jobs", job_id)
     if not force and (pointer := _reusable(base, run_id, job_id, prepared["attempt_id"])):
@@ -194,9 +273,12 @@ def prepare_deployment(run_id: str) -> dict[str, Any]:
     else:
         iac, iac_binding = _load(run_id, IAC)
         hits, iac_gap = iac["rule_hits"], None
+    components = {row["component_id"]: row for row in component["functional_components"]}
     targets = []
     for work in stig["work_items"]:
-        matching = [hit for hit in hits if work["target_id"] in str(hit)]
+        # P28: hits carry only location.path; match it against the work item's component paths.
+        owner = components.get(work["target_id"], {})
+        matching = [hit for hit in hits if _component_path(owner, (hit.get("location") or {}).get("path"))]
         if not matching:
             continue
         targets.append({"target_id": work["target_id"], "platform": "declared-iac",

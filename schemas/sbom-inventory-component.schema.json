@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sbom-inventory-component.schema.json",
   "title": "One SBOM component",
-  "description": "declaration is closed: a component a manifest or lockfile DECLARES, or one INFERRED from vendored file evidence. source.evidence_kind is re-derived from the basename of source.path by sbom_family_contracts.py, and declaration from evidence_kind, so an inferred vendored component cannot be relabelled declared. No description, licence, supplier, author, URL or free-text field exists.",
+  "description": "declaration is closed: a component a manifest or lockfile DECLARES, or one INFERRED from vendored file evidence. source.evidence_kind is re-derived from the basename of source.path by sbom_family_contracts.py, and declaration from evidence_kind, so an inferred vendored component cannot be relabelled declared. No description, licence, supplier, author, URL or free-text field exists. P37: declaration build-observed marks an OS-package component the native build consumed (source.evidence_kind build-dependency-evidence; source names the unit's build-dependencies.json in the accepted 02-native-build attempt with its sha256). scope and build_evidence are null except on components derived from build-dependency records. P43: declaration image-observed marks an installed OS package of a resolved Dockerfile base image, read from the accepted 02-iac-config-scan outputs/base-image-inventory.json (source.evidence_kind base-image-inventory-evidence; source names that document with its sha256); its scope is container-base and image_evidence cites each image reference (BI- record, declared repository/tag/digest, the resolved manifest, the Dockerfile line, the layer) with the distribution's EOL status. image_evidence is null on every other component.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,10 @@
     "ecosystem",
     "source",
     "tool_id",
-    "citation"
+    "citation",
+    "scope",
+    "build_evidence",
+    "image_evidence"
   ],
   "properties": {
     "component_id": {
@@ -28,14 +31,18 @@
       "enum": [
         "declared-component-present",
         "component-version-unknown",
-        "inventory-coverage-gap"
+        "inventory-coverage-gap",
+        "build-observed-component-present",
+        "base-image-component-present"
       ]
     },
     "declaration": {
       "type": "string",
       "enum": [
         "declared",
-        "inferred-vendored"
+        "inferred-vendored",
+        "build-observed",
+        "image-observed"
       ]
     },
     "name": {
@@ -96,7 +103,9 @@
           "enum": [
             "manifest",
             "lockfile",
-            "vendored-file-evidence"
+            "vendored-file-evidence",
+            "build-dependency-evidence",
+            "base-image-inventory-evidence"
           ]
         },
         "path": {
@@ -115,6 +124,54 @@
     },
     "citation": {
       "$ref": "sbom-inventory-citation.schema.json"
+    },
+    "scope": {
+      "description": "load-time: a built binary names one of the component's files in DT_NEEDED (directly or through a loaded library) or, for a vendored tree, the unit compiled its sources; build-time: only its headers or link-time files were consumed. container-base (P43): installed in a base image a Dockerfile of the target builds FROM; presence in the image, not use.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "load-time",
+        "build-time",
+        "container-base",
+        null
+      ]
+    },
+    "build_evidence": {
+      "description": "The consumed paths (first 16, sorted; path_count counts them all) and the native-build units that recorded them.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "paths",
+        "path_count",
+        "units"
+      ],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\n]{1,4096}\\Z"
+          }
+        },
+        "path_count": {
+          "type": "integer"
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\n]{1,4096}\\Z"
+          }
+        }
+      }
+    },
+    "image_evidence": {
+      "$ref": "sbom-base-image-evidence.schema.json"
     }
   }
 }

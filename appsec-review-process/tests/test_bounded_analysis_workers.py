@@ -31,6 +31,7 @@ class BoundedWorkers(unittest.TestCase):
         self.assertEqual(validate_document(value,"native-memory-analysis.schema.json"),[])
         self.assertFalse(value["candidates"][0]["host_verified"])
         self.assertEqual(value["proof_obligations"][0]["status"],"OPEN")
+        self.assertEqual((value["status"],len(value["gaps"])),("OK_WITH_GAPS",1))  # candidates need runtime proof
         hostile=copy.deepcopy(value); hostile["claim_limits"]["finding_created"]=True
         self.assertTrue(validate_document(hostile,"native-memory-analysis.schema.json"))
 

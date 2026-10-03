@@ -119,8 +119,11 @@ process and writes `appsec-review/treesitter-ast/1` (`schemas/treesitter-ast.sch
 file the language, sha256, byte size, node-kind histogram, function definitions (name, kind,
 start/end line), call sites (callee text, line) and imports (text, line). The document is
 deterministic (sorted, no timestamps in the hashed body) and carries `content_sha256` over its
-canonical body. Files over the size cap, unparseable files and languages without a grammar become
-`gaps`. It is an additional AST source; it does not replace Joern/CPG.
+canonical body. Files over the size cap, unparseable files and program source without a grammar
+become `gaps`; build, documentation and configuration files (`NON_SOURCE_SUFFIXES` such as `.am`,
+`.ac`, `.in`, `.m4`, `.md`, and `NON_SOURCE_NAMES` such as `Makefile`, `configure`) are counted in
+`totals.non_source` instead of as `no-grammar` gaps (P15, `7364a59`). It is an additional AST source;
+it does not replace Joern/CPG.
 
 The CLI streams: file records are written (and hashed) one at a time in path order, so memory
 stays flat however large the tree; `build()` returns the same document in memory for small trees
@@ -176,7 +179,12 @@ open):
 - **Output.** Leads with `tool_id: codeql-cpp-traced` from the same `cpp-security-extended` suite;
   the tool row carries `unit_id` and the replay counts; a unit with failed or refused TUs adds
   `codeql-traced-replay-incomplete:<key>:ok=..:failed=..:refused=..:total=..`; a unit that fails
-  as a whole is the usual per-lane gap. The build-mode none fidelity gap stays on the none row.
+  as a whole is the usual per-lane gap. The build-mode none fidelity gap stays on the none row, but
+  since P11 (`f0fcc17`) it states how many native units the traced replay covered ("N of M") or why
+  none ran, and is dropped when every unit ran traced. Since P35 (`e4eb405`) each unit's
+  configure-generated headers (`config.h` and the like, published by `02-native-build`) are mounted
+  read-only at `/inputs/generated-headers` and searched first, so autotools units no longer fail on
+  a missing `config.h`.
 - **Other compiled languages.** Java and C# stay build-mode none: a traced Maven/Gradle/MSBuild
   build needs dependency downloads the offline boundary forbids. C# now has the .NET SDK
   (9.0.318) in `audit-codeql`, which removes ADR-0017's "C# fails, no dotnet" gap. Go stays a gap
@@ -267,8 +275,9 @@ CodeQL check have **not** run yet.
 - ~~`codeql-cpp-traced` is not wired into the graph.~~ Done by brief G (ADR-0023): `02-codeql-cpp`
   depends on `02-native-build` and reads its accepted pointer itself; without a replayable unit it
   records `language not built` and runs build-mode none only.
-- `treesitter_ast.py` is a CLI and module, not yet a graph job; the host venv has no
-  py-tree-sitter, so its parsing tests skip there (they run with `/opt/treesitter/bin/python`).
+- `treesitter_ast.py` runs in the graph as `02-treesitter-ast` (`treesitter_ast_job.py`, see
+  [code-query-tools.md](code-query-tools.md)); the host venv has no py-tree-sitter, so its parsing
+  tests skip there (they run with `/opt/treesitter/bin/python`).
 - Other analysis images (`audit-native`, `audit-static*`, `audit-binary-analysis`, `audit-iac`,
   `audit-container`, `audit-report`, `tool-*`) carry no language server or tree-sitter.
 - Floating inputs remain: Adoptium Temurin 25 and NodeSource Node 22 apt repositories, distro

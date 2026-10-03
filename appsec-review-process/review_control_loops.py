@@ -141,7 +141,9 @@ def dependency_index(run_id: str, nodes: list[str], edges: list[dict[str, str]])
 
 
 def bounded_rescope(run_id: str, index: dict[str, Any], changed_nodes: list[str], *, iteration: int,
-                    max_iterations: int, previous_plan: dict[str, Any] | None = None) -> dict[str, Any]:
+                    max_iterations: int, previous_plan: dict[str, Any] | None = None,
+                    baseline: bool = False) -> dict[str, Any]:
+    """Affected-only rescope; ``baseline`` marks the first generation, where nothing was accepted to rescope."""
     if type(iteration) is not int or type(max_iterations) is not int or not 1 <= iteration <= max_iterations:
         raise Blocked("review controls: rescope iteration is outside its bound")
     nodes = set(index.get("nodes", [])); changed = set(changed_nodes)
@@ -155,6 +157,8 @@ def bounded_rescope(run_id: str, index: dict[str, Any], changed_nodes: list[str]
             if child not in affected: affected.add(child); queue.append(child)
     if iteration == 1 and previous_plan is not None:
         raise Blocked("review controls: first rescope iteration cannot have a predecessor")
+    if baseline and iteration != 1:
+        raise Blocked("review controls: an initial baseline is only the first rescope iteration")
     if iteration > 1:
         if (not isinstance(previous_plan, dict) or previous_plan.get("run_id") != run_id or
                 previous_plan.get("index_sha256") != index.get("index_sha256") or
@@ -163,7 +167,8 @@ def bounded_rescope(run_id: str, index: dict[str, Any], changed_nodes: list[str]
             raise Blocked("review controls: rescope predecessor chain is invalid")
     prior = set(previous_plan.get("affected_nodes", []) if previous_plan else [])
     no_progress = bool(prior) and affected == prior
-    state = "NO_PROGRESS" if no_progress else ("ITERATION_LIMIT" if iteration == max_iterations else "RESCOPE_REQUIRED")
+    state = ("INITIAL_BASELINE" if baseline else "NO_PROGRESS" if no_progress else
+             "ITERATION_LIMIT" if iteration == max_iterations else "RESCOPE_REQUIRED")
     return {"schema": "appsec-review/bounded-rescope-plan/1.0", "run_id": run_id,
             "index_sha256": index["index_sha256"], "iteration": iteration,
             "max_iterations": max_iterations, "changed_nodes": sorted(changed),

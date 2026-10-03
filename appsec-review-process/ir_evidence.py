@@ -401,7 +401,7 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
         raise RuntimeError("linked LLVM module cannot be decoded")
     lines=ir_text.splitlines(); records=[]; debug_locations=[]; gaps=list(linked["coverage_gaps"])
     target=_require_current_source(run_id,linked); source_by_path={item["path"]:item for item in linked["sources"]}
-    metadata_files={}; subprograms={}; scopes={}; locations={}
+    metadata_files={}; subprograms={}; scopes={}; locations={}; checkout_files={}
     for line in lines:
         file_match=re.search(r'^!(\d+) = !DIFile\(filename: "([^"]+)", directory: "([^"]*)"',line)
         if file_match: metadata_files[file_match.group(1)]=(file_match.group(2),file_match.group(3))
@@ -409,19 +409,31 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
         if sub_match: subprograms[sub_match.group(1)]={"function":sub_match.group(2),"file_id":sub_match.group(3)}
         scope_match=re.search(r'^!(\d+) = .*?scope: !(\d+)',line)
         if scope_match: scopes[scope_match.group(1)]=scope_match.group(2)
-        location=re.search(r'^!(\d+) = !DILocation\(line: (\d+), column: (\d+), scope: !(\d+)',line)
+        # -O2 emits `distinct` locations and column-less `!DILocation(line: 0, scope: ...)` (column 0).
+        location=re.search(r'^!(\d+) = (?:distinct )?!DILocation\(line: (\d+)(?:, column: (\d+))?, scope: !(\d+)(?:, inlinedAt: !(\d+))?',line)
         if location: locations[location.group(1)]={"source_line":int(location.group(2)),
-            "source_column":int(location.group(3)),"scope":location.group(4)}
-    def source_for_file(file_id:str)->dict|None:
-        if file_id not in metadata_files: return None
-        filename,directory=metadata_files[file_id]; path=Path(filename)
-        if not path.is_absolute(): path=Path(directory)/path
-        candidates=[]
-        try: candidates.append(path.resolve().relative_to(target.resolve()).as_posix())
-        except ValueError: pass
-        candidates.extend(rel for rel in source_by_path if path.as_posix().endswith('/'+rel) or path.as_posix()==rel)
-        matches={name for name in candidates if name in source_by_path}
-        return source_by_path[next(iter(matches))] if len(matches)==1 else None
+            "source_column":int(location.group(3) or 0),"scope":location.group(4),"inlined_at":location.group(5)}
+    def in_checkout(relative:str)->bool:
+        if relative not in checkout_files:
+            try: checkout_files[relative]=_relative(target,relative).is_file()
+            except Blocked: checkout_files[relative]=False
+        return checkout_files[relative]
+    def source_for_file(file_id:str)->tuple[dict|None,str]:
+        """A captured source, else why not: >1 match, a repo file no module was compiled from (a
+        header), or a file outside the checkout (system/toolchain headers)."""
+        if file_id not in metadata_files: return None,"debug-location-source-unresolved"
+        filename,directory=metadata_files[file_id]; path=PurePosixPath(filename)
+        if not path.is_absolute(): path=PurePosixPath(directory)/path
+        text=path.as_posix(); relative=None
+        # The checkout is /scratch/src in the native build and /workspace in the IR capture container.
+        for root in ("/scratch/src/","/workspace/",target.resolve().as_posix()+"/"):
+            if text.startswith(root): relative=text[len(root):]; break
+        if relative in source_by_path: return source_by_path[relative],""
+        matches={rel for rel in source_by_path if text.endswith('/'+rel) or text==rel}
+        if len(matches)==1: return source_by_path[next(iter(matches))],""
+        if matches: return None,"debug-location-source-ambiguous"
+        if in_checkout(relative or text): return None,"debug-location-checkout-file-not-captured"
+        return None,"debug-location-outside-checkout"
     def subprogram_for(scope:str)->dict|None:
         seen=set()
         while scope not in seen:
@@ -430,14 +442,25 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
             if scope not in scopes: return None
             scope=scopes[scope]
         return None
-    location_map={}
+    rank=["debug-location-source-ambiguous","debug-location-checkout-file-not-captured",
+          "debug-location-source-unresolved","debug-location-outside-checkout"]
+    location_map={}; unattributed={}
     for location_id,item in sorted(locations.items(),key=lambda pair:int(pair[0])):
-        sub=subprogram_for(item["scope"]); source=source_for_file(sub["file_id"]) if sub else None
+        # Inlined header code (libstdc++, system or repo headers) has a header scope plus an inlinedAt
+        # chain: attribute it to the innermost enclosing call site that is a captured source.
+        current_id,seen,reasons,source=location_id,set(),[],None
+        while current_id is not None and current_id not in seen:
+            seen.add(current_id); current=locations.get(current_id)
+            if current is None: reasons.append("debug-location-source-unresolved"); break
+            sub=subprogram_for(current["scope"])
+            source,reason=source_for_file(sub["file_id"]) if sub else (None,"debug-location-source-unresolved")
+            if source is not None: break
+            reasons.append(reason); current_id=current["inlined_at"]
         if source is None:
-            gaps.append({"reason":"debug-location-source-ambiguous","debug_location_id":location_id})
-            continue
-        record={"debug_location_id":location_id,"source_line":item["source_line"],
-            "source_column":item["source_column"],"function":sub["function"],
+            reason=min(reasons,key=rank.index); unattributed[location_id]=reason
+            gaps.append({"reason":reason,"debug_location_id":location_id}); continue
+        record={"debug_location_id":location_id,"source_line":current["source_line"],
+            "source_column":current["source_column"],"function":sub["function"],
             "module_id":source["module_id"],"source_path":source["path"],"source_sha256":source["sha256"]}
         debug_locations.append(record); location_map[location_id]=record
     current_function = None
@@ -452,8 +475,11 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
         if kind:
             debug_match=re.search(r"!dbg !(\d+)",line); debug_id=debug_match.group(1) if debug_match else None
             debug=location_map.get(debug_id) if debug_id else None
-            if debug is None:
-                gaps.append({"reason":"fact-source-ambiguous","ir_line":line_number,"function":current_function})
+            if debug is None and debug_id is None:
+                gaps.append({"reason":"fact-debug-location-missing","ir_line":line_number,"function":current_function})
+            elif debug is None:
+                gaps.append({"reason":"fact-source-unattributed","ir_line":line_number,"function":current_function,
+                    "debug_location_id":debug_id,"location_reason":unattributed.get(debug_id,"debug-location-unparsed")})
             records.append({"fact_id": "fact_" + digest({"line": line_number, "text": line.strip()})[:16],
                 "kind": kind, "ir_line": line_number,
                 "function": debug["function"] if debug else current_function,

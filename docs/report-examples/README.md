@@ -14,6 +14,12 @@ scan and must not be treated as an accepted review attempt.
 > still shows the old 42-process sample until it is re-rendered in the pinned TeX image (commands
 > below). Remove this note when the PDF is replaced.
 
+> **Pre-fix gap set (2026-10-03).** The hand-kept finding AR-005 ("Vendored cJSON 1.7.18 has no purl or
+> CPE") and the hand-kept SBOM/SCA gap texts in the sample data and both renders describe
+> `hello-autotools` before the gap punch list
+> ([`2026-10-03-gap-punchlist-hello-autotools.md`](../continuation-prompts/2026-10-03-gap-punchlist-hello-autotools.md)).
+> Refresh them from the re-run's report; until then read them as illustrations of layout only.
+
 ## How the sample is produced
 
 The sample stays SAMPLE DATA: the cover, findings and evidence register are hand-kept illustrations.
@@ -23,7 +29,7 @@ Every other block is produced by `pipeline/report/sample_data.py` through the re
 |---|---|
 | `families`, `processes`, `scoring.family_weight` | One process per job in `job-graph.json`, grouped by its `lane`; kind and tools from the design-parity manifest. Statuses follow a fixed SAMPLE rule in `sample_data.py` (`SKIPPED` with the workers' own reason codes, a few `OK_WITH_GAPS`, the rest OK). A family's weight is its job count. |
 | 3A `attack_chains` | Lane 14 composition and refutation workers over the canned replies of `tests/test_attack_chain_report.py` (the case-001 argv to strcpy fixture), projected by `attack_chain_report.build`. |
-| 3B `dependency_reachability` | `dependency_reachability_report.build` over a schema-valid 06 summary with no SCA match (vendored cJSON has no purl or CPE). |
+| 3B `dependency_reachability` | `dependency_reachability_report.build` over a schema-valid 06 summary with no SCA match (vendored cJSON has no purl or CPE: the pre-fix state; since `3436f9c`, gap punch list P19, it carries both). |
 | 3C `threat_workbench` | `threat_workbench.join` over `examples/hello-autotools.workbench-replies.json`, the core and overlay validators, `synthesis_report.build_report` (closed schema) and `synthesis_report_presentation._threat_workbench`. |
 | finding `exploit_signal`, lane-12 trail row | `synthesis_report_presentation._exploit_text` (EPSS/KEV not assessed) and the pinned `cvss4.py`. |
 

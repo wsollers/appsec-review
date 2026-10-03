@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "iac-config-base-image-inventory.schema.json",
-  "title": "Declared base-image references (outputs/base-image-inventory.json)",
-  "description": "ADR-0010 task V04, second artifact of contract iac-config-evidence. Each entry is a FROM reference as DECLARED in a Dockerfile, split into closed fields so no URL, credential or free text fits. No registry is contacted: nothing says the image exists or what it contains. Validated by secrets_iac_contracts.py because an output contract declares a single result_schema.",
+  "title": "Declared base-image references and their resolved OS packages (outputs/base-image-inventory.json)",
+  "description": "ADR-0010 task V04, second artifact of contract iac-config-evidence. Each entry is a FROM reference as DECLARED in a Dockerfile, split into closed fields so no URL, credential or free text fits. 1.1 (P41): a literal reference is looked up in the host-published, content-addressed base-image cache (base_image_cache.py; fetched outside B13, read here offline with every blob re-hashed) and its OS packages are inventoried from the dpkg/apk databases as CycloneDX-like components with pkg:deb/pkg:apk purls; the distribution is checked against the pinned EOL table. An image the cache does not hold or that fails verification is unresolved, and its Dockerfile is a not-analyzed input in coverage.json: a gap, never an empty inventory. Validated by secrets_iac_contracts.py because an output contract declares a single result_schema.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,11 +12,13 @@
     "attempt_id",
     "source_snapshot_sha256",
     "redactor",
+    "image_cache",
+    "eol_table",
     "base_images"
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/iac-config-base-image-inventory/1.0"
+      "const": "appsec-review/iac-config-base-image-inventory/1.1"
     },
     "run_id": {
       "type": "string",
@@ -58,6 +60,47 @@
         }
       }
     },
+    "image_cache": {
+      "description": "The published base-image cache snapshot this document read: sha256 of its reference table (the blob current.json names). Null when no cache was published or it did not verify, and for a document with no Dockerfile.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "platform"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+        },
+        "platform": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,16}/[a-z0-9]{1,16}(/[a-z0-9]{1,16})?\\Z"
+        }
+      }
+    },
+    "eol_table": {
+      "description": "The pinned EOL table operating_system.eol was read from, by file hash. Null for a document with no Dockerfile.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "const": "data/base-image-eol.json"
+        },
+        "sha256": {
+          "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+        }
+      }
+    },
     "base_images": {
       "type": "array",
       "items": {
@@ -72,7 +115,12 @@
           "tag",
           "digest",
           "location",
-          "citation"
+          "citation",
+          "mutable",
+          "resolution",
+          "operating_system",
+          "package_inventory",
+          "components"
         ],
         "properties": {
           "reference_id": {
@@ -103,7 +151,8 @@
               "string",
               "null"
             ],
-            "pattern": "^(?!.*[0-9A-Fa-f]{32})[a-z0-9]([a-z0-9._-]{0,126}[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]([a-z0-9._-]{0,126}[a-z0-9])?){0,15}\\Z"
+            "pattern": "^(?!.*[0-9A-Fa-f]{32})[a-z0-9]([a-z0-9._-]{0,126}[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]([a-z0-9._-]{0,126}[a-z0-9])?){0,15}\\Z",
+            "description": "The reference as declared, without tag or digest (P41: `repo:tag@digest` used to put the tag here)."
           },
           "tag": {
             "type": [
@@ -195,6 +244,236 @@
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}\\Z",
                 "description": "Hash of the cited output FILE (bare hex, as in threat-model-citation). Never a hash of a matched value."
+              }
+            }
+          },
+          "mutable": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True for a literal reference without a digest: the tag was resolved on the host at resolution.resolved_at and may point elsewhere now. Null for a non-literal form."
+          },
+          "resolution": {
+            "description": "What the host-published cache holds for this reference on the default platform.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "reason",
+              "resolved"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "resolved",
+                  "unresolved",
+                  "not-applicable"
+                ],
+                "description": "not-applicable: scratch or a build stage. unresolved is a coverage gap (tool-instance-partial gap-dockerfile-base-image-inventory-base-images-unresolved)."
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^(?!.*[0-9A-Fa-f]{32})[a-z][a-z0-9-]{0,63}\\Z",
+                "description": "Null unless unresolved: not-in-cache, cache-unavailable, build-arg-parameterized, the fetch cause recorded on the host (digest-mismatch, http-404, platform-not-found, ...) or the verification failure (blob-hash-mismatch, blob-missing, layer-format-unsupported, ...)."
+              },
+              "resolved": {
+                "description": "Set exactly when resolved. For a tag (mutable) reference, index or manifest digest is what the tag named at `at`.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "at",
+                  "platform",
+                  "index",
+                  "manifest"
+                ],
+                "properties": {
+                  "at": {
+                    "$ref": "common/formats.schema.json#/$defs/utc_timestamp"
+                  },
+                  "platform": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]{1,16}/[a-z0-9]{1,16}(/[a-z0-9]{1,16})?\\Z"
+                  },
+                  "index": {
+                    "description": "The multi-platform index the reference named; null when it named a single manifest.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": false,
+                    "required": [
+                      "digest"
+                    ],
+                    "properties": {
+                      "digest": {
+                        "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+                      }
+                    }
+                  },
+                  "manifest": {
+                    "description": "The platform image manifest whose layers were inventoried.",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "digest"
+                    ],
+                    "properties": {
+                      "digest": {
+                        "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "operating_system": {
+            "description": "From the image's os-release; null when not resolved or the image has none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version_id",
+              "eol_status",
+              "eol"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*[0-9A-Fa-f]{32})[a-z0-9][a-z0-9._-]{0,63}\\Z"
+              },
+              "version_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^(?!.*[0-9A-Fa-f]{32})[A-Za-z0-9][A-Za-z0-9._~-]{0,63}\\Z"
+              },
+              "eol_status": {
+                "type": "string",
+                "enum": [
+                  "end-of-life",
+                  "supported",
+                  "not-listed"
+                ],
+                "description": "Against the run date. not-listed: the pinned table has no entry, which says nothing about support."
+              },
+              "eol": {
+                "description": "The table row; null exactly when not-listed.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "support_end",
+                  "source_url"
+                ],
+                "properties": {
+                  "support_end": {
+                    "$ref": "common/formats.schema.json#/$defs/utc_date"
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "pattern": "^(?!.*[0-9A-Fa-f]{32})https://[A-Za-z0-9._~/:%?#=&+-]{1,500}\\Z"
+                  }
+                }
+              }
+            }
+          },
+          "package_inventory": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "reason"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "inventoried",
+                  "no-package-database",
+                  "not-inventoried",
+                  "not-applicable"
+                ],
+                "description": "no-package-database: examined, the image has no dpkg/apk/rpm database. not-inventoried is a coverage gap."
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^(?!.*[0-9A-Fa-f]{32})[a-z][a-z0-9-]{0,63}\\Z"
+              }
+            }
+          },
+          "components": {
+            "description": "Installed OS packages, CycloneDX component shaped, for the SBOM to merge.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "bom-ref",
+                "name",
+                "version",
+                "purl",
+                "source_package",
+                "layer"
+              ],
+              "properties": {
+                "type": {
+                  "const": "library"
+                },
+                "bom-ref": {
+                  "type": "string",
+                  "pattern": "^(?!.*[0-9A-Fa-f]{32})BI-[0-9]{6}:pkg:[a-z]{1,16}/[^\\s]{1,600}\\Z"
+                },
+                "name": {
+                  "type": "string",
+                  "pattern": "^(?!.*[0-9A-Fa-f]{32})[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}\\Z"
+                },
+                "version": {
+                  "type": "string",
+                  "pattern": "^(?!.*[0-9A-Fa-f]{32})[A-Za-z0-9][A-Za-z0-9.+~:_-]{0,127}\\Z"
+                },
+                "purl": {
+                  "type": "string",
+                  "pattern": "^(?!.*[0-9A-Fa-f]{32})pkg:(deb|apk|rpm)/[a-z0-9._-]{1,64}/[^\\s@]{1,128}@[^\\s?]{1,256}(\\?[^\\s]{1,256})?\\Z"
+                },
+                "source_package": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^(?!.*[0-9A-Fa-f]{32})[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}\\Z"
+                },
+                "layer": {
+                  "description": "The layer the package database came from.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "digest"
+                  ],
+                  "properties": {
+                    "digest": {
+                      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
+                    }
+                  }
+                }
               }
             }
           }

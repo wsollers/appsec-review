@@ -196,11 +196,14 @@ def _row_dynamic_candidates(assignment: Mapping[str, Any], fragments: list[dict[
     return attributed, sorted(set(missing))
 
 
-def _gap(gaps: list, kind: str, row_index: int, statement: str, *, citations=(), results=()) -> str:
-    gap_id = "gap-" + digest({"kind": kind, "row": row_index, "statement": statement,
-                              "citations": sorted(citations), "results": sorted(results)})[:20]
-    gaps.append({"gap_id": gap_id, "kind": kind, "row_indices": [row_index], "statement": statement,
-                 "citation_ids": sorted(set(citations)), "result_ids": sorted(set(results))})
+def _gap(gaps: dict, kind: str, row_index: int, statement: str, *, citations=(), results=()) -> str:
+    """One gap per (kind, statement); rows, citations and results sharing it accumulate on that gap."""
+    gap_id = "gap-" + digest({"kind": kind, "statement": statement})[:20]
+    gap = gaps.setdefault(gap_id, {"gap_id": gap_id, "kind": kind, "row_indices": [], "statement": statement,
+                                   "citation_ids": [], "result_ids": []})
+    gap["row_indices"] = sorted({*gap["row_indices"], row_index})
+    gap["citation_ids"] = sorted({*gap["citation_ids"], *citations})
+    gap["result_ids"] = sorted({*gap["result_ids"], *results})
     return gap_id
 
 
@@ -224,7 +227,7 @@ def derive(inputs: dict[str, Any]) -> dict[str, Any]:
     manifest = inputs["input_manifest"]
     source_rows = {row["target_id"]: row for row in model["rows"]}
     accounting_rows = {row["row_index"]: row for row in accounting["rows"]}
-    matrix_rows, gaps, dynamic_by_id, promotion_candidates = [], [], {}, []
+    matrix_rows, gaps, dynamic_by_id, promotion_candidates = [], {}, {}, []
     for index, assignment in enumerate(plan.worklist["assignments"]):
         source = source_rows[assignment["target_id"]]
         dispatch_row = accounting_rows[index]
@@ -241,7 +244,7 @@ def derive(inputs: dict[str, Any]) -> dict[str, Any]:
         gap_ids = []
         if source["applicability_status"] in {"conditional", "cannot_determine"}:
             gap_ids.append(_gap(gaps, "applicability", index, source["rationale"]))
-        if source["source_completeness"] != "adequate":
+        if source["source_completeness"] in {"partial", "unknown"}:
             gap_ids.append(_gap(gaps, "source_version", index,
                 f"Source completeness is {source['source_completeness']}."))
         if source["rescope_state"] == "required":
@@ -359,15 +362,10 @@ def derive(inputs: dict[str, Any]) -> dict[str, Any]:
         "dispatch_cells": accounting["cells"], "rows": matrix_rows,
         "claim_limits": {"finding_created": False, "severity_assigned": False,
             "runtime_state_claimed": False, "compliance_certified": False, "status_upgrade_permitted": False}}
-    gap_by_id = {}
-    for gap in gaps:
-        prior = gap_by_id.setdefault(gap["gap_id"], gap)
-        if prior != gap:
-            raise Blocked(f"{JOB_ID}: one gap id names contradictory gap records")
     output = {MATRIX: matrix,
         GAPS: {"schema": "appsec-review/owasp-coverage-gaps-report/1.0", "run_id": accounting["run_id"],
                "selection_id": plan.worklist["selection_id"],
-               "gaps": [gap_by_id[key] for key in sorted(gap_by_id)]},
+               "gaps": [gaps[key] for key in sorted(gaps)]},
         DYNAMIC: {"schema": "appsec-review/owasp-joined-dynamic-requests/1.0", "run_id": accounting["run_id"],
                   "selection_id": plan.worklist["selection_id"], "authorization": "not_authorized",
                   "execution": "not_executed", "requests": [dynamic_by_id[x] for x in sorted(dynamic_by_id)]},

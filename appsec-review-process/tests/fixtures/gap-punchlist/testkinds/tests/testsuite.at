@@ -1,0 +1,4 @@
+AT_SETUP([greeting])
+AT_CHECK([hello], [0], [Hello, world!
+])
+AT_CLEANUP

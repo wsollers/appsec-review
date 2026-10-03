@@ -42,3 +42,6 @@ tests repointed (`docs/REORG-2026-09-21.md` is the classification this executed)
 references redirected, the six open 2026-09-11 design-review items ported into the completion plan.
 2026-09-21 chunks 03 + 05 -- design-v3 dated appendices moved to its §24 decision log, ADR-0004 rewritten
 (repo copy canonical), stale trackers (completion plan, task series, migration, catalog) corrected.
+2026-10-03 gap punch-list docs sync -- operator guide, host, image, OSV, reachability, code-index, Dagster,
+evidence and standards pages, diagrams, catalog notes and live skills follow the hello-autotools punch-list
+fixes; the punch list moved from `TODO/` to `continuation-prompts/2026-10-03-gap-punchlist-hello-autotools.md`.

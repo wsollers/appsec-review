@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import osv_feed
 import osv_index
 import osv_snapshot
 import tunables
@@ -86,7 +87,7 @@ def parser():
     add("by-id").add_argument("id")
     add("by-alias").add_argument("alias")
     package = add("by-package")
-    package.add_argument("--ecosystem", required=True, choices=["npm", "Go", "Maven", "crates.io", "NuGet", "Packagist", "PyPI"])
+    package.add_argument("--ecosystem", required=True, choices=list(osv_feed.ECOSYSTEMS))
     package.add_argument("--name", required=True)
     package.add_argument("--version")
     symbol = add("by-symbol")

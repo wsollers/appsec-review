@@ -10,7 +10,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import automatic_evidence_inputs
 import bounded_analysis_workers as bounded
+import build_index
 import bounded_transform_orchestration as orchestration
 import execution_state
 from execution_state import Blocked, atomic_json, file_hash, tree_hashes
@@ -22,6 +24,8 @@ import intake
 
 
 STAMP = "2026-09-27T12:00:00Z"
+# The accepted-intake source projection lineage; the fixture projection is the staged in-run target.
+PROJECTION_BINDING = {key: "fixture-" + key for key in automatic_evidence_inputs.SOURCE_BINDING_KEYS}
 
 
 class FullReviewInputAssemblyTests(unittest.TestCase):
@@ -36,6 +40,10 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
         atomic_json(self.manifest, {"target": {"repo_path": str(self.target)}})
         self.generation = "sha256:" + file_hash(self.manifest)
         self.source = self._accepted_fuzz("data/upstream/fuzz", self.generation)
+        projection = patch.object(automatic_evidence_inputs, "source_projection", side_effect=lambda _run_id: (
+            self.target, dict(PROJECTION_BINDING), assembly._source_files(self.target)))
+        projection.start()
+        self.addCleanup(projection.stop)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -84,11 +92,44 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
             "accepted_at": STAMP})
         return base / "accepted.json"
 
+    def _accepted_build_index(self) -> Path:
+        """A real build index of the staged target; dependency request 1.1 binds it for the SBOM."""
+        base = self.run / "data/jobs/02-build-index"
+        if (base / "accepted.json").is_file():
+            return base / "accepted.json"
+        attempt = base / "attempts/index-1"
+        attempt.mkdir(parents=True)
+        source = intake.source_identity(str(self.target))
+        records = {"source_revision": source["revision"], "source_fingerprint": source["fingerprint"],
+                   "scope": {"excluded_paths": []}}
+        partitions = {"schema": "appsec-review/repository-partition-map/0.1", "target": "fixture",
+                      "source_revision": source["revision"], "partitions": [], "coverage": {}}
+        inputs = [{"job": "00-intake", "artifact": "intake.json", "attempt_id": "0" * 32, "sha256": "a" * 64},
+                  {"job": "02-repository-partition-discovery", "artifact": "repository-partition-map.json",
+                   "attempt_id": "1" * 32, "sha256": "b" * 64}]
+        atomic_json(attempt / "build-index.json",
+                    build_index.build_index(self.target, source, records, partitions, inputs))
+        envelope = terminal_envelope(run_id="review-1", job_id="02-build-index", attempt_id="index-1",
+            worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+            input_fingerprint="sha256:" + "b" * 64, output_contract="build-index", started_at=STAMP,
+            finished_at=STAMP, summary="fixture build index",
+            artifacts=artifact_records(attempt, ["build-index.json"]))
+        atomic_json(attempt / "result.json", envelope)
+        atomic_json(base / "latest.json", {"attempt_id": "index-1", "updated_at": STAMP})
+        atomic_json(base / "accepted.json", {"schema": ACCEPTED_SCHEMA, "status": "OK",
+            "run_id": "review-1", "job": "02-build-index", "attempt_id": "index-1",
+            "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
+            "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
+            "accepted_at": STAMP})
+        return base / "accepted.json"
+
     def _plan(self, *, sources=None) -> Path:
+        self._accepted_build_index()
         sources = sources or [{"alias": "fuzz-source", "pointer_path": "data/upstream/fuzz/accepted.json",
             "job_id": "13-fuzz-target-triage", "contract": "fuzz-target-triage",
             "artifact": "fuzz-target-triage.json", "artifact_schema": "fuzz-target-triage.schema.json",
-            "generation_pointer": "/source_generation"}]
+            "generation_pointer": "/source_generation"},
+            {**assembly.BUILD_INDEX_SOURCE, "pointer_path": "data/jobs/02-build-index/accepted.json"}]
         value = {"schema": assembly.PLAN_SCHEMA, "run_id": "review-1",
             "source_generation": self.generation, "generated_at": STAMP, "accepted_sources": sources,
             "launches": [
@@ -100,7 +141,8 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
                 {"adapter": "vendor", "job_id": "02-secrets-inventory",
                  "source_root": {"$run_path": "inputs/target", "kind": "directory"}},
                 {"adapter": "dependency", "job_id": "02-sbom-inventory",
-                 "payload": {"source_files": {"$source_files": "inputs/target"}},
+                 "payload": {"source_files": {"$source_files": "inputs/target"},
+                             "build_index": {"$binding": "build-index"}},
                  "tool": {"target_path": {"$run_path": "inputs/target", "kind": "directory"}}}
             ]}
         plan = self.run / "inputs" / "full-review-plan.json"
@@ -150,6 +192,7 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
 
     def test_component_map_derives_exact_first_wave_and_explicit_na_rows(self):
         pointer = self._accepted_component()
+        self._accepted_build_index()
         plan_path = self.run / "inputs/derived-full-review-plan.json"
         plan = assembly.derive_plan(pointer, self.run.absolute(), plan_path,
             run_id="review-1", generated_at=STAMP)
@@ -159,13 +202,30 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
         output, result = self._assemble(plan_path)
         self.assertEqual([row["job_id"] for row in result["requests"]],
             ["02-sbom-inventory", "02-secrets-inventory", "05-native-memory"])
+        sbom = json.loads((output / "attempts/assembly-1/requests/02-sbom-inventory.json").read_text())
+        self.assertEqual(sbom["payload"]["build_index"]["attempt_id"], "index-1")
         native = json.loads((output / "attempts/assembly-1/requests/05-native-memory.json").read_text())
         self.assertEqual(native["payload"]["units"][0]["path"], "main.c")
         self.assertEqual(native["payload"]["units"][0]["citations"][0]["observed_fact"],
                          "Writes the fixture greeting and exits.")
 
+    def test_sbom_without_accepted_build_index_is_an_explicit_skip(self):
+        plan = assembly.derive_plan(self._accepted_component(), self.run.absolute(),
+            self.run / "inputs/derived-full-review-plan.json", run_id="review-1", generated_at=STAMP)
+        self.assertNotIn("02-sbom-inventory", [row["job_id"] for row in plan["launches"]])
+        skipped = {row["job_id"]: row["reason"] for row in plan["skipped"]}
+        self.assertIn("02-build-index", skipped["02-sbom-inventory"])
+
+    def test_dockerfile_and_workflows_are_iac_inputs(self):
+        for path in ("Dockerfile", "docker/api.Dockerfile", "Containerfile", "Dockerfile.dev",
+                     ".github/workflows/ci.yml", "infra/main.tf", "deploy/app.yaml"):
+            self.assertTrue(assembly._iac_input(path), path)
+        for path in ("main.c", "config.yaml", "docs/workflows/ci.yml"):
+            self.assertFalse(assembly._iac_input(path), path)
+
     def test_derived_requests_dispatch_and_collect_exact_results(self):
         pointer = self._accepted_component()
+        self._accepted_build_index()
         plan = self.run / "inputs/derived-full-review-plan.json"
         assembly.derive_plan(pointer, self.run.absolute(), plan, run_id="review-1", generated_at=STAMP)
         output, _ = self._assemble(plan)

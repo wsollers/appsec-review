@@ -197,7 +197,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [CodeQL Rust](#job-02-codeql-rust) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-codeql-rust`](#a-job-02-codeql-rust) |
 | [Joern Code Property Graph](#job-02-code-property-graph) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-code-property-graph`](#a-job-02-code-property-graph) |
 | [Tree-sitter AST summary](#job-02-treesitter-ast) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-treesitter-ast`](#a-job-02-treesitter-ast) |
-| [Structural code index (SQLite)](#job-02-code-index) | lifecycle job | [`02-code-property-graph`](#a-job-02-code-property-graph)<br>[`02-treesitter-ast`](#a-job-02-treesitter-ast)<br>[`02-binary-triage`](#a-job-02-binary-triage) | [`02-code-index`](#a-job-02-code-index) |
+| [Structural code index (SQLite)](#job-02-code-index) | lifecycle job | [`02-code-property-graph`](#a-job-02-code-property-graph)<br>[`02-treesitter-ast`](#a-job-02-treesitter-ast)<br>[`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index) | [`02-code-index`](#a-job-02-code-index) |
 | [Native SAST](#job-02-native-sast) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-native-sast`](#a-job-02-native-sast) |
 | [IR Capture](#job-02-ir-capture) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-ir-capture`](#a-job-02-ir-capture) |
 | [IR Link](#job-02-ir-link) | lifecycle job | [`02-ir-capture`](#a-job-02-ir-capture) | [`02-ir-link`](#a-job-02-ir-link) |
@@ -212,7 +212,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Secrets Inventory](#job-02-secrets-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-secrets-inventory`](#a-job-02-secrets-inventory) |
 | [IaC Config Scan](#job-02-iac-config-scan) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-iac-config-scan`](#a-job-02-iac-config-scan) |
 | [Container Image Inventory](#job-02-container-image-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-container-image-inventory`](#a-job-02-container-image-inventory) |
-| [SBOM Inventory](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-build-index`](#a-job-02-build-index) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
+| [SBOM Inventory](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-build-index`](#a-job-02-build-index)<br>[`02-native-build`](#a-job-02-native-build)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
 | [Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) |
 | [License Inventory](#job-02-license-scan) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-license-scan`](#a-job-02-license-scan) |
 | [Dependency Lifecycle](#job-02-dependency-lifecycle) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-license-scan`](#a-job-02-license-scan) | [`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle) |
@@ -1009,7 +1009,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-native-build`](#job-02-native-build) |
 | Consumes | [`02-build-configure`](#a-job-02-build-configure)<br>[`configured-build`](#a-configured-build)<br>[`build-lock`](#a-build-lock)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`sut-checkout`](#a-sut-checkout) |
 | Produces | [`02-native-build`](#a-job-02-native-build)<br>[`native-build`](#a-native-build) |
-| Notes | Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. Fault/recovery qualification remains. |
+| Notes | Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries, and per unit the configure-generated headers (P35, `e4eb405`) and a hash-bound build-dependencies.json of headers, link lines, DT_NEEDED and owning OS packages (P36, `fcc1058`). Fault/recovery qualification remains. |
 
 <a id="step-source-sast"></a>
 
@@ -1022,7 +1022,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-source-sast`](#job-02-source-sast) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`source-sast-rules`](#a-source-sast-rules)<br>[`semgrep-image`](#a-semgrep-image) |
 | Produces | [`02-source-sast`](#a-job-02-source-sast)<br>[`source-sast-leads`](#a-source-sast-leads) |
-| Notes | Implemented with pinned offline C/C++, Go, Java and PHP adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain. |
+| Notes | Implemented with pinned offline C/C++ (including four Semgrep CE taint rules, P13), Go, Java, PHP and shell (tool-shellcheck, P14) adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain. |
 
 <a id="step-native-memory-analysis"></a>
 
@@ -1035,7 +1035,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`05-native-memory`](#job-05-native-memory) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
 | Produces | [`05-native-memory`](#a-job-05-native-memory) |
-| Notes | Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations; zero candidates is OK with no runtime-verification gap (P29). Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-fuzz-target-triage"></a>
 
@@ -1061,7 +1061,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
 | Produces | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
-| Notes | Standalone OWASP-only worklist transform. Applicability and evidence requirements remain NOT_ASSESSED; it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone OWASP-only worklist transform. Targets and per-row applicability come from the accepted 04-owasp-component-routing rules (P39, `4622a7f`): not_applicable rows carry the rule citation, partial classifications are conditional, unmatched rows are cannot_determine with one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-stig-srg-validation-worklist"></a>
 
@@ -1074,7 +1074,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
 | Produces | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
-| Notes | Standalone DISA STIG/SRG-only worklist transform. Platform tailoring remains NOT_ASSESSED; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone DISA STIG/SRG-only worklist transform. Targets are the components whose downstream_lanes route to 15 (no fallback to every component, P26); platform tailoring remains NOT_ASSESSED behind one summary gap; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-deployment-hardening"></a>
 
@@ -1087,7 +1087,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`15-deployment-hardening`](#job-15-deployment-hardening) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
 | Produces | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
-| Notes | Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone static deployment-hardening transform. IaC hits match a work item by the component's path patterns (P28); runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-threat-model-reconciliation-active"></a>
 
@@ -1112,7 +1112,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-sbom-inventory`](#job-02-sbom-inventory) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`syft-image`](#a-syft-image) |
 | Produces | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
-| Notes | Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Full-review input assembly and live Docker qualification remain gaps. |
+| Notes | Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Enriched from the build index (vendored cJSON with purl/CPE from its hash-bound cJSON.h, P19), the native build's build-dependencies.json (pkg:deb load-time/build-time and macro-versioned vendored trees, P37) and the 02-iac-config-scan base-image inventory (container-base pkg:deb/pkg:apk, P43); a crashed native build or IaC scan is a gap, not a stop (P42). Full-review input assembly and live Docker qualification remain gaps. |
 
 <a id="step-sca-vulnerability-match"></a>
 
@@ -1339,7 +1339,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-codeql-rust`](#job-02-codeql-rust) | `codeql-language` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-code-property-graph`](#job-02-code-property-graph) | `code-property-graph` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-treesitter-ast`](#job-02-treesitter-ast) | `treesitter-ast` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-code-index`](#job-02-code-index) | `code-index` | implemented_not_qualified | `02-code-property-graph`, `02-treesitter-ast`, `02-binary-triage` |
+| `02-evidence-pregather` | [`02-code-index`](#job-02-code-index) | `code-index` | implemented_not_qualified | `02-code-property-graph`, `02-treesitter-ast`, `02-binary-triage`, `02-ir-facts` (optional), `02-debug-symbol-index` (optional) |
 | `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `ir-link` | implemented_not_qualified | `02-ir-capture` |
@@ -1355,7 +1355,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-secrets-inventory`](#job-02-secrets-inventory) | `secrets-inventory` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-iac-config-scan`](#job-02-iac-config-scan) | `iac-config-evidence` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-container-image-inventory`](#job-02-container-image-inventory) | `container-image-inventory` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | implemented_not_qualified | `00-intake`, `02-build-index` |
+| `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | implemented_not_qualified | `00-intake`, `02-build-index`, `02-native-build` (optional), `02-iac-config-scan` (optional) |
 | `02-evidence-pregather` | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | `sca-vulnerability-match` | implemented_not_qualified | `02-sbom-inventory` |
 | `02-evidence-pregather` | [`02-license-scan`](#job-02-license-scan) | `license-inventory` | implemented_not_qualified | `00-intake`, `02-sbom-inventory` |
 | `02-evidence-pregather` | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | `dependency-lifecycle` | implemented_not_qualified | `02-sbom-inventory`, `02-license-scan` |
@@ -1748,7 +1748,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (pipeline/job-templates/02-native-build.json) | accepted build lock<br>accepted configured build<br>catalogued build image<br>staged target checkout<br>target-execution grant |
 | Produces | `runs/<run_id>/data/jobs/02-native-build/` |
 | Output files (pipeline/output-contracts/native-build.json) | native-build.json<br>b13-receipts.json<br>native-build-summary.md<br>status.json |
-| Consumed by | [`02-codeql-cpp`](#job-02-codeql-cpp)<br>[`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-binary-component-cve-match`](#job-02-binary-component-cve-match) |
+| Consumed by | [`02-codeql-cpp`](#job-02-codeql-cpp)<br>[`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-binary-component-cve-match`](#job-02-binary-component-cve-match) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -1984,8 +1984,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `cpu` |
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
-| Consumes (graph) | [`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-treesitter-ast`](#job-02-treesitter-ast) (required, contract `treesitter-ast`)<br>[`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`) |
-| Declared inputs (pipeline/job-templates/02-code-index.json) | accepted code property graph records file<br>accepted tree-sitter AST summary *(optional)*<br>accepted binary triage export tables *(optional)* |
+| Consumes (graph) | [`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-treesitter-ast`](#job-02-treesitter-ast) (required, contract `treesitter-ast`)<br>[`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-ir-facts`](#job-02-ir-facts) (optional, contract `ir-facts`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (optional, contract `debug-symbol-index`) |
+| Declared inputs (pipeline/job-templates/02-code-index.json) | accepted code property graph records file<br>accepted tree-sitter AST summary *(optional)*<br>accepted binary triage export tables *(optional)*<br>accepted IR facts *(optional)*<br>accepted debug-symbol index records *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-code-index/` |
 | Output files (pipeline/output-contracts/code-index.json) | code-index.json<br>code-index.sqlite<br>code-index-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
@@ -2068,7 +2068,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (pipeline/job-templates/02-ir-facts.json) | accepted linked LLVM module |
 | Produces | `runs/<run_id>/data/jobs/02-ir-facts/` |
 | Output files (pipeline/output-contracts/ir-facts.json) | ir-facts.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-code-index`](#job-02-code-index) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -2088,7 +2088,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (pipeline/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-debug-symbol-index/` |
 | Output files (pipeline/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json<br>debug-symbol-index.records.jsonl |
-| Consumed by | [`02-binary-cfg`](#job-02-binary-cfg) |
+| Consumed by | [`02-code-index`](#job-02-code-index)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -2268,7 +2268,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (pipeline/job-templates/02-iac-config-scan.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-iac-config-scan/` |
 | Output files (pipeline/output-contracts/iac-config-evidence.json) | manifest.json<br>status.json<br>outputs/iac-config-evidence.json<br>outputs/base-image-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json<br>outputs/applicability-probe-receipt.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) |
 | Gaps | `no_live_docker_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -2304,8 +2304,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `docker` |
 | Dagster | standalone: `sbom_inventory`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
-| Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-build-index`](#job-02-build-index) (required, contract `build-index`) |
-| Declared inputs (pipeline/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>accepted 02-build-index generation<br>B16 Syft image record |
+| Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-build-index`](#job-02-build-index) (required, contract `build-index`)<br>[`02-native-build`](#job-02-native-build) (optional, contract `native-build`)<br>[`02-iac-config-scan`](#job-02-iac-config-scan) (optional, contract `iac-config-evidence`) |
+| Declared inputs (pipeline/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>accepted 02-build-index generation<br>B16 Syft image record<br>accepted 02-native-build per-unit build-dependencies.json (P36) *(optional)*<br>accepted 02-iac-config-scan base-image-inventory.json (P41/P43) *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-sbom-inventory/` |
 | Output files (pipeline/output-contracts/sbom-inventory.json) | manifest.json<br>status.json<br>outputs/sbom.cdx.json<br>outputs/sbom-manifest.json<br>outputs/build-index-vendored-members.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`license-scan`](#step-license-scan)<br>[`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-reachability-codeql`](#job-06-reachability-codeql)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
@@ -2408,7 +2408,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-binary-component-cve-match/` |
 | Output files (pipeline/output-contracts/binary-component-cve-match.json) | manifest.json<br>status.json<br>permission.json<br>lineage.json<br>outputs/binary-component-cve-match.json<br>outputs/database-identity.json<br>outputs/tool-evidence.json<br>outputs/redaction-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `Not yet run inside the B13 boundary on a host: tool-cve-bin-tool must be built and its database published by nvd_reference_sync.` |
+| Gaps | `Qualified inside B13 in the cloud workspace only (local Docker, NVD from the fkie-cad mirror through the real publisher); not yet on zarathustra/hal5000 or in full_review.` |
 | Next prerequisite | Build tool-cve-bin-tool, let nvd_reference_sync publish the database, and run full_review on appsec-multi-vuln (case-030 vendors zlib 1.2.11). |
 
 <a id="job-02-mobile-sast"></a>
@@ -3209,7 +3209,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-04-owasp-validation-worklist"></a>`04-owasp-validation-worklist` | job output | runs/<run_id>/data/jobs/04-owasp-validation-worklist/ | [`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#job-04-asvs-masvs) |
 | <a id="a-job-15-stig-srg-validation-worklist"></a>`15-stig-srg-validation-worklist` | job output | runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/ | [`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | <a id="a-job-02-build-configure"></a>`02-build-configure` | job output | runs/<run_id>/data/jobs/02-build-configure/ | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) |
-| <a id="a-job-02-native-build"></a>`02-native-build` | job output | runs/<run_id>/data/jobs/02-native-build/ | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) | [`02-codeql-cpp`](#job-02-codeql-cpp)<br>[`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-binary-component-cve-match`](#job-02-binary-component-cve-match) |
+| <a id="a-job-02-native-build"></a>`02-native-build` | job output | runs/<run_id>/data/jobs/02-native-build/ | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) | [`02-codeql-cpp`](#job-02-codeql-cpp)<br>[`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-binary-component-cve-match`](#job-02-binary-component-cve-match) |
 | <a id="a-job-02-source-sast"></a>`02-source-sast` | job output | runs/<run_id>/data/jobs/02-source-sast/ | [`source-sast`](#step-source-sast)<br>[`02-source-sast`](#job-02-source-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) |
 | <a id="a-job-02-codeql-cpp"></a>`02-codeql-cpp` | job output | runs/<run_id>/data/jobs/02-codeql-cpp/ | [`02-codeql-cpp`](#job-02-codeql-cpp) | [`06-reachability-codeql`](#job-06-reachability-codeql) |
 | <a id="a-job-02-codeql-csharp"></a>`02-codeql-csharp` | job output | runs/<run_id>/data/jobs/02-codeql-csharp/ | [`02-codeql-csharp`](#job-02-codeql-csharp) | [`06-reachability-codeql`](#job-06-reachability-codeql) |
@@ -3225,8 +3225,8 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-native-sast"></a>`02-native-sast` | job output | runs/<run_id>/data/jobs/02-native-sast/ | [`02-native-sast`](#job-02-native-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) |
 | <a id="a-job-02-ir-capture"></a>`02-ir-capture` | job output | runs/<run_id>/data/jobs/02-ir-capture/ | [`02-ir-capture`](#job-02-ir-capture) | [`02-ir-link`](#job-02-ir-link) |
 | <a id="a-job-02-ir-link"></a>`02-ir-link` | job output | runs/<run_id>/data/jobs/02-ir-link/ | [`02-ir-link`](#job-02-ir-link) | [`02-ir-facts`](#job-02-ir-facts) |
-| <a id="a-job-02-ir-facts"></a>`02-ir-facts` | job output | runs/<run_id>/data/jobs/02-ir-facts/ | [`02-ir-facts`](#job-02-ir-facts) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir) |
-| <a id="a-job-02-debug-symbol-index"></a>`02-debug-symbol-index` | job output | runs/<run_id>/data/jobs/02-debug-symbol-index/ | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | [`02-binary-cfg`](#job-02-binary-cfg) |
+| <a id="a-job-02-ir-facts"></a>`02-ir-facts` | job output | runs/<run_id>/data/jobs/02-ir-facts/ | [`02-ir-facts`](#job-02-ir-facts) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-code-index`](#job-02-code-index) |
+| <a id="a-job-02-debug-symbol-index"></a>`02-debug-symbol-index` | job output | runs/<run_id>/data/jobs/02-debug-symbol-index/ | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | [`02-code-index`](#job-02-code-index)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | <a id="a-job-02-binary-triage"></a>`02-binary-triage` | job output | runs/<run_id>/data/jobs/02-binary-triage/ | [`02-binary-triage`](#job-02-binary-triage) | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest)<br>[`02-code-index`](#job-02-code-index)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | <a id="a-job-02-binary-cfg"></a>`02-binary-cfg` | job output | runs/<run_id>/data/jobs/02-binary-cfg/ | [`02-binary-cfg`](#job-02-binary-cfg) | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) |
 | <a id="a-job-02-test-execution"></a>`02-test-execution` | job output | runs/<run_id>/data/jobs/02-test-execution/ | [`02-test-execution`](#job-02-test-execution) | [`02-test-result-ingest`](#job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) |
@@ -3235,7 +3235,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-operations-doc-ingest"></a>`02-operations-doc-ingest` | job output | runs/<run_id>/data/jobs/02-operations-doc-ingest/ | [`02-operations-doc-ingest`](#job-02-operations-doc-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-evidence-index"></a>`02-evidence-index` | job output | runs/<run_id>/data/jobs/02-evidence-index/ | [`evidence_index`](#step-evidence-index)<br>[`02-evidence-index`](#job-02-evidence-index) | [`lane-handoffs`](#step-lane-handoffs)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-secrets-inventory"></a>`02-secrets-inventory` | job output | runs/<run_id>/data/jobs/02-secrets-inventory/ | [`02-secrets-inventory`](#job-02-secrets-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-iac-config-scan"></a>`02-iac-config-scan` | job output | runs/<run_id>/data/jobs/02-iac-config-scan/ | [`02-iac-config-scan`](#job-02-iac-config-scan) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
+| <a id="a-job-02-iac-config-scan"></a>`02-iac-config-scan` | job output | runs/<run_id>/data/jobs/02-iac-config-scan/ | [`02-iac-config-scan`](#job-02-iac-config-scan) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) |
 | <a id="a-job-02-container-image-inventory"></a>`02-container-image-inventory` | job output | runs/<run_id>/data/jobs/02-container-image-inventory/ | [`02-container-image-inventory`](#job-02-container-image-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-sbom-inventory"></a>`02-sbom-inventory` | job output | runs/<run_id>/data/jobs/02-sbom-inventory/ | [`sbom-inventory`](#step-sbom-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`license-scan`](#step-license-scan)<br>[`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-reachability-codeql`](#job-06-reachability-codeql)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
 | <a id="a-job-02-sca-vulnerability-match"></a>`02-sca-vulnerability-match` | job output | runs/<run_id>/data/jobs/02-sca-vulnerability-match/ | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | [`cve-reachability`](#step-cve-reachability)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-reachability-codeql`](#job-06-reachability-codeql)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`06-cve-reachability`](#job-06-cve-reachability) |

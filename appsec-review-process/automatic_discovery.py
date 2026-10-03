@@ -23,6 +23,8 @@ from schema_validate import validate_document
 import registry_paths
 
 JOBS = (discovery.ADOPTED_JOB, discovery.CONSUMER_JOB, discovery.DEVOPS_JOB, discovery.SRE_JOB)
+# Result fields that report without being gaps: verified absence (P30) and by-design notes (P34).
+NOTE_FIELDS = ("absence_observations", "informational_notes")
 
 
 def root(run_id: str, job_id: str) -> Path:
@@ -44,6 +46,12 @@ def _contract(job_id: str) -> str:
     if not isinstance(value, str) or not value:
         raise Blocked(f"{job_id}: registry output contract is absent")
     return value
+
+
+def _summary(job_id: str, result: str, notes: dict[str, int]) -> str:
+    counted = [f"{count} {field.replace('_', ' ')}" for field, count in notes.items() if count]
+    return (f"Automatic persona dispatch produced accepted {job_id} evidence"
+            + (f"; {' and '.join(counted)} in {result} (reported, not coverage gaps)." if counted else "."))
 
 
 def _receipts(run_id: str, job_id: str, source_snapshot_sha256: str) -> tuple[dict, dict]:
@@ -120,8 +128,11 @@ def _run_chained(run_id: str, dagster_run_id: str, job_id: str,
         permission, lineage = _receipts(run_id, job_id, record["source_snapshot_sha256"])
         atomic_json(attempt / "permission.json", permission)
         atomic_json(attempt / "lineage.json", lineage)
+        # Only what could not be determined is a gap (P30/P34): verified absence and by-design notes
+        # stay in the result, are counted here and in the envelope summary, and never set the status.
         gaps = list(value.get("coverage_gaps") or [])
         execution_status = "OK_WITH_GAPS" if gaps else "OK"
+        notes = {field: len(value.get(field) or []) for field in NOTE_FIELDS}
         status = {"process": "02-evidence-pregather", "status": execution_status,
             "budget": facts["budget"], "persona_id": facts["persona_id"],
             "role_id": facts["role_id"], "domain_id": facts["domain_id"],
@@ -132,14 +143,15 @@ def _run_chained(run_id: str, dagster_run_id: str, job_id: str,
             "ended_at": now(), "fingerprint": fingerprint,
             "dispatch_mode": "automatic", "persona_job_id": facts["persona_job_id"],
             "persona_attempt_id": facts["persona_attempt_id"],
-            "persona_result_sha256": facts["persona_result_sha256"], "model": facts["model"]}
+            "persona_result_sha256": facts["persona_result_sha256"], "model": facts["model"],
+            **notes}
         atomic_json(attempt / "status.json", status)
         return record_terminal_current(
             base, attempt, run_id=run_id, job_id=job_id, dagster_run_id=dagster_run_id,
             worker_kind="persona", output_contract=contract,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=execution_status,
-            summary=f"Automatic persona dispatch produced accepted {job_id} evidence.",
+            summary=_summary(job_id, spec["result"], notes),
             status_record=status,
             artifact_paths=[spec["result"], spec["summary"], "status.json",
                             "permission.json", "lineage.json"], gaps=gaps or None,

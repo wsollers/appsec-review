@@ -47,7 +47,7 @@ The graph is static: all eight nodes exist in every run and run in parallel in t
 
 | Node | Gating | Build mode | No language in the checkout | Language present but not analysable |
 |---|---|---|---|---|
-| `02-codeql-cpp` | waits for `02-native-build` | `none` always, plus one `traced` replay per native unit (`audit-codeql-native`) | SKIPPED `not-applicable-language-absent` | no native unit: gap `language not built: <cause>; ran --build-mode none only` |
+| `02-codeql-cpp` | waits for `02-native-build` | `none` always, plus one `traced` replay per native unit (`audit-codeql-native`, with the unit's configure-generated headers mounted read-only, P35) | SKIPPED `not-applicable-language-absent` | no native unit: gap `language not built: <cause>; ran --build-mode none only`; with units, the none-mode fidelity gap states how many units the traced replay covered (N of M) or why none ran, and is dropped when all did (P11, `f0fcc17`) |
 | `02-codeql-csharp`, `02-codeql-java` | intake | `none` (no build needed; fidelity gap recorded) | SKIPPED | — |
 | `02-codeql-javascript` (JS + TS), `02-codeql-python`, `02-codeql-ruby` | intake | `none` | SKIPPED | — |
 | `02-codeql-go` | intake | — | SKIPPED | OK_WITH_GAPS `language not built` (no build-mode none, no Go build step) |
@@ -156,12 +156,35 @@ No root → `unknown`, never `unreachable`.
 | CodeQL databases | `06-reachability-codeql` | pointer in the accepted `02-codeql-<lang>` result, store tree sha256 re-hashed before use |
 | CodeQL traced tables (C/C++) | `06-reachability-codeql` | CSV sha256 from the accepted `02-codeql-cpp` receipts |
 | CPG, IR facts | `06-reachability-ir` | pointer, attempt tree hashes, envelope, result sha256, same source generation |
-| OSV | engines (symbols), 06 (identity) | snapshot id + data timestamp, judged at the SCA completion time |
+| OSV | engines (symbols), 06 (identity) | snapshot id + data timestamp, judged at the SCA completion time. An unusable feed is a row gap; the job-level `ENGINE_INPUT:osv-unusable:<cause>` gap appears only when a row needed OSV symbols (P20, `3436f9c`) |
 | Reviewed map, entry points | engines, 06 | sha256 (`<run>/inputs/...`) |
 | LSP call hierarchy, tree-sitter AST (hints) | 06 | sha256 (`<run>/inputs/dependency-reachability/lsp/<lang>.json`, `treesitter-ast.json`) |
 
 Run-supplied CodeQL tables under `inputs/dependency-reachability/codeql/` are no longer read.
 A missing or unverifiable source is a gap, never a block.
+
+### 4.1 C/C++ dependencies: where the SCA matches come from
+
+C and C++ have no package manifest, so the matches 06 judges depend on how `02-sbom-inventory`
+identifies native components (gap punch list, 2026-10-03):
+
+- **Vendored cJSON** (P19, `3436f9c`): a build-referenced `cJSON` or `cJSON-<version>` tree is versioned
+  from the `CJSON_VERSION_MAJOR/MINOR/PATCH` macros of its `cJSON.h`, read only when its bytes hash to the
+  accepted source snapshot; it carries `pkg:github/davegamble/cjson@v<version>` and
+  `cpe:2.3:a:cjson_project:cjson:<version>:*:*:*:*:*:*:*`. A directory version that disagrees with the
+  header, or no version at all, is a gap (`vendored-cjson-version-conflict:*`,
+  `vendored-cjson-version-unverified:*`).
+- **Other vendored header trees and OS packages** (P37, `fcc1058`) come from the native build's per-unit
+  `build-dependencies.json`: `pkg:deb` components scoped `load-time` (`DT_NEEDED`) or `build-time`, and
+  macro-versioned vendored candidates; unattributed out-of-checkout files are gaps.
+- **Base-image OS packages** (P43, `2e180f2`): `pkg:deb`/`pkg:apk` components scoped `container-base`.
+
+The realistic CVE source for the C components is Grype matching the CPE against NVD. OSV's C/C++
+advisories (OSS-Fuzz and similar) carry `GIT` commit ranges, not versions: the feed does not fetch
+them (`osv_feed.ECOSYSTEMS` has no C/C++ ecosystem) and `osv_lookup.py by-package` compares only
+`SEMVER`/`ECOSYSTEM` ranges, so OSV neither matches a versioned C component nor supplies its symbols; most C/C++ rows therefore need `inputs/cve-reachability-functions.json`
+for symbols, else they stay `unknown` with `no-advisory-symbols`. OSV corroborates Grype for the Debian
+and Alpine base-image packages since P43.
 
 ## 5. Offline use
 

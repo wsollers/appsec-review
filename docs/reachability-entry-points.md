@@ -48,7 +48,7 @@ C/C++ program.
    exported name (demangled) to `METHOD.full_name`/`name`; an ambiguous join is an escape, not an
    entry. **Implemented behind `reachability_export_entries` (default off), brief Q:**
    * *Source.* What the jobs published before brief Q was not enough: `02-debug-symbol-index`
-     keeps `nm -an` (the static `.symtab`, which lists an executable's globals that are not
+     keeps `nm -an` (since P03, `73b64a7`, `nm -anl`, which adds DWARF `file:line` but no linkage; the static `.symtab`, which lists an executable's globals that are not
      exported and says nothing about visibility), `binary-summary` kept at most 200 `lief`
      export strings with no completeness marker, and `02-ir-facts` carries no linkage. So the
      pinned `binary-summary` tool (`images/audit-binary-analysis/scripts/binary-summary.py`, same

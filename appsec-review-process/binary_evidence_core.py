@@ -35,6 +35,9 @@ RAW_SCHEMA = "appsec-review/binary-static-evidence-input/1"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 APPLICABILITY = "applicability-receipt.json"
+# binary-triage.schema.json hardening enum: full strength, and how the rest reads in a lead subject.
+HARDENING_PRESENT = {"ENABLED", "FULL", "PRESENT"}
+HARDENING_LABEL = {"PARTIAL": "partial", "DISABLED": "absent", "NONE": "absent", "ABSENT": "absent"}
 # Scale audit B (docs/scale-audit-unreal-engine.md): a producer whose records grow with the target
 # publishes a small summary plus a JSONL records file bound by hash and count.  freeciv21 run
 # 20260928T005228Z-5b0fac: the debug-symbol index was 77 MB against a 32 MiB result limit.
@@ -263,8 +266,11 @@ def _derive_intelligence_raw(native: dict[str, Any], upstream: dict[str, Any]) -
                 "proof_obligation": "Correlate the imported dependency with source/build ownership and reachable call sites.",
                 "gaps": gaps})
         for check, state in sorted(triage_record.get("hardening", {}).items()):
-            records.append({**base, "lead_type": "defense" if state is True else "follow-up",
-                "subject": f"Binary hardening property {check}: {'present' if state is True else 'not confirmed'}",
+            # Hardening values are the triage enum strings; only the full-strength value is a defense.
+            present = state in HARDENING_PRESENT
+            label = "present" if present else HARDENING_LABEL.get(state, "not confirmed")
+            records.append({**base, "lead_type": "defense" if present else "follow-up",
+                "subject": f"Binary hardening property {check}: {label}",
                 "citations": [triage_citation],
                 "proof_obligation": "Confirm the property against the accepted binary and build configuration before drawing a security conclusion.",
                 "gaps": gaps})

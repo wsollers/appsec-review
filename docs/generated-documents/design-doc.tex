@@ -167,7 +167,8 @@ before use. The same image serves every target; workers never pull opportunistic
 \item \textbf{Offline reference feeds.} NVD and OSV are synchronised outside the review into
 immutable snapshots, and Grype databases are registered the same way. A 14-day ceiling
 (1,209,600~s) applies; a missing or stale snapshot is a gap or a block, never a silent pass. The
-OSV index measured on 2026-09-29 holds 283,781 advisory records, builds in about 12~s at 195~MB,
+OSV index measured on 2026-09-29 (seven package ecosystems; Debian and Alpine were added on
+2026-10-03 for base-image packages and are not yet measured) holds 283,781 advisory records, builds in about 12~s at 195~MB,
 and answers lookups in under 1~ms against about 6~s from the raw archives. MITRE ATT\&CK, CAPEC
 and the full CWE catalog will use the same feed rules when brief~O merges (decision log D-05, D-11).
 \item \textbf{Index-first lookup.} Models query pinned inputs through read-only lookup tools instead

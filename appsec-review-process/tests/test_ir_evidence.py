@@ -74,11 +74,11 @@ class IrEvidenceTests(unittest.TestCase):
         state.atomic_json(base / "latest.json", {"attempt_id":attempt_id,
                                                   "updated_at":"2026-01-01T00:00:02Z"})
 
-    def _native(self, extra=()):
+    def _native(self, extra=(), optimization="-O0"):
         attempt = self.run / "data/jobs/02-native-build/attempts/native-1"; attempt.mkdir(parents=True)
         db = attempt / "outputs/u/compile_commands.json"; db.parent.mkdir(parents=True)
         entries = [{"directory":"/scratch/src", "file":"/scratch/src/pointer.c",
-                    "arguments":["/usr/bin/clang","-g","-O0","-c","/scratch/src/pointer.c"]}, *extra]
+                    "arguments":["/usr/bin/clang","-g",optimization,"-c","/scratch/src/pointer.c"]}, *extra]
         state.atomic_json(db, entries)
         binary = attempt / "outputs/u/binaries/app"; binary.parent.mkdir(parents=True); binary.write_bytes(b"\x7fELFfixture")
         native = {"schema":"appsec-review/native-build/1", "run_id":self.run_id,
@@ -129,6 +129,27 @@ class IrEvidenceTests(unittest.TestCase):
         self.assertNotIn("severity", encoded); self.assertNotIn("vulnerability", encoded)
         malformed_facts = deepcopy(facts); malformed_facts["facts"][0]["kind"] = "vulnerability-verdict"
         self.assertTrue(validate_document(malformed_facts, "ir-facts.schema.json"))
+
+    def test_optimized_debug_locations_attribute_every_fact(self):
+        """P04/P05: -O2 emits distinct, column-less and inlinedAt locations; all map to pointer.c."""
+        shutil.rmtree(self.run / "data/jobs/02-native-build"); self._native(optimization="-O2")
+        cap_attempt = self.run / "data/jobs/02-ir-capture/attempts/capture-1"; cap_attempt.mkdir(parents=True)
+        captured = ir.capture(self.run_id, cap_attempt, toolchain=self.toolchain)
+        state.atomic_json(cap_attempt / "ir-capture.json", captured)
+        self._publish("02-ir-capture", "capture-1", "ir-capture.json", "ir-capture.schema.json",
+                      tuple(item["path"] for item in captured["modules"]))
+        link_attempt = self.run / "data/jobs/02-ir-link/attempts/link-1"; link_attempt.mkdir(parents=True)
+        linked = ir.link(self.run_id, link_attempt, toolchain=self.toolchain)
+        state.atomic_json(link_attempt / "ir-link.json", linked)
+        self._publish("02-ir-link", "link-1", "ir-link.json", "ir-link.schema.json",
+                      (linked["linked_module"]["path"],))
+        fact_root = self.owner / "facts"; fact_root.mkdir()
+        facts = ir.facts(self.run_id, fact_root, toolchain=self.toolchain)
+        self.assertIn("-O2", captured["modules"][0]["compiler_argv"])
+        self.assertEqual(facts["coverage_gaps"], []); self.assertEqual(facts["status"], "OK")
+        self.assertTrue(facts["facts"])
+        self.assertEqual({x["source_path"] for x in facts["facts"]}, {"pointer.c"})
+        self.assertIn(0, {x["source_column"] for x in facts["debug_locations"]})
 
     def test_current_envelope_mixed_variant_and_f02_receipts_fail_closed(self):
         native_base = self.run / "data/jobs/02-native-build"

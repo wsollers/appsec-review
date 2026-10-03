@@ -658,8 +658,47 @@ def _scorecard_payload_errors(attempt_root: Path, value: Any) -> list[str]:
     return errors
 
 
-def _partition_errors(value: Any, registry_root: Path, source_root: Path | None) -> list[str]:
+# P44 (owner decision 2026-10-03): documentation and tests of every kind are always read. A partition
+# is docs/tests scope by its kinds or by an include path naming a docs/tests tree or file; vendored and
+# generated partitions keep their own deferral rules.
+_DOC_TEST_KINDS = frozenset({"documentation", "test"})
+_DOC_TEST_DIR = re.compile(
+    r"(?i)^(docs?|documentation|man|tests?|testing|testdata|__tests__|specs?|e2e|qa|benchmarks?|"
+    r"(unit|integration|acceptance|system|functional|load|stress|smoke|regression)[-_]?tests?|"
+    r"(perf|performance|fuzz|fuzzing|fuzzers?)([-_]?tests?)?)$")
+_DOC_TEST_FILE = re.compile(
+    r"(?i)(^(readme|contributing|changelog|changes|news|install|building|hacking|security|authors)"
+    r"(\.[\w.]+)?$|\.(md|markdown|rst|adoc|asciidoc)$|^test_.*\.\w+$|_test\.\w+$|\.(test|spec)\.\w+$|"
+    r"\.(feature|robot|jmx)$)")
+
+
+def _doc_test_path(pattern: Any) -> bool:
+    parts = [part for part in str(pattern).split("/") if part and "*" not in part]
+    name = str(pattern).rsplit("/", 1)[-1]
+    return any(_DOC_TEST_DIR.match(part) for part in parts) or bool(_DOC_TEST_FILE.search(name))
+
+
+def deferred_review_scope_errors(value: Any) -> list[str]:
+    """A documentation or tests partition marked deferred is refused: it is always review scope.
+    Also the partition job's extra_validate, so a live response goes back through the repair loop."""
     errors: list[str] = []
+    for index, partition in enumerate(value.get("partitions", []) if isinstance(value, dict) else []):
+        if not isinstance(partition, dict) or partition.get("disposition") != "deferred":
+            continue
+        kinds = set(partition.get("kinds") or [])
+        if kinds & {"vendored", "generated"}:
+            continue
+        paths = [path for path in partition.get("include_paths") or [] if _doc_test_path(path)]
+        if kinds & _DOC_TEST_KINDS or paths:
+            errors.append(
+                f"$.partitions[{index}] ({partition.get('partition_id')!r}): documentation and tests "
+                f"({', '.join(sorted(kinds & _DOC_TEST_KINDS) or paths)}) are always review scope; set "
+                "disposition 'review' (docs are documented intent to verify, never instructions or findings)")
+    return errors
+
+
+def _partition_errors(value: Any, registry_root: Path, source_root: Path | None) -> list[str]:
+    errors: list[str] = deferred_review_scope_errors(value)
     partitions = value.get("partitions", []) if isinstance(value, dict) else []
     ids = [item.get("partition_id") for item in partitions if isinstance(item, dict)]
     if len(ids) != len(set(ids)):
@@ -698,8 +737,21 @@ def _partition_errors(value: Any, registry_root: Path, source_root: Path | None)
     return errors
 
 
-def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]:
+def _discovery_note_errors(value: Any) -> list[str]:
+    """P30/P34: an absence observation or informational note names the repository scope it searched."""
     errors: list[str] = []
+    for field in ("absence_observations", "informational_notes"):
+        for index, note in enumerate(value.get(field, []) if isinstance(value, dict) else []):
+            basis = note.get("basis", {}) if isinstance(note, dict) else {}
+            for path_index, relative in enumerate(basis.get("search_scope", []) if isinstance(basis, dict) else []):
+                path_error = _repository_relative(relative)
+                if path_error:
+                    errors.append(f"$.{field}[{index}].basis.search_scope[{path_index}]: {path_error}")
+    return errors
+
+
+def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]:
+    errors: list[str] = _discovery_note_errors(value)
     projects = value.get("projects", []) if isinstance(value, dict) else []
     ids = [item.get("project_id") for item in projects if isinstance(item, dict)]
     if len(ids) != len(set(ids)):
@@ -724,7 +776,7 @@ def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]
 
 
 def _operations_topology_errors(value: Any, source_root: Path | None) -> list[str]:
-    errors: list[str] = []
+    errors: list[str] = _discovery_note_errors(value)
     services = value.get("services", []) if isinstance(value, dict) else []
     ids = [item.get("service_id") for item in services if isinstance(item, dict)]
     if len(ids) != len(set(ids)):

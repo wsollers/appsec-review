@@ -1,7 +1,7 @@
 # Per-tool images
 
-Status: **16 registered images** (the original 13 were built 2026-09-26; OSV Scanner, Microsoft
-SBOM Tool and sbomasm were added afterward and independently built/smoke-tested inside the B13 boundary). Decided by
+Status: **20 `tool-*` images** in `registry_records.TOOL_IMAGE_IDS` (the original 13 were built 2026-09-26; OSV Scanner, Microsoft
+SBOM Tool and sbomasm were added afterward and independently built/smoke-tested inside the B13 boundary; zizmor, blint, cve-bin-tool and shellcheck (P14, 2026-10-03, not yet built on a run host) followed). Decided by
 William, 2026-09-26: **one Docker image per tool**, so a tool is updated by itself; tools are bundled only
 when one needs another package to run (gosec needs the Go toolchain, mobsfscan imports semgrep, Find
 Security Bugs is a SpotBugs plugin). Each image is built from our own Dockerfile on a digest-pinned base,
@@ -33,6 +33,7 @@ scan jobs themselves (deterministic Python, no persona, configuration passed in)
 | `tool-trivy` | trivy 0.74.0 | 02-iac-config-scan | sigstore-checksums | - |
 | `tool-zizmor` | zizmor 1.30.1 | 02-iac-config-scan (GitHub Actions, D-34) | pip lock, 1 wheel(s) (PyPI sha256) | - |
 | `tool-blint` | blint 3.4.0 | 02-binary-hardening (with checksec) | pip lock, 40 wheels (PyPI sha256) | LIEF 1.0.0 (blint's parser) |
+| `tool-shellcheck` | ShellCheck 0.11.0 (`shellcheck-py` 0.11.0.1 wheel) | 02-source-sast (shell lane, P14, `580bfb5`; `--format=json1 --norc`, exit 1 = comments) | pip lock (PyPI sha256) | - |
 | `tool-cve-bin-tool` | cve-bin-tool 3.4 (GPL-3.0-or-later, allowed 2026-10-01) | 02-binary-component-cve-match; its database is built by `cve_bin_tool_db.py` from the NVD snapshot | pip lock, 54 wheels (PyPI sha256); `pip_exclude: [gsutil]` | - |
 
 Bases (pinned by index digest): Docker Official Image `ubuntu:24.04` for the static binaries,
@@ -120,6 +121,35 @@ A Dependabot (or other reviewed) bump of a pip lock changes the lock but not `pi
 wheels it names, and records the lock's hash. Used for `tool-checkov` and `tool-mobsfscan` on
 2026-09-29 (`1661f48`).
 
+## Rebuilds required by the 2026-10-03 gap punch list
+
+Script changes in these images landed without a host rebuild; the next `hello-autotools` run needs them
+(punch list E2/E3):
+
+| Image | Change | Commit |
+|---|---|---|
+| `audit-binary-analysis` | `analyze-binary.sh` runs `nm -anl` (DWARF `file:line` per symbol) for `02-debug-symbol-index` source locations (P03) | `73b64a7` |
+| `audit-native` | `scripts/run_native_sast.py` classifies each clang-tidy run (`ok`, `timeout`, `tool-missing`, `tool-error`, `compile-error`) and records the first compile error (P12) | `f0fcc17` |
+| `audit-buildenv-cpp`, `audit-buildenv-cpp-resolute`, `audit-codeql-native` | none of their own; they layer on `audit-native:local`, so its rebuild changes their fingerprint | - |
+| `tool-shellcheck` | new image (P14) | `580bfb5` |
+| `audit-codeql-native` | never built on the run hosts; traced `02-codeql-cpp` rows are `UNAVAILABLE` until it has a B16 record (E2) | - |
+
+```bash
+orchestrator/prepare-host.sh --check          # "missing or stale builds: ..."
+orchestrator/prepare-host.sh                  # step 3 builds them in dependency order, step 4 regenerates B16 records
+# or one at a time:
+python3 -B images/image_build.py build audit-binary-analysis
+python3 -B images/image_build.py build audit-native
+python3 -B images/image_build.py build audit-codeql-native
+python3 -B images/tool_pins.py check && python3 -B images/image_build.py build tool-shellcheck
+python3 -B images/tool_pins.py smoke tool-shellcheck
+python3 -B images/registry_records.py generate && python3 -B images/registry_records.py check
+python3 -B images/image_build.py publish --all     # hal5000 only, then commit images/published.lock.json
+```
+
+"Re-pin" here means a new successful build and B16 record; `tool-shellcheck` is the only one with a
+`tool_pins.py` pin, already recorded in `images/tool-shellcheck/pin-record.json`.
+
 ## Reverse-engineering tools in audit images (Ghidra, x64dbg)
 
 Ghidra and x64dbg live in the two audit images that hold binaries, not in a `tool-*` image:
@@ -184,15 +214,16 @@ build either full image; see OPEN in TODO.
 
 ## Host-local B13 registry (B16)
 
-Docker image ids differ between hosts, so the 16 tool records and seven shared step-4 image records
-are not committed. `orchestrator/dagster/code-location.sh start` runs:
+Docker image ids differ between hosts, so the records for every image in `images/registry_records.py` `STEP4_IMAGE_IDS`
+(20 `tool-*` images, six shared audit images, nine buildenv images and the two CodeQL images as of
+2026-10-03) are not committed. `orchestrator/dagster/code-location.sh start` runs:
 
 ```bash
 python3 -B images/registry_records.py generate
 ```
 
 The generator writes ignored `appsec-review-process/pipeline/container-images/<image_id>.json`
-records only after all 23 successful build pointers still match the current image inputs and
+records only after every listed successful build pointer still matches the current image inputs and
 `docker image inspect`. It never builds, pulls, or repairs an image. `check` is read-only and fails
 on a missing record, changed Dockerfile/build fingerprint, changed attempt identity, or Docker image
 id drift. Local records use `digest_kind: image-id`; B13 runs the `sha256:...` image id directly.
@@ -233,9 +264,10 @@ id, Dockerfile hash, build fingerprint and attempt id at startup.
   these images has been built yet; details and WSL commands: [`docs/language-servers.md`](../language-servers.md).
 - **grype has no database** until the V16 mirror publisher exists; the smoke run only proves it refuses
   to run without one.
-- **syft finds no component in hello-autotools**: the vendored cJSON has no manifest. Phase 7 expects one
-  component, so `02-sbom-inventory` needs a vendored-code source (ScanCode, or the build index's
-  not-units/members) beside syft.
+- **syft finds no component in hello-autotools**: the vendored cJSON has no manifest. `02-sbom-inventory`
+  now adds it from the build index's vendored members, versioned from the hash-bound `cJSON.h` with the
+  upstream purl and CPE (P19, `3436f9c`), plus OS packages and vendored header trees from the native
+  build's `build-dependencies.json` (P37) and base-image packages (P43).
 - **Microsoft SBOM Tool is not a general SBOM editor.** It generates and validates SPDX 2.2/3.0,
   redacts SPDX 2.2 file data, and performs config-driven aggregation. Network license enrichment and
   Docker-daemon scanning are not enabled in the offline B13 profile. A transformation worker and

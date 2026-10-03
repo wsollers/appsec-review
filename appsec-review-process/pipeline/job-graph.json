@@ -199,7 +199,8 @@
           "kind": "required",
           "contract": "api-collection-intelligence",
           "allowed_skip_reasons": [
-            "not-applicable-after-partition-review"
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
           ]
         },
         {
@@ -217,7 +218,8 @@
           "kind": "required",
           "contract": "doc-intelligence",
           "allowed_skip_reasons": [
-            "not-applicable-after-partition-review"
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
           ]
         },
         {
@@ -233,7 +235,8 @@
           "kind": "required",
           "contract": "test-intelligence",
           "allowed_skip_reasons": [
-            "not-applicable-after-partition-review"
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
           ]
         },
         {
@@ -296,6 +299,7 @@
           "contract": "operations-doc-intelligence",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs",
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
@@ -1697,9 +1701,29 @@
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "optional",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        },
+        {
+          "job": "02-debug-symbol-index",
+          "kind": "optional",
+          "contract": "debug-symbol-index",
+          "allowed_skip_reasons": [
+            "no-debug-symbols",
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
         }
       ],
-      "planned_scope": "Deterministic SQLite code index (methods, resolved calls and escapes, types, identifiers, literals, tree-sitter spans and outlines, export joins, FTS) built from accepted artifacts for the model jobs' structural query tools (ADR-0032).",
+      "planned_scope": "Deterministic SQLite code index (methods, resolved calls and escapes, types, identifiers, literals, tree-sitter spans and outlines, export joins, IR fact functions, debug symbols, FTS) built from accepted artifacts for the model jobs' structural query tools (ADR-0032).",
       "required_artifacts": [
         "code-index.json",
         "code-index.sqlite",
@@ -2102,9 +2126,26 @@
           "kind": "required",
           "contract": "build-index",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-build",
+          "kind": "optional",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        },
+        {
+          "job": "02-iac-config-scan",
+          "kind": "optional",
+          "contract": "iac-config-evidence",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
         }
       ],
-      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot, enriched from exact accepted build-index lineage for conservatively recognized build-referenced vendored members. Enrichment never fabricates purl or CPE identifiers; inferred vendored components remain explicit gaps.",
+      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot, enriched from exact accepted build-index lineage for conservatively recognized build-referenced vendored members. Enrichment never fabricates purl or CPE identifiers: a vendored member gets them only from hash-bound evidence (cJSON's version macros, P19); a member that cannot be versioned is an explicit gap. P36/P37: optionally consumes the accepted 02-native-build's per-unit build-dependencies.json (skip binds nothing): OS packages the build consumed become pkg:deb components scoped load-time (DT_NEEDED) or build-time (headers/static only), vendored header trees become macro-versioned candidates, and unattributed out-of-checkout files are gaps. P43: optionally consumes the accepted 02-iac-config-scan base-image-inventory.json (skip binds nothing; a failed scan does not hold the SBOM): installed OS packages of resolved base images become pkg:deb/pkg:apk components scoped container-base with the image reference and EOL status; unresolved images are gaps.",
       "required_artifacts": [
         "result.json",
         "inputs.json",

@@ -29,10 +29,27 @@
             "type": "string"
         },
         "status": {
+            "$ref": "common/formats.schema.json#/$defs/publishable_status"
+        },
+        "applicability": {
             "enum": [
-                "OK",
-                "OK_WITH_GAPS"
+                "APPLICABLE",
+                "SKIPPED_NA_NO_APPLICABLE_INPUTS"
             ]
+        },
+        "inventory": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "files_examined",
+                "non_file_entries",
+                "candidates"
+            ],
+            "properties": {
+                "files_examined": {"type": "integer", "minimum": 0},
+                "non_file_entries": {"type": "integer", "minimum": 0},
+                "candidates": {"type": "integer", "minimum": 0}
+            }
         },
         "source": {"$ref":"static-intelligence-binding.schema.json"},
         "sources": {
@@ -56,5 +73,19 @@
         "static_only": {
             "const": true
         }
-    }
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"status": {"const": "SKIPPED"}}, "required": ["status"]},
+            "then": {
+                "required": ["applicability", "inventory"],
+                "properties": {
+                    "applicability": {"const": "SKIPPED_NA_NO_APPLICABLE_INPUTS"},
+                    "inventory": {"properties": {"non_file_entries": {"const": 0}, "candidates": {"const": 0}}},
+                    "records": {"maxItems": 0},
+                    "coverage_gaps": {"maxItems": 0}
+                }
+            }
+        }
+    ]
 }

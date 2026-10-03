@@ -222,6 +222,8 @@
       <bpmn:sequenceFlow id="Flow_sp2_loaded_sp2_end" name="yes" sourceRef="sp2_loaded" targetRef="sp2_end" />
       <bpmn:textAnnotation id="sp2_n1"><bpmn:text>Only this project's Compose project (appsec-review) is started, stopped or inspected. Startup regenerates B16 records only when every required host image, successful build fingerprint and immutable Docker image id still agree; drift fails closed.</bpmn:text></bpmn:textAnnotation>
       <bpmn:association id="Assoc_sp2_n1" sourceRef="sp2_up" targetRef="sp2_n1" />
+      <bpmn:textAnnotation id="sp2_n2"><bpmn:text>Before the first run and after image or feed changes (gap punch list E1-E3, P41): orchestrator/prepare-host.sh rebuilds stale images (audit-binary-analysis, audit-native and the images layered on it incl. audit-codeql-native, tool-shellcheck), regenerates B16 records and fetches Dockerfile base images (step 6b); osv_feed.py sync publishes the OSV feed (APPSEC_OSV_ROOT).</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp2_n2" sourceRef="sp2_cl" targetRef="sp2_n2" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Sub_Engagement" name="3. Launch engagement">
       <bpmn:incoming>Flow_Sub_Services_Sub_Engagement</bpmn:incoming>
@@ -675,6 +677,8 @@
       <bpmndi:BPMNEdge id="Flow_sp2_loaded_sp2_end_di" bpmnElement="Flow_sp2_loaded_sp2_end"><di:waypoint x="2875" y="230" /><di:waypoint x="3042" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="2881" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="sp2_n1_di" bpmnElement="sp2_n1"><dc:Bounds x="1086" y="42" width="300" height="45" /></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Assoc_sp2_n1_di" bpmnElement="Assoc_sp2_n1"><di:waypoint x="1170" y="188" /><di:waypoint x="1106" y="87" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp2_n2_di" bpmnElement="sp2_n2"><dc:Bounds x="1660" y="20" width="460" height="75" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp2_n2_di" bpmnElement="Assoc_sp2_n2"><di:waypoint x="1800" y="188" /><di:waypoint x="1800" y="95" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
   <bpmndi:BPMNDiagram id="Diagram_Sub_Engagement" name="3. Launch engagement">

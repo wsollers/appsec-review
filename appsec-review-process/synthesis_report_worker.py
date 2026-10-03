@@ -41,7 +41,8 @@ CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", 
     registry_paths.template_rel("10-synthesis-report"), registry_paths.GRAPH_REL)
 RENDER_FILES = ("pipeline/report/render.py", "pipeline/report/templates/report.tex.j2",
     "pipeline/report/templates/report.html.j2", "pipeline/report/templates/workbench.html.j2",
-    "pipeline/report/templates/vendor/katex-0.16.11.css", "pipeline/report/latex/appsec-house.sty")
+    "pipeline/report/templates/vendor/katex-0.16.11.css", "pipeline/report/templates/vendor/purify-3.4.16.min.js",
+    "pipeline/report/latex/appsec-house.sty")
 
 
 def _sha(value: Any) -> str:

@@ -263,7 +263,7 @@ class DependencyWorkersTest(unittest.TestCase):
         self.assertEqual(envelope["execution_status"], "OK_WITH_GAPS")
         self.assertEqual(envelope["gaps"], ["no-dependency-components-detected"])
 
-    def test_hello_build_index_enriches_empty_syft_with_cjson_and_no_package_ids(self):
+    def test_hello_build_index_enriches_empty_syft_with_cjson_purl_and_cpe(self):
         self.build_index_path.write_bytes(payload({"schema": "appsec-review/build-index/1", "units": [{
             "unit_id": "dir:.", "members": [{"path": "vendor/cJSON-1.7.18",
                 "reason": "referenced-by-parent-build", "signal_ids": ["s0005"], "manifests": []}]}]}))
@@ -287,13 +287,17 @@ class DependencyWorkersTest(unittest.TestCase):
         self.assertEqual([(row["name"], row["version"]) for row in result["components"]], [("cJSON", "1.7.18")])
         component = result["components"][0]
         self.assertEqual(component["declaration"], "inferred-vendored")
-        self.assertIsNone(component["purl"]); self.assertIsNone(component["cpe"])
+        # No cJSON.h bytes under the target match the fixture hash, so the version is the directory's.
+        self.assertEqual((component["purl"], component["cpe"]), ("pkg:github/davegamble/cjson@v1.7.18",
+                         "cpe:2.3:a:cjson_project:cjson:1.7.18:*:*:*:*:*:*:*"))
         self.assertEqual(component["tool_id"], "build-index-vendored-member")
-        self.assertIn("vendored-component-inferred-without-package-identifier:vendor/cJSON-1.7.18",
-                      result_envelope["gaps"])
+        self.assertEqual(result_envelope["gaps"], [])
         enrichment = json.loads(self.result_path(
             result_envelope, "outputs/build-index-vendored-members.json").read_text())
         self.assertEqual(enrichment["build_index_binding"]["attempt_id"], "build-one")
+        self.assertEqual(enrichment["members"][0]["version_source"], "directory-name")
+        self.assertEqual([error for error in sbom_contracts._component_errors(result["components"])
+                          if error.startswith("purl-mismatch")], [])
         cdx_path = self.result_path(result_envelope, "outputs/sbom.cdx.json")
         self.assertEqual(sbom_contracts._cdx_errors(cdx_path.read_bytes(), result), [])
         enrichment_path = self.result_path(result_envelope, "outputs/build-index-vendored-members.json")
@@ -307,15 +311,14 @@ class DependencyWorkersTest(unittest.TestCase):
             "data_timestamp": "2026-09-27T11:00:00Z"} for kind in ("grype-db", "osv")]
         sca_request = self.request(sbom=self.binding(result_envelope, "outputs/sbom-manifest.json"),
             tool_output=str(grype_output), tool_receipt=str(grype_receipt), expected_tool=grype_expected,
-            databases=databases, max_database_age_seconds=7200)
+            databases=databases, max_database_age_seconds=7200, **self.osv())
         sca_envelope = self.run_request("sca", "hello-cjson-sca", sca_request)
-        self.assertEqual(sca_envelope["execution_status"], "OK_WITH_GAPS")
-        self.assertIn("OSV_SKIPPED_NA_NO_PURL_COMPONENTS", sca_envelope["gaps"])
+        self.assertNotIn("OSV_SKIPPED_NA_NO_PURL_COMPONENTS", sca_envelope["gaps"])
+        self.assertNotIn("SCA_COMPONENT_GAPS", sca_envelope["gaps"])
         receipt = json.loads(self.result_path(
             sca_envelope, "outputs/osv-applicability-receipt.json").read_text())
-        self.assertEqual((receipt["decision"], receipt["reason"]),
-                         ("SKIPPED_NA", "no-purl-bearing-components"))
-        self.assertEqual(receipt["purl_component_refs"], [])
+        self.assertEqual((receipt["decision"], receipt["reason"]), ("EXECUTE", None))
+        self.assertEqual(receipt["purl_component_refs"], [component["component_id"]])
 
     def test_sbom_rejects_stale_build_index_pointer(self):
         output, receipt, expected = self.tool("02-sbom-inventory", "syft", {"components": []})

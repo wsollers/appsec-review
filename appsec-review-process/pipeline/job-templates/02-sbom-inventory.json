@@ -18,7 +18,10 @@
       "accepted 02-build-index generation",
       "B16 Syft image record"
     ],
-    "optional": []
+    "optional": [
+      "accepted 02-native-build per-unit build-dependencies.json (P36)",
+      "accepted 02-iac-config-scan base-image-inventory.json (P41/P43)"
+    ]
   },
   "outputs": {
     "directory": "data/jobs/02-sbom-inventory/attempts/<attempt_id>",

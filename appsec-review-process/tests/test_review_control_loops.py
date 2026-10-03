@@ -59,6 +59,11 @@ class ReviewControlLoopTests(unittest.TestCase):
         stalled = controls.bounded_rescope("run-1", index, ["threat"], iteration=2,
                                            max_iterations=3, previous_plan=plan)
         self.assertEqual(stalled["state"], "NO_PROGRESS")
+        self.assertEqual(controls.bounded_rescope("run-1", index, ["component"], iteration=1, max_iterations=1,
+                                                  baseline=True)["state"], "INITIAL_BASELINE")
+        with self.assertRaisesRegex(Blocked, "baseline"):
+            controls.bounded_rescope("run-1", index, ["threat"], iteration=2, max_iterations=3,
+                                     previous_plan=plan, baseline=True)
         with self.assertRaisesRegex(Blocked, "cycle"):
             controls.dependency_index("run-1", ["a", "b"], [
                 {"upstream": "a", "downstream": "b"}, {"upstream": "b", "downstream": "a"}])

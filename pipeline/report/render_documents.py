@@ -18,6 +18,7 @@ import jinja2
 
 
 HERE = Path(__file__).resolve().parent
+PURIFY = "purify-3.4.16.min.js"  # DOMPurify, Apache-2.0 / MPL-2.0; sha256 2c90a9b4...134ea2
 
 
 def _environment() -> jinja2.Environment:
@@ -51,9 +52,11 @@ def render_document(source: Path, output_dir: Path) -> tuple[Path, Path]:
     katex_js = base64.b64encode(
         (HERE / "templates" / "vendor" / "katex-0.16.11.min.js").read_bytes()
     ).decode("ascii")
+    purify_js = base64.b64encode((HERE / "templates" / "vendor" / PURIFY).read_bytes()).decode("ascii")
     body = _environment().get_template("workbench.html.j2").render(
         katex_css=css,
         katex_js=katex_js,
+        purify_js=purify_js,
         docs={tex_output.name: text},
         viewer=True,
         page_title=source.stem.replace("-", " ").title(),

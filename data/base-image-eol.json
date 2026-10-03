@@ -1,0 +1,234 @@
+{
+  "_meta": {
+    "purpose": "Pinned end-of-life table for base-image operating systems (P41). Read offline by 02-iac-config-scan through base_image_cache.py; never queried live during a run.",
+    "support_end": "The last day of free security support for the release: Debian LTS end (security_end is the end of regular security support), Ubuntu end of standard security maintenance (ESM needs an Ubuntu Pro subscription a container base does not carry), Alpine end of support for the branch's main repository. A release whose support_end is before the run date is end-of-life.",
+    "matching": "debian: VERSION_ID major; ubuntu: VERSION_ID exactly; alpine: the major.minor branch of VERSION_ID. A distribution or release not listed is reported as not-listed, never as supported.",
+    "sources": {
+      "debian": "distro-info-data debian.csv (the Debian package; read from distro-info-data 0.60ubuntu0.6 on 2026-10-03), cross-checked against endoflife.date products/debian.md at commit 40b29773178321d338704bd93a4100ad9061299a; they differ only on the Debian 9 LTS end (2022-06-30 here, 2022-07-01 there).",
+      "ubuntu": "distro-info-data ubuntu.csv eol column (same package and date), cross-checked against https://ubuntu.com/about/release-cycle on 2026-10-03, which gives months only and agrees for every row except 22.04 (May 2027 there, 2027-06-01 here).",
+      "alpine": "https://alpinelinux.org/releases/ as transcribed in endoflife.date products/alpine-linux.md at commit 40b29773178321d338704bd93a4100ad9061299a (2026-10-03); alpinelinux.org itself was not reachable from the authoring host."
+    },
+    "omitted": "Debian 14 and later and Ubuntu interim (non-LTS) releases have no confirmed end date in these sources and are absent; they report not-listed.",
+    "as_of": "2026-10-03"
+  },
+  "distributions": {
+    "debian": {
+      "match": "major",
+      "releases": [
+        {
+          "version": "8",
+          "codename": "jessie",
+          "security_end": "2018-06-17",
+          "support_end": "2020-06-30",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"
+        },
+        {
+          "version": "9",
+          "codename": "stretch",
+          "security_end": "2020-07-18",
+          "support_end": "2022-06-30",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"
+        },
+        {
+          "version": "10",
+          "codename": "buster",
+          "security_end": "2022-09-10",
+          "support_end": "2024-06-30",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"
+        },
+        {
+          "version": "11",
+          "codename": "bullseye",
+          "security_end": "2024-08-14",
+          "support_end": "2026-08-31",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"
+        },
+        {
+          "version": "12",
+          "codename": "bookworm",
+          "security_end": "2026-09-12",
+          "support_end": "2028-06-30",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"
+        },
+        {
+          "version": "13",
+          "codename": "trixie",
+          "security_end": "2028-08-09",
+          "support_end": "2030-06-30",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"
+        }
+      ]
+    },
+    "ubuntu": {
+      "match": "exact",
+      "releases": [
+        {
+          "version": "16.04",
+          "codename": "xenial",
+          "support_end": "2021-04-30",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/ubuntu.csv"
+        },
+        {
+          "version": "18.04",
+          "codename": "bionic",
+          "support_end": "2023-05-31",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/ubuntu.csv"
+        },
+        {
+          "version": "20.04",
+          "codename": "focal",
+          "support_end": "2025-05-29",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/ubuntu.csv"
+        },
+        {
+          "version": "22.04",
+          "codename": "jammy",
+          "support_end": "2027-06-01",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/ubuntu.csv"
+        },
+        {
+          "version": "24.04",
+          "codename": "noble",
+          "support_end": "2029-05-31",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/ubuntu.csv"
+        },
+        {
+          "version": "26.04",
+          "codename": "resolute",
+          "support_end": "2031-05-29",
+          "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/ubuntu.csv"
+        }
+      ]
+    },
+    "alpine": {
+      "match": "branch",
+      "releases": [
+        {
+          "version": "3.0",
+          "support_end": "2016-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.1",
+          "support_end": "2016-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.2",
+          "support_end": "2017-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.3",
+          "support_end": "2017-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.4",
+          "support_end": "2018-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.5",
+          "support_end": "2018-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.6",
+          "support_end": "2019-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.7",
+          "support_end": "2019-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.8",
+          "support_end": "2020-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.9",
+          "support_end": "2020-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.10",
+          "support_end": "2021-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.11",
+          "support_end": "2021-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.12",
+          "support_end": "2022-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.13",
+          "support_end": "2022-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.14",
+          "support_end": "2023-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.15",
+          "support_end": "2023-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.16",
+          "support_end": "2024-05-23",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.17",
+          "support_end": "2024-11-22",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.18",
+          "support_end": "2025-05-09",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.19",
+          "support_end": "2025-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.20",
+          "support_end": "2026-04-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.21",
+          "support_end": "2026-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.22",
+          "support_end": "2027-05-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.23",
+          "support_end": "2027-11-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        },
+        {
+          "version": "3.24",
+          "support_end": "2028-06-01",
+          "source_url": "https://alpinelinux.org/releases/"
+        }
+      ]
+    }
+  }
+}

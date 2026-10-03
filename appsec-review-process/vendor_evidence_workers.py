@@ -19,6 +19,8 @@ from typing import Any, Iterable
 
 import container_mobile_binary_contracts as cmb
 import evidence_redaction
+import base_image_cache as bic
+import iac_files
 import permission_capabilities as permissions
 import secrets_iac_contracts as sic
 import tool_instance_shapes as shapes
@@ -42,14 +44,15 @@ SPECS = {
 REGISTRY = registry_paths.JOB_TEMPLATES_DIR
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
-IMPLEMENTATION = "vendor-evidence-workers-v3-binary-observations"
+IMPLEMENTATION = "vendor-evidence-workers-v5-base-image-inventory"
 
+DOCKERFILE_PATTERNS = ["**/Dockerfile", "**/Dockerfile.*", "**/*.Dockerfile", "**/Containerfile"]
 PROBE_PATTERNS = {
     "gitleaks": ["**/*"], "key-material-file-inventory": ["**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx"],
     "checkov": ["**/*.tf", "**/*.yaml", "**/*.yml"], "trivy-config": ["**/*.tf", "**/*.yaml", "**/*.yml"],
-    "tfsec": ["**/*.tf"], "kube-linter": ["**/*.yaml", "**/*.yml"], "hadolint": ["**/Dockerfile*"],
+    "tfsec": ["**/*.tf"], "kube-linter": ["**/*.yaml", "**/*.yml"], "hadolint": DOCKERFILE_PATTERNS,
     "zizmor": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/action.yml", "**/action.yaml"],
-    "dockerfile-base-image-inventory": ["**/Dockerfile*"],
+    "dockerfile-base-image-inventory": DOCKERFILE_PATTERNS,
     "oci-archive-inventory": ["**/*.tar", "**/*.oci.tar"],
     "image-package-and-config-inspection": ["**/*.tar", "**/*.oci.tar"],
     "binskim": ["**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib"],
@@ -77,8 +80,7 @@ def _files(root: Path) -> list[tuple[str, Path]]:
     return values
 
 
-def _dockerfile(path: str) -> bool:
-    return Path(path).name == "Dockerfile" or Path(path).name.startswith("Dockerfile.")
+_dockerfile = iac_files.containerfile
 
 
 _CHECKOV_KINDS = {"dockerfile": "dockerfile", "terraform": "terraform", "kubernetes": "kubernetes",
@@ -161,8 +163,11 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
 
 def fingerprint(job_id: str, source_root: Path, source_snapshot_sha256: str) -> str:
     listing = [(name, HASH(path.read_bytes())) for name, path in _files(source_root)]
+    images = ({"cache": bic.identity(bic.cache_root()), "eol_table": bic.load_eol_table()[1]}
+              if job_id == "02-iac-config-scan" else None)   # P41: a re-published cache is new input
     return HASH(_dump({"implementation": IMPLEMENTATION, "job_id": job_id,
-                       "source_snapshot_sha256": source_snapshot_sha256, "files": listing}))
+                       "source_snapshot_sha256": source_snapshot_sha256, "files": listing,
+                       **({"base_images": images} if images else {})}))
 
 
 def producer_receipts(documents: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -265,7 +270,8 @@ def _cause_slug(cause: Any) -> str:
 def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                successful: dict[str, dict], *, can_skip: bool,
                failures: dict[str, tuple[str, Any]] | None = None,
-               partial: dict[str, dict[str, tuple[str, str]]] | None = None) -> tuple[str, dict, dict, dict | None, dict]:
+               partial: dict[str, dict[str, tuple[str, str]]] | None = None,
+               named_gaps: dict[str, str] | None = None) -> tuple[str, dict, dict, dict | None, dict]:
     """``failures`` maps a tool the collector ran (or tried to) to its (FAILED|BLOCKED, cause). Before,
     every tool without a result was reported BLOCKED / image-unavailable, which hid that checkov had run
     (output path), hadolint had failed (wrong input) and kube-linter could not start (permissions):
@@ -273,8 +279,12 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
 
     ``partial`` maps a tool to the inputs it did not assess: path -> (coverage list, reason), where the
     list is ``unsupported_inputs`` or ``not_analyzed_inputs``. A successful tool with any is OK_WITH_GAPS
-    (checksec on a PE file; a binary blint silently skipped)."""
+    (checksec on a PE file; a binary blint silently skipped).
+
+    ``named_gaps`` maps a successful tool to the slug of a gap that is not about one input (P41: a base
+    image the cache does not hold): OK_WITH_GAPS with gap ``gap-<tool>-<slug>``."""
     failures = failures or {}
+    named_gaps = named_gaps or {}
     partial = partial or {}
     instances, coverage_tools, gaps, probe_tools, raw = [], [], [], [], {}
     any_candidates = any(candidates[t] for t in tools)
@@ -283,7 +293,7 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
         if not paths and can_skip:
             status = "SKIPPED"
         elif tool in successful:
-            status = "OK_WITH_GAPS" if partial.get(tool) else "OK"
+            status = "OK_WITH_GAPS" if partial.get(tool) or tool in named_gaps else "OK"
         elif tool in failures and failures[tool][0] == "FAILED" and isinstance(failures[tool][2], int):
             status = "FAILED"   # it ran and exited: its exit code is on the instance
         elif tool in failures:
@@ -321,7 +331,7 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
             gaps.append({"gap_id": f"gap-{tool}-{status.lower()}{suffix}"[:96], "kind": shapes.INSTANCE_GAP_KIND[status],
                          "tool_id": tool, "affected_input_count": None})
         elif status == "OK_WITH_GAPS":
-            gaps.append({"gap_id": f"gap-{tool}-partial", "kind": shapes.INSTANCE_GAP_KIND[status],
+            gaps.append({"gap_id": f"gap-{tool}-{named_gaps.get(tool, 'partial')}"[:96], "kind": shapes.INSTANCE_GAP_KIND[status],
                          "tool_id": tool, "affected_input_count": None})
         if unanalyzed:
             gaps.append({"gap_id": f"gap-{tool}-inputs", "kind": "inputs-not-analyzed", "tool_id": tool,
@@ -368,23 +378,76 @@ def _scan_keys(root: Path, paths: list[str]) -> list[dict]:
     return entries
 
 
-def _scan_base_images(root: Path, paths: list[str]) -> list[dict]:
+def _scan_base_images(root: Path, paths: list[str], *, image_root: Path | None = None,
+                      now: str | None = None) -> list[dict]:
+    """One record per FROM. P41: ``repo:tag@digest`` is split by base_image_cache.parse_reference (the tag
+    used to land in ``repository``), and a literal image is looked up in the host-published image cache
+    (fetched outside B13; read here offline, every blob re-hashed) and inventoried for OS packages.
+    An image the cache does not hold, or that fails verification, is unresolved: a gap, never an empty
+    inventory."""
+    image_root = Path(image_root) if image_root is not None else bic.cache_root()
+    table, _ = bic.load_eol_table()
+    on = (now or table["_meta"]["as_of"])[:10]
     values = []
     for path in paths:
-        for line_no, line in enumerate((root / path).read_text(errors="replace").splitlines(), 1):
-            match = re.match(r"\s*FROM\s+([^\s]+)", line, re.I)
-            if not match:
-                continue
-            token = match.group(1)
-            form, repository, tag, digest = "literal", token, None, None
-            if token.lower() == "scratch": form, repository = "scratch", None
-            elif "$" in token: form, repository = "build-arg-parameterized", None
-            elif "@sha256:" in token: repository, digest = token.split("@", 1)
-            elif ":" in token.rsplit("/", 1)[-1]: repository, tag = token.rsplit(":", 1)
-            values.append({"reference_form": form, "repository": repository, "tag": tag, "digest": digest,
+        for line_no, form, token in bic.from_lines((root / path).read_text(errors="replace")):
+            ref = bic.parse_reference(token) if form == "literal" else None
+            values.append({"reference_form": form, "repository": ref and ref["name"], "tag": ref and ref["tag"],
+                           "digest": ref and ref["digest"], "mutable": None if ref is None else ref["digest"] is None,
                            "location": {"path": path, "path_disposition": "published",
-                                        "start_line": line_no, "end_line": line_no}})
+                                        "start_line": line_no, "end_line": line_no},
+                           **_base_image_contents(image_root, token, form, table, on)})
     return values
+
+
+_HEX_RUN = re.compile(r"[0-9A-Fa-f]{32}")
+
+
+def _base_image_contents(image_root: Path, token: str, form: str, table: dict, on: str) -> dict:
+    empty = {"resolution": {"status": "not-applicable", "reason": None, "resolved": None}, "operating_system": None,
+             "package_inventory": {"status": "not-applicable", "reason": None}, "components": []}
+    if form in ("scratch", "build-stage-alias"):
+        return empty
+    def gap(reason: str) -> dict:
+        return {**empty, "resolution": {"status": "unresolved", "reason": reason, "resolved": None},
+                "package_inventory": {"status": "not-inventoried", "reason": "base-image-unresolved"}}
+    if form != "literal":
+        return gap(form)
+    entry, reason = bic.lookup(image_root, token)
+    if entry is None or entry["status"] != "resolved":
+        return gap(reason or entry["cause"] or "fetch-failed")
+    try:
+        found = bic.inventory(image_root, entry)
+    except bic.CacheInvalid as exc:
+        return gap(str(exc))
+    system = None
+    if found["os"]:
+        eol = bic.eol_status(table, found["os"], on)
+        system = {**found["os"], "eol_status": eol["status"],
+                  "eol": None if eol["status"] == "not-listed" else {k: eol[k] for k in ("support_end", "source_url")}}
+    inventory = {"status": found["status"], "reason": found["reason"]}
+    components = []
+    for c in found["components"]:
+        if any(_HEX_RUN.search(c[k] or "") for k in ("name", "version", "purl", "source_package")):
+            inventory = {"status": "not-inventoried", "reason": "component-identity-withheld"}   # digest-shaped
+            continue
+        components.append({"type": "library", "bom-ref": None, "name": c["name"], "version": c["version"],
+                           "purl": c["purl"], "source_package": c["source_package"], "layer": {"digest": c["layer_digest"]}})
+    return {"resolution": {"status": "resolved", "reason": None, "resolved": {
+                "at": entry["resolved_at"], "platform": entry["platform"],
+                "index": entry["index_digest"] and {"digest": entry["index_digest"]},
+                "manifest": {"digest": entry["manifest_digest"]}}},
+            "operating_system": system, "package_inventory": inventory, "components": components}
+
+
+def _base_image_gap(images: list[dict]) -> str | None:
+    """The FROM lines were read (the records stand), but an image not resolved or not inventoried leaves
+    the tool partial: a named tool-instance-partial gap, with the per-image reason on the record."""
+    if any(image["resolution"]["status"] == "unresolved" for image in images):
+        return "base-images-unresolved"
+    if any(image["package_inventory"]["status"] == "not-inventoried" for image in images):
+        return "base-image-packages-not-inventoried"
+    return None
 
 
 def _binary_observations(source_root: Path, paths: list[str], vendor_results: dict[str, dict],
@@ -429,23 +492,31 @@ def _binary_observations(source_root: Path, paths: list[str], vendor_results: di
 
 
 def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: str,
-                    source_snapshot_sha256: str, vendor_results: dict[str, dict] | None = None) -> dict[str, Any]:
-    """Build one deterministic contract document set; no filesystem publication occurs here."""
+                    source_snapshot_sha256: str, vendor_results: dict[str, dict] | None = None,
+                    base_image_root: Path | None = None, now: str | None = None) -> dict[str, Any]:
+    """Build one deterministic contract document set; no filesystem publication occurs here.
+    ``base_image_root``: the published base-image cache (default base_image_cache.cache_root());
+    ``now``: the run instant the EOL table is read against (default: the table's as_of date)."""
     contract, tools = SPECS[job_id]
     found = probe(job_id, source_root)
     candidates = found["candidates"]
     header = _header(job_id, run_id, attempt_id, source_snapshot_sha256)
     successful: dict[str, dict] = {}
     vendor_results = vendor_results or {}
-    key_entries, base_images = [], []
+    key_entries, base_images, image_cache, eol_table = [], [], None, None
     if job_id == "02-secrets-inventory":
         key_entries = _scan_keys(source_root, candidates["key-material-file-inventory"])
         raw = _dump({"records": [{"ordinal": n + 1, "path": e["location"]["path"]} for n, e in enumerate(key_entries)]})
         successful["key-material-file-inventory"] = {"data": raw, "count": len(key_entries),
             "schema": "vendor-key-material-result-1", "path": "outputs/tools/key-material-file-inventory/result.json"}
     elif job_id == "02-iac-config-scan" and candidates["dockerfile-base-image-inventory"]:
-        base_images = _scan_base_images(source_root, candidates["dockerfile-base-image-inventory"])
-        raw = _dump({"records": len(base_images)})
+        image_root = Path(base_image_root) if base_image_root is not None else bic.cache_root()
+        base_images = _scan_base_images(source_root, candidates["dockerfile-base-image-inventory"],
+                                        image_root=image_root, now=now)
+        refs_digest = (bic.identity(image_root) or {}).get("refs_digest")
+        image_cache = refs_digest and {"sha256": refs_digest, "platform": bic.DEFAULT_PLATFORM}
+        eol_table = {"path": "data/base-image-eol.json", "sha256": bic.load_eol_table()[1]}
+        raw = _dump({"records": len(base_images), "image_cache": image_cache, "eol_table": eol_table})
         successful["dockerfile-base-image-inventory"] = {"data": raw, "count": len(base_images),
             "schema": "vendor-base-image-result-1", "path": "outputs/tools/dockerfile-base-image-inventory/result.json"}
     for tool, result in vendor_results.items():
@@ -471,6 +542,7 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
             "role": "raw-tool-output", "validation": "format-validated", "auth":auth,
             "receipt_data":receipt_data,"receipt_path":receipt_path}
     partial: dict[str, dict[str, tuple[str, str]]] = {}
+    named = {"dockerfile-base-image-inventory": _base_image_gap(base_images)} if _base_image_gap(base_images) else {}
     binary_observations: dict[str, list[dict[str, str]]] = {}
     if job_id == "02-binary-hardening":
         binary_observations, partial = _binary_observations(source_root, candidates["binskim"],
@@ -482,7 +554,7 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                 if tool in tools and result.get("status") in ("FAILED", "BLOCKED")}
     status, tool_results, coverage, probe_doc, raw_files = _aggregate(
         header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory", failures=failures,
-        partial=partial)
+        partial=partial, named_gaps=named)
     for value in successful.values():
         if "receipt_data" in value: raw_files[value["receipt_path"]]=value["receipt_data"]
 
@@ -513,6 +585,8 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                           "citation": {"source_class": "raw", "producer": job_id,
                                        "attempt_id": instance["attempt_id"], "path": out["path"],
                                        "sha256": out["sha256"].removeprefix("sha256:")}})
+            for component in image["components"]:
+                component["bom-ref"] = f"{image['reference_id']}:{component['purl']}"
             rendered.append(image)
         hits=[]
         for tool,result in vendor_results.items():
@@ -531,8 +605,9 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                     "citation":{"source_class":"raw","producer":job_id,"attempt_id":inst["attempt_id"],"path":out["path"],"sha256":out["sha256"].removeprefix("sha256:")}})
         docs["iac-config-evidence.json"] = {"schema": "appsec-review/iac-config-evidence/1.0", **header,
                                             "redactor": REDACTOR, "rule_hits": hits}
-        docs["base-image-inventory.json"] = {"schema": "appsec-review/iac-config-base-image-inventory/1.0", **header,
-                                             "redactor": REDACTOR, "base_images": rendered}
+        docs["base-image-inventory.json"] = {"schema": "appsec-review/iac-config-base-image-inventory/1.1", **header,
+                                             "redactor": REDACTOR, "image_cache": image_cache,
+                                             "eol_table": eol_table, "base_images": rendered}
     elif job_id == "02-mobile-sast":
         hits=[]
         for platform,tool in (("android","mobsfscan-android"),("ios","mobsfscan-ios")):
@@ -616,7 +691,7 @@ def execute_and_build(job_id: str, source_root: Path, *, run_id: str, attempt_id
             results["oci-archive-inventory"]["raw"],paths[0])
         for item in results.get("image-package-and-config-inspection",{}).get("records",[]): item["archive_path"]=paths[0]
     return build_documents(job_id,source_root,run_id=run_id,attempt_id=attempt_id,
-                           source_snapshot_sha256=source_snapshot_sha256,vendor_results=results)
+                           source_snapshot_sha256=source_snapshot_sha256,vendor_results=results,now=now)
 
 
 def _reconcile_redacted_outputs(attempt: Path) -> None:

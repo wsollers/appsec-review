@@ -34,10 +34,96 @@ MAX_FILE_BYTES = 1024 * 1024
 MAX_FILES = 200
 MAX_RECORDS = 1000
 TEXT_SUFFIXES = {".md", ".markdown", ".rst", ".txt", ".adoc"}
-TEST_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".py", ".js", ".ts", ".java", ".go", ".rs", ".cs", ".sh"}
+TEST_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".py", ".js", ".ts", ".java", ".go", ".rs", ".cs", ".sh",
+                 ".mjs", ".cjs", ".jsx", ".tsx", ".kt", ".scala", ".php", ".rb", ".hs", ".bash", ".bats", ".ps1",
+                 ".feature", ".robot", ".jmx", ".at"}
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
 MAX_PARSE_NODES = 10000
 MAX_PARSE_DEPTH = 40
+# P16: absence of a specialized input is N/A, never a coverage gap; only a fully examined inventory
+# (every entry a regular file) may claim it.
+APPLICABLE = "APPLICABLE"
+SKIPPED_NA = "SKIPPED_NA_NO_APPLICABLE_INPUTS"
+SKIP_REASON = "not-applicable-no-matching-inputs"
+CONSUMER = "02-evidence-assembly"  # the edge that authorizes SKIP_REASON
+OPS_TOKENS = ("runbook", "operations", "operational", "incident", "support", "deploy", "oncall", "playbook",
+              "build", "install")
+# P17: shell `test_x()`/`function test_x`/`run_test x`, C `void test_x(`, Unity/CUnit `RUN_TEST(x)`.
+TEST_PATTERNS = (r"\bdef\s+(test_[A-Za-z0-9_]+)", r"\b(?:TEST|TEST_F)\s*\(\s*([^,)]+)\s*,\s*([^,)]+)",
+                 r"\b(?:it|test|describe)\s*\(\s*['\"]([^'\"]+)",
+                 r"^\s*(?:function\s+)?(test_[A-Za-z0-9_]+)\s*\(\s*\)\s*\{?\s*$",
+                 r"^\s*function\s+(test_[A-Za-z0-9_]+)\b", r"^\s*run_test\s+['\"]?([A-Za-z0-9_.-]+)",
+                 r"^\s*(?:static\s+)?(?:inline\s+)?(?:void|int|bool)\s+(test_[A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:\{|$)",
+                 r"\b(?:RUN_TEST|CU_ADD_TEST)\s*\(\s*(?:[^,()]+,\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\)",
+                 r"\bCU_add_test\s*\([^,]+,\s*\"([^\"]+)\"",
+                 # P45: Gherkin scenarios, bats, go test/fuzz, Catch2/doctest, Pester.
+                 r"^\s*Scenario(?: Outline| Template)?:\s*(.+)", r"^\s*@test\s+\"([^\"]+)\"",
+                 r"^func\s+((?:Test|Fuzz|Benchmark)\w*)\s*\(", r"\bTEST_CASE\s*\(\s*\"([^\"]+)\"",
+                 r"^\s*It\s+['\"]([^'\"]+)")
+# P45: closed test kinds and frameworks from static signals only; first matching signal wins, so the
+# specific (fuzz, property, load, system, acceptance) precede the generic unit runners.
+TEST_KINDS = ("unit", "integration", "acceptance", "system", "load", "fuzz", "property", "smoke", "unknown")
+_C = (".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"); _JS = (".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx")
+_JVM = (".java", ".kt", ".scala"); _SH = (".sh", ".bash")
+FRAMEWORK_SIGNALS = (
+    ("libfuzzer", "fuzz", _C, r"\bLLVMFuzzerTestOneInput\b"),
+    ("cargo-fuzz", "fuzz", (".rs",), r"\bfuzz_target!\s*\("),
+    ("go-fuzz", "fuzz", (".go",), r"^func\s+Fuzz\w*\s*\(\s*\w+\s+\*testing\.F\b"),
+    ("atheris", "fuzz", (".py",), r"^\s*(?:import|from)\s+atheris\b"),
+    ("hypothesis", "property", (".py",), r"^\s*(?:import|from)\s+hypothesis\b"),
+    ("proptest", "property", (".rs",), r"\bproptest!\s*\{|^\s*use\s+proptest\b"),
+    ("quickcheck", "property", None, r"\bTest\.QuickCheck\b|\bquickcheck!|#\[quickcheck\]|^\s*use\s+quickcheck\b"),
+    ("k6", "load", _JS, r"""\bfrom\s+['"]k6(?:/http)?['"]|\brequire\(\s*['"]k6/http['"]"""),
+    ("locust", "load", (".py",), r"^\s*(?:from|import)\s+locust\b|\bHttpUser\b"),
+    ("jmeter", "load", (".jmx",), None),
+    ("gatling", "load", _JVM, r"\bextends\s+Simulation\b|\bio\.gatling\b"),
+    ("artillery", "load", (".yml", ".yaml"), r"^config\s*:(?=[\s\S]*^scenarios\s*:)"),
+    ("wrk", "load", (".lua",), r"^\s*wrk\.(?:method|body|headers|scheme|host|port|path)\b|\bwrk\.format\s*\("),
+    ("vegeta", "load", (".txt",), r"^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+https?://"),
+    ("playwright", "system", _JS + (".py",), r"@playwright/test|^\s*(?:from|import)\s+playwright\b"),
+    ("cypress", "system", _JS, r"\bcy\.(?:visit|get|request|contains|intercept)\s*\("),
+    ("selenium", "system", None, r"\bselenium\b|\bwebdriver\b|\bWebDriver\b"),
+    ("gherkin", "acceptance", (".feature",), None),
+    ("robot-framework", "acceptance", (".robot",), None),
+    ("behave", "acceptance", (".py",), r"^\s*(?:from|import)\s+behave\b"),
+    ("cucumber", "acceptance", None, r"@cucumber/cucumber|\bio\.cucumber\b|\brequire\(\s*['\"]cucumber['\"]"),
+    ("testng", "unit", _JVM, r"\borg\.testng\b"),
+    ("junit", "unit", _JVM, r"\borg\.junit\b|\bjunit\.framework\b"),
+    ("nunit", "unit", (".cs",), r"\bNUnit\.Framework\b"),
+    ("xunit", "unit", (".cs",), r"^\s*using\s+Xunit\s*;"),
+    ("mstest", "unit", (".cs",), r"\bMicrosoft\.VisualStudio\.TestTools\.UnitTesting\b"),
+    ("go-test", "unit", (".go",), r"^func\s+(?:Test|Benchmark|Example)\w*\s*\("),
+    ("cargo-test", "unit", (".rs",), r"#\[(?:test|tokio::test)\]"),
+    ("googletest", "unit", _C, r"\bgtest/gtest\.h\b|\bTEST(?:_F|_P)?\s*\("),
+    ("doctest", "unit", _C, r"\bdoctest(?:/doctest)?\.h\b"),
+    ("catch2", "unit", _C, r"\bcatch2?/|\bcatch\.hpp\b|\bTEST_CASE\s*\("),
+    ("unity", "unit", _C, r"\bunity\.h\b|\bRUN_TEST\s*\("),
+    ("cunit", "unit", _C, r"\bCUnit/|\bCU_(?:add_test|ADD_TEST)\b"),
+    ("ctest", "unit", (".txt", ".cmake"), r"^\s*add_test\s*\("),
+    ("vitest", "unit", _JS, r"""\bfrom\s+['"]vitest['"]|\brequire\(\s*['"]vitest['"]"""),
+    ("jest", "unit", _JS, r"\bjest\.\w+\s*\(|@jest/"),
+    ("mocha", "unit", _JS, r"""\brequire\(\s*['"](?:mocha|chai)['"]|\bfrom\s+['"](?:mocha|chai)['"]"""),
+    ("phpunit", "unit", (".php",), r"\bPHPUnit\\"),
+    ("bats", "unit", (".bats",), None),
+    ("pester", "unit", (".ps1",), r"^\s*(?:Describe|Context|It)\s+['\"]|\bInvoke-Pester\b"),
+    ("autotest", "unit", (".at",), None),
+    ("pytest", "unit", (".py",), r"^\s*(?:import|from)\s+pytest\b"),
+    ("unittest", "unit", (".py",), r"^\s*(?:import|from)\s+unittest\b"),
+    ("pytest", "unit", (".py",), r"^\s*def\s+test_\w*\s*\("),
+    ("shell", "unit", _SH, r"^\s*(?:function\s+)?test_\w+\s*\(\s*\)|^\s*function\s+test_\w+|^\s*run_test\s+"),
+    ("c-harness", "unit", _C, r"^\s*(?:static\s+)?(?:inline\s+)?(?:void|int|bool)\s+test_\w+\s*\("),
+)
+FRAMEWORKS = tuple(dict.fromkeys(name for name, *_ in FRAMEWORK_SIGNALS)) + ("unknown",)
+# Directory hints refine a generic unit runner's kind; a framework's own kind is never overridden.
+KIND_DIRS = {"integration": "integration", "integration-tests": "integration", "e2e": "system",
+             "end-to-end": "system", "acceptance": "acceptance", "load": "load", "loadtest": "load",
+             "perf": "load", "performance": "load", "stress": "load", "fuzz": "fuzz", "fuzzing": "fuzz",
+             "smoke": "smoke"}
+TEST_DIRS = {"test", "tests", "testing", "spec", "specs", "__tests__", "e2e", "end-to-end", "acceptance",
+             "integration", "integration-tests", "cypress", "playwright", "load", "loadtest", "loadtests",
+             "k6", "perf", "performance", "stress", "benchmarks", "fuzz", "fuzzing", "fuzzers", "fuzz_targets",
+             "smoke", "step_definitions"}
+MAX_PROBE_FILES = 2000  # files whose test status needs a content signal (CMake, YAML, Lua, target lists)
 
 
 def root(run_id: str, job: str) -> Path:
@@ -108,10 +194,37 @@ def _candidate(job: str, path: str) -> bool:
         return suffix in {".json", ".yaml", ".yml", ".bru"} and any(
             token in low for token in ("openapi", "swagger", "postman", "insomnia", "bruno", ".bru"))
     if job == "02-test-intelligence-ingest":
-        return suffix in TEST_SUFFIXES and (any(part in {"test", "tests", "spec", "specs"} for part in p.parts[:-1])
-            or name.startswith(("test_", "spec_")) or ".test." in name or ".spec." in name)
-    return suffix in TEXT_SUFFIXES and any(token in low for token in
-        ("runbook", "operations", "operational", "incident", "support", "deploy", "oncall", "playbook"))
+        return suffix in TEST_SUFFIXES and (any(part.lower() in TEST_DIRS for part in p.parts[:-1])
+            or suffix in {".feature", ".robot", ".jmx", ".bats", ".at"} or name.startswith(("test_", "spec_", "smoke"))
+            or any(token in name for token in (".test.", ".spec.", ".cy.", ".steps.", "_steps.", ".tests."))
+            or PurePosixPath(name).stem.endswith(("_test", "_tests", "test", "tests", "simulation"))
+            or name.startswith("locustfile") or re.search(r"(?:^|[_.-])fuzz(?:er|ing)?(?:[_.-]|$)", name) is not None)
+    return suffix in TEXT_SUFFIXES and any(token in low for token in OPS_TOKENS)
+
+
+def _probe(path: str) -> bool:
+    """P45: a test location the path alone cannot establish; only a framework signal makes it a candidate."""
+    name = PurePosixPath(path).name.lower(); suffix = PurePosixPath(name).suffix
+    return (name == "cmakelists.txt" or suffix in {".cmake", ".yml", ".yaml", ".lua"}
+            or (suffix == ".txt" and ("vegeta" in name or "target" in name)))
+
+
+def _classify(path: str, text: str) -> tuple[str, str, int]:
+    """(test_kind, framework, line of the first signal) from static signals; never executes the file."""
+    p = PurePosixPath(path); suffix = p.suffix.lower(); name = p.name.lower()
+    for framework, kind, suffixes, pattern in FRAMEWORK_SIGNALS:
+        if suffixes is not None and suffix not in suffixes: continue
+        if suffix == ".txt" and framework == "ctest" and name != "cmakelists.txt": continue
+        match = re.search(pattern, text, re.MULTILINE) if pattern else None
+        if pattern and not match: continue
+        line = text.count("\n", 0, match.start()) + 1 if match else 1
+        if kind == "unit":
+            kind = "smoke" if name.startswith("smoke") else next(
+                (KIND_DIRS[part.lower()] for part in p.parts[:-1] if part.lower() in KIND_DIRS), kind)
+        return kind, framework, line
+    if suffix in _SH or text.startswith("#!"):
+        return ("smoke" if name.startswith("smoke") else "unknown"), "shell", 1
+    return "unknown", "unknown", 1
 
 
 def _redacted(path: str, data: bytes) -> tuple[str | None, str, int]:
@@ -188,7 +301,7 @@ def _bruno_summaries(text: str) -> list[dict[str, str]]:
     return records
 
 
-def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
+def _summaries(job: str, path: str, text: str, executable: bool = False) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     if job in {"02-doc-intelligence-ingest", "02-operations-doc-ingest"}:
         for number, line in enumerate(text.splitlines(), 1):
@@ -197,14 +310,23 @@ def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
                     ("must", "should", "actor", "service", "incident", "deploy", "data", "auth"))):
                 records.append({"kind": "document-statement", "locator": f"line:{number}", "text": value[:500]})
     elif job == "02-test-intelligence-ingest":
-        patterns = (r"\bdef\s+(test_[A-Za-z0-9_]+)", r"\b(?:TEST|TEST_F)\s*\(\s*([^,)]+)\s*,\s*([^,)]+)",
-                    r"\b(?:it|test|describe)\s*\(\s*['\"]([^'\"]+)")
+        kind, framework, signal = _classify(path, text)
+        tag = {"test_kind": kind, "framework": framework}
+        if executable or PurePosixPath(path).suffix.lower() in {".sh", ".bash"} or text.startswith("#!"):
+            records.append({"kind": "test-entrypoint", "locator": "file", "text": f"runnable test script {path}"[:500],
+                            "citation": f"{path}:{signal}", **tag})
         for number, line in enumerate(text.splitlines(), 1):
-            for pattern in patterns:
+            for pattern in TEST_PATTERNS:
                 match = re.search(pattern, line)
                 if match:
                     records.append({"kind": "documented-test", "locator": f"line:{number}",
-                                    "text": "/".join(part.strip() for part in match.groups() if part)[:500]})
+                                    "text": "/".join(part.strip() for part in match.groups() if part)[:500],
+                                    "citation": f"{path}:{number}", **tag})
+                    break
+        if not records:  # P45: a test-location file is never dropped; unrecognised stays kind unknown
+            label = "unrecognised test file" if framework == "unknown" else f"{framework} {kind} test file"
+            records.append({"kind": "test-entrypoint", "locator": "file", "text": f"{label} {path}"[:500],
+                            "citation": f"{path}:{signal}", **tag})
     else:
         if PurePosixPath(path).suffix.lower() == ".bru":
             return _bruno_summaries(text)
@@ -236,11 +358,32 @@ def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
     return records
 
 
+def _probed(job: str, target: Path, source_files: dict[str, Any], taken: set[str], gaps: list[str]) -> list[str]:
+    """P45: probe-only paths (CMake, YAML, Lua, target lists) that carry a framework signal; bounded."""
+    found, paths = [], sorted(path for path, meta in source_files.items()
+                              if meta.get("kind") == "file" and path not in taken and _probe(path))
+    if len(paths) > MAX_PROBE_FILES:
+        gaps.append(f"test-probe-limit:{len(paths) - MAX_PROBE_FILES}-files-unprobed")
+    for relative in paths[:MAX_PROBE_FILES]:
+        path = target.joinpath(*PurePosixPath(relative).parts)
+        if not path.is_file() or path.is_symlink() or file_hash(path) != source_files[relative]["sha256"]:
+            raise Blocked(f"{job}: accepted source changed: {relative}")
+        if path.stat().st_size > tunables.value(job, "file_max_bytes"):
+            gaps.append(f"oversized-input:{relative}"); continue
+        if _classify(relative, path.read_bytes().decode("utf-8", errors="replace"))[1] not in {"unknown", "shell"}:
+            found.append(relative)
+    return found
+
+
 def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
             source: dict[str, Any], source_files: dict[str, Any]) -> dict[str, Any]:
     candidates = [path for path, meta in source_files.items() if meta.get("kind") == "file" and _candidate(job, path)]
-    readmes = [path for path in source_files if PurePosixPath(path).name.lower().startswith("readme")]
     gaps: list[str] = []
+    if job == "02-test-intelligence-ingest":
+        candidates += _probed(job, target, source_files, set(candidates), gaps)
+    readmes = [path for path in source_files if PurePosixPath(path).name.lower().startswith("readme")]
+    examined = sum(1 for meta in source_files.values() if meta.get("kind") == "file")
+    unexamined = sorted(path for path, meta in source_files.items() if meta.get("kind") != "file")
     size_log.observe(run_id, job, "applicable_inputs", len(candidates), tunables.value(job, "files_logged"))
     sources, records, identities = [], [], set()
     for relative in sorted(candidates):
@@ -256,7 +399,7 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
                         "status": disposition.upper(), "redactions": count})
         if text is None:
             gaps.append(f"withheld-input:{relative}:{disposition}"); continue
-        extracted = _summaries(job, relative, text)
+        extracted = _summaries(job, relative, text, bool(meta.get("executable")))
         if job == "02-api-collection-intelligence-ingest" and not extracted:
             gaps.append(f"malformed-or-empty-api-collection:{relative}")
         for item in extracted:
@@ -267,19 +410,29 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
             record_id = "intel_" + digest(identity)[:16]
             records.append({"record_id": record_id, "kind": item["kind"], "path": relative,
                 "source_sha256": "sha256:" + meta["sha256"], "locator": item["locator"],
-                "summary": item["text"], "semantics": "DOCUMENTED_STATIC_INTENT"})
+                "summary": item["text"], "semantics": "DOCUMENTED_STATIC_INTENT",
+                **{key: item[key] for key in ("test_kind", "framework", "citation") if key in item}})
     size_log.observe(run_id, job, "extracted_records", len(records), tunables.value(job, "records_logged"))
     records.sort(key=lambda x: (x["path"], x["locator"], x["record_id"]))
     sources.sort(key=lambda x: x["path"])
-    if not candidates:
-        gaps.append("readme-only-no-specialized-inputs" if readmes else "no-applicable-inputs")
-    elif not records:
+    skipped = not candidates and not unexamined
+    if not candidates and unexamined:
+        # Links and unreadable entries were not followed, so absence is not established.
+        gaps.append(("readme-only-no-specialized-inputs" if readmes else "no-applicable-inputs")
+                    + f":{len(unexamined)}-non-file-entries-unexamined")
+    elif candidates and not records:
         gaps.append("zero-indexable-records")
     contract, _name, _schema = SPECS[job]
-    return {"schema": f"appsec-review/{contract}/1", "run_id": run_id, "job_id": job,
-        "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if gaps else "OK",
+    result = {"schema": f"appsec-review/{contract}/1", "run_id": run_id, "job_id": job,
+        "attempt_id": attempt_id, "status": "SKIPPED" if skipped else "OK_WITH_GAPS" if gaps else "OK",
+        "applicability": SKIPPED_NA if skipped else APPLICABLE,
+        "inventory": {"files_examined": examined, "non_file_entries": len(unexamined), "candidates": len(candidates)},
         "source": source, "sources": sources, "records": records,
         "coverage_gaps": sorted(set(gaps)), "static_only": True}
+    if job == "02-test-intelligence-ingest":  # P45: test files per kind, for the report
+        kinds = {record["path"]: record["test_kind"] for record in records}
+        result["test_kind_totals"] = {kind: sum(1 for value in kinds.values() if value == kind) for kind in TEST_KINDS}
+    return result
 
 
 def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, Any]) -> None:
@@ -326,7 +479,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Published {len(result['records'])} redacted static intelligence record(s).",
             status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"],
-            gaps=result["coverage_gaps"] or None,
+            gaps=result["coverage_gaps"] or None, skip_reason=SKIP_REASON if result["status"] == "SKIPPED" else None,
+            consumer_job_id=CONSUMER,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
         worker_kind="deterministic_python", output_contract=contract,
@@ -334,6 +488,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
         derive_inputs=lambda: current_inputs(run_id, job), fingerprint_inputs=lambda value: _hash(value),
         execute_attempt=execute, preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(job)}, force=force,
+        consumer_job_id=CONSUMER,
         post_validate=lambda attempt, _envelope, inputs: _validate_attempt(run_id, job, attempt, inputs),
         blocked_summary=f"{job} source validation blocked.", failed_summary=f"{job} did not publish.")
 
@@ -341,7 +496,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
 def validate(run_id: str, job: str, pointer=None) -> Path:
     inputs = current_inputs(run_id, job); base = root(run_id, job)
     pointer = pointer or read_json(base / "accepted.json")
-    attempt, _ = validate_published(base, pointer, _hash(inputs), expected_run_id=run_id, expected_job_id=job)
+    attempt, _ = validate_published(base, pointer, _hash(inputs), expected_run_id=run_id, expected_job_id=job,
+                                    consumer_job_id=CONSUMER)
     _validate_attempt(run_id, job, attempt, inputs)
     return attempt
 

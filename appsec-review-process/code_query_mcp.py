@@ -63,7 +63,8 @@ TOOLS = [
     _tool("code_file_outline", "Functions, call sites and imports of one file from the tree-sitter AST (bounded rows).",
           {"path": _S, "limit": _LIMIT}, ["path"]),
     _tool("code_search", "Fuzzy (substring, 3+ characters) search over method names, call targets, types, identifiers "
-          "and string literals. kind narrows to one of method, call-target, type, identifier, literal, ts-function.",
+          "and string literals. kind narrows to one of method, call-target, type, identifier, literal, ts-function, "
+          "ir-function, debug-symbol.",
           {"text": {"type": "string", "maxLength": 200}, "kind": {"type": "string", "maxLength": 32}, "limit": _LIMIT},
           ["text"]),
     _tool("code_calls_to", "Call sites of a named function or a family (unsafe-copy, format, unbounded-read, alloc, free) "
@@ -76,7 +77,7 @@ TOOLS = [
           {"to": _S, "from": _S, "max_paths": {"type": "integer", "minimum": 1, "maximum": 20},
            "max_depth": {"type": "integer", "minimum": 1, "maximum": 64}}, ["to"]),
     _tool("code_address_taken", "Functions whose address is taken or that are named as a value (candidates for indirect "
-          "calls). Never a complete set: the CPG export carries no method-reference nodes.",
+          "calls). Never a complete set: addresses formed through casts, macros or data the CPG did not model are missing.",
           {"function": _S, "path_prefix": _S, "limit": _LIMIT}, []),
     _tool("code_overrides", "Overrides of a virtual method: candidates with the same name in other types, with "
           "hierarchy_complete and why.", {"method": _S, "limit": _LIMIT}, ["method"]),
@@ -262,6 +263,9 @@ class CodeIndex:
             found.append({"kind": "escape", "reason": "indirect-calls-in-graph", "count": indirect,
                           "address_taken_sites": taken,
                           "why": ("this function's address is taken, so an indirect call may reach it" if taken else
+                                  "no address-taken site is recorded, but addresses formed through casts, macros or "
+                                  "data the CPG did not model are not, so an indirect call reaching it cannot be "
+                                  "ruled out" if self.capabilities.get("method_references") else
                                   "no address-taken site is recorded, but the CPG export has no method-reference "
                                   "nodes, so an indirect call reaching it cannot be ruled out")})
         return found
@@ -321,8 +325,9 @@ class CodeIndex:
                        self.connection.execute("SELECT 1 FROM types WHERE full_name=?",
                                                (reachability.qualified_name(full).rsplit(".", 1)[0],)).fetchone()]
             if members:
-                reasons.append("virtual-dispatch-unmodelled: the index has no inheritance edges, so calls through a "
-                               "base-class method are not attributed to this member")
+                reasons.append("virtual-dispatch-unmodelled: calls through a base-class method are not attributed "
+                               "to this member" + ("" if self.capabilities.get("type_edges") else
+                                                   " (the index has no inheritance edges)"))
         reasons += self.graph_reasons()
         if frontier:
             reasons.append("depth-cap reached")
@@ -570,6 +575,9 @@ class CodeIndex:
         found = self.connection.execute(sql, params).fetchall()
         rows = [{"full_name": f, "how": h, "code": c, **self.loc(p, l)} for f, p, l, h, c in found[:limit]]
         return self.result("code_address_taken", args, rows, reasons=[
+            "never-complete: rows are the CPG's method references, &-operator calls and identifiers naming a "
+            "function; addresses formed through casts, macros or initialisers it did not model may be missing"
+            if self.capabilities.get("method_references") else
             "never-complete: the CPG export has no method-reference nodes; functions stored in tables through "
             "macros or initialisers may be missing"], truncated=len(found) > limit, total=len(found))
 

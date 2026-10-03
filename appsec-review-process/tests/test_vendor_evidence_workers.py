@@ -285,6 +285,23 @@ class HadolintInputTests(unittest.TestCase):
                     b13.argv_for("hadolint", Path(empty))
 
 
+    def test_p38_probe_uses_the_assembly_containerfile_rules(self):
+        """P38: every container definition that launches 02-iac-config-scan is a probe and hadolint input."""
+        import tempfile
+        import full_review_input_assembly as assembly
+        names = ("Dockerfile", "docker/api.Dockerfile", "Containerfile", "Dockerfile.dev", "svc/dockerfile")
+        with tempfile.TemporaryDirectory() as root:
+            for rel in names + ("README.md", "main.tf"):
+                path = Path(root, rel); path.parent.mkdir(parents=True, exist_ok=True); path.write_text("FROM x\n")
+            found = workers.probe("02-iac-config-scan", Path(root))["candidates"]
+            argv = b13.argv_for("hadolint", Path(root))
+        self.assertTrue(all(assembly._iac_input(name) for name in names))
+        for tool in ("hadolint", "dockerfile-base-image-inventory"):
+            self.assertEqual(found[tool], sorted(names), tool)
+        self.assertEqual(sorted(found["checkov"]), sorted(names + ("main.tf",)))
+        self.assertEqual(sorted(argv[-len(names):]), sorted("/workspace/" + name for name in names))
+
+
 class CheckovFileLevelSpanTests(unittest.TestCase):
     def test_file_level_check_with_line_zero_cites_line_one(self):
         doc = [{"check_type": "github_actions", "results": {"failed_checks": [

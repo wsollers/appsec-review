@@ -5,8 +5,9 @@ source branch before any native or CPG work and is consumed by every lookup, so 
 CPG would re-run it (and invalidate its consumers) whenever the CPG changes, and hold the source
 index back until Joern finishes. This job waits for the accepted ``02-code-property-graph``,
 ``02-treesitter-ast`` (or its language-absent skip) and ``02-binary-triage`` (or its native skips),
-binds each by accepted pointer, envelope and attempt-tree hashes (``dep_reachability_lifecycle``'s
-rule), and publishes ``code-index.sqlite`` (``code_index.build``) plus ``code-index.json`` with the
+and optionally ``02-ir-facts`` and ``02-debug-symbol-index`` (a skip there binds nothing and is no gap:
+there is nothing native to index), binds each by accepted pointer, envelope and attempt-tree hashes
+(``dep_reachability_lifecycle``'s rule), and publishes ``code-index.sqlite`` (``code_index.build``) plus ``code-index.json`` with the
 database's sha256, its logical ``content_sha256``, the source bindings, the capabilities the
 query tools are granted from, counts and gaps. Validation rebuilds the database from the bound
 inputs and compares every row.
@@ -35,6 +36,8 @@ SQLITE = code_index.SQLITE
 SUMMARY = "code-index-summary.md"
 SCHEMA_FILE = "code-index.schema.json"
 TRIAGE_JOB = "02-binary-triage"
+IR_JOB, IR_RESULT = "02-ir-facts", "ir-facts.json"
+DEBUG_JOB, DEBUG_RESULT = "02-debug-symbol-index", "debug-symbol-index.json"
 CONSUMER = "02-evidence-assembly"
 
 
@@ -44,7 +47,7 @@ def root(run_id: str) -> Path:
 
 def _code() -> dict[str, str]:
     paths = ("code_index_job.py", "code_index.py", "reachability.py", "entry_exports.py", "lsp_driver.py",
-             "treesitter_ast_job.py", registry_paths.template_rel(JOB), registry_paths.contract_rel(CONTRACT))
+             "treesitter_ast_job.py", "binary_evidence_core.py", registry_paths.template_rel(JOB), registry_paths.contract_rel(CONTRACT))
     values = {name: file_hash(ROOT / name) for name in paths}
     values["schemas/" + SCHEMA_FILE] = file_hash(ROOT.parent / "schemas" / SCHEMA_FILE)
     return values
@@ -74,30 +77,59 @@ def _optional(run_id: str, job: str, result: str, source: str) -> tuple[dict[str
     return binding, []
 
 
-def _triage(run_id: str) -> tuple[dict[str, Any] | None, list[str]]:
-    """The accepted binary triage attempt (pointer, envelope and tree verified) and the receipt that
-    hashes every per-binary summary (``entry_exports.triage_binding``); its manifest carries no
-    source generation, so the native-build lineage it was produced from is what binds it."""
-    import entry_exports
-    base = data_path(run_id, "jobs", TRIAGE_JOB)
+def _published(run_id: str, job: str) -> tuple[dict[str, Any] | None, Path | None, list[str]]:
+    """The accepted attempt of a job whose manifest carries no source generation (pointer, envelope
+    and tree verified; the native-build lineage it was produced from is what binds it): the
+    attempt-binding head, the attempt, and gaps. A SKIPPED publication returns no attempt."""
+    base = data_path(run_id, "jobs", job)
     pointer_path = base / "accepted.json"
     if not pointer_path.is_file() or pointer_path.is_symlink():
-        return None, [f"source-absent:{TRIAGE_JOB}"]
+        return None, None, [f"source-absent:{job}"]
     try:
         pointer = read_json(pointer_path)
         attempt = base / "attempts" / str(pointer.get("attempt_id"))
-        if (pointer.get("run_id") != run_id or pointer.get("job") != TRIAGE_JOB or attempt.is_symlink() or
+        if (pointer.get("run_id") != run_id or pointer.get("job") != job or attempt.is_symlink() or
                 not attempt.is_dir() or tree_hashes(attempt) != pointer.get("hashes") or
                 file_hash(attempt / pointer.get("envelope_path", "result.json")) != pointer.get("envelope_sha256")):
-            return None, [f"source-not-current:{TRIAGE_JOB}"]
+            return None, None, [f"source-not-current:{job}"]
     except (OSError, ValueError, TypeError):
-        return None, [f"source-not-current:{TRIAGE_JOB}"]
+        return None, None, [f"source-not-current:{job}"]
     if pointer.get("status") == "SKIPPED":
-        return None, [f"source-skipped:{TRIAGE_JOB}"]
+        return None, None, [f"source-skipped:{job}"]
     if pointer.get("status") not in ("OK", "OK_WITH_GAPS"):
-        return None, [f"source-not-current:{TRIAGE_JOB}"]
-    return {"attempt_id": pointer["attempt_id"], "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
-            **entry_exports.triage_binding(attempt)}, []
+        return None, None, [f"source-not-current:{job}"]
+    return {"attempt_id": pointer["attempt_id"], "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path)}, attempt, []
+
+
+def _triage(run_id: str) -> tuple[dict[str, Any] | None, list[str]]:
+    """The accepted binary triage attempt and the receipt that hashes every per-binary summary
+    (``entry_exports.triage_binding``)."""
+    import entry_exports
+    head, attempt, gaps = _published(run_id, TRIAGE_JOB)
+    return ({**head, **entry_exports.triage_binding(attempt)}, []) if attempt is not None else (None, gaps)
+
+
+def _native_only(gaps: list[str]) -> list[str]:
+    """A skipped native-evidence source (no native units, no debug symbols) has nothing to index: no gap."""
+    return [gap for gap in gaps if not gap.startswith("source-skipped:")]
+
+
+def _ir_facts(run_id: str, source: str) -> tuple[dict[str, Any] | None, list[str]]:
+    binding, gaps = _optional(run_id, IR_JOB, IR_RESULT, source)
+    return binding, _native_only(gaps)
+
+
+def _debug_symbols(run_id: str) -> tuple[dict[str, Any] | None, list[str]]:
+    head, attempt, gaps = _published(run_id, DEBUG_JOB)
+    if attempt is None:
+        return None, _native_only(gaps)
+    try:
+        result = read_json(attempt / DEBUG_RESULT)
+    except (OSError, ValueError):
+        return None, [f"source-not-current:{DEBUG_JOB}"]
+    if result.get("status") == "SKIPPED":
+        return None, []
+    return {**head, "result_sha256": "sha256:" + file_hash(attempt / DEBUG_RESULT)}, []
 
 
 def current_inputs(run_id: str) -> dict[str, Any]:
@@ -107,8 +139,11 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         raise Blocked(f"{JOB}: no accepted code property graph for this source generation ({', '.join(cpg_gaps)})")
     treesitter, ts_gaps = _optional(run_id, treesitter_ast_job.JOB, treesitter_ast_job.RESULT, source)
     triage, triage_gaps = _triage(run_id)
+    ir, ir_gaps = _ir_facts(run_id, source)
+    debug, debug_gaps = _debug_symbols(run_id)
     return {"run_id": run_id, "job": JOB, "source_snapshot_sha256": source, "cpg": cpg, "treesitter": treesitter,
-            "binary_triage": triage, "input_gaps": sorted(cpg_gaps + ts_gaps + triage_gaps), "code": _code()}
+            "binary_triage": triage, "ir_facts": ir, "debug_symbols": debug,
+            "input_gaps": sorted(cpg_gaps + ts_gaps + triage_gaps + ir_gaps + debug_gaps), "code": _code()}
 
 
 def _derive(run_id: str, inputs: dict[str, Any], database: Path) -> dict[str, Any]:
@@ -131,12 +166,26 @@ def _derive(run_id: str, inputs: dict[str, Any], database: Path) -> dict[str, An
         if entry_exports.triage_binding(attempt).get("receipt_sha256") != inputs["binary_triage"].get("receipt_sha256"):
             raise Blocked(f"{JOB}: binary triage receipt changed after binding")
         tables, export_gaps = entry_exports.tables_from_triage(attempt)
+    ir_facts = debug_symbols = None
+    if inputs["ir_facts"] is not None:
+        path = data_path(run_id, "jobs", IR_JOB, "attempts", inputs["ir_facts"]["attempt_id"], IR_RESULT)
+        if "sha256:" + file_hash(path) != inputs["ir_facts"]["result_sha256"]:
+            raise Blocked(f"{JOB}: accepted IR facts changed after binding")
+        ir_facts = read_json(path)
+    if inputs["debug_symbols"] is not None:
+        import binary_evidence_core
+        attempt = data_path(run_id, "jobs", DEBUG_JOB, "attempts", inputs["debug_symbols"]["attempt_id"])
+        if "sha256:" + file_hash(attempt / DEBUG_RESULT) != inputs["debug_symbols"]["result_sha256"]:
+            raise Blocked(f"{JOB}: accepted debug-symbol index changed after binding")
+        debug_symbols = binary_evidence_core.load_records(DEBUG_JOB, attempt, read_json(attempt / DEBUG_RESULT))
     sources = {"cpg": {"job": bindings.CPG_JOB, **inputs["cpg"]},
                "treesitter": ({"job": treesitter_ast_job.JOB, **inputs["treesitter"]} if inputs["treesitter"] else None),
-               "binary_triage": ({"job": TRIAGE_JOB, **inputs["binary_triage"]} if inputs["binary_triage"] else None)}
+               "binary_triage": ({"job": TRIAGE_JOB, **inputs["binary_triage"]} if inputs["binary_triage"] else None),
+               "ir_facts": ({"job": IR_JOB, **inputs["ir_facts"]} if inputs["ir_facts"] else None),
+               "debug_symbols": ({"job": DEBUG_JOB, **inputs["debug_symbols"]} if inputs["debug_symbols"] else None)}
     summary = code_index.build(database, records=records, cpg_summary=cpg_summary, sources=sources,
                                treesitter=document, export_tables=tables, export_gaps=export_gaps,
-                               source_gaps=inputs["input_gaps"])
+                               source_gaps=inputs["input_gaps"], ir_facts=ir_facts, debug_symbols=debug_symbols)
     return {**summary, "run_id": run_id, "source_snapshot_sha256": inputs["source_snapshot_sha256"],
             "status": "OK_WITH_GAPS" if summary["gaps"] else "OK"}
 
@@ -201,7 +250,9 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         (attempt / SUMMARY).write_text(
             "# Code index\n\n"
             f"- Methods {counts['methods']}, calls {counts['calls']}, types {counts['types']}, "
-            f"tree-sitter functions {counts['ts_functions']}, exports {counts['exports']}.\n"
+            f"tree-sitter functions {counts['ts_functions']}, exports {counts['exports']}, "
+            f"inheritance edges {counts['type_edges']}, IR functions {counts['ir_functions']}, "
+            f"debug symbols {counts['debug_symbols']}.\n"
             f"- Database {result['sqlite']['bytes']} bytes, built in {seconds}s.\n"
             f"- Capabilities: {', '.join(k for k, v in sorted(result['capabilities'].items()) if v)}.\n"
             f"- Gaps: {len(result['gaps'])}.\n- Rows are locators; read the source before citing.\n", encoding="utf-8")

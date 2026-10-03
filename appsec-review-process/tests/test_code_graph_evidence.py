@@ -68,6 +68,18 @@ class CodeGraphEvidenceTests(unittest.TestCase):
         self.assertNotIn("supersecretvalue", document["records"][0]["search_text"])
         self.assertEqual(document["coverage_gaps"], [{"reason":"no-source-location","count":1}])
 
+    def test_method_references_and_external_stubs(self):
+        """P07/P10: a METHOD_REF row is a record; a location-less TYPE_DECL stub is an observation, not a gap."""
+        self.write(self.row(kind="method-reference", label="METHOD_REF", name="copy", full_name="copy:int(char*,char*)",
+                            caller="main:int()", type_name="ANY", line=3, column=25, code="copy"),
+                   self.row(kind="type", label="TYPE_DECL", name="FILE", full_name="FILE", caller="", file="<empty>",
+                            line=None, column=None))
+        document = self.normalize()
+        self.assertEqual(validate_document(document, "code-property-graph.schema.json"), [])
+        self.assertEqual((document["status"], document["coverage_gaps"]), ("OK", []))
+        self.assertEqual(document["observations"], [{"reason": "external-stub", "count": 1}])
+        self.assertTrue(cpg.structural_query(document, operation="symbols", text="copy"))
+
     def test_malformed_and_traversal_fail_closed(self):
         self.raw.write_text("{bad\n", encoding="utf-8")
         with self.assertRaisesRegex(Blocked, "malformed"): self.normalize()

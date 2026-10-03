@@ -36,7 +36,8 @@ def sha(path: Path) -> str:
 
 def accepted_native_build(folder: Path, *, source_revision="a" * 40,
                           result_revision=None, db_hash_override=None,
-                          extra_entries=(), mutate_target=None):
+                          extra_entries=(), mutate_target=None, headers=None, omitted=0,
+                          publish_headers=True):
     run_id, attempt_id = "run-e03", "native-attempt"
     base = folder / "native-build"; attempt = base / "attempts" / attempt_id
     output = attempt / "outputs/u/compile_commands.json"; output.parent.mkdir(parents=True)
@@ -44,6 +45,11 @@ def accepted_native_build(folder: Path, *, source_revision="a" * 40,
     output.write_text(json.dumps(database, indent=2) + "\n")
     binary = attempt / "outputs/u/binaries/hello"; binary.parent.mkdir(parents=True)
     binary.write_bytes(b"\x7fELFfixture")
+    header_records = []
+    for rel, data in sorted((headers or {}).items()):
+        path = attempt / "outputs/u/generated-headers" / rel; path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        header_records.append({"path": rel, "sha256": sha(path), "size_bytes": len(data)})
     target = folder / "target"; shutil.copytree(FIXTURE / "target", target)
     if mutate_target is not None:
         mutate_target(target)
@@ -67,6 +73,9 @@ def accepted_native_build(folder: Path, *, source_revision="a" * 40,
             "binaries": [{"source_path": "hello", "artifact_path": "outputs/u/binaries/hello",
                           "sha256": sha(binary), "size_bytes": binary.stat().st_size}]}],
         "coverage_gaps": []}
+    if publish_headers:
+        result["units"][0]["generated_headers"] = {"root": "outputs/u/generated-headers",
+                                                   "headers": header_records, "omitted": omitted}
     atomic_json(attempt / "native-build.json", result)
     atomic_json(attempt / "b13-receipts.json", [])
     (attempt / "native-build-summary.md").write_text("# Native build\n")
@@ -76,7 +85,7 @@ def accepted_native_build(folder: Path, *, source_revision="a" * 40,
     fingerprint = "sha256:" + "6" * 64
     artifacts = artifact_records(attempt, ["native-build.json", "b13-receipts.json",
         "native-build-summary.md", "status.json", "outputs/u/compile_commands.json",
-        "outputs/u/binaries/hello"])
+        "outputs/u/binaries/hello"] + ["outputs/u/generated-headers/" + item["path"] for item in header_records])
     envelope = terminal_envelope(run_id=run_id, job_id=worker.UPSTREAM_JOB,
         attempt_id=attempt_id, worker_kind="pinned_container",
         input_fingerprint=fingerprint, output_contract="native-build",
@@ -298,6 +307,12 @@ class NativeSastTests(unittest.TestCase):
         self.assertTrue(any(gap.startswith("clang-tidy-tool-error") for gap in result["coverage_gaps"]))
         self.assertTrue(any(gap.startswith("cppcheck-tool-error") for gap in result["coverage_gaps"]))
         self.assertTrue(any(gap.startswith("clang-static-analyzer-tool-error") for gap in result["coverage_gaps"]))
+
+    def test_compile_error_gap_names_only_a_missing_header(self):
+        self.assertEqual(worker._missing_header({"message": "'config.h' file not found"}), ":missing-header:config.h")
+        for first in (None, {"message": "use of undeclared identifier 'x'"}, {"message": "'../a b' file not found"},
+                      {"message": "'../etc/x.h' file not found"}, {"message": 3}):
+            self.assertEqual(worker._missing_header(first), "", first)
 
     def test_requests_are_offline_read_only_pinned_and_never_execute_targets(self):
         with tempfile.TemporaryDirectory() as folder:
