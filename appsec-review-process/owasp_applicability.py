@@ -263,7 +263,9 @@ def _validate_citations(citations: list[dict[str, Any]], entries: dict[str, dict
     return canonical
 
 
-def _validate_decision(decision: dict[str, Any], entries: dict[str, dict[str, Any]]) -> None:
+def _validate_decision(decision: dict[str, Any], entries: dict[str, dict[str, Any]],
+                       classification: frozenset[str] = frozenset()) -> None:
+    """``classification`` names the bound component-map input that may positively exclude a rule's component."""
     if decision["status"] not in STATUSES or not decision["rationale"].strip():
         raise ValueError("applicability decision needs a supported status and rationale")
     signal_types = set()
@@ -278,8 +280,11 @@ def _validate_decision(decision: dict[str, Any], entries: dict[str, dict[str, An
     if status == "conditional" and ("unresolved_condition" not in signal_types or
                                       not decision.get("conditional_expression")):
         raise ValueError("conditional requires an unresolved condition and expression")
+    classified = (any(citation["input_id"] in classification for citation in decision["citations"]) and
+                  any(signal["signal_type"] == "positive_exclusion" and signal["input_id"] in classification
+                      for signal in decision["signals"]))
     if status == "not_applicable" and ("positive_exclusion" not in signal_types or
-                                         decision["source_completeness"] != "adequate" or not canonical):
+                                         decision["source_completeness"] != "adequate" or not (canonical or classified)):
         raise ValueError("not_applicable requires positive exclusion, adequate completeness, and canonical evidence")
     if status != "conditional" and decision.get("conditional_expression") is not None:
         raise ValueError("only conditional applicability may have a conditional expression")
@@ -344,8 +349,9 @@ def _decision_row(base: dict[str, Any], decision: dict[str, Any], source: str,
 
 
 def _unresolved(base: dict[str, Any], rationale: str, rule_ids: list[str]) -> dict[str, Any]:
-    decision = {"status": "cannot_determine", "rationale": rationale, "signals": [],
-                "citations": [], "source_completeness": "unknown", "conditional_expression": None}
+    # With no matching rule no decision evidence was consulted; only conflicting rules leave its completeness unknown.
+    decision = {"status": "cannot_determine", "rationale": rationale, "signals": [], "citations": [],
+                "source_completeness": "unknown" if rule_ids else "not_evaluated", "conditional_expression": None}
     return _decision_row(base, decision, "unresolved", rule_ids)
 
 
@@ -390,7 +396,10 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
             raise ValueError(f"{rule['rule_id']}: unknown component")
         if components[rule["component_id"]]["scope_status"] != "in_scope":
             raise ValueError(f"{rule['rule_id']}: rules cannot override engagement out_of_scope")
-        _validate_decision(rule["decision"], entries)
+        component = components[rule["component_id"]]
+        bound = "component_map" in request and component.get("classification_state") in {"known", "partial"}
+        _validate_decision(rule["decision"], entries, frozenset(
+            i for i in component["input_ids"] if bound and entries[i].get("kind") == "component_map"))
         rules.append(rule)
 
     selection_id = input_manifest["selection_id"]

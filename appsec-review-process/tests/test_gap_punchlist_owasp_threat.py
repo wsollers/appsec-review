@@ -69,7 +69,6 @@ class OwaspJoinGapTests(DispatchCase):
         inputs["results"] = {}
         return join.derive(inputs)[join.GAPS]["gaps"]
 
-    @unittest.expectedFailure
     def test_p22_identical_statement_across_rows_is_one_gap(self):
         """P22: rows sharing one unresolved rationale yield one gap per (kind, statement) with all row indices."""
         rationale = "Shared unresolved rationale for every row."
@@ -82,7 +81,6 @@ class OwaspJoinGapTests(DispatchCase):
         self.assertEqual(len(matching), 1, f"{len(matching)} gaps repeat the same statement")
         self.assertEqual(sorted(matching[0]["row_indices"]), [0, 1, 2])
 
-    @unittest.expectedFailure
     def test_p23_no_rule_cannot_determine_does_not_add_source_completeness_gap(self):
         """P23: a cannot_determine row whose only cause is "no rule" raises no source-completeness gap."""
         def source(row):
@@ -117,7 +115,6 @@ class OwaspComponentRoutingGapTests(unittest.TestCase):
     def _component(value, component_id):
         return next(row for row in value["functional_components"] if row["component_id"] == component_id)
 
-    @unittest.expectedFailure
     def test_p24_known_cli_without_network_trait_gets_domain_not_applicable_rule(self):
         """P24: a known high-confidence CLI component with no network trait gets domain-selector not_applicable rules."""
         def edit(value):
@@ -131,7 +128,6 @@ class OwaspComponentRoutingGapTests(unittest.TestCase):
                           and rule["selector"]["domain_ids"]]
         self.assertTrue(not_applicable, f"no not_applicable domain rule for the CLI component: {rules}")
 
-    @unittest.expectedFailure
     def test_p25_medium_confidence_component_gets_rule_and_no_incomplete_gap(self):
         """P25: a medium-confidence (partial) component still gets a rule and no incomplete-classification gap."""
         def edit(value):

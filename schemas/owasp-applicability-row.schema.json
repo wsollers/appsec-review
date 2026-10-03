@@ -56,7 +56,7 @@
     "rationale": {"type": "string"},
     "signals": {"type": "array", "items": {"$ref": "owasp-applicability-signal.schema.json"}},
     "citations": {"type": "array", "items": {"$ref": "owasp-applicability-citation.schema.json"}},
-    "source_completeness": {"enum": ["adequate", "partial", "unknown"]},
+    "source_completeness": {"enum": ["adequate", "partial", "unknown", "not_evaluated"]},
     "conditional_expression": {"type": ["string", "null"]},
     "decision_source": {"enum": ["deterministic_rule", "reviewer_override", "scope_authority", "unresolved"]},
     "rule_ids": {"type": "array", "items": {"type": "string"}},

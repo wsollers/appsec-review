@@ -208,6 +208,55 @@ class OwaspComponentRoutingTests(unittest.TestCase):
         self.assertEqual(model["component_map"], request["component_map"])
         self.assertTrue(all(row["component_evidence_roots"] for row in model["rows"]))
 
+    def _republish(self, edit):
+        edit(self.component_map)
+        for path in (self.data / "jobs").iterdir():
+            __import__("shutil").rmtree(path)
+        self.component_pointer = self._publish_component(self.component_map)
+        self.manifest, self.manifest_path, self.t03_pointer = self._publish_lane_in()
+        pointer = routing.run(self.run_id)
+        request_path = routing.request_path(self.run_id, pointer)
+        result = owasp_applicability.build(self.run_id, request_path)
+        model_path = (self.data / "jobs" / owasp_applicability.JOB_ID / "whole" / "attempts" /
+                      result["attempt_id"] / "outputs" / "owasp-applicability-model.json")
+        return json.loads(request_path.read_text()), json.loads(model_path.read_text())
+
+    def test_classified_local_cli_gets_t04_accepted_web_chapter_not_applicable(self):
+        def edit(value):
+            row = next(item for item in value["functional_components"] if item["component_id"] == "ruleset-loader")
+            row.update(component_type="command-line application", aliases=["cli"], confidence="high")
+        _request, model = self._republish(edit)
+        rows = [row for row in model["rows"] if row["component_id"] == "ruleset-loader"]
+        excluded = {row["domain_id"] for row in rows if row["applicability_status"] == "not_applicable"}
+        self.assertTrue(excluded)
+        self.assertLessEqual(excluded, routing.NON_WEB_NA_DOMAINS["owasp_asvs"])
+        self.assertTrue(all(row["citations"] and row["source_completeness"] == "adequate"
+                            for row in rows if row["applicability_status"] == "not_applicable"))
+        self.assertTrue(all(row["applicability_status"] == "cannot_determine" and row["source_completeness"] == "not_evaluated"
+                            for row in rows if row["domain_id"] not in excluded))
+        self.assertEqual(model["counts"]["not_applicable"], len([r for r in rows if r["domain_id"] in excluded]))
+
+    def test_network_trait_or_network_unknown_blocks_not_applicable(self):
+        def edit(value):
+            for row in value["functional_components"]:
+                if row["component_id"] in {"ruleset-loader", "freeciv-client"}:
+                    row.update(component_type="command-line application", aliases=["cli"], confidence="high")
+            next(item for item in value["functional_components"]
+                 if item["component_id"] == "ruleset-loader")["observed_purpose"] = "Fetches rulesets over HTTP."
+        request, model = self._republish(edit)
+        self.assertFalse([rule for rule in request["rules"] if rule["decision"]["status"] == "not_applicable"])
+        self.assertEqual(model["counts"]["not_applicable"], 0)
+
+    def test_partial_classification_yields_conditional_rows_carrying_the_unknown(self):
+        def edit(value):
+            next(item for item in value["functional_components"] if item["component_id"] == "freeciv-server")["confidence"] = "medium"
+        request, model = self._republish(edit)
+        rule = next(rule for rule in request["rules"] if rule["component_id"] == "freeciv-server")
+        self.assertEqual(rule["decision"]["status"], "conditional")
+        rows = [row for row in model["rows"] if row["component_id"] == "freeciv-server"]
+        self.assertTrue(rows and all(row["applicability_status"] == "conditional" and row["conditional_expression"]
+                                     for row in rows))
+
     def test_mixed_generation_is_rejected(self):
         self.manifest["entries"][0]["source_snapshot"]["snapshot_id"] = "sha256:" + "0" * 64
         write_json(self.manifest_path, self.manifest)

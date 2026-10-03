@@ -48,11 +48,11 @@ class WorkbenchCase(unittest.TestCase):
             invoker_id=persona_invocation.FixtureInvoker.invoker_id,
             source_snapshot_sha256=invocation_support.SNAPSHOT, registry_ceiling=None)
 
-    def publish(self, *, partial: bool = False):
+    def publish(self, *, unresolved: bool = False):
         component_map = self.fixture._freeciv_like_map()
-        if partial:
+        if unresolved:  # low confidence is unknown classification; medium (partial) now routes conditionally
             for component in component_map["functional_components"]:
-                component["confidence"] = "medium"
+                component["confidence"] = "low"
         self.fixture._publish_component(component_map)
 
     def dispatch(self, invoker=None, force: bool = False) -> dict:
@@ -89,7 +89,7 @@ class OwaspWorkbenchLifecycleTests(WorkbenchCase):
         self.assertIn(self.join()["status"], {"OK", "OK_WITH_GAPS"})
 
     def test_unresolved_components_publish_an_empty_accounting_the_join_consumes(self):
-        self.publish(partial=True)
+        self.publish(unresolved=True)
         invoker = dispatch_support.ValidatorInvoker()
         pointer = self.dispatch(invoker)
         self.assertIn(pointer["status"], {"OK", "OK_WITH_GAPS"})
@@ -122,7 +122,7 @@ class OwaspWorkbenchDagsterTests(WorkbenchCase):
         self.assertEqual(dagster_workflow.owasp_validator_handoffs_work.pool, dagster_workflow.CPU_POOL)
 
     def test_ops_publish_the_accounting_under_the_join_facts(self):
-        self.publish(partial=True)
+        self.publish(unresolved=True)
         configured = {"engagement_run_id": self.run_id, "force": False}
         invoker = dispatch_support.ValidatorInvoker()
         with mock.patch("standards_lifecycle.prepare_owasp_join", return_value=self.facts) as facts, \

@@ -9,7 +9,7 @@
     "applicability_status": {"enum": ["applicable", "conditional", "not_applicable", "cannot_determine", "out_of_scope"]},
     "applicability_rationale": {"type": "string"}, "applicability_citations": {"type": "array", "items": {"$ref": "owasp-applicability-citation.schema.json"}},
     "decision_source": {"type": "string"}, "override_ids": {"type": "array", "items": {"type": "string"}},
-    "source_completeness": {"enum": ["adequate", "partial", "unknown"]}, "rescope_state": {"enum": ["none", "required"]},
+    "source_completeness": {"enum": ["adequate", "partial", "unknown", "not_evaluated"]}, "rescope_state": {"enum": ["none", "required"]},
     "rescope_actions": {"type": "array", "items": {"type": "string"}}, "invalidated_result_ids": {"type": "array", "items": {"type": "string"}},
     "crosswalk_lineage": {"type": "array", "items": {"$ref": "owasp-crosswalk-lineage.schema.json"}},
     "batch_ids": {"type": "array", "items": {"type": "string"}}, "proof_obligations": {"type": "array", "items": {"$ref": "owasp-batch-proof-obligation.schema.json"}},
