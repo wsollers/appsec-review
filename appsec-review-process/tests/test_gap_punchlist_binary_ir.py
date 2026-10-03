@@ -179,7 +179,6 @@ class IrFactsPunchListTests(unittest.TestCase):
              mock.patch.object(ir, "_verify_artifact", return_value=self.target / "application.bc"):
             return ir.facts("run", self.target, toolchain=toolchain)
 
-    @unittest.expectedFailure
     def test_p04_distinct_and_columnless_dilocations_map_to_source(self):
         """P04: distinct !DILocation and !DILocation(line: 0, scope: ...) enter the location map."""
         result = self._facts(P04_IR)
@@ -187,7 +186,6 @@ class IrFactsPunchListTests(unittest.TestCase):
         self.assertNotIn("fact-source-ambiguous", reasons, json.dumps(result["coverage_gaps"]))
         self.assertEqual({fact["source_path"] for fact in result["facts"]}, {"pointer.c"})
 
-    @unittest.expectedFailure
     def test_p05_inlined_header_location_follows_inlined_at_to_checkout(self):
         """P05: a header-scoped location inlined into pointer.c is attributed to pointer.c via inlinedAt."""
         result = self._facts(P05_IR)
