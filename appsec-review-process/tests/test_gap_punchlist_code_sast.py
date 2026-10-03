@@ -142,7 +142,6 @@ class CodeIndexGaps(unittest.TestCase):
 
 
 class CodeqlFidelityGap(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p11_traced_success_replaces_build_mode_none_fidelity_gap(self):
         """P11: when a traced cpp row succeeded, the build-mode-none fidelity gap is not in coverage_gaps."""
         with tempfile.TemporaryDirectory() as folder:
@@ -163,7 +162,6 @@ class CodeqlFidelityGap(unittest.TestCase):
 class NativeSastCompileErrors(unittest.TestCase):
     IMAGE = native_tests.NativeSastTests.IMAGE
 
-    @unittest.expectedFailure
     def test_p12_compile_errors_are_not_tool_errors(self):
         """P12: clang-tidy files_compile_error yields clang-tidy-compile-error:<n>, not clang-tidy-tool-error."""
         with tempfile.TemporaryDirectory() as folder:
@@ -191,7 +189,6 @@ class NativeSastCompileErrors(unittest.TestCase):
                          f"compile errors reported as clang-tidy tool errors: {gaps}")
         self.assertTrue(any(gap.startswith("clang-tidy-compile-error:1") for gap in gaps))
 
-    @unittest.expectedFailure
     def test_p12_runner_classifies_clang_diagnostic_error_exit_as_compile_error(self):
         """P12: run_native_sast.py counts rc=1 with clang-diagnostic-error as files_compile_error, not a tool error."""
         path = REPO / "images/audit-native/scripts/run_native_sast.py"

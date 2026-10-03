@@ -397,6 +397,16 @@ def _raw(path: Path, attempt: Path) -> dict[str, Any]:
     return {"path": path.relative_to(attempt).as_posix(), "sha256": _hash(path)}
 
 
+_MISSING_HEADER = re.compile(r"'([A-Za-z0-9_][A-Za-z0-9_./+-]{0,95})' file not found\Z")
+
+
+def _missing_header(first: Any) -> str:
+    """``:missing-header:<name>`` when the runner's first compile error is a missing include (the
+    autotools config.h case); other compiler messages quote target code and stay in the attempt."""
+    match = _MISSING_HEADER.fullmatch(str(first.get("message", ""))) if isinstance(first, dict) else None
+    return f":missing-header:{match.group(1)}" if match and ".." not in match.group(1) else ""
+
+
 def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
                    clang_trial: Path, csa_trial: Path, inputs: dict[str, Any]) -> dict[str, Any]:
     clang_raw = read_json(clang_trial / "scratch/native-sast/findings-clang-tidy.json")
@@ -421,11 +431,16 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     gaps.extend(generated_gaps(unit.get("generated", [])))
     if dropped:
         gaps.append(f"analyzer-records-outside-checkout:{len(dropped)}")
-    tidy_failed = int(native_manifest["clang_tidy"]["files_nonzero_exit"])
+    tidy = native_manifest["clang_tidy"]
+    tidy_compile = int(tidy.get("files_compile_error", 0))  # absent from pre-P12 runner manifests
+    tidy_failed = int(tidy["files_nonzero_exit"]) - tidy_compile
     cpp_exit = int(native_manifest["cppcheck"]["exit_code"])
     csa_failed = int(csa_summary["tu_error"]) + int(csa_summary["tu_timeout"])
     if tidy_failed:
         gaps.append(f"clang-tidy-tool-error:{tidy_failed}-translation-units")
+    if tidy_compile:
+        gaps.append(f"clang-tidy-compile-error:{tidy_compile}-translation-units" +
+                    _missing_header(tidy.get("first_compile_error")))
     if cpp_exit:
         gaps.append(f"cppcheck-tool-error:exit-{cpp_exit}")
     if csa_failed:
@@ -435,7 +450,8 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     tools = [
         {"tool_id": "clang-tidy", "tool": "clang-tidy", "version": config["tools"]["clang-tidy"],
          "image_id": image["image_id"], "image_digest": image["digest"],
-         "config_sha256": inputs["config_sha256"], "status": "PARTIAL" if tidy_failed else "COMPLETE",
+         "config_sha256": inputs["config_sha256"],
+         "status": "PARTIAL" if tidy_failed or tidy_compile else "COMPLETE",
          "translation_units": supported, "analyzed_units": supported - tidy_failed,
          "records": len([x for x in leads if x["tool_id"] == "clang-tidy"]),
          "raw_evidence": [_raw(clang_trial / "scratch/native-sast/findings-clang-tidy.json", attempt),

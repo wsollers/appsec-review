@@ -23,6 +23,8 @@ from pathlib import Path
 
 SRC_EXTS = {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm"}
 TIDY_RE = re.compile(r"^(.*?):(\d+):(\d+):\s+(warning|error):\s+(.*?)(?:\s+\[([^\]]+)\])?$")
+OUTCOMES = ("timeout", "tool-missing", "tool-error", "compile-error")
+MESSAGE_LIMIT = 240
 
 
 def load_sources(compdb: Path) -> list[str]:
@@ -57,6 +59,26 @@ def parse_tidy(text: str) -> list[dict]:
             "check": m.group(6) or "unknown",
         })
     return findings
+
+
+def classify_tidy(rc: int, findings: list[dict]) -> str:
+    """Per-TU clang-tidy outcome. 124 (timeout), 127 (missing tool) and any other failure are tool
+    errors; rc 1 with an error-level compiler diagnostic (clang-diagnostic-error: missing header,
+    unknown flag) is a compile error, and the TU's findings still count."""
+    if rc in (0, 124, 127):
+        return {0: "ok", 124: "timeout", 127: "tool-missing"}[rc]
+    if rc == 1 and any(f["level"] == "error" for f in findings):
+        return "compile-error"
+    return "tool-error"
+
+
+def first_error(findings: list[dict]) -> dict | None:
+    """The first compiler error, bounded and stripped of control characters."""
+    for f in findings:
+        if f["level"] == "error":
+            return {"file": f["file"][-MESSAGE_LIMIT:], "line": f["line"], "check": f["check"][:80],
+                    "message": re.sub(r"[\x00-\x1f\x7f]+", " ", f["message"])[:MESSAGE_LIMIT]}
+    return None
 
 
 def run_tidy_one(src: str, compdb_dir: Path, checks: str, timeout: int) -> tuple[str, int, str]:
@@ -97,24 +119,35 @@ def main() -> int:
     tidy_log = out / "clang-tidy.log"
     tidy_findings: list[dict] = []
     tidy_status: dict[str, int] = {}
+    tidy_outcome: dict[str, str] = {}
+    compile_errors: dict[str, dict | None] = {}
     with tidy_log.open("w", encoding="utf-8", errors="replace") as log:
         with ThreadPoolExecutor(max_workers=args.jobs) as ex:
             futs = [ex.submit(run_tidy_one, src, compdb.parent, args.checks, args.timeout) for src in sources]
             for i, fut in enumerate(as_completed(futs), 1):
                 src, rc, text = fut.result()
+                found = parse_tidy(text)
                 tidy_status[src] = rc
-                log.write(f"\n===== clang-tidy {src} exit={rc} =====\n")
+                tidy_outcome[src] = classify_tidy(rc, found)
+                if tidy_outcome[src] == "compile-error":
+                    compile_errors[src] = first_error(found)
+                log.write(f"\n===== clang-tidy {src} exit={rc} outcome={tidy_outcome[src]} =====\n")
                 log.write(text)
-                tidy_findings.extend(parse_tidy(text))
+                tidy_findings.extend(found)
                 if i % 25 == 0 or i == len(futs):
                     print(f"clang-tidy {i}/{len(futs)}", flush=True)
+    # files_nonzero_exit stays the total; the outcome counts split it (P12).
+    tidy_counts = {"files_nonzero_exit": sum(1 for rc in tidy_status.values() if rc != 0),
+                   **{"files_" + name.replace("-", "_"): sum(1 for o in tidy_outcome.values() if o == name)
+                      for name in OUTCOMES},
+                   "first_compile_error": compile_errors[min(compile_errors)] if compile_errors else None}
 
     (out / "findings-clang-tidy.json").write_text(json.dumps({
         "tool": "clang-tidy",
         "checks": args.checks,
         "findings": tidy_findings,
         "files_attempted": len(sources),
-        "files_nonzero_exit": sum(1 for rc in tidy_status.values() if rc != 0),
+        **tidy_counts,
     }, indent=1))
 
     cppcheck_xml = out / "cppcheck.xml"
@@ -141,7 +174,7 @@ def main() -> int:
             "checks": args.checks,
             "findings": len(tidy_findings),
             "files_attempted": len(sources),
-            "files_nonzero_exit": sum(1 for rc in tidy_status.values() if rc != 0),
+            **tidy_counts,
             "log": str(tidy_log),
             "findings_file": str(out / "findings-clang-tidy.json"),
         },

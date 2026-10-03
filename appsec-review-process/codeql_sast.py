@@ -718,6 +718,8 @@ def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
             elif replay["failed"] or replay["refused"]:
                 gaps.append(f"codeql-traced-replay-incomplete:{key}:ok={replay['ok']}:failed={replay['failed']}:"
                             f"refused={replay['refused']}:total={replay['total']}")
+        elif language == "cpp":
+            gaps.extend(filter(None, [cpp_fidelity_gap(inputs["plan"], outcomes)]))
         elif language in FIDELITY_GAPS:
             gaps.append(FIDELITY_GAPS[language])
         if outcome.get("dependency_gap"):
@@ -731,6 +733,24 @@ def assemble(*, run_id: str, attempt_id: str, inputs: dict[str, Any],
             "status": "OK_WITH_GAPS" if gaps else "OK", "skip_reason": None,
             "build_modes": sorted({tool["build_mode"] for tool in tools}), "tools": tools, "leads": leads,
             "databases": databases, "coverage_gaps": list(dict.fromkeys(gaps))}
+
+
+def cpp_fidelity_gap(plan: list[dict[str, Any]], outcomes: dict[str, dict[str, Any]]) -> str | None:
+    """The none-mode cpp row's fidelity statement given the traced rows (P11): FIDELITY_GAPS["cpp"] without
+    native units; that plus the cause when no traced row ran; "N of M" when some ran; None when every native
+    unit ran traced (its replay gaps still stand)."""
+    traced = [row for row in plan if row["tool_id"] == TRACED_TOOL_ID and row["status"] != "NO_UNITS"]
+    if not traced:
+        return FIDELITY_GAPS["cpp"]
+    gap = {plan_key(row): row["gap"] if row["status"] != "READY" else
+           (outcomes.get(plan_key(row)) or {"gap": "no receipt"})["gap"] for row in traced}
+    ran = sum(value is None for value in gap.values())
+    if ran == len(traced):
+        return None
+    if ran:
+        return (f"CodeQL cpp --build-mode none results are heuristic (no compiler invocation); traced replay "
+                f"covered {ran} of {len(traced)} native units, so the others have heuristic results only.")
+    return f"{FIDELITY_GAPS['cpp']} Traced replay covered 0 of {len(traced)} native units: {next(iter(gap.values()))}"
 
 
 def _label(row: dict[str, Any]) -> str:
