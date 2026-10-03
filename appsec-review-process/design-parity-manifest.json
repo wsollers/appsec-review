@@ -4448,7 +4448,9 @@
         "dependencies": [
           "02-code-property-graph",
           "02-treesitter-ast",
-          "02-binary-triage"
+          "02-binary-triage",
+          "02-ir-facts",
+          "02-debug-symbol-index"
         ]
       },
       "registry": {

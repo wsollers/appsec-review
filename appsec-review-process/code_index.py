@@ -14,12 +14,17 @@ and never from target text:
   and imports (the CPG exporter records only a method's first line, so spans come from here).
 * the ``02-binary-triage`` dynamic export tables when accepted (``entry_exports``, brief Q),
   joined to CPG methods exactly as the reachability export entries are.
+* the ``02-ir-facts`` document when accepted: per (function, file) fact counts by kind
+  (``ir_functions``), joined to a CPG method by name.
+* the ``02-debug-symbol-index`` records when accepted: symbol names, kinds, addresses and DWARF
+  locations per binary (``debug_symbols``), joined to a CPG method by name.
 
-What the sources do not carry is not invented: the CPG exporter emits no inheritance, member or
-method-reference nodes, so ``type_edges`` stays empty and every hierarchy answer says
-``hierarchy_complete=false``; address-taken functions are the ``&name`` operator calls and
-identifiers that name a defined function, never a complete set. IR facts and the debug-symbol index
-are recorded as sources that are not indexed yet (a gap), never as silently absent.
+What the sources do not carry is not invented: ``type_edges`` holds only the exporter's
+``INHERITS`` rows (``typeDecl.inheritsFromTypeFullName``) and every hierarchy answer says
+``hierarchy_complete`` only when there are some; address-taken functions are the exporter's
+``METHOD_REF`` rows, ``&name`` operator calls and identifiers that name a defined function, never a
+complete set. An exporter that emitted no inheritance rows for an object-oriented language, or no
+method references at all, is recorded as a gap, never as silently absent.
 
 Rows are locators into the pinned source snapshot (``path:line`` plus the file's sha256) and are
 untrusted data: every name and text is control-stripped and length-capped as ``lsp_driver.clean``
@@ -63,7 +68,11 @@ FAMILY_OF = {name: family for family, names in FAMILIES.items() for name in name
 _STRING = re.compile(r'"(?:[^"\\\n]|\\.){1,400}"')
 _ADDRESS_OF = "<operator>.addressOf"
 TABLES = ("meta", "files", "methods", "calls", "sites", "types", "type_edges", "members", "identifiers",
-          "literals", "imports", "ts_functions", "ts_calls", "address_taken", "export_tables", "exports")
+          "literals", "imports", "ts_functions", "ts_calls", "address_taken", "export_tables", "exports",
+          "ir_functions", "debug_symbols")
+# Languages with type inheritance: zero INHERITS rows there is an exporter gap; C has none to export.
+INHERITANCE_LANGUAGES = frozenset(("cpp", "c_sharp", "java", "javascript", "typescript", "tsx", "python", "php",
+                                   "ruby"))
 DDL = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE files(path TEXT PRIMARY KEY, sha256 TEXT, language TEXT, source TEXT NOT NULL);
@@ -92,6 +101,10 @@ CREATE TABLE export_tables(artifact TEXT NOT NULL, binary_sha256 TEXT, artifact_
   gaps TEXT);
 CREATE TABLE exports(artifact TEXT NOT NULL, symbol TEXT NOT NULL, demangled TEXT, qualified TEXT,
   join_state TEXT NOT NULL, method_id INTEGER, candidates TEXT);
+CREATE TABLE ir_functions(function TEXT NOT NULL, method_id INTEGER, file TEXT, line INTEGER, facts INTEGER NOT NULL,
+  kinds TEXT NOT NULL);
+CREATE TABLE debug_symbols(binary_id TEXT NOT NULL, binary_sha256 TEXT, name TEXT NOT NULL, kind TEXT, address TEXT,
+  size INTEGER, file TEXT, line INTEGER, method_id INTEGER);
 CREATE VIRTUAL TABLE names USING fts5(name, kind UNINDEXED, ref UNINDEXED, file UNINDEXED,
   line UNINDEXED, tokenize='trigram');
 CREATE INDEX methods_name ON methods(name);
@@ -119,6 +132,9 @@ CREATE INDEX ts_functions_name ON ts_functions(name);
 CREATE INDEX ts_calls_file ON ts_calls(file, line);
 CREATE INDEX address_taken_method ON address_taken(method_id);
 CREATE INDEX exports_method ON exports(method_id);
+CREATE INDEX ir_functions_name ON ir_functions(function);
+CREATE INDEX debug_symbols_name ON debug_symbols(name);
+CREATE INDEX debug_symbols_file ON debug_symbols(file, line);
 """
 
 
@@ -205,11 +221,14 @@ def _enclosing_type(full_name: str) -> str | None:
 
 def build(db_path: Path, *, records: Path, cpg_summary: dict[str, Any], sources: dict[str, Any],
           treesitter: dict[str, Any] | None = None, export_tables: Iterable[dict[str, Any]] | None = None,
-          export_gaps: Iterable[str] = (), source_gaps: Iterable[str] = ()) -> dict[str, Any]:
+          export_gaps: Iterable[str] = (), source_gaps: Iterable[str] = (), ir_facts: dict[str, Any] | None = None,
+          debug_symbols: Iterable[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Build the database at ``db_path`` (replaced) and return its summary (without file hashes).
 
     ``sources`` is the hash binding of every upstream artifact (recorded verbatim); ``treesitter``
-    is the accepted AST document or None; ``export_tables`` the verified export tables or None."""
+    is the accepted AST document or None; ``export_tables`` the verified export tables or None;
+    ``ir_facts`` the accepted IR facts document and ``debug_symbols`` the accepted debug-symbol
+    records, each None when not bound (nothing to index, not a gap of this job)."""
     db_path = Path(db_path)
     if db_path.exists():
         db_path.unlink()
@@ -223,15 +242,21 @@ def build(db_path: Path, *, records: Path, cpg_summary: dict[str, Any], sources:
         connection.execute("PRAGMA synchronous=OFF")
         connection.executescript(DDL)
         counts = _fill(connection, graph, records, treesitter, export_tables, list(export_gaps))
+        counts |= _fill_native(connection, graph, ir_facts, debug_symbols)
         gaps = sorted(set(source_gaps) | {f"cpg-coverage-gap:{gap}" for gap in graph.gaps})
         if treesitter is None:
             gaps.append("source-absent:02-treesitter-ast (no outline, no function spans beyond the CPG's first line)")
         if export_tables is None:
             gaps.append("source-absent:02-binary-triage export tables (code_exports unavailable)")
-        gaps += ["source-not-indexed:02-ir-facts", "source-not-indexed:02-debug-symbol-index",
-                 "cpg-exporter:no-inheritance-edges", "cpg-exporter:no-method-reference-nodes"]
+        languages = {language for (language,) in connection.execute("SELECT DISTINCT language FROM files WHERE source LIKE 'cpg%'")}
+        if not counts["type_edges"] and languages & INHERITANCE_LANGUAGES:
+            gaps.append("cpg-exporter:no-inheritance-edges")
+        if not counts["method_references"]:
+            gaps.append("cpg-exporter:no-method-reference-nodes")
         capabilities = {"cpg": True, "treesitter": treesitter is not None,
-                        "exports": export_tables is not None, "type_edges": counts["type_edges"] > 0}
+                        "exports": export_tables is not None, "type_edges": counts["type_edges"] > 0,
+                        "method_references": counts["method_references"] > 0,
+                        "ir_facts": ir_facts is not None, "debug_symbols": debug_symbols is not None}
         meta = {"schema": SCHEMA, "sources": sources, "graph_gaps": list(graph.gaps),
                 "capabilities": capabilities, "gaps": gaps}
         connection.executemany("INSERT INTO meta VALUES(?,?)",
@@ -255,7 +280,9 @@ def _fill(connection: sqlite3.Connection, graph: reachability.CallGraph, records
     signatures: dict[str, str] = {}
     files: dict[str, tuple[str | None, str]] = {}
     types: list[tuple] = []
-    address: list[tuple[str, str, int, str, str]] = []   # (name, file, line, how, code)
+    edges: set[tuple[str, str, str]] = set()
+    address: list[tuple[str, str, str, int, str, str]] = []   # (name, full name or "", file, line, how, code)
+    references = 0
     defined_short = set(graph.by_short)
     identifiers = literals = 0
     names_rows: list[tuple] = []
@@ -265,6 +292,10 @@ def _fill(connection: sqlite3.Connection, graph: reachability.CallGraph, records
             files[path] = (record.get("source_sha256"), "cpg")
         if kind == "symbol" and record.get("label") == "METHOD":
             signatures.setdefault(record.get("full_name") or "", record.get("type_name") or "")
+        elif kind == "type" and record.get("label") == "INHERITS":
+            derived, base = clean(record.get("full_name"), 1000), clean(record.get("type_name"), 1000)
+            if derived and base:
+                edges.add((derived, base, "cpg-inherits"))
         elif kind == "type":
             types.append((clean(record.get("name")) or "", clean(record.get("full_name"), 1000) or "",
                           clean(record.get("label")) or "TYPE_DECL", path, line, clean(record.get("code"), CODE_LIMIT)))
@@ -274,14 +305,21 @@ def _fill(connection: sqlite3.Connection, graph: reachability.CallGraph, records
                 insert("INSERT INTO identifiers VALUES(?,?,?,?)", (name, path, line, clean(record.get("type_name"))))
                 identifiers += 1
                 if name in defined_short:
-                    address.append((name, path, line, "identifier-names-function", clean(record.get("code"), CODE_LIMIT) or ""))
+                    address.append((name, "", path, line, "identifier-names-function", clean(record.get("code"), CODE_LIMIT) or ""))
+        elif kind == "method-reference":
+            references += 1
+            full, name, code = record.get("full_name") or "", clean(record.get("name")) or "", clean(record.get("code"), CODE_LIMIT) or ""
+            if full in graph.methods:
+                address.append((graph.methods[full]["name"], full, path, line, "method-reference", code))
+            elif name in defined_short:
+                address.append((name, "", path, line, "method-reference", code))
         elif kind in ("call", "memory-operation"):
             code = record.get("code") or ""
             if record.get("full_name") == _ADDRESS_OF or record.get("name") == _ADDRESS_OF:
                 target = code.strip().lstrip("&").strip().strip("()").strip()
                 target = target.rsplit("::", 1)[-1]
                 if target in defined_short:
-                    address.append((target, path, line, "address-of-operator", clean(code, CODE_LIMIT) or ""))
+                    address.append((target, "", path, line, "address-of-operator", clean(code, CODE_LIMIT) or ""))
             for match in _STRING.findall(code):
                 value = clean(match[1:-1], NAME_LIMIT)
                 if value:
@@ -345,8 +383,10 @@ def _fill(connection: sqlite3.Connection, graph: reachability.CallGraph, records
     for index, row in enumerate(types, 1):
         insert("INSERT INTO types VALUES(?,?,?,?,?,?,?)", (index, *row))
         names_rows.append((row[0], "type", str(index), row[3], row[4]))
-    for name, path, line, how, code in sorted(set(address), key=lambda row: (row[1] or "", row[2], row[0], row[3])):
-        for full in sorted(graph.by_short.get(name, [])):
+    for derived, base, source in sorted(edges):
+        insert("INSERT INTO type_edges VALUES(?,?,?)", (derived, base, source))
+    for name, exact, path, line, how, code in sorted(set(address), key=lambda row: (row[2] or "", row[3], row[0], row[4], row[1])):
+        for full in [exact] if exact else sorted(graph.by_short.get(name, [])):
             insert("INSERT INTO address_taken VALUES(?,?,?,?,?,?)", (method_ids[full], clean(full, 1000), path, line,
                                                                    how, code))
     for item in sorted((treesitter or {}).get("files", []), key=lambda row: row["path"]):
@@ -400,7 +440,50 @@ def _fill(connection: sqlite3.Connection, graph: reachability.CallGraph, records
                            [row for row in names_rows if row[0]])
     return {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in TABLES if table != "meta"} | {"identifiers": identifiers, "literals": literals,
-                                                       "export_rows": exports}
+                                                       "export_rows": exports, "method_references": references}
+
+
+def _fill_native(connection: sqlite3.Connection, graph: reachability.CallGraph, ir_facts: dict[str, Any] | None,
+                 debug_symbols: Iterable[dict[str, Any]] | None) -> dict[str, int]:
+    """IR fact functions and debug symbols, joined to a CPG method only when the name is unique (in
+    the file when one is recorded); everything else keeps ``method_id`` NULL."""
+    def join(name: str | None, path: str | None) -> int | None:
+        candidates = graph.by_short.get(name or "", [])
+        local = [full for full in candidates if path and graph.methods[full]["path"] == path]
+        chosen = local if len(local) == 1 else candidates if len(candidates) == 1 else []
+        return ids.get(chosen[0]) if chosen else None
+    ids = {full: mid for mid, full in connection.execute("SELECT id, full_name FROM methods")}
+    names_rows: list[tuple] = []
+    functions: dict[tuple[str, str | None], dict[str, Any]] = {}
+    lines = {item.get("debug_location_id"): item.get("source_line") for item in (ir_facts or {}).get("debug_locations", [])
+             if isinstance(item, dict)}
+    for fact in (ir_facts or {}).get("facts", []):
+        if not fact.get("function"):
+            continue
+        row = functions.setdefault((fact["function"], fact.get("source_path")), {"line": None, "kinds": {}})
+        line = lines.get(fact.get("debug_location_id"))
+        if isinstance(line, int) and (row["line"] is None or line < row["line"]):
+            row["line"] = line
+        row["kinds"][fact["kind"]] = row["kinds"].get(fact["kind"], 0) + 1
+    for (function, path), row in sorted(functions.items(), key=lambda item: (item[0][1] or "", item[0][0])):
+        name = clean(function, 1000) or ""
+        connection.execute("INSERT INTO ir_functions VALUES(?,?,?,?,?,?)", (name, join(function, path), path, row["line"],
+                           sum(row["kinds"].values()), _json(row["kinds"])))
+        names_rows.append((clean(function) or "", "ir-function", name, path, row["line"]))
+    symbols = []
+    for record in debug_symbols or []:
+        for symbol in record.get("symbols", []):
+            symbols.append((clean(record.get("binary_id"), 1000) or "", record.get("binary_sha256"),
+                            clean(symbol.get("name"), 1000) or "", clean(symbol.get("kind")), clean(symbol.get("address")),
+                            symbol.get("size"), symbol.get("source_path"), symbol.get("line")))
+    for row in sorted(set(symbols), key=lambda row: (row[0], row[6] or "", row[7] or 0, row[2], row[4] or "")):
+        if row[2]:
+            connection.execute("INSERT INTO debug_symbols VALUES(?,?,?,?,?,?,?,?,?)", (*row, join(row[2], row[6])))
+            names_rows.append((clean(row[2]) or "", "debug-symbol", row[2], row[6], row[7]))
+    connection.executemany("INSERT INTO names(name, kind, ref, file, line) VALUES(?,?,?,?,?)",
+                           [row for row in names_rows if row[0]])
+    return {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("ir_functions", "debug_symbols")}
 
 
 def content_sha256(connection: sqlite3.Connection) -> str:

@@ -7,8 +7,8 @@
   `argument_count=null` means the call text was truncated or not a plain call (macro form); it is
   unknown, not zero.
 - `code_address_taken function=`: where a function's address is taken (`&f`) or it is named as a
-  value. Never complete: the CPG export has no method-reference nodes, so tables filled by macros or
-  initialisers can be missing.
+  value (CPG method references, `&` operator calls, identifiers naming a function). Never complete:
+  addresses formed through casts, macros or initialisers the CPG did not model can be missing.
 Limits: calls through function pointers or unexpanded macros are not listed by name.
 Cite: each row is a call-site locator. Read the call and the size/bounds logic around it before
 claiming a defect; a call to memcpy is not a finding.

@@ -56,6 +56,18 @@
             "object",
             "null"
           ]
+        },
+        "ir_facts": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "debug_symbols": {
+          "type": [
+            "object",
+            "null"
+          ]
         }
       }
     },
@@ -79,6 +91,15 @@
           "type": "boolean"
         },
         "type_edges": {
+          "type": "boolean"
+        },
+        "method_references": {
+          "type": "boolean"
+        },
+        "ir_facts": {
+          "type": "boolean"
+        },
+        "debug_symbols": {
           "type": "boolean"
         }
       }

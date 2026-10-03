@@ -18,7 +18,10 @@ import size_log
 from schema_validate import validate_document
 
 SCHEMA = "appsec-review/code-property-graph/1.0"
-KINDS = frozenset(("call", "symbol", "type", "identifier", "memory-operation"))
+KINDS = frozenset(("call", "symbol", "type", "identifier", "memory-operation", "method-reference"))
+# Location-less definitions are Joern external stubs (<operator>.*, libc, unresolved callees): the
+# exporter filters isExternal(false), older exports did not. Info, not a coverage gap.
+STUB_KINDS = frozenset(("symbol", "type"))
 QUERY_KINDS = frozenset(("calls", "symbols", "types", "flows", "memory-operations"))
 LIMITS = {
     "max_input_bytes": tunables.value("02-code-property-graph", "cpg_input_bytes_logged"),   # logged
@@ -114,7 +117,9 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
                      LIMITS["max_input_bytes"])
     ordinal = 0
     records: list[dict[str, Any]] = []
-    skipped = {"no_source_location": 0, "duplicate": 0}
+    skipped = {"no_source_location": 0}
+    # Not gaps: external stubs, and identical rows c2cpg emits at each macro expansion site.
+    observed = {"external_stub": 0, "duplicate": 0}
     seen: set[str] = set()
     source_cache: dict[Path, tuple[str, int]] = {}
     with raw.open("r", encoding="utf-8") as stream:
@@ -138,7 +143,10 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
             if (item["file"] == "" or
                     (isinstance(item["file"], str) and item["file"].startswith("<") and item["file"].endswith(">")) or
                     line_number is None):
-                skipped["no_source_location"] += 1
+                if kind in STUB_KINDS:
+                    observed["external_stub"] += 1
+                else:
+                    skipped["no_source_location"] += 1
                 continue
             if (not isinstance(line_number, int) or isinstance(line_number, bool) or line_number < 1 or
                     (column is not None and (not isinstance(column, int) or isinstance(column, bool) or column < 1))):
@@ -168,7 +176,7 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
             identity = "cpg_" + digest((kind, relative, line_number, column, fields["label"],
                                          fields["name"], fields["full_name"], fields["caller"], fields["code"]))[:24]
             if identity in seen:
-                skipped["duplicate"] += 1
+                observed["duplicate"] += 1
                 continue
             seen.add(identity)
             records.append({"record_id": identity, "kind": kind, **fields,
@@ -192,7 +200,9 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
         "records": records, "coverage_gaps": [
             {"reason": reason.replace("_", "-"), "count": count}
             for reason, count in sorted(skipped.items()) if count
-        ], "limits": LIMITS, "claim_boundary": "STRUCTURAL_RETRIEVAL_NOT_FINDING_OR_RUNTIME_PROOF"}
+        ], "observations": [{"reason": reason.replace("_", "-"), "count": count}
+                            for reason, count in sorted(observed.items()) if count],
+        "limits": LIMITS, "claim_boundary": "STRUCTURAL_RETRIEVAL_NOT_FINDING_OR_RUNTIME_PROOF"}
     if outcomes is not None:
         result["frontends"] = outcomes
     if validate_document(result, "code-property-graph.schema.json"):
@@ -206,7 +216,7 @@ def structural_query(document: dict[str, Any], *, operation: str, text: str = ""
         raise ValueError("unsupported or unbounded structural query")
     if any(len(value) > LIMITS["max_search_chars"] for value in (text, caller, callee)):
         raise ValueError("structural query text exceeds its bound")
-    accepted = {"calls": {"call", "memory-operation"}, "symbols": {"symbol", "identifier"},
+    accepted = {"calls": {"call", "memory-operation"}, "symbols": {"symbol", "identifier", "method-reference"},
                 "types": {"type"}, "flows": {"call", "memory-operation"},
                 "memory-operations": {"memory-operation"}}[operation]
     needle = text.casefold().strip()

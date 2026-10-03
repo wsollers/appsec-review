@@ -197,7 +197,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [CodeQL Rust](#job-02-codeql-rust) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-codeql-rust`](#a-job-02-codeql-rust) |
 | [Joern Code Property Graph](#job-02-code-property-graph) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-code-property-graph`](#a-job-02-code-property-graph) |
 | [Tree-sitter AST summary](#job-02-treesitter-ast) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-treesitter-ast`](#a-job-02-treesitter-ast) |
-| [Structural code index (SQLite)](#job-02-code-index) | lifecycle job | [`02-code-property-graph`](#a-job-02-code-property-graph)<br>[`02-treesitter-ast`](#a-job-02-treesitter-ast)<br>[`02-binary-triage`](#a-job-02-binary-triage) | [`02-code-index`](#a-job-02-code-index) |
+| [Structural code index (SQLite)](#job-02-code-index) | lifecycle job | [`02-code-property-graph`](#a-job-02-code-property-graph)<br>[`02-treesitter-ast`](#a-job-02-treesitter-ast)<br>[`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index) | [`02-code-index`](#a-job-02-code-index) |
 | [Native SAST](#job-02-native-sast) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-native-sast`](#a-job-02-native-sast) |
 | [IR Capture](#job-02-ir-capture) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-ir-capture`](#a-job-02-ir-capture) |
 | [IR Link](#job-02-ir-link) | lifecycle job | [`02-ir-capture`](#a-job-02-ir-capture) | [`02-ir-link`](#a-job-02-ir-link) |
@@ -1339,7 +1339,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-codeql-rust`](#job-02-codeql-rust) | `codeql-language` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-code-property-graph`](#job-02-code-property-graph) | `code-property-graph` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-treesitter-ast`](#job-02-treesitter-ast) | `treesitter-ast` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-code-index`](#job-02-code-index) | `code-index` | implemented_not_qualified | `02-code-property-graph`, `02-treesitter-ast`, `02-binary-triage` |
+| `02-evidence-pregather` | [`02-code-index`](#job-02-code-index) | `code-index` | implemented_not_qualified | `02-code-property-graph`, `02-treesitter-ast`, `02-binary-triage`, `02-ir-facts` (optional), `02-debug-symbol-index` (optional) |
 | `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `ir-link` | implemented_not_qualified | `02-ir-capture` |
@@ -1984,8 +1984,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `cpu` |
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
-| Consumes (graph) | [`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-treesitter-ast`](#job-02-treesitter-ast) (required, contract `treesitter-ast`)<br>[`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`) |
-| Declared inputs (pipeline/job-templates/02-code-index.json) | accepted code property graph records file<br>accepted tree-sitter AST summary *(optional)*<br>accepted binary triage export tables *(optional)* |
+| Consumes (graph) | [`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-treesitter-ast`](#job-02-treesitter-ast) (required, contract `treesitter-ast`)<br>[`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-ir-facts`](#job-02-ir-facts) (optional, contract `ir-facts`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (optional, contract `debug-symbol-index`) |
+| Declared inputs (pipeline/job-templates/02-code-index.json) | accepted code property graph records file<br>accepted tree-sitter AST summary *(optional)*<br>accepted binary triage export tables *(optional)*<br>accepted IR facts *(optional)*<br>accepted debug-symbol index records *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-code-index/` |
 | Output files (pipeline/output-contracts/code-index.json) | code-index.json<br>code-index.sqlite<br>code-index-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
@@ -2068,7 +2068,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (pipeline/job-templates/02-ir-facts.json) | accepted linked LLVM module |
 | Produces | `runs/<run_id>/data/jobs/02-ir-facts/` |
 | Output files (pipeline/output-contracts/ir-facts.json) | ir-facts.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-code-index`](#job-02-code-index) |
 | Gaps | `live_dagster_qualification_missing` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -2088,7 +2088,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (pipeline/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-debug-symbol-index/` |
 | Output files (pipeline/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json<br>debug-symbol-index.records.jsonl |
-| Consumed by | [`02-binary-cfg`](#job-02-binary-cfg) |
+| Consumed by | [`02-code-index`](#job-02-code-index)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -3225,8 +3225,8 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-native-sast"></a>`02-native-sast` | job output | runs/<run_id>/data/jobs/02-native-sast/ | [`02-native-sast`](#job-02-native-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`07-hypothesis-discovery`](#job-07-hypothesis-discovery) |
 | <a id="a-job-02-ir-capture"></a>`02-ir-capture` | job output | runs/<run_id>/data/jobs/02-ir-capture/ | [`02-ir-capture`](#job-02-ir-capture) | [`02-ir-link`](#job-02-ir-link) |
 | <a id="a-job-02-ir-link"></a>`02-ir-link` | job output | runs/<run_id>/data/jobs/02-ir-link/ | [`02-ir-link`](#job-02-ir-link) | [`02-ir-facts`](#job-02-ir-facts) |
-| <a id="a-job-02-ir-facts"></a>`02-ir-facts` | job output | runs/<run_id>/data/jobs/02-ir-facts/ | [`02-ir-facts`](#job-02-ir-facts) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir) |
-| <a id="a-job-02-debug-symbol-index"></a>`02-debug-symbol-index` | job output | runs/<run_id>/data/jobs/02-debug-symbol-index/ | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | [`02-binary-cfg`](#job-02-binary-cfg) |
+| <a id="a-job-02-ir-facts"></a>`02-ir-facts` | job output | runs/<run_id>/data/jobs/02-ir-facts/ | [`02-ir-facts`](#job-02-ir-facts) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-reachability-ir`](#job-06-reachability-ir)<br>[`02-code-index`](#job-02-code-index) |
+| <a id="a-job-02-debug-symbol-index"></a>`02-debug-symbol-index` | job output | runs/<run_id>/data/jobs/02-debug-symbol-index/ | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | [`02-code-index`](#job-02-code-index)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | <a id="a-job-02-binary-triage"></a>`02-binary-triage` | job output | runs/<run_id>/data/jobs/02-binary-triage/ | [`02-binary-triage`](#job-02-binary-triage) | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest)<br>[`02-code-index`](#job-02-code-index)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | <a id="a-job-02-binary-cfg"></a>`02-binary-cfg` | job output | runs/<run_id>/data/jobs/02-binary-cfg/ | [`02-binary-cfg`](#job-02-binary-cfg) | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) |
 | <a id="a-job-02-test-execution"></a>`02-test-execution` | job output | runs/<run_id>/data/jobs/02-test-execution/ | [`02-test-execution`](#job-02-test-execution) | [`02-test-result-ingest`](#job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) |

@@ -154,8 +154,61 @@ class SanitisingAndIntegrityTests(IndexCase):
             query.CodeIndex(self.jobs, "02-code-index/../x/code-index.json", self.summary)
 
 
+class HierarchyAndNativeSourceTests(unittest.TestCase):
+    """P09/P10: INHERITS and METHOD_REF records, IR facts and debug symbols are indexed, not reported as gaps."""
+    IR = {"debug_locations": [{"debug_location_id": "d1", "source_line": 10, "source_column": 3,
+                               "function": "parse_request", "module_id": "m", "source_path": "app/parse.c",
+                               "source_sha256": fx.SHA["app/parse.c"]}],
+          "facts": [{"fact_id": "f1", "kind": "memory-intrinsic", "ir_line": 4, "function": "parse_request",
+                     "module_id": "m", "source_path": "app/parse.c", "source_sha256": fx.SHA["app/parse.c"],
+                     "debug_location_id": "d1"},
+                    {"fact_id": "f2", "kind": "memory-read", "ir_line": 5, "function": "parse_request",
+                     "module_id": "m", "source_path": "app/parse.c", "source_sha256": fx.SHA["app/parse.c"],
+                     "debug_location_id": None}]}
+    DEBUG = [{"binary_id": "bin-app", "binary_sha256": "sha256:" + "4" * 64, "symbols": [
+        {"address": "0x1000", "size": 64, "name": "on_message", "kind": "T", "source_path": "app/net.c", "line": 1},
+        {"address": "0x2000", "size": 8, "name": "log_msg", "kind": "T", "source_path": "lib/log.c", "line": 1}]}]
+
+    def test_records_fill_type_edges_address_taken_ir_and_debug_tables(self):
+        inherits = {**fx.type_decl("Button", "ui.Button", "src/widget.cpp", 12), "label": "INHERITS",
+                    "type_name": "ui.Widget"}
+        reference = {**fx.call("main", "on_message", "on_message", "app/main.c", 7, "on_message"),
+                     "kind": "method-reference", "label": "METHOD_REF"}
+        with tempfile.TemporaryDirectory() as folder:
+            records, summary = fx.write_cpg(Path(folder), records=fx.RECORDS + [inherits, reference])
+            result = code_index.build(Path(folder) / code_index.SQLITE, records=records, cpg_summary=summary,
+                                      sources={"cpg": {}}, treesitter=fx.TREESITTER, export_tables=fx.EXPORTS,
+                                      ir_facts=self.IR, debug_symbols=self.DEBUG)
+            connection = code_index.open_readonly(Path(folder) / code_index.SQLITE)
+            try:
+                edges = connection.execute("SELECT * FROM type_edges").fetchall()
+                taken = connection.execute("SELECT full_name, line, how FROM address_taken WHERE how='method-reference'").fetchall()
+                ir = connection.execute("SELECT function, method_id IS NOT NULL, line, facts FROM ir_functions").fetchall()
+                debug = connection.execute("SELECT name, method_id IS NOT NULL FROM debug_symbols ORDER BY name").fetchall()
+                types = connection.execute("SELECT COUNT(*) FROM types").fetchone()[0]
+            finally:
+                connection.close()
+        self.assertEqual(edges, [("ui.Button", "ui.Widget", "cpg-inherits")])
+        self.assertEqual(types, 2)                                  # an INHERITS row is an edge, not a type
+        self.assertEqual(taken, [("on_message", 7, "method-reference")])
+        self.assertEqual(ir, [("parse_request", 1, 10, 2)])
+        self.assertEqual(debug, [("log_msg", 1), ("on_message", 1)])   # log_msg joins by file among overloads
+        self.assertTrue(all(result["capabilities"][key] for key in ("type_edges", "method_references", "ir_facts",
+                                                                    "debug_symbols")))
+        self.assertFalse([gap for gap in result["gaps"] if gap.startswith(("cpg-exporter:", "source-not-indexed:"))])
+
+    def test_a_c_only_export_without_method_references_keeps_only_that_gap(self):
+        records = [row for row in fx.RECORDS if row["source_path"] != "src/widget.cpp"]
+        with tempfile.TemporaryDirectory() as folder:
+            path, summary = fx.write_cpg(Path(folder), records=records)
+            result = code_index.build(Path(folder) / code_index.SQLITE, records=path, cpg_summary=summary,
+                                      sources={"cpg": {}})
+        self.assertIn("cpg-exporter:no-method-reference-nodes", result["gaps"])
+        self.assertNotIn("cpg-exporter:no-inheritance-edges", result["gaps"])   # C has no inheritance to export
+
+
 class GrantTests(unittest.TestCase):
-    PROFILE = {"allowed_actions": ["read", "query tool: code_symbol", "query tool: code_callers",
+    PROFILE ={"allowed_actions": ["read", "query tool: code_symbol", "query tool: code_callers",
                                    "query tool: code_file_outline", "query tool: code_exports"]}
 
     def package(self, profile, summary=None, ref=None):
