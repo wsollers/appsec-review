@@ -51,6 +51,7 @@ class AssemblyBindingTests(unittest.TestCase):
     def setUp(self):
         self.case = tfa.FullReviewInputAssemblyTests("test_component_map_derives_exact_first_wave_and_explicit_na_rows")
         self.case.setUp()
+        self.addCleanup(self.case.doCleanups)  # the borrowed case's own patches (source_projection)
         self.addCleanup(self.case.tearDown)
         runs = patch.object(execution_state, "RUNS", self.case.runs)
         runs.start()

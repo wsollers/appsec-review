@@ -240,9 +240,13 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 self.assertEqual(len(names), len(set(names)))
                 self.assertLessEqual(set(backticked(s.adr_nodes[job][2])), above)
                 for edge in declared:
-                    self.assertEqual(edge["kind"], "required")
+                    # 02-native-build feeds the SBOM's build-dependency inference (punch list P37) as an
+                    # optional, ordering-tolerant edge (P42): a crashed build never holds the SBOM.
+                    optional = (job, edge["job"]) == ("02-sbom-inventory", "02-native-build")
+                    self.assertEqual(edge["kind"], "optional" if optional else "required")
                     self.assertEqual(edge["contract"], s.jobs[edge["job"]]["contract"])
-                    self.assertEqual(edge["allowed_skip_reasons"], [])
+                    self.assertEqual(edge["allowed_skip_reasons"],
+                                     ["not-applicable-non-native", "not-applicable-no-native-binaries"] if optional else [])
                 legacy = {step for tool in s.adopted[job]["tool_instances"] for step in tool.get("legacy_steps", [])}
                 mapped = [step for step in steps if step.get("proposed_job_id") == job]
                 self.assertEqual({step["legacy_step"] for step in mapped}, legacy)
@@ -276,10 +280,14 @@ class VendorPrepassGraphTests(unittest.TestCase):
         uses = {(consumer, edge["job"]) for consumer, node in s.jobs.items() for edge in node["dependencies"]
                 if self.reason in edge["allowed_skip_reasons"]}
         # 02-binary-component-cve-match (cve-bin-tool, docs/proposals/vendor-prepass/blint-cve-bin-tool.md)
-        # skips like 02-binary-hardening but is not one of the ADR-0010 nine nodes.
+        # skips like 02-binary-hardening but is not one of the ADR-0010 nine nodes. The four static
+        # intelligence ingests skip when the inventory holds no applicable input (punch list P16).
         self.assertEqual(uses, {(ASSEMBLY, job) for job in skippable} |
                          {("15-deployment-hardening", "02-iac-config-scan"),
-                          (ASSEMBLY, "02-binary-component-cve-match")})
+                          (ASSEMBLY, "02-binary-component-cve-match")} |
+                         {(ASSEMBLY, job) for job in ("02-api-collection-intelligence-ingest",
+                                                      "02-operations-doc-ingest", "02-test-intelligence-ingest",
+                                                      "02-doc-intelligence-ingest")})
         self.assertEqual(s.jobs[ASSEMBLY]["join_policy"]["mode"], s.fixture["consumer_join"]["join_policy_mode"])
         self.assertEqual(s.fixture["consumer_join"]["job"], ASSEMBLY)
 
