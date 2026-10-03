@@ -60,6 +60,7 @@ identifier that changed. At least these:
     the conditional rule for partially classified components
   - cJSON purl/CPE
   - the native-build generated-headers artifact (P35)
+  - the native-build `build-dependencies.json` record (P36) and SBOM components inferred from it: OS packages with runtime/build scope, vendored header trees (P37)
 - Graph and catalog changes: any new optional edges (02-ir-facts and 02-debug-symbol-index into
   02-code-index), new artifacts, and changed output contracts.
 - Image script changes that need a rebuild and re-pin:
