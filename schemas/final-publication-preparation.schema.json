@@ -58,7 +58,7 @@
           "required": ["binding", "state", "final_publication_affected"],
           "properties": {
             "binding": {"$ref": "control-publication-binding.schema.json"},
-            "state": {"enum": ["NO_PROGRESS", "ITERATION_LIMIT"]},
+            "state": {"enum": ["INITIAL_BASELINE", "NO_PROGRESS", "ITERATION_LIMIT"]},
             "final_publication_affected": {"const": true}
           }
         },

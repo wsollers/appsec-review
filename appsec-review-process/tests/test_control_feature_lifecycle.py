@@ -75,6 +75,29 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
             result = life.run("run", "dag", "remediation-retest-feedback")
         self.assertEqual(result, {"status":"SKIPPED", "skip_reason":"not-applicable-no-verified-claims"})
 
+    def test_rescope_is_an_initial_baseline_until_an_earlier_intake_was_published(self):
+        inputs = {"run_id":"run", "job_id":"dynamic-rescope", "source_generation":SHA, "code":{},
+                  "intake":BINDING, "nodes":["00-intake", "10-report", "final-publication-gate"],
+                  "edges":[{"upstream":"00-intake", "downstream":"10-report"},
+                           {"upstream":"10-report", "downstream":"final-publication-gate"}],
+                  "changed_nodes":["00-intake"], "max_iterations":1}
+        with tempfile.TemporaryDirectory() as folder, \
+             mock.patch.object(life, "data_path", side_effect=lambda _run,*parts:Path(folder).joinpath(*parts)):
+            attempts = Path(folder) / "jobs" / "dynamic-rescope" / "attempts"
+            self.assertEqual(life._prior_intakes("run", SHA), [])
+            for name, intake, status in (("a0", "sha256:" + "9" * 64, "OK"), ("a1", SHA, "OK"),
+                                         ("a2", "sha256:" + "8" * 64, "FAILED")):
+                atomic_json(attempts / name / "inputs.json", {"intake":{**BINDING, "artifact_sha256":intake}})
+                atomic_json(attempts / name / "result.json", {"execution_status":status})
+            changed = life._prior_intakes("run", SHA)
+        self.assertEqual(changed, ["sha256:" + "9" * 64])
+        result, status, gaps, _skip = life._produce("run", "dynamic-rescope", {**inputs, "prior_intakes":[]})
+        self.assertEqual((result["state"], status, gaps), ("INITIAL_BASELINE", "OK", []))
+        self.assertEqual(validate_document(result, "bounded-rescope-plan.schema.json"), [])
+        result, status, gaps, _skip = life._produce("run", "dynamic-rescope", {**inputs, "prior_intakes":changed})
+        self.assertEqual((result["state"], status, gaps),
+                         ("ITERATION_LIMIT", "OK_WITH_GAPS", ["initial-intake-change-rescopes-current-graph"]))
+
     def test_completeness_accounts_for_unresolved_obligations_as_declared_gaps(self):
         report = {"verified_findings":[], "unresolved_candidates":[{"claim_id":"c1",
             "proof_obligations":[{"obligation_id":"o1", "statement":"Needs runtime proof."}]}],

@@ -10,7 +10,9 @@ beside Joern/CPG, not a replacement, and nothing here executes or evaluates targ
 Determinism: files are sorted by path, rows by position, text is control-stripped and truncated,
 and ``content_sha256`` is the sha256 of the canonical JSON of everything except itself. Timing and
 memory go to ``--stats`` (not hashed). Coverage problems are ``gaps`` (oversized, unreadable,
-symlinked, languages without a grammar, per-file row caps), never silent omissions.
+symlinked, languages without a grammar, per-file row caps), never silent omissions. Build scripts,
+docs and config that are not program source (``NON_SOURCE_*``) are counted in ``totals.non_source``,
+not reported as missing grammars.
 
     /opt/treesitter/bin/python treesitter_ast.py --root /workspace --out /scratch/treesitter-ast.json \\
         --stats /scratch/treesitter-ast.stats.json
@@ -65,6 +67,12 @@ SUFFIXES = {
     ".json": "json", ".php": "php", ".py": "python", ".pyi": "python", ".rb": "ruby", ".rs": "rust",
     ".ts": "typescript", ".mts": "typescript", ".cts": "typescript", ".tsx": "tsx",
 }
+# Not program source: build-system inputs, docs and config. Counted (totals.non_source), not gaps.
+NON_SOURCE_SUFFIXES = {".am", ".ac", ".in", ".m4", ".mk", ".md", ".rst", ".txt", ".texi", ".yml", ".yaml",
+                       ".cfg", ".ini", ".toml"}
+NON_SOURCE_NAMES = {"Makefile", "GNUmakefile", "makefile", "configure", "LICENSE", "COPYING", "AUTHORS",
+                    "NEWS", "README", "ChangeLog", "INSTALL", "THANKS", "TODO", "NOTICE", ".gitignore",
+                    ".gitattributes", ".editorconfig"}
 # Node types per language: function definitions, call sites, imports.
 FUNCTIONS = {
     "bash": {"function_definition"},
@@ -274,7 +282,8 @@ class Scan:
         self.root = root.resolve()
         self.label = label or self.root.name or "/"
         self.file_list = file_list
-        self.totals = {"files": 0, "bytes": 0, "functions": 0, "calls": 0, "imports": 0, "error_nodes": 0}
+        self.totals = {"files": 0, "bytes": 0, "functions": 0, "calls": 0, "imports": 0, "error_nodes": 0,
+                       "non_source": 0}
         self.parse_seconds = 0.0
         self._manifest = hashlib.sha256(b"[")
 
@@ -286,6 +295,10 @@ class Scan:
                 self.gaps.append({"kind": problem, "path": relative, "detail": problem})
                 continue
             language = SUFFIXES.get(path.suffix.lower())
+            if language is None and (path.name in NON_SOURCE_NAMES or
+                                     path.suffix.lower() in NON_SOURCE_SUFFIXES):
+                self.totals["non_source"] += 1
+                continue
             if language is None:
                 unsupported[path.suffix.lower() or "(none)"] += 1
                 continue

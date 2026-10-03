@@ -44,6 +44,21 @@ class ContainerRequest(unittest.TestCase):
         self.assertEqual(request["argv"][:2], ["/opt/treesitter/bin/python", "-B"])
 
 
+class NonSource(unittest.TestCase):
+    def test_build_and_doc_files_are_counted_but_unparsed_source_stays_a_gap(self):
+        import types
+        fake = types.SimpleNamespace(Language=lambda value: value, Parser=lambda language: None)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("Makefile.am", "configure", "README.md", "app.kt"):
+                (root / name).write_text("x\n")
+            scan = ast.Scan(root, tree_sitter=fake, label="fixture")
+            list(scan.records())
+        self.assertEqual(scan.totals["non_source"], 3)
+        self.assertEqual([gap for gap in scan.gaps if gap["kind"] == "no-grammar"],
+                         [{"kind": "no-grammar", "path": None, "detail": "1 file(s) with suffix .kt"}])
+
+
 class Walker(unittest.TestCase):
     def test_walk_is_sorted_skips_vcs_and_never_follows_symlinks(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -118,11 +133,10 @@ class Parse(unittest.TestCase):
                          "sha256:" + hashlib.sha256((FIXTURE / "src/app.py").read_bytes()).hexdigest())
         kinds = {row["kind"]: row["count"] for row in files["src/app.py"]["node_kinds"]}
         self.assertEqual(kinds["function_definition"], 2)
-        self.assertEqual(document["gaps"], [{"kind": "no-grammar", "path": None,
-                                             "detail": "1 file(s) with suffix .txt"}])
+        self.assertEqual(document["gaps"], [])  # README.txt is non-source info, not a no-grammar gap
         self.assertEqual(document["totals"], {"files": 5, "bytes": sum(row["bytes"] for row in files.values()),
                                               "functions": 8, "calls": 10, "imports": 5, "error_nodes": 1,
-                                              "gaps": 1})
+                                              "non_source": 1, "gaps": 0})
         self.assertEqual({row["language"] for row in document["generator"]["grammars"]}, set(ast.GRAMMARS))
 
     def test_same_bytes_same_document_and_one_byte_changes_it(self):

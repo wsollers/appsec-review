@@ -150,10 +150,11 @@ def native_memory(*, run_id: str, attempt_id: str, source_generation: str,
                 "status": "OPEN", "citation_ids": citation_ids})
     result = {**_base("appsec-review/native-memory-analysis/1.0", "05-native-memory", run_id,
                       attempt_id, source_generation, bindings),
-              "status": "OK_WITH_GAPS", "candidates": sorted(rows, key=lambda row: row["candidate_id"]),
+              # No candidates, nothing awaiting runtime proof; claim_limits.runtime_claimed already says it.
+              "status": "OK_WITH_GAPS" if rows else "OK", "candidates": sorted(rows, key=lambda row: row["candidate_id"]),
               "coverage": sorted(coverage, key=lambda row: row["unit_id"]),
               "proof_obligations": sorted(obligations, key=lambda row: row["obligation_id"]),
-              "gaps": ["Host/runtime verification was not performed; every candidate remains candidate_only."],
+              "gaps": ["Host/runtime verification was not performed; every candidate remains candidate_only."] if rows else [],
               "claim_limits": {"finding_created": False, "severity_assigned": False,
                                "runtime_claimed": False, "compliance_claimed": False}}
     return _validate(result, "native-memory-analysis.schema.json")

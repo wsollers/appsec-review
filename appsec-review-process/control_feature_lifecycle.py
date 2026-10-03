@@ -226,6 +226,24 @@ def _graph_index(run_id: str) -> tuple[list[str], list[dict[str, str]]]:
     return nodes, edges
 
 
+def _prior_intakes(run_id: str, intake_sha256: str) -> list[str]:
+    """Intake hashes of earlier published rescope generations; empty for the initial baseline.
+
+    Read from immutable attempts, not accepted.json, so the answer is stable across allocation
+    (which replaces the pointer) and re-validation of this generation's own attempt."""
+    attempts = data_path(run_id, "jobs", "dynamic-rescope", "attempts")
+    prior = set()
+    for attempt in sorted(attempts.iterdir()) if attempts.is_dir() else []:
+        envelope, record = attempt / "result.json", attempt / "inputs.json"
+        if (attempt.is_symlink() or not envelope.is_file() or not record.is_file() or
+                read_json(envelope).get("execution_status") not in {"OK", "OK_WITH_GAPS"}):
+            continue
+        intake = read_json(record).get("intake")
+        if isinstance(intake, dict) and intake.get("artifact_sha256") not in {None, intake_sha256}:
+            prior.add(intake["artifact_sha256"])
+    return sorted(prior)
+
+
 def _completeness_inputs(report: dict[str, Any], report_sha256: str | None = None) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
     expected, observed, gaps = [], [], []
     for finding in report["verified_findings"]:
@@ -316,6 +334,7 @@ def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
         _intake, binding, _attempt = _current(run_id, "00-intake")
         nodes, edges = _graph_index(run_id)
         return {**base, "intake": binding, "nodes": nodes, "edges": edges,
+                "prior_intakes": _prior_intakes(run_id, binding["artifact_sha256"]),
                 "changed_nodes": ["00-intake"], "max_iterations": 1}
     if job_id == "completeness-audit":
         report, binding, _attempt = _current(run_id, "10-synthesis-report")
@@ -388,8 +407,12 @@ def _produce(run_id: str, job_id: str, inputs: dict[str, Any]) -> tuple[dict[str
         return result, "OK", [], None
     if job_id == "dynamic-rescope":
         index = dynamic_rescope.dependency_index(run_id, inputs["nodes"], inputs["edges"])
+        # First generation (no earlier published intake): the whole graph runs fresh, nothing to rescope.
         result = dynamic_rescope.bounded_rescope(run_id, index, inputs["changed_nodes"], iteration=1,
-            max_iterations=inputs["max_iterations"]); result["dependency_index"] = index
+            max_iterations=inputs["max_iterations"], baseline=not inputs.get("prior_intakes"))
+        result["dependency_index"] = index
+        if result["state"] == "INITIAL_BASELINE":
+            return result, "OK", [], None
         return result, "OK_WITH_GAPS", ["initial-intake-change-rescopes-current-graph"], None
     if job_id == "completeness-audit":
         result = completeness_audit.completeness_audit(run_id, inputs["expected"], inputs["observed"],
