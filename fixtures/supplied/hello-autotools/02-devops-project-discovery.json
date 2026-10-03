@@ -107,9 +107,59 @@
       ]
     }
   ],
-  "coverage_gaps": [
-    "No CI/CD workflow files, IaC manifests or deployment manifests were found anywhere in the repository (repository-partition-map coverage.category_checks: cicd, iac and deployment all not-found); the only build/release automation is this Dockerfile.",
-    "The Dockerfile's build stage runs the same autotools chain developer discovery already planned (02-dev-project-discovery); this record treats the Dockerfile as the containerized build/release route, not a second independent native build to resolve.",
-    "No image registry, tag policy or publication step is declared anywhere in the repository; the Dockerfile only builds and runs a binary, it does not publish one."
+  "coverage_gaps": [],
+  "absence_observations": [
+    {
+      "statement": "No CI/CD workflow files, IaC manifests or deployment manifests were found anywhere in the repository (repository-partition-map coverage.category_checks: cicd, iac and deployment all not-found); the only build/release automation is this Dockerfile.",
+      "basis": {
+        "search_scope": [
+          "**"
+        ],
+        "inventory_count": 0,
+        "evidence_citations": []
+      }
+    },
+    {
+      "statement": "No image registry, tag policy or publication step is declared anywhere in the repository; the Dockerfile only builds and runs a binary, it does not publish one.",
+      "basis": {
+        "search_scope": [
+          "**"
+        ],
+        "inventory_count": 0,
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Dockerfile",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+            "note": null
+          }
+        ]
+      }
+    }
+  ],
+  "informational_notes": [
+    {
+      "statement": "The Dockerfile's build stage runs the same autotools chain developer discovery already planned (02-dev-project-discovery); this record treats the Dockerfile as the containerized build/release route, not a second independent native build to resolve.",
+      "basis": {
+        "search_scope": [
+          "Dockerfile"
+        ],
+        "inventory_count": 1,
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Dockerfile",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+            "note": null
+          }
+        ]
+      }
+    }
   ]
 }

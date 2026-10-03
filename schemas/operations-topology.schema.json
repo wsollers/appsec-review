@@ -53,6 +53,7 @@
       }
     },
     "operational_notes": {"type": "array", "items": {"type": "string"}},
-    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}, "description": "What could not be determined or examined. Only these make the job OK_WITH_GAPS."},
+    "absence_observations": {"type": "array", "items": {"$ref": "project-discovery.schema.json#/$defs/discovery_note"}, "description": "Verified absence: a control or definition the job searched for and the target does not declare (no port, no health check, no runbook, no orchestration manifest). Reported, never a coverage gap."}
   }
 }

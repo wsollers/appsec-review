@@ -1047,7 +1047,7 @@ pmap = json.loads((pd / 'attempts' / json.loads((pd / 'accepted.json').read_text
 if pmap['source_revision'] != out['source_revision']: bad.append('revision differs from the accepted partition map')
 plan = out.get('safe_command_plan', [])
 if not plan or any(not (c.get('argv') and c.get('authorization') and c.get('purpose')) for c in plan): bad.append('incomplete command plan')
-if not out.get('coverage_gaps'): bad.append('devops discovery must record the missing IaC/CI/CD/deployment coverage')
+if not (out.get('absence_observations') or out.get('coverage_gaps')): bad.append('devops discovery must record the missing IaC/CI/CD/deployment as absence or gaps')
 if bad: sys.exit('; '.join(bad))
 p = out['projects'][0]
 print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'projects': [x['project_id'] for x in out['projects']],
@@ -1160,7 +1160,7 @@ for s in services:
 if bad: sys.exit('; '.join(bad))
 # Informational only, not failures: wording that reads as observed runtime state, and the fixture diff.
 observed = re.compile(r'(?i)\b(is|are) (running|listening|healthy|reachable|deployed)\b|\bobserved\b')
-texts = list(out.get('operational_notes', [])) + list(out.get('coverage_gaps', []))
+texts = list(out.get('operational_notes', [])) + list(out.get('coverage_gaps', [])) + [n.get('statement', '') for n in out.get('absence_observations', [])]
 flagged = [t for t in texts if observed.search(t)]
 notes = []
 if flagged: notes.append('%d note(s) use observed-state wording, review by hand: %s' % (len(flagged), flagged[:3]))
@@ -1204,7 +1204,7 @@ known = set(ids)
 for s in services:
     for dep in s.get('dependencies', []):
         if dep.get('target_service_id') not in known: bad.append('dependency target %r does not resolve' % dep.get('target_service_id'))
-if not out.get('coverage_gaps'): bad.append('sre topology must record its coverage gaps')
+if not (out.get('absence_observations') or out.get('coverage_gaps')): bad.append('sre topology must record its absence observations or coverage gaps')
 if bad: sys.exit('; '.join(bad))
 print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'services': [{'id': s['service_id'], 'kind': s['kind']} for s in services],
                   'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites)}))

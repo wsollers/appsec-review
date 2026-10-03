@@ -28,9 +28,57 @@
     "The image's ENTRYPOINT runs the built binary directly and exits when it returns; there is no supervisor, no restart policy and no long-running process declared anywhere in the repository.",
     "No environment variables, volumes or configuration files are declared for the final-stage image; the binary takes no runtime inputs beyond argv."
   ],
-  "coverage_gaps": [
-    "No ports are exposed or declared anywhere in the repository (no EXPOSE, no docker-compose.yaml, no k8s manifest); this record cannot confirm the binary never opens a socket at runtime, only that none is declared.",
-    "No orchestration, deployment or IaC manifests exist anywhere in the repository (repository-partition-map coverage.category_checks: iac and deployment both not-found, confirmed again at this revision); there is exactly one service to place because none is declared to run alongside it.",
-    "No logging, metrics or health-check configuration is declared anywhere in the repository; operational observability for this image is entirely unaddressed."
+  "coverage_gaps": [],
+  "absence_observations": [
+    {
+      "statement": "No ports are exposed or declared anywhere in the repository (no EXPOSE, no docker-compose.yaml, no k8s manifest); this record cannot confirm the binary never opens a socket at runtime, only that none is declared.",
+      "basis": {
+        "search_scope": [
+          "**"
+        ],
+        "inventory_count": 0,
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Dockerfile",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+            "note": null
+          }
+        ]
+      }
+    },
+    {
+      "statement": "No orchestration, deployment or IaC manifests exist anywhere in the repository (repository-partition-map coverage.category_checks: iac and deployment both not-found, confirmed again at this revision); there is exactly one service to place because none is declared to run alongside it.",
+      "basis": {
+        "search_scope": [
+          "**"
+        ],
+        "inventory_count": 0,
+        "evidence_citations": []
+      }
+    },
+    {
+      "statement": "No logging, metrics or health-check configuration is declared anywhere in the repository; operational observability for this image is entirely unaddressed.",
+      "basis": {
+        "search_scope": [
+          "**"
+        ],
+        "inventory_count": 0,
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Dockerfile",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+            "note": null
+          }
+        ]
+      }
+    }
   ]
 }

@@ -698,8 +698,21 @@ def _partition_errors(value: Any, registry_root: Path, source_root: Path | None)
     return errors
 
 
-def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]:
+def _discovery_note_errors(value: Any) -> list[str]:
+    """P30/P34: an absence observation or informational note names the repository scope it searched."""
     errors: list[str] = []
+    for field in ("absence_observations", "informational_notes"):
+        for index, note in enumerate(value.get(field, []) if isinstance(value, dict) else []):
+            basis = note.get("basis", {}) if isinstance(note, dict) else {}
+            for path_index, relative in enumerate(basis.get("search_scope", []) if isinstance(basis, dict) else []):
+                path_error = _repository_relative(relative)
+                if path_error:
+                    errors.append(f"$.{field}[{index}].basis.search_scope[{path_index}]: {path_error}")
+    return errors
+
+
+def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]:
+    errors: list[str] = _discovery_note_errors(value)
     projects = value.get("projects", []) if isinstance(value, dict) else []
     ids = [item.get("project_id") for item in projects if isinstance(item, dict)]
     if len(ids) != len(set(ids)):
@@ -724,7 +737,7 @@ def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]
 
 
 def _operations_topology_errors(value: Any, source_root: Path | None) -> list[str]:
-    errors: list[str] = []
+    errors: list[str] = _discovery_note_errors(value)
     services = value.get("services", []) if isinstance(value, dict) else []
     ids = [item.get("service_id") for item in services if isinstance(item, dict)]
     if len(ids) != len(set(ids)):

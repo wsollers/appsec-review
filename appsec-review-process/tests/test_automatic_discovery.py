@@ -75,6 +75,21 @@ class AutomaticDiscoveryLifecycleTests(unittest.TestCase):
                          {"project-inventory.json", "project-discovery-summary.md", "status.json",
                           "permission.json", "lineage.json"})
 
+    def test_absence_and_notes_are_reported_but_only_gaps_set_the_status(self):
+        """P30/P34: verified absence and by-design notes stay visible and do not make OK_WITH_GAPS."""
+        note = {"statement": "No CI/CD workflow is declared.",
+                "basis": {"search_scope": [".github/workflows/*"], "inventory_count": 0, "evidence_citations": []}}
+        value = {**self.value, "coverage_gaps": [], "absence_observations": [note],
+                 "informational_notes": [dict(note, statement="vendor/x is built by its parent project")]}
+        result, attempt = self.run_worker(lambda run_id, base, record: (dict(value), "# D\n", dict(self.facts)))
+        self.assertEqual(result["status"], "OK")
+        envelope = state.read_json(attempt / "result.json")
+        self.assertEqual(envelope["gaps"], [])
+        self.assertIn("1 absence observations and 1 informational notes", envelope["summary"])
+        status = state.read_json(attempt / "status.json")
+        self.assertEqual((status["absence_observations"], status["informational_notes"]), (1, 1))
+        self.assertEqual(state.read_json(attempt / "project-inventory.json")["absence_observations"], [note])
+
     def test_same_inputs_reuse_and_changed_upstream_dispatches_again(self):
         calls = []
         def dispatch(run_id, base, record):

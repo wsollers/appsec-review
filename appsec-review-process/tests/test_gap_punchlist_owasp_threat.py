@@ -248,17 +248,14 @@ class DiscoverySchemaTests(unittest.TestCase):
     def _properties(name):
         return sorted(json.loads((SCHEMAS / name).read_text(encoding="utf-8"))["properties"])
 
-    @unittest.expectedFailure
     def test_p30_project_discovery_schema_defines_absence_observations(self):
         """P30: project-discovery schema separates verified absence (absence_observations) from coverage gaps."""
         self.assertIn("absence_observations", self._properties("project-discovery.schema.json"))
 
-    @unittest.expectedFailure
     def test_p30_operations_topology_schema_defines_absence_observations(self):
         """P30: operations-topology schema separates verified absence (absence_observations) from coverage gaps."""
         self.assertIn("absence_observations", self._properties("operations-topology.schema.json"))
 
-    @unittest.expectedFailure
     def test_p34_dev_project_discovery_schema_defines_informational_notes(self):
         """P34: the 02-dev-project-discovery output schema defines informational_notes beside coverage_gaps."""
         import discovery_gate
