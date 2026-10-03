@@ -54,7 +54,6 @@ class BinaryEvidencePunchListTests(unittest.TestCase):
 
     def tearDown(self): self.folder.cleanup()
 
-    @unittest.expectedFailure
     def test_p01_die_without_packer_reads_packed_no(self):
         """P01: DIE parsed with no packer plus normal ELF sections classifies packed NO without a gap."""
         out = _evidence(self.root,
@@ -64,7 +63,6 @@ class BinaryEvidencePunchListTests(unittest.TestCase):
         self.assertEqual(record["packed"], "NO")
         self.assertNotIn("static-packer-classification-inconclusive", record["gaps"])
 
-    @unittest.expectedFailure
     def test_p01_upx_marker_reads_packed_yes(self):
         """P01: a UPX! marker in strings.txt classifies the binary as packed YES."""
         out = _evidence(self.root,
@@ -73,7 +71,6 @@ class BinaryEvidencePunchListTests(unittest.TestCase):
         record = adapter._triage_record(ADAPTER_BINARY, out)
         self.assertEqual(record["packed"], "YES")
 
-    @unittest.expectedFailure
     def test_p02_stt_file_symbols_are_skipped_and_not_duplicates(self):
         """P02: nm kind 'a' (STT_FILE) entries are skipped so crtstuff.c does not raise duplicate-symbol-identity."""
         out = _evidence(self.root, nm="0000000000000000 a crtstuff.c\n"
@@ -84,7 +81,6 @@ class BinaryEvidencePunchListTests(unittest.TestCase):
         self.assertEqual([item["name"] for item in normalized["symbols"]], ["main"])
         self.assertNotIn("duplicate-symbol-identity", normalized["gaps"])
 
-    @unittest.expectedFailure
     def test_p03_nm_line_location_becomes_repo_relative_source(self):
         """P03: a trailing nm -l file:line under /scratch/src/ yields a repo-relative source_path and line."""
         out = _evidence(self.root, nm="0000000000001000 T main\t/scratch/src/src/main.cpp:12\n")
@@ -94,7 +90,6 @@ class BinaryEvidencePunchListTests(unittest.TestCase):
         self.assertEqual(symbol["line"], 12)
         self.assertNotIn("source-locations-unavailable", record["gaps"])
 
-    @unittest.expectedFailure
     def test_p06_enabled_hardening_is_a_confirmed_defense_lead(self):
         """P06: hardening values ENABLED/FULL/PRESENT produce defense leads, not 'not confirmed' follow-ups."""
         image = raw("02-binary-triage", {})["image"]

@@ -11,7 +11,8 @@ file "$TARGET" > "$OUT/file.txt"
 strings -a -n 6 "$TARGET" > "$OUT/strings.txt" || true
 objdump -x "$TARGET" > "$OUT/objdump-x.txt" 2>&1 || true
 objdump -d "$TARGET" > "$OUT/objdump-disassembly.txt" 2>&1 || true
-nm -an "$TARGET" > "$OUT/nm-symbols.txt" 2>&1 || true
+# -l appends a DWARF "\tfile:line" per symbol (02-debug-symbol-index source locations).
+nm -anl "$TARGET" > "$OUT/nm-symbols.txt" 2>&1 || true
 readelf -aW "$TARGET" > "$OUT/readelf-all.txt" 2>&1 || true
 eu-readelf -a "$TARGET" > "$OUT/eu-readelf-all.txt" 2>&1 || true
 dwarfdump "$TARGET" > "$OUT/dwarfdump.txt" 2>&1 || true
