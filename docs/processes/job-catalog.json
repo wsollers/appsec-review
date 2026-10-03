@@ -1498,7 +1498,9 @@
        "consumes": [
         "job:02-code-property-graph",
         "job:02-treesitter-ast",
-        "job:02-binary-triage"
+        "job:02-binary-triage",
+        "job:02-ir-facts",
+        "job:02-debug-symbol-index"
        ],
        "produces": [
         "job:02-code-index"
@@ -4458,7 +4460,9 @@
        "consumes": [
         "job:02-code-property-graph",
         "job:02-treesitter-ast",
-        "job:02-binary-triage"
+        "job:02-binary-triage",
+        "job:02-ir-facts",
+        "job:02-debug-symbol-index"
        ],
        "produces": [
         "job:02-code-index"
@@ -11517,6 +11521,16 @@
      "job": "02-binary-triage",
      "kind": "required",
      "contract": "binary-triage"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "optional",
+     "contract": "ir-facts"
+    },
+    {
+     "job": "02-debug-symbol-index",
+     "kind": "optional",
+     "contract": "debug-symbol-index"
     }
    ],
    "declared_inputs": [
@@ -11531,6 +11545,14 @@
     {
      "need": "optional",
      "input": "accepted binary triage export tables"
+    },
+    {
+     "need": "optional",
+     "input": "accepted IR facts"
+    },
+    {
+     "need": "optional",
+     "input": "accepted debug-symbol index records"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-code-index.json",
@@ -11552,7 +11574,9 @@
    "consumes": [
     "job:02-code-property-graph",
     "job:02-treesitter-ast",
-    "job:02-binary-triage"
+    "job:02-binary-triage",
+    "job:02-ir-facts",
+    "job:02-debug-symbol-index"
    ],
    "produces": [
     "job:02-code-index"
@@ -15180,7 +15204,8 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:05-native-memory",
-    "job:06-reachability-ir"
+    "job:06-reachability-ir",
+    "job:02-code-index"
    ]
   },
   "job:02-debug-symbol-index": {
@@ -15192,6 +15217,7 @@
     "job:02-debug-symbol-index"
    ],
    "consumed_by": [
+    "job:02-code-index",
     "job:02-binary-cfg"
    ]
   },

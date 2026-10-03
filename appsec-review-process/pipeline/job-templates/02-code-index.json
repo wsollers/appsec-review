@@ -17,7 +17,9 @@
     ],
     "optional": [
       "accepted tree-sitter AST summary",
-      "accepted binary triage export tables"
+      "accepted binary triage export tables",
+      "accepted IR facts",
+      "accepted debug-symbol index records"
     ]
   },
   "outputs": {

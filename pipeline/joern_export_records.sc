@@ -96,17 +96,25 @@ def exportRecords(emit: Seq[(String, String)] => Unit, unit: String): Unit = {
     if (unit.isEmpty || file.isEmpty || file.startsWith("/") || file.startsWith("<") || file == "N/A") file
     else s"$unit/$file"
   {
-    cpg.method.l.sortBy(m => (m.filename, m.lineNumber.getOrElse(0), m.fullName)).foreach { m =>
+    // External stubs (<operator>.*, libc, unresolved callees) have no source file: export defined code only.
+    cpg.method.isExternal(false).l.sortBy(m => (m.filename, m.lineNumber.getOrElse(0), m.fullName)).foreach { m =>
       emit(Seq("kind" -> json("symbol"), "label" -> json("METHOD"), "name" -> json(m.name),
         "full_name" -> json(m.fullName), "caller" -> json(""), "type_name" -> json(m.signature),
         "file" -> json(place(m.filename)), "line" -> maybe(m.lineNumber), "column" -> maybe(m.columnNumber),
         "code" -> json(m.code)))
     }
-    cpg.typeDecl.l.sortBy(t => (t.filename, t.lineNumber.getOrElse(0), t.fullName)).foreach { t =>
+    cpg.typeDecl.isExternal(false).l.sortBy(t => (t.filename, t.lineNumber.getOrElse(0), t.fullName)).foreach { t =>
       emit(Seq("kind" -> json("type"), "label" -> json("TYPE_DECL"), "name" -> json(t.name),
         "full_name" -> json(t.fullName), "caller" -> json(""), "type_name" -> json(t.fullName),
         "file" -> json(place(t.filename)), "line" -> maybe(t.lineNumber), "column" -> maybe(t.columnNumber),
         "code" -> json(t.code)))
+      // One INHERITS row per declared base (type_name is the base), at the derived declaration.
+      t.inheritsFromTypeFullName.distinct.sorted.foreach { base =>
+        emit(Seq("kind" -> json("type"), "label" -> json("INHERITS"), "name" -> json(t.name),
+          "full_name" -> json(t.fullName), "caller" -> json(""), "type_name" -> json(base),
+          "file" -> json(place(t.filename)), "line" -> maybe(t.lineNumber), "column" -> maybe(t.columnNumber),
+          "code" -> json(t.code)))
+      }
     }
     // Some nodes (freeciv21) have no enclosing method/graph; their location/method accessors throw.
     // Skip those nodes rather than lose the whole export.
@@ -120,6 +128,14 @@ def exportRecords(emit: Seq[(String, String)] => Unit, unit: String): Unit = {
         "name" -> json(c.name), "full_name" -> json(c.methodFullName), "caller" -> json(caller),
         "type_name" -> json(c.typeFullName), "file" -> json(place(safe(c.location.filename))),
         "line" -> maybe(c.lineNumber), "column" -> maybe(c.columnNumber), "code" -> json(c.code)))
+    }
+    // A function named as a value (&f, f passed or stored, lambdas): the address-taken candidates.
+    cpg.methodRef.l.filter(r => Try(r.method.fullName).isSuccess).sortBy(r => (safe(r.location.filename), r.lineNumber.getOrElse(0), r.methodFullName)).foreach { r =>
+      val name = Try(r.referencedMethod.name).getOrElse(r.code)
+      emit(Seq("kind" -> json("method-reference"), "label" -> json("METHOD_REF"), "name" -> json(name),
+        "full_name" -> json(r.methodFullName), "caller" -> json(r.method.fullName), "type_name" -> json(r.typeFullName),
+        "file" -> json(place(safe(r.location.filename))), "line" -> maybe(r.lineNumber), "column" -> maybe(r.columnNumber),
+        "code" -> json(r.code)))
     }
     cpg.identifier.l.filter(i => Try(i.location.filename).isSuccess).sortBy(i => (safe(i.location.filename), i.lineNumber.getOrElse(0), i.name)).foreach { i =>
       emit(Seq("kind" -> json("identifier"), "label" -> json("IDENTIFIER"), "name" -> json(i.name),

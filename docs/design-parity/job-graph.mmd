@@ -306,6 +306,8 @@ flowchart TD
   02_code_property_graph_post -->|required| 02_code_index_config
   02_treesitter_ast_post -->|required| 02_code_index_config
   02_binary_triage_post -->|required| 02_code_index_config
+  02_ir_facts_post -->|optional| 02_code_index_config
+  02_debug_symbol_index_post -->|optional| 02_code_index_config
   02_native_sast_config["02-native-sast: resolve job configuration"] --> 02_native_sast_pre["02-native-sast: pre-validation"]
   02_native_sast_pre --> 02_native_sast["02-native-sast: work or reuse"]
   02_native_sast --> 02_native_sast_post["02-native-sast: post-validation and publish"]

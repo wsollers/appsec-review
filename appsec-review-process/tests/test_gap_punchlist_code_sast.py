@@ -67,7 +67,6 @@ class CodeGraphEvidenceGaps(unittest.TestCase):
             source_snapshot_sha256=SHA, source_revision="abc123", image_id="audit-native",
             image_digest=SHA, exporter_sha256=SHA, build_identity_sha256=SHA)
 
-    @unittest.expectedFailure
     def test_p07_external_method_stub_is_not_a_location_gap(self):
         """P07: a location-less METHOD stub (<operator>.*) is not a no-source-location gap; a location-less CALL is."""
         stub = self.row(kind="symbol", label="METHOD", name="<operator>.assignment",
@@ -81,7 +80,6 @@ class CodeGraphEvidenceGaps(unittest.TestCase):
         document = self.normalize(self.row(), self.row(file="<empty>", line=None, column=None))
         self.assertIn({"reason": "no-source-location", "count": 1}, document["coverage_gaps"])
 
-    @unittest.expectedFailure
     def test_p08_duplicate_rows_are_info_not_a_gap(self):
         """P08: identical exporter rows are deduplicated without setting OK_WITH_GAPS or a duplicate gap."""
         document = self.normalize(self.row(), self.row())
@@ -101,7 +99,6 @@ class CodeIndexGaps(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    @unittest.expectedFailure
     def test_p09_unbound_ir_and_debug_sources_are_not_reported_as_not_indexed(self):
         """P09: with no accepted 02-ir-facts / 02-debug-symbol-index source, no source-not-indexed gap is emitted."""
         _, result = fx.build(self.folder)
@@ -109,7 +106,6 @@ class CodeIndexGaps(unittest.TestCase):
                          "source-not-indexed:02-ir-facts is hard-coded although no IR source was bound")
         self.assertNotIn("source-not-indexed:02-debug-symbol-index", result["gaps"])
 
-    @unittest.expectedFailure
     def test_p09_code_index_has_optional_edges_to_ir_and_debug_jobs(self):
         """P09: job-graph gives 02-code-index (optional) dependencies on 02-ir-facts and 02-debug-symbol-index."""
         graph = json.loads((ROOT / "pipeline" / "job-graph.json").read_text(encoding="utf-8"))
@@ -117,7 +113,6 @@ class CodeIndexGaps(unittest.TestCase):
         self.assertIn("02-ir-facts", dependencies, "02-code-index has no edge to 02-ir-facts")
         self.assertIn("02-debug-symbol-index", dependencies)
 
-    @unittest.expectedFailure
     def test_p10_inheritance_records_clear_the_no_inheritance_gap(self):
         """P10: an INHERITS type record fills type_edges and the no-inheritance-edges gap is not emitted."""
         inherits = {**fx.type_decl("Button", "ui.Button", "src/widget.cpp", 12),
@@ -132,7 +127,6 @@ class CodeIndexGaps(unittest.TestCase):
                          "no-inheritance-edges is hard-coded although an INHERITS record was exported")
         self.assertTrue(result["capabilities"]["type_edges"])
 
-    @unittest.expectedFailure
     def test_p10_exporter_walks_inheritance_and_method_refs(self):
         """P10: the Joern exporter walks inheritsFromTypeFullName and cpg.methodRef."""
         exporter = (REPO / "pipeline" / "joern_export_records.sc").read_text(encoding="utf-8")

@@ -1701,9 +1701,29 @@
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "optional",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        },
+        {
+          "job": "02-debug-symbol-index",
+          "kind": "optional",
+          "contract": "debug-symbol-index",
+          "allowed_skip_reasons": [
+            "no-debug-symbols",
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
         }
       ],
-      "planned_scope": "Deterministic SQLite code index (methods, resolved calls and escapes, types, identifiers, literals, tree-sitter spans and outlines, export joins, FTS) built from accepted artifacts for the model jobs' structural query tools (ADR-0032).",
+      "planned_scope": "Deterministic SQLite code index (methods, resolved calls and escapes, types, identifiers, literals, tree-sitter spans and outlines, export joins, IR fact functions, debug symbols, FTS) built from accepted artifacts for the model jobs' structural query tools (ADR-0032).",
       "required_artifacts": [
         "code-index.json",
         "code-index.sqlite",

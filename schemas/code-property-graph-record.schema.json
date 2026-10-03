@@ -6,7 +6,7 @@
   "required": ["record_id", "kind", "label", "name", "full_name", "caller", "type_name", "code", "source_path", "source_sha256", "start_line", "start_column", "end_line", "search_text", "redaction", "locator"],
   "properties": {
     "record_id": {"type": "string", "pattern": "^cpg_[0-9a-f]{24}$"},
-    "kind": {"enum": ["call", "symbol", "type", "identifier", "memory-operation"]},
+    "kind": {"enum": ["call", "symbol", "type", "identifier", "memory-operation", "method-reference"]},
     "label": {"type": "string", "maxLength": 4096}, "name": {"type": "string", "maxLength": 4096},
     "full_name": {"type": "string", "maxLength": 4096}, "caller": {"type": "string", "maxLength": 4096}, "type_name": {"type": "string", "maxLength": 4096},
     "code": {"type": "string", "maxLength": 4096}, "source_path": {"type": "string", "minLength": 1},
