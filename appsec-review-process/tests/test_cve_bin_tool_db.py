@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -183,6 +184,19 @@ class CveBinToolDbTests(unittest.TestCase):
             self.build(runner=other_source)
         self.assertEqual(caught.exception.reason, "BUILD_INVALID")
         self.assertFalse((self.root / "current.json").exists())
+
+    def test_host_check_runs_the_scan_preflight(self):
+        # prepare-host.sh step 4b: the reason the scan node would block on, before any run.
+        at = T0 + timedelta(hours=4)
+        with mock.patch.object(db, "pinned_tool", return_value=TOOL):
+            with self.assertRaises(db.DbUnavailable) as caught:
+                db.check(self.root, self.nvd_root, now=at)
+            self.assertEqual(caught.exception.reason, "DB_MISSING")
+            pointer = self.build()
+            self.assertEqual(db.check(self.root, self.nvd_root, now=at)["snapshot_id"], pointer["snapshot_id"])
+            with self.assertRaises(db.DbUnavailable) as caught:
+                db.check(self.root, self.tmp / "no-nvd", now=at)
+            self.assertTrue(caught.exception.reason.startswith("NVD_"), caught.exception.reason)
 
     def test_no_nvd_snapshot_means_no_database(self):
         with self.assertRaises(db.DbUnavailable) as caught:

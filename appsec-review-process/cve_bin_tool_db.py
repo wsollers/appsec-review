@@ -69,12 +69,12 @@ class DbUnavailable(Blocked):
 
 def feed_root() -> Path:
     configured = os.environ.get("APPSEC_CVE_BIN_TOOL_DB_ROOT")
-    return Path(configured) if configured else REPO / "data" / "feeds" / "cve-bin-tool"
+    return Path(configured).resolve() if configured else REPO / "data" / "feeds" / "cve-bin-tool"
 
 
 def nvd_root() -> Path:
     configured = os.environ.get("APPSEC_NVD_ROOT")
-    return Path(configured) if configured else REPO / "data" / "feeds" / "nvd"
+    return Path(configured).resolve() if configured else REPO / "data" / "feeds" / "nvd"
 
 
 def _sha_file(path: Path) -> str:
@@ -258,12 +258,34 @@ def resolve_db(root: Path, *, nvd_identity: dict, tool: dict[str, str], now: dat
     return {**manifest, "manifest_sha256": pointer["manifest_sha256"], "directory": str(directory)}
 
 
+def check(root: Path | None = None, nvd_data_root: Path | None = None, *,
+          now: datetime | None = None) -> dict[str, Any]:
+    """The scan node's preflight outside a run (host preparation): the NVD snapshot under the shared
+    reference ceiling, then the published database against it and the pinned image. Raises
+    DbUnavailable with the same reason the scan would block on."""
+    import tunables   # deferred: only the preflight needs the shared ceiling
+    now = now or datetime.now(timezone.utc)
+    ceiling = timedelta(seconds=tunables.shared("reference_snapshot_max_age_seconds"))
+    resolved = nvd.resolve_snapshot(nvd_data_root or nvd_root(), max_age=ceiling, now=now)
+    if not resolved.usable:
+        raise DbUnavailable("NVD_" + str(resolved.reason), "the NVD snapshot cannot be used; run nvd_reference_sync")
+    database = resolve_db(root or feed_root(), nvd_identity=resolved.identity, tool=pinned_tool(), now=now)
+    return {key: database[key] for key in ("snapshot_id", "nvd_snapshot_id", "cve_count", "built_at")}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=["build"])
+    parser.add_argument("command", choices=["build", "check"])
     parser.add_argument("--root", type=Path)
     parser.add_argument("--nvd-root", type=Path)
     args = parser.parse_args(argv)
+    if args.command == "check":
+        try:
+            print(json.dumps(check(args.root, args.nvd_root), sort_keys=True))
+        except DbUnavailable as exc:
+            print(json.dumps({"reason": exc.reason, "detail": str(exc)}, sort_keys=True))
+            return 1
+        return 0
     print(json.dumps(build(args.root, args.nvd_root), sort_keys=True))
     return 0
 

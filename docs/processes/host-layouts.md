@@ -37,6 +37,7 @@ target runs.
   | `orchestrator/dagster/.env`, `.host/` | instance password, uid/gid, DAGSTER_HOME, compute logs | `orchestrator/dagster/setup.py`, `code-location.sh prepare` |
   | `data/feeds/nvd/` mutable state | NVD feed snapshots | `nvd_reference_schedule` |
   | `data/feeds/osv/`, `data/feeds/mitre/` | OSV and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `nvd_reference_schedule`, `mitre_feed.py sync` |
+  | `data/feeds/cve-bin-tool/` | cve-bin-tool database derived from the current NVD snapshot | `nvd_reference_sync`, or `prepare-host.sh` step 4b (`cve_bin_tool_db.py build`) |
 
 - **Runs are not portable.** A run started on one host is resumed on the same host.
 - **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-google-drive.md)).** hal5000 builds

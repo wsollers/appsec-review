@@ -15,6 +15,7 @@
 #   3. every image the B13 registry needs has a current successful build here: loads the published
 #      ones from Google Drive (images/published.lock.json, ADR-0033), builds the rest
 #   4. B16 registry records generate and match Docker
+#  4b. the cve-bin-tool database matches the current NVD snapshot (built here if missing or stale)
 #   5. the host code location is running (started in the background if not) and reloaded
 #   6. the four targets are cloned at their pinned commits (fixtures/populate-targets.sh)
 #   7. the Claude CLI answers (persona jobs use its subscription login)
@@ -158,6 +159,27 @@ elif [[ $CHECK -eq 1 ]]; then
     todo "$(echo "$out" | tail -1)"
 else
     bad "registry" "$(echo "$out" | tail -1)"
+fi
+
+# ---- 4b. cve-bin-tool database -----------------------------------------------------------------------
+# 02-binary-component-cve-match BLOCKS without a database built from the current NVD snapshot and the
+# pinned image. Dagster's nvd_reference_sync builds it after each NVD sync; a host that has not run it
+# since gets it here (needs the registry records from step 4).
+step "4b. cve-bin-tool database (derived from the NVD snapshot)"
+if out="$(python3 -B appsec-review-process/cve_bin_tool_db.py check 2>&1)"; then
+    ok "cve-bin-tool database $(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(d["snapshot_id"][:16], "from NVD", d["nvd_snapshot_id"][:16], d["cve_count"], "CVEs")' "$out")"
+elif [[ $CHECK -eq 1 ]]; then
+    todo "cve-bin-tool database: $(echo "$out" | tail -1) (build: appsec-review-process/cve_bin_tool_db.py build)"
+elif [[ "$out" == *'"NVD_'* ]]; then
+    bad "cve-bin-tool-db" "cve-bin-tool database: $(echo "$out" | tail -1) (run the Dagster nvd_reference_sync job first)"
+else
+    echo "  building the cve-bin-tool database from the NVD snapshot (once per NVD snapshot)"
+    if built="$(python3 -B appsec-review-process/cve_bin_tool_db.py build 2>&1)" \
+            && python3 -B appsec-review-process/cve_bin_tool_db.py check >/dev/null 2>&1; then
+        ok "cve-bin-tool database built"
+    else
+        bad "cve-bin-tool-db" "cve-bin-tool database build failed: $(echo "$built" | tail -1)"
+    fi
 fi
 
 # ---- 5. code location ------------------------------------------------------------------------------
