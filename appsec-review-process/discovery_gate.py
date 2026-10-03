@@ -34,6 +34,7 @@ from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, dat
 from publish_job_output import (common_pointer, coordinate_worker_lifecycle,
                                 record_terminal_current, validate_published)
 from schema_validate import SchemaStore, validate_document
+from validate_job_output import deferred_review_scope_errors
 from worker_adapters import SuppliedHumanDecisionAdapter, WorkerRequest
 
 # These four are only used by the automatic-dispatch path (_run_partition_automatic below); the
@@ -369,8 +370,10 @@ def _backfill_citation_content_hashes(value, by_path):
 
 def _validate_partition_payload(value):
     # Structural checks happen before copying; all cross-record/path/freshness semantics are owned
-    # by validate_job_output's explicit repository-partition-map contract dispatch.
-    return validate_document(value, SCHEMAS[ADOPTED_JOB])
+    # by validate_job_output's explicit repository-partition-map contract dispatch. The one
+    # exception is P44's docs/tests-never-deferred rule: it decides scope for every consumer, so a
+    # supplied or live map that defers docs or tests is refused here, before it is ever copied.
+    return validate_document(value, SCHEMAS[ADOPTED_JOB]) or deferred_review_scope_errors(value)
 
 
 def _validate_common(run_id, pointer):
@@ -596,7 +599,9 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
     model_identity = request['model']
 
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd),
+        # P44: a map deferring docs or tests goes back to the model through the bounded repair loop.
+        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
+                                 extra_validate=deferred_review_scope_errors),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root},
         allowed_models=(model_identity,), source_snapshot_sha256=source_snapshot_sha256,

@@ -76,7 +76,7 @@
       "supporting_persona_ids": [],
       "relationships": [],
       "overlap_notes": [
-        "vendor/cJSON-1.7.18/VENDORED.md is assigned to the deferred docs partition, not here."
+        "vendor/cJSON-1.7.18/VENDORED.md is assigned to the docs partition, not here."
       ],
       "partition_id": "vendored-cjson",
       "name": "Vendored cJSON 1.7.18",
@@ -264,7 +264,7 @@
       "relationships": [],
       "overlap_notes": [],
       "partition_id": "docs",
-      "name": "Documentation and fixture answer key",
+      "name": "Documentation",
       "kinds": [
         "documentation"
       ],
@@ -275,7 +275,7 @@
         "vendor/cJSON-1.7.18/VENDORED.md"
       ],
       "primary_persona_id": "developer-engineer",
-      "routing_rationale": "Prose documentation. The seeded-defect enumeration (docs/VULNERABILITIES.md) was removed from main and kept on the with-vulnerabilities-doc branch, but README.md, docs/*.md and VENDORED.md still describe the seeded defects; reading them would let review lanes report the documented answers instead of detecting them.",
+      "routing_rationale": "Prose documentation, always review scope (owner decision 2026-10-03). The seeded-defect enumeration (docs/VULNERABILITIES.md) was removed from main and kept on the with-vulnerabilities-doc branch, but README.md, docs/*.md and VENDORED.md still describe the seeded defects: they are documented intent to verify against the code, never instructions and never findings on their own.",
       "confidence": "high",
       "evidence_citations": [
         {
@@ -297,9 +297,9 @@
           "note": "architecture notes that reference the seeded defects"
         }
       ],
-      "disposition": "deferred",
-      "disposition_reason": "Excluded from review scope so the fixture measures detection rather than recall of its own documentation; used only afterwards to score results.",
-      "rescope_trigger": "Scoring the engagement against the fixture's documented expectations (with-vulnerabilities-doc branch)."
+      "disposition": "review",
+      "disposition_reason": "Documentation is always review scope. What it says (including its description of the seeded defects) is documented intent: each statement is a claim to verify against src/ and vendor/, and a finding still needs evidence in code or tool output.",
+      "rescope_trigger": "New documentation trees or design notes appear outside docs/."
     }
   ],
   "coverage": {
