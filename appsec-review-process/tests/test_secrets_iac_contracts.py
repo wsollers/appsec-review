@@ -287,15 +287,36 @@ def iac_hit(number, tool_id, rule_id, category, kind, address, where, lead=False
 
 
 def base_image(number, form, repository, tag, digest, where):
+    """1.1 (P41): a literal reference is resolved from the host image cache and inventoried; a
+    build-arg reference is unresolved; scratch is not applicable."""
     tool_id = "dockerfile-base-image-inventory"
+    resolved = form == "literal"
+    status = "resolved" if resolved else "unresolved" if form == "build-arg-parameterized" else "not-applicable"
+    purl = "pkg:deb/debian/zlib1g@1:1.2.13.dfsg-1?arch=amd64&distro=debian-12"
     return {"reference_id": f"BI-{number:06d}", "assertion": "declared-base-image-reference", "tool_id": tool_id,
             "reference_form": form, "repository": repository, "tag": tag, "digest": digest, "location": where,
-            "citation": citation(IAC_JOB, tool_id)}
+            "citation": citation(IAC_JOB, tool_id),
+            "mutable": (digest is None) if resolved else None,
+            "resolution": {"status": status, "reason": form if status == "unresolved" else None,
+                           "resolved": {"at": "2026-10-03T00:00:00Z", "platform": "linux/amd64",
+                                        "index": {"digest": label_sha("index")},
+                                        "manifest": {"digest": label_sha("manifest")}} if resolved else None},
+            "operating_system": {"id": "debian", "version_id": "12", "eol_status": "supported", "eol": {
+                "support_end": "2028-06-30",
+                "source_url": "https://salsa.debian.org/debian/distro-info-data/-/raw/main/debian.csv"}} if resolved else None,
+            "package_inventory": {"status": "inventoried" if resolved else "not-inventoried" if status == "unresolved"
+                                  else "not-applicable",
+                                  "reason": "base-image-unresolved" if status == "unresolved" else None},
+            "components": [{"type": "library", "bom-ref": f"BI-{number:06d}:{purl}", "name": "zlib1g",
+                            "version": "1:1.2.13.dfsg-1", "purl": purl, "source_package": "zlib",
+                            "layer": {"digest": label_sha("layer")}}] if resolved else []}
 
 
 def goldens() -> dict[str, Golden]:
     secrets_schema, iac_schema = "appsec-review/secrets-inventory/1.0", "appsec-review/iac-config-evidence/1.0"
-    base_schema = "appsec-review/iac-config-base-image-inventory/1.0"
+    base_schema = "appsec-review/iac-config-base-image-inventory/1.1"
+    image_cache = {"image_cache": {"sha256": label_sha("refs"), "platform": "linux/amd64"},
+                   "eol_table": {"path": "data/base-image-eol.json", "sha256": label_sha("eol")}}
     hit_entries = [
         secrets_entry(1, "candidate-secret-location", "gitleaks", "aws-access-token", "cloud-provider-credential",
                       location("services/billing/config/settings.py", 41, 41)),
@@ -333,11 +354,12 @@ def goldens() -> dict[str, Golden]:
                {contracts.SECRETS_RESULT_FILE: (secrets_schema, {"entries": []})}, with_probe=False),
         Golden("iac-ok-with-gaps", contracts.IAC_CONTRACT_ID, "OK_WITH_GAPS", contracts.CAN_SKIP, iac_tools,
                {contracts.IAC_RESULT_FILE: (iac_schema, {"rule_hits": hits}),
-                contracts.BASE_IMAGE_FILE: (base_schema, {"base_images": images})}, with_probe=True),
+                contracts.BASE_IMAGE_FILE: (base_schema, {**image_cache, "base_images": images})}, with_probe=True),
         Golden("iac-skipped", contracts.IAC_CONTRACT_ID, "SKIPPED", contracts.CAN_SKIP,
                [(tool[0], "SKIPPED", None, tool[3]) for tool in iac_tools],
                {contracts.IAC_RESULT_FILE: (iac_schema, {"rule_hits": []}),
-                contracts.BASE_IMAGE_FILE: (base_schema, {"base_images": []})}, with_probe=True),
+                contracts.BASE_IMAGE_FILE: (base_schema, {"image_cache": None, "eol_table": None,
+                                                          "base_images": []})}, with_probe=True),
     )}
 
 
@@ -549,7 +571,7 @@ class SchemaHygieneTests(unittest.TestCase):
             schema = self.store.load(name)
             self.assertLessEqual(set(keywords(schema)), supported, name)
             for reference in re.findall(r'"\$ref": "([^"]+)"', json.dumps(schema)):
-                self.assertTrue((REPO / "schemas" / reference).is_file(), reference)
+                self.assertTrue((REPO / "schemas" / reference.split("#", 1)[0]).is_file(), reference)
 
     def test_no_property_name_can_hold_a_match_a_per_value_hash_or_a_promoted_claim(self):
         hashish = re.compile(r"(?i)(hash|hmac|digest|checksum|md5|sha1|sha256|sha512|fingerprint|entropy|length|prefix|suffix)")
@@ -608,7 +630,10 @@ class SchemaHygieneTests(unittest.TestCase):
                 free.append(path.rsplit(".", 1)[-1])
                 for value in digests:
                     self.assertIsNone(re.match(leaf["pattern"], value), f"{name} {path} accepts a digest")
-        self.assertEqual(set(free), {"entry_id", "rule_id", "path", "hit_id", "address", "reference_id", "repository", "tag"})
+        self.assertEqual(set(free), {"entry_id", "rule_id", "path", "hit_id", "address", "reference_id", "repository", "tag",
+                                     # base-image-inventory 1.1 (P41): os-release and package identities
+                                     "reason", "platform", "id", "version_id", "source_url", "bom-ref", "name",
+                                     "version", "purl", "source_package"})
 
     def test_observed_exposure_is_schema_valid_on_purpose(self):
         exposure = self.store.load(HIT_SCHEMA)["properties"]["exposure"]

@@ -17,6 +17,8 @@
 #   4. B16 registry records generate and match Docker
 #   5. the host code location is running (started in the background if not) and reloaded
 #   6. the four targets are cloned at their pinned commits (fixtures/populate-targets.sh)
+#  6b. their Dockerfile base images are fetched into the hash-verified cache data/feeds/base-images
+#      (base_image_cache.py fetch; 02-iac-config-scan reads it offline)
 #   7. the Claude CLI answers (persona jobs use its subscription login)
 set -uo pipefail
 
@@ -28,7 +30,7 @@ for arg in "$@"; do
         --check) CHECK=1 ;;
         --buildenvs) BUILDENVS=1 ;;
         --no-claude) CLAUDE=0 ;;
-        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -196,6 +198,24 @@ if [[ $CHECK -eq 1 ]]; then
 else
     fixtures/populate-targets.sh 2>&1 | sed 's/^/  /'
     [[ ${PIPESTATUS[0]} -eq 0 ]] && ok "all targets at their pinned commits" || bad "targets" "populate-targets.sh reported a problem"
+fi
+
+# ---- 6b. base images -------------------------------------------------------------------------------
+# P41: every Dockerfile FROM image of the targets, fetched here (network, outside B13) into the
+# content-addressed cache data/feeds/base-images (APPSEC_BASE_IMAGE_ROOT); 02-iac-config-scan reads it
+# offline. An image that cannot be fetched is recorded with its cause and stays a gap in the run.
+step "6b. base-image cache"
+TARGET_DIRS=(fixtures/targets/*/)
+if [[ ! -d "${TARGET_DIRS[0]}" ]]; then
+    todo "no targets cloned yet"
+elif [[ $CHECK -eq 1 ]]; then
+    if out="$(python3 -B appsec-review-process/base_image_cache.py status "${TARGET_DIRS[@]}" 2>&1)"; then ok "$(echo "$out" | tail -1)"
+    else todo "$(echo "$out" | tail -1): appsec-review-process/base_image_cache.py fetch fixtures/targets/*/"; fi
+else
+    # Docker Hub rate-limits anonymous pulls per IP (429); mirror.gcr.io serves the same blobs, hash-checked.
+    out="$(python3 -B appsec-review-process/base_image_cache.py fetch --mirror docker.io=mirror.gcr.io "${TARGET_DIRS[@]}" 2>&1)"
+    if [[ $? -eq 0 ]]; then ok "$(echo "$out" | tail -1)"
+    else echo "$out" | grep -v '^resolved ' | sed 's/^/  /'; todo "unresolved base images are gaps in the run (causes above)"; fi
 fi
 
 # ---- 7. Claude CLI ---------------------------------------------------------------------------------
