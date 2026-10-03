@@ -9,7 +9,7 @@
 # Fails closed: a wrong origin or local modifications are reported and left untouched, never reset.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/targets"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/targets"
 
 # name|origin|pinned commit (full SHA; bump deliberately when the fixture changes)
 FIXTURES=(

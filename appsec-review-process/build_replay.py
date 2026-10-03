@@ -19,6 +19,7 @@ import shlex
 import shutil
 import threading
 from typing import Any
+import zlib
 
 import build_resolution
 import container_execution as ce
@@ -600,6 +601,18 @@ def _host(runtime: ce.ContainerRuntime) -> dict[str, Any]:
             "docker_executable": runtime.docker_executable, "container_user": runtime.container_user}
 
 
+
+# The runner travels in argv, compressed and split into members under the container's per-member limit
+# (container_argv_member_chars_max); the bootstrap joins them back. sys.argv[1] stays the config.
+RUNNER_BOOTSTRAP = "import base64,sys,zlib;exec(zlib.decompress(base64.b64decode(''.join(sys.argv[2:]))))"
+
+
+def runner_argv(cfg: dict) -> list[str]:
+    packed = base64.b64encode(zlib.compress(RUNNER.encode("utf-8"), 9)).decode("ascii")
+    size = ce.MAX_ARGV_MEMBER_CHARS
+    return ["/usr/bin/python3", "-c", RUNNER_BOOTSTRAP, json.dumps(cfg, sort_keys=True),
+            *(packed[i:i + size] for i in range(0, len(packed), size))]
+
 def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], lock: dict[str, Any],
              inputs: dict[str, Any]) -> dict[str, Any]:
     control = inputs["control"]["value"]
@@ -611,11 +624,9 @@ def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], loc
            "headers": {"limit": HEADER_LIMIT, "max_bytes": HEADER_MAX_BYTES, "suffixes": list(HEADER_SUFFIXES)}}
     if job == "02-native-build":
         cfg["dependencies"] = {"limits": DEPENDENCY_LIMITS, "record": DEPENDENCIES_FILE}
-    encoded = base64.b64encode(RUNNER.encode("utf-8")).decode("ascii")
-    trusted = "import base64;exec(base64.b64decode('" + encoded + "'))"
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": job, "attempt_id": adapter_id,
         "image": {"image_id": record["image_id"], "digest": record["digest"]},
-        "argv": ["/usr/bin/python3", "-c", trusted, json.dumps(cfg, sort_keys=True)],
+        "argv": runner_argv(cfg),
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"}],
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
         "scratch_path": "scratch", "log_path": "logs/container",

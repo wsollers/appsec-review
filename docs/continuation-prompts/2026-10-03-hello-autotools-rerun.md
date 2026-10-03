@@ -56,7 +56,7 @@ python3 orchestrator/run-status.py "$RUN_ID" --failed
 ```
 
 When Dagster reports FAILURE but no job is FAILED/BLOCKED:
-`python3 orchestrator/dagster-failures.py orchestrator/dagster/.host/launch-$RUN_ID.log`.
+`python3 orchestrator/dagster-failures.py "$RUN_ID"`.
 
 ## 3. What should change in the gap summary
 

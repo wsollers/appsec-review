@@ -21,7 +21,7 @@
 # Log: orchestrator/dagster/.host/prep-rerun-<UTC time>.log
 set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$REPO" || exit 1
 CHECK=0; OSV=1; PUBLISH=0; HOST_ARGS=()
 for arg in "$@"; do
