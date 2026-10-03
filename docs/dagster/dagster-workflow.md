@@ -50,6 +50,18 @@ configured persona/role/domain/tooling/output contracts and preserve partition-b
 dependencies. They prepare work requests only. Partition discovery, developer/DevOps/SRE review,
 scanners and target builds are still planned; this workflow does not execute them or claim findings.
 
+## full_review: tolerant producers and gate ops
+
+In `full_review` most lifecycle ops raise when their job does not publish, and Dagster then skips every
+downstream op. Two producers are tolerant (P42 `f75ef1d`, P43 `2e180f2`; `dagster_workflow.TOLERANT_OPS`):
+the `02-native-build` op and the `02-iac-config-scan` op return a `NOT_PUBLISHED` marker instead of raising.
+`wire_lifecycle` hands that marker to optional consumers (only `02-sbom-inventory`, which records the gap,
+e.g. `native-build-not-published`) and hands required consumers the output of a gate op,
+`job_02_native_build_published` or `job_02_iac_config_scan_published`, which re-raises. So a crashed or
+BLOCKED native build still holds native SAST, IR capture, `02-codeql-cpp` and the binary jobs, and the
+run still fails, but the SBOM publishes. Lane 14 uses the same return-not-raise pattern towards 10.
+The wiring was verified in a pinned-version venv only, not on a host stack.
+
 ## State and recovery
 
 Each branch owns:

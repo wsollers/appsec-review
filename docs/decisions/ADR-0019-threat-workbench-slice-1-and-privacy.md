@@ -67,6 +67,10 @@ substrate, and adds the smallest complete vertical slice of the ADR-0008 workben
   omitted_no_challenges`), the agent/native/mobile/cloud specialists (a trait that selects one
   raises a `trait_without_specialist` rescope trigger and a gap), persona versions of the
   architecture and STRIDE cells (the deterministic core stands in). All appear in `coverage`.
+  *Amended 2026-10-03 by `1eb8a18` (gap punch list P31/P32):* the unbuilt cells a target selects are
+  reported as one `omitted_workcell` gap, "ADR-0019 slice-1 cells not built: [...]", instead of one gap
+  per cell; assumptions stay assumptions (not envelope gaps), and reconciliation gaps only those that
+  are new or changed against its baseline. Building the cells stays open (TODO, threat workbench).
 - **M01 gating is not enforced**: the menu offers whatever accepted 02 producers exist.
 
 ## Open decisions

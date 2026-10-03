@@ -78,7 +78,11 @@ Target files are evidence data and cannot expand permission or change job policy
 The source family runs language SAST including Go, Java and PHP; secrets, IaC and mobile checks;
 container-image inventory; SBOM, licence and lifecycle analysis; and offline SCA matching. The SCA
 workers bind exact Grype/OSV snapshot bytes and record snapshot age. Refresh happens outside the
-engagement flow. Do not enable network access to bypass a stale snapshot.
+engagement flow. Do not enable network access to bypass a stale snapshot. The SBOM also lists
+vendored C components versioned from their headers (cJSON with its purl and CPE), the OS packages
+the native build consumed, and the OS packages of Dockerfile base images, which the host fetches into
+a hash-verified cache beforehand (\texttt{orchestrator/prepare-host.sh}, step 6b). The OSV feed
+(\texttt{osv\_feed.py sync}) must be published on the host once before the first run.
 
 \subsection{Build and binary evidence}
 Build resolution discovers and replays build units in an isolated no-network worker. Imported

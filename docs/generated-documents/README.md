@@ -13,6 +13,11 @@ The `.tex` file is authoritative. The PDF is compiled from that exact source by 
 by `pipeline/report/render_documents.py` and uses the report workbench's browser-side KaTeX
 renderer. TikZ diagrams render in PDF and appear as explicit diagram placeholders in HTML.
 
+> **PDFs lag the sources (2026-10-03).** `user-guide.tex` and `design-doc.tex` gained the gap
+> punch-list notes (base-image packages, OSV Debian/Alpine) and the HTML was regenerated; the PDFs
+> were not, because no Docker daemon or `audit-report:local` was available. Recompile them with the
+> commands below and remove this note.
+
 Regenerate from the repository root:
 
 ```bash

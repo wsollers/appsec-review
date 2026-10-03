@@ -52,6 +52,10 @@ Index content: 283,404 advisories, 111,657 aliases, 315,197 affected entries, 10
   `affected_functions` key exists on 1,254 crates.io affected entries but is `null` in every one in this
   data. No other ecosystem populates symbols. Wave 3 dependency reachability therefore gets symbols for
   Go only; an empty symbol result is never evidence that a package is safe.
+- **Not measured: Debian, Alpine and C/C++.** The feed added the `Debian` and `Alpine` ecosystems on
+  2026-10-03 (P43, `2e180f2`) after this measurement; their archive sizes and index cost are unmeasured
+  (re-run `bench_osv_index.py` after the next sync). OSV's C/C++ advisories use `GIT` commit ranges and are
+  not in the feed, so vendored C components (cJSON) match through Grype's CPE/NVD path, not OSV.
 
 ## Reproduce
 

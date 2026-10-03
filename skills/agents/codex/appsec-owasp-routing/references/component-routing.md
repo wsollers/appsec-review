@@ -22,7 +22,11 @@ qualified, explicit run-owned requests may still appear. Always verify:
 
 - component classification hashes and input IDs bind to the accepted map;
 - `counts.control_targets == selected_controls x components`;
-- unknown or conflicting classification becomes `cannot_determine` with a rescope gap;
+- unknown or conflicting classification becomes `cannot_determine` with a rescope gap; a partial
+  classification routes `conditional` with its unknowns as conditions (P25); a row no rule matches has
+  `source_completeness: not_evaluated` and no completeness gap (P23);
+- the OWASP validation worklist takes its targets and applicability from the accepted routing
+  (P39); join-report gaps are one per (kind, statement) with `row_indices` (P22);
 - every row is represented in batching, dispatch accounting, validator results and the joined
   control matrix exactly once;
 - a component map alone is not evidence that OWASP validation ran.

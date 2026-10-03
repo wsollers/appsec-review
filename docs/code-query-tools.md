@@ -10,8 +10,17 @@ hash-verified **code index** instead. Decision record: [ADR-0032](decisions/ADR-
    content-addressed from `data/tooling/` (AGENTS.md rule).
 2. `02-code-index` (`code_index_job.py`, deterministic Python) builds `code-index.sqlite`
    (schema `appsec-review/code-index/1`) from the CPG records file, the tree-sitter AST and the export tables.
-   It depends on `02-code-property-graph`, `02-treesitter-ast` and binary triage. The capabilities it could build
-   (`cpg`, `treesitter`, `exports`) are recorded in `code-index.json`.
+   It depends on `02-code-property-graph`, `02-treesitter-ast` and binary triage, and since P09 (`55a173e`) takes
+   optional edges from `02-ir-facts` and `02-debug-symbol-index` (a skip binds nothing and is no gap); their records
+   fill the `ir_functions` and `debug_symbols` tables (FTS names included). The Joern exporter
+   (`pipeline/joern_export_records.sc`) exports only `isExternal(false)` methods and type declarations, plus
+   `INHERITS` type rows and method-reference rows (P07, P10); these fill `type_edges` and `address_taken`.
+   Location-less METHOD/TYPE_DECL rows from older exports are an `external-stub` observation and deduplicated
+   macro-expansion nodes a `duplicate` observation, neither a gap (P07, P08); a location-less CALL stays a gap.
+   `cpg-exporter:no-inheritance-edges` is emitted only when no edge was exported for a language with inheritance,
+   `cpg-exporter:no-method-reference-nodes` only when there are no method references. The capabilities it could
+   build (`cpg`, `treesitter`, `exports`, `type_edges`, `method_references`, `ir_facts`, `debug_symbols`) are recorded
+   in `code-index.json`; the exporter change is not yet compiled by a host run.
 3. A model job is granted `code_*` tools only when **all** hold: its tooling profile lists `query tool: <name>`;
    the tunable family (`code_query_*_enabled`) is on; the job pins an accepted
    `02-code-index/attempts/<a>/code-index.json`; and that index's capabilities can answer the tool.

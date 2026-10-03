@@ -32,6 +32,21 @@ produce:
 - downstream lane hints
 - evidence lineage back to the original artifact
 
+## Implemented behaviour: absence is not a gap (2026-10-03)
+
+This page is the design. In the implemented ingests (`static_intelligence_core.py`, `02-api-collection-`,
+`02-doc-`, `02-operations-doc-`, `02-test-intelligence-ingest`), a target with no matching input is
+`SKIPPED` with skip reason `not-applicable-no-matching-inputs` and `applicability:
+SKIPPED_NA_NO_APPLICABLE_INPUTS`, authorized by the `02-evidence-assembly` edge, and only when every
+inventory entry was examined; unexamined non-file entries keep the gap
+(`readme-only-no-specialized-inputs:<n>-non-file-entries-unexamined`). Operations docs match `build`
+and `install` too. Test intelligence indexes shell `test_x()`/`run_test x`, C `test_x(` and
+Unity/CUnit `RUN_TEST(x)` and records one `test-entrypoint` per runnable test script.
+`02-standards-source-ingest` publishes deselected families in `not_applicable_families` with a reason;
+a selected family without records is the gap `selected-family-without-records:<family>`
+(P16-P18, `da62ed8`). Open owner question: these ingests do not honour the partition map's `docs/**`
+deferral, so a seeded fixture's answer key under `docs/` can be ingested.
+
 ## Design Goals
 
 1. **Use more of what teams already know.**

@@ -36,8 +36,14 @@ target runs.
   | `fixtures/targets/` | target clones at pinned commits | `fixtures/populate-targets.sh` |
   | `orchestrator/dagster/.env`, `.host/` | instance password, uid/gid, DAGSTER_HOME, compute logs | `orchestrator/dagster/setup.py`, `code-location.sh prepare` |
   | `data/feeds/nvd/` mutable state | NVD feed snapshots | `nvd_reference_schedule` |
-  | `data/feeds/osv/`, `data/feeds/mitre/` | OSV and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `nvd_reference_schedule`, `mitre_feed.py sync` |
+  | `data/feeds/osv/`, `data/feeds/mitre/` | OSV (`npm`, `Go`, `Maven`, `crates.io`, `NuGet`, `Packagist`, `PyPI`, and since P43 `Debian`, `Alpine`; [osv-feed](../osv-feed.md)) and MITRE ATT&CK/CAPEC feed snapshots ([mitre-feed](../mitre-feed.md)) | `osv_feed.py sync` once, then `nvd_reference_schedule`; `mitre_feed.py sync` |
+  | `data/feeds/base-images/` | content-addressed Dockerfile base-image blobs and `current.json` (P41, `APPSEC_BASE_IMAGE_ROOT`) | `prepare-host.sh` step 6b (`base_image_cache.py fetch`) |
 
+- **After the 2026-10-03 gap punch list** every run host (zarathustra and hal5000 WSL) needs one
+  `prepare-host.sh` pass (rebuilds `audit-binary-analysis`, `audit-native` and the images layered on it,
+  `tool-shellcheck`, `audit-codeql-native`; regenerates B16 records; fetches base images) and one
+  `osv_feed.py sync` (the OSV feed did not exist on zarathustra for run `20261003T000827Z-a02791`).
+  hal5000 then publishes the rebuilt images. Commands: [operator guide](../report-path/happy-path-operator-guide.md#host-steps-after-the-gap-punch-list-2026-10-03).
 - **Runs are not portable.** A run started on one host is resumed on the same host.
 - **Shared images ([ADR-0033](../decisions/ADR-0033-shared-images-google-drive.md)).** hal5000 builds
   images and publishes them as `.tar.zst` archives to Google Drive (`appsec-review/images`), then commits

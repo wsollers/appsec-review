@@ -172,6 +172,38 @@ records the gap `MITRE_REFERENCE_MISSING` / `MITRE_REFERENCE_STALE`; the review 
 the snapshot's full MITRE CWE catalog; when its CWE source is missing or stale, the committed curated
 catalog is used instead and the gap `CWE_REFERENCE_MISSING` / `CWE_REFERENCE_STALE` / `CWE_REFERENCE_INVALID` is recorded.
 
+### Host steps after the gap punch list (2026-10-03)
+
+The fixes for the `hello-autotools` gap punch list
+([`2026-10-03-gap-punchlist-hello-autotools.md`](../continuation-prompts/2026-10-03-gap-punchlist-hello-autotools.md))
+changed image scripts and added host-side inputs. On each run host, before the next `full_review`:
+
+```bash
+orchestrator/prepare-host.sh --check        # lists stale images, missing records, uncached base images
+orchestrator/prepare-host.sh                # step 3 rebuilds stale images, 4 regenerates B16 records, 6b fetches base images
+python3 appsec-review-process/osv_feed.py sync     # E1: OSV feed incl. Debian and Alpine (network)
+python3 appsec-review-process/osv_feed.py verify
+orchestrator/dagster/code-location.sh reload       # or restart it, so the new B16 records are read
+```
+
+- **E1, OSV feed.** `06-reachability-*` reported `ENGINE_INPUT:osv-unusable:DATA_ROOT_MISSING` because
+  `data/feeds/osv` did not exist on the host. `code-location.sh` exports `APPSEC_OSV_ROOT` to that path;
+  the feed must be published there once (`nvd_reference_sync` refreshes it afterwards). Since P43 the feed
+  also fetches the `Debian` and `Alpine` ecosystems (`2e180f2`), so an existing feed needs one new `sync`.
+- **E2, `audit-codeql-native`.** Traced C/C++ CodeQL rows are `UNAVAILABLE` until this image is built and
+  has a B16 record. It is in `registry_records.CODEQL_IMAGE_IDS`, so step 3 builds it (it layers on
+  `audit-native:local`) and step 4 records it.
+- **E3, rebuilt images.** `audit-binary-analysis` (`nm -anl` in `analyze-binary.sh`, P02/P03, `73b64a7`),
+  `audit-native` (`run_native_sast.py` splits clang-tidy compile errors from tool errors, P12, `f0fcc17`)
+  and the new `tool-shellcheck` (P14, `580bfb5`). Step 3 rebuilds any image whose folder changed
+  (`image_build.py` fingerprints), and every image layered on `audit-native` (`audit-buildenv-cpp`,
+  `audit-buildenv-cpp-resolute`, `audit-codeql-native`) follows. Without `APPSEC_IMAGE_STORE` or with a
+  STALE published archive the build is local; on hal5000 publish afterwards
+  (`python3 -B images/image_build.py publish --all`).
+- **Base images (P41).** Step 6b runs `base_image_cache.py fetch --mirror docker.io=mirror.gcr.io
+  fixtures/targets/*/` into `data/feeds/base-images` (`APPSEC_BASE_IMAGE_ROOT`); `02-iac-config-scan`
+  reads it offline. An image that could not be fetched stays a named gap in the run.
+
 ## 3. Prepare source, build and searchable evidence
 
 Intake fixes target identity, source commit, scope and permissions. Discovery partitions the
@@ -189,7 +221,18 @@ runs with no network and imports only allowlisted artifacts. Analysis then publi
   `unknown`, [docs/dependency-reachability.md](../dependency-reachability.md)); the report shows it in
   section 3B;
 - secrets, IaC, image, SBOM, offline SCA, licence and dependency-lifecycle evidence;
-- native SAST, LLVM IR, Joern AST/CPG, test and ELF hardening evidence;
+- native SAST, LLVM IR, Joern AST/CPG, test and ELF hardening evidence. `02-native-build` publishes,
+  per unit, the configure-generated headers (`outputs/<unit>/generated-headers/`, P35) and a hash-bound
+  `build-dependencies.json` (headers per translation unit, link lines, `DT_NEEDED`, owning OS packages,
+  P36). `02-native-sast` and the traced `02-codeql-cpp` rows mount the headers read-only at
+  `/inputs/generated-headers`; `02-code-index` also indexes accepted `02-ir-facts` and
+  `02-debug-symbol-index` records (optional edges, P09);
+- SBOM components from Syft, the build index (vendored cJSON versioned from its hash-bound `cJSON.h`
+  with `pkg:github/davegamble/cjson@v<ver>` and `cpe:2.3:a:cjson_project:cjson:<ver>`, P19), the native
+  build's `build-dependencies.json` (`pkg:deb` scoped `load-time` or `build-time`, P37) and the base-image
+  inventory of `02-iac-config-scan` (`pkg:deb`/`pkg:apk` scoped `container-base` with the image
+  reference and end-of-life flag, P43). Both extra edges are optional and tolerant: a crashed or BLOCKED
+  native build or IaC scan becomes an SBOM gap (`native-build-not-published`), not a stop (P42);
 - literal/full-text and LanceDB semantic search projections; and
 - cross-references between components, files, symbols, build units, binaries and dependencies.
 
@@ -296,6 +339,31 @@ Inspect all findings against cited evidence, all unresolved items, tool and cont
 snapshot age, source/build identity, threat conflicts and the two claim-ledger heads. A clean-looking
 report with incomplete coverage is not a clean assessment.
 
+### Reading the gap summary (since the 2026-10-03 punch list)
+
+A gap is something the run could not examine. Since the punch-list fixes, verified absence and
+by-design notes are reported as such, not as gaps:
+
+- intelligence ingests with no matching input publish `SKIPPED` (`not-applicable-no-matching-inputs`,
+  applicability `SKIPPED_NA_NO_APPLICABLE_INPUTS`) when every inventory entry was examined (P16);
+  deselected standards families appear in `not_applicable_families` (P18);
+- DevOps/SRE/dev discovery put verified absence in `absence_observations` and by-design notes in
+  `informational_notes`; only `coverage_gaps` set `OK_WITH_GAPS` (P30, P34);
+- build and documentation files count as tree-sitter `totals.non_source`, not `no-grammar` (P15);
+  Joern external stubs and deduplicated nodes are observations (P07, P08);
+- `05-native-memory` with zero candidates is `OK` (P29); the first dynamic-rescope generation is
+  `INITIAL_BASELINE` with no gap (P33);
+- OWASP join gaps are one per (kind, statement) with `row_indices` (P22); a no-rule row has
+  completeness `not_evaluated` (P23); the worklists carry one counted assessment gap (P26);
+- the threat model reports unbuilt ADR-0019 cells in one gap and each open question once (P31, P32).
+
+Still expected on `hello-autotools`, because they describe the target: no CODEOWNERS, the deliberately
+seeded fixture, `vendor/cJSON` origin claimed by `VENDORED.md` but not verified upstream, `strcpy` in
+`greet.cpp` not confirmed dynamically, deployed umask/container user unknown, `docs/BUILDING.md`
+option 2 not built. Also expected until their work lands: Semgrep interprocedural/interfile taint
+(P13 is intraprocedural), autotools-generated shell scripts not linted (P14), and the unbuilt
+wave-3 challenge cell (P31).
+
 ## 8. Current stop conditions
 
 Stop short of final publication whenever final preparation fails, or whenever its retained control
@@ -336,4 +404,8 @@ operator and design-document HTML publications are self-contained, but this demo
 | A model step seems hung | `orchestrator/tail-run-log.sh "$RUN_ID" --level warn`: `IDLE` lines name the stalled call; set `APPSEC_IDLE_KILL_SECONDS` to stop such calls automatically. |
 | A compiled language shows a build gap | `language not built: <cause>` on `02-codeql-<lang>`. For C/C++, check that `02-native-build` has replayable units (build-mode none still ran); for Go, the image has no Go toolchain yet (TODO section G). The node is `OK_WITH_GAPS`, not failed; its reachability rows are `unknown`. |
 | Conflict between engines | 06's `outputs/dependency-reachability.json` lists the match with each engine's verdict and reason, and `cve-reachability.json` writes it as `unknown` with a `REACHABILITY_CONFLICT:<match>` gap (Critical stays capped). The claim ledger adds a review obligation to resolve the conflicting verdicts; review both witnesses by hand. Never delete an engine table to resolve it. |
+| `clang-tidy-compile-error:<n>-translation-units[:missing-header:<h>]` on `02-native-sast` | The translation units compiled with errors (findings still count); a missing `config.h` means the native build published no generated headers for that unit (`generated-headers-not-published`) or the run predates P35. A `clang-tidy-tool-error` is a timeout, missing tool or other failure. |
+| `native-build-not-published` on `02-sbom-inventory` | No accepted `02-native-build`: the SBOM ran without build-dependency components (P42). Fix the native build; required consumers (native SAST, IR, codeql-cpp, binary jobs) are held by the `job_02_native_build_published` gate. |
+| Base-image packages missing from the SBOM | Run `orchestrator/prepare-host.sh` step 6b (`base_image_cache.py status fixtures/targets/*/`); unresolved images are named gaps in `02-iac-config-scan`. |
+| `ENGINE_INPUT:osv-unusable:<cause>` on `06-reachability-*` | A row needed OSV advisory symbols and the feed is missing or stale (P20): `osv_feed.py sync` (E1). |
 | CodeQL reports every language `UNAVAILABLE` | The `audit-codeql` image has no B16 record yet; build and register it (`images/audit-codeql/README.md`). |

@@ -82,7 +82,12 @@ IaC, container-image inventory, SBOM generation, offline SCA matching, licence s
 lifecycle, ELF binary hardening, mobile SAST, and Go/Java/PHP source SAST. Offline vulnerability
 matching binds exact Grype/OSV snapshot bytes and records age; snapshot refresh is an out-of-band
 maintenance job and a stale or missing snapshot becomes a coverage gap. Native binaries produced by
-the build lane are routed to Checksec and retained with the build identity.
+the build lane are routed to Checksec and retained with the build identity. Since the 2026-10-03 gap
+punch list the native build also publishes per unit its configure-generated headers (mounted by native
+SAST and traced CodeQL) and a `build-dependencies.json`; the SBOM adds OS packages and vendored trees
+from it, vendored cJSON with purl/CPE, and base-image OS packages from the IaC scan's inventory, over
+optional edges that never stop the SBOM. Verified absence (no API spec, no CI, no IaC) is reported as
+`SKIPPED`/N/A or an absence observation, not as a coverage gap.
 
 CodeQL runs as eight per-language nodes `02-codeql-<lang>` in parallel
 ([ADR-0023](decisions/ADR-0023-per-language-codeql-reachability.md)): interpreted languages after
@@ -104,7 +109,10 @@ OWASP, STIG/SRG and deployment hardening are three distinct processes:
 
 1. OWASP T03-T14 selects ASVS/MASVS work by component, performs bounded validation and publishes a
    paginated status matrix, gaps and candidate routes. The chain is qualified. Automatic derivation
-   of all trusted dispatch facts remains open.
+   of all trusted dispatch facts remains open. The worklist takes its targets and applicability from
+   the accepted T04 routing (P39); a positively classified local CLI/library with no network trait is
+   N/A for the ASVS web, API and session chapters on the bound component map (P24, pending owner
+   confirmation), and a partially classified component routes conditionally (P25).
 2. STIG/SRG tailoring selects platform controls and publishes its own validation worklist.
 3. Deployment hardening consumes the tailored worklist plus deployment evidence and reports static
    configuration and exposure observations. It does not certify compliance and does not replace the
