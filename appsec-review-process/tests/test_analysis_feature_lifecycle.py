@@ -50,7 +50,7 @@ class LifecycleTests(unittest.TestCase):
                  mock.patch.object(life,"data_path",side_effect=lambda _run,*parts:base.joinpath(*parts)), \
                  mock.patch.object(life,"coordinate_worker_lifecycle",side_effect=self.fake_coordinate), \
                  mock.patch.object(life,"record_terminal_current",side_effect=self.fake_record):
-                self.assertEqual(life.run("run","dag","05-native-memory")["status"],"OK_WITH_GAPS")
+                self.assertEqual(life.run("run","dag","05-native-memory")["status"],"OK")  # zero candidates: no runtime gap (P29)
                 skipped=life.run("run","dag","13-fuzz-target-triage")
                 self.assertEqual(skipped,{"status":"SKIPPED","reason":"not-applicable-no-fuzz-target"})
 

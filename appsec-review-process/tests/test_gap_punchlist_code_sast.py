@@ -239,7 +239,6 @@ class SourceSastCoverage(unittest.TestCase):
 
 
 class TreesitterNonSource(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p15_build_and_doc_files_are_not_no_grammar_gaps(self):
         """P15: Makefile.am, configure.ac, README.md and friends are non-source info, not no-grammar gaps."""
         fake = types.SimpleNamespace(Language=lambda value: value, Parser=lambda language: None)

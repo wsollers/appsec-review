@@ -222,7 +222,6 @@ class FullReviewIacPresenceTests(unittest.TestCase):
 
 
 class NativeMemoryGapTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p29_zero_candidates_has_no_runtime_gap(self):
         """P29: native-memory with zero candidates reports no host/runtime gap and status OK."""
         bounded = bounded_tests
@@ -309,7 +308,6 @@ class ThreatModelAssumptionGapTests(unittest.TestCase):
 
 
 class DynamicRescopeTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p33_initial_dynamic_rescope_is_ok_without_gap(self):
         """P33: the first dynamic-rescope run (no prior accepted generation) is OK with no gap."""
         inputs = {"run_id": "run", "job_id": "dynamic-rescope", "source_generation": H, "code": {},
