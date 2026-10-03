@@ -23,7 +23,7 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-cd "$REPO"
+cd "$REPO" || exit 1
 CHECK=0; BUILDENVS=0; CLAUDE=1
 for arg in "$@"; do
     case "$arg" in
@@ -165,6 +165,20 @@ fi
 # ---- 5. code location ------------------------------------------------------------------------------
 step "5. host code location"
 cl_up() { orchestrator/dagster/code-location.sh check >/dev/null 2>&1; }
+# A code location started from another spelling of this checkout (a symlinked path, or another clone)
+# serves the wrong paths: every mount and pool check then refuses them. Replace it.
+stale_cl() { pgrep -af 'dagster (code-server start|api grpc)' | grep -v -- "-d $REPO\( \|$\)" | awk '{print $1}'; }
+mapfile -t STALE < <(stale_cl)
+if [[ ${#STALE[@]} -gt 0 && $CHECK -eq 1 ]]; then
+    todo "code location runs from another path (pids ${STALE[*]}); a normal run replaces it"
+elif [[ ${#STALE[@]} -gt 0 ]]; then
+    echo "  stopping code location started from another path (pids ${STALE[*]})"
+    kill "${STALE[@]}" 2>/dev/null
+    for _ in $(seq 1 15); do [[ -z "$(stale_cl)" ]] && break; sleep 1; done
+    mapfile -t STALE < <(stale_cl)
+    [[ ${#STALE[@]} -gt 0 ]] && kill -9 "${STALE[@]}" 2>/dev/null
+    sleep 2
+fi
 if cl_up; then
     ok "running"
     [[ $CHECK -eq 0 ]] && { orchestrator/dagster/code-location.sh reload 2>&1 | tail -1 | sed 's/^/  /'; }
