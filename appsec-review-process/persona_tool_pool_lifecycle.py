@@ -206,7 +206,9 @@ class GraphReviewInvoker:
             value, (first,), package.allowed_claim_classes, schema["artifact"]))
         persona_invocation.write_invoker_output(
             package, output_root, files=[schema["artifact"]], claims=claims,
-            usage={"input_bytes": len(first.data), "input_units": 0, "output_units": 0, "tool_calls": 0},
+            # input_bytes is what the package holds (prompt + inputs), as persona_invocation re-derives it.
+            usage={"input_bytes": len(package.prompt) + sum(len(item.data) for item in package.inputs),
+                   "input_units": 0, "output_units": 0, "tool_calls": 0},
             tool_calls=[], verified_invocations=[], injection_suspected=[],
             limitations=["No model was called: the intake review candidates are fully determined by accepted "
                          "intake (decision D4); the persona prompt was pinned for the pool protocol, not sent."])

@@ -196,7 +196,8 @@ class DeterministicInvokerTests(unittest.TestCase):
         request = {"invoker_id": lifecycle.INVOKER_ID, "model": MODEL,
                    "persona": {"persona_id": "claim-reviewer", "persona_sha256": "sha256:" + "3" * 64}}
         return SimpleNamespace(inputs=(first,), composition={"output_contract": contract}, request=request,
-                               request_sha256="sha256:" + "4" * 64, allowed_claim_classes=("candidate_only",))
+                               request_sha256="sha256:" + "4" * 64, allowed_claim_classes=("candidate_only",),
+                               prompt=b"pinned prompt, never sent")
 
     def test_writes_the_canonical_candidates_without_a_model(self):
         data = json.dumps(intake()).encode("utf-8")
@@ -212,8 +213,24 @@ class DeterministicInvokerTests(unittest.TestCase):
                          (lifecycle.INVOKER_ID, 0, 0))
         self.assertEqual([claim["claim_id"] for claim in manifest["claims"]], ["review_accepted_scope"])
         self.assertTrue(any("No model was called" in line for line in manifest["limitations"]))
+        # persona_invocation re-derives input_bytes as prompt + inputs and refuses any other count.
+        self.assertEqual(manifest["usage"]["input_bytes"], len(package.prompt) + len(data))
         self.assertEqual(lifecycle.persona_invocation.validate_document(
             manifest, lifecycle.persona_invocation.OUTPUT_SCHEMA), [])
+
+    def test_the_real_pool_publishes_two_identical_candidates(self):
+        # No launch, rendezvous or merge patch: the pool and persona_invocation's output checks run for real.
+        with tempfile.TemporaryDirectory() as folder:
+            workspace = Path(folder).resolve()
+            inputs = build_inputs(workspace)
+            base = workspace / "dispatch"
+            with mock.patch.object(lifecycle, "root", return_value=base), \
+                    mock.patch.object(lifecycle, "_current_inputs", return_value=inputs):
+                pointer = lifecycle.run(RUN_ID, "dagster-real")
+            self.assertEqual(pointer["status"], "OK")
+            written = sorted(base.glob("attempts/*/pool-context/pools/*/instances/*/outputs/persona/candidates.json"))
+            self.assertEqual(len(written), 2)
+            self.assertEqual(read_json(written[0]), read_json(written[1]))
 
     def test_the_pool_requests_name_the_deterministic_invoker(self):
         with tempfile.TemporaryDirectory() as folder:
