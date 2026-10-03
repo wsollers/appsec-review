@@ -272,10 +272,14 @@ def finish_row(prepared: dict[str, Any], found: dict[str, Any], files: dict[str,
 def assemble(*, run_id: str, attempt_id: str, engine: str, inputs: dict[str, Any], rows: list[dict[str, Any]],
              languages: list[dict[str, Any]]) -> dict[str, Any]:
     rows = sorted(rows, key=lambda row: row["match_id"])
+    # The OSV input matters only to a row that needed advisory symbols from it (``prepare``); with no
+    # such row an unusable OSV root takes nothing from this job.
+    osv_gap = inputs.get("osv_gap")
+    osv_needed = bool(osv_gap) and any(osv_gap in row["gaps"] for row in rows)
     gaps = sorted({f"REACHABILITY_UNKNOWN:{row['match_id']}:{gap}"[:512] for row in rows for gap in row["gaps"]
                    if not gap.startswith("engine-not-applicable:")} |
                   {f"ENGINE_INPUT:{gap}"[:512] for language in languages for gap in language["gaps"]} |
-                  ({f"ENGINE_INPUT:{inputs['osv_gap']}"[:512]} if inputs.get("osv_gap") else set()))
+                  ({f"ENGINE_INPUT:{osv_gap}"[:512]} if osv_needed else set()))
     counts = {verdict: sum(1 for row in rows if row["verdict"] == verdict)
               for verdict in ("reachable", "unreachable", "unknown")}
     return {"schema": SCHEMA, "run_id": run_id, "job_id": job_id(engine), "attempt_id": attempt_id, "engine": engine,

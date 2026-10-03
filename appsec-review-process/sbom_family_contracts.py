@@ -260,12 +260,19 @@ def required_gap_reason(component: Mapping[str, Any]) -> str | None:
     return None
 
 
+def cjson_identifiers(version: str) -> tuple[str, str]:
+    """purl and CPE of upstream cJSON (github.com/DaveGamble/cJSON, tagged ``v<version>``) at a
+    version read from build-referenced, hash-bound source; NVD names the product cjson_project:cjson."""
+    return f"pkg:github/davegamble/cjson@v{version}", f"cpe:2.3:a:cjson_project:cjson:{version}:*:*:*:*:*:*:*"
+
+
 def build_index_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) -> list[str]:
     """Validate the deterministic build-index enrichment and its component citations.
 
     This producer is intentionally separate from the Syft tool instance.  Its retained document
     is the citation target and carries the exact accepted build-index binding; it may infer only
-    name/version from a build-referenced cJSON directory and may never invent package identifiers.
+    name/version of a build-referenced cJSON tree, and its only package identifiers are the fixed
+    upstream cJSON purl and CPE for that version (``cjson_identifiers``).
     """
     descriptor = manifest.get("enrichment_document")
     if not isinstance(descriptor, Mapping):
@@ -304,14 +311,17 @@ def build_index_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) -> li
         errors.append("enrichment-projection: enriched component count differs from retained member evidence")
     for component in enriched:
         citation = component.get("citation", {})
-        if (component.get("declaration") != "inferred-vendored" or component.get("purl") is not None or
-                component.get("cpe") is not None or citation.get("producer") != "02-sbom-inventory" or
+        version = component.get("version")
+        if (component.get("declaration") != "inferred-vendored" or component.get("name") != "cJSON" or
+                not isinstance(version, str) or (component.get("purl"), component.get("cpe")) != cjson_identifiers(version) or
+                citation.get("producer") != "02-sbom-inventory" or
                 citation.get("attempt_id") != manifest.get("attempt_id") or
                 citation.get("path") != "outputs/build-index-vendored-members.json" or
                 citation.get("sha256") != hashlib.sha256(raw).hexdigest()):
             errors.append("enrichment-citation: enriched component is not bounded to the deterministic producer artifact")
-    if members and not gaps:
-        errors.append("enrichment-gap: inferred vendored members require an explicit package-identifier coverage gap")
+    if any(not isinstance(member, dict) or member.get("purl") is None or member.get("cpe") is None
+           for member in members) and not gaps:
+        errors.append("enrichment-gap: a vendored member without package identifiers requires an explicit coverage gap")
     return errors
 
 
@@ -929,9 +939,14 @@ def _component_errors(components: list[dict]) -> list[str]:
             errors.append(f"assertion-mismatch: {label}: assertion must be {wanted!r} for this declaration and version")
         if component["purl"] is not None:
             purl_type, purl_name, purl_version = _purl_parts(component["purl"])
-            if purl_type not in _PURL_TYPES or purl_type != component["ecosystem"]:
+            # A github purl names a repository and a tag: case-insensitive name, tag ``v<version>`` or ``<version>``;
+            # no ecosystem keys on it, so its component is generic.
+            github = purl_type == "github" and component["ecosystem"] == "generic"
+            if not github and (purl_type not in _PURL_TYPES or purl_type != component["ecosystem"]):
                 errors.append(f"purl-mismatch: {label}: the purl type must equal the component's ecosystem")
-            if purl_name != component["name"].rsplit("/", 1)[-1] or purl_version != component["version"]:
+            name, version = component["name"].rsplit("/", 1)[-1], component["version"]
+            if not (purl_name.lower() == name.lower() and purl_version in (version, f"v{version}") if github else
+                    purl_name == name and purl_version == version):
                 errors.append(f"purl-mismatch: {label}: the purl's name and version must agree with the component's")
         key = (component["ecosystem"], component["name"], component["version"], component["purl"], source["path"])
         if key in seen:
