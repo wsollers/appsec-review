@@ -58,7 +58,7 @@ _ctx: dict[str, str] = {}
 
 
 def _runs_root() -> Path:
-    return Path(os.environ.get("APPSEC_RUNS_ROOT") or ROOT / "runs")
+    return Path(os.environ.get("APPSEC_RUNS_ROOT") or ROOT / "runs").resolve()
 
 
 def run_log_path(run_id: str) -> Path:
