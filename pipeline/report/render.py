@@ -6,7 +6,7 @@
 Both outputs are rendered from the same computed model, so every number in the
 preview matches the PDF. Math strings are LaTeX and go verbatim to both.
 """
-import argparse, json, math, pathlib, re, subprocess, sys, time
+import argparse, base64, json, math, pathlib, re, subprocess, sys, time
 
 import jinja2
 
@@ -223,13 +223,14 @@ def render(data_path, out, source_root=None, embed=False):
     html_env.filters["jsonscript"] = lambda v: jinja2.utils.markupsafe.Markup(
         json.dumps(v).replace("</", "<\\/"))
     katex_css = (tdir / "vendor" / "katex-0.16.11.css").read_text()
+    purify_js = base64.b64encode((tdir / "vendor" / "purify-3.4.16.min.js").read_bytes()).decode("ascii")
     head = '<!doctype html>\n<html lang="en"><meta charset="utf-8">\n'
     docs = {"report.tex": tex_source}
     for p in sorted((HERE / "latex").glob("*.tex")):
         docs[p.name] = p.read_text()
     for name in ("report", "workbench"):
         body = html_env.get_template(f"{name}.html.j2").render(
-            katex_css=katex_css, tex_source=tex_source, docs=docs,
+            katex_css=katex_css, purify_js=purify_js, tex_source=tex_source, docs=docs,
             viewer=False, page_title="AppSec Review LaTeX Workbench", **data)
         # <name>.html: standalone, open locally. <name>.fragment.html: for the Artifact publisher,
         # which supplies its own doctype/head/body skeleton.
