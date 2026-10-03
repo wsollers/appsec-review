@@ -3,6 +3,11 @@ flowchart LR
   classDef open fill:#fff3cd,stroke:#9a6700,color:#4d3500,stroke-dasharray:5 4
   classDef human fill:#e8f1ff,stroke:#245a9b,color:#102a43
 
+  HOST[Host preparation: prepare-host.sh images + B16 records,<br/>base-image cache 6b, osv_feed.py sync]:::open --> NB
+  NB[02-native-build per unit: compile DB, binaries,<br/>generated headers, build-dependencies.json]:::open --> C
+  NB -->|generated headers, read-only| CQ
+  NB -.->|build-dependencies.json, optional, tolerant| PREREQ
+  IAC[02-iac-config-scan<br/>base-image inventory]:::open -.->|optional, tolerant| PREREQ
   C[Accepted component characterization]:::qualified --> PLAN[Deterministically derived<br/>full-review launch plan]:::qualified
   PLAN --> ASM[02 full-review input assembly<br/>revalidate, bound, dispatch first wave]:::qualified
   CQ[02-codeql-* x8 nodes, parallel<br/>CodeQL leads, retained DBs, per-language gaps]:::open

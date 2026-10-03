@@ -126,13 +126,19 @@
     <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_ReportInput" targetRef="Task_Synthesis"/>
     <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Synthesis" targetRef="Task_Draft"/>
     <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Draft" targetRef="End_Draft"/>
-    <bpmn:textAnnotation id="Note_Standalone"><bpmn:text>L6A and L6B are executable and qualified. OWASP T03-T14 is qualified. OWASP, STIG/SRG and deployment hardening remain distinct processes.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Standalone"><bpmn:text>L6A and L6B are executable and qualified; unbuilt ADR-0019 cells are one gap and assumptions stay assumptions (P31/P32). OWASP T03-T14 is qualified; the OWASP worklist takes targets and applicability from the accepted T04 routing, where a classified local CLI/library is N/A for ASVS V3/V4/V7/V9/V10/V17 (P24/P39; that evidence policy awaits owner confirmation). OWASP, STIG/SRG and deployment hardening remain distinct processes.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Adapters"><bpmn:text>Component-derived full-review inputs are revalidated and first-wave requests dispatch automatically. SKIPPED_NA is explicit; reinvoke after SBOM, licence and SCA prerequisites for later dependency waves. Automatic OWASP dispatch-fact derivation remains open.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Final"><bpmn:text>The package is DRAFT_EVIDENCE_BACKED only. One real accepted end-to-end run and human final authorization are still required.</bpmn:text></bpmn:textAnnotation>
-    <bpmn:textAnnotation id="Note_Codeql"><bpmn:text>ADR-0023. javascript, python, ruby after intake; java, csharp build-mode none; cpp waits for 02-native-build (traced rows per unit plus build-mode none). go and rust: OK_WITH_GAPS (language not built / not supported). Absent language: SKIPPED. A container timeout, OOM or non-zero exit is a gap, never a failure. Not live-qualified.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Codeql"><bpmn:text>ADR-0023. javascript, python, ruby after intake; java, csharp build-mode none; cpp waits for 02-native-build (traced rows per unit plus build-mode none). cpp traced replay mounts the native build's generated headers read-only (P35); the none-mode fidelity gap states traced coverage N of M (P11). go and rust: OK_WITH_GAPS (language not built / not supported). Absent language: SKIPPED. A container timeout, OOM or non-zero exit is a gap, never a failure. Not live-qualified.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Chains"><bpmn:text>Chains are candidates, never findings. 10 reads the refuted ledger as an optional input and states SKIPPED or ABSENT with a reason. Unit-tested only; nothing has run live.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Cve"><bpmn:text>ADR-0022/0023. reachable needs a hash-bound witness from codeql or ir; unreachable only from ir with the dependency source analysed and no dynamic-dispatch escape; engines disagreeing = conflict (written as unknown in cve-reachability.json). LSP and tree-sitter are hints. No model decides. Summary feeds the ledger (reachable = P1), 07/08/09/12 and 10.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Poc"><bpmn:text>Optional input of 10: SKIPPED not-applicable-no-eligible-findings when nothing qualifies; a failed pool never holds the report. Unit-tested only.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_HostPrep"><bpmn:text>Host preparation before the run (punch list E1-E3, P41): orchestrator/prepare-host.sh rebuilds stale images (audit-binary-analysis, audit-native and the images layered on it incl. audit-codeql-native, tool-shellcheck), regenerates B16 records and fetches Dockerfile base images into data/feeds/base-images (step 6b); osv_feed.py sync publishes the OSV feed incl. Debian and Alpine (APPSEC_OSV_ROOT set by code-location.sh).</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_NativeHandoff"><bpmn:text>02-native-build publishes per unit the compile DB, binaries, generated-headers/ (P35) and build-dependencies.json (P36). 02-native-sast and traced 02-codeql-cpp mount the generated headers read-only; 02-code-index takes optional 02-ir-facts and 02-debug-symbol-index edges (P09).</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Sbom"><bpmn:text>SBOM sources: Syft, build index (vendored cJSON with purl/CPE, P19), optional 02-native-build build-dependencies (pkg:deb load-time/build-time, P37) and optional 02-iac-config-scan base-image inventory (container-base pkg:deb/pkg:apk, P43). A crashed or BLOCKED native build or IaC scan is an SBOM gap, never a stop (P42).</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="Assoc_HostPrep" sourceRef="Note_HostPrep" targetRef="Start_Run"/>
+    <bpmn:association id="Assoc_NativeHandoff" sourceRef="Note_NativeHandoff" targetRef="Gateway_EvidenceSplit"/>
+    <bpmn:association id="Assoc_Sbom" sourceRef="Note_Sbom" targetRef="DataRef_Sca"/>
     <bpmn:association id="Assoc_Cve" sourceRef="Note_Cve" targetRef="Task_CveReach"/>
     <bpmn:association id="Assoc_Poc" sourceRef="Note_Poc" targetRef="Task_PocFix"/>
     <bpmn:association id="Assoc_Codeql" sourceRef="Note_Codeql" targetRef="Task_CodeqlSast"/>
@@ -183,7 +189,7 @@
       <bpmndi:BPMNShape id="Shape_Synthesis" bpmnElement="Task_Synthesis"><dc:Bounds x="3340" y="870" width="170" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_Draft"><dc:Bounds x="3550" y="870" width="180" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_Draft"><dc:Bounds x="3800" y="892" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="1340" y="985" width="400" height="60"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="1260" y="985" width="560" height="85"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Note_Adapters" bpmnElement="Note_Adapters"><dc:Bounds x="1950" y="985" width="420" height="60"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Shape_Note_Final" bpmnElement="Note_Final"><dc:Bounds x="3360" y="985" width="440" height="60"/></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Edge_01" bpmnElement="Flow_01"><di:waypoint x="96" y="150"/><di:waypoint x="130" y="150"/></bpmndi:BPMNEdge>
@@ -233,6 +239,12 @@
       <bpmndi:BPMNEdge id="Edge_DIA_Sca_Cve" bpmnElement="DIA_Sca_Cve"><di:waypoint x="498" y="430"/><di:waypoint x="498" y="455"/><di:waypoint x="1000" y="455"/><di:waypoint x="1000" y="400"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_DOA_Summary" bpmnElement="DOA_Summary"><di:waypoint x="1100" y="390"/><di:waypoint x="1140" y="400"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Edge_DIA_Summary_Ledger" bpmnElement="DIA_Summary_Ledger"><di:waypoint x="1176" y="410"/><di:waypoint x="1330" y="530"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_Note_HostPrep" bpmnElement="Note_HostPrep"><dc:Bounds x="860" y="1075" width="560" height="95"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_NativeHandoff" bpmnElement="Note_NativeHandoff"><dc:Bounds x="1460" y="1075" width="520" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Sbom" bpmnElement="Note_Sbom"><dc:Bounds x="2020" y="1075" width="520" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Assoc_HostPrep" bpmnElement="Assoc_HostPrep"><di:waypoint x="900" y="1075"/><di:waypoint x="85" y="166"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_NativeHandoff" bpmnElement="Assoc_NativeHandoff"><di:waypoint x="1500" y="1075"/><di:waypoint x="370" y="165"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Sbom" bpmnElement="Assoc_Sbom"><di:waypoint x="2060" y="1075"/><di:waypoint x="516" y="425"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>
