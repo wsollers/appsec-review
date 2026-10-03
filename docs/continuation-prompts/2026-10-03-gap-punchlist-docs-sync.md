@@ -132,7 +132,7 @@ the HTML with `pipeline/report/render_documents.py` (command in
 `docs/generated-documents/README.md`). Regenerate the PDF only if Docker and `audit-report:local`
 are present; otherwise leave the PDFs and say so.
 
-Sample data: `pipeline/report/examples/hello-autotools.review.json` (and any other sample report data that lists gaps) still shows the old gap set; regenerate it with the repo's sample-data tooling if one exists (see `tests/test_sample_report_data.py` and the commit `aab5be1` that last regenerated sample report data), otherwise annotate it as pre-fix sample data.
+Sample data: `pipeline/report/examples/hello-autotools.review.json` (and any other sample report data that lists gaps) still shows the old gap set; regenerate it with the repo's sample-data tooling if one exists (`python3 pipeline/report/sample_data.py`, checked by `tests/test_sample_report_data.py`; re-run it if the graph changed after the coordinator last ran it), otherwise annotate it as pre-fix sample data.
 
 ## 6. Punch list and TODO bookkeeping
 
