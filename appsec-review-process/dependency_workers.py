@@ -26,7 +26,7 @@ import evidence_redaction
 import container_execution as ce
 import dependency_b13_adapters as dependency_adapters
 from sbom_family_contracts import (
-    build_index_enrichment_errors, canonical_advisory_id, databases_digest, declaration_kind, lifecycle_row_for,
+    build_index_enrichment_errors, canonical_advisory_id, cjson_identifiers, databases_digest, declaration_kind, lifecycle_row_for,
     required_gap_reason, spdx_expression_shape_ok, version_scheme_for,
 )
 import registry_paths
@@ -373,19 +373,38 @@ def _component_id(value: dict[str, Any]) -> str:
     return "SC-" + str(int(hashlib.sha256(_canonical(value)).hexdigest()[:12], 16) % 1000000).zfill(6)
 
 
-_CJSON_MEMBER = re.compile(r"(?:[A-Za-z0-9._+@%~,-]+/)*cJSON-([0-9]+\.[0-9]+\.[0-9]+)\Z")
+_CJSON_MEMBER = re.compile(r"(?:[A-Za-z0-9._+@%~,-]+/)*cJSON(?:-([0-9]+\.[0-9]+\.[0-9]+))?\Z")
+_CJSON_VERSION_MACRO = re.compile(rb"^[ \t]*#[ \t]*define[ \t]+CJSON_VERSION_(MAJOR|MINOR|PATCH)[ \t]+([0-9]+)[ \t]*$", re.M)
 _BUILD_INDEX_ENRICHMENT = "outputs/build-index-vendored-members.json"
 _BUILD_INDEX_TOOL_ID = "build-index-vendored-member"
 
 
-def _build_index_rows(request: dict[str, Any], attempt_id: str,
-                      syft_rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bytes, list[str]]:
+def _cjson_header_version(target: Path, header_path: str, sha256: str) -> str | None:
+    """CJSON_VERSION_MAJOR.MINOR.PATCH from the target's cJSON.h, only when its bytes are the accepted
+    source snapshot's (``sha256``); None when the file is absent, differs or lacks one macro."""
+    path = target.joinpath(*PurePosixPath(header_path).parts)
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(target.resolve()):
+        return None
+    data = path.read_bytes()
+    if _hash_bytes(data) != sha256: return None
+    macros: dict[bytes, list[bytes]] = {}
+    for key, value in _CJSON_VERSION_MACRO.findall(data): macros.setdefault(key, []).append(value)
+    parts = [macros.get(key, []) for key in (b"MAJOR", b"MINOR", b"PATCH")]
+    if any(len(set(values)) != 1 for values in parts): return None
+    return ".".join(str(int(values[0])) for values in parts)
+
+
+def _build_index_rows(request: dict[str, Any], attempt_id: str, syft_rows: list[dict[str, Any]],
+                      target: Path) -> tuple[list[dict[str, Any]], bytes, list[str]]:
     """Project only unambiguous, build-referenced cJSON members into dependency evidence.
 
     The accepted build index establishes that the target build names the vendored tree.  The
-    directory spelling establishes only the component name and version; it does not establish a
-    package URL, CPE, supplier, license, advisory status, or reachability.  Both canonical source
-    files must be present in the accepted source snapshot before a row is emitted.
+    version comes from the CJSON_VERSION_* macros of the member's cJSON.h, read from ``target``
+    (the verified Syft mount) only after its bytes match the accepted source snapshot, else from a
+    ``cJSON-<version>`` directory name; the two must agree.  The version fixes the upstream cJSON
+    purl and CPE; nothing here establishes supplier, license, advisory status, or reachability.
+    Both canonical source files must be present in the accepted source snapshot before a row is
+    emitted; a member whose version cannot be established is a gap, never a silent skip.
     """
     job = JOBS["sbom"][0]
     index, binding, _path = _upstream(request, "build_index", "02-build-index", "build-index.json",
@@ -393,7 +412,7 @@ def _build_index_rows(request: dict[str, Any], attempt_id: str,
     if index.get("schema") != "appsec-review/build-index/1" or not isinstance(index.get("units"), list):
         raise WorkerBlocked(f"{job}: accepted build index has an unsupported shape")
     source_files = _source_files(request, job)
-    candidates: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []; member_gaps: list[str] = []
     for unit in index["units"]:
         if not isinstance(unit, dict) or not isinstance(unit.get("members"), list):
             raise WorkerBlocked(f"{job}: accepted build index member records are malformed")
@@ -409,12 +428,23 @@ def _build_index_rows(request: dict[str, Any], attempt_id: str,
             source_path, header_path = path + "/cJSON.c", path + "/cJSON.h"
             if source_path not in source_files or header_path not in source_files:
                 continue
-            candidates.append({"name": "cJSON", "version": match.group(1), "purl": None,
-                "cpe": None, "ecosystem": "generic", "declaration": "inferred-vendored",
+            directory, header = match.group(1), _cjson_header_version(target, header_path, source_files[header_path])
+            if directory and header and directory != header:
+                member_gaps.append(f"vendored-cjson-version-conflict:{path}: directory names {directory}, cJSON.h defines {header}")
+                continue
+            version = header or directory
+            if version is None:
+                member_gaps.append(f"vendored-cjson-version-unverified:{path}: no CJSON_VERSION_* macros in hash-bound cJSON.h "
+                                   "and no version in the directory name")
+                continue
+            purl, cpe = cjson_identifiers(version)
+            candidates.append({"name": "cJSON", "version": version, "purl": purl,
+                "cpe": cpe, "ecosystem": "generic", "declaration": "inferred-vendored",
                 "source": {"path": source_path, "sha256": source_files[source_path]},
                 "member": {"path": path, "reason": member["reason"],
                            "signal_ids": member.get("signal_ids", [])},
-                "header": {"path": header_path, "sha256": source_files[header_path]}})
+                "header": {"path": header_path, "sha256": source_files[header_path]},
+                "version_source": "cJSON.h" if header else "directory-name"})
     candidates.sort(key=lambda row: (row["member"]["path"], row["version"]))
     if len({row["member"]["path"] for row in candidates}) != len(candidates):
         raise WorkerBlocked(f"{job}: accepted build index repeats a cJSON vendored member")
@@ -424,27 +454,26 @@ def _build_index_rows(request: dict[str, Any], attempt_id: str,
         "producer_id": _BUILD_INDEX_TOOL_ID, "build_index_binding": binding,
         "members": [{"name": row["name"], "version": row["version"],
                      "member": row["member"], "source": row["source"], "header": row["header"],
-                     "purl": None, "cpe": None} for row in candidates],
-        "coverage_gaps": (["Vendored-member inference supplies no purl or CPE; vulnerability matching remains uncovered."]
-                          if candidates else [])}
+                     "version_source": row["version_source"], "purl": row["purl"], "cpe": row["cpe"]}
+                    for row in candidates],
+        "coverage_gaps": member_gaps}
     evidence_bytes = _canonical(evidence)
     existing = {(str(row.get("name", "")).lower(), row.get("version"), row.get("source", {}).get("path"))
                 for row in syft_rows if isinstance(row, dict) and isinstance(row.get("source"), dict)}
-    rows, gaps = [], []
+    rows = []
     for row in candidates:
         identity = ("cjson", row["version"], row["source"]["path"])
         if identity in existing:
             continue
         rows.append({key: row[key] for key in
                      ("name", "version", "purl", "cpe", "ecosystem", "declaration", "source")})
-        gaps.append("vendored-component-inferred-without-package-identifier:" + row["member"]["path"])
     citation = {"source_class": "raw", "producer": job, "attempt_id": attempt_id,
                 "path": _BUILD_INDEX_ENRICHMENT,
                 "sha256": _hash_bytes(evidence_bytes).split(":", 1)[1]}
     for row in rows:
         row["tool_id"] = _BUILD_INDEX_TOOL_ID
         row["citation"] = citation
-    return rows, evidence_bytes, gaps
+    return rows, evidence_bytes, member_gaps
 
 
 # Dependency manifests by file name (or suffix) -> ecosystem. Syft's directory scan reads lockfiles and
@@ -485,7 +514,10 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     job = JOBS["sbom"][0]; base = _base(request, job)
     tool, receipt, output = _tool(request, job, "syft")
     syft_rows = _sbom_rows(tool, request, job)
-    enriched_rows, enrichment_bytes, enrichment_gaps = _build_index_rows(request, attempt_id, syft_rows)
+    # The verified B13 request's /workspace mount is the target tree Syft read; header bytes read from
+    # it are trusted only when they hash to the accepted source snapshot.
+    target = Path(request["b13_attempt"]["request"]["target_mounts"][0]["host_path"])
+    enriched_rows, enrichment_bytes, enrichment_gaps = _build_index_rows(request, attempt_id, syft_rows, target)
     rows = syft_rows + enriched_rows
     components = []
     for raw in rows:
@@ -515,7 +547,8 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     cdx = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
            "components": [{"bom-ref": row["component_id"], "name": row["name"],
                            **({"version": row["version"]} if row["version"] else {}),
-                           **({"purl": row["purl"]} if row["purl"] else {})} for row in components]}
+                           **({"purl": row["purl"]} if row["purl"] else {}),
+                           **({"cpe": row["cpe"]} if row["cpe"] else {})} for row in components]}
     cdx_bytes = _canonical(cdx)
     result = {"schema": "appsec-review/sbom-inventory/1.0", **base, "attempt_id": attempt_id,
               "redactor": REDACTOR, "generated_at": request["generated_at"],
@@ -528,7 +561,7 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     errors = validate_document(result, "sbom-inventory.schema.json")
     errors += build_index_enrichment_errors(result, enrichment_bytes)
     if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors; first: {'; '.join(str(e)[:200] for e in errors[:3])})")
-    gaps = (enrichment_gaps or ([] if components else ["no-dependency-components-detected"])) + \
+    gaps = enrichment_gaps + ([] if components or enrichment_gaps else ["no-dependency-components-detected"]) + \
         uninventoried_manifests(request.get("source_files"), components)
     return {"outputs/sbom.cdx.json": cdx_bytes, "outputs/sbom-manifest.json": _canonical(result),
             _BUILD_INDEX_ENRICHMENT: enrichment_bytes,

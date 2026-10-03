@@ -148,7 +148,6 @@ class SbomCjsonGapTests(unittest.TestCase):
         result = json.loads(h.result_path(envelope, "outputs/sbom-manifest.json").read_text())
         return {"envelope": envelope, "result": result}
 
-    @unittest.expectedFailure
     def test_p19_unversioned_vendor_cjson_gets_version_purl_and_cpe_from_header(self):
         """P19: vendor/cJSON with CJSON_VERSION_* 1.7.18 in cJSON.h -> cJSON 1.7.18 with purl and CPE."""
         out = self.with_member("vendor/cJSON")
@@ -157,7 +156,6 @@ class SbomCjsonGapTests(unittest.TestCase):
         self.assertEqual(rows, [("cJSON", "1.7.18", "pkg:github/davegamble/cjson@v1.7.18",
                                  "cpe:2.3:a:cjson_project:cjson:1.7.18:*:*:*:*:*:*:*")])
 
-    @unittest.expectedFailure
     def test_p19_versioned_vendor_cjson_carries_purl_and_cpe(self):
         """P19: vendor/cJSON-1.7.18 member yields a component with non-null purl and CPE."""
         out = self.with_member("vendor/cJSON-1.7.18")
@@ -168,7 +166,6 @@ class SbomCjsonGapTests(unittest.TestCase):
 
 
 class ReachabilityOsvGapTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p20_osv_gap_not_emitted_without_rows(self):
         """P20: with zero reachability rows the job-level ENGINE_INPUT:osv-* gap is not emitted."""
         inputs = {**upstream(), "osv_gap": "osv-unusable:DATA_ROOT_MISSING"}
