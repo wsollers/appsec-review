@@ -63,7 +63,7 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 ## Target notes
 
-- **appsec-multi-vuln.** OSV has only the npm ecosystem registered; other ecosystems (Go, Maven,
+- **appsec-multi-vuln.** Branch `claude/practical-darwin-yk9370` (`0c836f4`, guide `claude/practical-darwin-yk9370`) adds case-081 (end-of-life Debian 10 base, digest-pinned, known OS-package CVEs) and case-082 (current Alpine 3.24.2 negative control); re-pin the target once merged. Scoring them needs punch-list P41 (base-image OS package inventory). OSV has only the npm ecosystem registered; other ecosystems (Go, Maven,
   crates.io, NuGet, Packagist, PyPI) need their own snapshots for OSV matching, otherwise they are OSV
   gaps (Grype still matches them). Score the report against `appsec-multi-vuln-guide` afterwards.
 - **freeciv21.** Expect the build-plan and build-resolution steps to need Qt and many system
