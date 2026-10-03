@@ -290,6 +290,16 @@ def _reference_snapshot(family: str, edition: str) -> tuple[Path, dict[str, Any]
     return matches[0]
 
 
+# P18: why a deselected family is not applicable; published as N/A by 02-standards-source-ingest.
+NOT_APPLICABLE_REASONS = {
+    "owasp_masvs": "No Android or iOS project markers in the accepted intake source inventory.",
+    "owasp_mastg": "No Android or iOS project markers in the accepted intake source inventory.",
+    "owasp_api_security_top_10": "No OpenAPI or Swagger definition in the accepted intake source inventory.",
+    "owasp_llm_top_10": "No LLM SDK or framework paths (openai, anthropic, langchain, llamaindex) in the accepted intake source inventory.",
+    "disa_gpos_srg": "The general-purpose operating system SRG covers OS configuration; a source review routes application controls to the ASD STIG instead.",
+}
+
+
 def _standards_selection(source: dict[str, Any]) -> dict[str, bool]:
     paths = {str(path).lower() for path, value in source.get("files", {}).items()
              if isinstance(value, dict) and value.get("kind") == "file"}
@@ -330,8 +340,8 @@ def prepare_standards_binding(run_id: str) -> Path:
                 "manifest_sha256": _sha(manifest_path),
                 "selection_basis": "Automatic applicability routing from the accepted intake source inventory; reference material only, not an approval or compliance decision."})
         else:
-            unselected.append({"family": family,
-                "reason": "Accepted intake source paths contain no target evidence for this specialized standards family."})
+            unselected.append({"family": family, "reason": NOT_APPLICABLE_REASONS.get(family,
+                "Accepted intake source paths contain no target evidence for this specialized standards family.")})
     binding = {"schema": "appsec-review/standards-source-binding/1.0", "run_id": run_id,
                "selected_snapshots": selected, "unselected_families": unselected}
     if validate_document(binding, "standards-source-binding.schema.json"):

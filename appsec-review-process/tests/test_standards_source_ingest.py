@@ -83,12 +83,13 @@ class StandardsSourceIngestTests(unittest.TestCase):
         result, artifacts = worker.materialize(run_id=self.fixture["run_id"], attempt_id="attempt-1",
                                                attempt=attempt, inputs=self.inputs())
         self.assertEqual(validate_document(result, "standards-source-extract.schema.json"), [])
-        self.assertEqual(result["status"], "OK_WITH_GAPS")
+        self.assertEqual(result["status"], "OK")
         self.assertEqual([(item["family"], item["record_count"]) for item in result["snapshots"]],
                          [("disa_asd_stig", 286), ("opencre", 522),
                           ("owasp_asvs", 345), ("owasp_top_10", 10)])
         self.assertEqual(len(result["records"]), 1163)
-        self.assertEqual(len(result["coverage_gaps"]), 5)
+        self.assertEqual(result["coverage_gaps"], [])
+        self.assertEqual(len(result["not_applicable_families"]), 5)
         self.assertEqual(len(artifacts), 1171)
         sample = json.loads((attempt / result["records"][0]["path"]).read_text())
         self.assertEqual(validate_document(sample, "standards-source-record.schema.json"), [])
@@ -159,7 +160,7 @@ class StandardsSourceIngestTests(unittest.TestCase):
                 envelope = json.loads((attempt / "result.json").read_text())
                 self.assertEqual((envelope["worker_kind"], envelope["output_contract"],
                                   envelope["execution_status"], envelope["acceptance_status"]),
-                                 ("deterministic_python", worker.CONTRACT, "OK_WITH_GAPS", "CURRENT"))
+                                 ("deterministic_python", worker.CONTRACT, "OK", "CURRENT"))
                 self.assertEqual(len(envelope["artifacts"]), 1175)
                 before = {path.relative_to(attempt).as_posix(): file_hash(path)
                           for path in attempt.rglob("*") if path.is_file()}

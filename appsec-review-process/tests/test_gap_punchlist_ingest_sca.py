@@ -44,11 +44,13 @@ def source_files(target: Path) -> dict:
 
 def extract(job: str, target: Path) -> dict:
     return core.extract(job, run_id="r", attempt_id="a", target=target,
-                        source={"source_fingerprint": "a" * 64}, source_files=source_files(target))
+                        source={"job_id": "00-intake", "attempt_id": "i", "fingerprint": "f",
+                                "source_fingerprint": "a" * 64, "source_revision": "r",
+                                "pointer_sha256": "sha256:" + "b" * 64},
+                        source_files=source_files(target))
 
 
 class StaticIntelligenceGapTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p16_readme_only_api_and_ops_jobs_are_skipped_not_gaps(self):
         """P16: README-only target -> api-collection and operations-doc ingest are SKIPPED with no coverage gap."""
         with tempfile.TemporaryDirectory() as d:
@@ -61,7 +63,6 @@ class StaticIntelligenceGapTests(unittest.TestCase):
                     self.assertEqual(out["coverage_gaps"], [])
                     self.assertEqual(validate_document(out, core.SPECS[job][2]), [])
 
-    @unittest.expectedFailure
     def test_p16_building_md_is_ingested_as_operations_doc(self):
         """P16: docs/BUILDING.md with build/install instructions is ingested by 02-operations-doc-ingest."""
         with tempfile.TemporaryDirectory() as d:
@@ -73,7 +74,6 @@ class StaticIntelligenceGapTests(unittest.TestCase):
             self.assertGreater(len(out["records"]), 0, out["coverage_gaps"])
             self.assertIn("docs/BUILDING.md", {record["path"] for record in out["records"]})
 
-    @unittest.expectedFailure
     def test_p17_shell_and_c_test_functions_are_indexed(self):
         """P17: shell test_x() and C test_x( functions under tests/ become test-intelligence records."""
         with tempfile.TemporaryDirectory() as d:
@@ -91,7 +91,6 @@ class StaticIntelligenceGapTests(unittest.TestCase):
 
 
 class StandardsGapTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p18_unselected_families_are_not_applicable_not_gaps(self):
         """P18: unselected standards families are published as not_applicable_families, not coverage gaps."""
         helper = tssi.StandardsSourceIngestTests()
@@ -175,7 +174,6 @@ class ReachabilityOsvGapTests(unittest.TestCase):
 
 
 class BuildenvCatalogGapTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_p21_cpp_buildenv_catalog_declares_autotools(self):
         """P21: cpp buildenv catalog entries list autotools markers and the autoconf/automake/libtool tools."""
         catalog = read_json(bp.CATALOG_PATH)

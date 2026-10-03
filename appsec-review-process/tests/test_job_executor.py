@@ -157,6 +157,46 @@ Path(a.output, NAME).write_text(json.dumps({"seen": sorted(doc["needs"]["p"]["p.
 OPEN_SCHEMA = {'type': 'object'}
 
 
+class NotApplicableTests(ExecutorCase):
+    """P16: a README-only target publishes SKIPPED under the evidence-assembly edge's reason through
+    both the legacy lifecycle and the item executor, and the published result re-validates."""
+
+    def setUp(self):
+        self.root = EVIDENCE / ('jx-' + uuid.uuid4().hex[:8])
+        self.root.mkdir(parents=True)
+        self.old_runs, state.RUNS = state.RUNS, self.root / 'runs'
+        self.env = patch.dict(os.environ, {'APPSEC_RUN_MODE': '', 'APPSEC_RUNS_ROOT': str(state.RUNS)})
+        self.env.start()
+        self.target = self.root / 'target'
+        self.target.mkdir()
+        (self.target / 'README.md').write_text('# hello\n')
+        self.run_id = 'jx-' + uuid.uuid4().hex[:8]
+        run_process.init_run(self.run_id)
+        phase1.stage(self.run_id, self.target, 'fixture', 'Executor qualification', ['Linux'])
+        phase1.run_intake(self.run_id)
+
+    def test_readme_only_target_is_an_authorized_skip(self):
+        import publish_job_output as pjo
+        legacy = core.run(self.run_id, 'dagster-1', JOB)
+        self.assertEqual((legacy['status'], legacy['reason']), ('SKIPPED', core.SKIP_REASON))
+        core.validate(self.run_id, JOB)
+        shutil.rmtree(self.job_root())
+        ported = jx.run_item(JOB, self.run_id, 'dagster-2', mode='prod')
+        self.assertEqual((ported['status'], ported['reason']), ('SKIPPED', core.SKIP_REASON))
+        again = jx.run_item(JOB, self.run_id, 'dagster-3', mode='prod')
+        self.assertEqual(again['attempt_id'], ported['attempt_id'])
+        attempt = self.attempt(ported)
+        payload = json.loads((attempt / PAYLOAD[0]).read_text())
+        self.assertEqual((payload['applicability'], payload['coverage_gaps'], payload['inventory']['candidates']),
+                         (core.SKIPPED_NA, [], 0))
+        coverage = json.loads((attempt / 'coverage.json').read_text())
+        self.assertEqual((coverage['tool_ran'], coverage['skip_reason']), (False, core.SKIP_REASON))
+        # Without the authorizing edge the same envelope is refused.
+        with self.assertRaises(state.Blocked):
+            pjo.validate_published(self.job_root(), ported, ported['fingerprint'], expected_run_id=self.run_id,
+                                   expected_job_id=JOB)
+
+
 class DevDecisionTests(ExecutorCase):
     """Rules 2-6 on real item attempts with two fixture items: producer (needs the intake) and
     consumer (needs the producer's p.json). Contract validation belongs to the byte-identity test

@@ -4,6 +4,7 @@
   "description": "Runbooks, operations and deployment docs as redacted, static-only intelligence records. Ported from the legacy static_intelligence_core lifecycle as the ADR-0025 proof item; outputs are byte-identical.",
   "output_contract": "operations-doc-intelligence",
   "worker_kind": "deterministic_python",
+  "skip_consumer": "02-evidence-assembly",
   "needs": [
     {"job": "00-intake", "as": "source", "resolve": "intake-source"}
   ],

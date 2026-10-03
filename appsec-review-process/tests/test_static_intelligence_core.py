@@ -22,13 +22,36 @@ class StaticIntelTests(unittest.TestCase):
     self.assertTrue(one['static_only']); self.assertNotIn('sk-abcdefghijklmnopqrstuvwxyz',json.dumps(one))
     self.assertGreater(len(one['records']),0)
     self.assertTrue(all(r['semantics']=='DOCUMENTED_STATIC_INTENT' for r in one['records']))
- def test_readme_only_and_zero_input_are_honest_gaps(self):
+ def test_readme_only_is_not_applicable_but_unexamined_entries_stay_gaps(self):
   with tempfile.TemporaryDirectory() as d:
    target=Path(d); (target/'README.md').write_text('# hello\n')
    files=self.source(target); source={"source_fingerprint":"a"*64}
    for job in core.SPECS:
     out=core.extract(job,run_id='r',attempt_id='a',target=target,source=source,source_files=files)
-    self.assertEqual(out['records'],[]); self.assertIn('readme-only-no-specialized-inputs',out['coverage_gaps'])
+    self.assertEqual((out['status'],out['applicability'],out['records'],out['coverage_gaps']),
+                     ('SKIPPED',core.SKIPPED_NA,[],[]))
+    self.assertEqual(out['inventory'],{'files_examined':1,'non_file_entries':0,'candidates':0})
+   # A link is not followed: absence of a candidate behind it is not established.
+   files['docs']={'kind':'symlink','target':'../elsewhere'}
+   for job in core.SPECS:
+    out=core.extract(job,run_id='r',attempt_id='a',target=target,source=source,source_files=files)
+    self.assertEqual(out['status'],'OK_WITH_GAPS')
+    self.assertEqual(out['coverage_gaps'],['readme-only-no-specialized-inputs:1-non-file-entries-unexamined'])
+ def test_assembly_edge_authorizes_the_not_applicable_skip(self):
+  graph=json.loads((ROOT/'pipeline/job-graph.json').read_text())
+  edges={d['job']:d for d in graph['jobs'][core.CONSUMER]['dependencies']}
+  for job in core.SPECS: self.assertIn(core.SKIP_REASON,edges[job]['allowed_skip_reasons'],job)
+ def test_shell_c_and_unity_tests_and_runnable_entrypoints_are_indexed(self):
+  with tempfile.TemporaryDirectory() as d:
+   target=Path(d); (target/'tests').mkdir()
+   (target/'tests/run.sh').write_text('#!/bin/sh\nfunction test_a {\n:\n}\ntest_b () {\n:\n}\nrun_test test_c\n')
+   (target/'tests/t.c').write_text('void test_d(void);\nvoid test_d(void) {\n}\nint main(void) { RUN_TEST(test_e); return 0; }\n')
+   out=core.extract('02-test-intelligence-ingest',run_id='r',attempt_id='a',target=target,source={},source_files=self.source(target))
+   got=sorted((r['path'],r['kind'],r['locator'],r['summary']) for r in out['records'])
+   self.assertEqual(got,[('tests/run.sh','documented-test','line:2','test_a'),('tests/run.sh','documented-test','line:5','test_b'),
+    ('tests/run.sh','documented-test','line:8','test_c'),('tests/run.sh','test-entrypoint','file','runnable test script tests/run.sh'),
+    ('tests/t.c','documented-test','line:2','test_d'),('tests/t.c','documented-test','line:4','test_e')])
+   self.assertEqual(out['status'],'OK')
  def test_openapi_yaml_and_bruno_are_bounded_deterministic_positive_inputs(self):
   with tempfile.TemporaryDirectory() as d:
    target=Path(d); shutil.copytree(ROOT/'tests/fixtures/static-intelligence/api',target/'api')
