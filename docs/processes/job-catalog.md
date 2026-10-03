@@ -1009,7 +1009,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-native-build`](#job-02-native-build) |
 | Consumes | [`02-build-configure`](#a-job-02-build-configure)<br>[`configured-build`](#a-configured-build)<br>[`build-lock`](#a-build-lock)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`sut-checkout`](#a-sut-checkout) |
 | Produces | [`02-native-build`](#a-job-02-native-build)<br>[`native-build`](#a-native-build) |
-| Notes | Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. Fault/recovery qualification remains. |
+| Notes | Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries, and per unit the configure-generated headers (P35, `e4eb405`) and a hash-bound build-dependencies.json of headers, link lines, DT_NEEDED and owning OS packages (P36, `fcc1058`). Fault/recovery qualification remains. |
 
 <a id="step-source-sast"></a>
 
@@ -1022,7 +1022,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-source-sast`](#job-02-source-sast) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`source-sast-rules`](#a-source-sast-rules)<br>[`semgrep-image`](#a-semgrep-image) |
 | Produces | [`02-source-sast`](#a-job-02-source-sast)<br>[`source-sast-leads`](#a-source-sast-leads) |
-| Notes | Implemented with pinned offline C/C++, Go, Java and PHP adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain. |
+| Notes | Implemented with pinned offline C/C++ (including four Semgrep CE taint rules, P13), Go, Java, PHP and shell (tool-shellcheck, P14) adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain. |
 
 <a id="step-native-memory-analysis"></a>
 
@@ -1035,7 +1035,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`05-native-memory`](#job-05-native-memory) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
 | Produces | [`05-native-memory`](#a-job-05-native-memory) |
-| Notes | Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations; zero candidates is OK with no runtime-verification gap (P29). Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-fuzz-target-triage"></a>
 
@@ -1061,7 +1061,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
 | Produces | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
-| Notes | Standalone OWASP-only worklist transform. Applicability and evidence requirements remain NOT_ASSESSED; it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone OWASP-only worklist transform. Targets and per-row applicability come from the accepted 04-owasp-component-routing rules (P39, `4622a7f`): not_applicable rows carry the rule citation, partial classifications are conditional, unmatched rows are cannot_determine with one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-stig-srg-validation-worklist"></a>
 
@@ -1074,7 +1074,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
 | Produces | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
-| Notes | Standalone DISA STIG/SRG-only worklist transform. Platform tailoring remains NOT_ASSESSED; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone DISA STIG/SRG-only worklist transform. Targets are the components whose downstream_lanes route to 15 (no fallback to every component, P26); platform tailoring remains NOT_ASSESSED behind one summary gap; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-deployment-hardening"></a>
 
@@ -1087,7 +1087,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`15-deployment-hardening`](#job-15-deployment-hardening) |
 | Consumes | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
 | Produces | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
-| Notes | Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps. |
+| Notes | Standalone static deployment-hardening transform. IaC hits match a work item by the component's path patterns (P28); runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-threat-model-reconciliation-active"></a>
 
@@ -1112,7 +1112,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-sbom-inventory`](#job-02-sbom-inventory) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`syft-image`](#a-syft-image) |
 | Produces | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
-| Notes | Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Full-review input assembly and live Docker qualification remain gaps. |
+| Notes | Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Enriched from the build index (vendored cJSON with purl/CPE from its hash-bound cJSON.h, P19), the native build's build-dependencies.json (pkg:deb load-time/build-time and macro-versioned vendored trees, P37) and the 02-iac-config-scan base-image inventory (container-base pkg:deb/pkg:apk, P43); a crashed native build or IaC scan is a gap, not a stop (P42). Full-review input assembly and live Docker qualification remain gaps. |
 
 <a id="step-sca-vulnerability-match"></a>
 
