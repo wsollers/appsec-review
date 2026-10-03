@@ -203,8 +203,7 @@
                       "type": "string"
                     },
                     "sha256": {
-                      "type": "string",
-                      "pattern": "^sha256:[0-9a-f]{64}$"
+                      "$ref": "common/formats.schema.json#/$defs/sha256_ref"
                     },
                     "size_bytes": {
                       "type": "integer",

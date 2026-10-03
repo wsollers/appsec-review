@@ -29,11 +29,7 @@
             "type": "string"
         },
         "status": {
-            "enum": [
-                "OK",
-                "OK_WITH_GAPS",
-                "SKIPPED"
-            ]
+            "$ref": "common/formats.schema.json#/$defs/publishable_status"
         },
         "applicability": {
             "enum": [
