@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import bounded_analysis_workers as workers
+import component_characterization as cc
 import deployment_hardening
 from execution_state import Blocked, atomic_json, beneath, data_path, digest, file_hash, identifier, now, read_json, run_path
 import model_version_registry as mvr
@@ -69,8 +70,16 @@ def _record_documents(run_id: str, standards: dict[str, Any]) -> list[tuple[dict
 
 
 def _component_targets(component: dict[str, Any], lane: str) -> list[dict[str, Any]]:
-    rows = [row for row in component["functional_components"] if lane in row["downstream_lanes"]]
-    return rows or list(component["functional_components"])
+    """Only components the accepted map routes to ``lane``; an unrouted component is not assessed by fallback."""
+    return [row for row in component["functional_components"] if lane in row["downstream_lanes"]]
+
+
+def _component_path(component: dict[str, Any], path: Any) -> bool:
+    """A hit path lies in a component by its path_patterns (repo-root anchored globs) or representative locations."""
+    if not isinstance(path, str) or not path:
+        return False
+    return (any(cc._matches(path, pattern) for pattern in component.get("path_patterns", [])) or
+            path in {cc._location_path(value) for value in component.get("representative_locations", [])})
 
 
 def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
@@ -105,10 +114,16 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
                 "tailoring": "Target-derived component; applicability awaits control-specific assessment.",
                 "evidence_mode": "hybrid" if needs_runtime else "manual",
                 "citation_ids": [citation],
-                "gaps": ["runtime evidence unavailable" if needs_runtime else
-                         "control-specific assessment has not been performed"]})
+                "gaps": ["runtime evidence unavailable"] if needs_runtime else []})
+    # P26: every row is NOT_ASSESSED; one summary gap carries the count instead of one gap per row.
+    if not targets:
+        gaps = [f"No functional component is routed to {lane}; the {family} worklist is empty."]
+    elif controls:
+        gaps = [f"Control-specific assessment has not been performed for {len(controls)} control x component work items."]
+    else:
+        gaps = []
     generation = _generation(run_id)
-    payload = {"controls": controls}
+    payload = {"controls": controls, "gaps": gaps}
     request = {"schema": "appsec-review/bounded-transform-request/1.0", "run_id": run_id,
         "job_id": job_id, "source_generation": generation,
         "upstream": [{"pointer_path": str(_base(run_id, COMPONENT[0]) / "accepted.json"),
@@ -122,7 +137,7 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
         raise Blocked("standards lifecycle: immutable derived request changed")
     if not path.exists(): atomic_json(path, request)
     return {"request_path": path, "attempt_id": _attempt_id(job_id, generation, payload),
-            "control_count": len(controls), "generation": generation}
+            "control_count": len(controls), "target_count": len(targets), "generation": generation}
 
 
 def _publish_bounded(run_id: str, job_id: str, attempt_id: str) -> dict[str, Any]:
@@ -147,7 +162,9 @@ def _reusable(base: Path, run_id: str, job_id: str, attempt_id: str) -> dict[str
 def run_worklist(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> dict[str, Any]:
     import bounded_transform_orchestration as orchestration
     prepared = prepare_worklist(run_id, job_id)
-    if prepared["control_count"] == 0:
+    # No routed component publishes an empty worklist with its reason; routed components without
+    # accepted controls are a failure to examine.
+    if prepared["target_count"] and prepared["control_count"] == 0:
         raise Blocked("standards lifecycle: no accepted controls exist for the requested standards family")
     base = data_path(run_id, "jobs", job_id)
     if not force and (pointer := _reusable(base, run_id, job_id, prepared["attempt_id"])):
@@ -194,9 +211,12 @@ def prepare_deployment(run_id: str) -> dict[str, Any]:
     else:
         iac, iac_binding = _load(run_id, IAC)
         hits, iac_gap = iac["rule_hits"], None
+    components = {row["component_id"]: row for row in component["functional_components"]}
     targets = []
     for work in stig["work_items"]:
-        matching = [hit for hit in hits if work["target_id"] in str(hit)]
+        # P28: hits carry only location.path; match it against the work item's component paths.
+        owner = components.get(work["target_id"], {})
+        matching = [hit for hit in hits if _component_path(owner, (hit.get("location") or {}).get("path"))]
         if not matching:
             continue
         targets.append({"target_id": work["target_id"], "platform": "declared-iac",

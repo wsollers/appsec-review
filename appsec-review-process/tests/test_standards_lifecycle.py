@@ -42,7 +42,9 @@ class StandardsLifecycleTests(unittest.TestCase):
             self.assertEqual(control["target_id"],"cli")
             self.assertEqual(control["applicability"],"cannot_determine")
             self.assertEqual(control["evidence_mode"],"manual")
-            self.assertTrue(control["gaps"])
+            self.assertEqual(control["gaps"],[])
+            self.assertEqual(request["payload"]["gaps"],
+                ["Control-specific assessment has not been performed for 1 control x component work items."])
 
     def test_missing_stig_sources_fail_closed_instead_of_empty_success(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -52,8 +54,24 @@ class StandardsLifecycleTests(unittest.TestCase):
                  self.assertRaisesRegex(Blocked,"no accepted controls"):
                 lifecycle.run_worklist("run-a","dagster-a","15-stig-srg-validation-worklist")
 
+    def test_unrouted_worklist_is_empty_with_its_reason(self):
+        import bounded_analysis_workers as workers
+        component={"source_snapshot_sha256":H,"functional_components":[{"component_id":"cli","downstream_lanes":[]}]}
+        with tempfile.TemporaryDirectory() as folder:
+            _run,p1,p2=self.setup_paths(folder)
+            loader=lambda _run,spec: (component,COMPONENT_BIND) if spec[0]==lifecycle.COMPONENT[0] else (STANDARD,STANDARDS_BIND)
+            with p1,p2,mock.patch.object(lifecycle,"_load",side_effect=loader), \
+                 mock.patch.object(lifecycle,"_record_documents",return_value=[(STANDARD["records"][0],WRAPPER)]):
+                prepared=lifecycle.prepare_worklist("run-a","15-stig-srg-validation-worklist")
+            payload=read_json(prepared["request_path"])["payload"]
+        self.assertEqual((prepared["control_count"],prepared["target_count"],payload["controls"]),(0,0,[]))
+        result=workers.standards_worklist(family="stig_srg",run_id="run-a",attempt_id="a",source_generation=H,
+                                          bindings=[COMPONENT_BIND,STANDARDS_BIND],**payload)
+        self.assertEqual(result["status"],"OK_WITH_GAPS")
+        self.assertEqual(result["gaps"],["No functional component is routed to 15-deployment-hardening; the stig_srg worklist is empty."])
+
     def test_worklist_run_executes_worker_and_reuses_verified_publication(self):
-        prepared={"request_path":Path("request.json"),"attempt_id":"auto-a","control_count":1,"generation":H}
+        prepared={"request_path":Path("request.json"),"attempt_id":"auto-a","control_count":1,"target_count":1,"generation":H}
         pointer={"attempt_id":"auto-a","status":"OK_WITH_GAPS"}
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder)/"job"
