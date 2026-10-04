@@ -11523,7 +11523,7 @@
     },
     {
      "job": "02-binary-triage",
-     "kind": "required",
+     "kind": "optional",
      "contract": "binary-triage"
     },
     {

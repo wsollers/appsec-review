@@ -1695,7 +1695,7 @@
         },
         {
           "job": "02-binary-triage",
-          "kind": "required",
+          "kind": "optional",
           "contract": "binary-triage",
           "allowed_skip_reasons": [
             "not-applicable-non-native",

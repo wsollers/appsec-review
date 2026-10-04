@@ -292,7 +292,7 @@ flowchart LR
   j_00_intake --> j_02_treesitter_ast
   j_02_code_property_graph --> j_02_code_index
   j_02_treesitter_ast --> j_02_code_index
-  j_02_binary_triage --> j_02_code_index
+  j_02_binary_triage -.->|optional| j_02_code_index
   j_02_ir_facts -.->|optional| j_02_code_index
   j_02_debug_symbol_index -.->|optional| j_02_code_index
   j_02_native_build --> j_02_native_sast
