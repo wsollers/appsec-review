@@ -471,7 +471,6 @@ class Adr34OwaspParticipationTests(Adr34Case):
         self.assertNotEqual(validate_document({"records": [dict(record, downstream_lanes=["x"])]},
                                               "owasp-participation-cell.schema.json"), [])
 
-    @unittest.expectedFailure
     def test_keyword_routing_is_deleted(self):
         """(7) P3: the component-keyword routing and the inline worklist routing are gone."""
         routing = importlib.import_module("owasp_component_routing")

@@ -18,6 +18,12 @@ Failed or interrupted attempts remain available. New attempts supersede acceptan
 never falls back to an older success. Reuse and every query validate producer freshness and all
 artifact hashes. An interrupted attempt receives a separate recovery record on retry.
 
+The raw FTS index takes UTF-8 text only: PDF and DOCX files are fingerprinted but not searchable there,
+and HTML is indexed with its markup. `02-doc-intelligence-ingest` converts HTML, man pages, PDF
+(`pdftotext`) and DOCX (`pandoc`, both in the pinned `audit-doc-convert` image) to text with page or
+line provenance and publishes it for `02-evidence-index-derived`, whose `text_chunks` make it
+searchable. Scanned or image-only, encrypted, corrupt and oversized documents are gaps; there is no OCR.
+
 Full commands and tooling limits are in the
 [LLM addendum](../../appsec-review-process/tooling/llm-retrieval-addendum.md). Both Codex and Claude
 receive an `evidence-retrieval` repository skill; intake handoffs point to it and the addendum.

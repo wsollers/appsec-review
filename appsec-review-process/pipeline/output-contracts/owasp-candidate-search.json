@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "owasp-candidate-search",
+  "display_name": "OWASP ASVS per-chapter candidate search (ADR-0034)",
+  "required_files": [
+    "owasp-candidate-search.json",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "candidates",
+    "chapters",
+    "gaps"
+  ],
+  "result_schema": {
+    "artifact": "owasp-candidate-search.json",
+    "schema_file": "owasp-candidate-search.schema.json"
+  },
+  "validation_rules": [
+    "built only from accepted, hash-bound code index, CPG, tree-sitter, evidence-index and optional source-SAST and component tag-cloud inputs of this run and the versioned rule table",
+    "every chapter V1..V17 is listed with its search basis, zero included",
+    "an unparsed or uncovered language, or an absent optional input, is a coverage gap, never zero hits",
+    "test, docs, example, vendored, generated and build-system hits are excluded with their reason",
+    "candidates are locators; no model output chooses the universe"
+  ]
+}

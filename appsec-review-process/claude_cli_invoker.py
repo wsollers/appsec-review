@@ -226,11 +226,53 @@ def _input_tool_names(code_tools: tuple[str, ...] | list[str] = ()) -> list[str]
 
 
 def granted_tool_names(code_tools: tuple[str, ...] | list[str] = ()) -> list[str]:
-    """Every tool an indexed-mode job may call, in order: the base lookups, then its code tools.
+    """Every tool a tool-served job may call, in order: the base lookups, then its code tools.
     The prompt's tool guides, the input server's tools/list and ``--allowedTools`` all come from
     this one list, so what the prompt describes and what the CLI grants cannot disagree (brief U3)."""
     import input_mcp
     return [tool["name"] for tool in input_mcp.BASE_TOOLS] + list(code_tools)
+
+
+def profile_grants_tools(package: Any) -> bool:
+    """A tooling profile that lists any ``query tool:`` line grants lookup tools: the job is served
+    the input server (base lookups plus whatever code tools its pinned index can answer) at any input
+    size. A profile that lists none grants nothing; such a job gets the lookups only when its inputs
+    exceed the inline limit (it then needs them to read its inputs)."""
+    import code_query_mcp
+    return bool(code_query_mcp.profile_tools(dict(package.composition.get("tooling_profile") or {})))
+
+
+def code_grant_gap(package: Any, code_grant: tuple[str | None, tuple[str, ...]]) -> str | None:
+    """Why a profile that lists ``code_*`` tools got none of them (None when it got some or lists none).
+    Recorded as a coverage gap in the attempt: the job ran on the evidence lookups alone."""
+    import code_query_mcp
+    listed = code_query_mcp.profile_tools(dict(package.composition.get("tooling_profile") or {}))
+    if not listed or code_grant[1]:
+        return None
+    ref = code_query_mcp.summary_ref([f"{item.root}:{item.path}" for item in package.inputs])
+    if ref is None:
+        return "no accepted 02-code-index summary is pinned for this job"
+    return "the pinned 02-code-index cannot answer the listed tools (capabilities or disabled families)"
+
+
+CODE_INDEX_JOB, CODE_INDEX_SUMMARY = "02-code-index", "code-index.json"
+
+
+def code_index_pin(run_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    """(readable_inputs row, gap) for the run's accepted ``02-code-index`` summary, pinned under the
+    ``supporting-evidence`` root (the run's data/jobs) exactly as the supporting-evidence menu pins it,
+    so ``code_query_grant`` can grant ``code_*`` tools. The caller maps that root to
+    ``data_path(run_id, "jobs")``. No accepted index: (None, reason); the job keeps the evidence lookups."""
+    import supporting_evidence_menu as sem
+    from execution_state import data_path
+    row = next(item for item in sem.MENU if item[0] == CODE_INDEX_JOB)
+    item = sem._item(data_path(run_id, "jobs"), run_id, *row)
+    files = [entry for entry in item["files"] if entry["path"].endswith("/" + CODE_INDEX_SUMMARY)]
+    if item["status"] != "AVAILABLE" or len(files) != 1:
+        return None, f"{CODE_INDEX_JOB}: {item.get('reason') or 'no code-index.json in the accepted publication'}"
+    entry = files[0]
+    return {"root": sem.ROOT_ID, "path": entry["path"], "sha256": entry["sha256"], "bytes": entry["bytes"],
+            "role": "evidence", "producer_request_sha256": None}, None
 
 
 def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
@@ -261,15 +303,25 @@ def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
     return (ref, tools) if tools else (None, ())
 
 
-def input_mode(inline_bytes: int, inline_limit: int, code_grant: tuple[str | None, tuple[str, ...]]
-               ) -> tuple[bool, tuple[str | None, tuple[str, ...]]]:
-    """(indexed, effective code grant). Inputs over the inline limit are always indexed. A job
-    granted code tools is indexed too while ``code_query_force_indexed_mode`` is on; with it off
-    it stays inline and loses the grant, so the prompt, the server and --allowedTools still agree."""
+def input_mode(inline_bytes: int, inline_limit: int, code_grant: tuple[str | None, tuple[str, ...]],
+               tools_granted: bool = False) -> tuple[bool, tuple[str | None, tuple[str, ...]]]:
+    """(served, effective code grant): whether the job gets the input server and its lookup tools.
+    Inputs over the inline limit are always served (listed as an inventory). A job whose profile
+    grants tools (``tools_granted``) or that holds a code grant is served at any size while
+    ``code_query_force_indexed_mode`` is on; below the limit its inputs stay inlined in the prompt as
+    well. With the flag off such a job stays inline and loses the grant, so the prompt, the server and
+    --allowedTools still agree. A job whose profile grants nothing gets no tools below the limit."""
     over_limit = inline_bytes > inline_limit
-    if code_grant[1] and not over_limit and tunables.shared("code_query_force_indexed_mode") is not True:
-        code_grant = (None, ())
-    return over_limit or bool(code_grant[1]), code_grant
+    granted = tools_granted or bool(code_grant[1])
+    if granted and not over_limit and tunables.shared("code_query_force_indexed_mode") is not True:
+        code_grant, granted = (None, ()), False
+    return over_limit or granted, code_grant
+
+
+def _max_tool_calls() -> int:
+    """Tunable ``max_tool_calls_per_cell``: lookup-tool calls one invocation (all its repair rounds) may make."""
+    value = tunables.shared("max_tool_calls_per_cell")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 1
 
 
 def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
@@ -291,7 +343,7 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
                        "--run-id", package.request["run_id"], "--inputs", str(folder),
                        "--job-id", str(package.request.get("job_id")),
                        "--attempt-id", str(package.request.get("attempt_id")),
-                       "--usage-file", str(scratch / "tool-usage.json"),
+                       "--usage-file", str(scratch / "tool-usage.json"), "--max-tool-calls", str(_max_tool_calls()),
                        *(["--code-index", code[0], "--code-tools", ",".join(code[1])] if code[1] else []),
                        *(["--output-root", str(output_root)] if output_root else [])]}
     config = scratch / "mcp-config.json"
@@ -300,6 +352,7 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
 
 
 INVENTORY_ROWS_MAX = tunables.shared("invoker_inventory_rows_max")   # above this, summarise by folder
+BUDGET_EXHAUSTED_KEY = "_budget_exhausted"   # tool-usage.json: calls refused at max_tool_calls_per_cell
 
 
 def _tool_usage(scratch: Path) -> dict[str, int]:
@@ -309,6 +362,15 @@ def _tool_usage(scratch: Path) -> dict[str, int]:
     except (OSError, ValueError):
         return {}
     return {str(k): v for k, v in counts.items() if isinstance(v, int)} if isinstance(counts, dict) else {}
+
+
+def _tool_budget_gap(counts: dict[str, int], cap: int) -> str | None:
+    """The coverage-gap line for calls the input server refused at the per-cell cap (None when none were)."""
+    refused = counts.get(BUDGET_EXHAUSTED_KEY, 0)
+    if not refused:
+        return None
+    return (f"coverage gap: tool-call budget exhausted (max_tool_calls_per_cell {cap}); {refused} lookup call(s) "
+            f"refused, so what they would have examined was not examined")
 
 
 def _inventory_section(items: list, root_label: str) -> list[str]:
@@ -446,7 +508,7 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
         schema_sections.append(_render_json_schema(
             persona_schema or output_contract["result_schema"]["schema_file"], store))
     parts = [outer, (_render_input_inventory if indexed else _render_readable_inputs)(package.inputs)]
-    if indexed and tool_guides_text:
+    if tool_guides_text:
         parts.append(tool_guides_text.rstrip())
     if schema_sections:
         parts.append("## Required Output Schema(s)\n\n" + "\n".join(schema_sections))
@@ -1269,13 +1331,17 @@ class ClaudeCliInvoker:
         cfg = rc.load_model_config()
         inline_bytes = sum(len(item.data) for item in package.inputs)
         code_grant = code_query_grant(package)
-        # Structural query tools exist only in indexed mode (the input server). Tunable
-        # code_query_force_indexed_mode (default on): a job granted them is served that way even
-        # when its inputs would fit inline. Off: such a job stays inline with no tools at all
-        # (the grant is dropped, so prompt, server and --allowedTools still agree); for comparing runs.
-        indexed, code_grant = input_mode(inline_bytes, _inline_input_limit(cfg), code_grant)
+        # Lookup tools come only from the input server. A profile that grants tools is served it at
+        # any input size (tunable code_query_force_indexed_mode, default on; off: a small job stays
+        # inline with no tools and the grant is dropped, so prompt, server and --allowedTools still
+        # agree; for comparing runs). A profile that grants none gets it only above the inline limit.
+        # Inputs are listed as an inventory only above the limit; below it they stay inlined.
+        tools_granted = profile_grants_tools(package)
+        served, code_grant = input_mode(inline_bytes, _inline_input_limit(cfg), code_grant, tools_granted)
+        indexed = inline_bytes > _inline_input_limit(cfg)
+        grant_gap = code_grant_gap(package, code_grant) if served else None
         guides_text, guides = "", []
-        if indexed:
+        if served:
             import tool_guides
             guides_text, guides = tool_guides.render(granted_tool_names(code_grant[1]))
         prompt_text = build_prompt_text(package, output_contract, store, indexed=indexed,
@@ -1302,9 +1368,10 @@ class ClaudeCliInvoker:
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
         mcp_config = (_stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root), code_grant)
-                      if indexed else None)
+                      if served else None)
         size_log.observe(package.request.get("run_id"), package.request.get("job_id"), "prompt_input_mode",
-                         inline_bytes, _inline_input_limit(cfg), mode="indexed" if indexed else "inline",
+                         inline_bytes, _inline_input_limit(cfg),
+                         mode="indexed" if indexed else ("inline+tools" if served else "inline"),
                          inputs=len(package.inputs), prompt_chars=len(prompt_text))
         builder = _CLAIM_BUILDERS.get(output_contract["result_schema"]["schema_file"], _claims_generic)
         if builder is None:
@@ -1433,18 +1500,26 @@ class ClaudeCliInvoker:
                                f"(persona cache {cache_key[:16]}, first answered in attempt "
                                f"{reused.get('cached_from')} at {reused.get('cached_at')}); no model call"]
             limitations.extend(fill_notes)
-            if indexed:
+            if served:
                 # Reproducibility (brief U4/U5): which lookup tools and guides this prompt carried,
                 # and how often the model called each tool (counted by the input server).
                 limitations.append("lookup tools granted: " + ", ".join(granted_tool_names(code_grant[1]))
-                                   + (f" (code index {code_grant[0]})" if code_grant[0] else ""))
+                                   + (f" (code index {code_grant[0]})" if code_grant[0] else "")
+                                   + f"; max_tool_calls_per_cell {_max_tool_calls()}")
+                if grant_gap:
+                    limitations.append(f"coverage gap: code_* query tools not granted ({grant_gap}); "
+                                       f"the job ran on the evidence lookups alone")
                 if guides:
                     limitations.append("tool guides: " + ", ".join(
                         f"{g['guide']}@v{g['version']}:{g['sha256'][7:23]}" for g in guides))
                 usage_counts = _tool_usage(diagnostics_dir)
+                budget_gap = _tool_budget_gap(usage_counts, _max_tool_calls())
+                usage_counts.pop(BUDGET_EXHAUSTED_KEY, None)
                 if usage_counts:
                     limitations.append("tool use: " + ", ".join(f"{name} {count}"
                                                                 for name, count in sorted(usage_counts.items())))
+                if budget_gap:
+                    limitations.append(budget_gap)
             if rounds["rejected"]:
                 limitations.append(f"schema repair retry: {rounds['rejected']} rejected response(s) before "
                                    f"this one; the rejected responses and reasons are kept in the run's "

@@ -118,11 +118,12 @@ class OwaspComponentRoutingGapTests(unittest.TestCase):
 
 
 class StandardsLifecycleGapTests(unittest.TestCase):
+    setUp = standards_tests.StandardsLifecycleTests.setUp
     setup_paths = standards_tests.StandardsLifecycleTests.setup_paths
     standards = standards_tests
 
     def _worklist(self, component, records, job_id="04-owasp-validation-worklist"):
-        # P39: OWASP targets come from the accepted routing; route every map component as applicable.
+        # ADR-0034: OWASP targets come from the projected universe request; route every map component as applicable.
         routed = dict(self.standards.ROUTED, components=[
             {"component_id": row["component_id"], "scope_status": "in_scope"} for row in component["functional_components"]],
             rules=[dict(self.standards.ROUTED["rules"][0], rule_id="auto-" + row["component_id"],

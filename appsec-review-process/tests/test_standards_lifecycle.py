@@ -16,17 +16,27 @@ COMPONENT_BIND={"job_id":"01-component-characterization","attempt_id":"c1","arti
 STANDARDS_BIND={"job_id":"02-standards-source-ingest","attempt_id":"s1","artifact_path":"standards-source.json","artifact_sha256":H,"accepted_pointer_sha256":H}
 STANDARD={"records":[{"family":"owasp_asvs","record_type":"control","record_id":"V1.1.1","path":"standards/x.json","sha256":H}]}
 WRAPPER={"family":"owasp_asvs","edition":"5.0.0","record_type":"control","record_id":"V1.1.1",
-         "record":{"proof_obligations":[{"minimum_evidence_modes":["static_source"]}]}}
-# P39: the OWASP worklist routes from the accepted T04 routing request bound to the same component map.
-ROUTED={"component_map":{"attempt_id":"c1","artifact_sha256":"a"*64},
-        "components":[{"component_id":"cli","scope_status":"in_scope"}],
-        "rules":[{"rule_id":"auto-cli-owasp-asvs","component_id":"cli",
-                  "selector":{"standard_family":"owasp_asvs","control_ids":[],"domain_ids":[],"all_controls":True},
+         "record":{"group":{"chapter_id":"V1"},"proof_obligations":[{"minimum_evidence_modes":["static_source"]}]}}
+WRAPPER_V5={"family":"owasp_asvs","edition":"5.0.0","record_type":"control","record_id":"V5.1.1",
+            "record":{"group":{"chapter_id":"V5"},"proof_obligations":[{"minimum_evidence_modes":["static_source"]}]}}
+# ADR-0034: the OWASP worklist reads the 04-owasp-component-routing projection of the newest accepted
+# 04-owasp-universe (one component per chapter, scoped to that chapter's controls), bound to exactly the
+# binding owasp_universe.accepted returns.
+UNIVERSE_BIND={"job_id":"04-owasp-universe","attempt_id":"u1","artifact_path":"jobs/04-owasp-universe/whole/attempts/u1/outputs/owasp-universe.json",
+               "artifact_sha256":"a"*64,"accepted_pointer_sha256":"a"*64,"planned_validator_calls":1}
+ROUTED={"universe":dict(UNIVERSE_BIND),
+        "components":[{"component_id":"asvs-V1","scope_status":"in_scope","control_scope":{"domain_ids":["V1"]}}],
+        "rules":[{"rule_id":"universe-asvs-V1","component_id":"asvs-V1",
+                  "selector":{"standard_family":"owasp_asvs","control_ids":[],"domain_ids":["V1"],"all_controls":False},
                   "decision":{"status":"applicable","rationale":"fixture","signals":[],"citations":[],
                               "source_completeness":"adequate","conditional_expression":None}}]}
 ROUTING_BIND={"job_id":"04-owasp-component-routing","attempt_id":"r1","artifact_path":"owasp-applicability-request.json","artifact_sha256":H,"accepted_pointer_sha256":H}
 
 class StandardsLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        patcher=mock.patch.object(lifecycle.owasp_universe,"accepted",return_value=({"targets":[]},dict(UNIVERSE_BIND)))
+        patcher.start(); self.addCleanup(patcher.stop)
+
     def setup_paths(self, folder):
         run=Path(folder)/"run"; (run/"inputs").mkdir(parents=True)
         atomic_json(run/"inputs/artifact-manifest.json",{"fixture":"identity"})
@@ -43,19 +53,32 @@ class StandardsLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             run,p1,p2=self.setup_paths(folder)
             with p1,p2,mock.patch.object(lifecycle,"_load",side_effect=self.loader), \
-                 mock.patch.object(lifecycle,"_record_documents",return_value=[(STANDARD["records"][0],WRAPPER)]):
+                 mock.patch.object(lifecycle,"_record_documents",return_value=[(STANDARD["records"][0],WRAPPER),
+                                                                                 (STANDARD["records"][0],WRAPPER_V5)]):
                 first=lifecycle.prepare_worklist("run-a","04-owasp-validation-worklist")
                 second=lifecycle.prepare_worklist("run-a","04-owasp-validation-worklist")
             self.assertEqual(first,second); request=read_json(first["request_path"])
+            # the V5 control is outside the only participating chapter's control_scope
+            self.assertEqual([row["control_id"] for row in request["payload"]["controls"]],["V1.1.1"])
             control=request["payload"]["controls"][0]
-            self.assertEqual(control["target_id"],"cli")
+            self.assertEqual(control["target_id"],"asvs-V1")
             self.assertEqual(control["applicability"],"applicable")
-            self.assertIn("auto-cli-owasp-asvs",control["citation_ids"])
+            self.assertIn("universe-asvs-V1",control["citation_ids"])
             self.assertEqual(request["upstream"][-1]["job_id"],"04-owasp-component-routing")
             self.assertEqual(control["evidence_mode"],"manual")
             self.assertEqual(control["gaps"],[])
             self.assertEqual(request["payload"]["gaps"],
                 ["Control-specific assessment has not been performed for 1 control x component work items."])
+
+    def test_owasp_request_must_project_the_accepted_universe(self):
+        stale=dict(ROUTED,universe=dict(UNIVERSE_BIND,attempt_id="u0"))
+        loader=lambda run_id,spec: (stale,ROUTING_BIND) if spec[0]==lifecycle.ROUTING[0] else self.loader(run_id,spec)
+        with tempfile.TemporaryDirectory() as folder:
+            _run,p1,p2=self.setup_paths(folder)
+            with p1,p2,mock.patch.object(lifecycle,"_load",side_effect=loader), \
+                 mock.patch.object(lifecycle,"_record_documents",return_value=[(STANDARD["records"][0],WRAPPER)]), \
+                 self.assertRaisesRegex(Blocked,"projection of the accepted universe"):
+                lifecycle.prepare_worklist("run-a","04-owasp-validation-worklist")
 
     def test_missing_stig_sources_fail_closed_instead_of_empty_success(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -86,15 +109,16 @@ class StandardsLifecycleTests(unittest.TestCase):
         pointer={"attempt_id":"auto-a","status":"OK_WITH_GAPS"}
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder)/"job"
+            # ADR-0034: the worklist routes nothing itself; the universe node publishes the projection.
+            self.assertFalse(hasattr(lifecycle,"_route_owasp"))
             with mock.patch.object(lifecycle,"prepare_worklist",return_value=prepared), \
-                 mock.patch.object(lifecycle,"_route_owasp") as route, \
+                 mock.patch.object(lifecycle.owasp_component_routing,"run") as route, \
                  mock.patch.object(lifecycle,"data_path",return_value=base), \
                  mock.patch("bounded_transform_orchestration.execute",return_value={"attempt_id":"auto-a"}) as execute, \
                  mock.patch.object(lifecycle,"_publish_bounded",return_value=pointer):
                 self.assertEqual(lifecycle.run_worklist("run-a","dagster-a","04-owasp-validation-worklist"),pointer)
-                execute.assert_called_once(); route.assert_called_once_with("run-a","dagster-a")
+                execute.assert_called_once(); route.assert_not_called()
             with mock.patch.object(lifecycle,"prepare_worklist",return_value=prepared), \
-                 mock.patch.object(lifecycle,"_route_owasp"), \
                  mock.patch.object(lifecycle,"data_path",return_value=base), \
                  mock.patch.object(lifecycle,"_reusable",return_value=pointer), \
                  mock.patch("bounded_transform_orchestration.execute") as execute:

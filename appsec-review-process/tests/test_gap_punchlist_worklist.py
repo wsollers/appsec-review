@@ -49,9 +49,9 @@ def _rule(rule_id, component_id, status, *, domains=(), expression=None):
                          "conditional_expression": expression}}
 
 
-def routing_request(component_ids, rules, binding=standards_tests.COMPONENT_BIND):
-    return {"component_map": {"attempt_id": binding["attempt_id"],
-                              "artifact_sha256": binding["artifact_sha256"].removeprefix("sha256:")},
+def routing_request(component_ids, rules, binding=standards_tests.UNIVERSE_BIND):
+    # ADR-0034: the request is the projection of the accepted 04-owasp-universe and is bound to it.
+    return {"universe": dict(binding),
             "components": [{"component_id": value, "scope_status": "in_scope"} for value in component_ids],
             "rules": rules}
 
@@ -62,6 +62,7 @@ ROUTING_BIND = {"job_id": ROUTING_JOB, "attempt_id": "r1", "artifact_path": "owa
 
 class OwaspWorklistRoutingTests(unittest.TestCase):
     """P39: the OWASP worklist takes its targets and applicability from the accepted T04 routing."""
+    setUp = standards_tests.StandardsLifecycleTests.setUp
     setup_paths = standards_tests.StandardsLifecycleTests.setup_paths
 
     def _prepare(self, job_id, component, routed, records):
@@ -116,11 +117,11 @@ class OwaspWorklistRoutingTests(unittest.TestCase):
                          ("owasp-applicability-request", "owasp-applicability-request.json",
                           "owasp-applicability-request.schema.json"))
 
-    def test_p39_routing_for_another_component_map_is_refused(self):
-        """P39: routing derived from a different component-map attempt cannot route this worklist."""
+    def test_p39_routing_for_another_universe_is_refused(self):
+        """ADR-0034: a request projected from a different universe attempt cannot route this worklist."""
         component, routed, records = self._cli_lib()
-        routed = deepcopy(routed); routed["component_map"]["attempt_id"] = "older"
-        with self.assertRaisesRegex(Blocked, "different component map"):
+        routed = deepcopy(routed); routed["universe"]["attempt_id"] = "older"
+        with self.assertRaisesRegex(Blocked, "projection of the accepted universe"):
             self._prepare("04-owasp-validation-worklist", component, routed, records)
 
     def test_p39_stig_keeps_downstream_lanes(self):
@@ -134,8 +135,8 @@ class OwaspWorklistRoutingTests(unittest.TestCase):
         self.assertEqual([row["target_id"] for row in request["payload"]["controls"]], ["cli"])
         self.assertEqual(prepared["target_count"], 1)
 
-    def test_p39_run_produces_routing_before_the_owasp_worklist(self):
-        """P39: the OWASP worklist stage produces (or reuses) T03 and routing before reading the routing."""
+    def test_owasp_worklist_run_routes_nothing_itself(self):
+        """ADR-0034: the universe node publishes the projection; the worklist only reads it (no T03, no routing)."""
         order = []
         prepared = {"request_path": Path("request.json"), "attempt_id": "auto-a", "control_count": 1,
                     "target_count": 1, "generation": H}
@@ -149,33 +150,34 @@ class OwaspWorklistRoutingTests(unittest.TestCase):
              mock.patch("bounded_transform_orchestration.execute"), \
              mock.patch.object(lifecycle, "_publish_bounded", return_value={"attempt_id": "auto-a"}):
             lifecycle.run_worklist("run-a", "dagster-a", "04-owasp-validation-worklist")
-        self.assertEqual(order, ["t03", "routing", "prepare"])
+        self.assertEqual(order, ["prepare"])
 
 
 class PublishedRoutingTests(unittest.TestCase):
-    """P39: the real accepted routing publication loads hash-verified and decides rows exactly as T04 does."""
-    _cls = routing_tests.OwaspComponentRoutingTests
+    """ADR-0034: the real accepted projection of a real accepted universe binds the worklist and decides
+    each in-scope row exactly as T04 does."""
+    _cls = routing_tests.UniverseProjectionTests
     setUp = _cls.setUp
-    _freeciv_like_map = _cls._freeciv_like_map
-    _publish_component = _cls._publish_component
-    _publish_lane_in = _cls._publish_lane_in
-    _republish = _cls._republish
+    project = _cls.project
+    model = _cls.model
 
     def test_p39_published_routing_matches_t04_rows(self):
-        def edit(value):
-            row = next(item for item in value["functional_components"] if item["component_id"] == "ruleset-loader")
-            row.update(component_type="command-line application", aliases=["cli"], confidence="high")
-        _request, model = self._republish(edit)
-        _component, component_binding = lifecycle._load(self.run_id, lifecycle.COMPONENT)
-        routed = lifecycle._owasp_routing(self.run_id, component_binding)
+        self.project(incomplete=("V3",))
+        _result, model = self.model(self.request_path)
+        routed = lifecycle._owasp_routing(self.run_id)  # bound to exactly the accepted universe
+        targets = {row["component_id"]: row for row in routed["components"]}
         observed = {}
         for row in model["rows"]:
             wrapper = {"family": row["standard_family"], "record_id": row["control_id"],
                        "record": {"group": {"chapter_id": row["domain_id"]}}}
+            self.assertTrue(lifecycle._in_scope(targets[row["component_id"]], wrapper), row["component_id"])
             rule = lifecycle._routed_rule(routed, row["component_id"], wrapper)
             self.assertEqual(rule["decision"]["status"] if rule else "cannot_determine", row["applicability_status"])
             observed[row["applicability_status"]] = observed.get(row["applicability_status"], 0) + 1
-        self.assertTrue(observed.get("not_applicable") and observed.get("applicable"), observed)
+        self.assertTrue(observed.get("not_applicable") and observed.get("applicable") and
+                        observed.get("cannot_determine"), observed)
+        other = {"family": "owasp_asvs", "record_id": "V5.1.1", "record": {"group": {"chapter_id": "V5"}}}
+        self.assertFalse(lifecycle._in_scope(targets["asvs-V1"], other))
 
 
 class _Reached(Exception):

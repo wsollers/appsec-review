@@ -1,7 +1,7 @@
 """Dagster multiprocessing graph. Each stateful unit owns its lock in one process."""
 from pathlib import Path
-from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, Field, MetadataValue, RetryPolicy, In, failure_hook,
-                     job, multiprocess_executor, resource, run_failure_sensor, run_status_sensor)
+from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, Field, MetadataValue, RetryPolicy, In, Out, Output,
+                     failure_hook, job, multiprocess_executor, resource, run_failure_sensor, run_status_sensor)
 from pipeline_log_dagster import op
 from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json, run_path
 from phase1 import Session, config_for
@@ -18,6 +18,7 @@ import reachability_engine_jobs
 import treesitter_ast_job
 import code_index_job
 import lsp_xref_job
+import evidence_index_derived
 import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
@@ -39,10 +40,11 @@ import automatic_discovery
 import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
-import owasp_component_routing as owasp_component_routing_worker
 import owasp_dispatch
 import owasp_join_publisher as owasp_join_publisher_worker
 import owasp_workbench_lifecycle
+import owasp_universe_jobs
+import tunables
 import ir_evidence as ir_evidence_worker
 import joern_cpg as joern_cpg_worker
 import api_collection_intelligence_ingest as api_collection_intelligence_worker
@@ -726,7 +728,7 @@ def automatic_common_lifecycle_op(job_id, worker, pool):
 api_collection_intelligence_work = automatic_common_lifecycle_op(
     '02-api-collection-intelligence-ingest', api_collection_intelligence_worker, CPU_POOL)
 doc_intelligence_work = automatic_common_lifecycle_op(
-    '02-doc-intelligence-ingest', doc_intelligence_worker, CPU_POOL)
+    '02-doc-intelligence-ingest', doc_intelligence_worker, OFFLINE_DOCKER_POOL)  # gap 7: PDF/DOCX conversion containers
 test_intelligence_work = automatic_common_lifecycle_op(
     '02-test-intelligence-ingest', test_intelligence_worker, CPU_POOL)
 operations_doc_work = automatic_common_lifecycle_op(
@@ -829,6 +831,8 @@ treesitter_ast_lifecycle_work = structural_index_op('02-treesitter-ast', treesit
                                                     OFFLINE_DOCKER_POOL)
 code_index_lifecycle_work = structural_index_op('02-code-index', code_index_job, code_index_job.RESULT, CPU_POOL)
 lsp_xref_lifecycle_work = structural_index_op('02-lsp-xref', lsp_xref_job, lsp_xref_job.RESULT, OFFLINE_DOCKER_POOL)
+evidence_index_derived_lifecycle_work = structural_index_op('02-evidence-index-derived', evidence_index_derived,
+                                                            evidence_index_derived.RESULT, CPU_POOL)
 reachability_codeql_lifecycle_work = reachability_engine_op('codeql', DOCKER_POOL)
 reachability_ir_lifecycle_work = reachability_engine_op('ir', CPU_POOL)
 cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
@@ -892,6 +896,39 @@ def hypothesis_discovery_lifecycle_op():
 
 
 hypothesis_discovery_lifecycle_work = hypothesis_discovery_lifecycle_op()
+
+
+def owasp_universe_lifecycle_op(job_id, pool):
+    """ADR-0034: 04-owasp-candidate-search / -participation / -universe. owasp_universe_jobs imports
+    the job modules only when a job runs. The universe raises
+    Blocked over budget (nothing downstream runs); an accepted one is projected into the applicability
+    request the worklist and T03-T06 read."""
+    @op(name='job_' + job_id.replace('-', '_'), ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def owasp_universe_stage(context, configured, upstream):
+        run_id, force = configured['engagement_run_id'], configured.get('force', False)
+        if job_id == owasp_universe_jobs.UNIVERSE:
+            result = owasp_universe_jobs.run_universe(run_id, context.run_id, force)
+            context.add_output_metadata({'attempt_id': result['attempt_id'], 'reused': bool(result.get('reused')),
+                                         'planned_validator_calls': result.get('planned_validator_calls', 0),
+                                         'projection_attempt_id': result['projection']['attempt_id']})
+            return result
+        if job_id == owasp_universe_jobs.PARTICIPATION:
+            result = owasp_universe_jobs.run_participation(run_id, context.run_id, force)
+            output = 'owasp-participation.json'
+        else:
+            result = owasp_universe_jobs.run(job_id, run_id, context.run_id, force)
+            output = owasp_universe_jobs.JOBS[job_id][1]
+        attempt = owasp_universe_jobs.root(run_id, job_id) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({'output': MetadataValue.path(str(attempt / output)),
+                                     'envelope': MetadataValue.path(str(attempt / 'result.json')),
+                                     'attempt_id': result['attempt_id']})
+        return result
+    return owasp_universe_stage
+
+
+owasp_candidate_search_lifecycle_work = owasp_universe_lifecycle_op('04-owasp-candidate-search', CPU_POOL)
+owasp_participation_lifecycle_work = owasp_universe_lifecycle_op('04-owasp-participation', PERSONA_POOL)
+owasp_universe_lifecycle_work = owasp_universe_lifecycle_op('04-owasp-universe', CPU_POOL)
 
 
 def attack_chain_lifecycle_op(job_id, worker):
@@ -1117,23 +1154,9 @@ def owasp_validation_worklist():
     owasp_validation_worklist_work(build_execution_config())
 
 
-@op(pool=CPU_POOL)
-def owasp_component_routing_work(context, configured):
-    result = owasp_component_routing_worker.run(
-        configured['engagement_run_id'], context.run_id, force=configured['force'])
-    attempt = owasp_component_routing_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({
-        'request': MetadataValue.path(str(attempt / owasp_component_routing_worker.REQUEST)),
-        'routing': MetadataValue.path(str(attempt / owasp_component_routing_worker.ROUTING)),
-        'attempt_id': result['attempt_id']})
-    return result
-
-
-@job(resource_defs={'workflow_settings': workflow_settings},
-     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
-     op_retry_policy=RetryPolicy(max_retries=0))
-def owasp_component_routing():
-    owasp_component_routing_work(build_execution_config())
+def owasp_validator_max_parallel():
+    """ADR-0034: the 04-owasp-validator-cell tunable; run_dispatch caps it at pool_persona_llm_slots."""
+    return tunables.value('04-owasp-validator-cell', 'max_parallel')
 
 
 def run_owasp_validator_handoffs(context, configured):
@@ -1148,7 +1171,8 @@ def run_owasp_validator_dispatch(context, configured):
     """T10: dispatch every static validator cell under the join's own facts, wait for all, and
     publish the accepted accounting (an EMPTY one when T06 produced no handoff)."""
     result = owasp_workbench_lifecycle.run_dispatch(
-        configured['engagement_run_id'], context.run_id, configured.get('force', False))
+        configured['engagement_run_id'], context.run_id, configured.get('force', False),
+        max_parallel=owasp_validator_max_parallel())
     context.add_output_metadata({
         'accounting': MetadataValue.path(str(owasp_dispatch._base(configured['engagement_run_id'])
                                              / 'attempts' / result['attempt_id'] / owasp_dispatch.ACCOUNTING_ARTIFACT)),
@@ -1813,6 +1837,7 @@ LIFECYCLE_OPS['02-code-property-graph']=code_property_graph_work
 LIFECYCLE_OPS['02-treesitter-ast']=treesitter_ast_lifecycle_work
 LIFECYCLE_OPS['02-code-index']=code_index_lifecycle_work
 LIFECYCLE_OPS['02-lsp-xref']=lsp_xref_lifecycle_work
+LIFECYCLE_OPS['02-evidence-index-derived']=evidence_index_derived_lifecycle_work
 LIFECYCLE_OPS['02-api-collection-intelligence-ingest']=api_collection_intelligence_work
 LIFECYCLE_OPS['02-doc-intelligence-ingest']=doc_intelligence_work
 LIFECYCLE_OPS['02-test-intelligence-ingest']=test_intelligence_work
@@ -1844,6 +1869,9 @@ LIFECYCLE_OPS['06-reachability-codeql']=reachability_codeql_lifecycle_work
 LIFECYCLE_OPS['06-reachability-ir']=reachability_ir_lifecycle_work
 LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
 LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
+LIFECYCLE_OPS['04-owasp-candidate-search']=owasp_candidate_search_lifecycle_work
+LIFECYCLE_OPS['04-owasp-participation']=owasp_participation_lifecycle_work
+LIFECYCLE_OPS['04-owasp-universe']=owasp_universe_lifecycle_work
 LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
 LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
 LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
@@ -1880,6 +1908,38 @@ ITEM_JOBS=job_executor.register_item_ops(LIFECYCLE,LIFECYCLE_OPS,CPU_POOL)
 TOLERANT_OPS={'02-native-build':native_build_published,'02-iac-config-scan':published_gate('02-iac-config-scan')}
 
 
+def published_inputs(job_id):
+    """Gap 3: route a pass-through op's inputs. All published: 'ready' (the op runs). A required input that
+    did not publish: 'missing' carries NOT_PUBLISHED and the op does not run (Dagster skips it)."""
+    @op(name='job_'+job_id.replace('-','_')+'_inputs',ins={'upstream':In(list)},
+        out={'ready':Out(list,is_required=False),'missing':Out(dict,is_required=False)},tags=COORDINATION)
+    def inputs(upstream):
+        absent=[]
+        for row in upstream:
+            if isinstance(row,dict) and row.get('status')=='NOT_PUBLISHED': absent.append(row.get('job_id','?'))
+        if absent:
+            yield Output({'job_id':job_id,'status':'NOT_PUBLISHED',
+                          'error':'required input did not publish: '+', '.join(absent)},'missing')
+        else:
+            yield Output(upstream,'ready')
+    return inputs
+
+
+def pass_through_result(job_id):
+    """The op's result, or the NOT_PUBLISHED pass-through when it did not run (fan-in of the one present)."""
+    @op(name='job_'+job_id.replace('-','_')+'_result',ins={'results':In(list)},tags=COORDINATION)
+    def result(results):
+        return results[0]
+    return result
+
+
+# Gap 3: Dagster holds every op below a failed op, optional fan-in or not. The native evidence chain takes the
+# native-build observation and passes NOT_PUBLISHED through instead of raising, so 02-code-index (whose edges
+# to it are optional) still runs after a failed native build; published_gate holds their required consumers.
+PASS_THROUGH_OPS={name:(published_inputs(name),pass_through_result(name),published_gate(name))
+                  for name in ('02-binary-triage','02-debug-symbol-index','02-ir-capture','02-ir-link','02-ir-facts')}
+
+
 def wire_lifecycle(configured, outputs, ops, discovered=None):
     """Compose ``ops`` in job-graph order onto ``outputs`` (job id -> output) inside a job body."""
     observed={}
@@ -1898,6 +1958,12 @@ def wire_lifecycle(configured, outputs, ops, discovered=None):
                     # The join reads the accepted T10 accounting; produce T03-T06 and dispatch first.
                     handoffs=owasp_validator_handoffs_work(configured,list(upstream))
                     upstream.append(owasp_validator_dispatch_work(configured,[handoffs]))
+                if name in PASS_THROUGH_OPS:
+                    route,merge,gate=PASS_THROUGH_OPS[name]
+                    ready,missing=route([observed.get(d['job'],outputs[d['job']]) for d in deps])
+                    observed[name]=merge([pending.pop(name)(configured,ready),missing])
+                    outputs[name]=gate(observed[name])
+                    continue
                 output=pending.pop(name)(configured,upstream)
                 if name in TOLERANT_OPS: observed[name],output=output,TOLERANT_OPS[name](output)
                 outputs[name]=output
@@ -1916,7 +1982,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -1926,7 +1992,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

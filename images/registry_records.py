@@ -51,7 +51,7 @@ BUILDENV_IMAGE_IDS = (
 CODEQL_IMAGE_IDS = ("audit-codeql", "audit-codeql-native")
 STEP4_IMAGE_IDS = (
     "audit-native", "audit-binary-analysis", "audit-container", "audit-iac",
-    "audit-report", "scancode-toolkit", *BUILDENV_IMAGE_IDS, *TOOL_IMAGE_IDS, *CODEQL_IMAGE_IDS,
+    "audit-report", "audit-doc-convert", "scancode-toolkit", *BUILDENV_IMAGE_IDS, *TOOL_IMAGE_IDS, *CODEQL_IMAGE_IDS,
 )
 # Built before the images above and read only at their build time (RUN --mount); never executed
 # against a target, so no B16 record.

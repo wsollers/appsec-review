@@ -7,6 +7,7 @@ intake source inventory.
 from __future__ import annotations
 
 import tunables
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -14,8 +15,9 @@ from typing import Any
 
 import yaml
 
+import doc_convert
 import evidence_redaction as redaction
-from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json
+from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, now, read_json
 import size_log
 import phase1
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
@@ -28,6 +30,7 @@ SPECS = {
     "02-test-intelligence-ingest": ("test-intelligence", "test-intelligence.json", "test-intelligence.schema.json"),
     "02-operations-doc-ingest": ("operations-doc-intelligence", "operations-doc-intelligence.json", "operations-doc-intelligence.schema.json"),
 }
+DOC = "02-doc-intelligence-ingest"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 MAX_FILE_BYTES = 1024 * 1024
@@ -154,6 +157,9 @@ def _code_hashes(job: str) -> dict[str, str]:
         ROOT.parent / "schemas/static-intelligence-source.schema.json")
     values["schemas/static-intelligence-binding.schema.json"] = file_hash(
         ROOT.parent / "schemas/static-intelligence-binding.schema.json")
+    if job == DOC:
+        values["doc_convert.py"] = file_hash(ROOT / "doc_convert.py")
+        values["schemas/doc-text-manifest.schema.json"] = file_hash(ROOT.parent / "schemas/doc-text-manifest.schema.json")
     return values
 
 
@@ -182,14 +188,36 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     if job == "02-api-collection-intelligence-ingest":
         result["parser_versions"] = {"json": "python-stdlib", "yaml": f"PyYAML-{yaml.__version__}",
                                      "bruno": "bounded-static-v1"}
+    if job == DOC:
+        result["parser_versions"] = {"html": doc_convert.HTML_VERSION, "roff": doc_convert.ROFF_VERSION}
+        result["limits"] = _doc_limits()
+        result["converter"] = _converter_inputs(source["files"])
     return result
+
+
+def _doc_limits() -> dict[str, int]:
+    return {name: tunables.value(DOC, name) for name in ("file_max_bytes", "binary_document_max_bytes",
+            "pdf_min_text_chars_per_page", "converted_text_max_bytes", "converted_line_max_chars")}
+
+
+def _converter_inputs(source_files: dict[str, Any]) -> dict[str, Any] | None:
+    """The pinned converter image, only when a PDF or DOCX is in the universe. No B16 record is a gap
+    per document (``converter-unavailable``), not a blocked job: the text documents still publish."""
+    included, _skipped = doc_convert.plan(source_files)
+    if not any(item["format"] in doc_convert.BINARY_FORMATS for item in included):
+        return None
+    import container_execution as ce
+    image_id = tunables.value(DOC, "image_id")
+    try:
+        image = ce.load_image_registry(ce.IMAGES_DIR).get(image_id)
+    except ce.ContainerRequestError:
+        image = None
+    return {"image_id": image_id, "image": image, "boundary_sha256": ce.boundary_sha256() if image else None,
+            "container_limits": tunables.container_limits(DOC)}
 
 
 def _candidate(job: str, path: str) -> bool:
     p = PurePosixPath(path); low = path.lower(); name = p.name.lower(); suffix = p.suffix.lower()
-    if job == "02-doc-intelligence-ingest":
-        return suffix in TEXT_SUFFIXES and name not in {"readme", "readme.md", "readme.txt", "readme.rst"} and any(
-            token in low for token in ("doc", "design", "architecture", "adr", "spec", "requirement", "product", "feature"))
     if job == "02-api-collection-intelligence-ingest":
         return suffix in {".json", ".yaml", ".yml", ".bru"} and any(
             token in low for token in ("openapi", "swagger", "postman", "insomnia", "bruno", ".bru"))
@@ -375,9 +403,156 @@ def _probed(job: str, target: Path, source_files: dict[str, Any], taken: set[str
     return found
 
 
+def _redact_lines(lines: list, name: str) -> tuple[list | None, str, int]:
+    """Redact converted text; the line structure (and so its provenance) must survive unchanged."""
+    if not lines:
+        return lines, "unchanged", 0
+    data = ("\n".join(text for text, *_rest in lines) + "\n").encode("utf-8")
+    outcome = redaction._process(data, name, redaction.DEFAULT_LIMITS)
+    if outcome.disposition == "withheld" or outcome.data is None:
+        return None, "withheld", 0
+    texts = outcome.data.decode("utf-8", errors="replace").split("\n")[:-1]
+    if len(texts) != len(lines):
+        return None, "line-count-changed", 0
+    return [(text, *rest) for text, (_old, *rest) in zip(texts, lines)], outcome.disposition, sum(outcome.counts.values())
+
+
+def _bounded(lines: list, max_bytes: int) -> tuple[list, bool]:
+    total = 0
+    for index, (text, *_rest) in enumerate(lines):
+        total += len(text.encode("utf-8")) + 1
+        if total > max_bytes:
+            return lines[:index], True
+    return lines, False
+
+
+def _sha_bytes(data: bytes) -> str:
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def _extract_doc(*, run_id: str, attempt_id: str, target: Path, source: dict[str, Any], source_files: dict[str, Any],
+                 converter: Any = None, artifacts: dict[str, bytes] | None = None) -> dict[str, Any]:
+    """Gap 7: the planned documents, converted to text with provenance, classified and indexed as locators."""
+    job, limits = DOC, _doc_limits()
+    included, skipped = doc_convert.plan(source_files)
+    gaps = [f"unsupported-document-format:{item['path']}" for item in skipped
+            if item["reason"].startswith("unsupported-format:")]
+    examined = sum(1 for meta in source_files.values() if meta.get("kind") == "file")
+    unexamined = sorted(path for path, meta in source_files.items() if meta.get("kind") != "file")
+    size_log.observe(run_id, job, "applicable_inputs", len(included), tunables.value(job, "files_logged"))
+    sources, records, identities, documents, manifest, versions = [], [], set(), [], [], {}
+    for item in included:
+        relative, fmt, doc_class = item["path"], item["format"], item["doc_class"]
+        meta = source_files[relative]; sha = "sha256:" + meta["sha256"]
+        path = target.joinpath(*PurePosixPath(relative).parts)
+        if not path.is_file() or path.is_symlink() or file_hash(path) != meta["sha256"]:
+            raise Blocked(f"{job}: accepted source changed: {relative}")
+        entry = {"path": relative, "doc_class": doc_class, "format": fmt, "source_sha256": sha}
+
+        def gap(kind: str, status: str = "UNCONVERTED", detail: str = "") -> None:
+            sources.append({"path": relative, "sha256": sha, "status": status, "redactions": 0})
+            gaps.append(f"{kind}:{relative}{detail}")
+            documents.append({**entry, "outcome": "gap", "reason": kind})
+        binary = fmt in doc_convert.BINARY_FORMATS
+        if path.stat().st_size > limits["binary_document_max_bytes" if binary else "file_max_bytes"]:
+            gap("oversized-input", "OVERSIZED"); continue
+        data = path.read_bytes()
+        tool = None
+        if binary:
+            problem = doc_convert.precheck(fmt, data, limits["binary_document_max_bytes"])
+            if problem is None and converter is None:
+                problem = "converter-unavailable"
+            if problem is None:
+                command = doc_convert.argv(fmt, relative, "out.txt")
+                outcome = converter.run(doc_convert.step_id(fmt, relative, meta["sha256"]), command, "out.txt")
+                if file_hash(path) != meta["sha256"]:
+                    raise Blocked(f"{job}: accepted source changed during conversion: {relative}")
+                if outcome["status"] != "OK" or outcome["output"] is None:
+                    problem = doc_convert.failure_gap(fmt, outcome)
+            if problem:
+                gap(problem); continue
+            text = outcome["output"].decode("utf-8", errors="replace")
+            if fmt == "pdf":
+                lines, pages, chars = doc_convert.pdf_lines(text)
+                if chars < limits["pdf_min_text_chars_per_page"] * max(pages, 1):   # no OCR: missing text is a gap
+                    gap("image-only-or-scanned-pdf", detail=f":{chars}-chars-{pages}-pages"); continue
+            else:
+                lines = doc_convert.text_lines(text, "docx", source_lines=False)
+            tool = {"name": doc_convert.TOOL_NAMES[fmt], "version": doc_convert.tool_version(converter, fmt, versions),
+                    "image_id": converter.image["image_id"], "image_digest": converter.image["digest"], "argv": command}
+        elif fmt in ("html", "roff"):
+            if b"\x00" in data:
+                gap("corrupt-document"); continue
+            text = data.decode("utf-8-sig", errors="replace")
+            lines = doc_convert.html_lines(text) if fmt == "html" else doc_convert.roff_lines(text)
+            tool = {"name": "html.parser" if fmt == "html" else "roff-strip", "image_id": None, "image_digest": None,
+                    "version": doc_convert.HTML_VERSION if fmt == "html" else doc_convert.ROFF_VERSION, "argv": None}
+        if tool is None:   # a text format: redacted as read; text line N is source line N
+            redacted, disposition, count = _redacted(relative, data)
+            if redacted is None:
+                gap("withheld-input", "WITHHELD", f":{disposition}"); continue
+            lines = doc_convert.text_lines(redacted, fmt)
+        else:
+            lines, truncated = _bounded(doc_convert.wrap(lines, limits["converted_line_max_chars"]),
+                                        limits["converted_text_max_bytes"])
+            lines, disposition, count = _redact_lines(lines, "converted.txt")
+            if lines is None:
+                gap("withheld-input", "WITHHELD", f":{disposition}"); continue
+            if truncated:
+                gaps.append(f"converted-text-truncated:{relative}")
+            body = ("\n".join(text for text, *_rest in lines) + "\n").encode("utf-8") if lines else b""
+            text_path = f"{doc_convert.TEXT_DIR}/{doc_convert.doc_id(relative)}.txt"
+            if artifacts is not None:
+                artifacts[text_path] = body
+            manifest.append({**entry, "doc_id": doc_convert.doc_id(relative), "converter": tool, "text_path": text_path,
+                             "text_sha256": _sha_bytes(body), "text_bytes": len(body), "line_count": len(lines),
+                             "redaction": disposition.lower(), "truncated": truncated,
+                             "provenance": doc_convert.provenance(fmt, lines)})
+        sources.append({"path": relative, "sha256": sha, "status": disposition.upper(), "redactions": count})
+        documents.append({**entry, "outcome": "indexed", "reason": None})
+        for found in doc_convert.records(relative, doc_class, fmt, lines):
+            identity = (relative, found["kind"], found["locator"], found["text"])
+            if identity in identities:
+                gaps.append(f"duplicate-record:{relative}:{found['locator']}"); continue
+            identities.add(identity)
+            records.append({"record_id": "intel_" + digest(identity)[:16], "kind": found["kind"], "path": relative,
+                "source_sha256": sha, "locator": found["locator"], "summary": found["text"],
+                "semantics": "DOCUMENTED_STATIC_INTENT",
+                **{key: found[key] for key in ("citation", "doc_class", "format", "topics", "heading_level") if key in found}})
+    size_log.observe(run_id, job, "extracted_records", len(records), tunables.value(job, "records_logged"))
+    records.sort(key=lambda x: (x["path"], x["locator"], x["record_id"]))
+    sources.sort(key=lambda x: x["path"])
+    if not included and unexamined:   # links were not followed, so absence is not established
+        gaps.append(f"no-applicable-inputs:{len(unexamined)}-non-file-entries-unexamined")
+    elif included and not records:
+        gaps.append("zero-indexable-records")
+    skip = not included and not unexamined and not gaps
+    manifest_bytes = doc_convert.canonical({"schema": doc_convert.MANIFEST_SCHEMA, "run_id": run_id, "job_id": job,
+        "claim_boundary": "CONVERTED_TEXT_LOCATOR_NOT_FINDING", "documents": sorted(manifest, key=lambda x: x["path"])})
+    if artifacts is not None:
+        artifacts[doc_convert.MANIFEST] = manifest_bytes
+        # 02-evidence-index-derived reads this one (derived-text-manifest.schema.json) and chunks each text.
+        artifacts[doc_convert.DERIVED_MANIFEST] = doc_convert.canonical(doc_convert.derived_manifest(manifest))
+    return {"schema": "appsec-review/doc-intelligence/2", "run_id": run_id, "job_id": job,
+        "attempt_id": attempt_id, "status": "SKIPPED" if skip else "OK_WITH_GAPS" if gaps else "OK",
+        "applicability": SKIPPED_NA if skip else APPLICABLE,
+        "inventory": {"files_examined": examined, "non_file_entries": len(unexamined), "candidates": len(included)},
+        "source": source, "sources": sources, "documents": sorted(documents, key=lambda x: x["path"]),
+        "skipped": skipped, "records": records,
+        "converted_text": {"manifest": doc_convert.MANIFEST, "sha256": _sha_bytes(manifest_bytes),
+                           "documents": len(manifest)},
+        "coverage_gaps": sorted(set(gaps)), "static_only": True}
+
+
 def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
-            source: dict[str, Any], source_files: dict[str, Any]) -> dict[str, Any]:
-    candidates = [path for path, meta in source_files.items() if meta.get("kind") == "file" and _candidate(job, path)]
+            source: dict[str, Any], source_files: dict[str, Any], converter: Any = None,
+            artifacts: dict[str, bytes] | None = None) -> dict[str, Any]:
+    """Normalized static intelligence. ``converter``/``artifacts`` apply to the document job only: the
+    B13 converter (or its replay) for PDF/DOCX, and a dict that receives the converted-text files."""
+    if job == DOC:
+        return _extract_doc(run_id=run_id, attempt_id=attempt_id, target=target, source=source,
+                            source_files=source_files, converter=converter, artifacts=artifacts)
+    candidates =[path for path, meta in source_files.items() if meta.get("kind") == "file" and _candidate(job, path)]
     gaps: list[str] = []
     if job == "02-test-intelligence-ingest":
         candidates += _probed(job, target, source_files, set(candidates), gaps)
@@ -435,6 +610,15 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
     return result
 
 
+def _doc_converter(run_id: str, attempt: Path, inputs: dict[str, Any], receipt: dict[str, Any] | None) -> Any:
+    """The B13 converter for this attempt's PDF/DOCX documents (a replay when ``receipt`` is given)."""
+    converter = inputs.get("converter")
+    if not converter or not converter.get("image"):
+        return None
+    return doc_convert.ContainerConverter(attempt=attempt, run_id=run_id, job=DOC, target=inputs["target_path"],
+        converter=converter, source_snapshot_sha256="sha256:" + inputs["source"]["source_fingerprint"], receipt=receipt)
+
+
 def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs or inputs["code"] != _code_hashes(job):
         raise Blocked(f"{job}: immutable inputs or implementation changed")
@@ -442,11 +626,25 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
     if binding != inputs["source"] or live_source["files"] != inputs["source_files"]:
         raise Blocked(f"{job}: accepted source generation changed")
     contract, result_name, schema = SPECS[job]
+    converter, artifacts = None, None
+    if job == DOC:   # replay: verify each stored B13 conversion, never start a container
+        converter, artifacts = _doc_converter(run_id, attempt, inputs, read_json(attempt / doc_convert.RECEIPT)), {}
     expected = extract(job, run_id=run_id, attempt_id=attempt.name, target=Path(inputs["target_path"]),
-                       source=inputs["source"], source_files=inputs["source_files"])
+                       source=inputs["source"], source_files=inputs["source_files"], converter=converter,
+                       artifacts=artifacts)
     found = read_json(attempt / result_name)
     if found != expected or validate_document(found, schema):
         raise Blocked(f"{job}: normalized static intelligence changed or fails schema")
+    if job == DOC:
+        stored = read_json(attempt / doc_convert.RECEIPT)
+        if (converter.receipt() if converter else {"schema": doc_convert.RECEIPT_SCHEMA, "steps": {}}) != stored:
+            raise Blocked(f"{job}: conversion receipt changed")
+        if validate_document(read_json(attempt / doc_convert.MANIFEST), "doc-text-manifest.schema.json"):
+            raise Blocked(f"{job}: converted-text manifest fails its schema")
+        for relative, body in artifacts.items():
+            path = attempt.joinpath(*PurePosixPath(relative).parts)
+            if path.is_symlink() or not path.is_file() or path.read_bytes() != body:
+                raise Blocked(f"{job}: converted text changed: {relative}")
     permission = {"schema": PERMISSION_SCHEMA, "run_id": run_id, "job_id": job,
         "source_snapshot_sha256": "sha256:" + inputs["source"]["source_fingerprint"],
         "permissions": _permissions(job)}
@@ -461,9 +659,20 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
     contract, result_name, _schema = SPECS[job]; base = root(run_id, job)
     def execute(allocation, inputs, fingerprint):
         attempt = allocation["attempt"]
+        converter, artifacts = (_doc_converter(run_id, attempt, inputs, None), {}) if job == DOC else (None, None)
         result = extract(job, run_id=run_id, attempt_id=allocation["attempt_id"],
-            target=Path(inputs["target_path"]), source=inputs["source"], source_files=inputs["source_files"])
+            target=Path(inputs["target_path"]), source=inputs["source"], source_files=inputs["source_files"],
+            converter=converter, artifacts=artifacts)
         atomic_json(attempt / result_name, result)
+        extra = []
+        if job == DOC:
+            for relative, body in sorted(artifacts.items()):
+                path = attempt.joinpath(*PurePosixPath(relative).parts)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                atomic_bytes(path, body)
+            atomic_json(attempt / doc_convert.RECEIPT, converter.receipt() if converter else
+                        {"schema": doc_convert.RECEIPT_SCHEMA, "steps": {}})
+            extra = sorted(artifacts) + [doc_convert.RECEIPT]
         source_hash = "sha256:" + inputs["source"]["source_fingerprint"]
         atomic_json(attempt / "permission.json", {"schema": PERMISSION_SCHEMA, "run_id": run_id,
             "job_id": job, "source_snapshot_sha256": source_hash, "permissions": _permissions(job)})
@@ -478,7 +687,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Published {len(result['records'])} redacted static intelligence record(s).",
-            status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"],
+            status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json", *extra],
             gaps=result["coverage_gaps"] or None, skip_reason=SKIP_REASON if result["status"] == "SKIPPED" else None,
             consumer_job_id=CONSUMER,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))

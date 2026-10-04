@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 85,
+  "lifecycle_jobs": 89,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1187,6 +1187,7 @@
         "job:02-test-coverage-ingest",
         "job:02-operations-doc-ingest",
         "job:02-evidence-index",
+        "job:02-evidence-index-derived",
         "job:02-ossf-scorecard",
         "job:02-secrets-inventory",
         "job:02-iac-config-scan",
@@ -1255,9 +1256,8 @@
         "job:02-doc-intelligence-ingest"
        ],
        "declared_inputs": [
-        "document source path",
-        "source type",
-        "redaction policy"
+        "accepted 00-intake source inventory and checkout (read-only)",
+        "evidence redaction ruleset"
        ]
       },
       {
@@ -1703,6 +1703,47 @@
        ]
       },
       {
+       "ref": "job:02-evidence-index-derived",
+       "id": "02-evidence-index-derived",
+       "name": "Derived evidence index (producer records and build inputs)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-evidence-index",
+        "job:02-api-collection-intelligence-ingest",
+        "job:02-binary-cfg",
+        "job:02-binary-intelligence-ingest",
+        "job:02-binary-triage",
+        "job:02-code-property-graph",
+        "job:02-codeql-cpp",
+        "job:02-codeql-csharp",
+        "job:02-codeql-go",
+        "job:02-codeql-java",
+        "job:02-codeql-javascript",
+        "job:02-codeql-python",
+        "job:02-codeql-ruby",
+        "job:02-codeql-rust",
+        "job:02-debug-symbol-index",
+        "job:02-doc-intelligence-ingest",
+        "job:02-ir-facts",
+        "job:02-native-sast",
+        "job:02-operations-doc-ingest",
+        "job:02-repository-partition-discovery",
+        "job:02-source-sast",
+        "job:02-test-coverage-ingest",
+        "job:02-test-execution",
+        "job:02-test-intelligence-ingest",
+        "job:02-test-result-ingest",
+        "job:02-treesitter-ast",
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-evidence-index-derived"
+       ],
+       "declared_inputs": [
+        "accepted 02-evidence-index (source generation)"
+       ]
+      },
+      {
        "ref": "job:02-secrets-inventory",
        "id": "02-secrets-inventory",
        "name": "Secrets Inventory",
@@ -1895,14 +1936,6 @@
        "legacy-pregather",
        "job:02-build-resolution",
        "job:02-evidence-assembly",
-       "job:02-codeql-cpp",
-       "job:02-codeql-csharp",
-       "job:02-codeql-go",
-       "job:02-codeql-java",
-       "job:02-codeql-javascript",
-       "job:02-codeql-python",
-       "job:02-codeql-ruby",
-       "job:02-codeql-rust",
        "job:02-lsp-xref"
       ],
       "passes": [
@@ -1918,6 +1951,14 @@
        "job:02-standards-source-ingest",
        "job:02-test-intelligence-ingest",
        "job:02-source-sast",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust",
        "job:02-code-property-graph",
        "job:02-treesitter-ast",
        "job:02-code-index",
@@ -1932,6 +1973,7 @@
        "job:02-test-result-ingest",
        "job:02-test-coverage-ingest",
        "job:02-operations-doc-ingest",
+       "job:02-evidence-index-derived",
        "job:02-secrets-inventory",
        "job:02-iac-config-scan",
        "job:02-container-image-inventory",
@@ -1969,9 +2011,8 @@
        "accepted native-build binary lineage",
        "accepted binary-triage result",
        "accepted binary-cfg result",
-       "document source path",
-       "source type",
-       "redaction policy",
+       "accepted 00-intake source inventory and checkout (read-only)",
+       "evidence redaction ruleset",
        "exact accepted intake source identity",
        "run-owned standards-source-binding.json",
        "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -2003,6 +2044,7 @@
        "target-execution grant",
        "accepted test execution",
        "exact accepted intake source inventory",
+       "accepted 02-evidence-index (source generation)",
        "fresh run artifact manifest",
        "explicit run-owned source root",
        "B16 scanner image records",
@@ -2082,14 +2124,16 @@
        "name": "Component Purpose And Review Routing",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-evidence-assembly"
+        "job:02-evidence-assembly",
+        "job:02-code-index"
        ],
        "produces": [
         "job:01-component-characterization"
        ],
        "declared_inputs": [
         "target repository path",
-        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+        "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)"
        ]
       },
       {
@@ -2129,14 +2173,16 @@
        "name": "DFD And STRIDE Core With Threat Workbench",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-code-index"
        ],
        "produces": [
         "job:03-threat-model-dfd-stride"
        ],
        "declared_inputs": [
         "current accepted F03 component map",
-        "exact F02 evidence assembly and dereferenced artifact cited through F03"
+        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+        "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
        ]
       },
       {
@@ -2166,7 +2212,9 @@
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
         "job:03-threat-model-reconciliation",
-        "job:04-owasp-validation-worklist"
+        "job:04-owasp-validation-worklist",
+        "job:02-code-index",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-asvs-masvs"
@@ -2177,13 +2225,75 @@
        ]
       },
       {
+       "ref": "job:04-owasp-candidate-search",
+       "id": "04-owasp-candidate-search",
+       "name": "OWASP ASVS Candidate Search (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-index",
+        "job:02-code-property-graph",
+        "job:02-treesitter-ast",
+        "job:02-source-sast",
+        "job:02-evidence-index",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:04-owasp-candidate-search"
+       ],
+       "declared_inputs": [
+        "accepted 02-code-index (code-index.json and code-index.sqlite)",
+        "accepted 02-code-property-graph",
+        "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+        "accepted 02-evidence-index full-text search (index.sqlite)",
+        "data/owasp-asvs/category-rules-v1.json"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-participation",
+       "id": "04-owasp-participation",
+       "name": "ASVS Chapter Participation Classification",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:02-code-index"
+       ],
+       "produces": [
+        "job:04-owasp-participation"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "accepted 02-code-index",
+        "target checkout named by the staged artifact manifest"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-universe",
+       "id": "04-owasp-universe",
+       "name": "OWASP ASVS Universe and Validator Budget (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:04-owasp-participation"
+       ],
+       "produces": [
+        "job:04-owasp-universe"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+        "pinned ASVS 5.0.0 reference snapshot",
+        "target checkout matching the source snapshot"
+       ]
+      },
+      {
        "ref": "job:04-owasp-validation-worklist",
        "id": "04-owasp-validation-worklist",
        "name": "OWASP Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
-        "job:02-standards-source-ingest"
+        "job:02-standards-source-ingest",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-owasp-validation-worklist"
@@ -2339,7 +2449,11 @@
        "job:02-evidence-index",
        "legacy-pregather",
        "job:02-evidence-assembly",
+       "job:02-code-index",
        "job:00-intake",
+       "job:02-code-property-graph",
+       "job:02-treesitter-ast",
+       "job:02-source-sast",
        "job:02-standards-source-ingest",
        "job:02-native-sast",
        "job:02-ir-facts",
@@ -2353,7 +2467,6 @@
        "job:02-codeql-python",
        "job:02-codeql-ruby",
        "job:02-codeql-rust",
-       "job:02-code-property-graph",
        "job:02-iac-config-scan"
       ],
       "leaves": [
@@ -2368,6 +2481,9 @@
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
        "job:03-threat-model-reconciliation",
+       "job:04-owasp-candidate-search",
+       "job:04-owasp-participation",
+       "job:04-owasp-universe",
        "job:04-owasp-validation-worklist",
        "job:05-native-memory",
        "job:06-reachability-codeql",
@@ -2378,15 +2494,28 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
        "run artifact manifest",
        "current accepted component map",
        "run-owned dependency and changed-node request",
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+       "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
        "accepted reproducible L6A model",
        "current accepted F03 component map and F02 evidence generation",
        "exact accepted OWASP dispatch accounting",
        "hash-verified applicability and assessment artifacts",
+       "accepted 02-code-index (code-index.json and code-index.sqlite)",
+       "accepted 02-code-property-graph",
+       "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+       "accepted 02-evidence-index full-text search (index.sqlite)",
+       "data/owasp-asvs/category-rules-v1.json",
+       "accepted 04-owasp-candidate-search",
+       "accepted 02-code-index",
+       "target checkout named by the staged artifact manifest",
+       "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+       "pinned ASVS 5.0.0 reference snapshot",
+       "target checkout matching the source snapshot",
        "accepted standards source",
        "accepted applicability evidence",
        "accepted native SAST/IR evidence",
@@ -2945,6 +3074,7 @@
      "job:02-test-result-ingest",
      "job:02-test-coverage-ingest",
      "job:02-operations-doc-ingest",
+     "job:02-evidence-index-derived",
      "job:02-secrets-inventory",
      "job:02-iac-config-scan",
      "job:02-container-image-inventory",
@@ -2961,6 +3091,9 @@
      "job:03-threat-model-dfd-stride",
      "job:03-threat-model-reconciliation",
      "job:04-asvs-masvs",
+     "job:04-owasp-candidate-search",
+     "job:04-owasp-participation",
+     "job:04-owasp-universe",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
      "job:06-reachability-codeql",
@@ -3019,9 +3152,8 @@
      "accepted native-build binary lineage",
      "accepted binary-triage result",
      "accepted binary-cfg result",
-     "document source path",
-     "source type",
-     "redaction policy",
+     "accepted 00-intake source inventory and checkout (read-only)",
+     "evidence redaction ruleset",
      "exact accepted intake source identity",
      "run-owned standards-source-binding.json",
      "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -3052,6 +3184,7 @@
      "trusted bounded test plan",
      "accepted test execution",
      "exact accepted intake source inventory",
+     "accepted 02-evidence-index (source generation)",
      "fresh run artifact manifest",
      "explicit run-owned source root",
      "B16 scanner image records",
@@ -3073,15 +3206,28 @@
      "explicit manifest-declared source root",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
      "run artifact manifest",
      "current accepted component map",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
+     "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
      "accepted reproducible L6A model",
      "current accepted F03 component map and F02 evidence generation",
      "exact accepted OWASP dispatch accounting",
      "hash-verified applicability and assessment artifacts",
+     "accepted 02-code-index (code-index.json and code-index.sqlite)",
+     "accepted 02-code-property-graph",
+     "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+     "accepted 02-evidence-index full-text search (index.sqlite)",
+     "data/owasp-asvs/category-rules-v1.json",
+     "accepted 04-owasp-candidate-search",
+     "accepted 02-code-index",
+     "target checkout named by the staged artifact manifest",
+     "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+     "pinned ASVS 5.0.0 reference snapshot",
+     "target checkout matching the source snapshot",
      "accepted standards source",
      "accepted applicability evidence",
      "accepted native SAST/IR evidence",
@@ -4136,6 +4282,7 @@
         "job:02-test-coverage-ingest",
         "job:02-operations-doc-ingest",
         "job:02-evidence-index",
+        "job:02-evidence-index-derived",
         "job:02-ossf-scorecard",
         "job:02-secrets-inventory",
         "job:02-iac-config-scan",
@@ -4204,9 +4351,8 @@
         "job:02-doc-intelligence-ingest"
        ],
        "declared_inputs": [
-        "document source path",
-        "source type",
-        "redaction policy"
+        "accepted 00-intake source inventory and checkout (read-only)",
+        "evidence redaction ruleset"
        ]
       },
       {
@@ -4705,6 +4851,47 @@
        ]
       },
       {
+       "ref": "job:02-evidence-index-derived",
+       "id": "02-evidence-index-derived",
+       "name": "Derived evidence index (producer records and build inputs)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-evidence-index",
+        "job:02-api-collection-intelligence-ingest",
+        "job:02-binary-cfg",
+        "job:02-binary-intelligence-ingest",
+        "job:02-binary-triage",
+        "job:02-code-property-graph",
+        "job:02-codeql-cpp",
+        "job:02-codeql-csharp",
+        "job:02-codeql-go",
+        "job:02-codeql-java",
+        "job:02-codeql-javascript",
+        "job:02-codeql-python",
+        "job:02-codeql-ruby",
+        "job:02-codeql-rust",
+        "job:02-debug-symbol-index",
+        "job:02-doc-intelligence-ingest",
+        "job:02-ir-facts",
+        "job:02-native-sast",
+        "job:02-operations-doc-ingest",
+        "job:02-repository-partition-discovery",
+        "job:02-source-sast",
+        "job:02-test-coverage-ingest",
+        "job:02-test-execution",
+        "job:02-test-intelligence-ingest",
+        "job:02-test-result-ingest",
+        "job:02-treesitter-ast",
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-evidence-index-derived"
+       ],
+       "declared_inputs": [
+        "accepted 02-evidence-index (source generation)"
+       ]
+      },
+      {
        "ref": "job:02-secrets-inventory",
        "id": "02-secrets-inventory",
        "name": "Secrets Inventory",
@@ -4890,14 +5077,6 @@
       ],
       "leaves": [
        "job:02-evidence-assembly",
-       "job:02-codeql-cpp",
-       "job:02-codeql-csharp",
-       "job:02-codeql-go",
-       "job:02-codeql-java",
-       "job:02-codeql-javascript",
-       "job:02-codeql-python",
-       "job:02-codeql-ruby",
-       "job:02-codeql-rust",
        "job:02-lsp-xref"
       ],
       "passes": [
@@ -4918,6 +5097,14 @@
        "job:02-build-configure",
        "job:02-native-build",
        "job:02-source-sast",
+       "job:02-codeql-cpp",
+       "job:02-codeql-csharp",
+       "job:02-codeql-go",
+       "job:02-codeql-java",
+       "job:02-codeql-javascript",
+       "job:02-codeql-python",
+       "job:02-codeql-ruby",
+       "job:02-codeql-rust",
        "job:02-code-property-graph",
        "job:02-treesitter-ast",
        "job:02-code-index",
@@ -4933,6 +5120,7 @@
        "job:02-test-coverage-ingest",
        "job:02-operations-doc-ingest",
        "job:02-evidence-index",
+       "job:02-evidence-index-derived",
        "job:02-secrets-inventory",
        "job:02-iac-config-scan",
        "job:02-container-image-inventory",
@@ -4972,9 +5160,8 @@
        "accepted native-build binary lineage",
        "accepted binary-triage result",
        "accepted binary-cfg result",
-       "document source path",
-       "source type",
-       "redaction policy",
+       "accepted 00-intake source inventory and checkout (read-only)",
+       "evidence redaction ruleset",
        "exact accepted intake source identity",
        "run-owned standards-source-binding.json",
        "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -5010,6 +5197,7 @@
        "accepted test execution",
        "exact accepted intake source inventory",
        "accepted build discovery",
+       "accepted 02-evidence-index (source generation)",
        "fresh run artifact manifest",
        "explicit run-owned source root",
        "B16 scanner image records",
@@ -5041,14 +5229,16 @@
        "name": "Component Purpose And Review Routing",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-evidence-assembly"
+        "job:02-evidence-assembly",
+        "job:02-code-index"
        ],
        "produces": [
         "job:01-component-characterization"
        ],
        "declared_inputs": [
         "target repository path",
-        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+        "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)"
        ]
       },
       {
@@ -5086,6 +5276,7 @@
      "rollup": {
       "enters": [
        "job:02-evidence-assembly",
+       "job:02-code-index",
        "job:00-intake"
       ],
       "leaves": [
@@ -5098,6 +5289,7 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
        "run artifact manifest",
        "current accepted component map",
        "run-owned dependency and changed-node request"
@@ -5113,14 +5305,16 @@
        "name": "DFD And STRIDE Core With Threat Workbench",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-code-index"
        ],
        "produces": [
         "job:03-threat-model-dfd-stride"
        ],
        "declared_inputs": [
         "current accepted F03 component map",
-        "exact F02 evidence assembly and dereferenced artifact cited through F03"
+        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+        "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
        ]
       },
       {
@@ -5145,6 +5339,7 @@
      "rollup": {
       "enters": [
        "job:01-component-characterization",
+       "job:02-code-index",
        "job:02-evidence-assembly"
       ],
       "leaves": [
@@ -5156,6 +5351,7 @@
       "declared_inputs": [
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+       "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
        "accepted reproducible L6A model",
        "current accepted F03 component map and F02 evidence generation"
       ]
@@ -5173,7 +5369,9 @@
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
         "job:03-threat-model-reconciliation",
-        "job:04-owasp-validation-worklist"
+        "job:04-owasp-validation-worklist",
+        "job:02-code-index",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-asvs-masvs"
@@ -5184,13 +5382,75 @@
        ]
       },
       {
+       "ref": "job:04-owasp-candidate-search",
+       "id": "04-owasp-candidate-search",
+       "name": "OWASP ASVS Candidate Search (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-index",
+        "job:02-code-property-graph",
+        "job:02-treesitter-ast",
+        "job:02-source-sast",
+        "job:02-evidence-index",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:04-owasp-candidate-search"
+       ],
+       "declared_inputs": [
+        "accepted 02-code-index (code-index.json and code-index.sqlite)",
+        "accepted 02-code-property-graph",
+        "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+        "accepted 02-evidence-index full-text search (index.sqlite)",
+        "data/owasp-asvs/category-rules-v1.json"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-participation",
+       "id": "04-owasp-participation",
+       "name": "ASVS Chapter Participation Classification",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:02-code-index"
+       ],
+       "produces": [
+        "job:04-owasp-participation"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "accepted 02-code-index",
+        "target checkout named by the staged artifact manifest"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-universe",
+       "id": "04-owasp-universe",
+       "name": "OWASP ASVS Universe and Validator Budget (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:04-owasp-participation"
+       ],
+       "produces": [
+        "job:04-owasp-universe"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+        "pinned ASVS 5.0.0 reference snapshot",
+        "target checkout matching the source snapshot"
+       ]
+      },
+      {
        "ref": "job:04-owasp-validation-worklist",
        "id": "04-owasp-validation-worklist",
        "name": "OWASP Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
-        "job:02-standards-source-ingest"
+        "job:02-standards-source-ingest",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-owasp-validation-worklist"
@@ -5206,17 +5466,36 @@
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
        "job:03-threat-model-reconciliation",
+       "job:02-code-index",
+       "job:02-code-property-graph",
+       "job:02-treesitter-ast",
+       "job:02-source-sast",
+       "job:02-evidence-index",
        "job:02-standards-source-ingest"
       ],
       "leaves": [
        "job:04-asvs-masvs"
       ],
       "passes": [
+       "job:04-owasp-candidate-search",
+       "job:04-owasp-participation",
+       "job:04-owasp-universe",
        "job:04-owasp-validation-worklist"
       ],
       "declared_inputs": [
        "exact accepted OWASP dispatch accounting",
        "hash-verified applicability and assessment artifacts",
+       "accepted 02-code-index (code-index.json and code-index.sqlite)",
+       "accepted 02-code-property-graph",
+       "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+       "accepted 02-evidence-index full-text search (index.sqlite)",
+       "data/owasp-asvs/category-rules-v1.json",
+       "accepted 04-owasp-candidate-search",
+       "accepted 02-code-index",
+       "target checkout named by the staged artifact manifest",
+       "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+       "pinned ASVS 5.0.0 reference snapshot",
+       "target checkout matching the source snapshot",
        "accepted standards source",
        "accepted applicability evidence"
       ]
@@ -6055,6 +6334,7 @@
      "job:02-test-coverage-ingest",
      "job:02-operations-doc-ingest",
      "job:02-evidence-index",
+     "job:02-evidence-index-derived",
      "job:02-secrets-inventory",
      "job:02-iac-config-scan",
      "job:02-container-image-inventory",
@@ -6070,6 +6350,9 @@
      "job:03-threat-model-dfd-stride",
      "job:03-threat-model-reconciliation",
      "job:04-asvs-masvs",
+     "job:04-owasp-candidate-search",
+     "job:04-owasp-participation",
+     "job:04-owasp-universe",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
      "job:06-reachability-codeql",
@@ -6128,9 +6411,8 @@
      "accepted native-build binary lineage",
      "accepted binary-triage result",
      "accepted binary-cfg result",
-     "document source path",
-     "source type",
-     "redaction policy",
+     "accepted 00-intake source inventory and checkout (read-only)",
+     "evidence redaction ruleset",
      "exact accepted intake source identity",
      "run-owned standards-source-binding.json",
      "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -6166,6 +6448,7 @@
      "accepted test execution",
      "exact accepted intake source inventory",
      "accepted build discovery",
+     "accepted 02-evidence-index (source generation)",
      "fresh run artifact manifest",
      "explicit run-owned source root",
      "B16 scanner image records",
@@ -6186,15 +6469,28 @@
      "cve-bin-tool database derived from the run's NVD snapshot",
      "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
      "run artifact manifest",
      "current accepted component map",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
+     "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
      "accepted reproducible L6A model",
      "current accepted F03 component map and F02 evidence generation",
      "exact accepted OWASP dispatch accounting",
      "hash-verified applicability and assessment artifacts",
+     "accepted 02-code-index (code-index.json and code-index.sqlite)",
+     "accepted 02-code-property-graph",
+     "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+     "accepted 02-evidence-index full-text search (index.sqlite)",
+     "data/owasp-asvs/category-rules-v1.json",
+     "accepted 04-owasp-candidate-search",
+     "accepted 02-code-index",
+     "target checkout named by the staged artifact manifest",
+     "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+     "pinned ASVS 5.0.0 reference snapshot",
+     "target checkout matching the source snapshot",
      "accepted standards source",
      "accepted applicability evidence",
      "accepted native SAST/IR evidence",
@@ -7104,12 +7400,13 @@
     "04-owasp-validation-worklist"
    ],
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:04-owasp-universe"
    ],
    "produces": [
     "job:04-owasp-validation-worklist"
    ],
-   "notes": "Standalone OWASP-only worklist transform. Targets and per-row applicability come from the accepted 04-owasp-component-routing rules (P39, `4622a7f`): not_applicable rows carry the rule citation, partial classifications are conditional, unmatched rows are cannot_determine with one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
+   "notes": "Standalone OWASP-only worklist transform. Targets and per-row applicability come from the projection of the accepted 04-owasp-universe into the applicability request (ADR-0034): one target per participating ASVS chapter, scoped to that chapter's controls, bound to that exact universe; the worklist routes nothing itself and the component map is report context only. A chapter the universe leaves as a gap is one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "stig-srg-validation-worklist",
@@ -8252,6 +8549,11 @@
      "contract": "evidence-index"
     },
     {
+     "job": "02-evidence-index-derived",
+     "kind": "required",
+     "contract": "evidence-index-derived"
+    },
+    {
      "job": "02-ossf-scorecard",
      "kind": "required",
      "contract": "ossf-scorecard-results"
@@ -8355,6 +8657,7 @@
     "job:02-test-coverage-ingest",
     "job:02-operations-doc-ingest",
     "job:02-evidence-index",
+    "job:02-evidence-index-derived",
     "job:02-ossf-scorecard",
     "job:02-secrets-inventory",
     "job:02-iac-config-scan",
@@ -8398,6 +8701,11 @@
      "job": "02-evidence-assembly",
      "kind": "required",
      "contract": "pregather"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
     }
    ],
    "declared_inputs": [
@@ -8408,6 +8716,10 @@
     {
      "need": "required",
      "input": "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)"
     },
     {
      "need": "optional",
@@ -8437,7 +8749,8 @@
    ],
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-code-index"
    ],
    "produces": [
     "job:01-component-characterization"
@@ -8534,6 +8847,11 @@
      "job": "01-component-characterization",
      "kind": "required",
      "contract": "component-map"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
     }
    ],
    "declared_inputs": [
@@ -8544,6 +8862,10 @@
     {
      "need": "required",
      "input": "exact F02 evidence assembly and dereferenced artifact cited through F03"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
     }
    ],
    "inputs_source": "pipeline/job-templates/03-threat-model-dfd-stride.json",
@@ -8566,7 +8888,8 @@
    ],
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:02-code-index"
    ],
    "produces": [
     "job:03-threat-model-dfd-stride"
@@ -8689,6 +9012,16 @@
      "job": "04-owasp-validation-worklist",
      "kind": "required",
      "contract": "owasp-validation-worklist"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
+    },
+    {
+     "job": "04-owasp-universe",
+     "kind": "required",
+     "contract": "owasp-universe"
     }
    ],
    "declared_inputs": [
@@ -8719,7 +9052,9 @@
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
     "job:03-threat-model-reconciliation",
-    "job:04-owasp-validation-worklist"
+    "job:04-owasp-validation-worklist",
+    "job:02-code-index",
+    "job:04-owasp-universe"
    ],
    "produces": [
     "job:04-asvs-masvs"
@@ -10339,27 +10674,15 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "document source path"
+     "input": "accepted 00-intake source inventory and checkout (read-only)"
     },
     {
      "need": "required",
-     "input": "source type"
-    },
-    {
-     "need": "required",
-     "input": "redaction policy"
+     "input": "evidence redaction ruleset"
     },
     {
      "need": "optional",
-     "input": "existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json"
-    },
-    {
-     "need": "optional",
-     "input": "component map"
-    },
-    {
-     "need": "optional",
-     "input": "product glossary"
+     "input": "B16 record of the pinned audit-doc-convert image (pdftotext, pandoc); needed only when a PDF or DOCX is in the document universe"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-doc-intelligence-ingest.json",
@@ -10518,6 +10841,253 @@
    ]
   },
   {
+   "id": "04-owasp-candidate-search",
+   "lane": "04-asvs-masvs",
+   "name": "OWASP ASVS Candidate Search (deterministic)",
+   "contract": "owasp-candidate-search",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/owasp_universe_jobs.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-worklist-builder",
+    "output_contract_id": "owasp-candidate-search"
+   },
+   "depends_on": [
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
+    },
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-treesitter-ast",
+     "kind": "required",
+     "contract": "treesitter-ast"
+    },
+    {
+     "job": "02-source-sast",
+     "kind": "optional",
+     "contract": "source-sast"
+    },
+    {
+     "job": "02-evidence-index",
+     "kind": "required",
+     "contract": "evidence-index"
+    },
+    {
+     "job": "01-component-characterization",
+     "kind": "optional",
+     "contract": "component-map"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 02-code-index (code-index.json and code-index.sqlite)"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-property-graph"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-treesitter-ast, or its not-applicable-language-absent skip"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-evidence-index full-text search (index.sqlite)"
+    },
+    {
+     "need": "required",
+     "input": "data/owasp-asvs/category-rules-v1.json"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-source-sast hits (absent: SAST rule kinds are a gap)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 01-component-characterization tag cloud (absent: a gap)"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/04-owasp-candidate-search.json",
+   "output_dir": "runs/<run_id>/data/jobs/04-owasp-candidate-search/",
+   "output_files": [
+    "owasp-candidate-search.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/owasp-candidate-search.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Execute and retain this job in a fresh full_review run.",
+   "consumes": [
+    "job:02-code-index",
+    "job:02-code-property-graph",
+    "job:02-treesitter-ast",
+    "job:02-source-sast",
+    "job:02-evidence-index",
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:04-owasp-candidate-search"
+   ]
+  },
+  {
+   "id": "04-owasp-participation",
+   "lane": "04-asvs-masvs",
+   "name": "ASVS Chapter Participation Classification",
+   "contract": "owasp-participation",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/owasp_participation.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "asvs-participation-classifier",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-participation-static",
+    "output_contract_id": "owasp-participation"
+   },
+   "depends_on": [
+    {
+     "job": "04-owasp-candidate-search",
+     "kind": "required",
+     "contract": "owasp-candidate-search"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 04-owasp-candidate-search"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-index"
+    },
+    {
+     "need": "required",
+     "input": "target checkout named by the staged artifact manifest"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/04-owasp-participation.json",
+   "output_dir": "runs/<run_id>/data/jobs/04-owasp-participation/",
+   "output_files": [
+    "owasp-participation.json",
+    "owasp-participation.md",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/owasp-participation.json",
+   "claim_class": "candidate_only",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Execute and retain this job in a fresh full_review run.",
+   "consumes": [
+    "job:04-owasp-candidate-search",
+    "job:02-code-index"
+   ],
+   "produces": [
+    "job:04-owasp-participation"
+   ]
+  },
+  {
+   "id": "04-owasp-universe",
+   "lane": "04-asvs-masvs",
+   "name": "OWASP ASVS Universe and Validator Budget (deterministic)",
+   "contract": "owasp-universe",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/owasp_universe.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-worklist-builder",
+    "output_contract_id": "owasp-universe"
+   },
+   "depends_on": [
+    {
+     "job": "04-owasp-candidate-search",
+     "kind": "required",
+     "contract": "owasp-candidate-search"
+    },
+    {
+     "job": "04-owasp-participation",
+     "kind": "required",
+     "contract": "owasp-participation"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 04-owasp-candidate-search"
+    },
+    {
+     "need": "required",
+     "input": "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names"
+    },
+    {
+     "need": "required",
+     "input": "pinned ASVS 5.0.0 reference snapshot"
+    },
+    {
+     "need": "required",
+     "input": "target checkout matching the source snapshot"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 04-owasp-participation (absent or no-candidates skip: every candidate chapter is a gap)"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/04-owasp-universe.json",
+   "output_dir": "runs/<run_id>/data/jobs/04-owasp-universe/",
+   "output_files": [
+    "outputs/owasp-universe.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/owasp-universe.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Execute and retain this job in a fresh full_review run.",
+   "consumes": [
+    "job:04-owasp-candidate-search",
+    "job:04-owasp-participation"
+   ],
+   "produces": [
+    "job:04-owasp-universe"
+   ]
+  },
+  {
    "id": "04-owasp-validation-worklist",
    "lane": "04-asvs-masvs",
    "name": "OWASP Validation Worklist Core",
@@ -10548,6 +11118,11 @@
      "job": "02-standards-source-ingest",
      "kind": "required",
      "contract": "standards-source-extract"
+    },
+    {
+     "job": "04-owasp-universe",
+     "kind": "required",
+     "contract": "owasp-universe"
     }
    ],
    "declared_inputs": [
@@ -10576,7 +11151,8 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
-    "job:02-standards-source-ingest"
+    "job:02-standards-source-ingest",
+    "job:04-owasp-universe"
    ],
    "produces": [
     "job:04-owasp-validation-worklist"
@@ -11573,7 +12149,7 @@
     },
     {
      "job": "02-binary-triage",
-     "kind": "required",
+     "kind": "optional",
      "contract": "binary-triage"
     },
     {
@@ -12416,7 +12992,6 @@
    "outputs_source": "pipeline/output-contracts/evidence-index.json",
    "claim_class": null,
    "gaps": [
-    "derived_producer_selection_not_orchestrated",
     "common_worker_envelope_migration_missing",
     "live_enrichment_requalification_missing"
    ],
@@ -12426,6 +13001,230 @@
    ],
    "produces": [
     "job:02-evidence-index"
+   ]
+  },
+  {
+   "id": "02-evidence-index-derived",
+   "lane": "02-evidence-pregather",
+   "name": "Derived evidence index (producer records and build inputs)",
+   "contract": "evidence-index-derived",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/evidence_index_derived.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-indexer",
+    "domain_id": "intake-state",
+    "tooling_profile_id": "local-evidence-retrieval",
+    "output_contract_id": "evidence-index-derived"
+   },
+   "depends_on": [
+    {
+     "job": "02-evidence-index",
+     "kind": "required",
+     "contract": "evidence-index"
+    },
+    {
+     "job": "02-api-collection-intelligence-ingest",
+     "kind": "optional",
+     "contract": "api-collection-intelligence"
+    },
+    {
+     "job": "02-binary-cfg",
+     "kind": "optional",
+     "contract": "binary-cfg"
+    },
+    {
+     "job": "02-binary-intelligence-ingest",
+     "kind": "optional",
+     "contract": "binary-intelligence"
+    },
+    {
+     "job": "02-binary-triage",
+     "kind": "optional",
+     "contract": "binary-triage"
+    },
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-codeql-cpp",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-csharp",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-go",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-java",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-javascript",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-python",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-ruby",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-codeql-rust",
+     "kind": "optional",
+     "contract": "codeql-language"
+    },
+    {
+     "job": "02-debug-symbol-index",
+     "kind": "optional",
+     "contract": "debug-symbol-index"
+    },
+    {
+     "job": "02-doc-intelligence-ingest",
+     "kind": "optional",
+     "contract": "doc-intelligence"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "optional",
+     "contract": "ir-facts"
+    },
+    {
+     "job": "02-native-sast",
+     "kind": "optional",
+     "contract": "native-sast"
+    },
+    {
+     "job": "02-operations-doc-ingest",
+     "kind": "optional",
+     "contract": "operations-doc-intelligence"
+    },
+    {
+     "job": "02-repository-partition-discovery",
+     "kind": "required",
+     "contract": "repository-partition-map"
+    },
+    {
+     "job": "02-source-sast",
+     "kind": "required",
+     "contract": "source-sast"
+    },
+    {
+     "job": "02-test-coverage-ingest",
+     "kind": "optional",
+     "contract": "test-coverage-intelligence"
+    },
+    {
+     "job": "02-test-execution",
+     "kind": "optional",
+     "contract": "test-execution"
+    },
+    {
+     "job": "02-test-intelligence-ingest",
+     "kind": "optional",
+     "contract": "test-intelligence"
+    },
+    {
+     "job": "02-test-result-ingest",
+     "kind": "optional",
+     "contract": "test-result-intelligence"
+    },
+    {
+     "job": "02-treesitter-ast",
+     "kind": "optional",
+     "contract": "treesitter-ast"
+    },
+    {
+     "job": "02-native-build",
+     "kind": "optional",
+     "contract": "native-build"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 02-evidence-index (source generation)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted publications of every evidence_index_enrichment.PROFILES producer present in the run"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-native-build build-dependencies.json and generated headers"
+    },
+    {
+     "need": "optional",
+     "input": "derived-text-manifest.json listed by an included producer"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/02-evidence-index-derived.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-evidence-index-derived/",
+   "output_files": [
+    "evidence-index-derived.json",
+    "evidence-index-enrichment.json",
+    "evidence-index-derived.sqlite",
+    "evidence-index-derived-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/evidence-index-derived.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-evidence-index",
+    "job:02-api-collection-intelligence-ingest",
+    "job:02-binary-cfg",
+    "job:02-binary-intelligence-ingest",
+    "job:02-binary-triage",
+    "job:02-code-property-graph",
+    "job:02-codeql-cpp",
+    "job:02-codeql-csharp",
+    "job:02-codeql-go",
+    "job:02-codeql-java",
+    "job:02-codeql-javascript",
+    "job:02-codeql-python",
+    "job:02-codeql-ruby",
+    "job:02-codeql-rust",
+    "job:02-debug-symbol-index",
+    "job:02-doc-intelligence-ingest",
+    "job:02-ir-facts",
+    "job:02-native-sast",
+    "job:02-operations-doc-ingest",
+    "job:02-repository-partition-discovery",
+    "job:02-source-sast",
+    "job:02-test-coverage-ingest",
+    "job:02-test-execution",
+    "job:02-test-intelligence-ingest",
+    "job:02-test-result-ingest",
+    "job:02-treesitter-ast",
+    "job:02-native-build"
+   ],
+   "produces": [
+    "job:02-evidence-index-derived"
    ]
   },
   {
@@ -14593,7 +15392,8 @@
     "step:build-index",
     "job:02-dev-project-discovery",
     "job:02-devops-project-discovery",
-    "job:02-build-index"
+    "job:02-build-index",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-dev-project-discovery": {
@@ -14738,6 +15538,7 @@
     "job:08-blue-team-refutation",
     "job:14-attack-chain-composition",
     "job:10-synthesis-report",
+    "job:04-owasp-candidate-search",
     "job:04-owasp-validation-worklist",
     "job:15-stig-srg-validation-worklist"
    ]
@@ -15036,7 +15837,8 @@
     "job:02-api-collection-intelligence-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-binary-intelligence-ingest": {
@@ -15048,7 +15850,8 @@
     "job:02-binary-intelligence-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-doc-intelligence-ingest": {
@@ -15060,7 +15863,8 @@
     "job:02-doc-intelligence-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-standards-source-ingest": {
@@ -15086,7 +15890,47 @@
     "job:02-test-intelligence-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
+   ]
+  },
+  "job:04-owasp-candidate-search": {
+   "id": "job:04-owasp-candidate-search",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/04-owasp-candidate-search/",
+   "about": "Accepted owasp-candidate-search output of 04-owasp-candidate-search.",
+   "produced_by": [
+    "job:04-owasp-candidate-search"
+   ],
+   "consumed_by": [
+    "job:04-owasp-participation",
+    "job:04-owasp-universe"
+   ]
+  },
+  "job:04-owasp-participation": {
+   "id": "job:04-owasp-participation",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/04-owasp-participation/",
+   "about": "Accepted owasp-participation output of 04-owasp-participation.",
+   "produced_by": [
+    "job:04-owasp-participation"
+   ],
+   "consumed_by": [
+    "job:04-owasp-universe"
+   ]
+  },
+  "job:04-owasp-universe": {
+   "id": "job:04-owasp-universe",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/04-owasp-universe/",
+   "about": "Accepted owasp-universe output of 04-owasp-universe.",
+   "produced_by": [
+    "job:04-owasp-universe"
+   ],
+   "consumed_by": [
+    "step:owasp-validation-worklist",
+    "job:04-asvs-masvs",
+    "job:04-owasp-validation-worklist"
    ]
   },
   "job:04-owasp-validation-worklist": {
@@ -15147,6 +15991,7 @@
     "job:02-debug-symbol-index",
     "job:02-binary-triage",
     "job:02-test-execution",
+    "job:02-evidence-index-derived",
     "job:02-sbom-inventory",
     "job:02-binary-hardening",
     "job:02-binary-component-cve-match"
@@ -15163,7 +16008,9 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:07-hypothesis-discovery"
+    "job:07-hypothesis-discovery",
+    "job:04-owasp-candidate-search",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-cpp": {
@@ -15175,7 +16022,8 @@
     "job:02-codeql-cpp"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-csharp": {
@@ -15187,7 +16035,8 @@
     "job:02-codeql-csharp"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-go": {
@@ -15199,7 +16048,8 @@
     "job:02-codeql-go"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-java": {
@@ -15211,7 +16061,8 @@
     "job:02-codeql-java"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-javascript": {
@@ -15223,7 +16074,8 @@
     "job:02-codeql-javascript"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-python": {
@@ -15235,7 +16087,8 @@
     "job:02-codeql-python"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-ruby": {
@@ -15247,7 +16100,8 @@
     "job:02-codeql-ruby"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-codeql-rust": {
@@ -15259,7 +16113,8 @@
     "job:02-codeql-rust"
    ],
    "consumed_by": [
-    "job:06-reachability-codeql"
+    "job:06-reachability-codeql",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-code-property-graph": {
@@ -15273,7 +16128,9 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:06-reachability-ir",
-    "job:02-code-index"
+    "job:04-owasp-candidate-search",
+    "job:02-code-index",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-treesitter-ast": {
@@ -15285,7 +16142,9 @@
     "job:02-treesitter-ast"
    ],
    "consumed_by": [
-    "job:02-code-index"
+    "job:04-owasp-candidate-search",
+    "job:02-code-index",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-code-index": {
@@ -15298,6 +16157,11 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
+    "job:01-component-characterization",
+    "job:03-threat-model-dfd-stride",
+    "job:04-asvs-masvs",
+    "job:04-owasp-candidate-search",
+    "job:04-owasp-participation",
     "job:02-lsp-xref"
    ]
   },
@@ -15324,7 +16188,8 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:05-native-memory",
-    "job:07-hypothesis-discovery"
+    "job:07-hypothesis-discovery",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-ir-capture": {
@@ -15363,7 +16228,8 @@
     "job:02-evidence-assembly",
     "job:05-native-memory",
     "job:06-reachability-ir",
-    "job:02-code-index"
+    "job:02-code-index",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-debug-symbol-index": {
@@ -15376,7 +16242,8 @@
    ],
    "consumed_by": [
     "job:02-code-index",
-    "job:02-binary-cfg"
+    "job:02-binary-cfg",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-binary-triage": {
@@ -15390,7 +16257,8 @@
    "consumed_by": [
     "job:02-binary-intelligence-ingest",
     "job:02-code-index",
-    "job:02-binary-cfg"
+    "job:02-binary-cfg",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-binary-cfg": {
@@ -15402,7 +16270,8 @@
     "job:02-binary-cfg"
    ],
    "consumed_by": [
-    "job:02-binary-intelligence-ingest"
+    "job:02-binary-intelligence-ingest",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-test-execution": {
@@ -15415,7 +16284,8 @@
    ],
    "consumed_by": [
     "job:02-test-result-ingest",
-    "job:02-test-coverage-ingest"
+    "job:02-test-coverage-ingest",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-test-result-ingest": {
@@ -15427,7 +16297,8 @@
     "job:02-test-result-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-test-coverage-ingest": {
@@ -15439,7 +16310,8 @@
     "job:02-test-coverage-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-operations-doc-ingest": {
@@ -15451,7 +16323,8 @@
     "job:02-operations-doc-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-evidence-index-derived"
    ]
   },
   "job:02-evidence-index": {
@@ -15465,6 +16338,20 @@
    ],
    "consumed_by": [
     "step:lane-handoffs",
+    "job:02-evidence-assembly",
+    "job:04-owasp-candidate-search",
+    "job:02-evidence-index-derived"
+   ]
+  },
+  "job:02-evidence-index-derived": {
+   "id": "job:02-evidence-index-derived",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-evidence-index-derived/",
+   "about": "Accepted evidence-index-derived output of 02-evidence-index-derived.",
+   "produced_by": [
+    "job:02-evidence-index-derived"
+   ],
+   "consumed_by": [
     "job:02-evidence-assembly"
    ]
   },

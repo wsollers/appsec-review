@@ -321,7 +321,7 @@ nvd_reference_schedule = ScheduleDefinition(
 )
 
 
-from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, dev_project_discovery, devops_project_discovery, sre_operations_topology, build_index, build_classify, build_plan, build_resolution, build_configure, native_build, source_sast, codeql_sast, component_characterization, full_review_input_assembly, threat_model_dfd_stride, threat_model_reconciliation, synthesis_report, code_property_graph, ir_capture, ir_link, ir_facts, native_memory_analysis, fuzz_target_triage, owasp_component_routing, owasp_validation_worklist, owasp_join_report, stig_srg_validation_worklist, deployment_hardening, sbom_inventory, sca_vulnerability_match, license_scan, dependency_lifecycle, cve_reachability, secrets_inventory, iac_config_scan, container_image_inventory, binary_hardening, mobile_sast, persona_tool_pool_dispatch, deterministic_pool_merge, evidence_qualified_quorum, dynamic_rescope, completeness_audit, synthetic_hypothesis_resynthesis, remediation_retest_feedback, final_publication_gate, b13_harmless_container, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
+from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, dev_project_discovery, devops_project_discovery, sre_operations_topology, build_index, build_classify, build_plan, build_resolution, build_configure, native_build, source_sast, codeql_sast, component_characterization, full_review_input_assembly, threat_model_dfd_stride, threat_model_reconciliation, synthesis_report, code_property_graph, ir_capture, ir_link, ir_facts, native_memory_analysis, fuzz_target_triage, owasp_validation_worklist, owasp_join_report, stig_srg_validation_worklist, deployment_hardening, sbom_inventory, sca_vulnerability_match, license_scan, dependency_lifecycle, cve_reachability, secrets_inventory, iac_config_scan, container_image_inventory, binary_hardening, mobile_sast, persona_tool_pool_dispatch, deterministic_pool_merge, evidence_qualified_quorum, dynamic_rescope, completeness_audit, synthetic_hypothesis_resynthesis, remediation_retest_feedback, final_publication_gate, b13_harmless_container, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
 
 defs = Definitions(jobs=[orchestration_smoke, nop, phase1_intake, nvd_reference_sync,
                          engagement_workflow, build_discovery, build_execution,
@@ -332,7 +332,7 @@ defs = Definitions(jobs=[orchestration_smoke, nop, phase1_intake, nvd_reference_
                          component_characterization, full_review_input_assembly, threat_model_dfd_stride, threat_model_reconciliation, synthesis_report,
                          code_property_graph,
                          ir_capture, ir_link, ir_facts,
-                         native_memory_analysis, fuzz_target_triage, owasp_component_routing, owasp_validation_worklist, owasp_join_report,
+                         native_memory_analysis, fuzz_target_triage, owasp_validation_worklist, owasp_join_report,
                          stig_srg_validation_worklist, deployment_hardening,
                          sbom_inventory, sca_vulnerability_match, license_scan,
                          dependency_lifecycle, cve_reachability,

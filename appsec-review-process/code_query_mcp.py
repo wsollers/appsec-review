@@ -639,8 +639,10 @@ class CodeIndex:
     def code_exports(self, args: dict[str, Any]) -> dict[str, Any]:
         limit = self._limit(args)
         if not self.capabilities.get("exports"):
+            # Unknown, not "no exports": name the binary triage's state as the index recorded it.
+            state = [gap for gap in self.meta.get("gaps", []) if isinstance(gap, str) and "02-binary-triage" in gap]
             return self.result("code_exports", args, [], reasons=["exports-unavailable"],
-                               gaps=["no accepted 02-binary-triage export table in this index"])
+                               gaps=["no accepted 02-binary-triage export table in this index", *state])
         sql = ("SELECT e.artifact, e.symbol, e.demangled, e.qualified, e.join_state, e.candidates, m.full_name, m.file, "
                "m.start_line FROM exports e LEFT JOIN methods m ON m.id=e.method_id WHERE 1=1")
         params: list[Any] = []

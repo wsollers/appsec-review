@@ -8,16 +8,35 @@
     "exact accepted handoff publication",
     "pinned static evidence named by the handoff"
   ],
-  "optional_inputs": [],
+  "optional_inputs": [
+    "accepted 02-code-index summary (served through the code_* query tools)"
+  ],
   "allowed_actions": [
     "read the assigned control fragments and their pinned static evidence",
     "assess only the proof obligations assigned by the handoff",
     "cite exact pinned evidence for every supported control verdict",
     "emit cannot verify and coverage gaps when evidence is insufficient",
     "draft inert dynamic test requests without executing them",
-    "emit candidate followup routes without promoting a finding"
+    "emit candidate followup routes without promoting a finding",
+    "query the run evidence index and the accepted code index; results are locators, cite only pinned evidence read",
+    "query tool: code_symbol",
+    "query tool: code_callers",
+    "query tool: code_callees",
+    "query tool: code_locate",
+    "query tool: code_type_info",
+    "query tool: code_file_outline",
+    "query tool: code_search",
+    "query tool: code_calls_to",
+    "query tool: code_path",
+    "query tool: code_address_taken",
+    "query tool: code_overrides",
+    "query tool: code_exports",
+    "query tool: code_definition",
+    "query tool: code_references",
+    "query tool: code_hover",
+    "query tool: code_call_hierarchy"
   ],
-  "isolation": "Persona cell receives only bounded pinned bytes; no network, target execution, target mutation, credentials, dynamic execution or manual observation.",
+  "isolation": "Persona cell receives only bounded pinned bytes and read-only queries over the hash-bound accepted code index; no network, target execution, target mutation, credentials, dynamic execution or manual observation.",
   "disallowed_actions": [
     "change applicability or worklist assignments",
     "execute dynamic or manual tests",
