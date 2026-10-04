@@ -88,6 +88,22 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 ## Follow-ups (after hello-autotools reaches a report)
 
+- [ ] **OWASP routing by code participation (ADR-0034, in progress 2026-10-04).** Owner decision after run
+      `20261003T235640Z-f42fbf` spent most of the model quota in `04-owasp-validator-dispatch`: inference only
+      classifies, Python decides every job's universe. OWASP becomes three nodes with per-category cells:
+      deterministic candidate search per ASVS chapter (code index, CPG, tree-sitter, structural rules) ->
+      model participation classification with code tools (function/symbol level, rolled up to files; a file
+      may sit in several categories) -> Python universe with a pre-dispatch call budget. Validators then check
+      each chapter's controls against that chapter's participating code, in parallel.
+- [ ] **Audit prompt: walk every job and its inputs/outputs** against the principle "inference classifies,
+      Python routes" once ADR-0034 lands; list every place where model output decides scope, routing or
+      fan-out (known: `downstream_lanes` in `full_review_input_assembly.py` and the STIG worklist, partition
+      discovery scope, threat-workbench cell selection), with file:line, and propose the Python-side rule.
+- [ ] **appsec-multi-vuln: add a simple Android app case** (Kotlin or Java, Gradle, an `AndroidManifest.xml`
+      with an exported component and a cleartext-traffic or insecure-storage defect, plus an answer-key row in
+      `appsec-multi-vuln-guide`) so MASVS selection and the mobile lanes have a target. MASVS stays deferred
+      to mobile projects only.
+
 - [x] **Source SAST Semgrep rules.** Done on branch ws-sast (see breakage log).
       Original note: `data/source-sast/rules-v1.yml` has only 4 C/C++ rules
       (strcpy, non-literal printf, memcpy, system), so `02-source-sast` always reports the gap
