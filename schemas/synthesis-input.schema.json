@@ -105,12 +105,11 @@
               "pattern": "^sha256:[0-9a-f]{64}$"
             },
             "permission_receipt_sha256": {
-              "type": "string",
-              "pattern": "^sha256:[0-9a-f]{64}$"
+              "description": "Null only when the producer emits no receipts (report_input_assembly.RECEIPTLESS); the report then carries a named gap.",
+              "anyOf": [{"$ref": "common/formats.schema.json#/$defs/sha256_ref"}, {"type": "null"}]
             },
             "lineage_receipt_sha256": {
-              "type": "string",
-              "pattern": "^sha256:[0-9a-f]{64}$"
+              "anyOf": [{"$ref": "common/formats.schema.json#/$defs/sha256_ref"}, {"type": "null"}]
             },
             "supporting_artifacts": {
               "type": "array",
