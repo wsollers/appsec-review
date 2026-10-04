@@ -92,7 +92,7 @@
           "excluded_count": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"},
           "coverage_complete": {"type": "boolean"},
           "search_basis": {
-            "description": "Every rule of the chapter that was evaluated, with its raw hit count (before exclusions), plus propagation when the chapter has it.",
+            "description": "Every rule of the chapter that was evaluated, with its raw hit count (before exclusions), plus propagation when the chapter has it, plus one not_applicable_language row (rule_id null, hits 0) per present language the rule table's languages_not_applicable exempts in this chapter, with its reason and file count.",
             "type": "array",
             "items": {
               "type": "object",
@@ -100,9 +100,14 @@
               "required": ["rule_id", "kind", "hits"],
               "properties": {
                 "rule_id": {"$ref": "#/$defs/rule_ref"},
-                "kind": {"$ref": "#/$defs/match_kind"},
-                "hits": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}
-              }
+                "kind": {"anyOf": [{"$ref": "#/$defs/match_kind"}, {"const": "not_applicable_language"}]},
+                "hits": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"},
+                "language": {"type": "string", "minLength": 1, "maxLength": 40},
+                "file_count": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"},
+                "reason": {"type": "string", "minLength": 1, "maxLength": 300}
+              },
+              "if": {"properties": {"kind": {"const": "not_applicable_language"}}, "required": ["kind"]},
+              "then": {"required": ["language", "file_count", "reason"], "properties": {"rule_id": {"type": "null"}, "hits": {"const": 0}}}
             }
           }
         }

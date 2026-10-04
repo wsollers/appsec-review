@@ -257,6 +257,129 @@ class SearchTests(CandidateSearchCase):
         self.assertIn("OWASP_CANDIDATE_SEARCH_BLOCKED", error.getvalue())
 
 
+class LanguageScopeTests(CandidateSearchCase):
+    """Per-chapter reasoned language exemptions, bash rules, build-system scripts and the names facility."""
+    SHELL_NA = {"V3", "V4", "V7", "V8", "V9", "V10", "V17"}
+
+    @staticmethod
+    def shell(connection, path: str, functions=(), calls=()):
+        """A tree-sitter-only bash file as 02-code-index holds it: ts_functions spans, ts_calls command names."""
+        connection.execute("INSERT INTO files VALUES(?,?,'bash','treesitter')", (path, HEX))
+        for name, start, end in functions:
+            connection.execute("INSERT INTO ts_functions VALUES(?,?,'function_definition',?,?,'bash')", (path, name, start, end))
+        for line, callee in calls:
+            connection.execute("INSERT INTO ts_calls VALUES(?,?,?)", (path, line, callee))
+
+    def test_c_program_and_shell_script_complete_with_exemptions_and_bash_candidates(self):
+        connection = self.tree(guard.HELLO).index()
+        self.shell(connection, "autogen.sh", functions=[("fetch", 3, 6)],
+                   calls=[(4, "curl"), (5, "eval"), (8, "autoreconf"), (9, "chmod")])
+        result = self.run_search(connection)
+        self.assertTrue(result["coverage"]["complete"])
+        self.assertEqual(result["coverage"]["searched_languages"], ["bash", "c"])
+        self.assertEqual(result["coverage"]["unsearched_languages"], [])
+        self.assertEqual([row["chapter_id"] for row in result["chapters"] if not row["coverage_complete"]], [])
+        self.assertNotIn("language_not_searched", self.kinds(result))
+        for row in result["chapters"]:
+            exempt = [basis for basis in row["search_basis"] if basis["kind"] == "not_applicable_language"]
+            if row["chapter_id"] in self.SHELL_NA:
+                self.assertEqual([(basis["language"], basis["file_count"], basis["rule_id"], basis["hits"]) for basis in exempt],
+                                 [("bash", 1, None, 0)], row["chapter_id"])
+                self.assertTrue(exempt[0]["reason"].startswith("Shell scripts "))
+            else:
+                self.assertEqual(exempt, [], row["chapter_id"])
+        # real bash candidates: commands inside a function, and at module scope
+        fetch = {(match["rule_id"], match["detail"]) for match in self.found(result, "V12")[("autogen.sh", "fetch")]["matches"]}
+        self.assertEqual(fetch, {("V12-bash-network", "call curl")})
+        self.assertIn(("V1-bash-command-exec", "call eval"),
+                      {(match["rule_id"], match["detail"]) for match in self.found(result, "V1")[("autogen.sh", "fetch")]["matches"]})
+        chmod = self.found(result, "V5")[("autogen.sh", "<module>")]
+        self.assertEqual((chmod["language"], chmod["start_line"], chmod["span_source"]), ("bash", 9, "module-scope"))
+        self.assertNotIn("autogen.sh", {row["file"] for row in result["candidates"] if row["chapter_id"] in self.SHELL_NA})
+        lower = [gap for gap in result["gaps"] if gap["kind"] == "index_incomplete" and gap["statement"].startswith("shell is")]
+        self.assertEqual(len(lower), 1)
+        self.assertTrue(set(lower[0]["chapter_ids"]).isdisjoint(self.SHELL_NA))
+
+    def test_language_without_rules_or_exemption_stays_incomplete(self):
+        connection = self.tree({"src/a.c": "int main(void)\n{\n  return 0;\n}\n"}).index()
+        connection.execute("INSERT INTO files VALUES('lib/task.rb',?,'ruby','treesitter')", (HEX,))
+        connection.execute("INSERT INTO files VALUES('package.json',?,'json','treesitter')", (HEX,))
+        result = self.run_search(connection)
+        self.assertFalse(result["coverage"]["complete"])
+        self.assertEqual([row["coverage_complete"] for row in result["chapters"]], [False] * 17)
+        gap = next(gap for gap in result["gaps"] if gap["kind"] == "language_not_searched" and "ruby" in gap["statement"])
+        self.assertIn("has no ruby rule and no languages_not_applicable reason", gap["statement"])
+        self.assertEqual(gap["chapter_ids"], CHAPTERS)
+        # JSON is data: visible where exempt, a lower-bound gap elsewhere, never a coverage change
+        v1 = [row for row in self.chapter(result, "V1")["search_basis"] if row["kind"] == "not_applicable_language"]
+        self.assertEqual([(row["language"], row["file_count"]) for row in v1], [("json", 1)])
+        data = next(gap for gap in result["gaps"] if "json data file(s)" in gap["statement"])
+        self.assertIn("V13", data["chapter_ids"])
+        self.assertNotIn("V1", data["chapter_ids"])
+        # a present language a chapter neither covers nor exempts makes only that chapter incomplete
+        rules = json.loads(json.dumps(RULES))
+        del next(row for row in rules["chapters"] if row["chapter_id"] == "V3")["languages_not_applicable"]["bash"]
+        connection = self.tree(guard.HELLO).index()
+        self.shell(connection, "run.sh", calls=[(2, "curl")])
+        result = search_mod.search(connection, rules, sast_hits=[], treesitter_gaps=[])
+        self.assertTrue(result["coverage"]["complete"])
+        self.assertEqual([row["chapter_id"] for row in result["chapters"] if not row["coverage_complete"]], ["V3"])
+        self.assertTrue(any(gap["kind"] == "language_not_searched" and gap["chapter_ids"] == ["V3"]
+                            and "bash" in gap["statement"] for gap in result["gaps"]))
+
+    def test_generated_autotools_scripts_are_excluded_as_build_system(self):
+        connection = self.tree({"src/a.c": "int main(void)\n{\n  return 0;\n}\n"}).index()
+        for path in ("ltmain.sh", "build-aux/ltmain.sh"):
+            self.shell(connection, path, calls=[(10, "eval")])
+        connection.execute("INSERT INTO files VALUES('m4/libtool.m4',?,NULL,'treesitter')", (HEX,))
+        self.shell(connection, "scripts/release.sh", calls=[(3, "eval")])
+        result = self.run_search(connection)
+        excluded = {(row["file"], row["reason"]) for row in result["excluded"] if row["chapter_id"] == "V1"}
+        self.assertEqual(excluded, {("ltmain.sh", "build_system"), ("build-aux/ltmain.sh", "build_system")})
+        self.assertIn(("scripts/release.sh", "<module>"), self.found(result, "V1"))   # hand-written: still searched
+        self.assertEqual(result["coverage"]["unsearched_languages"], [])            # the .m4 is excluded, not unsearched
+        self.assertTrue(result["coverage"]["complete"])
+        exempt = next(row for row in self.chapter(result, "V3")["search_basis"] if row["kind"] == "not_applicable_language")
+        self.assertEqual(exempt["file_count"], 1)                                    # excluded scripts are not counted
+        globs = next(row for row in RULES["exclusions"] if row["exclusion_id"] == "build-system")["path_globs"]
+        for name in ("configure", "config.status", "libtool", "install-sh", "missing", "depcomp", "compile",
+                     "config.guess", "config.sub"):
+            self.assertIn(f"**/{name}", globs)
+
+    def test_names_facility_status_follows_the_row_count(self):
+        def names(result):
+            return next(row for row in result["coverage"]["facilities"] if row["facility"] == "code_index_names")
+        empty = self.run_search(self.tree(guard.HELLO).index())
+        self.assertEqual(names(empty)["status"], "unavailable")
+        self.assertTrue(names(empty)["detail"].startswith("0 IR-function"))
+        gap = next(gap for gap in empty["gaps"] if "no IR-function or debug-symbol names rows" in gap["statement"])
+        self.assertEqual(gap["chapter_ids"], ["V6", "V7", "V8", "V16"])
+        self.assertTrue(empty["coverage"]["complete"])
+        connection = self.tree(guard.HELLO).index()
+        connection.execute("INSERT INTO names(name, kind, ref, file, line) VALUES('helper','debug-symbol','helper',NULL,NULL)")
+        connection.execute("INSERT INTO names(name, kind, ref, file, line) VALUES('main','method','1','src/hello.c',20)")
+        used = self.run_search(connection)
+        self.assertEqual(names(used)["status"], "used")
+        self.assertTrue(names(used)["detail"].startswith("1 IR-function"))
+        self.assertFalse(any("names rows" in gap["statement"] for gap in used["gaps"]))
+
+    def test_rule_table_exemptions_are_reasoned_and_never_overlap_a_rule(self):
+        self.assertEqual(RULES["version"], "1.1.0")
+        self.assertIn("bash", RULES["languages"])
+        self.assertNotIn("ruby", RULES["languages"])
+        for chapter in RULES["chapters"]:
+            covered = {language for rule in chapter["rules"] for language in rule["languages"]}
+            exempt = chapter.get("languages_not_applicable", {})
+            self.assertEqual(set(exempt) & covered, set(), chapter["chapter_id"])
+            self.assertEqual("bash" in covered or "bash" in exempt, True, chapter["chapter_id"])
+            self.assertEqual("bash" in exempt, chapter["chapter_id"] in self.SHELL_NA, chapter["chapter_id"])
+        # shell genuinely matters in these chapters: never exempt, always ruled
+        for chapter_id in ("V1", "V2", "V5", "V11", "V12", "V13", "V14", "V15", "V16"):
+            chapter = RULES["chapters"][CHAPTERS.index(chapter_id)]
+            self.assertTrue(any("bash" in rule["languages"] and rule["kind"] in ("calls_to", "sast_rule_ids")
+                                for rule in chapter["rules"]), chapter_id)
+
+
 class EvidenceIndexTests(CandidateSearchCase):
     CONFIG = "\n".join([
         "static const char *HEADERS[] = {",
