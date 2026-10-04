@@ -185,6 +185,40 @@ class Tools(Case):
         self.assertEqual(again["rows"][0]["via"], "recorded")
         self.assertEqual(again["rows"][0]["text"], first["rows"][0]["text"])
 
+    def test_a_not_ready_answer_names_the_server_image_and_the_published_reason(self):
+        index = self.index()
+        index.gaps.append("lsp-not-ready: no compile_commands (native-build-skipped)")
+        answer = code_query_mcp.call(None, "code_hover", {"path": "src/hello.c", "line": 3}, lsp=index)
+        self.assertFalse(answer["complete"])
+        reason = answer["reasons"][0]
+        for word in ("lsp-not-ready", "clangd", "audit-buildenv-cpp", "no compile_commands (native-build-skipped)"):
+            self.assertIn(word, reason)
+        unknown = code_query_mcp.call(None, "code_hover", {"path": "elsewhere/util.py", "line": 1}, lsp=index)
+        self.assertTrue(unknown["reasons"][0].startswith("lsp-path-unknown"), unknown["reasons"])
+        self.assertIn("lsp-no-server", code_query_mcp.call(None, "code_hover", {"path": "README.md", "line": 1},
+                                                           lsp=index)["reasons"][0])
+
+    def test_path_forms_from_other_tools_reach_the_precomputed_rows(self):
+        index = self.index()
+        want = code_query_mcp.call(None, "code_references", {"path": "main.py", "line": 1}, lsp=index)["rows"]
+        self.assertEqual(len(want), 2)
+        for arguments in ({"path": "source/main.py", "line": 1}, {"path": "target-repository:main.py:1"},
+                          {"path": "./main.py", "line": 1}):
+            got = code_query_mcp.call(None, "code_references", arguments, lsp=index)
+            self.assertEqual(got["rows"], want, arguments)
+
+    def test_an_unreadable_line_and_a_failed_server_name_their_cause(self):
+        index = self.index()
+        past = code_query_mcp.call(None, "code_hover", {"path": "util.py", "line": 99}, lsp=index)
+        self.assertIn("lsp-source-unreadable", past["reasons"][0])
+        self.launcher.fail = 9
+        failing = lsp_service.Broker("run-1", self.tmp / "lsp-down", [self.server], launcher=self.launcher,
+                                     spawn=self.spawn)
+        index._broker = failing
+        answer = code_query_mcp.call(None, "code_hover", {"path": "util.py", "line": 1, "symbol": "tool"}, lsp=index)
+        self.assertIn("lsp-server-failed", answer["reasons"][0])
+        self.assertIn("image failed to start", answer["reasons"][0])
+
     def test_calls_per_cell_are_bounded(self):
         index = self.index()
         with mock.patch.object(code_query_mcp.tunables, "shared",
@@ -236,15 +270,16 @@ class Tools(Case):
                 mock.patch.dict(input_mcp.CONTEXT, {"job_id": "j", "attempt_id": "a"}, clear=True), \
                 mock.patch.dict(input_mcp.USAGE, {}, clear=True), mock.patch.dict(input_mcp.BUDGET, {"max": None}), \
                 mock.patch.object(report, "RUNS", runs):
-            for arguments in ({"function": "main"}, {"path": "nowhere.py", "line": 1}):
+            for arguments in ({"function": "main"}, {"path": "nowhere.py", "line": 1}, {"path": "cmd/x.go", "line": 1}):
                 answer = input_mcp.handle("run-1", None, {"method": "tools/call", "params": {
                     "name": "code_definition", "arguments": arguments}})
                 self.assertFalse(answer["isError"])
             summary = report.summarize(report.load("run-1"))
-        self.assertEqual(len(list((runs / "run-1" / "data" / "retrieval").glob("*/result.json"))), 2)
-        self.assertEqual(summary["tools"]["code_definition"]["calls"], 2)
-        self.assertEqual(summary["families"]["code_lsp"]["calls"], 2)
-        self.assertEqual(summary["lsp"]["failed"], 1)   # the path no language server serves
+        self.assertEqual(len(list((runs / "run-1" / "data" / "retrieval").glob("*/result.json"))), 3)
+        self.assertEqual(summary["tools"]["code_definition"]["calls"], 3)
+        self.assertEqual(summary["families"]["code_lsp"]["calls"], 3)
+        # only the go file counts as server not ready; a path the index does not list is a caller error, not a server one
+        self.assertEqual(summary["lsp"]["failed"], 1)
 
 
 if __name__ == "__main__":

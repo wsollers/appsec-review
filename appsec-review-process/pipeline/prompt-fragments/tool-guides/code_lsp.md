@@ -1,10 +1,13 @@
-<!-- tool-guide: code_lsp v1 tools: code_definition code_references code_hover code_call_hierarchy -->
+<!-- tool-guide: code_lsp v2 tools: code_definition code_references code_hover code_call_hierarchy -->
 ### code_definition, code_references, code_hover, code_call_hierarchy (language server)
 
 Source: the run's language servers (clangd on the accepted compile_commands, gopls, jdtls, rust-analyzer,
 typescript-language-server, pylsp, phpactor), configured so no project script runs. Answers for indexed
 functions were precomputed by `02-lsp-xref`; anything else is asked live, recorded, and replayed on retry.
 Each row says `via`: `precomputed`, `recorded` or `live`.
+When: for "who uses / calls this" and "where is this defined" on a lead, prefer these to text search and to
+name matching (`code_symbol`, `code_callers`): they follow macros, overloads and headers. Paths are repo-relative
+(`src/a.c`, as `cite` gives them).
 - `code_definition function=` or `path= line= symbol=`: where the symbol is defined (resolves macros,
   overloads, templates and imports the way the compiler front end does).
 - `code_references function=` or `path= line= symbol=`: uses of it across the project.

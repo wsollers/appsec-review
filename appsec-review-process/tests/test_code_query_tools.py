@@ -63,6 +63,46 @@ class SymbolTests(IndexCase):
         self.assertEqual(self.ask("code_search", {"text": "zzzzzz"})["rows"], [])
 
 
+class QueryFormTests(IndexCase):
+    """The forms other tools show the model (input refs, evidence index paths, cites) reach the same rows; an empty
+    answer caused by the query's form says so (retrieval-report: code_search 45% empty, code_symbol 42%)."""
+
+    def test_path_forms_from_other_tools_resolve_to_the_index_path(self):
+        want = self.ask("code_locate", {"path": "app/parse.c", "line": 9})["rows"]
+        for path in ("source/app/parse.c", "target-repository:app/parse.c", "./app/parse.c", "/workspace/app/parse.c"):
+            self.assertEqual(self.ask("code_locate", {"path": path, "line": 9})["rows"], want, path)
+        self.assertEqual(self.ask("code_locate", {"path": "app/parse.c:9"})["rows"], want)   # a cite as given
+        outline = self.ask("code_file_outline", {"path": "source/app/main.c"})
+        self.assertTrue(outline["complete"])
+        self.assertEqual(outline["rows"], self.ask("code_file_outline", {"path": "app/main.c"})["rows"])
+        calls = self.ask("code_calls_to", {"name": "memcpy", "path_prefix": "source/app/"})
+        self.assertEqual(calls["rows"], self.ask("code_calls_to", {"name": "memcpy", "path_prefix": "app/"})["rows"])
+        self.assertTrue(calls["rows"])
+
+    def test_a_repository_source_directory_is_not_stripped(self):
+        self.assertEqual(query.repo_path("source/x.c", {"source/x.c"}.__contains__), ("source/x.c", None))
+        self.assertEqual(query.repo_path("source/x.c", {"x.c"}.__contains__), ("x.c", None))
+        self.assertEqual(query.repo_path("target-repository:src/a.c#L12-L20"), ("src/a.c", 12))
+
+    def test_search_kind_is_checked_and_a_multi_word_miss_names_the_form(self):
+        with self.assertRaisesRegex(ValueError, "unknown kind 'function'.*ts-function"):
+            self.ask("code_search", {"text": "parse", "kind": "function"})
+        miss = self.ask("code_search", {"text": "parse request"})
+        self.assertEqual(miss["rows"], [])
+        self.assertFalse(miss["complete"])
+        self.assertIn("whitespace", miss["reasons"][0])
+        self.assertTrue(self.ask("code_search", {"text": "PARSE_req"})["rows"])   # case-insensitive substring
+        plain = self.ask("code_search", {"text": "zzzzzz"})
+        self.assertEqual((plain["rows"], plain["reasons"]), ([], []))
+
+    def test_an_empty_symbol_answer_is_not_complete_and_names_the_form(self):
+        miss = self.ask("code_symbol", {"name": "parse_request()"})
+        self.assertEqual(miss["rows"], [])
+        self.assertFalse(miss["complete"])
+        self.assertIn("parentheses", miss["reasons"][0])
+        self.assertTrue(self.ask("code_symbol", {"name": "parse_request"})["complete"])
+
+
 class GraphTests(IndexCase):
     def test_callers_with_an_indirect_call_in_the_graph_is_not_complete(self):
         result = self.ask("code_callers", {"function": "on_message"})
