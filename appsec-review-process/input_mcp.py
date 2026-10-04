@@ -8,8 +8,10 @@ writes the pinned bytes to a private scratch folder, lists them in the prompt as
   readable inputs (target files and upstream accepted artifacts), with line numbers.
 - ``evidence_search`` / ``evidence_read`` / ``evidence_similar``: the run's accepted evidence index
   (02-evidence-index, FTS + ssdeep over the target snapshot), via ``evidence_mcp``.
-- ``evidence_derived``: the index's derived records from upstream producers (SAST, CPG, IR, SBOM,
-  ...), filterable by partition or component.
+- ``evidence_derived``: the accepted ``02-evidence-index-derived`` (``evidence_index_derived.query``):
+  records of the ``evidence_index_enrichment.PROFILES`` producers the run accepted, build inputs of
+  ``02-native-build`` and chunked producer text, filterable by partition or component; before that
+  job is accepted it returns no hits and a gap.
 - ``code_*`` (``code_query_mcp``, ADR-0032): structural queries (symbols, callers/callees, enclosing
   function, types, file outline, call sites, call paths, address-taken, exports) over the run's
   published ``02-code-index`` database, re-hashed before use. Served only when the invoker grants
@@ -60,7 +62,13 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {"ref": {"type": "string"}, "filter": {"type": "string", "maxLength": 2000},
                      "compact": {"type": "integer", "minimum": 0, "maximum": 1}}, "required": ["ref", "filter"], "additionalProperties": False}},
     *evidence_mcp.TOOLS,
-    {"name": "evidence_derived", "description": "Search the evidence index's derived records from upstream tools (SAST, code property graph, IR, SBOM, secrets, ...). Optional partition/component filter. Results are locators to producer records.",
+    {"name": "evidence_derived", "description": "Search records of upstream tools the run accepted: source SAST and CodeQL leads, native SAST units, IR facts, "
+     "code property graph, tree-sitter, debug symbols, binary triage/CFG/intelligence, test execution/results/coverage, "
+     "partitions, doc/API/test/operations documentation intelligence, and native build inputs (include/library dirs, "
+     "consumed headers and libraries with sha256 and package, link lines, DT_NEEDED) plus generated-header text. "
+     "SBOM, SCA, secrets, IaC, license and component-map records are NOT indexed (use the supporting-evidence menu). "
+     "Optional partition/component filter. Results are locators to producer records; coverage_gaps lists producers "
+     "not indexed in this run.",
      "inputSchema": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 1000}, "partition_id": {"type": "string"},
                      "component_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
                      "required": [], "additionalProperties": False}},
@@ -170,8 +178,8 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
     if name.startswith("code_"):
         return code_query_mcp.call(_code_index(run_id, inputs), name, args, _scope(inputs))
     if name == "evidence_derived":
-        from evidence_store import query_derived
-        return query_derived(run_id, fresh=False, **args)
+        import evidence_index_derived
+        return evidence_index_derived.query(run_id, **args)
     from evidence_store import query
     # fresh=False: the run's accepted index, integrity-checked; code-fingerprint freshness is a
     # process check that must not blind a model job mid-run (ADR-0013).
