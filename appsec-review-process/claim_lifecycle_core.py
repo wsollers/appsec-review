@@ -567,6 +567,9 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
     return _validate(result, "08-blue-team-refutation.schema.json")
 
 
+OBLIGATION_STATUSES = {"OPEN", "SATISFIED", "FAILED", "UNRESOLVED"}
+
+
 def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any], *,
            cwe_binding: dict[str, Any] | None = None) -> dict[str, Any]:
     reviews = _index(blue["reviews"])
@@ -584,25 +587,28 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
         disposition = decision["disposition"]
         obligations = decision["proof_obligations"]
         if {x["obligation_id"] for x in obligations} != {x["obligation_id"] for x in review["proof_obligations"]}:
-            raise Blocked("verification: proof obligations are incomplete")
+            raise Blocked(f"verification: proof obligations are incomplete (claim {claim_id})")
         statuses = {x["status"] for x in obligations}
         if review["status"] == "REFUTED" and disposition == "VERIFIED":
-            raise Blocked("verification: a refuted claim cannot be upgraded to verified")
+            raise Blocked(f"verification: a refuted claim cannot be upgraded to verified (claim {claim_id})")
         if disposition == "VERIFIED" and statuses != {"SATISFIED"}:
-            raise Blocked("verification: verified requires every proof obligation satisfied")
+            raise Blocked(f"verification: verified requires every proof obligation satisfied (claim {claim_id})")
         if disposition in {"UNRESOLVED", "BLOCKED"} and "UNRESOLVED" not in statuses:
-            raise Blocked("verification: unresolved disposition must remain explicit")
+            raise Blocked(f"verification: unresolved disposition must remain explicit (claim {claim_id}: disposition "
+                          f"{disposition}, obligation statuses "
+                          f"{sorted(x if x in OBLIGATION_STATUSES else '<other>' for x in statuses)}; mark "
+                          "UNRESOLVED each obligation that still needs new independent evidence)")
         prior_hashes = {item["citation_id"] for item in review["citations"] + review["refutation_citations"]}
         verification_hashes = {item["citation_id"] for item in decision["citations"]}
         if any(not _citation_ids(item["citations"]) <= verification_hashes for item in obligations):
-            raise Blocked("verification: proof obligation citation is outside the verification evidence")
+            raise Blocked(f"verification: proof obligation citation is outside the verification evidence (claim {claim_id})")
         if disposition == "VERIFIED" and not (verification_hashes - prior_hashes):
-            raise Blocked("verification: verified requires new independent evidence")
+            raise Blocked(f"verification: verified requires new independent evidence (claim {claim_id})")
         if disposition == "VERIFIED" and any(
                 (item["producer_job_id"], item["producer_attempt_id"]) !=
                 (decision["verifier"]["job_id"], decision["verifier"]["attempt_id"])
                 for item in decision["citations"]):
-            raise Blocked("verification: independent evidence identity does not match the verifier")
+            raise Blocked(f"verification: independent evidence identity does not match the verifier (claim {claim_id})")
         results.append(_judged({**_preserved(review), "hypothesis_id": review["hypothesis_id"],
             "status": disposition, "red_reviewer": review["red_reviewer"],
             "blue_reviewer": review["blue_reviewer"], "verifier": decision["verifier"],
