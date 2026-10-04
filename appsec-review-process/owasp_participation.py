@@ -39,7 +39,7 @@ from pathlib import Path, PurePosixPath
 import sqlite3
 from typing import Any, Callable, Iterable
 
-from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path, tree_hashes
+from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json, run_path
 from schema_validate import SchemaStore, validate_document
 
 JOB = "04-owasp-participation"
@@ -362,27 +362,15 @@ def root(run_id: str) -> Path:
 
 
 def _accepted(run_id: str, job: str, artifact: str, schema: str) -> tuple[dict[str, Any], dict[str, Any], Path]:
-    """(document, owasp binding, attempt dir) of one accepted publication, verified by pointer, attempt
-    tree and envelope hashes; ``Blocked`` otherwise."""
-    base = data_path(run_id, "jobs", job)
-    pointer_path = base / "accepted.json"
-    if pointer_path.is_symlink() or not pointer_path.is_file():
-        raise Blocked(f"{JOB}: accepted {job} is required")
-    pointer = read_json(pointer_path)
-    attempt = base / "attempts" / str(pointer.get("attempt_id"))
-    if (pointer.get("run_id") != run_id or pointer.get("job") != job or pointer.get("status") not in ("OK", "OK_WITH_GAPS")
-            or attempt.is_symlink() or not attempt.is_dir() or tree_hashes(attempt) != pointer.get("hashes")
-            or file_hash(attempt / pointer.get("envelope_path", "result.json")) != pointer.get("envelope_sha256")):
-        raise Blocked(f"{JOB}: accepted {job} is not current")
-    path = attempt / artifact
-    if path.is_symlink() or not path.is_file():
-        raise Blocked(f"{JOB}: accepted {job} has no {artifact}")
-    value = read_json(path)
-    if validate_document(value, schema):
-        raise Blocked(f"{JOB}: accepted {job} {artifact} fails {schema}")
-    binding = {"job_id": job, "attempt_id": pointer["attempt_id"], "accepted_pointer_sha256": file_hash(pointer_path),
-               "artifact_path": f"jobs/{job}/attempts/{pointer['attempt_id']}/{artifact}", "artifact_sha256": file_hash(path)}
-    return value, binding, attempt
+    """(document, owasp binding, attempt dir) of one accepted publication. The binding comes from
+    ``owasp_universe._accepted_input``, the same check 04-owasp-universe applies to the candidate search
+    this result names, so the two bindings cannot disagree."""
+    import owasp_universe
+    try:
+        value, binding = owasp_universe._accepted_input(run_id, job, artifact, schema, required=True)
+    except Blocked as exc:
+        raise Blocked(f"{JOB}: {exc}") from exc
+    return value, binding, (data_path(run_id) / PurePosixPath(binding["artifact_path"])).parent
 
 
 def load_config(path: str = CONFIG_PATH) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -404,8 +392,7 @@ def _target(run_id: str) -> Path:
 
 
 def _open_index(run_id: str, inputs: dict[str, Any]) -> sqlite3.Connection:
-    attempt = data_path(run_id, "jobs", INDEX_JOB, "attempts", inputs["code_index"]["attempt_id"])
-    database = attempt / INDEX_SQLITE
+    database = (data_path(run_id) / PurePosixPath(inputs["code_index"]["artifact_path"])).parent / INDEX_SQLITE
     if database.is_symlink() or not database.is_file() or file_hash(database) != inputs["index_sqlite_sha256"]:
         raise Blocked(f"{JOB}: the code index database does not match its accepted summary")
     return sqlite3.connect(f"file:{database.resolve().as_posix()}?mode=ro", uri=True)
@@ -444,16 +431,15 @@ def prepare(run_id: str) -> dict[str, Any]:
     summary_path = index_attempt / INDEX_RESULT
     names = {chapter["chapter_id"]: chapter["chapter_name"]
              for chapter in json.loads((ROOT.parent / RULES_PATH).read_text(encoding="utf-8"))["chapters"]}
-    pointer = read_json(data_path(run_id, "jobs", SEARCH_JOB, "accepted.json"))
     return {"run_id": run_id, "source_snapshot_sha256": source, "candidate_search": search_binding,
             "code_index": index_binding, "index_sqlite_sha256": _bare((index.get("sqlite") or {}).get("sha256")),
-            "index_summary": {"path": f"{INDEX_JOB}/attempts/{index_binding['attempt_id']}/{INDEX_RESULT}",
+            "index_summary": {"path": index_binding["artifact_path"].removeprefix("jobs/"),
                               "sha256": "sha256:" + file_hash(summary_path), "bytes": summary_path.stat().st_size},
             "config": config_ref, "config_value": config, "candidates": search["candidates"], "budget": budget,
             "cells": [{"cell_id": cell["cell_id"], "chapter_id": cell["chapter_id"],
                        "chapter_name": names.get(cell["chapter_id"], cell["chapter_id"]), "candidates": cell["candidates"]}
                       for cell in cells],
-            "files": files, "target_root": str(target), "accepted_at": pointer.get("accepted_at"), "code": _code_hashes()}
+            "files": files, "target_root": str(target), "code": _code_hashes()}
 
 
 # --- the live invoker and pool -----------------------------------------------------------------------
@@ -579,7 +565,7 @@ def run_pool(inputs: dict[str, Any], attempt: Path, invoker: Any) -> tuple[dict[
     import pool_specification
     import resource_pools
     run_id, store = inputs["run_id"], SchemaStore()
-    now = inputs["accepted_at"] or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     briefs = attempt / "cell-briefs"
     pool_parent, rendezvous = attempt / "pools", attempt / "rendezvous"
     for folder in (briefs, pool_parent, rendezvous):
