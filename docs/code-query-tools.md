@@ -43,6 +43,15 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 - `hypothesis-hunt-static` and `claim-review-static` profiles (hunters and claim reviewers; attack-chain cells use
   claim-review-static, so they already have the tools).
 - `threat-workbench-static-evidence`: eight query actions. Effective only if the index was accepted before stage 03.
+- `component-evidence-router` (01), `threat-model-static-evidence` (03) and `owasp-control-validator` (04 validator
+  cells): the twelve tools of `hypothesis-hunt-static`. `02-code-index` is a required graph dependency of 01, 03 and
+  04-asvs-masvs; 01 and the validator dispatch pin the accepted `code-index.json` (`claude_cli_invoker.code_index_pin`).
+  No accepted index: the job runs on the evidence lookups and records a coverage gap. The 03 core is deterministic;
+  its workbench cells get their tools through `threat-workbench-static-evidence` and the supporting-evidence menu.
+- A profile that lists any `query tool:` line is served the lookup tools at any input size; below the inline limit
+  its inputs stay inlined as well. A profile that lists none gets tools only above the inline limit.
+- `max_tool_calls_per_cell` caps lookup calls per invocation (all repair rounds). Past it every call returns a fixed
+  `budget_exhausted` error and the invoker writes a `coverage gap: tool-call budget exhausted ...` limitation.
 - Persona task prompts (both hunters, claim review) carry a short "Structural queries" paragraph; the details live in
   the tool guides so they cannot drift from the granted set.
 
@@ -52,8 +61,8 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 records each call; `orchestrator/retrieval-report.py` prints a code-tool block (calls, incomplete answers, truncations
 per tool) beside the "files read" line.
 
-`code_query_force_indexed_mode` (flag, default on): a job granted code tools runs in indexed mode (inventory plus
-lookup tools) even when its inputs would fit inline. Turn it off to compare runs (for example freeciv21 with and
+`code_query_force_indexed_mode` (flag, default on): a job whose profile grants tools gets the lookup tools even when
+its inputs fit inline (the inputs stay inlined too). Turn it off to compare runs (for example freeciv21 with and
 without the query tools): a small job then stays inline with no tools and its grant is dropped, so the prompt's tool
 guides, the server's tool list and `--allowedTools` still agree. Jobs whose inputs exceed the inline limit keep their
 grant either way.

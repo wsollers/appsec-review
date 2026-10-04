@@ -2106,14 +2106,16 @@
        "name": "Component Purpose And Review Routing",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-evidence-assembly"
+        "job:02-evidence-assembly",
+        "job:02-code-index"
        ],
        "produces": [
         "job:01-component-characterization"
        ],
        "declared_inputs": [
         "target repository path",
-        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+        "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)"
        ]
       },
       {
@@ -2153,14 +2155,16 @@
        "name": "DFD And STRIDE Core With Threat Workbench",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-code-index"
        ],
        "produces": [
         "job:03-threat-model-dfd-stride"
        ],
        "declared_inputs": [
         "current accepted F03 component map",
-        "exact F02 evidence assembly and dereferenced artifact cited through F03"
+        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+        "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
        ]
       },
       {
@@ -2190,7 +2194,8 @@
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
         "job:03-threat-model-reconciliation",
-        "job:04-owasp-validation-worklist"
+        "job:04-owasp-validation-worklist",
+        "job:02-code-index"
        ],
        "produces": [
         "job:04-asvs-masvs"
@@ -2363,6 +2368,7 @@
        "job:02-evidence-index",
        "legacy-pregather",
        "job:02-evidence-assembly",
+       "job:02-code-index",
        "job:00-intake",
        "job:02-standards-source-ingest",
        "job:02-native-sast",
@@ -2402,11 +2408,13 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
        "run artifact manifest",
        "current accepted component map",
        "run-owned dependency and changed-node request",
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+       "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
        "accepted reproducible L6A model",
        "current accepted F03 component map and F02 evidence generation",
        "exact accepted OWASP dispatch accounting",
@@ -3094,11 +3102,13 @@
      "explicit manifest-declared source root",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
      "run artifact manifest",
      "current accepted component map",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
+     "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
      "accepted reproducible L6A model",
      "current accepted F03 component map and F02 evidence generation",
      "exact accepted OWASP dispatch accounting",
@@ -5086,14 +5096,16 @@
        "name": "Component Purpose And Review Routing",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-evidence-assembly"
+        "job:02-evidence-assembly",
+        "job:02-code-index"
        ],
        "produces": [
         "job:01-component-characterization"
        ],
        "declared_inputs": [
         "target repository path",
-        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+        "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)"
        ]
       },
       {
@@ -5131,6 +5143,7 @@
      "rollup": {
       "enters": [
        "job:02-evidence-assembly",
+       "job:02-code-index",
        "job:00-intake"
       ],
       "leaves": [
@@ -5143,6 +5156,7 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
        "run artifact manifest",
        "current accepted component map",
        "run-owned dependency and changed-node request"
@@ -5158,14 +5172,16 @@
        "name": "DFD And STRIDE Core With Threat Workbench",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-code-index"
        ],
        "produces": [
         "job:03-threat-model-dfd-stride"
        ],
        "declared_inputs": [
         "current accepted F03 component map",
-        "exact F02 evidence assembly and dereferenced artifact cited through F03"
+        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+        "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
        ]
       },
       {
@@ -5190,6 +5206,7 @@
      "rollup": {
       "enters": [
        "job:01-component-characterization",
+       "job:02-code-index",
        "job:02-evidence-assembly"
       ],
       "leaves": [
@@ -5201,6 +5218,7 @@
       "declared_inputs": [
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
+       "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
        "accepted reproducible L6A model",
        "current accepted F03 component map and F02 evidence generation"
       ]
@@ -5218,7 +5236,8 @@
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
         "job:03-threat-model-reconciliation",
-        "job:04-owasp-validation-worklist"
+        "job:04-owasp-validation-worklist",
+        "job:02-code-index"
        ],
        "produces": [
         "job:04-asvs-masvs"
@@ -5251,6 +5270,7 @@
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
        "job:03-threat-model-reconciliation",
+       "job:02-code-index",
        "job:02-standards-source-ingest"
       ],
       "leaves": [
@@ -6228,11 +6248,13 @@
      "cve-bin-tool database derived from the run's NVD snapshot",
      "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)",
      "run artifact manifest",
      "current accepted component map",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
+     "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)",
      "accepted reproducible L6A model",
      "current accepted F03 component map and F02 evidence generation",
      "exact accepted OWASP dispatch accounting",
@@ -8446,6 +8468,11 @@
      "job": "02-evidence-assembly",
      "kind": "required",
      "contract": "pregather"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
     }
    ],
    "declared_inputs": [
@@ -8456,6 +8483,10 @@
     {
      "need": "required",
      "input": "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-index code-index.json (pinned; serves the code_* query tools, absent is a recorded gap)"
     },
     {
      "need": "optional",
@@ -8485,7 +8516,8 @@
    ],
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:02-code-index"
    ],
    "produces": [
     "job:01-component-characterization"
@@ -8582,6 +8614,11 @@
      "job": "01-component-characterization",
      "kind": "required",
      "contract": "component-map"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
     }
    ],
    "declared_inputs": [
@@ -8592,6 +8629,10 @@
     {
      "need": "required",
      "input": "exact F02 evidence assembly and dereferenced artifact cited through F03"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
     }
    ],
    "inputs_source": "pipeline/job-templates/03-threat-model-dfd-stride.json",
@@ -8614,7 +8655,8 @@
    ],
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:02-code-index"
    ],
    "produces": [
     "job:03-threat-model-dfd-stride"
@@ -8737,6 +8779,11 @@
      "job": "04-owasp-validation-worklist",
      "kind": "required",
      "contract": "owasp-validation-worklist"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
     }
    ],
    "declared_inputs": [
@@ -8767,7 +8814,8 @@
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
     "job:03-threat-model-reconciliation",
-    "job:04-owasp-validation-worklist"
+    "job:04-owasp-validation-worklist",
+    "job:02-code-index"
    ],
    "produces": [
     "job:04-asvs-masvs"
@@ -15497,7 +15545,10 @@
     "job:02-code-index"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:01-component-characterization",
+    "job:03-threat-model-dfd-stride",
+    "job:04-asvs-masvs"
    ]
   },
   "job:02-native-sast": {

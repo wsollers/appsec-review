@@ -127,8 +127,10 @@ flowchart TD
   j_02_mobile_sast --> j_02_evidence_assembly
   j_02_code_index --> j_02_evidence_assembly
   j_02_evidence_assembly --> j_01_component_characterization
+  j_02_code_index --> j_01_component_characterization
   j_01_component_characterization --> j_02_full_review_input_assembly
   j_01_component_characterization --> j_03_threat_model_dfd_stride
+  j_02_code_index --> j_03_threat_model_dfd_stride
   j_03_threat_model_dfd_stride --> j_03_threat_model_reconciliation
   j_01_component_characterization --> j_03_threat_model_reconciliation
   j_02_evidence_assembly --> j_03_threat_model_reconciliation
@@ -136,6 +138,7 @@ flowchart TD
   j_03_threat_model_dfd_stride --> j_04_asvs_masvs
   j_03_threat_model_reconciliation --> j_04_asvs_masvs
   j_04_owasp_validation_worklist --> j_04_asvs_masvs
+  j_02_code_index --> j_04_asvs_masvs
   j_01_component_characterization --> j_05_native_memory
   j_02_native_sast --> j_05_native_memory
   j_02_ir_facts --> j_05_native_memory

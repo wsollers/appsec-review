@@ -254,6 +254,7 @@ class Plan:
     cells: tuple
     waves: tuple                 # tuple of tuples of cell indexes
     fingerprint: str
+    code_index: Mapping[str, Any] | None = None   # pinned accepted 02-code-index summary (code_* tools), or None
 
 
 def _load_config(reference: Mapping[str, Any]) -> tuple:
@@ -442,12 +443,17 @@ def load_plan(run_id: str, request: Mapping[str, Any], facts: DispatchFacts) -> 
                           handoff=freeze(handoff)))
     if not waves:
         waves.append([])        # an EMPTY pool is a recorded state, not an absence
+    # Every dispatched cell also pins the accepted code index summary so its profile's code_* tools are
+    # granted; without one the cells run on the evidence lookups and the invoker records the gap.
+    import claude_cli_invoker
+    code_index, _gap = claude_cli_invoker.code_index_pin(run_id)
     fingerprint = digest({
         "rule": RULE_ID, "request": thaw(request), "pointer_sha256": request["handoffs"]["accepted_pointer_sha256"],
         "members": [[cell.ordinal, cell.member_sha256] for cell in built],
         "worklist_sha256": reference["worklist_sha256"], "config_digest": config_digest, "persona": persona,
         "allowed": allowed, "prohibited": prohibited, "prompt": prompt, "invoker_id": facts.invoker_id,
-        "source_snapshot_sha256": facts.source_snapshot_sha256, "registry_ceiling": facts.registry_ceiling})
+        "source_snapshot_sha256": facts.source_snapshot_sha256, "registry_ceiling": facts.registry_ceiling,
+        **({"code_index": code_index} if code_index else {})})
     return Plan(run_id=run_id, request=freeze(thaw(request)), data_root=data_root,
                 pointer_sha256=request["handoffs"]["accepted_pointer_sha256"],
                 publication_attempt=pointer["attempt_id"],
@@ -456,7 +462,7 @@ def load_plan(run_id: str, request: Mapping[str, Any], facts: DispatchFacts) -> 
                 config_digest=config_digest, persona=freeze(persona), composition_sha256=composition,
                 allowed_claims=allowed, prohibited_claims=prohibited, budget_name=budget_name,
                 prompt=freeze(prompt), cells=tuple(built), waves=tuple(tuple(wave) for wave in waves),
-                fingerprint=fingerprint)
+                fingerprint=fingerprint, code_index=freeze(code_index) if code_index else None)
 
 
 def _coverage(worklist: Mapping[str, Any], cells: list) -> None:
@@ -521,6 +527,8 @@ def _readable_inputs(plan: Plan, cell: Cell) -> list:
         _, data = _read_pinned(plan.data_root, relative, pinned[relative])
         inputs.append({"root": READABLE_ROOT, "path": relative, "sha256": "sha256:" + pinned[relative],
                        "bytes": len(data), "role": "evidence", "producer_request_sha256": None})
+    if plan.code_index:
+        inputs.append(dict(thaw(plan.code_index)))
     return inputs
 
 
@@ -579,7 +587,9 @@ def build_specifications(plan: Plan, facts: DispatchFacts, *, attempt_id: str, d
 def pool_context(plan: Plan, facts: DispatchFacts, attempt: Path, wave: int) -> ps.PoolContext:
     return ps.PoolContext(
         pool_parent=attempt / POOLS_DIR / wave_name(wave), registry_dir=Path(facts.registry_dir),
-        prompt_root=ROOT, readable_roots={READABLE_ROOT: plan.data_root}, allowed_models=facts.allowed_models,
+        prompt_root=ROOT, readable_roots={READABLE_ROOT: plan.data_root, **(
+            {plan.code_index["root"]: plan.data_root / "jobs"} if plan.code_index else {})},
+        allowed_models=facts.allowed_models,
         invoker_id=facts.invoker_id, images_dir=ce.IMAGES_DIR,
         host_flavor="windows" if os.name == "nt" else "posix", docker_host=None,
         # T10 cells are persona instances only; no pinned-container instance is ever expanded,
