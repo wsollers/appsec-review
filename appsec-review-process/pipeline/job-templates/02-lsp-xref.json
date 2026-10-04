@@ -1,0 +1,139 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-lsp-xref",
+  "display_name": "Language-server cross-references (on-demand servers, recorded answers)",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "lsp-xref"
+  },
+  "inputs": {
+    "required": [
+      "accepted code index"
+    ],
+    "optional": [
+      "accepted native build (compile_commands.json per unit = clangd build variant)",
+      "accepted language census (languages_needing_server; else the code index languages)"
+    ]
+  },
+  "outputs": {
+    "directory": "data/jobs/02-lsp-xref/attempts/<attempt_id>",
+    "files": [
+      "lsp-xref.json",
+      "lsp-xref.sqlite",
+      "lsp-xref-summary.md",
+      "status.json",
+      "permission.json",
+      "lineage.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 14400,
+  "execution": {
+    "worker": "lsp_xref_job.py",
+    "arguments": [
+      "{run_id}"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "every run with an accepted code index; languages whose server is not ready are gaps",
+  "permissions": [
+    "read-source",
+    "read-run-data",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "container_timeout_seconds": {
+      "value": 14400,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for the container (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_memory_bytes": {
+      "value": 4294967296,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_cpu_millis": {
+      "value": 2000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_pids": {
+      "value": 512,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_tmpfs_bytes": {
+      "value": 268435456,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stdout_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stderr_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (language server).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "max_queries": {
+      "value": 40000,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most language-server queries the precompute plans (4 per function: definition, references, incoming and outgoing calls); functions beyond it are an lsp-budget-exceeded gap.",
+      "scale": "freeciv21-size code indexes hold ~10K functions; Linux-size ones ~800K (a subset is precomputed, the live tools answer the rest)."
+    },
+    "request_seconds": {
+      "value": 30.0,
+      "unit": "seconds",
+      "kind": "safety",
+      "description": "Timeout of one language-server request (call hierarchy: up to three).",
+      "scale": ""
+    },
+    "start_seconds": {
+      "value": 300.0,
+      "unit": "seconds",
+      "kind": "safety",
+      "description": "How long a first query waits for the server to start and initialize before it is a gap.",
+      "scale": "jdtls and rust-analyzer index for minutes on large trees."
+    },
+    "idle_seconds": {
+      "value": 900.0,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "A started server stops after this long without a query (it restarts on the next one).",
+      "scale": ""
+    }
+  }
+}

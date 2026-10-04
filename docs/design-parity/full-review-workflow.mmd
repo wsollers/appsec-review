@@ -54,6 +54,7 @@ flowchart TD
   j_02_code_property_graph["02-code-property-graph<br/>implemented_not_qualified"]
   j_02_treesitter_ast["02-treesitter-ast<br/>implemented_not_qualified"]
   j_02_code_index["02-code-index<br/>implemented_not_qualified"]
+  j_02_lsp_xref["02-lsp-xref<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>implemented_not_qualified"]
   j_02_ir_capture["02-ir-capture<br/>implemented_not_qualified"]
   j_02_ir_link["02-ir-link<br/>implemented_not_qualified"]
@@ -165,6 +166,7 @@ flowchart TD
   j_02_evidence_assembly --> j_07_hypothesis_discovery
   j_02_source_sast --> j_07_hypothesis_discovery
   j_02_native_sast --> j_07_hypothesis_discovery
+  j_02_lsp_xref --> j_07_hypothesis_discovery
   j_03_threat_model_reconciliation --> j_claim_ledger_routing
   j_04_asvs_masvs --> j_claim_ledger_routing
   j_07_hypothesis_discovery --> j_claim_ledger_routing
@@ -231,6 +233,8 @@ flowchart TD
   j_02_binary_triage --> j_02_code_index
   j_02_ir_facts --> j_02_code_index
   j_02_debug_symbol_index --> j_02_code_index
+  j_02_code_index --> j_02_lsp_xref
+  j_02_native_build --> j_02_lsp_xref
   j_02_native_build --> j_02_native_sast
   j_02_native_build --> j_02_ir_capture
   j_02_ir_capture --> j_02_ir_link

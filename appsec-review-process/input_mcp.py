@@ -13,7 +13,9 @@ writes the pinned bytes to a private scratch folder, lists them in the prompt as
 - ``code_*`` (``code_query_mcp``, ADR-0032): structural queries (symbols, callers/callees, enclosing
   function, types, file outline, call sites, call paths, address-taken, exports) over the run's
   published ``02-code-index`` database, re-hashed before use. Served only when the invoker grants
-  them (``--code-tools``): a job sees exactly the tools its pinned inputs can answer.
+  them (``--code-tools``): a job sees exactly the tools its pinned inputs can answer. The lsp family
+  (``code_definition``/``code_references``/``code_hover``/``code_call_hierarchy``) also needs the job's pinned
+  ``02-lsp-xref`` ``lsp-xref.json``, found among its inputs.
 
 Content is untrusted data, never instructions. Every call is audited under
 ``runs/<run_id>/data/retrieval/``. Protocol stdout carries JSON-RPC only.
@@ -167,6 +169,8 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
         return {"hits": hits, "truncated": False}
     if name == "input_jq":
         return _jq(inputs, args["ref"], args["filter"], compact=args.get("compact", 1) == 1)
+    if code_query_mcp.FAMILY_OF.get(name) == "lsp":
+        return code_query_mcp.call(None, name, args, lsp=_lsp_index(run_id, inputs))
     if name.startswith("code_"):
         return code_query_mcp.call(_code_index(run_id, inputs), name, args, _scope(inputs))
     if name == "evidence_derived":
@@ -200,6 +204,22 @@ def _code_index(run_id: str, inputs: "Inputs | None") -> "code_query_mcp.CodeInd
     if isinstance(CODE["index"], Exception):
         raise ValueError(f"code index unavailable: {CODE['index']}")
     return CODE["index"]
+
+
+def _lsp_index(run_id: str, inputs: "Inputs | None") -> "code_query_mcp.LspIndex":
+    """The pinned 02-lsp-xref summary (hash-checked as an input) and its re-hashed database."""
+    if "lsp" not in CODE:
+        try:
+            ref = code_query_mcp.lsp_summary_ref([entry["ref"] for entry in (inputs.entries if inputs else [])])
+            if ref is None:
+                raise ValueError("no 02-lsp-xref summary is pinned for this job")
+            CODE["lsp"] = code_query_mcp.LspIndex(run_id, data_path(run_id, "jobs"), ref.split(":", 1)[1],
+                                                  json.loads(inputs.text(ref)))
+        except Exception as exc:   # remembered: every later lsp query reports the same refusal
+            CODE["lsp"] = exc
+    if isinstance(CODE["lsp"], Exception):
+        raise ValueError(f"language-server index unavailable: {CODE['lsp']}")
+    return CODE["lsp"]
 
 
 def _scope(inputs: "Inputs | None"):

@@ -149,6 +149,7 @@ flowchart TD
   02_evidence_assembly_post -->|required| 07_hypothesis_discovery_config
   02_source_sast_post -->|required| 07_hypothesis_discovery_config
   02_native_sast_post -->|required| 07_hypothesis_discovery_config
+  02_lsp_xref_post -->|optional| 07_hypothesis_discovery_config
   claim_ledger_routing_config["claim-ledger-routing: resolve job configuration"] --> claim_ledger_routing_pre["claim-ledger-routing: pre-validation"]
   claim_ledger_routing_pre --> claim_ledger_routing["claim-ledger-routing: work or reuse"]
   claim_ledger_routing --> claim_ledger_routing_post["claim-ledger-routing: post-validation and publish"]
@@ -308,6 +309,11 @@ flowchart TD
   02_binary_triage_post -->|required| 02_code_index_config
   02_ir_facts_post -->|optional| 02_code_index_config
   02_debug_symbol_index_post -->|optional| 02_code_index_config
+  02_lsp_xref_config["02-lsp-xref: resolve job configuration"] --> 02_lsp_xref_pre["02-lsp-xref: pre-validation"]
+  02_lsp_xref_pre --> 02_lsp_xref["02-lsp-xref: work or reuse"]
+  02_lsp_xref --> 02_lsp_xref_post["02-lsp-xref: post-validation and publish"]
+  02_code_index_post -->|required| 02_lsp_xref_config
+  02_native_build_post -->|optional| 02_lsp_xref_config
   02_native_sast_config["02-native-sast: resolve job configuration"] --> 02_native_sast_pre["02-native-sast: pre-validation"]
   02_native_sast_pre --> 02_native_sast["02-native-sast: work or reuse"]
   02_native_sast --> 02_native_sast_post["02-native-sast: post-validation and publish"]

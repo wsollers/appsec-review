@@ -24,7 +24,11 @@
     "query tool: code_path",
     "query tool: code_address_taken",
     "query tool: code_overrides",
-    "query tool: code_exports"
+    "query tool: code_exports",
+    "query tool: code_definition",
+    "query tool: code_references",
+    "query tool: code_hover",
+    "query tool: code_call_hierarchy"
   ],
   "disallowed_actions": [
     "execute target content",

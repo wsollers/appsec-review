@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lsp-xref.schema.json",
+  "title": "Accepted 02-lsp-xref result: language-server cross-references of every indexed function",
+  "description": "Summary of lsp-xref.sqlite (lsp_xref_job.py). Every row comes from a recorded, hash-sealed language-server answer under data/lsp/recordings (lsp_service), so validation replays it without a live server. Rows are locators and untrusted data, never findings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "job_id", "source_snapshot_sha256", "status", "inputs", "servers", "counts", "gaps",
+               "capabilities", "content_sha256", "budget", "claim_boundary"],
+  "properties": {
+    "schema": {"const": "appsec-review/lsp-xref/1"},
+    "run_id": {"$ref": "common/formats.schema.json#/$defs/run_id"},
+    "job_id": {"const": "02-lsp-xref"},
+    "source_snapshot_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+    "status": {"$ref": "common/formats.schema.json#/$defs/ok_status"},
+    "inputs": {
+      "type": "object", "additionalProperties": false, "required": ["census", "code_index", "native_build"],
+      "properties": {"census": {"type": "object"}, "code_index": {"type": "object"},
+                     "native_build": {"oneOf": [{"type": "null"}, {"type": "object"}]}}
+    },
+    "servers": {
+      "description": "Each ready (server, build variant): its identity (what recordings are keyed by) and the spec the broker starts it from.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["server_key", "variant", "server", "image_id", "image_digest", "argv", "build_input_sha256",
+                     "source_snapshot_sha256", "identity_sha256", "build_input", "spec"],
+        "properties": {
+          "server_key": {"type": "string", "pattern": "^[a-z]+$"},
+          "variant": {"type": "string", "minLength": 1, "maxLength": 128},
+          "server": {"type": "string", "maxLength": 64},
+          "image_id": {"type": "string", "maxLength": 128},
+          "image_digest": {"type": ["string", "null"], "maxLength": 200},
+          "argv": {"type": "array", "items": {"type": "string"}},
+          "build_input_sha256": {"oneOf": [{"type": "null"}, {"$ref": "common/formats.schema.json#/$defs/sha256_ref_or_hex"}]},
+          "source_snapshot_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+          "identity_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+          "build_input": {"type": "object", "required": ["kind"],
+                          "properties": {"kind": {"enum": ["compile_commands", "build_file", "none"]}}},
+          "spec": {"type": "object", "required": ["identity", "identity_sha256", "target_path", "limits", "container_limits"]}
+        }
+      }
+    },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["functions", "eligible", "asked", "queries", "definitions", "references", "calls", "not_located", "query_gaps"],
+      "patternProperties": {"^[a-z_]+$": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}}
+    },
+    "budget": {
+      "type": "object", "additionalProperties": false, "required": ["max_queries", "planned_queries", "functions_covered"],
+      "patternProperties": {"^[a-z_]+$": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}}
+    },
+    "gaps": {
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": false, "required": ["kind", "detail"],
+                "properties": {"kind": {"enum": ["lsp-not-ready", "lsp-no-server", "lsp-server-failed", "lsp-budget-exceeded",
+                                                 "lsp-unresolved-includes", "lsp-name-not-located", "lsp-query-gap",
+                                                 "lsp-limit"]},
+                               "detail": {"type": "string", "maxLength": 1200}}}
+    },
+    "capabilities": {
+      "type": "object", "additionalProperties": false, "required": ["lsp", "definition", "references", "calls", "hover"],
+      "patternProperties": {"^[a-z]+$": {"type": "boolean"}}
+    },
+    "content_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+    "sqlite": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "bytes"],
+      "properties": {"path": {"const": "lsp-xref.sqlite"}, "sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+                     "bytes": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}}
+    },
+    "claim_boundary": {"const": "STRUCTURAL_RETRIEVAL_NOT_FINDING_OR_RUNTIME_PROOF"}
+  }
+}

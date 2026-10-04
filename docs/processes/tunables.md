@@ -15,6 +15,8 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `code_query_exports_enabled` | True flag | safety | Grant the code_exports query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_force_indexed_mode` | True flag | safety | A model job granted code_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools. |  |
 | `code_query_graph_enabled` | True flag | safety | Grant the code_callers, code_callees, code_path query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_lsp_calls_max` | 60 count | safety | Most code_definition / code_references / code_hover / code_call_hierarchy calls one model job (one input server process, one cell) may make; further calls are refused and the job reports the gap. | Each call may start or query a live language server; precomputed rows answer most calls without one. |
+| `code_query_lsp_enabled` | True flag | safety | Grant the code_definition, code_references, code_hover, code_call_hierarchy query tools to model jobs whose tooling profile lists them and whose pinned 02-lsp-xref summary can answer them. Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_native_enabled` | True flag | safety | Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_outline_enabled` | True flag | safety | Grant the code_file_outline query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_path_depth_max` | 24 count | safety | Longest call path code_path explores (edges). |  |
@@ -460,6 +462,22 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `scancode_processes` | 4 count | resource | scancode -n: parallel scan processes. Keep container_cpu_millis at 1000 per process. | Scan time falls roughly with processes; doom3-bfg did not finish in 3600 s with one. |
 
+### `02-lsp-xref`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 4 GiB | resource | Memory limit for the container (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 512 count | resource | Process/thread limit (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 14400 s (240 min) | resource | Wall-clock limit for the container (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `idle_seconds` | 900.0 seconds | resource | A started server stops after this long without a query (it restarts on the next one). |  |
+| `max_queries` | 40000 count | safety | Most language-server queries the precompute plans (4 per function: definition, references, incoming and outgoing calls); functions beyond it are an lsp-budget-exceeded gap. | freeciv21-size code indexes hold ~10K functions; Linux-size ones ~800K (a subset is precomputed, the live tools answer the rest). |
+| `request_seconds` | 30.0 seconds | safety | Timeout of one language-server request (call hierarchy: up to three). |  |
+| `start_seconds` | 300.0 seconds | safety | How long a first query waits for the server to start and initialize before it is a gap. | jdtls and rust-analyzer index for minutes on large trees. |
+
 ### `02-mobile-sast`
 
 | Tunable | Value | Kind | What it does | Scale |
@@ -548,6 +566,21 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_timeout_seconds` | 900 s (15 min) | resource | Wall-clock limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+
+### `02-semantic-recall-index`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `batch_size` | 8 count | resource | Chunks per embedding batch; ONNX pads a batch to its longest chunk, so keep it small. | Legacy runs OOMed at 64 with 27K-char chunks; chunks are now capped at 4000 chars. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_pids` | 512 count | resource | Process/thread limit (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_timeout_seconds` | 7200 s (120 min) | resource | Wall-clock limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `image_id` | audit-static id | resource | Pinned image whose system python3 carries lancedb and fastembed and runs semantic_index_build.py (mounted, not copied). |  |
+| `max_file_bytes` | 4 MiB | safety | Largest source file read for chunks; larger files are file-too-large gaps. |  |
 
 ### `02-source-sast`
 
