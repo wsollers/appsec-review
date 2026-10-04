@@ -1,7 +1,7 @@
 """Dagster multiprocessing graph. Each stateful unit owns its lock in one process."""
 from pathlib import Path
-from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, Field, MetadataValue, RetryPolicy, In, failure_hook,
-                     job, multiprocess_executor, resource, run_failure_sensor, run_status_sensor)
+from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, Field, MetadataValue, RetryPolicy, In, Out, Output,
+                     failure_hook, job, multiprocess_executor, resource, run_failure_sensor, run_status_sensor)
 from pipeline_log_dagster import op
 from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json, run_path
 from phase1 import Session, config_for
@@ -1905,6 +1905,38 @@ ITEM_JOBS=job_executor.register_item_ops(LIFECYCLE,LIFECYCLE_OPS,CPU_POOL)
 TOLERANT_OPS={'02-native-build':native_build_published,'02-iac-config-scan':published_gate('02-iac-config-scan')}
 
 
+def published_inputs(job_id):
+    """Gap 3: route a pass-through op's inputs. All published: 'ready' (the op runs). A required input that
+    did not publish: 'missing' carries NOT_PUBLISHED and the op does not run (Dagster skips it)."""
+    @op(name='job_'+job_id.replace('-','_')+'_inputs',ins={'upstream':In(list)},
+        out={'ready':Out(list,is_required=False),'missing':Out(dict,is_required=False)},tags=COORDINATION)
+    def inputs(upstream):
+        absent=[]
+        for row in upstream:
+            if isinstance(row,dict) and row.get('status')=='NOT_PUBLISHED': absent.append(row.get('job_id','?'))
+        if absent:
+            yield Output({'job_id':job_id,'status':'NOT_PUBLISHED',
+                          'error':'required input did not publish: '+', '.join(absent)},'missing')
+        else:
+            yield Output(upstream,'ready')
+    return inputs
+
+
+def pass_through_result(job_id):
+    """The op's result, or the NOT_PUBLISHED pass-through when it did not run (fan-in of the one present)."""
+    @op(name='job_'+job_id.replace('-','_')+'_result',ins={'results':In(list)},tags=COORDINATION)
+    def result(results):
+        return results[0]
+    return result
+
+
+# Gap 3: Dagster holds every op below a failed op, optional fan-in or not. The native evidence chain takes the
+# native-build observation and passes NOT_PUBLISHED through instead of raising, so 02-code-index (whose edges
+# to it are optional) still runs after a failed native build; published_gate holds their required consumers.
+PASS_THROUGH_OPS={name:(published_inputs(name),pass_through_result(name),published_gate(name))
+                  for name in ('02-binary-triage','02-debug-symbol-index','02-ir-capture','02-ir-link','02-ir-facts')}
+
+
 def wire_lifecycle(configured, outputs, ops, discovered=None):
     """Compose ``ops`` in job-graph order onto ``outputs`` (job id -> output) inside a job body."""
     observed={}
@@ -1923,6 +1955,12 @@ def wire_lifecycle(configured, outputs, ops, discovered=None):
                     # The join reads the accepted T10 accounting; produce T03-T06 and dispatch first.
                     handoffs=owasp_validator_handoffs_work(configured,list(upstream))
                     upstream.append(owasp_validator_dispatch_work(configured,[handoffs]))
+                if name in PASS_THROUGH_OPS:
+                    route,merge,gate=PASS_THROUGH_OPS[name]
+                    ready,missing=route([observed.get(d['job'],outputs[d['job']]) for d in deps])
+                    observed[name]=merge([pending.pop(name)(configured,ready),missing])
+                    outputs[name]=gate(observed[name])
+                    continue
                 output=pending.pop(name)(configured,upstream)
                 if name in TOLERANT_OPS: observed[name],output=output,TOLERANT_OPS[name](output)
                 outputs[name]=output
