@@ -635,6 +635,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `workbench_records_per_cell_max` | 60 count | window | Most records of one family the join takes from one cell reply; the rest is recorded as a gap. |  |
 | `workbench_wave_timeout_seconds` | 5400 s (90 min) | resource | Wait-all limit for one workbench wave pool. | Cells run concurrently; raise with slow models, not with target size (lookup tools keep calls small). |
 
+### `04-owasp-validator-cell`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_parallel` | 4 count | resource | Validator cells T10 dispatches concurrently (ADR-0034); dagster_workflow caps it at the shared pool_persona_llm_slots. | A full ASVS universe plans at most 17 cells (max_validator_calls 20); each cell is one claude -p call. |
+
 ### `06-reachability-codeql`
 
 | Tunable | Value | Kind | What it does | Scale |

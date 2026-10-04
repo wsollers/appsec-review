@@ -174,11 +174,10 @@ class ExportQueries(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("dagster"), "dagster is not installed")
 class DagsterWiring(unittest.TestCase):
-    @unittest.expectedFailure
     def test_a_raising_native_build_still_runs_the_code_index(self):
-        """OPEN (dagster_workflow.wire_lifecycle, wiring owner): Dagster holds every op downstream of a failed
-        op, fan-in or not, so an optional edge only tolerates a TOLERANT_OPS producer. 02-binary-triage and
-        02-debug-symbol-index take the native-build gate, are held, and hold the code index with them."""
+        """Dagster holds every op downstream of a failed op, fan-in or not. The native evidence chain
+        (dagster_workflow.PASS_THROUGH_OPS) takes the native-build observation and passes NOT_PUBLISHED through
+        without running, so the code index, whose edges to it are optional, still runs."""
         from dagster import In, job as dagster_job, op
         from execution_state import Blocked
         import dagster_workflow as dw
@@ -211,8 +210,43 @@ class DagsterWiring(unittest.TestCase):
             dw.wire_lifecycle(configured, outputs, ops)
 
         with mock.patch.object(dw.native_build_worker, "run", side_effect=Blocked("stub native build crashed")):
-            probe.execute_in_process(raise_on_error=False)
+            result = probe.execute_in_process(raise_on_error=False)
         self.assertEqual(ran, ["02-code-index"])
+        self.assertFalse(result.success)  # the native build's own gate still fails the run
+
+    def test_a_published_native_build_runs_the_native_chain(self):
+        from dagster import In, job as dagster_job, op
+        import dagster_workflow as dw
+        ran = []
+
+        @op
+        def stub_config():
+            return {"engagement_run_id": RUN, "force": False}
+
+        @op(ins={"configured": In(dict)})
+        def seed(configured):
+            return {"status": "OK"}
+
+        def stub(name):
+            @op(name="stub_" + name.replace("-", "_"), ins={"configured": In(dict), "upstream": In(list)})
+            def work(configured, upstream):
+                ran.append(name)
+                return {"job_id": name, "status": "OK"}
+            return work
+
+        chain = ("02-native-build", "02-binary-triage", "02-debug-symbol-index", "02-ir-capture", "02-ir-link",
+                 "02-ir-facts", "02-code-index")
+        ops = {name: stub(name) for name in chain}
+
+        @dagster_job
+        def probe():
+            configured = stub_config()
+            outputs = {name: seed.alias("seed_" + name.replace("-", "_"))(configured)
+                       for name in ("00-intake", "02-build-configure", "02-code-property-graph", "02-treesitter-ast")}
+            dw.wire_lifecycle(configured, outputs, ops)
+
+        self.assertTrue(probe.execute_in_process().success)
+        self.assertEqual(sorted(ran), sorted(chain))
 
 
 if __name__ == "__main__":

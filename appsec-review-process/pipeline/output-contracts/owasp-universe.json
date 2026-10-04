@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "owasp-universe",
+  "display_name": "OWASP ASVS validation universe and validator budget (ADR-0034)",
+  "required_files": [
+    "outputs/owasp-universe.json",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "job_id",
+    "attempt_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/owasp-universe.json",
+    "schema_file": "owasp-universe.schema.json"
+  },
+  "validation_rules": [
+    "exactly one target per ASVS chapter with decision participating, not_applicable or gap and its reason",
+    "not_applicable only for zero candidates under complete coverage or all candidates not_participating with resolved citations",
+    "participant excerpts are hash-bound to the source snapshot (owasp-participants-bundle.schema.json)",
+    "planned validator calls = sum(ceil(l1_l2_control_rows / max_control_target_rows)) over participating chapters; over max_validator_calls is BLOCKED and never accepted",
+    "MASVS for a target without a mobile platform is a not_applicable family with its reason"
+  ]
+}

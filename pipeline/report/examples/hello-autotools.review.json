@@ -7,7 +7,7 @@
     "engagement": "SAMPLE - hello-autotools fixture (illustrative)",
     "run_id": "sample-hello-autotools",
     "sat_id": "20260927T141440Z",
-    "pipeline_commit": "sample; job-graph.json sha256:a78d83db220c (85 jobs)",
+    "pipeline_commit": "sample; job-graph.json sha256:457627544077 (88 jobs)",
     "report_date": "2026-09-29",
     "classification": "Internal - sample",
     "native_tier": "A",
@@ -50,7 +50,7 @@
       "01-component-characterization": 3,
       "02-evidence-pregather": 52,
       "03-threat-model-dfd-stride": 2,
-      "04-asvs-masvs": 2,
+      "04-asvs-masvs": 5,
       "05-native-memory": 1,
       "06-cve-reachability": 3,
       "07-red-team-adversarial": 5,
@@ -97,7 +97,7 @@
     {
       "id": "04-asvs-masvs",
       "name": "Lane 04: asvs masvs",
-      "note": "2 job(s) whose job-graph.json lane is 04-asvs-masvs."
+      "note": "5 job(s) whose job-graph.json lane is 04-asvs-masvs."
     },
     {
       "id": "05-native-memory",
@@ -641,6 +641,27 @@
       "kind": "deterministic_python",
       "status": "OK",
       "tools": "owasp-join-reporter (owasp_join_publisher.py:run)"
+    },
+    {
+      "id": "04-owasp-candidate-search",
+      "family": "04-asvs-masvs",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "owasp-worklist-builder (owasp_universe_jobs.py:run)"
+    },
+    {
+      "id": "04-owasp-participation",
+      "family": "04-asvs-masvs",
+      "kind": "pool_coordinator",
+      "status": "OK",
+      "tools": "owasp-participation-static (owasp_participation.py:run)"
+    },
+    {
+      "id": "04-owasp-universe",
+      "family": "04-asvs-masvs",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "owasp-worklist-builder (owasp_universe.py:run)"
     },
     {
       "id": "04-owasp-validation-worklist",

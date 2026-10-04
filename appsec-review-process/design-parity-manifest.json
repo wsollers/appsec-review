@@ -67,7 +67,6 @@
       "ir_facts",
       "native_memory_analysis",
       "fuzz_target_triage",
-      "owasp_component_routing",
       "owasp_validation_worklist",
       "owasp_join_report",
       "stig_srg_validation_worklist",
@@ -317,14 +316,6 @@
         "relationship": "config-driven standalone bounded transform; full-review input assembly remains blocked"
       },
       {
-        "job": "owasp_component_routing",
-        "lifecycle_jobs": [
-          "01-component-characterization",
-          "04-owasp-validation-worklist"
-        ],
-        "relationship": "automatic accepted component-map to T04 applicability-request bridge; T03/T04-T14 remain separate OWASP processes"
-      },
-      {
         "job": "owasp_validation_worklist",
         "lifecycle_jobs": [
           "04-owasp-validation-worklist"
@@ -391,6 +382,9 @@
           "02-doc-intelligence-ingest",
           "02-standards-source-ingest",
           "02-test-intelligence-ingest",
+          "04-owasp-candidate-search",
+          "04-owasp-participation",
+          "04-owasp-universe",
           "04-owasp-validation-worklist",
           "15-stig-srg-validation-worklist",
           "02-build-configure",
@@ -600,7 +594,6 @@
       "ir_facts",
       "native_memory_analysis",
       "fuzz_target_triage",
-      "owasp_component_routing",
       "owasp_validation_worklist",
       "owasp_join_report",
       "stig_srg_validation_worklist",
@@ -655,7 +648,6 @@
       "ir_facts",
       "native_memory_analysis",
       "fuzz_target_triage",
-      "owasp_component_routing",
       "owasp_validation_worklist",
       "owasp_join_report",
       "stig_srg_validation_worklist",
@@ -711,7 +703,6 @@
       "ir_facts",
       "native_memory_analysis",
       "fuzz_target_triage",
-      "owasp_component_routing",
       "owasp_validation_worklist",
       "owasp_join_report",
       "stig_srg_validation_worklist",
@@ -1823,7 +1814,8 @@
           "03-threat-model-dfd-stride",
           "03-threat-model-reconciliation",
           "04-owasp-validation-worklist",
-          "02-code-index"
+          "02-code-index",
+          "04-owasp-universe"
         ]
       },
       "registry": {
@@ -3388,6 +3380,208 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "04-owasp-candidate-search",
+      "design_refs": [
+        "docs/decisions/ADR-0034-inference-classifies-python-routes.md"
+      ],
+      "graph": {
+        "node": "04-owasp-candidate-search",
+        "implemented": true,
+        "dependencies": [
+          "02-code-index",
+          "02-code-property-graph",
+          "02-treesitter-ast",
+          "02-source-sast",
+          "02-evidence-index",
+          "01-component-characterization"
+        ]
+      },
+      "registry": {
+        "template": "04-owasp-candidate-search",
+        "persona": "owasp-validator",
+        "role": "standards-control-validator",
+        "domain": "owasp-application-controls",
+        "tooling_profile": "owasp-worklist-builder",
+        "output_contract": "owasp-candidate-search"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/owasp_universe_jobs.py:run",
+        "validator": "appsec-review-process/owasp_universe_jobs.py:accepted"
+      },
+      "output": {
+        "contract": "owasp-candidate-search",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/owasp-candidate-search.json",
+        "schema_file": "schemas/owasp-candidate-search.schema.json",
+        "claim_class": "control_universe_candidates"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_owasp_candidate_search.py",
+          "appsec-review-process/tests/test_adr34_owasp_participation.py",
+          "appsec-review-process/tests/test_owasp_universe_jobs.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Execute and retain this job in a fresh full_review run."
+    },
+    {
+      "id": "04-owasp-participation",
+      "design_refs": [
+        "docs/decisions/ADR-0034-inference-classifies-python-routes.md"
+      ],
+      "graph": {
+        "node": "04-owasp-participation",
+        "implemented": true,
+        "dependencies": [
+          "04-owasp-candidate-search",
+          "02-code-index"
+        ]
+      },
+      "registry": {
+        "template": "04-owasp-participation",
+        "persona": "owasp-validator",
+        "role": "asvs-participation-classifier",
+        "domain": "owasp-application-controls",
+        "tooling_profile": "owasp-participation-static",
+        "output_contract": "owasp-participation"
+      },
+      "execution": {
+        "mode": "pool_coordinator",
+        "worker": "appsec-review-process/owasp_participation.py:run",
+        "validator": "appsec-review-process/owasp_participation.py:_validate_attempt"
+      },
+      "output": {
+        "contract": "owasp-participation",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/owasp-participation.json",
+        "schema_file": "schemas/owasp-participation.schema.json",
+        "claim_class": "candidate_only"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_owasp_participation.py",
+          "appsec-review-process/tests/test_adr34_owasp_participation.py",
+          "appsec-review-process/tests/test_owasp_universe_jobs.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Execute and retain this job in a fresh full_review run."
+    },
+    {
+      "id": "04-owasp-universe",
+      "design_refs": [
+        "docs/decisions/ADR-0034-inference-classifies-python-routes.md"
+      ],
+      "graph": {
+        "node": "04-owasp-universe",
+        "implemented": true,
+        "dependencies": [
+          "04-owasp-candidate-search",
+          "04-owasp-participation"
+        ]
+      },
+      "registry": {
+        "template": "04-owasp-universe",
+        "persona": "owasp-validator",
+        "role": "standards-control-validator",
+        "domain": "owasp-application-controls",
+        "tooling_profile": "owasp-worklist-builder",
+        "output_contract": "owasp-universe"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/owasp_universe.py:run",
+        "validator": "appsec-review-process/owasp_universe.py:accepted"
+      },
+      "output": {
+        "contract": "owasp-universe",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/owasp-universe.json",
+        "schema_file": "schemas/owasp-universe.schema.json",
+        "claim_class": "control_universe"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_owasp_universe.py",
+          "appsec-review-process/tests/test_adr34_owasp_participation.py",
+          "appsec-review-process/tests/test_owasp_universe_jobs.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Execute and retain this job in a fresh full_review run."
+    },
+    {
       "id": "04-owasp-validation-worklist",
       "design_refs": [
         "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
@@ -3398,7 +3592,8 @@
         "implemented": true,
         "dependencies": [
           "01-component-characterization",
-          "02-standards-source-ingest"
+          "02-standards-source-ingest",
+          "04-owasp-universe"
         ]
       },
       "registry": {
@@ -7016,6 +7211,9 @@
         "docs/design-parity/design-parity-completion-plan.md#g2-owasp-checklist-and-verification-model"
       ],
       "jobs": [
+        "04-owasp-candidate-search",
+        "04-owasp-participation",
+        "04-owasp-universe",
         "04-owasp-validation-worklist",
         "04-asvs-masvs"
       ],

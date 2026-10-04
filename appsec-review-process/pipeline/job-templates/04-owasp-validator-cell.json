@@ -35,5 +35,14 @@
     "validator_handoff",
     "evidence",
     "output_contract"
-  ]
+  ],
+  "tunables": {
+    "max_parallel": {
+      "value": 4,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Validator cells T10 dispatches concurrently (ADR-0034); dagster_workflow caps it at the shared pool_persona_llm_slots.",
+      "scale": "A full ASVS universe plans at most 17 cells (max_validator_calls 20); each cell is one claude -p call."
+    }
+  }
 }

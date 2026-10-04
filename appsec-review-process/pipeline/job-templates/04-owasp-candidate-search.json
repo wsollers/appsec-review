@@ -1,0 +1,62 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "04-owasp-candidate-search",
+  "display_name": "OWASP ASVS Candidate Search (deterministic)",
+  "process": "04-asvs-masvs",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-worklist-builder",
+    "output_contract_id": "owasp-candidate-search"
+  },
+  "inputs": {
+    "required": [
+      "accepted 02-code-index (code-index.json and code-index.sqlite)",
+      "accepted 02-code-property-graph",
+      "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+      "accepted 02-evidence-index full-text search (index.sqlite)",
+      "data/owasp-asvs/category-rules-v1.json"
+    ],
+    "optional": [
+      "accepted 02-source-sast hits (absent: SAST rule kinds are a gap)",
+      "accepted 01-component-characterization tag cloud (absent: a gap)"
+    ]
+  },
+  "outputs": {
+    "directory": "data/jobs/04-owasp-candidate-search/attempts/<attempt_id>",
+    "files": [
+      "owasp-candidate-search.json",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "execution": {
+    "worker": "owasp_universe_jobs.py",
+    "arguments": [
+      "--job",
+      "04-owasp-candidate-search",
+      "--run-id",
+      "{run_id}"
+    ]
+  },
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "applicability": "every full review; zero candidates are published with their search basis",
+  "timeout_seconds": 1800,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
+}

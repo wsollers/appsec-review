@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 85,
+  "lifecycle_jobs": 88,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2195,7 +2195,8 @@
         "job:03-threat-model-dfd-stride",
         "job:03-threat-model-reconciliation",
         "job:04-owasp-validation-worklist",
-        "job:02-code-index"
+        "job:02-code-index",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-asvs-masvs"
@@ -2206,13 +2207,75 @@
        ]
       },
       {
+       "ref": "job:04-owasp-candidate-search",
+       "id": "04-owasp-candidate-search",
+       "name": "OWASP ASVS Candidate Search (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-index",
+        "job:02-code-property-graph",
+        "job:02-treesitter-ast",
+        "job:02-source-sast",
+        "job:02-evidence-index",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:04-owasp-candidate-search"
+       ],
+       "declared_inputs": [
+        "accepted 02-code-index (code-index.json and code-index.sqlite)",
+        "accepted 02-code-property-graph",
+        "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+        "accepted 02-evidence-index full-text search (index.sqlite)",
+        "data/owasp-asvs/category-rules-v1.json"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-participation",
+       "id": "04-owasp-participation",
+       "name": "ASVS Chapter Participation Classification",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:02-code-index"
+       ],
+       "produces": [
+        "job:04-owasp-participation"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "accepted 02-code-index",
+        "target checkout named by the staged artifact manifest"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-universe",
+       "id": "04-owasp-universe",
+       "name": "OWASP ASVS Universe and Validator Budget (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:04-owasp-participation"
+       ],
+       "produces": [
+        "job:04-owasp-universe"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+        "pinned ASVS 5.0.0 reference snapshot",
+        "target checkout matching the source snapshot"
+       ]
+      },
+      {
        "ref": "job:04-owasp-validation-worklist",
        "id": "04-owasp-validation-worklist",
        "name": "OWASP Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
-        "job:02-standards-source-ingest"
+        "job:02-standards-source-ingest",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-owasp-validation-worklist"
@@ -2370,6 +2433,9 @@
        "job:02-evidence-assembly",
        "job:02-code-index",
        "job:00-intake",
+       "job:02-code-property-graph",
+       "job:02-treesitter-ast",
+       "job:02-source-sast",
        "job:02-standards-source-ingest",
        "job:02-native-sast",
        "job:02-ir-facts",
@@ -2383,7 +2449,6 @@
        "job:02-codeql-python",
        "job:02-codeql-ruby",
        "job:02-codeql-rust",
-       "job:02-code-property-graph",
        "job:02-iac-config-scan"
       ],
       "leaves": [
@@ -2398,6 +2463,9 @@
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
        "job:03-threat-model-reconciliation",
+       "job:04-owasp-candidate-search",
+       "job:04-owasp-participation",
+       "job:04-owasp-universe",
        "job:04-owasp-validation-worklist",
        "job:05-native-memory",
        "job:06-reachability-codeql",
@@ -2419,6 +2487,17 @@
        "current accepted F03 component map and F02 evidence generation",
        "exact accepted OWASP dispatch accounting",
        "hash-verified applicability and assessment artifacts",
+       "accepted 02-code-index (code-index.json and code-index.sqlite)",
+       "accepted 02-code-property-graph",
+       "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+       "accepted 02-evidence-index full-text search (index.sqlite)",
+       "data/owasp-asvs/category-rules-v1.json",
+       "accepted 04-owasp-candidate-search",
+       "accepted 02-code-index",
+       "target checkout named by the staged artifact manifest",
+       "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+       "pinned ASVS 5.0.0 reference snapshot",
+       "target checkout matching the source snapshot",
        "accepted standards source",
        "accepted applicability evidence",
        "accepted native SAST/IR evidence",
@@ -2991,6 +3070,9 @@
      "job:03-threat-model-dfd-stride",
      "job:03-threat-model-reconciliation",
      "job:04-asvs-masvs",
+     "job:04-owasp-candidate-search",
+     "job:04-owasp-participation",
+     "job:04-owasp-universe",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
      "job:06-reachability-codeql",
@@ -3113,6 +3195,17 @@
      "current accepted F03 component map and F02 evidence generation",
      "exact accepted OWASP dispatch accounting",
      "hash-verified applicability and assessment artifacts",
+     "accepted 02-code-index (code-index.json and code-index.sqlite)",
+     "accepted 02-code-property-graph",
+     "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+     "accepted 02-evidence-index full-text search (index.sqlite)",
+     "data/owasp-asvs/category-rules-v1.json",
+     "accepted 04-owasp-candidate-search",
+     "accepted 02-code-index",
+     "target checkout named by the staged artifact manifest",
+     "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+     "pinned ASVS 5.0.0 reference snapshot",
+     "target checkout matching the source snapshot",
      "accepted standards source",
      "accepted applicability evidence",
      "accepted native SAST/IR evidence",
@@ -5237,7 +5330,8 @@
         "job:03-threat-model-dfd-stride",
         "job:03-threat-model-reconciliation",
         "job:04-owasp-validation-worklist",
-        "job:02-code-index"
+        "job:02-code-index",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-asvs-masvs"
@@ -5248,13 +5342,75 @@
        ]
       },
       {
+       "ref": "job:04-owasp-candidate-search",
+       "id": "04-owasp-candidate-search",
+       "name": "OWASP ASVS Candidate Search (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-index",
+        "job:02-code-property-graph",
+        "job:02-treesitter-ast",
+        "job:02-source-sast",
+        "job:02-evidence-index",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:04-owasp-candidate-search"
+       ],
+       "declared_inputs": [
+        "accepted 02-code-index (code-index.json and code-index.sqlite)",
+        "accepted 02-code-property-graph",
+        "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+        "accepted 02-evidence-index full-text search (index.sqlite)",
+        "data/owasp-asvs/category-rules-v1.json"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-participation",
+       "id": "04-owasp-participation",
+       "name": "ASVS Chapter Participation Classification",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:02-code-index"
+       ],
+       "produces": [
+        "job:04-owasp-participation"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "accepted 02-code-index",
+        "target checkout named by the staged artifact manifest"
+       ]
+      },
+      {
+       "ref": "job:04-owasp-universe",
+       "id": "04-owasp-universe",
+       "name": "OWASP ASVS Universe and Validator Budget (deterministic)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:04-owasp-candidate-search",
+        "job:04-owasp-participation"
+       ],
+       "produces": [
+        "job:04-owasp-universe"
+       ],
+       "declared_inputs": [
+        "accepted 04-owasp-candidate-search",
+        "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+        "pinned ASVS 5.0.0 reference snapshot",
+        "target checkout matching the source snapshot"
+       ]
+      },
+      {
        "ref": "job:04-owasp-validation-worklist",
        "id": "04-owasp-validation-worklist",
        "name": "OWASP Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
-        "job:02-standards-source-ingest"
+        "job:02-standards-source-ingest",
+        "job:04-owasp-universe"
        ],
        "produces": [
         "job:04-owasp-validation-worklist"
@@ -5271,17 +5427,35 @@
        "job:03-threat-model-dfd-stride",
        "job:03-threat-model-reconciliation",
        "job:02-code-index",
+       "job:02-code-property-graph",
+       "job:02-treesitter-ast",
+       "job:02-source-sast",
+       "job:02-evidence-index",
        "job:02-standards-source-ingest"
       ],
       "leaves": [
        "job:04-asvs-masvs"
       ],
       "passes": [
+       "job:04-owasp-candidate-search",
+       "job:04-owasp-participation",
+       "job:04-owasp-universe",
        "job:04-owasp-validation-worklist"
       ],
       "declared_inputs": [
        "exact accepted OWASP dispatch accounting",
        "hash-verified applicability and assessment artifacts",
+       "accepted 02-code-index (code-index.json and code-index.sqlite)",
+       "accepted 02-code-property-graph",
+       "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+       "accepted 02-evidence-index full-text search (index.sqlite)",
+       "data/owasp-asvs/category-rules-v1.json",
+       "accepted 04-owasp-candidate-search",
+       "accepted 02-code-index",
+       "target checkout named by the staged artifact manifest",
+       "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+       "pinned ASVS 5.0.0 reference snapshot",
+       "target checkout matching the source snapshot",
        "accepted standards source",
        "accepted applicability evidence"
       ]
@@ -6133,6 +6307,9 @@
      "job:03-threat-model-dfd-stride",
      "job:03-threat-model-reconciliation",
      "job:04-asvs-masvs",
+     "job:04-owasp-candidate-search",
+     "job:04-owasp-participation",
+     "job:04-owasp-universe",
      "job:04-owasp-validation-worklist",
      "job:05-native-memory",
      "job:06-reachability-codeql",
@@ -6259,6 +6436,17 @@
      "current accepted F03 component map and F02 evidence generation",
      "exact accepted OWASP dispatch accounting",
      "hash-verified applicability and assessment artifacts",
+     "accepted 02-code-index (code-index.json and code-index.sqlite)",
+     "accepted 02-code-property-graph",
+     "accepted 02-treesitter-ast, or its not-applicable-language-absent skip",
+     "accepted 02-evidence-index full-text search (index.sqlite)",
+     "data/owasp-asvs/category-rules-v1.json",
+     "accepted 04-owasp-candidate-search",
+     "accepted 02-code-index",
+     "target checkout named by the staged artifact manifest",
+     "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names",
+     "pinned ASVS 5.0.0 reference snapshot",
+     "target checkout matching the source snapshot",
      "accepted standards source",
      "accepted applicability evidence",
      "accepted native SAST/IR evidence",
@@ -7168,12 +7356,13 @@
     "04-owasp-validation-worklist"
    ],
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:04-owasp-universe"
    ],
    "produces": [
     "job:04-owasp-validation-worklist"
    ],
-   "notes": "Standalone OWASP-only worklist transform. Targets and per-row applicability come from the accepted 04-owasp-component-routing rules (P39, `4622a7f`): not_applicable rows carry the rule citation, partial classifications are conditional, unmatched rows are cannot_determine with one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
+   "notes": "Standalone OWASP-only worklist transform. Targets and per-row applicability come from the projection of the accepted 04-owasp-universe into the applicability request (ADR-0034): one target per participating ASVS chapter, scoped to that chapter's controls, bound to that exact universe; the worklist routes nothing itself and the component map is report context only. A chapter the universe leaves as a gap is one counted gap; every other row stays NOT_ASSESSED behind one summary gap (P26); it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "stig-srg-validation-worklist",
@@ -8784,6 +8973,11 @@
      "job": "02-code-index",
      "kind": "required",
      "contract": "code-index"
+    },
+    {
+     "job": "04-owasp-universe",
+     "kind": "required",
+     "contract": "owasp-universe"
     }
    ],
    "declared_inputs": [
@@ -8815,7 +9009,8 @@
     "job:03-threat-model-dfd-stride",
     "job:03-threat-model-reconciliation",
     "job:04-owasp-validation-worklist",
-    "job:02-code-index"
+    "job:02-code-index",
+    "job:04-owasp-universe"
    ],
    "produces": [
     "job:04-asvs-masvs"
@@ -10596,6 +10791,253 @@
    ]
   },
   {
+   "id": "04-owasp-candidate-search",
+   "lane": "04-asvs-masvs",
+   "name": "OWASP ASVS Candidate Search (deterministic)",
+   "contract": "owasp-candidate-search",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/owasp_universe_jobs.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-worklist-builder",
+    "output_contract_id": "owasp-candidate-search"
+   },
+   "depends_on": [
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
+    },
+    {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
+     "job": "02-treesitter-ast",
+     "kind": "required",
+     "contract": "treesitter-ast"
+    },
+    {
+     "job": "02-source-sast",
+     "kind": "optional",
+     "contract": "source-sast"
+    },
+    {
+     "job": "02-evidence-index",
+     "kind": "required",
+     "contract": "evidence-index"
+    },
+    {
+     "job": "01-component-characterization",
+     "kind": "optional",
+     "contract": "component-map"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 02-code-index (code-index.json and code-index.sqlite)"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-property-graph"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-treesitter-ast, or its not-applicable-language-absent skip"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-evidence-index full-text search (index.sqlite)"
+    },
+    {
+     "need": "required",
+     "input": "data/owasp-asvs/category-rules-v1.json"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 02-source-sast hits (absent: SAST rule kinds are a gap)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 01-component-characterization tag cloud (absent: a gap)"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/04-owasp-candidate-search.json",
+   "output_dir": "runs/<run_id>/data/jobs/04-owasp-candidate-search/",
+   "output_files": [
+    "owasp-candidate-search.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/owasp-candidate-search.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Execute and retain this job in a fresh full_review run.",
+   "consumes": [
+    "job:02-code-index",
+    "job:02-code-property-graph",
+    "job:02-treesitter-ast",
+    "job:02-source-sast",
+    "job:02-evidence-index",
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:04-owasp-candidate-search"
+   ]
+  },
+  {
+   "id": "04-owasp-participation",
+   "lane": "04-asvs-masvs",
+   "name": "ASVS Chapter Participation Classification",
+   "contract": "owasp-participation",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/owasp_participation.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "asvs-participation-classifier",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-participation-static",
+    "output_contract_id": "owasp-participation"
+   },
+   "depends_on": [
+    {
+     "job": "04-owasp-candidate-search",
+     "kind": "required",
+     "contract": "owasp-candidate-search"
+    },
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 04-owasp-candidate-search"
+    },
+    {
+     "need": "required",
+     "input": "accepted 02-code-index"
+    },
+    {
+     "need": "required",
+     "input": "target checkout named by the staged artifact manifest"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/04-owasp-participation.json",
+   "output_dir": "runs/<run_id>/data/jobs/04-owasp-participation/",
+   "output_files": [
+    "owasp-participation.json",
+    "owasp-participation.md",
+    "permission.json",
+    "lineage.json",
+    "pool-receipt.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/owasp-participation.json",
+   "claim_class": "candidate_only",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Execute and retain this job in a fresh full_review run.",
+   "consumes": [
+    "job:04-owasp-candidate-search",
+    "job:02-code-index"
+   ],
+   "produces": [
+    "job:04-owasp-participation"
+   ]
+  },
+  {
+   "id": "04-owasp-universe",
+   "lane": "04-asvs-masvs",
+   "name": "OWASP ASVS Universe and Validator Budget (deterministic)",
+   "contract": "owasp-universe",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/owasp_universe.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-worklist-builder",
+    "output_contract_id": "owasp-universe"
+   },
+   "depends_on": [
+    {
+     "job": "04-owasp-candidate-search",
+     "kind": "required",
+     "contract": "owasp-candidate-search"
+    },
+    {
+     "job": "04-owasp-participation",
+     "kind": "required",
+     "contract": "owasp-participation"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 04-owasp-candidate-search"
+    },
+    {
+     "need": "required",
+     "input": "appsec-review-process/config/owasp-universe/default-v1.json and the batch config it names"
+    },
+    {
+     "need": "required",
+     "input": "pinned ASVS 5.0.0 reference snapshot"
+    },
+    {
+     "need": "required",
+     "input": "target checkout matching the source snapshot"
+    },
+    {
+     "need": "optional",
+     "input": "accepted 04-owasp-participation (absent or no-candidates skip: every candidate chapter is a gap)"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/04-owasp-universe.json",
+   "output_dir": "runs/<run_id>/data/jobs/04-owasp-universe/",
+   "output_files": [
+    "outputs/owasp-universe.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/owasp-universe.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Execute and retain this job in a fresh full_review run.",
+   "consumes": [
+    "job:04-owasp-candidate-search",
+    "job:04-owasp-participation"
+   ],
+   "produces": [
+    "job:04-owasp-universe"
+   ]
+  },
+  {
    "id": "04-owasp-validation-worklist",
    "lane": "04-asvs-masvs",
    "name": "OWASP Validation Worklist Core",
@@ -10626,6 +11068,11 @@
      "job": "02-standards-source-ingest",
      "kind": "required",
      "contract": "standards-source-extract"
+    },
+    {
+     "job": "04-owasp-universe",
+     "kind": "required",
+     "contract": "owasp-universe"
     }
    ],
    "declared_inputs": [
@@ -10654,7 +11101,8 @@
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
-    "job:02-standards-source-ingest"
+    "job:02-standards-source-ingest",
+    "job:04-owasp-universe"
    ],
    "produces": [
     "job:04-owasp-validation-worklist"
@@ -14971,6 +15419,7 @@
     "job:08-blue-team-refutation",
     "job:14-attack-chain-composition",
     "job:10-synthesis-report",
+    "job:04-owasp-candidate-search",
     "job:04-owasp-validation-worklist",
     "job:15-stig-srg-validation-worklist"
    ]
@@ -15326,6 +15775,45 @@
     "job:02-evidence-index-derived"
    ]
   },
+  "job:04-owasp-candidate-search": {
+   "id": "job:04-owasp-candidate-search",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/04-owasp-candidate-search/",
+   "about": "Accepted owasp-candidate-search output of 04-owasp-candidate-search.",
+   "produced_by": [
+    "job:04-owasp-candidate-search"
+   ],
+   "consumed_by": [
+    "job:04-owasp-participation",
+    "job:04-owasp-universe"
+   ]
+  },
+  "job:04-owasp-participation": {
+   "id": "job:04-owasp-participation",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/04-owasp-participation/",
+   "about": "Accepted owasp-participation output of 04-owasp-participation.",
+   "produced_by": [
+    "job:04-owasp-participation"
+   ],
+   "consumed_by": [
+    "job:04-owasp-universe"
+   ]
+  },
+  "job:04-owasp-universe": {
+   "id": "job:04-owasp-universe",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/04-owasp-universe/",
+   "about": "Accepted owasp-universe output of 04-owasp-universe.",
+   "produced_by": [
+    "job:04-owasp-universe"
+   ],
+   "consumed_by": [
+    "step:owasp-validation-worklist",
+    "job:04-asvs-masvs",
+    "job:04-owasp-validation-worklist"
+   ]
+  },
   "job:04-owasp-validation-worklist": {
    "id": "job:04-owasp-validation-worklist",
    "kind": "job output",
@@ -15401,6 +15889,7 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:07-hypothesis-discovery",
+    "job:04-owasp-candidate-search",
     "job:02-evidence-index-derived"
    ]
   },
@@ -15519,6 +16008,7 @@
    "consumed_by": [
     "job:02-evidence-assembly",
     "job:06-reachability-ir",
+    "job:04-owasp-candidate-search",
     "job:02-code-index",
     "job:02-evidence-index-derived"
    ]
@@ -15532,6 +16022,7 @@
     "job:02-treesitter-ast"
    ],
    "consumed_by": [
+    "job:04-owasp-candidate-search",
     "job:02-code-index",
     "job:02-evidence-index-derived"
    ]
@@ -15548,7 +16039,9 @@
     "job:02-evidence-assembly",
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
-    "job:04-asvs-masvs"
+    "job:04-asvs-masvs",
+    "job:04-owasp-candidate-search",
+    "job:04-owasp-participation"
    ]
   },
   "job:02-native-sast": {
@@ -15713,6 +16206,7 @@
    "consumed_by": [
     "step:lane-handoffs",
     "job:02-evidence-assembly",
+    "job:04-owasp-candidate-search",
     "job:02-evidence-index-derived"
    ]
   },
