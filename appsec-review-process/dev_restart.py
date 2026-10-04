@@ -345,7 +345,12 @@ def current_code(recorded: Mapping[str, str], process_root: Path) -> dict[str, s
     process_root = Path(process_root)
     values = {}
     for key in recorded:
-        base = process_root.parent if key.startswith('schemas/') else process_root
+        file_key = key.rsplit(':', 1)[0] if ':' in key else key
+        # Keys are process-root relative, except repository-root paths (schemas/, data/, pipeline/ ...)
+        # that a job records as written; resolve to whichever exists so a repository-level file is not
+        # reported as changed just because it is not under the process root.
+        base = process_root.parent if (key.startswith('schemas/') or (
+            not (process_root / file_key).exists() and (process_root.parent / file_key).exists())) else process_root
         if ':' in key:
             file_part, function = key.rsplit(':', 1)
             values[key] = function_source_hash(base / file_part, function)
