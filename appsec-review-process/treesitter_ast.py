@@ -10,7 +10,9 @@ beside Joern/CPG, not a replacement, and nothing here executes or evaluates targ
 Determinism: files are sorted by path, rows by position, text is control-stripped and truncated,
 and ``content_sha256`` is the sha256 of the canonical JSON of everything except itself. Timing and
 memory go to ``--stats`` (not hashed). Coverage problems are ``gaps`` (oversized, unreadable,
-symlinked, languages without a grammar, per-file row caps), never silent omissions. Build scripts,
+symlinked, languages without a grammar, per-file row caps), never silent omissions; files without a
+grammar are counted per suffix and listed by path (``NO_GRAMMAR_PATHS``, then one overflow gap). A
+suffix-less file takes its grammar from its shebang (``#!/bin/sh``, ``#!/usr/bin/env python3``). Build scripts,
 docs and config that are not program source (``NON_SOURCE_*``) are counted in ``totals.non_source``,
 not reported as missing grammars.
 
@@ -73,6 +75,49 @@ NON_SOURCE_SUFFIXES = {".am", ".ac", ".in", ".m4", ".mk", ".md", ".rst", ".txt",
 NON_SOURCE_NAMES = {"Makefile", "GNUmakefile", "makefile", "configure", "LICENSE", "COPYING", "AUTHORS",
                     "NEWS", "README", "ChangeLog", "INSTALL", "THANKS", "TODO", "NOTICE", ".gitignore",
                     ".gitattributes", ".editorconfig"}
+# Suffix-less scripts: the shebang interpreter picks the grammar (02-language-census uses the same parser).
+SHEBANG_LANGUAGES = {"sh": "bash", "bash": "bash", "dash": "bash", "zsh": "bash", "ksh": "bash", "ash": "bash",
+                     "python": "python", "perl": "perl", "ruby": "ruby", "node": "javascript", "nodejs": "javascript",
+                     "php": "php"}
+SHEBANG_HEAD = 256
+NO_GRAMMAR_PATHS = 500   # no-grammar files listed by path; the rest are one overflow gap
+_SHEBANG = re.compile(rb"#![ \t]*(\S+)((?:[ \t]+\S+)*)")
+_ENV_ARGUMENT = re.compile(r"-[A-Za-z]+|[A-Za-z_][A-Za-z0-9_]*=.*")
+_VERSIONED = re.compile(r"([a-z]+?)(?:[0-9][0-9.]*)?(?:-[0-9.]+)?\Z")
+
+
+def shebang_interpreter(head: bytes) -> str | None:
+    """The interpreter a ``#!`` first line names (``env`` forms followed, version suffix dropped), or None."""
+    match = _SHEBANG.match(head.split(b"\n", 1)[0].rstrip(b"\r"))
+    if not match:
+        return None
+    words = [match.group(1).decode("utf-8", "replace")] + match.group(2).decode("utf-8", "replace").split()
+    program = words[0].rsplit("/", 1)[-1]
+    if program == "env":
+        rest = [word for word in words[1:] if not _ENV_ARGUMENT.fullmatch(word)]
+        if not rest:
+            return None
+        program = rest[0].rsplit("/", 1)[-1]
+    versioned = _VERSIONED.match(program)
+    return (versioned.group(1) if versioned else program)[:40] or None
+
+
+def shebang_language(head: bytes) -> str | None:
+    return SHEBANG_LANGUAGES.get(shebang_interpreter(head) or "")
+
+
+def language_for(path: Path) -> str | None:
+    """Grammar language of one file: its suffix, else (suffix-less, not a known build/doc name) its shebang."""
+    language = SUFFIXES.get(path.suffix.lower())
+    if language is None and not path.suffix and path.name not in NON_SOURCE_NAMES:
+        try:
+            with path.open("rb") as stream:
+                language = shebang_language(stream.read(SHEBANG_HEAD))
+        except OSError:
+            return None
+    return language if language in GRAMMARS else None
+
+
 # Node types per language: function definitions, call sites, imports.
 FUNCTIONS = {
     "bash": {"function_definition"},
@@ -289,18 +334,21 @@ class Scan:
 
     def records(self) -> Iterable[dict[str, Any]]:
         unsupported: Counter = Counter()
+        unlisted: list[str] = []
         seen = 0
         for relative, path, problem in iter_files(self.root, self.file_list):
             if problem:
                 self.gaps.append({"kind": problem, "path": relative, "detail": problem})
                 continue
-            language = SUFFIXES.get(path.suffix.lower())
+            language = language_for(path)
             if language is None and (path.name in NON_SOURCE_NAMES or
                                      path.suffix.lower() in NON_SOURCE_SUFFIXES):
                 self.totals["non_source"] += 1
                 continue
             if language is None:
                 unsupported[path.suffix.lower() or "(none)"] += 1
+                if len(unlisted) < NO_GRAMMAR_PATHS:
+                    unlisted.append(relative)
                 continue
             seen += 1
             if seen > self.limits["max_files"]:
@@ -339,6 +387,14 @@ class Scan:
             yield record
         for suffix, count in sorted(unsupported.items()):
             self.gaps.append({"kind": "no-grammar", "path": None, "detail": f"{count} file(s) with suffix {suffix}"})
+        # The same files by path (bounded): consumers apply exclusions and the language census to them.
+        for relative in unlisted:
+            suffix = PurePosixPath(relative).suffix.lower() or "(none)"
+            self.gaps.append({"kind": "no-grammar", "path": relative, "detail": f"no grammar for suffix {suffix}"})
+        overflow = sum(unsupported.values()) - len(unlisted)
+        if overflow:
+            self.gaps.append({"kind": "no-grammar", "path": None, "detail": f"{overflow} more file(s) without a grammar "
+                              f"are not listed by path (cap {NO_GRAMMAR_PATHS})"})
 
     def trailer(self) -> dict[str, Any]:
         """Every top-level member except files and content_sha256; valid once records() is exhausted."""

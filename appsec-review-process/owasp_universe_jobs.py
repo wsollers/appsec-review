@@ -46,11 +46,13 @@ ARTIFACTS = {
     "02-source-sast": "source-sast.json",
     "02-evidence-index": "index.sqlite",
     "01-component-characterization": "component-purpose-map.json",
+    "02-language-census": "language-census.json",
 }
 CANDIDATE_FLAGS = {"02-treesitter-ast": "--treesitter-ast", "02-source-sast": "--source-sast",
-                   "01-component-characterization": "--component-map"}
-# the four inputs owasp-candidate-search.schema.json binds (evidence index and tag cloud are in inputs.json)
-CANDIDATE_INPUTS = ("02-code-index", "02-code-property-graph", "02-treesitter-ast", "02-source-sast")
+                   "01-component-characterization": "--component-map", "02-language-census": "--language-census"}
+# the inputs owasp-candidate-search.schema.json binds (evidence index and tag cloud are in inputs.json)
+CANDIDATE_INPUTS = ("02-code-index", "02-code-property-graph", "02-treesitter-ast", "02-source-sast",
+                    "02-language-census")
 SOURCES = {CANDIDATES: [RULES]}
 
 

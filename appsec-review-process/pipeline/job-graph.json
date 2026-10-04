@@ -1425,6 +1425,12 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
+        },
+        {
+          "job": "02-language-census",
+          "kind": "required",
+          "contract": "language-census",
+          "allowed_skip_reasons": []
         }
       ],
       "planned_scope": "ADR-0034: deterministic per-ASVS-chapter (V1..V17) candidate search at function/symbol level over the accepted code index, CPG, tree-sitter, evidence-index full-text search, optional source-SAST rule ids and the optional component tag cloud, driven by data/owasp-asvs/category-rules-v1.json; zero candidates are published with their search basis and unindexed languages or an absent optional input are coverage gaps.",
@@ -1831,6 +1837,28 @@
         "lineage.json"
       ]
     },
+    "02-language-census": {
+      "lane": "02-evidence-pregather",
+      "contract": "language-census",
+      "template": "02-language-census",
+      "implemented": true,
+      "namespace": "02-language-census",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Deterministic file census of the staged snapshot: one class per file (program language, build system, documentation, data/config, binary/media, patch, generated, vendored, unknown text) by path, name, suffix, shebang and content sniff, and the program languages a catalog language server covers.",
+      "required_artifacts": [
+        "language-census.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
+      ]
+    },
     "02-code-index": {
       "lane": "02-evidence-pregather",
       "contract": "code-index",
@@ -1912,6 +1940,12 @@
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
+        },
+        {
+          "job": "02-language-census",
+          "kind": "required",
+          "contract": "language-census",
+          "allowed_skip_reasons": []
         }
       ],
       "planned_scope": "On-demand language servers for the languages the code index (or an accepted 02-language-census) holds (lsp_service broker: started on first query in their pinned buildenv image, network none, source read-only, one lock per server and build variant) precompute definitions, references and call hierarchy for every indexed function; every answer is recorded and hash-bound for replay and for the code_* language-server query tools.",

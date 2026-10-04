@@ -473,6 +473,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_tmpfs_bytes` | 512 MiB | resource | Size of the in-memory /tmp (IR link). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `ir_max_bytes` | 64 MiB | safety | Largest bitcode or disassembled IR file accepted. | Grows with target size; see docs/scale-audit-unreal-engine.md B: per-module IR only. |
 
+### `02-language-census`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_rows` | 200000 count | safety | Most per-file census rows listed; class and language counts still cover every file and the unlisted rows are a gap. | Grows with snapshot file count (00-intake bounds its inventory at 100000 files). |
+
 ### `02-license-scan`
 
 | Tunable | Value | Kind | What it does | Scale |

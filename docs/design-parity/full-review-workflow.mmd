@@ -56,6 +56,7 @@ flowchart TD
   j_02_codeql_rust["02-codeql-rust<br/>implemented_not_qualified"]
   j_02_code_property_graph["02-code-property-graph<br/>implemented_not_qualified"]
   j_02_treesitter_ast["02-treesitter-ast<br/>implemented_not_qualified"]
+  j_02_language_census["02-language-census<br/>implemented_not_qualified"]
   j_02_code_index["02-code-index<br/>implemented_not_qualified"]
   j_02_lsp_xref["02-lsp-xref<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>implemented_not_qualified"]
@@ -225,6 +226,7 @@ flowchart TD
   j_02_source_sast --> j_04_owasp_candidate_search
   j_02_evidence_index --> j_04_owasp_candidate_search
   j_01_component_characterization --> j_04_owasp_candidate_search
+  j_02_language_census --> j_04_owasp_candidate_search
   j_04_owasp_candidate_search --> j_04_owasp_participation
   j_02_code_index --> j_04_owasp_participation
   j_04_owasp_candidate_search --> j_04_owasp_universe
@@ -248,6 +250,7 @@ flowchart TD
   j_00_intake --> j_02_codeql_rust
   j_00_intake --> j_02_code_property_graph
   j_00_intake --> j_02_treesitter_ast
+  j_00_intake --> j_02_language_census
   j_02_code_property_graph --> j_02_code_index
   j_02_treesitter_ast --> j_02_code_index
   j_02_binary_triage --> j_02_code_index
@@ -255,6 +258,7 @@ flowchart TD
   j_02_debug_symbol_index --> j_02_code_index
   j_02_code_index --> j_02_lsp_xref
   j_02_native_build --> j_02_lsp_xref
+  j_02_language_census --> j_02_lsp_xref
   j_02_native_build --> j_02_native_sast
   j_02_native_build --> j_02_ir_capture
   j_02_ir_capture --> j_02_ir_link

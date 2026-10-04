@@ -26,13 +26,14 @@
     },
     "inputs": {
       "description": "The accepted upstream publications read, one per job; an optional upstream that was not accepted is listed with accepted false and named in gaps.",
-      "type": "array", "minItems": 3, "maxItems": 4,
+      "type": "array", "minItems": 3, "maxItems": 5,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["job_id", "required", "accepted", "attempt_id", "artifact_path", "artifact_sha256"],
         "properties": {
-          "job_id": {"enum": ["02-code-index", "02-code-property-graph", "02-treesitter-ast", "02-source-sast"]},
+          "job_id": {"enum": ["02-code-index", "02-code-property-graph", "02-treesitter-ast", "02-source-sast",
+                              "02-language-census"]},
           "required": {"type": "boolean"},
           "accepted": {"type": "boolean"},
           "attempt_id": {"oneOf": [{"type": "null"}, {"$ref": "common/formats.schema.json#/$defs/attempt_id"}]},
@@ -63,6 +64,21 @@
           }
         },
         "sast_available": {"type": "boolean"},
+        "file_classes": {
+          "description": "Present when the accepted 02-language-census was supplied: every non-program census class (build_system, documentation, data_config, binary_media, patch_diff, generated, vendored, unknown_text) with its file count and up to 20 sample paths. These classes never change coverage; unknown_text without a shebang is also an unclassified_text gap.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["class", "file_count", "paths"],
+            "properties": {
+              "class": {"enum": ["build_system", "documentation", "data_config", "binary_media", "patch_diff", "generated",
+                                 "vendored", "unknown_text"]},
+              "file_count": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"},
+              "paths": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/path"}}
+            }
+          }
+        },
         "facilities": {
           "description": "Every search facility and whether it was used. Widening facilities (fts, semantic, tag_cloud) only add candidates; an unavailable one is also a gap.",
           "type": "array",
@@ -71,7 +87,8 @@
             "additionalProperties": false,
             "required": ["facility", "status", "detail"],
             "properties": {
-              "facility": {"enum": ["code_index", "code_index_names", "source_sast", "evidence_index_fts", "semantic_index", "tag_cloud"]},
+              "facility": {"enum": ["code_index", "code_index_names", "source_sast", "evidence_index_fts", "semantic_index", "tag_cloud",
+                                  "language_census"]},
               "status": {"enum": ["used", "unavailable"]},
               "detail": {"type": "string", "maxLength": 500}
             }
@@ -177,7 +194,8 @@
           "gap_id": {"type": "string", "pattern": "^gap-[0-9a-f]{20}\\Z"},
           "kind": {"enum": ["language_not_searched", "index_incomplete", "sast_unavailable", "treesitter_unavailable",
                             "rule_without_index_support", "rows_truncated", "evidence_index_unavailable",
-                            "tag_cloud_unavailable", "semantic_index_absent"]},
+                            "tag_cloud_unavailable", "semantic_index_absent", "language_census_absent",
+                            "unclassified_text"]},
           "chapter_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"}},
           "statement": {"type": "string", "minLength": 1, "maxLength": 1000}
         }

@@ -56,7 +56,8 @@ class NonSource(unittest.TestCase):
             list(scan.records())
         self.assertEqual(scan.totals["non_source"], 3)
         self.assertEqual([gap for gap in scan.gaps if gap["kind"] == "no-grammar"],
-                         [{"kind": "no-grammar", "path": None, "detail": "1 file(s) with suffix .kt"}])
+                         [{"kind": "no-grammar", "path": None, "detail": "1 file(s) with suffix .kt"},
+                          {"kind": "no-grammar", "path": "app.kt", "detail": "no grammar for suffix .kt"}])
 
 
 class Walker(unittest.TestCase):

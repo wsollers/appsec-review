@@ -19,6 +19,7 @@ import treesitter_ast_job
 import code_index_job
 import lsp_xref_job
 import evidence_index_derived
+import language_census
 import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
@@ -831,6 +832,8 @@ treesitter_ast_lifecycle_work = structural_index_op('02-treesitter-ast', treesit
                                                     OFFLINE_DOCKER_POOL)
 code_index_lifecycle_work = structural_index_op('02-code-index', code_index_job, code_index_job.RESULT, CPU_POOL)
 lsp_xref_lifecycle_work = structural_index_op('02-lsp-xref', lsp_xref_job, lsp_xref_job.RESULT, OFFLINE_DOCKER_POOL)
+language_census_lifecycle_work = structural_index_op('02-language-census', language_census, language_census.RESULT,
+                                                     CPU_POOL)
 evidence_index_derived_lifecycle_work = structural_index_op('02-evidence-index-derived', evidence_index_derived,
                                                             evidence_index_derived.RESULT, CPU_POOL)
 reachability_codeql_lifecycle_work = reachability_engine_op('codeql', DOCKER_POOL)
@@ -1838,6 +1841,7 @@ LIFECYCLE_OPS['02-treesitter-ast']=treesitter_ast_lifecycle_work
 LIFECYCLE_OPS['02-code-index']=code_index_lifecycle_work
 LIFECYCLE_OPS['02-lsp-xref']=lsp_xref_lifecycle_work
 LIFECYCLE_OPS['02-evidence-index-derived']=evidence_index_derived_lifecycle_work
+LIFECYCLE_OPS['02-language-census']=language_census_lifecycle_work
 LIFECYCLE_OPS['02-api-collection-intelligence-ingest']=api_collection_intelligence_work
 LIFECYCLE_OPS['02-doc-intelligence-ingest']=doc_intelligence_work
 LIFECYCLE_OPS['02-test-intelligence-ingest']=test_intelligence_work

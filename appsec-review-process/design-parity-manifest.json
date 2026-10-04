@@ -400,6 +400,7 @@
           "02-codeql-rust",
           "02-code-property-graph",
           "02-treesitter-ast",
+          "02-language-census",
           "02-code-index",
           "02-lsp-xref",
           "02-native-sast",
@@ -3395,7 +3396,8 @@
           "02-treesitter-ast",
           "02-source-sast",
           "02-evidence-index",
-          "01-component-characterization"
+          "01-component-characterization",
+          "02-language-census"
         ]
       },
       "registry": {
@@ -4640,6 +4642,69 @@
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
+      "id": "02-language-census",
+      "design_refs": [
+        "docs/decisions/ADR-0034-inference-classifies-python-routes.md"
+      ],
+      "graph": {
+        "node": "02-language-census",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-language-census",
+        "persona": "evidence-custodian",
+        "role": "evidence-indexer",
+        "domain": "intake-state",
+        "tooling_profile": "local-evidence-retrieval",
+        "output_contract": "language-census"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/language_census.py:run",
+        "validator": "appsec-review-process/language_census.py:validate"
+      },
+      "output": {
+        "contract": "language-census",
+        "contract_file": "appsec-review-process/pipeline/output-contracts/language-census.json",
+        "schema_file": "schemas/language-census.schema.json",
+        "claim_class": "retrieval_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_language_census.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
       "id": "02-code-index",
       "design_refs": [
         "docs/architecture/design-v3.md"
@@ -4716,7 +4781,8 @@
         "implemented": true,
         "dependencies": [
           "02-code-index",
-          "02-native-build"
+          "02-native-build",
+          "02-language-census"
         ]
       },
       "registry": {

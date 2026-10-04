@@ -89,11 +89,11 @@ def _target(run_id: str) -> tuple[Path, str, str]:
 
 
 def applicable_languages(target: Path) -> list[str]:
-    """Languages with a grammar that have at least one file in the checkout (suffix only, no parse)."""
+    """Languages with a grammar that have at least one file in the checkout (suffix, else shebang; no parse)."""
     found = set()
     for relative, path, problem in treesitter_ast.iter_files(target):
         if problem is None and path is not None:
-            language = treesitter_ast.SUFFIXES.get(path.suffix.lower())
+            language = treesitter_ast.language_for(path)
             if language:
                 found.add(language)
     return sorted(found)
