@@ -406,6 +406,10 @@
           "rationale": "Process, raw SQL and deserializer crates."
         }
       ],
+      "semantic_queries": [
+        "building a shell command or SQL query from external input",
+        "parsing XML or deserializing untrusted data"
+      ],
       "propagation": null
     },
     {
@@ -601,6 +605,10 @@
           "rationale": "Reads arguments or stream input."
         }
       ],
+      "semantic_queries": [
+        "validating command line arguments or request parameters",
+        "parsing numbers from untrusted input"
+      ],
       "propagation": {
         "seed_rule_ids": [
           "V2-native-input-sources",
@@ -717,6 +725,10 @@
           ],
           "rationale": "Embedded HTTP server response header."
         }
+      ],
+      "semantic_queries": [
+        "setting HTTP security headers or cookies for a browser",
+        "writing HTML into the DOM"
       ],
       "propagation": null
     },
@@ -873,6 +885,10 @@
           "pattern": "\\b(?:actix_web|axum|rocket|warp|hyper|tide|poem|tonic)\\b",
           "rationale": "HTTP/gRPC server."
         }
+      ],
+      "semantic_queries": [
+        "registering HTTP routes and request handlers",
+        "starting an HTTP or GraphQL server"
       ],
       "propagation": null
     },
@@ -1124,6 +1140,10 @@
           "rationale": "File or archive API."
         }
       ],
+      "semantic_queries": [
+        "opening a file from a user supplied path",
+        "extracting an archive or handling an upload"
+      ],
       "propagation": null
     },
     {
@@ -1296,6 +1316,10 @@
           "rationale": "Password hash or MFA crate."
         }
       ],
+      "semantic_queries": [
+        "password verification and credential storage",
+        "login and multi-factor authentication"
+      ],
       "propagation": null
     },
     {
@@ -1430,6 +1454,10 @@
           "rationale": "PHP session lifecycle."
         }
       ],
+      "semantic_queries": [
+        "session token creation and invalidation",
+        "session timeout and cookie handling"
+      ],
       "propagation": null
     },
     {
@@ -1550,6 +1578,10 @@
           "pattern": "Microsoft\\.AspNetCore\\.Authorization",
           "rationale": "ASP.NET authorization."
         }
+      ],
+      "semantic_queries": [
+        "permission and role checks before an action",
+        "dropping or changing process privileges"
       ],
       "propagation": null
     },
@@ -1692,6 +1724,9 @@
           "pattern": "\\b(?:jsonwebtoken|josekit)\\b",
           "rationale": "JWT crate."
         }
+      ],
+      "semantic_queries": [
+        "signing and verifying JSON web tokens"
       ],
       "propagation": null
     },
@@ -1836,6 +1871,9 @@
           "pattern": "\\b(?:oauth2|openidconnect)\\b",
           "rationale": "OAuth/OIDC crate."
         }
+      ],
+      "semantic_queries": [
+        "OAuth authorization code flow and redirect URI handling"
       ],
       "propagation": null
     },
@@ -2065,6 +2103,10 @@
           "rationale": "Crypto or random crate."
         }
       ],
+      "semantic_queries": [
+        "encryption key generation and cipher usage",
+        "generating random numbers for security"
+      ],
       "propagation": null
     },
     {
@@ -2260,6 +2302,10 @@
           "pattern": "\\b(?:rustls|native_tls|reqwest|hyper|tonic)\\b|tokio::net|std::net",
           "rationale": "Network/TLS crate."
         }
+      ],
+      "semantic_queries": [
+        "TLS certificate verification and secure connections",
+        "opening network sockets"
       ],
       "propagation": null
     },
@@ -2462,6 +2508,10 @@
           "rationale": "Environment or config crate."
         }
       ],
+      "semantic_queries": [
+        "reading secrets or configuration from the environment",
+        "debug mode and configuration settings"
+      ],
       "propagation": null
     },
     {
@@ -2550,6 +2600,10 @@
           "pattern": "^(?:localStorage|sessionStorage|indexedDB)$",
           "rationale": "Browser storage."
         }
+      ],
+      "semantic_queries": [
+        "wiping sensitive data from memory",
+        "handling personal data and caching"
       ],
       "propagation": null
     },
@@ -2755,6 +2809,10 @@
           "rationale": "Concurrency, transmute, FFI or dynamic loading."
         }
       ],
+      "semantic_queries": [
+        "loading dynamic libraries or plugins",
+        "thread synchronization and race conditions"
+      ],
       "propagation": null
     },
     {
@@ -2939,6 +2997,10 @@
           "rationale": "Logging crate."
         }
       ],
+      "semantic_queries": [
+        "writing security logs and audit events",
+        "error handling and abnormal termination"
+      ],
       "propagation": null
     },
     {
@@ -3027,6 +3089,9 @@
           "pattern": "\\baiortc\\b|github\\.com/pion/(?:webrtc|turn|ice)|\\bwebrtc::|org\\.webrtc|Microsoft\\.MixedReality\\.WebRTC|SIPSorcery",
           "rationale": "WebRTC library."
         }
+      ],
+      "semantic_queries": [
+        "WebRTC peer connection and ICE servers"
       ],
       "propagation": null
     }
