@@ -282,7 +282,6 @@ class Adr34Case(unittest.TestCase):
 
 
 class Adr34OwaspParticipationTests(Adr34Case):
-    @unittest.expectedFailure
     def test_hello_autotools_like_target_plans_at_most_twelve_validator_calls(self):
         """(1) A small C CLI: candidates -> fake participation -> universe -> batch plan <= 12 calls."""
         tree, search, participation, universe, bundles = self.chain(HELLO)
@@ -325,7 +324,6 @@ class Adr34OwaspParticipationTests(Adr34Case):
         self.assertEqual((self.target(universe, "V3")["decision"], self.target(universe, "V3")["reason_code"]),
                          ("gap", "coverage_incomplete"))
 
-    @unittest.expectedFailure
     def test_budget_exceeded_blocks_before_any_model_call(self):
         """(2) Over budget: the universe is BLOCKED and no validator (or participation) call happens."""
         config = deepcopy(self.config)
@@ -357,7 +355,6 @@ class Adr34OwaspParticipationTests(Adr34Case):
             participation_mod.participate(search, config, invoke=spy, source_root=root)
         self.assertEqual(spy.calls, [])
 
-    @unittest.expectedFailure
     def test_file_in_two_chapters_is_in_both_bundles(self):
         """(3) src/hello.c opens a file (V5) and logs (V16): it is in both chapter bundles."""
         tree, _, _, universe, bundles = self.chain(HELLO)
@@ -372,7 +369,6 @@ class Adr34OwaspParticipationTests(Adr34Case):
             self.assertEqual(excerpt["text"], "\n".join(lines))
             self.assertEqual(excerpt["text_sha256"], hashlib.sha256(excerpt["text"].encode("utf-8")).hexdigest())
 
-    @unittest.expectedFailure
     def test_component_without_participating_code_yields_no_validator_rows(self):
         """(4) Only not_participating code in src/util: it reaches no target, bundle or validator row."""
         files = {
@@ -403,7 +399,6 @@ class Adr34OwaspParticipationTests(Adr34Case):
                          ("not_applicable", "all_candidates_not_participating", 0))
         self.assertEqual({row["file"] for row in universe["excluded"]}, {"src/util/util.c"})
 
-    @unittest.expectedFailure
     def test_validator_calls_scale_with_chapters_not_components(self):
         """(5) 40 components with code in three chapters plan sum(ceil(L1+L2 rows / 40)) calls; 4 components plan the same."""
         def target(count: int) -> dict[str, str]:
