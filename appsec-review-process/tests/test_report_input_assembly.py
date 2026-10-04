@@ -28,7 +28,7 @@ class ReportInputAssemblyTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.schema_patcher = patch.object(report, "validate_document", side_effect=self._validation)
         self.schema_patcher.start()
-        self.jobs = Path(self.temp.name) / "jobs"
+        self.jobs = Path(self.temp.name) / "data" / "jobs"
         evidence = self.jobs / "evidence-source" / "attempts" / "evidence-1"
         evidence.mkdir(parents=True)
         atomic_json(evidence / "evidence.json", {"observed": "bounded fixture"})
@@ -219,29 +219,32 @@ class ReportInputAssemblyTests(unittest.TestCase):
         attempt_id = COMPONENT_ATTEMPT if name == "component" else name + "-1"
         return self._publish_job(job, contract, attempt_id, documents)
 
-    def _publish_job(self, job, contract, attempt_id, documents):
+    def _publish_job(self, job, contract, attempt_id, documents, receipts=True, inputs=None):
         base = self.jobs / job
         attempt = base / "attempts" / attempt_id
         attempt.mkdir(parents=True)
         for relative, document in documents.items(): atomic_json(attempt / relative, document)
-        permission = {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": RUN_ID,
-            "job_id": job, "source_snapshot_sha256": SOURCE,
-            "permissions": report.CANONICAL_PERMISSIONS[job]}
-        lineage = {"schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": RUN_ID,
-            "job_id": job, "source_snapshot_sha256": SOURCE, "build_lineage_sha256": "sha256:" + "e" * 64}
-        atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
+        if receipts:
+            permission = {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": RUN_ID,
+                "job_id": job, "source_snapshot_sha256": SOURCE,
+                "permissions": report.CANONICAL_PERMISSIONS[job]}
+            lineage = {"schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": RUN_ID,
+                "job_id": job, "source_snapshot_sha256": SOURCE, "build_lineage_sha256": "sha256:" + "e" * 64}
+            atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
+        if inputs is not None: atomic_json(attempt / "inputs.json", inputs)
         atomic_json(attempt / "status.json", {"status": "OK"})
-        paths = [*documents, "permission.json", "lineage.json", "status.json"]
+        paths = [*documents, *(report.RECEIPTS if receipts else ()), "status.json"]
+        fingerprint = "sha256:" + "f" * 64 if inputs is None else report._sha(inputs)
         envelope = terminal_envelope(run_id=RUN_ID, job_id=job, attempt_id=attempt_id,
             worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
-            input_fingerprint="sha256:" + "f" * 64, output_contract=contract,
+            input_fingerprint=fingerprint, output_contract=contract,
             started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z",
             summary="fixture", artifacts=artifact_records(attempt, paths))
         atomic_json(attempt / "result.json", envelope)
         atomic_json(base / "latest.json", {"attempt_id": attempt_id, "updated_at": "2026-01-01T00:00:02Z"})
         pointer = {"schema": "appsec-review/accepted-worker-result/1.0", "status": "OK",
             "run_id": RUN_ID, "job": job, "attempt_id": attempt_id,
-            "fingerprint": "sha256:" + "f" * 64, "envelope_path": "result.json",
+            "fingerprint": fingerprint, "envelope_path": "result.json",
             "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
             "accepted_at": "2026-01-01T00:00:02Z"}
         atomic_json(base / "accepted.json", pointer)
@@ -395,6 +398,138 @@ class ReportInputAssemblyTests(unittest.TestCase):
         self.assertEqual(validate_job_output(attempt, envelope, "sha256:" + "7" * 64,
             expected_run_id=RUN_ID, expected_job_id=report.JOB,
             orchestration=NO_ORCHESTRATION_FACTS), [])
+
+    def _reseal(self, job, mutate):
+        """Re-bind a mutated attempt so only the property under test can reject it."""
+        base = self.jobs / job; pointer = json.loads((base / "accepted.json").read_text())
+        attempt = base / "attempts" / pointer["attempt_id"]
+        envelope = json.loads((attempt / "result.json").read_text())
+        paths = mutate(attempt, [item["path"] for item in envelope["artifacts"]])
+        envelope["artifacts"] = artifact_records(attempt, paths)
+        atomic_json(attempt / "result.json", envelope)
+        pointer.update(envelope_sha256=file_hash(attempt / "result.json"), hashes=tree_hashes(attempt))
+        atomic_json(base / "accepted.json", pointer)
+
+    def _paginate_owasp(self):
+        """Republish 04 exactly as owasp_join_publisher splits it: a manifest plus one page per row."""
+        import shutil
+        import owasp_join_publisher as publisher
+        matrix = copy.deepcopy(self.documents["owasp"]["owasp-control-status-matrix.json"])
+        matrix["rows"].append({"row_index": 1, "applicability_status": "applicable", "joined_status": "satisfied"})
+        matrix["denominators"] = {"selected": 2, "applicable": 2, "assessed": 2, "satisfied": 2}
+        limit = max(len(publisher._json_bytes(publisher._page(matrix, 0, 0, [row]))) for row in matrix["rows"])
+        with patch.object(publisher, "PAGE_BYTE_LIMIT", limit), \
+                patch.object(publisher, "validate_document", return_value=[]):
+            outputs = publisher._partition_matrix(matrix)
+        self.assertEqual(len(outputs[publisher.MATRIX_MANIFEST]["pages"]), 2)
+        shutil.rmtree(self.jobs / "04-owasp-join-report")
+        documents = {**outputs, **{item[0]: self.documents["owasp"][item[0]] for item in report.SPECS["owasp"][4]}}
+        self.pointers["owasp"] = self._publish_job("04-owasp-join-report", "owasp-join-report", "owasp-1", documents)
+        return matrix
+
+    def test_paginated_owasp_matrix_reassembles_exactly(self):
+        matrix = self._paginate_owasp()
+        loaded = self.load()
+        self.assertEqual(loaded["owasp"]["documents"]["owasp-control-status-matrix.json"], matrix)
+        self.assertEqual(loaded["owasp"]["reference"]["artifact_path"], report.MATRIX_MANIFEST)
+        result = report.assemble(RUN_ID, loaded, self.jobs)
+        self.assertEqual(result["counts"]["owasp_rows"], 2)
+        self.assertEqual(result["owasp_denominators"], matrix["denominators"])
+        self.assertEqual(validate_schema(result, "synthesis-input.schema.json"), [])
+        import synthesis_report
+        value, _binding = synthesis_report.load_reference(Path(self.temp.name), RUN_ID, result["inputs"]["owasp"])
+        self.assertEqual(value, matrix)
+
+    def test_paginated_owasp_tampered_missing_or_unlisted_page_rejects(self):
+        page = report.PAGE_DIRECTORY + "/page-0001.json"
+        def tamper(attempt, paths):
+            value = json.loads((attempt / page).read_text()); value["rows"][0]["joined_status"] = "not_satisfied"
+            atomic_json(attempt / page, value); return paths
+        def remove(attempt, paths):
+            (attempt / page).unlink(); return [path for path in paths if path != page]
+        def unlisted(attempt, paths):
+            extra = report.PAGE_DIRECTORY + "/page-0002.json"
+            atomic_json(attempt / extra, json.loads((attempt / page).read_text())); return [*paths, extra]
+        for mutate in (tamper, remove, unlisted):
+            with self.subTest(mutate.__name__):
+                self._paginate_owasp(); self._reseal("04-owasp-join-report", mutate)
+                with self.assertRaises(Blocked):
+                    report.load_accepted(self.pointers["owasp"], run_id=RUN_ID, name="owasp")
+
+    def test_legacy_single_file_owasp_matrix_still_loads(self):
+        loaded = report.load_accepted(self.pointers["owasp"], run_id=RUN_ID, name="owasp")
+        self.assertEqual(loaded["reference"]["artifact_path"], "owasp-control-status-matrix.json")
+        self.assertEqual(loaded["documents"]["owasp-control-status-matrix.json"],
+                         self.documents["owasp"]["owasp-control-status-matrix.json"])
+
+    def _receiptless_component(self, source=SOURCE, inputs_source=None):
+        import shutil
+        component = copy.deepcopy(self.documents["component"]["component-purpose-map.json"])
+        component["source_snapshot_sha256"] = source
+        lineage = component["evidence_manifest_lineage"]
+        inputs = {"job": "01-component-characterization", "run_id": RUN_ID,
+                  "source_snapshot_sha256": inputs_source or source,
+                  "evidence": {"attempt_id": lineage["producer_attempt_id"],
+                               "pointer_sha256": lineage["accepted_pointer_sha256"].removeprefix("sha256:")}}
+        shutil.rmtree(self.jobs / "01-component-characterization")
+        self.pointers["component"] = self._publish_job("01-component-characterization", "component-map",
+            COMPONENT_ATTEMPT, {"component-purpose-map.json": component}, receipts=False, inputs=inputs)
+
+    def test_receiptless_component_binds_generation_from_map_and_inputs(self):
+        self._receiptless_component()
+        loaded = self.load()
+        self.assertEqual(loaded["component"]["source_generation"], SOURCE)
+        reference = loaded["component"]["reference"]
+        self.assertIsNone(reference["permission_receipt_sha256"]); self.assertIsNone(reference["lineage_receipt_sha256"])
+        result = report.assemble(RUN_ID, loaded, self.jobs)
+        self.assertEqual(result["source_generation"], SOURCE)
+        self.assertEqual(validate_schema(result, "synthesis-input.schema.json"), [])
+        import synthesis_report
+        with self.assertRaises(Blocked):  # a null receipt never stands for a producer that has receipts
+            bad = copy.deepcopy(result["inputs"]["threat"]); bad["permission_receipt_sha256"] = None
+            synthesis_report.load_reference(Path(self.temp.name), RUN_ID, bad, receiptless=True)
+        value, binding = synthesis_report.load_reference(Path(self.temp.name), RUN_ID,
+                                                         result["inputs"]["component"], receiptless=True)
+        self.assertEqual(value["source_snapshot_sha256"], SOURCE)
+        self.assertIsNone(binding["permission_receipt_sha256"])
+        self.assertEqual(validate_schema(binding, "synthesis-upstream-binding.schema.json"), [])
+        atomic_json(Path(self.temp.name) / report.RESULT, result)
+        with patch.object(synthesis_report, "validate_document", side_effect=self._validation):
+            inputs = synthesis_report.load_inputs(Path(self.temp.name), Path(self.temp.name) / report.RESULT)
+        self.assertEqual(inputs["limitations"], [report.RECEIPT_GAP])  # the absent receipts are a named gap
+
+    def test_receiptless_component_mismatched_generation_blocks(self):
+        other = "sha256:" + "9" * 64
+        self._receiptless_component(inputs_source=other)  # map and its own attempt inputs disagree
+        with self.assertRaises(Blocked):
+            report.load_accepted(self.pointers["component"], run_id=RUN_ID, name="component")
+        self._receiptless_component(source=other)  # self-consistent, but a different generation than the rest
+        loaded = self.load()
+        self.assertEqual(loaded["component"]["source_generation"], other)
+        with self.assertRaises(Blocked): report.assemble(RUN_ID, loaded, self.jobs)
+        threat = self.jobs / "03-threat-model-dfd-stride"
+        self._reseal("03-threat-model-dfd-stride", lambda attempt, paths: [p for p in paths if p != "permission.json"])
+        with self.assertRaises(Blocked):  # receiptless is per spec: other producers still need receipts
+            report.load_accepted(threat / "accepted.json", run_id=RUN_ID, name="threat")
+
+    def test_specs_match_producer_output_contracts(self):
+        """Static guard: every name a spec requires is one its producer's contract promises."""
+        import owasp_join_publisher as publisher
+        import registry_paths
+        self.assertEqual((report.MATRIX_MANIFEST, report.PAGE_DIRECTORY, *report.PAGINATED["owasp"][1:]),
+            (publisher.MATRIX_MANIFEST, publisher.PAGE_DIRECTORY, publisher.SCHEMAS[publisher.MATRIX_MANIFEST],
+             publisher.SCHEMAS["matrix_page"]))
+        self.assertLessEqual(report.RECEIPTLESS | set(report.PAGINATED), set(report.SPECS))
+        for name, (job, contract, primary, _schema, supporting) in report.SPECS.items():
+            with self.subTest(name):
+                required = set(json.loads(registry_paths.contract(contract).read_text())["required_files"])
+                published = report.PAGINATED[name][0] if name in report.PAGINATED else primary
+                self.assertIn(published, required)
+                self.assertLessEqual({item[0] for item in supporting}, required)
+                receipts = set(report.RECEIPTS) <= required
+                self.assertEqual(receipts, name not in report.RECEIPTLESS,
+                                 f"{contract} receipts disagree with RECEIPTLESS")
+                self.assertIn(job, report.CANONICAL_PERMISSIONS)
 
     def test_synthesis_schema_is_recursively_closed(self):
         stack = [json.loads((ROOT.parent / "schemas/synthesis-input.schema.json").read_text())]

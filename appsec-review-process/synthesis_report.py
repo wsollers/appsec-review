@@ -18,6 +18,7 @@ from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 import registry_paths
+import report_input_assembly as assembly
 
 JOB = "10-synthesis-report"
 CONTRACT = "synthesis-report-draft"
@@ -98,8 +99,10 @@ def _attempt_relative(ref: dict[str, Any]) -> str:
     return path.as_posix()
 
 
-def load_reference(run_root: Path, run_id: str, ref: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Load one artifact from its exact newest accepted common publication."""
+def load_reference(run_root: Path, run_id: str, ref: dict[str, Any],
+                   receiptless: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load one artifact from its exact newest accepted common publication; 04's matrix manifest is
+    reassembled into the logical matrix, and a receiptless producer's null receipt bindings stand."""
     base = Path(run_root) / "data" / "jobs" / ref["job_id"]
     pointer_path = _owned(base, "accepted.json"); latest_path = _owned(base, "latest.json")
     pointer, latest = read_json(pointer_path), read_json(latest_path)
@@ -133,12 +136,17 @@ def load_reference(run_root: Path, run_id: str, ref: dict[str, Any]) -> tuple[di
             "sha256:" + file_hash(artifact_path) != ref["artifact_sha256"]:
         raise Blocked(f"{JOB}: accepted artifact hash or envelope binding is invalid")
     for receipt, field in (("permission.json", "permission_receipt_sha256"), ("lineage.json", "lineage_receipt_sha256")):
+        if receiptless and ref[field] is None:
+            if receipt in artifacts: raise Blocked(f"{JOB}: accepted {receipt} is published but unbound")
+            continue
         path = _owned(attempt, receipt)
         if receipt not in artifacts or artifacts[receipt].get("sha256") != file_hash(path) or \
                 "sha256:" + file_hash(path) != ref[field]:
             raise Blocked(f"{JOB}: accepted {receipt} binding is invalid")
     binding = {key: value for key, value in deepcopy(ref).items() if key != "supporting_artifacts"}
-    return read_json(artifact_path), {**binding, "envelope_sha256": "sha256:" + file_hash(envelope_path)}
+    value = (assembly.reassemble_matrix(attempt, artifacts, run_id) if relative == assembly.MATRIX_MANIFEST
+             else read_json(artifact_path))
+    return value, {**binding, "envelope_sha256": "sha256:" + file_hash(envelope_path)}
 
 
 def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
@@ -151,13 +159,17 @@ def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
             integrity["manifest_sha256"] != _sha({**manifest, "integrity": {
                 **integrity, "manifest_sha256": ""}})):
         raise Blocked(f"{JOB}: input manifest integrity binding is invalid")
-    loaded, bindings = {}, {}
+    loaded, bindings, limitations = {}, {}, []
     for name in INPUT_NAMES:
         ref=manifest["inputs"][name]; expected_job,expected_contract,expected_artifact=EXPECTED[name]
+        artifacts={expected_artifact,*assembly.PAGINATED.get(name,())[:1]}
         if (ref["job_id"]!=expected_job or ref["contract_id"]!=expected_contract or
-                PurePosixPath(ref["artifact_path"]).name!=expected_artifact):
+                PurePosixPath(ref["artifact_path"]).name not in artifacts):
             raise Blocked(f"{JOB}: {name} reference does not name its exact required producer contract")
-        value, binding = load_reference(run_root, manifest["run_id"], ref)
+        # Only RECEIPTLESS references may carry null receipts (synthesis-input schema); each is a named gap.
+        receiptless = name in assembly.RECEIPTLESS
+        if None in (ref["permission_receipt_sha256"], ref["lineage_receipt_sha256"]): limitations.append(assembly.RECEIPT_GAP)
+        value, binding = load_reference(run_root, manifest["run_id"], ref, receiptless=receiptless)
         schema = SCHEMAS[name]
         if (ROOT.parent / "schemas" / schema).is_file():
             errors = validate_document(value, schema)
@@ -194,7 +206,7 @@ def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
         evidence.append(normalized)
     return {**manifest, "input_manifest_sha256":"sha256:"+file_hash(manifest_path),
             "documents": loaded, "bindings": bindings, "evidence_bindings": evidence,
-            "limitations": []}
+            "limitations": limitations}
 
 
 def _latest_ledger(ledger: dict[str, Any]) -> dict[str, dict[str, Any]]:

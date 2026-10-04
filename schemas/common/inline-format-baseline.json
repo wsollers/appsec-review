@@ -835,7 +835,7 @@
       "sha256_ref_or_hex": 1
     },
     "synthesis-input.schema.json": {
-      "sha256_ref": 36
+      "sha256_ref": 34
     },
     "synthesis-l08-adapter.schema.json": {
       "sha256_ref": 1
@@ -852,7 +852,7 @@
       "sha256_ref": 3
     },
     "synthesis-upstream-binding.schema.json": {
-      "sha256_ref": 5
+      "sha256_ref": 3
     },
     "synthetic-hypothesis-resynthesis.schema.json": {
       "sha256_ref": 1
