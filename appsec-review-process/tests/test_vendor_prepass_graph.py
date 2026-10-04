@@ -290,9 +290,12 @@ class VendorPrepassGraphTests(unittest.TestCase):
                          {("15-deployment-hardening", "02-iac-config-scan"),
                           ("02-sbom-inventory", "02-iac-config-scan"),
                           (ASSEMBLY, "02-binary-component-cve-match")} |
-                         {(ASSEMBLY, job) for job in ("02-api-collection-intelligence-ingest",
+                         {(consumer, job) for job in ("02-api-collection-intelligence-ingest",
                                                       "02-operations-doc-ingest", "02-test-intelligence-ingest",
-                                                      "02-doc-intelligence-ingest")})
+                                                      "02-doc-intelligence-ingest")
+                          # 02-evidence-index-derived binds every derived-record producer over an optional edge
+                          # that accepts the producer's own skips (a skipped producer is a recorded gap there).
+                          for consumer in (ASSEMBLY, "02-evidence-index-derived")})
         self.assertEqual(s.jobs[ASSEMBLY]["join_policy"]["mode"], s.fixture["consumer_join"]["join_policy_mode"])
         self.assertEqual(s.fixture["consumer_join"]["job"], ASSEMBLY)
 

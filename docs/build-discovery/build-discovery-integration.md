@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 84 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 85 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/pipeline/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -163,7 +163,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 84-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 85-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -219,6 +219,7 @@ graph job.
 | `02-test-coverage-ingest` | Worker blocked | Missing |
 | `02-operations-doc-ingest` | Worker blocked | Missing |
 | `02-evidence-index` | Qualified worker (`evidence_index.py`); see [evidence retrieval](../evidence/evidence-retrieval.md) | Present |
+| `02-evidence-index-derived` | Deterministic worker (`evidence_index_derived.py`): producer records and native build inputs after the producers, read by `evidence_derived` | Present |
 | `02-secrets-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-iac-config-scan` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-container-image-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |

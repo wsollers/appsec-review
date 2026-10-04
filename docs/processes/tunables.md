@@ -380,6 +380,17 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
 
+### `02-evidence-index-derived`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `build_records_max` | 200000 count | safety | Most build-dependencies records indexed across units; the rest are counted in a gap. | Grows with headers and libraries a build consumes (02-native-build caps 8192 files per unit). |
+| `text_chunk_lines` | 60 lines | window | Lines per text FTS chunk (as 02-evidence-index). |  |
+| `text_max_file_bytes` | 2 MiB | safety | Largest text document chunked; larger ones are listed with a gap. |  |
+| `text_max_files` | 4096 count | safety | Most text documents (generated headers, converted documents) chunked; the rest are listed with status over-file-count and a gap. | Grows with generated headers per unit (02-native-build caps 256 per unit) and converted documents. |
+| `text_max_line_chars` | 16384 chars | safety | Longest line in a chunked text document; a longer line excludes the document with a gap. |  |
+| `text_max_total_bytes` | 128 MiB | safety | Total text bytes chunked; documents beyond it are listed with a gap. | Grows with the converted document set. |
+
 ### `02-evidence-index`
 
 | Tunable | Value | Kind | What it does | Scale |
@@ -548,6 +559,21 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_timeout_seconds` | 900 s (15 min) | resource | Wall-clock limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+
+### `02-semantic-recall-index`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `batch_size` | 8 count | resource | Chunks per embedding batch; ONNX pads a batch to its longest chunk, so keep it small. | Legacy runs OOMed at 64 with 27K-char chunks; chunks are now capped at 4000 chars. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_pids` | 512 count | resource | Process/thread limit (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_timeout_seconds` | 7200 s (120 min) | resource | Wall-clock limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `image_id` | audit-static id | resource | Pinned image whose system python3 carries lancedb and fastembed and runs semantic_index_build.py (mounted, not copied). |  |
+| `max_file_bytes` | 4 MiB | safety | Largest source file read for chunks; larger files are file-too-large gaps. |  |
 
 ### `02-source-sast`
 

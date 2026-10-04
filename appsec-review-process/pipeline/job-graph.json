@@ -311,6 +311,12 @@
           "allowed_skip_reasons": []
         },
         {
+          "job": "02-evidence-index-derived",
+          "kind": "required",
+          "contract": "evidence-index-derived",
+          "allowed_skip_reasons": []
+        },
+        {
           "job": "02-ossf-scorecard",
           "kind": "required",
           "contract": "ossf-scorecard-results",
@@ -2031,6 +2037,257 @@
       ],
       "preparation_dependencies": [
         "build_discovery"
+      ]
+    },
+    "02-evidence-index-derived": {
+      "lane": "02-evidence-pregather",
+      "contract": "evidence-index-derived",
+      "template": "02-evidence-index-derived",
+      "implemented": true,
+      "namespace": "02-evidence-index-derived",
+      "dependencies": [
+        {
+          "job": "02-evidence-index",
+          "kind": "required",
+          "contract": "evidence-index",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-api-collection-intelligence-ingest",
+          "kind": "optional",
+          "contract": "api-collection-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
+          "job": "02-binary-cfg",
+          "kind": "optional",
+          "contract": "binary-cfg",
+          "allowed_skip_reasons": [
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-binary-intelligence-ingest",
+          "kind": "optional",
+          "contract": "binary-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-binary-triage",
+          "kind": "optional",
+          "contract": "binary-triage",
+          "allowed_skip_reasons": [
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-code-property-graph",
+          "kind": "required",
+          "contract": "code-property-graph",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-codeql-cpp",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-csharp",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-go",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-java",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-javascript",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-python",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-ruby",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-codeql-rust",
+          "kind": "optional",
+          "contract": "codeql-language",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-debug-symbol-index",
+          "kind": "optional",
+          "contract": "debug-symbol-index",
+          "allowed_skip_reasons": [
+            "no-debug-symbols",
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-doc-intelligence-ingest",
+          "kind": "optional",
+          "contract": "doc-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "optional",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-native-sast",
+          "kind": "optional",
+          "contract": "native-sast",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-operations-doc-ingest",
+          "kind": "optional",
+          "contract": "operations-doc-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs",
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-repository-partition-discovery",
+          "kind": "required",
+          "contract": "repository-partition-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-source-sast",
+          "kind": "required",
+          "contract": "source-sast",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-test-coverage-ingest",
+          "kind": "optional",
+          "contract": "test-coverage-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-test-execution",
+          "kind": "optional",
+          "contract": "test-execution",
+          "allowed_skip_reasons": [
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-test-intelligence-ingest",
+          "kind": "optional",
+          "contract": "test-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
+          "job": "02-test-result-ingest",
+          "kind": "optional",
+          "contract": "test-result-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-treesitter-ast",
+          "kind": "optional",
+          "contract": "treesitter-ast",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-native-build",
+          "kind": "optional",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-no-native-binaries",
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "After the derived-record producers: Python selects every accepted enrichment-profile producer of this run (exclusions with reasons are gaps), indexes their records and the 02-native-build build inputs (build-dependencies records, generated headers) into a derived SQLite FTS index that the evidence_derived tool reads.",
+      "required_artifacts": [
+        "evidence-index-derived.json",
+        "evidence-index-enrichment.json",
+        "evidence-index-derived.sqlite",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-secrets-inventory": {

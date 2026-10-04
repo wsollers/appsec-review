@@ -1,0 +1,105 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-evidence-index-derived",
+  "display_name": "Derived evidence index (producer records and build inputs)",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-indexer",
+    "domain_id": "intake-state",
+    "tooling_profile_id": "local-evidence-retrieval",
+    "output_contract_id": "evidence-index-derived"
+  },
+  "inputs": {
+    "required": [
+      "accepted 02-evidence-index (source generation)"
+    ],
+    "optional": [
+      "accepted publications of every evidence_index_enrichment.PROFILES producer present in the run",
+      "accepted 02-native-build build-dependencies.json and generated headers",
+      "derived-text-manifest.json listed by an included producer"
+    ]
+  },
+  "outputs": {
+    "directory": "data/jobs/02-evidence-index-derived/attempts/<attempt_id>",
+    "files": [
+      "evidence-index-derived.json",
+      "evidence-index-enrichment.json",
+      "evidence-index-derived.sqlite",
+      "evidence-index-derived-summary.md",
+      "status.json",
+      "permission.json",
+      "lineage.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 3600,
+  "execution": {
+    "worker": "evidence_index_derived.py",
+    "arguments": [
+      "{run_id}"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "every run with an accepted 02-evidence-index, after the derived-record producers are terminal",
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "text_max_files": {
+      "value": 4096,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most text documents (generated headers, converted documents) chunked; the rest are listed with status over-file-count and a gap.",
+      "scale": "Grows with generated headers per unit (02-native-build caps 256 per unit) and converted documents."
+    },
+    "text_max_file_bytes": {
+      "value": 2097152,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest text document chunked; larger ones are listed with a gap.",
+      "scale": ""
+    },
+    "text_max_total_bytes": {
+      "value": 134217728,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Total text bytes chunked; documents beyond it are listed with a gap.",
+      "scale": "Grows with the converted document set."
+    },
+    "text_chunk_lines": {
+      "value": 60,
+      "unit": "lines",
+      "kind": "window",
+      "description": "Lines per text FTS chunk (as 02-evidence-index).",
+      "scale": ""
+    },
+    "text_max_line_chars": {
+      "value": 16384,
+      "unit": "chars",
+      "kind": "safety",
+      "description": "Longest line in a chunked text document; a longer line excludes the document with a gap.",
+      "scale": ""
+    },
+    "build_records_max": {
+      "value": 200000,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most build-dependencies records indexed across units; the rest are counted in a gap.",
+      "scale": "Grows with headers and libraries a build consumes (02-native-build caps 8192 files per unit)."
+    }
+  }
+}

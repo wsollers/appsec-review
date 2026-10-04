@@ -66,6 +66,7 @@ flowchart TD
   j_02_test_coverage_ingest["02-test-coverage-ingest<br/>implemented_not_qualified"]
   j_02_operations_doc_ingest["02-operations-doc-ingest<br/>implemented_not_qualified"]
   j_02_evidence_index["02-evidence-index<br/>implemented_not_qualified"]
+  j_02_evidence_index_derived["02-evidence-index-derived<br/>implemented_not_qualified"]
   j_02_secrets_inventory["02-secrets-inventory<br/>implemented_not_qualified"]
   j_02_iac_config_scan["02-iac-config-scan<br/>implemented_not_qualified"]
   j_02_container_image_inventory["02-container-image-inventory<br/>implemented_not_qualified"]
@@ -112,6 +113,7 @@ flowchart TD
   j_02_test_coverage_ingest --> j_02_evidence_assembly
   j_02_operations_doc_ingest --> j_02_evidence_assembly
   j_02_evidence_index --> j_02_evidence_assembly
+  j_02_evidence_index_derived --> j_02_evidence_assembly
   j_02_ossf_scorecard --> j_02_evidence_assembly
   j_02_secrets_inventory --> j_02_evidence_assembly
   j_02_iac_config_scan --> j_02_evidence_assembly
@@ -244,6 +246,33 @@ flowchart TD
   j_02_test_execution --> j_02_test_coverage_ingest
   j_00_intake --> j_02_operations_doc_ingest
   j_00_intake --> j_02_evidence_index
+  j_02_evidence_index --> j_02_evidence_index_derived
+  j_02_api_collection_intelligence_ingest --> j_02_evidence_index_derived
+  j_02_binary_cfg --> j_02_evidence_index_derived
+  j_02_binary_intelligence_ingest --> j_02_evidence_index_derived
+  j_02_binary_triage --> j_02_evidence_index_derived
+  j_02_code_property_graph --> j_02_evidence_index_derived
+  j_02_codeql_cpp --> j_02_evidence_index_derived
+  j_02_codeql_csharp --> j_02_evidence_index_derived
+  j_02_codeql_go --> j_02_evidence_index_derived
+  j_02_codeql_java --> j_02_evidence_index_derived
+  j_02_codeql_javascript --> j_02_evidence_index_derived
+  j_02_codeql_python --> j_02_evidence_index_derived
+  j_02_codeql_ruby --> j_02_evidence_index_derived
+  j_02_codeql_rust --> j_02_evidence_index_derived
+  j_02_debug_symbol_index --> j_02_evidence_index_derived
+  j_02_doc_intelligence_ingest --> j_02_evidence_index_derived
+  j_02_ir_facts --> j_02_evidence_index_derived
+  j_02_native_sast --> j_02_evidence_index_derived
+  j_02_operations_doc_ingest --> j_02_evidence_index_derived
+  j_02_repository_partition_discovery --> j_02_evidence_index_derived
+  j_02_source_sast --> j_02_evidence_index_derived
+  j_02_test_coverage_ingest --> j_02_evidence_index_derived
+  j_02_test_execution --> j_02_evidence_index_derived
+  j_02_test_intelligence_ingest --> j_02_evidence_index_derived
+  j_02_test_result_ingest --> j_02_evidence_index_derived
+  j_02_treesitter_ast --> j_02_evidence_index_derived
+  j_02_native_build --> j_02_evidence_index_derived
   j_00_intake --> j_02_secrets_inventory
   j_00_intake --> j_02_iac_config_scan
   j_00_intake --> j_02_container_image_inventory

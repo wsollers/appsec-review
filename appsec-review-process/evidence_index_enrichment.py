@@ -235,17 +235,22 @@ def selected_inputs(run_id: str) -> dict[str, Any]:
             "producers": [load_producer(run_id, job) for job in sorted(jobs)]}
 
 
+def redacted(text: str, limit: int | None = None) -> tuple[str, str]:
+    """Bounded, redacted text: (text, unchanged | redacted | withheld)."""
+    limit = limit or LIMITS["max_search_text"]
+    outcome = redaction._process(text[:limit].encode("utf-8"), "record.txt", redaction.DEFAULT_LIMITS)
+    if outcome.data is None:
+        return "", "withheld"
+    rendered = outcome.data.decode("utf-8", errors="replace")[:limit]
+    return rendered, "redacted" if outcome.disposition != "unchanged" else "unchanged"
+
+
 def _text(record: dict[str, Any]) -> tuple[str, str]:
     parts = []
     for key, value in sorted(record.items()):
         if key in _TEXT_KEYS and isinstance(value, (str, int, float, bool)):
             parts.append(str(value))
-    text = " | ".join(parts)[:LIMITS["max_search_text"]]
-    outcome = redaction._process(text.encode("utf-8"), "record.txt", redaction.DEFAULT_LIMITS)
-    if outcome.data is None:
-        return "", "withheld"
-    rendered = outcome.data.decode("utf-8", errors="replace")[:LIMITS["max_search_text"]]
-    return rendered, "redacted" if outcome.disposition != "unchanged" else "unchanged"
+    return redacted(" | ".join(parts))
 
 
 def _logical_id(record: dict[str, Any]) -> str:
@@ -263,76 +268,94 @@ def _jsonl(path: Path):
                 yield json.loads(line)
 
 
+def derived_record(producer: dict[str, Any], array_name: str, index: int, record: dict[str, Any], *,
+                   text: tuple[str, str] | None = None, type_label: str | None = None) -> dict[str, Any]:
+    """One locator row for ``record`` at ``/<array_name>/<index>`` of ``producer["artifact_path"]``;
+    ``producer`` names job_id, attempt_id, contract, artifact path/sha256, authority and generation."""
+    record_path = f"/{array_name}/{index}"
+    record_id = "derived_" + digest((producer["job_id"], producer["attempt_id"],
+                                      producer["artifact_path"], record_path, digest(record)))[:24]
+    search_text, disposition = text if text is not None else _text(record)
+    partition_ids = sorted({value for key, value in record.items()
+                            if key == "partition_id" and isinstance(value, str)} |
+                           {value for value in record.get("partition_ids", []) if isinstance(value, str)})
+    component_ids = sorted({value for key, value in record.items()
+                            if key in {"component_id", "from_component_id", "to_component_id"}
+                            and isinstance(value, str)} |
+                           {value for value in record.get("component_ids", []) if isinstance(value, str)})
+    return {"record_id": record_id, "producer_job_id": producer["job_id"],
+            "producer_attempt_id": producer["attempt_id"], "producer_contract": producer["contract"],
+            "artifact_path": producer["artifact_path"], "artifact_sha256": producer["artifact_sha256"],
+            "record_path": record_path, "record_sha256": _hash(record),
+            "type_label": type_label or f"{producer['contract']}:{array_name}", "authority": producer["authority"],
+            "redaction": disposition, "source_snapshot_sha256": producer["source_snapshot_sha256"],
+            "build_lineage_sha256": producer["build_lineage_sha256"],
+            "partition_ids": partition_ids, "component_ids": component_ids, "search_text": search_text}
+
+
+def build_records(run_id: str, producers: list[dict[str, Any]], job: str = "02-evidence-index"
+                  ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Rows, partition links and component links of admitted producers (``load_producer`` results),
+    each re-loaded first; the generation rule is the caller's."""
+    size_log.observe(run_id, job, "producers", len(producers), LIMITS["max_producers"])
+    records, partitions, components, seen = [], [], [], set()
+    for producer in producers:
+        if load_producer(run_id, producer["job_id"]) != producer:
+            raise Blocked(f"{job}: selected producer changed during enrichment")
+        attempt = _producer_root(run_id, producer["job_id"]) / "attempts" / producer["attempt_id"]
+        payload = read_json(attempt / producer["artifact_path"])
+        for array_name in producer["arrays"]:
+            values = payload.get(array_name)
+            records_file = payload.get("records_file") if isinstance(payload, dict) else None
+            if values is None and array_name == "records" and isinstance(records_file, dict):
+                values = _jsonl(attempt / records_file["path"])
+            for index, record in enumerate(values or []):
+                if not isinstance(record, dict):
+                    raise Blocked(f"{job}: selected derived record is not an object")
+                logical = (producer["job_id"], array_name, _logical_id(record))
+                if logical in seen:
+                    raise Blocked(f"{job}: selected producer repeats a derived record identity")
+                seen.add(logical)
+                item = derived_record(producer, array_name, index, record)
+                records.append(item)
+                partitions.extend({"partition_id": value, "record_id": item["record_id"]} for value in item["partition_ids"])
+                components.extend({"component_id": value, "record_id": item["record_id"]} for value in item["component_ids"])
+    return records, partitions, components
+
+
+def document(run_id: str, records: list[dict[str, Any]], partitions: list[dict[str, Any]],
+             components: list[dict[str, Any]], *, producer_count: int, source_snapshot_sha256: str,
+             build_lineage_sha256: str | None, gaps: list[str], job: str = "02-evidence-index") -> dict[str, Any]:
+    """The closed enrichment document over sorted rows; a schema-invalid result is refused."""
+    size_log.observe(run_id, job, "derived_records", len(records), LIMITS["max_records"])
+    size_log.observe(run_id, job, "partition_component_links", len(partitions) + len(components), LIMITS["max_links"])
+    records = sorted(records, key=lambda item: (item["producer_job_id"], item["type_label"], item["record_path"], item["record_id"]))
+    partitions = sorted(partitions, key=lambda item: (item["partition_id"], item["record_id"]))
+    components = sorted(components, key=lambda item: (item["component_id"], item["record_id"]))
+    result = {"schema": SCHEMA, "run_id": run_id, "source_snapshot_sha256": source_snapshot_sha256,
+              "build_lineage_sha256": build_lineage_sha256, "producer_count": producer_count,
+              "record_count": len(records), "records": records, "partitions": partitions,
+              "components": components, "coverage_gaps": gaps, "limits": LIMITS,
+              "claim_boundary": "DERIVED_INDEX_NOT_AUTHORITY_OR_RUNTIME_PROOF"}
+    if validate_document(result, "evidence-index-enrichment.schema.json"):
+        raise Blocked(f"{job}: derived enrichment fails its closed schema")
+    return result
+
+
 def build(run_id: str, selection: dict[str, Any], source_snapshot_sha256: str | None = None) -> dict[str, Any]:
+    """The raw 02-evidence-index enrichment: one source and one build generation across producers."""
     producers = selection["producers"]
-    size_log.observe(run_id, "02-evidence-index", "producers", len(producers), LIMITS["max_producers"])
     sources = {item["source_snapshot_sha256"] for item in producers}
     if source_snapshot_sha256 is not None:
         sources.add(source_snapshot_sha256)
     builds = {item["build_lineage_sha256"] for item in producers if item["build_lineage_sha256"] is not None}
     if len(sources) > 1 or len(builds) > 1:
         raise Blocked("02-evidence-index: selected producers are mixed-generation")
-    records, partitions, components, seen = [], [], [], set()
-    for producer in producers:
-        live = load_producer(run_id, producer["job_id"])
-        if live != producer:
-            raise Blocked("02-evidence-index: selected producer changed during enrichment")
-        payload = read_json(_producer_root(run_id, producer["job_id"]) / "attempts" /
-                            producer["attempt_id"] / producer["artifact_path"])
-        for array_name in producer["arrays"]:
-            values = payload.get(array_name)
-            records_file = payload.get("records_file") if isinstance(payload, dict) else None
-            if values is None and array_name == "records" and isinstance(records_file, dict):
-                values = _jsonl(_producer_root(run_id, producer["job_id"]) / "attempts" /
-                                producer["attempt_id"] / records_file["path"])
-            for index, record in enumerate(values or []):
-                if not isinstance(record, dict):
-                    raise Blocked("02-evidence-index: selected derived record is not an object")
-                logical = (producer["job_id"], array_name, _logical_id(record))
-                if logical in seen:
-                    raise Blocked("02-evidence-index: selected producer repeats a derived record identity")
-                seen.add(logical)
-                record_path = f"/{array_name}/{index}"
-                record_id = "derived_" + digest((producer["job_id"], producer["attempt_id"],
-                                                  producer["artifact_path"], record_path, digest(record)))[:24]
-                text, disposition = _text(record)
-                partition_ids = sorted({value for key, value in record.items()
-                                        if key == "partition_id" and isinstance(value, str)} |
-                                       {value for value in record.get("partition_ids", [])
-                                        if isinstance(value, str)})
-                component_ids = sorted({value for key, value in record.items()
-                                        if key in {"component_id", "from_component_id", "to_component_id"}
-                                        and isinstance(value, str)} |
-                                       {value for value in record.get("component_ids", [])
-                                        if isinstance(value, str)})
-                item = {"record_id": record_id, "producer_job_id": producer["job_id"],
-                    "producer_attempt_id": producer["attempt_id"], "producer_contract": producer["contract"],
-                    "artifact_path": producer["artifact_path"], "artifact_sha256": producer["artifact_sha256"],
-                    "record_path": record_path, "record_sha256": _hash(record),
-                    "type_label": f"{producer['contract']}:{array_name}", "authority": producer["authority"],
-                    "redaction": disposition, "source_snapshot_sha256": producer["source_snapshot_sha256"],
-                    "build_lineage_sha256": producer["build_lineage_sha256"],
-                    "partition_ids": partition_ids, "component_ids": component_ids, "search_text": text}
-                records.append(item)
-                partitions.extend({"partition_id": value, "record_id": record_id} for value in partition_ids)
-                components.extend({"component_id": value, "record_id": record_id} for value in component_ids)
-    size_log.observe(run_id, "02-evidence-index", "derived_records", len(records), LIMITS["max_records"])
-    size_log.observe(run_id, "02-evidence-index", "partition_component_links",
-                     len(partitions) + len(components), LIMITS["max_links"])
-    records.sort(key=lambda item: (item["producer_job_id"], item["type_label"], item["record_path"], item["record_id"]))
-    partitions.sort(key=lambda item: (item["partition_id"], item["record_id"]))
-    components.sort(key=lambda item: (item["component_id"], item["record_id"]))
-    gaps = [] if producers else ["no-derived-producers-selected"]
-    result = {"schema": SCHEMA, "run_id": run_id,
-              "source_snapshot_sha256": next(iter(sources), "sha256:" + "0" * 64),
-              "build_lineage_sha256": next(iter(builds), None), "producer_count": len(producers),
-              "record_count": len(records), "records": records, "partitions": partitions,
-              "components": components, "coverage_gaps": gaps, "limits": LIMITS,
-              "claim_boundary": "DERIVED_INDEX_NOT_AUTHORITY_OR_RUNTIME_PROOF"}
-    errors = validate_document(result, "evidence-index-enrichment.schema.json")
-    if errors:
-        raise Blocked("02-evidence-index: derived enrichment fails its closed schema")
-    return result
+    records, partitions, components = build_records(run_id, producers)
+    return document(run_id, records, partitions, components, producer_count=len(producers),
+                    source_snapshot_sha256=next(iter(sources), "sha256:" + "0" * 64),
+                    build_lineage_sha256=next(iter(builds), None),
+                    gaps=[] if producers else ["no-derived-producers-selected"])
 
 
 def query(document: dict[str, Any], *, text: str = "", partition_id: str = "",
