@@ -5,13 +5,16 @@ description: Build, inspect, or operate AppSec Review's component-scoped OWASP a
 
 # AppSec OWASP component routing
 
-Use the accepted component map as the target inventory, then build a complete selected-control x
-component applicability matrix. Every pair must end as applicable, conditional, not applicable,
-cannot determine, or explicitly out of scope. Absence of a rule is `cannot_determine`, never
-`not_applicable`. The one generated technical N/A: ASVS V3, V4, V7, V9, V10 and V17 for a component
-the accepted map classifies with high confidence as a local CLI or library with no network, HTTP or
-session trait (`owasp_component_routing.py`, P24; resting on the bound component map was confirmed by the
-owner 2026-10-03). A partially classified component gets a `conditional` rule carrying its open questions.
+Routing follows ADR-0034 (inference classifies, Python routes). `04-owasp-candidate-search` (Python)
+collects per-chapter candidate code from the code index, full-text and semantic search, SAST hits and
+the tag cloud; `04-owasp-participation` (model, read-only `code_*` tools) only labels each candidate
+`implements`/`enforces`/`consumes`/`not_participating` with resolving citations; `04-owasp-universe`
+(Python) decides each ASVS chapter `participating`, `not_applicable` (zero candidates with complete
+coverage, or all candidates cited as not participating) or `gap`, and enforces the validator-call budget
+before any call. `owasp_component_routing.py` is a pure projection of the accepted universe into the T04
+request: 17 `asvs-V<n>` targets, each with `control_scope` so its rows are only that chapter's controls.
+No keyword or trait rule decides applicability; the component map is report context only. Absence of
+coverage is a gap, never `not_applicable`.
 
 Batch only applicable and conditional rows. Partition by component or component group, OWASP
 domain, evidence mode, tooling profile, authorization boundary, and validator role. Preserve the

@@ -130,7 +130,7 @@ def _check(schema: dict, args: dict) -> None:
     if not isinstance(args, dict) or set(args) - set(schema["properties"]) or set(schema["required"]) - set(args):
         raise ValueError("invalid tool arguments")
     for key, value in args.items():
-        expected = str if schema["properties"][key]["type"] == "string" else int
+        expected = {"string": str, "boolean": bool}.get(schema["properties"][key]["type"], int)
         if type(value) is not expected:
             raise ValueError("invalid argument type: " + key)
 

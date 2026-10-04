@@ -33,6 +33,19 @@ class InputReadDedup(unittest.TestCase):
         self.assertIn("2: two", other["text"])
 
 
+class ArgumentTypes(unittest.TestCase):
+    """The server validates arguments against each tool's inputSchema before calling it."""
+    schema = next(t["inputSchema"] for t in input_mcp.TOOLS if t["name"] == "input_read")
+
+    def test_boolean_again_is_accepted(self):
+        input_mcp._check(self.schema, {"ref": "t:a.c", "again": True})
+
+    def test_wrong_types_are_refused(self):
+        for args in ({"ref": "t:a.c", "again": 1}, {"ref": "t:a.c", "start": True}, {"ref": 3}):
+            with self.assertRaises(ValueError):
+                input_mcp._check(self.schema, args)
+
+
 class ToolCallCap(unittest.TestCase):
     """max_tool_calls_per_cell: past the cap every call gets a fixed budget_exhausted error, is not run,
     and is counted under _budget_exhausted for the invoker's receipt gap; the count spans repair rounds."""

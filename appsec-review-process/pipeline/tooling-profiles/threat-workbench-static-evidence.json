@@ -24,6 +24,10 @@
     "query tool: code_type_info",
     "query tool: code_file_outline",
     "query tool: code_search",
+    "query tool: code_calls_to",
+    "query tool: code_path",
+    "query tool: code_address_taken",
+    "query tool: code_overrides",
     "query tool: code_exports"
   ],
   "disallowed_actions": [
