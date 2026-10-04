@@ -43,6 +43,10 @@ READ_LINES_MAX = tunables.shared("input_read_lines_max")
 LINE_CHARS_MAX = tunables.shared("input_line_chars_max")
 
 _INT = {"type": "integer", "minimum": 0}
+EVIDENCE_READ_TEXT = ("Read up to 50 numbered lines (start, limit) of one target file from the accepted immutable snapshot; "
+                      "page with start. path as evidence_search returns it (source/<repository path>); the repository "
+                      "path, a target-repository: ref and a :N or #LN line suffix are accepted too. Pinned upstream "
+                      "artifacts are not in the snapshot: read them with input_read.")
 TOOLS = [
     {"name": "input_list", "description": "List this job's pinned readable inputs (root:path, bytes, sha256). Filter by ref prefix.",
      "inputSchema": {"type": "object", "properties": {"prefix": {"type": "string"}, "offset": _INT,
@@ -63,7 +67,7 @@ TOOLS = [
      "'[.partitions[] | {partition_id, include_paths}]', 'paths(scalars) | join(\".\")' . Returns up to 64 KB; narrow the filter if truncated.",
      "inputSchema": {"type": "object", "properties": {"ref": {"type": "string"}, "filter": {"type": "string", "maxLength": 2000},
                      "compact": {"type": "integer", "minimum": 0, "maximum": 1}}, "required": ["ref", "filter"], "additionalProperties": False}},
-    *evidence_mcp.TOOLS,
+    *({**tool, "description": EVIDENCE_READ_TEXT} if tool["name"] == "evidence_read" else tool for tool in evidence_mcp.TOOLS),
     {"name": "evidence_derived", "description": "Search records of upstream tools the run accepted: source SAST and CodeQL leads, native SAST units, IR facts, "
      "code property graph, tree-sitter, debug symbols, binary triage/CFG/intelligence, test execution/results/coverage, "
      "partitions, doc/API/test/operations documentation intelligence, and native build inputs (include/library dirs, "
@@ -185,9 +189,157 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
         import evidence_index_derived
         return evidence_index_derived.query(run_id, **args)
     from evidence_store import query
+    notes: list[str] = []
+    if name in ("evidence_read", "evidence_similar"):
+        args, notes = _evidence_args(run_id, name, args)
     # fresh=False: the run's accepted index, integrity-checked; code-fingerprint freshness is a
     # process check that must not blind a model job mid-run (ADR-0013).
-    return query(run_id, name.removeprefix("evidence_"), fresh=False, **args)
+    for wait in (0.05, 0.2, 0.5, 1.0, None):
+        try:
+            result = query(run_id, name.removeprefix("evidence_"), fresh=False, **args)
+            break
+        except ValueError as exc:
+            raise ValueError(_evidence_error(run_id, name, args, str(exc))) from None
+        except RuntimeError as exc:
+            # evidence_store's job lock is exclusive and non-blocking: a read-only query of a parallel cell
+            # holding it is not this call's failure. Bounded retry, then the refusal as it was.
+            if wait is None or not str(exc).startswith("active lock"):
+                raise
+            time.sleep(wait)
+    return {**result, "notes": notes} if notes else result
+
+
+# evidence_read / evidence_similar take the snapshot path the index lists (``source/<repo path>``,
+# ``evidence/...``). Models hold other forms of the same file: the input ref (``target-repository:src/a.c``),
+# the citation form (``src/a.c``) the prompt asks for, a cite with a line (``src/a.c:42``, ``#L42-L60``) and
+# container paths (``/workspace/src/a.c``). Those resolve to the one indexed path; anything else is refused
+# with what was tried and what to pass instead.
+_TARGET_ROOTS = ("target-repository", "target", "source")
+_ROOT_REF = re.compile(r"^([a-z][a-z0-9-]*):(?!\d)(.+)$")
+_LINES = re.compile(r"(?:#L(\d+)(?:-L?(\d+))?|:(\d+)(?:-(\d+))?)$")
+SNAPSHOT: dict = {}   # {"attempt": accepted index attempt id, "files": {path: (sha256, text_status)}, "excluded": {...}}
+
+
+def _snapshot(run_id: str) -> dict | None:
+    """Paths of the accepted evidence index (read-only, for resolving and explaining paths; content is
+    served only by the integrity-checked ``evidence_store.query``). None when no index is accepted."""
+    import sqlite3
+    import evidence_store
+    try:
+        pointer = json.loads((evidence_store.root(run_id) / "accepted.json").read_text(encoding="utf-8"))
+        attempt = evidence_store.root(run_id) / "attempts" / pointer["attempt_id"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if SNAPSHOT.get("attempt") != pointer["attempt_id"]:
+        try:
+            db = sqlite3.connect((attempt / "index.sqlite").as_uri() + "?mode=ro&immutable=1", uri=True)
+            try:
+                files = {path: (sha, status) for path, sha, status in db.execute("SELECT path, sha256, text_status FROM files")}
+            finally:
+                db.close()
+            manifest = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, sqlite3.Error):
+            return None
+        SNAPSHOT.clear()
+        SNAPSHOT.update({"attempt": pointer["attempt_id"], "dir": attempt, "files": files,
+                         "excluded": {row.get("path"): row.get("reason") for row in manifest.get("excluded", [])
+                                      if isinstance(row, dict)}})
+    return SNAPSHOT
+
+
+def _evidence_path(raw: str) -> tuple[str, int | None, int | None, str | None]:
+    """(candidate snapshot path, first line, last line, non-target root) of a model-supplied path."""
+    path, root = raw.strip().removeprefix("file://"), None
+    match = _ROOT_REF.match(path)
+    if match:
+        if match.group(1) in _TARGET_ROOTS:
+            path = match.group(2)
+        else:
+            root = match.group(1)
+    first = last = None
+    lines = _LINES.search(path)
+    if lines:
+        path = path[:lines.start()]
+        first = int(lines.group(1) or lines.group(3))
+        last = int(lines.group(2) or lines.group(4) or first)
+    if path.startswith("/"):
+        path = path.split("/source/", 1)[1] if "/source/" in path else path.removeprefix("/workspace/").lstrip("/")
+    while path.startswith("./"):
+        path = path[2:]
+    if not path.startswith(("source/", "evidence/")):
+        path = "source/" + path
+    return path, first, last, root
+
+
+def _evidence_args(run_id: str, name: str, args: dict) -> tuple[dict, list[str]]:
+    """The arguments ``evidence_store.query`` accepts for what the model asked, and notes on what changed."""
+    raw, notes = args["path"], []
+    snapshot = _snapshot(run_id)
+    files = snapshot["files"] if snapshot else {}
+    if raw in files:
+        path, first, last, root = raw, None, None, None
+    else:
+        path, first, last, root = _evidence_path(raw)
+        if root is not None:
+            raise ValueError(f"{raw!r} is a pinned input ref (root {root!r}), not a path in the target snapshot; "
+                             f"{name} reads only the evidence index of the target repository. Read this ref with "
+                             "input_read (or input_jq for JSON)")
+        if snapshot is not None and path not in files:
+            raise ValueError(_missing(raw, [path], snapshot))
+        if path != raw:
+            notes.append(f"path {raw!r} resolved to the indexed path {path!r}; pass that form next time")
+    args = {**args, "path": path}
+    if name == "evidence_similar":
+        return args, notes
+    status = files.get(path, (None, "indexed"))[1]
+    if status != "indexed":
+        raise ValueError(f"{path} is in the snapshot but its text is not indexed ({status}), so {name} cannot return it; "
+                         "if it is one of this job's pinned inputs read it with input_read, otherwise report it as a gap")
+    if first is not None and "start" not in args:
+        args["start"] = first
+        if "limit" not in args and last is not None and last >= first:
+            args["limit"] = last - first + 1
+    window = tunables.shared("evidence_query_results_max")
+    if args.get("limit", 0) > window:
+        notes.append(f"limit {args['limit']} is over the {window}-line window: lines {args.get('start', 1)}-"
+                     f"{args.get('start', 1) + window - 1} returned; ask for the next range with start=")
+        args["limit"] = window
+    return args, notes
+
+
+def _missing(raw: str, tried: list[str], snapshot: dict) -> str:
+    """Why a path is not in the index and what to pass instead."""
+    for path in tried:
+        if path in snapshot["excluded"]:
+            return (f"{path} is in the target but excluded from the evidence index ({snapshot['excluded'][path]}); "
+                    "if it is one of this job's pinned inputs read it with input_read, otherwise report it as a gap")
+    base = "/" + tried[0].rsplit("/", 1)[-1]
+    alike = sorted(path for path in snapshot["files"] if path.endswith(base))[:5]
+    return (f"path {raw!r} is not in the accepted evidence index (tried {', '.join(tried)}); use the path exactly as "
+            "evidence_search returned it (source/<repository path>)"
+            + (f"; indexed files with that name: {', '.join(alike)}" if alike else ""))
+
+
+def _evidence_error(run_id: str, name: str, args: dict, message: str) -> str:
+    """``evidence_store.query``'s refusal made precise (it is shared with the CLI and keeps its own wording)."""
+    if message == "start line is beyond the file":
+        snapshot = _snapshot(run_id) or {}
+        sha = (snapshot.get("files") or {}).get(args.get("path"), (None,))[0]
+        try:
+            total = len((snapshot["dir"] / "objects" / sha).read_text(encoding="utf-8-sig").splitlines())
+        except (KeyError, OSError, TypeError, ValueError):
+            total = None
+        return (f"start line {args.get('start')} is beyond the end of {args.get('path')}"
+                + (f" ({total} lines)" if total is not None else "") + "; read from an earlier start")
+    if message.startswith("query bounds"):
+        return (f"{name} bounds: limit 1..{tunables.shared('evidence_query_results_max')} lines, start >= 1, "
+                f"text <= {tunables.shared('evidence_query_text_max')} characters")
+    if message == "path is not in the accepted index":
+        snapshot = _snapshot(run_id)
+        return _missing(args.get("path", ""), [args.get("path", "")], snapshot) if snapshot else (
+            f"path {args.get('path')!r} is not in the accepted evidence index; use the path exactly as evidence_search "
+            "returned it (source/<repository path>)")
+    return message
 
 
 CONTEXT: dict = {}   # job_id, attempt_id, output_root of the invocation this server serves
@@ -307,7 +459,8 @@ def _summary(name: str, result: object) -> dict:
             ref = row.get("ref") or row.get("path") or row.get("record_id")
             if ref and ref not in refs:
                 refs.append(ref)
-    return {"hits": len(rows) if isinstance(rows, list) else 0, "refs": refs}
+    return {"hits": len(rows) if isinstance(rows, list) else 0, "refs": refs,
+            **({"notes": [str(note)[:300] for note in result["notes"][:3]]} if result.get("notes") else {})}
 
 
 def grant(ref: str | None, names: list[str]) -> None:

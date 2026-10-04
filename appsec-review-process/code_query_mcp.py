@@ -68,9 +68,9 @@ TOOLS = [
           {"type": _S, "limit": _LIMIT}, ["type"]),
     _tool("code_file_outline", "Functions, call sites and imports of one file from the tree-sitter AST (bounded rows).",
           {"path": _S, "limit": _LIMIT}, ["path"]),
-    _tool("code_search", "Fuzzy (substring, 3+ characters) search over method names, call targets, types, identifiers "
-          "and string literals. kind narrows to one of method, call-target, type, identifier, literal, ts-function, "
-          "ir-function, debug-symbol.",
+    _tool("code_search", "Fuzzy (substring, 3+ characters, case-insensitive) search over method names, call targets, types, "
+          "identifiers and string literals. text is one literal name fragment: no spaces, :: qualifiers, paths or regex. "
+          "kind narrows to one of method, call-target, type, identifier, literal, ts-function, ir-function, debug-symbol.",
           {"text": {"type": "string", "maxLength": 200}, "kind": {"type": "string", "maxLength": 32}, "limit": _LIMIT},
           ["text"]),
     _tool("code_calls_to", "Call sites of a named function or a family (unsafe-copy, format, unbounded-read, alloc, free) "
@@ -276,7 +276,9 @@ class CodeIndex:
                          **self.loc(path, start)})
         gaps = [] if self.capabilities.get("treesitter") else ["tree-sitter AST not in this index: CPG definitions only"]
         extra = {"ambiguous": sum(1 for row in rows if row["source"] == "cpg") > 1}
-        return self.result("code_symbol", args, rows[:limit], gaps=gaps, truncated=len(rows) > limit,
+        reasons = [] if rows else ["symbol-not-found: no CPG method or tree-sitter function has this name"
+                                   + _form_hint(name, "code_symbol") + "; try code_search with a name fragment"]
+        return self.result("code_symbol", args, rows[:limit], reasons=reasons, gaps=gaps, truncated=len(rows) > limit,
                            total=len(rows), extra=extra)
 
     def _hop_escapes_to(self, target: str) -> list[dict[str, Any]]:
@@ -449,6 +451,8 @@ class CodeIndex:
         text, kind, limit = args["text"].strip(), args.get("kind"), self._limit(args)
         if len(text) < 3:
             raise ValueError("code_search needs at least 3 characters (trigram index)")
+        if kind and kind not in SEARCH_KINDS:
+            raise ValueError(f"unknown kind {kind!r}; use one of " + ", ".join(SEARCH_KINDS) + " or omit it")
         phrase = '"' + text.replace('"', '""') + '"'
         sql = "SELECT name, kind, ref, file, line FROM names WHERE names MATCH ?"
         params: list[Any] = [phrase]
@@ -457,7 +461,9 @@ class CodeIndex:
         sql += " ORDER BY length(name), name, kind, ref LIMIT ?"
         params.append(limit + 1)
         rows = [{"name": n, "kind": k, "ref": r, **self.loc(f, l)} for n, k, r, f, l in self.connection.execute(sql, params)]
+        hint = _form_hint(text, "code_search") if not rows else ""
         return self.result("code_search", args, rows[:limit], truncated=len(rows) > limit,
+                           reasons=["query-form: no name contains this text" + hint] if hint else [],
                            extra={"hint": "a zero hit is not proof of absence: names the CPG or AST did not record "
                                           "are not indexed"})
 
@@ -688,6 +694,29 @@ class LspIndex:
         self._broker = broker
         self.calls = 0
 
+    def known(self, path: str) -> bool:
+        """A file the xref index lists (served by a ready server, or holding an indexed function)."""
+        return any(self.connection.execute(sql, (path,)).fetchone() for sql in (
+            "SELECT 1 FROM lsp_files WHERE path=?", "SELECT 1 FROM lsp_functions WHERE file=? LIMIT 1"))
+
+    def not_ready(self, path: str) -> str:
+        """Why no ready server serves ``path``, from the language, the specs and the published readiness gaps."""
+        import lsp_service
+        language = code_index.language_of(path)
+        key = lsp_service.LANGUAGE_SERVER.get(language or "")
+        if key is None:
+            return (f"lsp-no-server: {path}: no language server is pinned for "
+                    f"{'its language ' + repr(language) if language else 'its file type'}")
+        plan = lsp_service.SERVER_PLAN[key]
+        if any(spec.get("identity", {}).get("server_key") == key for spec in self.servers):
+            return (f"lsp-path-unknown: {path} is not a file the 02-lsp-xref index lists although a {plan['server']} "
+                    "server is ready; pass the repo-relative path as code_symbol/code_search return it (e.g. src/a.c)")
+        words = [plan["server"], plan["image_id"], key + ":", key + "/"] + (
+            ["compile_commands"] if plan["readiness"] == "compile_commands" else list(plan.get("markers", ())))
+        why = [gap for gap in self.gaps if isinstance(gap, str) and any(word in gap for word in words)]
+        return (f"lsp-not-ready: no ready {plan['server']} ({plan['image_id']}) for {language} file {path}: "
+                + ("; ".join(why[:2])[:400] if why else "02-lsp-xref recorded no reason (no server spec for it)"))
+
     def broker(self) -> Any:
         if self._broker is None:
             import lsp_service
@@ -718,20 +747,27 @@ class LspIndex:
         return [(row[0] if row and not args.get("symbol") else None, args["path"], args["line"],
                  args.get("symbol") or (row[1] if row else None))]
 
-    def _status(self, ident: int) -> tuple[str, str | None, str | None]:
-        row = self.connection.execute("SELECT status, server_key, variant FROM lsp_functions WHERE id=?",
+    def _status(self, ident: int) -> tuple[str, str | None, str | None, int | None]:
+        row = self.connection.execute("SELECT status, server_key, variant, character FROM lsp_functions WHERE id=?",
                                       (ident,)).fetchone()
-        return row if row else ("not_ready", None, None)
+        return row if row else ("not_ready", None, None, None)
 
-    def _live(self, method: str, path: str, line: int, name: str | None, reasons: list[str], gaps: list[str]
-              ) -> list[dict[str, Any]]:
+    def _live(self, method: str, path: str, line: int, name: str | None, reasons: list[str], gaps: list[str],
+              character: int | None = None) -> list[dict[str, Any]]:
         server = self.connection.execute("SELECT server_key, variant FROM lsp_files WHERE path=?", (path,)).fetchone()
         if server is None:
-            reasons.append(f"lsp-not-ready: no ready language server serves {path}")
+            reasons.append(self.not_ready(path))
             return []
-        character = _utf16_column(self._line(path, line), name)
         if character is None:
-            reasons.append(f"symbol {name!r} not found on {path}:{line}")
+            text = self._line(path, line)
+            if not text:
+                reasons.append(f"lsp-source-unreadable: line {line} of {path} could not be read from the snapshot "
+                               f"the server serves ({self.servers[0].get('target_path') if self.servers else 'no spec'}); "
+                               "check the line number")
+                return []
+            character = _utf16_column(text, name)
+        if character is None:
+            reasons.append(f"symbol {name!r} not found on {path}:{line}; pass symbol= as it is spelled on that line")
             return []
         query = {"method": method, "path": path, "line": line, "character": character}
         if method == "references":
@@ -740,7 +776,9 @@ class LspIndex:
         for gap in answer.get("gaps") or []:
             gaps.append(f"{gap['kind']}: {gap['detail']}")
         if answer.get("status") != "OK":
-            reasons.append("the language server did not answer this query (see gaps)")
+            first = (answer.get("gaps") or [{}])[0]
+            reasons.append("the language server did not answer this query"
+                           + (f" ({first.get('kind')}: {str(first.get('detail'))[:300]})" if first else " (see gaps)"))
         if answer.get("truncated"):
             reasons.append("the language server's answer was capped")
         if answer.get("unresolved_includes"):
@@ -809,18 +847,37 @@ class LspIndex:
         if len(targets) > 1:
             reasons.append(f"{len(targets)} functions share this name; rows for each are returned (target field)")
         for ident, path, line, name in targets:
-            status = self._status(ident) if ident is not None else ("not_ready", None, None)
+            status = self._status(ident) if ident is not None else ("not_ready", None, None, None)
             if table and ident is not None and status[0] == "ok":
                 found = self._rows(ident, table, direction if table == "lsp_calls" else None)
                 origins.add("precomputed")
             else:
-                found = self._live(method, path, line, name, reasons, gaps)
+                # The column the precompute located the name at (same recording key) when the name is the indexed one.
+                found = self._live(method, path, line, name, reasons, gaps, status[3])
                 origins.add("broker")
             rows += [{**row, "target": f"{path}:{line}"} for row in found]
         rows = [{**row, "cite": row.get("cite") or (f"{row['path']}:{row['start_line']}" if row.get("path") else None)}
                 for row in rows]
         return self.result(tool, {key: value for key, value in args.items()}, rows, reasons=reasons,
                            gaps=gaps + self.gaps[:5], limit=limit, origin="+".join(sorted(origins)) or "none")
+
+
+SEARCH_KINDS = ("method", "call-target", "type", "identifier", "literal", "ts-function", "ir-function", "debug-symbol")
+_FORM = ((re.compile(r"\s"), "whitespace"), (re.compile(r"::|->|/"), "a qualifier or path"),
+         (re.compile(r"[()\[\]*?+^$|\\{}]"), "parentheses or regex/wildcard characters"))
+
+
+def _form_hint(text: str, tool: str) -> str:
+    """Why a name query may have matched nothing because of its form (the index holds bare names; matching is
+    literal: code_search one case-insensitive substring of a name, code_symbol a bare or qualified name)."""
+    found = [label for pattern, label in _FORM if pattern.search(text)]
+    if tool == "code_symbol":
+        found = [label for label in found if label != "a qualifier or path" or "/" in text]
+    if not found:
+        return ""
+    return (f"; the query contains {' and '.join(found)}, but {tool} matches "
+            + ("one literal name fragment (no spaces, qualifiers, paths or regex)" if tool == "code_search" else
+               "a bare or qualified function name (no parentheses, signature or file path)"))
 
 
 def _utf16_column(text: str, name: str | None) -> int | None:
@@ -832,15 +889,58 @@ def _utf16_column(text: str, name: str | None) -> int | None:
     return None if at < 0 else len(text[:at].encode("utf-16-le")) // 2
 
 
+_TARGET_ROOTS = ("target-repository:", "target:", "source:")
+_PATH_SUFFIX = re.compile(r"(?::(\d+)(?:-\d+)?|#L(\d+)(?:-L?\d+)?)$")
+
+
+def repo_path(value: str, known: Callable[[str], bool] | None = None) -> tuple[str, int | None]:
+    """(path in the index's repo-relative form, line from a ``:N`` / ``#LN`` suffix or None). Models pass the
+    forms other tools showed them: ``target-repository:src/a.c`` (input refs), ``source/src/a.c`` (evidence
+    index), ``./src/a.c``, ``/workspace/src/a.c`` (container paths), ``src/a.c:42`` (``cite``). A form the
+    index lists as given is kept (a repository may have its own ``source/`` directory)."""
+    raw = value.strip()
+    line = None
+    match = _PATH_SUFFIX.search(raw)
+    if match and not (known and known(raw)):
+        raw, line = raw[:match.start()], int(match.group(1) or match.group(2))
+    if known and known(raw):
+        return raw, line
+    path = raw
+    for prefix in _TARGET_ROOTS:
+        path = path.removeprefix(prefix)
+    path = path.removeprefix("/workspace/")
+    while path.startswith("./"):
+        path = path[2:]
+    stripped = path.removeprefix("source/")
+    if known and not known(stripped) and known(path):
+        return path, line
+    return stripped, line
+
+
+def _normalized(args: dict[str, Any], known: Callable[[str], bool], prefixes: Callable[[str], bool]) -> dict[str, Any]:
+    args = dict(args)
+    if isinstance(args.get("path"), str):
+        args["path"], line = repo_path(args["path"], known)
+        if line and not args.get("line"):
+            args["line"] = line
+    if isinstance(args.get("path_prefix"), str):
+        given = args["path_prefix"]
+        path, _ = repo_path(given)
+        args["path_prefix"] = given if prefixes(given) or not prefixes(path) else path
+    return args
+
+
 def call(index: CodeIndex | None, name: str, args: dict[str, Any],
          scope: Callable[[str, str], Callable[[str], bool] | None] | None = None,
          lsp: LspIndex | None = None) -> dict[str, Any]:
     if FAMILY_OF.get(name) == "lsp":
         if lsp is None:
             raise ValueError("no language-server cross-reference index is attached to this job")
-        return lsp.answer(name, args)
+        return lsp.answer(name, _normalized(args, lsp.known, lambda _p: False))
     if index is None:
         raise ValueError("no code index is attached to this job")
+    args = _normalized(args, index._files.__contains__,
+                       lambda prefix: any(path.startswith(prefix) for path in index._files))
     if name == "code_calls_to":
         return index.code_calls_to(args, scope or (lambda _kind, _id: None))
     return getattr(index, name)(args)

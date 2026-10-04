@@ -68,6 +68,7 @@ After a run (no model, Docker or network; reads only the run tree):
 python3 orchestrator/retrieval-report.py <run> --summary [--json] [--compare <other run>]
 python3 orchestrator/retrieval-report.py <run> --feedback [--json]
 python3 orchestrator/retrieval-report.py <run> --check     # exit 1 when there is a finding
+python3 orchestrator/retrieval-report.py <run> --diagnose [--job <job>] [--json]
 python3 orchestrator/run-status.py <run> --tooling          # the same findings after the job lines; exit stays 0
 ```
 
@@ -80,6 +81,12 @@ minus the other. `--check` thresholds (constants at the top of the script): a gr
 rate > 50% for a tool with >= 10 calls; error rate > 10% for a tool with >= 5 calls; any cap exhaustion; citation
 backing < 80%; lsp granted and every lsp call answered server failed / not ready; > 30% of feedback blocks with
 `coverage_confidence: low`; a run with no tool-served invocation is reported as a gap, not a pass.
+Citation backing counts a cited path as tool-backed (read or surfaced by a call) or pinned-backed (one of the
+invocation's `readable_inputs`, found through the persona request beside its output), compared in one repo-relative
+form. `--diagnose` explains the numbers: tool errors grouped by cause with example arguments, `evidence_read` path
+shapes, the 02-lsp-xref servers and gaps with `data/lsp/` start failures and recorded GAP answers, and per job up to
+10 cited paths no tool fetched, classified normalization-mismatch, pinned-inline, present-in-target-but-not-read or
+not-in-target.
 
 A tool-granted model job may add an optional envelope-level `tooling_feedback` block
 (`schemas/common/tooling-feedback.schema.json`: useful and unhelpful tools, up to five `wanted` items, coverage
