@@ -227,6 +227,10 @@ Slice 1 (branch `adr14-slice1`):
 - Build resolution kept a ~720 MB source copy per trial (freeciv21: 11 GB per job), tree-hashed on every
   re-validation. [x] Trial source copies are pruned after their logs are read (branch io-prune).
 - [ ] Same audit for native-build/replay and code-property-graph (freeciv21 2.8 GB, doom3-bfg 4.0 GB).
+- [ ] Tooling telemetry (branch `tooling-telemetry`, 2026-10-04): after the next run, run
+      `orchestrator/retrieval-report.py <run> --summary --feedback --check` (or `run-status.py <run> --tooling`)
+      and record here which families went unused, empty/error rates, cap exhaustion, citation backing and
+      the models' `tooling_feedback` wants; `--compare <previous run>` for the deltas.
 
 ## Relaunch tax
 

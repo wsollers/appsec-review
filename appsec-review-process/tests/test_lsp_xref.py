@@ -223,6 +223,29 @@ class Tools(Case):
         result = input_mcp.call("run-1", None, "code_definition", {"function": "tool"})
         self.assertEqual([(row["path"], row["start_line"]) for row in result["rows"]], [("util.py", 1)])
 
+    def test_lsp_calls_are_audited_and_counted_by_the_retrieval_report(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("retrieval_report", PROCESS.parent / "orchestrator" / "retrieval-report.py")
+        report = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(report)
+        input_mcp.grant("supporting-evidence:02-code-index/attempts/a1/code-index.json", LSP_TOOLS)
+        self.addCleanup(input_mcp.grant, None, [])
+        input_mcp.CODE["lsp"] = self.index()
+        runs = self.tmp / "runs"
+        with mock.patch.object(input_mcp, "data_path", side_effect=lambda run, *p: runs.joinpath(run, "data", *p)), \
+                mock.patch.dict(input_mcp.CONTEXT, {"job_id": "j", "attempt_id": "a"}, clear=True), \
+                mock.patch.dict(input_mcp.USAGE, {}, clear=True), mock.patch.dict(input_mcp.BUDGET, {"max": None}), \
+                mock.patch.object(report, "RUNS", runs):
+            for arguments in ({"function": "main"}, {"path": "nowhere.py", "line": 1}):
+                answer = input_mcp.handle("run-1", None, {"method": "tools/call", "params": {
+                    "name": "code_definition", "arguments": arguments}})
+                self.assertFalse(answer["isError"])
+            summary = report.summarize(report.load("run-1"))
+        self.assertEqual(len(list((runs / "run-1" / "data" / "retrieval").glob("*/result.json"))), 2)
+        self.assertEqual(summary["tools"]["code_definition"]["calls"], 2)
+        self.assertEqual(summary["families"]["code_lsp"]["calls"], 2)
+        self.assertEqual(summary["lsp"]["failed"], 1)   # the path no language server serves
+
 
 if __name__ == "__main__":
     unittest.main()
