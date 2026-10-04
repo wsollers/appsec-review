@@ -26,17 +26,23 @@ class StaticIntelTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    target=Path(d); (target/'README.md').write_text('# hello\n')
    files=self.source(target); source={"source_fingerprint":"a"*64}
-   for job in core.SPECS:
+   others=[job for job in core.SPECS if job!=core.DOC]  # gap 7: a README is a document-intake input
+   for job in others:
     out=core.extract(job,run_id='r',attempt_id='a',target=target,source=source,source_files=files)
     self.assertEqual((out['status'],out['applicability'],out['records'],out['coverage_gaps']),
                      ('SKIPPED',core.SKIPPED_NA,[],[]))
     self.assertEqual(out['inventory'],{'files_examined':1,'non_file_entries':0,'candidates':0})
+   out=core.extract(core.DOC,run_id='r',attempt_id='a',target=target,source=source,source_files=files)
+   self.assertEqual((out['status'],out['inventory']['candidates'],out['documents'][0]['doc_class']),('OK',1,'readme'))
    # A link is not followed: absence of a candidate behind it is not established.
    files['docs']={'kind':'symlink','target':'../elsewhere'}
-   for job in core.SPECS:
+   for job in others:
     out=core.extract(job,run_id='r',attempt_id='a',target=target,source=source,source_files=files)
     self.assertEqual(out['status'],'OK_WITH_GAPS')
     self.assertEqual(out['coverage_gaps'],['readme-only-no-specialized-inputs:1-non-file-entries-unexamined'])
+   del files['README.md']
+   out=core.extract(core.DOC,run_id='r',attempt_id='a',target=target,source=source,source_files=files)
+   self.assertEqual((out['status'],out['coverage_gaps']),('OK_WITH_GAPS',['no-applicable-inputs:1-non-file-entries-unexamined']))
  def test_assembly_edge_authorizes_the_not_applicable_skip(self):
   graph=json.loads((ROOT/'pipeline/job-graph.json').read_text())
   edges={d['job']:d for d in graph['jobs'][core.CONSUMER]['dependencies']}
@@ -85,7 +91,7 @@ class StaticIntelTests(unittest.TestCase):
  def test_registry_is_not_executable(self):
   for job,(contract,result,schema) in core.SPECS.items():
    t=json.loads((ROOT/registry_paths.template_rel(job)).read_text()); c=json.loads((ROOT/registry_paths.contract_rel(contract)).read_text())
-   self.assertFalse(t['implemented']); self.assertEqual(c['result_schema'],{"artifact":result,"schema_file":schema})
+   self.assertEqual(t['implemented'],job==core.DOC); self.assertEqual(c['result_schema'],{"artifact":result,"schema_file":schema})
    self.assertTrue(set(c['required_files'])<=set(t['outputs']['files']))
    self.assertEqual(output_validator._claim_class_errors(c,{"records":[]}),[])
    self.assertTrue(output_validator._claim_class_errors(c,{"severity":"high"}))

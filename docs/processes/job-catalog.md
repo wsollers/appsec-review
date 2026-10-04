@@ -1667,7 +1667,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `functional-design-doc-consumer`, role `doc-intelligence-extractor`, tooling `static-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (pipeline/job-templates/02-doc-intelligence-ingest.json) | document source path<br>source type<br>redaction policy<br>existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json *(optional)*<br>component map *(optional)*<br>product glossary *(optional)* |
+| Declared inputs (pipeline/job-templates/02-doc-intelligence-ingest.json) | accepted 00-intake source inventory and checkout (read-only)<br>evidence redaction ruleset<br>B16 record of the pinned audit-doc-convert image (pdftotext, pandoc); needed only when a PDF or DOCX is in the document universe *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-doc-intelligence-ingest/` |
 | Output files (pipeline/output-contracts/doc-intelligence.json) | doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-evidence-index-derived`](#job-02-evidence-index-derived) |

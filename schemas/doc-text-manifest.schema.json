@@ -1,0 +1,70 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "doc-text-manifest.schema.json",
+    "description": "02-doc-intelligence-ingest converted-text manifest (gap 7): one UTF-8 text artifact per HTML, man-page, PDF or DOCX document, bound to its source bytes, converter and version, with line provenance. Text is a locator for retrieval, never a finding.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["schema", "run_id", "job_id", "claim_boundary", "documents"],
+    "properties": {
+        "schema": {"const": "appsec-review/doc-text-manifest/1"},
+        "run_id": {"type": "string"},
+        "job_id": {"const": "02-doc-intelligence-ingest"},
+        "claim_boundary": {"const": "CONVERTED_TEXT_LOCATOR_NOT_FINDING"},
+        "documents": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["doc_id", "path", "doc_class", "format", "source_sha256", "converter", "text_path",
+                             "text_sha256", "text_bytes", "line_count", "redaction", "truncated", "provenance"],
+                "properties": {
+                    "doc_id": {"type": "string", "pattern": "^doc_[0-9a-f]{16}\\Z"},
+                    "path": {"type": "string", "minLength": 1},
+                    "doc_class": {"$ref": "doc-intelligence.schema.json#/$defs/doc_class"},
+                    "format": {"enum": ["html", "roff", "pdf", "docx"]},
+                    "source_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+                    "converter": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "version", "image_id", "image_digest", "argv"],
+                        "properties": {
+                            "name": {"enum": ["html.parser", "roff-strip", "pdftotext", "pandoc"]},
+                            "version": {"type": "string", "minLength": 1},
+                            "image_id": {"type": ["string", "null"]},
+                            "image_digest": {"type": ["string", "null"]},
+                            "argv": {"type": ["array", "null"], "items": {"type": "string"}}
+                        }
+                    },
+                    "text_path": {"type": "string", "pattern": "^doc-text/doc_[0-9a-f]{16}\\.txt\\Z"},
+                    "text_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+                    "text_bytes": {"type": "integer", "minimum": 0},
+                    "line_count": {"type": "integer", "minimum": 0},
+                    "redaction": {"enum": ["unchanged", "redacted"]},
+                    "truncated": {"type": "boolean"},
+                    "provenance": {
+                        "description": "source-line: lines[i] is the source line of text line i+1 (HTML, man page). page: pages[n-1] is the [first, last] text line of PDF page n, null for a page without text. converted-line: no source position survives conversion (DOCX); cite the text line.",
+                        "oneOf": [
+                            {
+                                "type": "object", "additionalProperties": false, "required": ["kind", "lines"],
+                                "properties": {"kind": {"const": "source-line"},
+                                               "lines": {"type": "array", "items": {"type": "integer", "minimum": 1}}}
+                            },
+                            {
+                                "type": "object", "additionalProperties": false, "required": ["kind", "pages"],
+                                "properties": {"kind": {"const": "page"},
+                                               "pages": {"type": "array", "items": {"anyOf": [
+                                                   {"type": "null"},
+                                                   {"type": "array", "minItems": 2, "maxItems": 2,
+                                                    "items": {"type": "integer", "minimum": 1}}]}}}
+                            },
+                            {
+                                "type": "object", "additionalProperties": false, "required": ["kind"],
+                                "properties": {"kind": {"const": "converted-line"}}
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}
