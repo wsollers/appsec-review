@@ -117,6 +117,7 @@ def _runtime_instructions(package: Any) -> str:
                         f"{derive.PERSONA_SCHEMA}; one decision per upstream claim_id"),
         "decision_required_fields": sorted(required), "decision_optional_fields": sorted(optional),
         "decision_rule": rule,
+        "allowed_dispositions": list(derive.STAGE_DISPOSITIONS.get(stage, ())) or None,
         "judgment_fields": {key: value for key, value in {
             "cwe": ("optional: {cwe_id: 'CWE-<n>', rationale} naming the weakness the claim instantiates; "
                     "it must be in the pinned CWE catalog; omit when unsure"),

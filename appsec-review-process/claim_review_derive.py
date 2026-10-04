@@ -64,6 +64,19 @@ PERSONA_FIELDS = {
     "12-scoring-prioritization": ({"claim_id", "factors", "rationale"}, {"cwe", "cvss_v4", "remediation"}),
 }
 ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool specification."
+# The persona schema's disposition enum is shared by 08 and 09; each stage's own record schema accepts
+# fewer. Checked here so a cross-stage value gets a repair round that names the claim and the fix
+# (09 re-run 2026-10-04 answered SURVIVING, the 08 outcome, and failed only at the closed schema).
+STAGE_DISPOSITIONS = {
+    "08-blue-team-refutation": ("REFUTED", "SURVIVING", "UNRESOLVED"),
+    "09-independent-verification": ("REFUTED", "UNRESOLVED", "BLOCKED"),  # no new evidence here: never VERIFIED
+}
+DISPOSITION_HINTS = {
+    ("09-independent-verification", "SURVIVING"): (
+        "SURVIVING is the 08 outcome; at 09 a claim that survived refutation but has no new independent "
+        "evidence is UNRESOLVED, with the obligation(s) still needing that evidence marked UNRESOLVED"),
+}
+
 # Orchestrator-owned keys a model may still echo out of habit; they are ignored, never trusted.
 # Candidate-wrapper bookkeeping, plus every field the decision schema declares where the persona schema
 # does not (ADR-0013: Python derives it). `citations` is one: Python builds it from citation_ids, and
@@ -227,6 +240,12 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
         if claim_id not in records:
             errors.append(f"{where}: claim_id {claim_id!r} is not an upstream claim")
             continue
+        allowed_dispositions = STAGE_DISPOSITIONS.get(stage)
+        if allowed_dispositions and row.get("disposition") not in allowed_dispositions:
+            value_shown = row.get("disposition") if isinstance(row.get("disposition"), str) else "<other>"
+            hint = DISPOSITION_HINTS.get((stage, value_shown))
+            errors.append(f"claim {claim_id}: disposition {value_shown} is not allowed at {stage}; use one of "
+                          f"{list(allowed_dispositions)}" + (f" ({hint})" if hint else ""))
         if claim_id in by_claim:
             if by_claim[claim_id] == row:
                 limitations.append(f"claim {claim_id}: identical duplicate decision collapsed")
