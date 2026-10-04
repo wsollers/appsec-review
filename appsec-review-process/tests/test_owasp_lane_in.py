@@ -213,5 +213,64 @@ class OwaspLaneInTests(unittest.TestCase):
             owasp_lane_in.admit(self.run_id, self.request_path)
 
 
+class OwaspUniverseAdmissionTests(unittest.TestCase):
+    """ADR-0034: asvs-universe is locator-only derived intelligence; asvs-participants-V<n> canonical evidence."""
+
+    def setUp(self):
+        sys.path.insert(0, str(PROCESS / "tests"))
+        import owasp_workbench_lifecycle as workbench
+        import test_owasp_universe as universe_tests
+        universe_tests.isolated_runs(self)
+        self.workbench, self.run_id = workbench, "lane-in-universe"
+        self.fixture = universe_tests.UniverseRun(self, self.run_id)
+        self.fixture.publish()
+        self.request = workbench.lane_in_request(self.run_id)
+        self.path = self.fixture.run / "inputs" / "owasp-lane-in-request.json"
+
+    def admit(self, request=None):
+        write_json(self.path, request or self.request)
+        return owasp_lane_in.admit(self.run_id, self.path)
+
+    def entry(self, input_id):
+        return next(row for row in self.request["entries"] if row["input_id"] == input_id)
+
+    def test_universe_and_every_bundle_are_admitted(self):
+        pointer = self.admit()
+        manifest = json.loads((self.fixture.data / "jobs" / owasp_lane_in.JOB_ID / "whole" / "attempts" /
+                               pointer["attempt_id"] / "outputs" / "owasp-input-manifest.json").read_text())
+        uses = {row["input_id"]: (row["kind"], row["use"], row["may_support_control_status"]) for row in manifest["entries"]}
+        self.assertEqual(uses["asvs-universe"], ("asvs_universe", "locator_only", False))
+        self.assertEqual(uses["asvs-participants-V5"], ("source_excerpt_bundle", "canonical_evidence", True))
+        self.assertEqual(len(uses), 5)
+
+    def test_wrong_evidence_class_or_use_is_refused(self):
+        self.entry("asvs-universe")["use"] = "canonical_evidence"
+        with self.assertRaises(ValueError):
+            self.admit()
+        self.request = self.workbench.lane_in_request(self.run_id)
+        self.entry("asvs-participants-V5")["use"] = "locator_only"
+        with self.assertRaisesRegex(ValueError, "canonical raw evidence"):
+            self.admit()
+
+    def test_a_missing_bundle_or_an_edited_snapshot_is_refused(self):
+        self.request["entries"] = [row for row in self.request["entries"] if row["input_id"] != "asvs-participants-V2"]
+        with self.assertRaisesRegex(execution_state.Blocked, "exactly the participants bundles"):
+            self.admit()
+        self.request = self.workbench.lane_in_request(self.run_id)
+        source = self.fixture.source / "src" / "hello.c"
+        source.write_text(source.read_text() + "/* edited after the universe */\n", encoding="utf-8")
+        with self.assertRaisesRegex(execution_state.Blocked, "changed since candidate search"):
+            self.admit()
+
+    def test_blocked_universe_is_not_admissible(self):
+        pointer_path = self.fixture.data / "jobs" / "04-owasp-universe" / "whole" / "accepted.json"
+        pointer = json.loads(pointer_path.read_text())
+        write_json(pointer_path, dict(pointer, status="BLOCKED"))
+        for row in self.request["entries"]:
+            row["producer"]["accepted_pointer_sha256"] = sha(pointer_path)
+        with self.assertRaisesRegex(execution_state.Blocked, "producer is not accepted"):
+            self.admit()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

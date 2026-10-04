@@ -1,6 +1,11 @@
-"""Qualification and mutation tests for automatic OWASP component routing."""
+"""OWASP routing is a pure projection of the accepted 04-owasp-universe into T04 (ADR-0034).
+
+The component-map helpers (``_freeciv_like_map``, ``_publish_component``, ``_publish_lane_in``) stay
+for the chain tests that admit the map as report context; it no longer routes any OWASP work.
+"""
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 import hashlib
 import json
@@ -13,12 +18,17 @@ import unittest
 PROCESS = Path(__file__).resolve().parents[1]
 ROOT = PROCESS.parent
 sys.path.insert(0, str(PROCESS))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import execution_state
 import owasp_applicability
 import owasp_component_routing as routing
+import owasp_lane_in
+import owasp_universe
+import owasp_workbench_lifecycle as workbench
 from publish_job_output import mark_attempt_started, record_terminal_current
 from schema_validate import validate_document
+import test_owasp_universe as universe_fixture
 
 
 def write_json(path: Path, value) -> None:
@@ -28,6 +38,14 @@ def write_json(path: Path, value) -> None:
 
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def admit_universe(case, run_id: str, *, component_map: bool = False) -> dict:
+    """T03 over the accepted universe (and the component map as context when published)."""
+    request = workbench.lane_in_request(run_id)
+    if not component_map:
+        request["entries"] = [row for row in request["entries"] if row["kind"] != "component_map"]
+    return owasp_lane_in.admit(run_id, workbench._write_request(run_id, "owasp-lane-in-request.json", request))
 
 
 class OwaspComponentRoutingTests(unittest.TestCase):
@@ -186,28 +204,6 @@ class OwaspComponentRoutingTests(unittest.TestCase):
         write_json(base / "latest.json", {"attempt_id": attempt_id})
         return manifest, manifest_path, pointer
 
-    def test_complete_freeciv_like_projection_and_t04_happy_path(self):
-        pointer = routing.run(self.run_id)
-        request_path = routing.request_path(self.run_id, pointer)
-        request = json.loads(request_path.read_text())
-        route = json.loads(request_path.with_name(routing.ROUTING).read_text())
-        self.assertEqual(validate_document(request, "owasp-applicability-request.schema.json"), [])
-        self.assertEqual(route["component_ids"], ["freeciv-client", "freeciv-server", "network-protocol", "ruleset-loader"])
-        self.assertEqual(route["expected_target_count"], route["component_count"] * route["selected_control_count"])
-        self.assertEqual([rule["component_id"] for rule in request["rules"]], ["freeciv-server"])
-        self.assertTrue(all(row["kind"] == "cannot_determine" and row["rescope_required"] for row in route["gaps"]))
-
-        result = owasp_applicability.build(self.run_id, request_path)
-        model_path = (self.data / "jobs" / owasp_applicability.JOB_ID / "whole" / "attempts" /
-                      result["attempt_id"] / "outputs" / "owasp-applicability-model.json")
-        model = json.loads(model_path.read_text())
-        self.assertEqual(model["counts"]["control_targets"], route["expected_target_count"])
-        self.assertEqual(model["counts"]["not_applicable"], 0)
-        self.assertGreater(model["counts"]["applicable"], 0)
-        self.assertGreater(model["counts"]["cannot_determine"], 0)
-        self.assertEqual(model["component_map"], request["component_map"])
-        self.assertTrue(all(row["component_evidence_roots"] for row in model["rows"]))
-
     def _republish(self, edit):
         edit(self.component_map)
         for path in (self.data / "jobs").iterdir():
@@ -221,79 +217,106 @@ class OwaspComponentRoutingTests(unittest.TestCase):
                       result["attempt_id"] / "outputs" / "owasp-applicability-model.json")
         return json.loads(request_path.read_text()), json.loads(model_path.read_text())
 
-    def test_classified_local_cli_gets_t04_accepted_web_chapter_not_applicable(self):
-        def edit(value):
-            row = next(item for item in value["functional_components"] if item["component_id"] == "ruleset-loader")
-            row.update(component_type="command-line application", aliases=["cli"], confidence="high")
-        _request, model = self._republish(edit)
-        rows = [row for row in model["rows"] if row["component_id"] == "ruleset-loader"]
-        excluded = {row["domain_id"] for row in rows if row["applicability_status"] == "not_applicable"}
-        self.assertTrue(excluded)
-        self.assertLessEqual(excluded, routing.NON_WEB_NA_DOMAINS["owasp_asvs"])
-        self.assertTrue(all(row["citations"] and row["source_completeness"] == "adequate"
-                            for row in rows if row["applicability_status"] == "not_applicable"))
-        self.assertTrue(all(row["applicability_status"] == "cannot_determine" and row["source_completeness"] == "not_evaluated"
-                            for row in rows if row["domain_id"] not in excluded))
-        self.assertEqual(model["counts"]["not_applicable"], len([r for r in rows if r["domain_id"] in excluded]))
 
-    def test_network_trait_or_network_unknown_blocks_not_applicable(self):
-        def edit(value):
-            for row in value["functional_components"]:
-                if row["component_id"] in {"ruleset-loader", "freeciv-client"}:
-                    row.update(component_type="command-line application", aliases=["cli"], confidence="high")
-            next(item for item in value["functional_components"]
-                 if item["component_id"] == "ruleset-loader")["observed_purpose"] = "Fetches rulesets over HTTP."
-        request, model = self._republish(edit)
-        self.assertFalse([rule for rule in request["rules"] if rule["decision"]["status"] == "not_applicable"])
-        self.assertEqual(model["counts"]["not_applicable"], 0)
+class UniverseProjectionTests(unittest.TestCase):
+    def setUp(self):
+        universe_fixture.isolated_runs(self)
+        self.run_id = "universe-routing"
 
-    def test_partial_classification_yields_conditional_rows_carrying_the_unknown(self):
-        def edit(value):
-            next(item for item in value["functional_components"] if item["component_id"] == "freeciv-server")["confidence"] = "medium"
-        request, model = self._republish(edit)
-        rule = next(rule for rule in request["rules"] if rule["component_id"] == "freeciv-server")
-        self.assertEqual(rule["decision"]["status"], "conditional")
-        rows = [row for row in model["rows"] if row["component_id"] == "freeciv-server"]
-        self.assertTrue(rows and all(row["applicability_status"] == "conditional" and row["conditional_expression"]
-                                     for row in rows))
-
-    def test_mixed_generation_is_rejected(self):
-        self.manifest["entries"][0]["source_snapshot"]["snapshot_id"] = "sha256:" + "0" * 64
-        write_json(self.manifest_path, self.manifest)
-        pointer = json.loads(self.t03_pointer.read_text())
-        pointer["artifacts"]["outputs/owasp-input-manifest.json"] = sha(self.manifest_path)
-        write_json(self.t03_pointer, pointer)
-        with self.assertRaisesRegex(execution_state.Blocked, "mixed or absent source-generation"):
-            routing.assemble(self.run_id)
-
-    def test_t04_rejects_tampered_component_projection(self):
+    def project(self, **fixture):
+        self.fixture = universe_fixture.UniverseRun(self, self.run_id, **fixture)
+        self.fixture.publish()
+        admit_universe(self, self.run_id)
         pointer = routing.run(self.run_id)
         request_path = routing.request_path(self.run_id, pointer)
-        request = json.loads(request_path.read_text())
-        request["components"][0]["tags"] = ["forged-web-surface"]
-        tampered = self.run / "inputs" / "tampered-owasp-applicability-request.json"
+        self.request_path = request_path
+        return pointer, json.loads(request_path.read_text()), json.loads(request_path.with_name(routing.ROUTING).read_text())
+
+    def model(self, request_path):
+        result = owasp_applicability.build(self.run_id, request_path)
+        path = (self.fixture.data / "jobs" / owasp_applicability.JOB_ID / "whole" / "attempts" / result["attempt_id"] /
+                "outputs" / "owasp-applicability-model.json")
+        return result, json.loads(path.read_text())
+
+    def test_every_chapter_is_projected_once_and_t04_rows_follow_its_control_scope(self):
+        pointer, request, route = self.project()
+        self.assertEqual(pointer["status"], "OK")
+        self.assertEqual(validate_document(request, "owasp-applicability-request.schema.json"), [])
+        self.assertEqual(validate_document(route, "owasp-component-routing.schema.json"), [])
+        ids = [f"asvs-V{n}" for n in range(1, 18)]
+        self.assertEqual(route["component_ids"], ids)
+        self.assertEqual([row["control_scope"] for row in request["components"]],
+                         [{"domain_ids": [f"V{n}"]} for n in range(1, 18)])
+        self.assertEqual((route["expected_target_count"], route["planned_validator_calls"]), (253, 4))
+        self.assertNotIn("component_map", request)
+        self.assertTrue(all(not rule["selector"]["all_controls"] and len(rule["selector"]["domain_ids"]) == 1
+                            for rule in request["rules"]))
+
+        _result, model = self.model(self.request_path)
+        per_component = Counter(row["component_id"] for row in model["rows"])
+        self.assertEqual({key.removeprefix("asvs-"): value for key, value in per_component.items()},
+                         universe_fixture.PER_CHAPTER)
+        self.assertEqual(model["counts"]["control_targets"], 253)
+        self.assertTrue(all(row["domain_id"] == row["component_id"].removeprefix("asvs-") for row in model["rows"]))
+        applicable = Counter(row["domain_id"] for row in model["rows"] if row["applicability_status"] == "applicable")
+        self.assertEqual(applicable, {"V1": 27, "V2": 11, "V5": 9, "V16": 16})
+        self.assertEqual(model["counts"]["not_applicable"], 253 - 63)
+        self.assertEqual(model["counts"]["cannot_determine"], 0)
+        participants = next(row for row in model["rows"] if row["domain_id"] == "V5")
+        self.assertEqual(participants["component_evidence_input_ids"], ["asvs-participants-V5"])
+        self.assertEqual(participants["component_evidence_roots"], ["src/hello.c"])
+
+    def test_universe_gap_stays_cannot_determine_and_visible(self):
+        _pointer, request, route = self.project(incomplete=("V3",))
+        rule = next(row for row in request["rules"] if row["component_id"] == "asvs-V3")
+        self.assertEqual(rule["decision"]["status"], "cannot_determine")
+        self.assertEqual([gap["component_id"] for gap in route["gaps"]], ["asvs-V3"])
+        _result, model = self.model(self.request_path)
+        statuses = {row["applicability_status"] for row in model["rows"] if row["domain_id"] == "V3"}
+        self.assertEqual(statuses, {"cannot_determine"})
+        self.assertEqual(model["counts"]["cannot_determine"], universe_fixture.PER_CHAPTER["V3"])
+
+    def test_not_applicable_chapter_rule_cites_the_universe_decision(self):
+        _pointer, request, _route = self.project()
+        rule = next(row for row in request["rules"] if row["component_id"] == "asvs-V3")["decision"]
+        self.assertEqual((rule["status"], rule["source_completeness"]), ("not_applicable", "adequate"))
+        self.assertEqual([signal["signal_type"] for signal in rule["signals"]], ["positive_exclusion"])
+        self.assertEqual([citation["input_id"] for citation in rule["citations"]], ["asvs-universe"])
+        applicable = next(row for row in request["rules"] if row["component_id"] == "asvs-V5")["decision"]
+        self.assertEqual([citation["input_id"] for citation in applicable["citations"]],
+                         ["asvs-participants-V5", "asvs-universe"])
+
+    def test_t04_rejects_a_tampered_projection(self):
+        _pointer, request, _route = self.project()
+        request["components"][0]["control_scope"] = {"domain_ids": ["V1", "V6"]}
+        tampered = self.fixture.run / "inputs" / "tampered-owasp-applicability-request.json"
         write_json(tampered, request)
         with self.assertRaisesRegex(execution_state.Blocked, "not the newest accepted assembler artifact"):
             owasp_applicability.build(self.run_id, tampered)
+        manifest = owasp_applicability._load_input_manifest(self.run_id, request["input_manifest"])
+        with self.assertRaisesRegex(execution_state.Blocked, "not the exact projection"):
+            owasp_applicability._validate_component_binding(self.run_id, request, manifest)
 
-    def test_stale_component_pointer_binding_is_rejected(self):
-        self.manifest["entries"][0]["producer"]["accepted_pointer_sha256"] = "0" * 64
-        write_json(self.manifest_path, self.manifest)
-        pointer = json.loads(self.t03_pointer.read_text())
-        pointer["artifacts"]["outputs/owasp-input-manifest.json"] = sha(self.manifest_path)
-        write_json(self.t03_pointer, pointer)
-        with self.assertRaisesRegex(execution_state.Blocked, "exactly the newest accepted component map"):
+    def test_routing_refuses_without_an_accepted_universe_or_its_admission(self):
+        self.fixture = universe_fixture.UniverseRun(self, self.run_id)
+        with self.assertRaisesRegex(execution_state.Blocked, "accepted 04-owasp-universe"):
             routing.assemble(self.run_id)
+        self.fixture.publish()
+        admit_universe(self, self.run_id)
+        manifest, _binding = routing._accepted_lane_in(self.run_id)
+        universe, binding = owasp_universe.accepted(self.run_id)
+        dropped = deepcopy(manifest)
+        dropped["entries"] = [row for row in dropped["entries"] if row["input_id"] != "asvs-participants-V5"]
+        with self.assertRaisesRegex(execution_state.Blocked, "every participating chapter"):
+            routing.admitted_universe(dropped, binding, universe)
+        stale = dict(binding, artifact_sha256="0" * 64)
+        with self.assertRaisesRegex(execution_state.Blocked, "exactly the newest accepted 04-owasp-universe"):
+            routing.admitted_universe(manifest, stale, universe)
 
-    def test_overlapping_group_assignment_is_rejected(self):
-        self.component_map["parallel_review_groups"][1]["component_ids"].append("freeciv-server")
-        with self.assertRaisesRegex(execution_state.Blocked, "overlapping or contradictory"):
-            routing._validate_component_topology(self.component_map)
-
-    def test_unresolved_component_reference_is_rejected(self):
-        self.component_map["tag_cloud"][0]["component_ids"] = ["missing-component"]
-        with self.assertRaisesRegex(execution_state.Blocked, "unresolved"):
-            routing._validate_component_topology(self.component_map)
+    def test_keyword_routing_is_gone(self):
+        for name in ("_family_match", "_local_only", "_tokens", "NON_WEB_NA_DOMAINS", "LOCAL_KINDS", "NETWORK_TRAITS"):
+            self.assertFalse(hasattr(routing, name), name)
+        self.assertNotIn('"all_controls": True', Path(routing.__file__).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

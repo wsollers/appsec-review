@@ -143,6 +143,59 @@ def _explicit_import(data_root: Path, entry: dict[str, Any], artifact: Path) -> 
         raise Blocked(f"{entry['input_id']}: explicit import receipt/hash mismatch")
 
 
+def _universe_entry(data_root: Path, entry: dict[str, Any], artifact: Path) -> None:
+    """ADR-0034: the universe is locator-only derived intelligence; each participants bundle is canonical
+    source evidence whose every excerpt is re-read from the snapshot and must match exactly."""
+    import owasp_universe
+    producer = entry.get("producer") or {}
+    if entry["admission"] != "accepted_run_output" or producer.get("job_id") != owasp_universe.JOB:
+        raise ValueError(f"{entry['input_id']}: OWASP universe inputs must be accepted 04-owasp-universe output")
+    if entry["freshness"]["status"] != "current":
+        raise Blocked(f"{entry['input_id']}: OWASP universe inputs must be current")
+    value = read_json(artifact)
+    snapshot = (entry.get("source_snapshot") or {}).get("snapshot_id")
+    if entry["kind"] == owasp_universe.UNIVERSE_KIND:
+        if (entry["input_id"] != owasp_universe.UNIVERSE_INPUT or entry["evidence_class"] != "derived_intelligence" or
+                entry["use"] != "locator_only"):
+            raise ValueError(f"{entry['input_id']}: the OWASP universe is admitted only as locator-only derived intelligence")
+        if validate_document(value, "owasp-universe.schema.json") or value["run_id"] != data_root.parent.name:
+            raise Blocked(f"{entry['input_id']}: OWASP universe no longer validates")
+        if value["status"] not in {"OK", "OK_WITH_GAPS"} or not value["budget"]["within_budget"]:
+            raise Blocked(f"{entry['input_id']}: a BLOCKED or over-budget OWASP universe is not admissible")
+    else:
+        if entry["evidence_class"] != "raw_evidence" or entry["use"] != "canonical_evidence":
+            raise ValueError(f"{entry['input_id']}: a participants bundle is admitted only as canonical raw evidence")
+        if (validate_document(value, "owasp-participants-bundle.schema.json") or
+                value["input_id"] != entry["input_id"] or value["run_id"] != data_root.parent.name):
+            raise Blocked(f"{entry['input_id']}: participants bundle no longer validates")
+        owasp_universe.verify_bundle(value, owasp_universe.source_root(data_root.parent.name))
+    if snapshot != value["source_snapshot_sha256"]:
+        raise Blocked(f"{entry['input_id']}: OWASP universe input has mixed or absent source-snapshot lineage")
+
+
+def _universe_set(entries: list[dict[str, Any]], data_root: Path) -> None:
+    """Bundles are admitted only with their universe, all of them, at the hashes the universe binds."""
+    import owasp_universe
+    universes = [row for row in entries if row["kind"] == owasp_universe.UNIVERSE_KIND]
+    bundles = {row["input_id"]: row for row in entries if row["kind"] == owasp_universe.BUNDLE_KIND}
+    if not universes and not bundles:
+        return
+    if len(universes) != 1:
+        raise ValueError("OWASP lane-in admits exactly one OWASP universe with its participants bundles")
+    universe, attempt = universes[0], universes[0]["producer"]["attempt_id"]
+    value = read_json(data_root.joinpath(*_relative(universe["artifact"]["path"]).parts))
+    prefix = universe["artifact"]["path"].rsplit("/outputs/", 1)[0] + "/"
+    expected = {target["evidence_bundle"]["input_id"]: target["evidence_bundle"] for target in value["targets"]
+                if target["evidence_bundle"] is not None}
+    if set(bundles) != set(expected):
+        raise Blocked("OWASP lane-in must admit exactly the participants bundles of the admitted universe")
+    for input_id, bundle in expected.items():
+        entry = bundles[input_id]
+        if (entry["producer"]["attempt_id"] != attempt or
+                entry["artifact"] != {"path": prefix + bundle["path"], "sha256": bundle["sha256"]}):
+            raise Blocked(f"{input_id}: participants bundle is not the one the admitted universe binds")
+
+
 def _validate_entry(data_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
     artifact = _artifact(data_root, entry["artifact"])
     admission = entry["admission"]
@@ -171,6 +224,8 @@ def _validate_entry(data_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
     elif entry.get("derivation_status") is not None:
         raise ValueError(f"{entry['input_id']}: raw evidence cannot claim derivation status")
 
+    if entry["kind"] in {"asvs_universe", "source_excerpt_bundle"}:
+        _universe_entry(data_root, entry, artifact)
     index_like = "index" in entry["kind"].lower() or "search" in entry["kind"].lower()
     if index_like:
         if entry["use"] != "locator_only":
@@ -340,6 +395,7 @@ def _validate_request(run_id: str, request: dict[str, Any], reference_root: Path
         if entry["source_snapshot"] is not None:
             _parse_time(entry["source_snapshot"]["captured_at"])
         entries.append(_validate_entry(data_root, entry))
+    _universe_set(entries, data_root)
     instant = clock()
     if instant.tzinfo is None:
         raise ValueError("lane-in clock must be timezone-aware")

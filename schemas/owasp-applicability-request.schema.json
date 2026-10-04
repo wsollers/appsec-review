@@ -10,6 +10,7 @@
     "run_id": {"type": "string"},
     "input_manifest": {"$ref": "owasp-input-manifest-binding.schema.json"},
     "component_map": {"$ref": "owasp-component-map-binding.schema.json"},
+    "universe": {"$ref": "#/$defs/universe_binding"},
     "assigned_reviewer": {
       "type": "object",
       "additionalProperties": false,
@@ -46,7 +47,14 @@
           "classification_state": {"enum": ["known", "partial", "unknown"]},
           "component_type": {"type": "string"},
           "coarse_group": {"type": "string"},
-          "deployability": {"type": "string"}
+          "deployability": {"type": "string"},
+          "control_scope": {
+            "description": "ADR-0034: a synthetic asvs-V<n> chapter target receives only the controls of the listed chapters/domains.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["domain_ids"],
+            "properties": {"domain_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}
+          }
         }
       }
     },
@@ -75,5 +83,24 @@
       }
     },
     "overrides": {"type": "array", "items": {"$ref": "owasp-applicability-override.schema.json"}}
+  },
+  "$defs": {
+    "universe_binding": {
+      "description": "The newest accepted, within-budget 04-owasp-universe publication the request projects (ADR-0034).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "artifact_path",
+                   "artifact_sha256", "source_snapshot_sha256", "planned_validator_calls"],
+      "properties": {
+        "job_id": {"const": "04-owasp-universe"},
+        "attempt_id": {"$ref": "common/formats.schema.json#/$defs/attempt_id"},
+        "accepted_pointer_path": {"const": "jobs/04-owasp-universe/whole/accepted.json"},
+        "accepted_pointer_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"},
+        "artifact_path": {"type": "string", "pattern": "^jobs/04-owasp-universe/whole/attempts/[^/]+/outputs/owasp-universe\\.json\\Z"},
+        "artifact_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"},
+        "source_snapshot_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+        "planned_validator_calls": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}
+      }
+    }
   }
 }
