@@ -15,6 +15,8 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `code_query_exports_enabled` | True flag | safety | Grant the code_exports query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_force_indexed_mode` | True flag | safety | A model job whose tooling profile grants tools (query tool: lines) gets the lookup tools even when its inputs fit inline (the inputs then stay inlined as well). Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools. |  |
 | `code_query_graph_enabled` | True flag | safety | Grant the code_callers, code_callees, code_path query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_lsp_calls_max` | 60 count | safety | Most code_definition / code_references / code_hover / code_call_hierarchy calls one model job (one input server process, one cell) may make; further calls are refused and the job reports the gap. | Each call may start or query a live language server; precomputed rows answer most calls without one. |
+| `code_query_lsp_enabled` | True flag | safety | Grant the code_definition, code_references, code_hover, code_call_hierarchy query tools to model jobs whose tooling profile lists them and whose pinned 02-lsp-xref summary can answer them. Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_native_enabled` | True flag | safety | Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_outline_enabled` | True flag | safety | Grant the code_file_outline query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_path_depth_max` | 24 count | safety | Longest call path code_path explores (edges). |  |
@@ -377,8 +379,20 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
-| `file_max_bytes` | 1 MiB | window | Bytes read per input file. |  |
+| `binary_document_max_bytes` | 32 MiB | safety | Largest PDF or DOCX converted (and the DOCX unpacked-size bound); larger ones are oversized-input gaps. | Typical design PDFs are 0.1-10 MB. |
+| `container_cpu_millis` | 1000 millicpu | resource | CPU quota (1000 = one core) (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_memory_bytes` | 1 GiB | resource | Memory limit for one conversion container (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_pids` | 64 count | resource | Process/thread limit (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_timeout_seconds` | 300 s (5 min) | resource | Wall-clock limit for one conversion container (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_tmpfs_bytes` | 64 MiB | resource | Size of the in-memory /tmp (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `converted_line_max_chars` | 4000 count | window | Longer converted lines are split; each piece keeps its line's provenance. |  |
+| `converted_text_max_bytes` | 2 MiB | window | Converted text kept per document (the evidence index text limit); the rest is a converted-text-truncated gap. |  |
+| `file_max_bytes` | 1 MiB | window | Bytes read per text, HTML or man-page document; larger ones are oversized-input gaps. |  |
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
+| `image_id` | audit-doc-convert id | resource | Pinned image holding pdftotext (poppler-utils) and pandoc for PDF/DOCX conversion. |  |
+| `pdf_min_text_chars_per_page` | 32 count | safety | Non-whitespace characters per page below which a PDF is an image-only-or-scanned-pdf gap (no OCR). |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
 
 ### `02-evidence-index-derived`
@@ -471,6 +485,22 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode scales with file count. A TIMEOUT (or OOM / failed exit) publishes OK_WITH_GAPS with a LICENSE_SCAN_TOOL_GAP and outputs/pinned-tool-gap.json instead of pinned-tool-evidence.json (ADR-0013). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `scancode_processes` | 4 count | resource | scancode -n: parallel scan processes. Keep container_cpu_millis at 1000 per process. | Scan time falls roughly with processes; doom3-bfg did not finish in 3600 s with one. |
+
+### `02-lsp-xref`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 4 GiB | resource | Memory limit for the container (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 512 count | resource | Process/thread limit (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 14400 s (240 min) | resource | Wall-clock limit for the container (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `idle_seconds` | 900.0 seconds | resource | A started server stops after this long without a query (it restarts on the next one). |  |
+| `max_queries` | 40000 count | safety | Most language-server queries the precompute plans (4 per function: definition, references, incoming and outgoing calls); functions beyond it are an lsp-budget-exceeded gap. | freeciv21-size code indexes hold ~10K functions; Linux-size ones ~800K (a subset is precomputed, the live tools answer the rest). |
+| `request_seconds` | 30.0 seconds | safety | Timeout of one language-server request (call hierarchy: up to three). |  |
+| `start_seconds` | 300.0 seconds | safety | How long a first query waits for the server to start and initialize before it is a gap. | jdtls and rust-analyzer index for minutes on large trees. |
 
 ### `02-mobile-sast`
 

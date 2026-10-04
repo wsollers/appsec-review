@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 88,
+  "lifecycle_jobs": 89,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1510,6 +1510,22 @@
        ]
       },
       {
+       "ref": "job:02-lsp-xref",
+       "id": "02-lsp-xref",
+       "name": "Language-server cross-references (on-demand servers, recorded answers)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-index",
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-lsp-xref"
+       ],
+       "declared_inputs": [
+        "accepted code index"
+       ]
+      },
+      {
        "ref": "job:02-native-sast",
        "id": "02-native-sast",
        "name": "Native SAST",
@@ -1919,7 +1935,8 @@
       "leaves": [
        "legacy-pregather",
        "job:02-build-resolution",
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-lsp-xref"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -2011,6 +2028,7 @@
        "pinned compiler image with the vendored /opt/treesitter venv",
        "hash-bound treesitter_ast.py",
        "accepted code property graph records file",
+       "accepted code index",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
        "B16 audit-native record",
@@ -2560,7 +2578,8 @@
         "job:01-component-characterization",
         "job:02-evidence-assembly",
         "job:02-source-sast",
-        "job:02-native-sast"
+        "job:02-native-sast",
+        "job:02-lsp-xref"
        ],
        "produces": [
         "job:07-hypothesis-discovery"
@@ -2896,6 +2915,7 @@
        "job:02-evidence-assembly",
        "job:02-source-sast",
        "job:02-native-sast",
+       "job:02-lsp-xref",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
        "job:06-cve-reachability",
@@ -3042,6 +3062,7 @@
      "job:02-code-property-graph",
      "job:02-treesitter-ast",
      "job:02-code-index",
+     "job:02-lsp-xref",
      "job:02-native-sast",
      "job:02-ir-capture",
      "job:02-ir-link",
@@ -3148,6 +3169,7 @@
      "pinned compiler image with the vendored /opt/treesitter venv",
      "hash-bound treesitter_ast.py",
      "accepted code property graph records file",
+     "accepted code index",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
      "B16 audit-native record",
@@ -4620,6 +4642,22 @@
        ]
       },
       {
+       "ref": "job:02-lsp-xref",
+       "id": "02-lsp-xref",
+       "name": "Language-server cross-references (on-demand servers, recorded answers)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-code-index",
+        "job:02-native-build"
+       ],
+       "produces": [
+        "job:02-lsp-xref"
+       ],
+       "declared_inputs": [
+        "accepted code index"
+       ]
+      },
+      {
        "ref": "job:02-native-sast",
        "id": "02-native-sast",
        "name": "Native SAST",
@@ -5038,7 +5076,8 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-lsp-xref"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -5142,6 +5181,7 @@
        "pinned compiler image with the vendored /opt/treesitter venv",
        "hash-bound treesitter_ast.py",
        "accepted code property graph records file",
+       "accepted code index",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
        "B16 audit-native record",
@@ -5715,7 +5755,8 @@
         "job:01-component-characterization",
         "job:02-evidence-assembly",
         "job:02-source-sast",
-        "job:02-native-sast"
+        "job:02-native-sast",
+        "job:02-lsp-xref"
        ],
        "produces": [
         "job:07-hypothesis-discovery"
@@ -5803,6 +5844,7 @@
        "job:02-evidence-assembly",
        "job:02-source-sast",
        "job:02-native-sast",
+       "job:02-lsp-xref",
        "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
        "job:06-cve-reachability",
@@ -6279,6 +6321,7 @@
      "job:02-code-property-graph",
      "job:02-treesitter-ast",
      "job:02-code-index",
+     "job:02-lsp-xref",
      "job:02-native-sast",
      "job:02-ir-capture",
      "job:02-ir-link",
@@ -6389,6 +6432,7 @@
      "pinned compiler image with the vendored /opt/treesitter venv",
      "hash-bound treesitter_ast.py",
      "accepted code property graph records file",
+     "accepted code index",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
      "B16 audit-native record",
@@ -9599,6 +9643,11 @@
      "job": "02-native-sast",
      "kind": "required",
      "contract": "native-sast"
+    },
+    {
+     "job": "02-lsp-xref",
+     "kind": "optional",
+     "contract": "lsp-xref"
     }
    ],
    "declared_inputs": [
@@ -9640,7 +9689,8 @@
     "job:01-component-characterization",
     "job:02-evidence-assembly",
     "job:02-source-sast",
-    "job:02-native-sast"
+    "job:02-native-sast",
+    "job:02-lsp-xref"
    ],
    "produces": [
     "job:07-hypothesis-discovery"
@@ -12160,6 +12210,75 @@
    ],
    "produces": [
     "job:02-code-index"
+   ]
+  },
+  {
+   "id": "02-lsp-xref",
+   "lane": "02-evidence-pregather",
+   "name": "Language-server cross-references (on-demand servers, recorded answers)",
+   "contract": "lsp-xref",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/lsp_xref_job.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "lsp-xref"
+   },
+   "depends_on": [
+    {
+     "job": "02-code-index",
+     "kind": "required",
+     "contract": "code-index"
+    },
+    {
+     "job": "02-native-build",
+     "kind": "optional",
+     "contract": "native-build"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted code index"
+    },
+    {
+     "need": "optional",
+     "input": "accepted native build (compile_commands.json per unit = clangd build variant)"
+    },
+    {
+     "need": "optional",
+     "input": "accepted language census (languages_needing_server; else the code index languages)"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/02-lsp-xref.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-lsp-xref/",
+   "output_files": [
+    "lsp-xref.json",
+    "lsp-xref.sqlite",
+    "lsp-xref-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/lsp-xref.json",
+   "claim_class": "structural_source_evidence",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:02-code-index",
+    "job:02-native-build"
+   ],
+   "produces": [
+    "job:02-lsp-xref"
    ]
   },
   {
@@ -15866,6 +15985,7 @@
    ],
    "consumed_by": [
     "job:02-codeql-cpp",
+    "job:02-lsp-xref",
     "job:02-native-sast",
     "job:02-ir-capture",
     "job:02-debug-symbol-index",
@@ -16041,7 +16161,20 @@
     "job:03-threat-model-dfd-stride",
     "job:04-asvs-masvs",
     "job:04-owasp-candidate-search",
-    "job:04-owasp-participation"
+    "job:04-owasp-participation",
+    "job:02-lsp-xref"
+   ]
+  },
+  "job:02-lsp-xref": {
+   "id": "job:02-lsp-xref",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-lsp-xref/",
+   "about": "Accepted lsp-xref output of 02-lsp-xref.",
+   "produced_by": [
+    "job:02-lsp-xref"
+   ],
+   "consumed_by": [
+    "job:07-hypothesis-discovery"
    ]
   },
   "job:02-native-sast": {

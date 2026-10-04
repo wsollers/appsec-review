@@ -31,7 +31,8 @@ hash-verified **code index** instead. Decision record: [ADR-0032](decisions/ADR-
 ## Tools
 
 `code_symbol`, `code_callers`, `code_callees`, `code_locate`, `code_type_info`, `code_file_outline`, `code_search`,
-`code_calls_to`, `code_path`, `code_address_taken`, `code_overrides`, `code_exports`.
+`code_calls_to`, `code_path`, `code_address_taken`, `code_overrides`, `code_exports`; and the language-server family
+`code_definition`, `code_references`, `code_hover`, `code_call_hierarchy` (below).
 
 Every result carries `complete`, `reasons`, `gaps`, `truncated`, `source` (cpg / treesitter / exports) and a locator
 (`path:line`). Unresolved calls, an unknown class hierarchy or a truncated answer make `complete=false`; the guides
@@ -74,14 +75,55 @@ hint input. A manually supplied `<run>/inputs/dependency-reachability/treesitter
 a hint engine (call sites matched by name, never `reachable` on its own). There is no job-graph edge from 02-treesitter-ast
 to 06: if the job has not been accepted when 06 binds, 06 records the usual `engine-input-absent` gap.
 
+## Language servers (recorded-sidecar replay, built 2026-10-04)
+
+The deferred "sealed code-intel sidecar" is built on the replay rule it named: every answer is recorded in the run and
+hash-bound, and a replay reads the recording, never the live server.
+
+1. Which servers are needed: an accepted `02-language-census` (`language-census.json`, its `languages_needing_server`)
+   when the run has one, read as an optional input; otherwise the languages of the accepted code index's `files`.
+2. `lsp_service.py` is the broker. A server is ready once its build input exists: C/C++ the accepted `02-native-build`
+   unit's adapted `compile_commands.json` (one build variant per unit), Java `pom.xml`/Gradle, Go `go.mod`, Rust
+   `Cargo.toml`, TS/JS `tsconfig.json`/`jsconfig.json`/`package.json`, Python and PHP nothing; otherwise the gap is
+   `lsp-not-ready: no compile_commands` (or the missing marker). The first query for (run, server, variant) creates
+   `runs/<run>/data/lsp/locks/<server>-<variant>.lock` with `mkdir`, writes `owner.json` (pid, container id, start time,
+   loopback port, token) and spawns a daemon that starts the server in its buildenv image through
+   `container_execution.build_docker_argv` (network none, checkout and build inputs read-only, one run-owned scratch dir;
+   `--interactive` added for stdio). Concurrent first queries wait for `ready`, so one container starts. A lock whose
+   owner pid or container is gone is renamed aside (one winner) with a record in `data/lsp/recoveries/`. The daemon
+   stops after `idle_seconds` without a query or on `lsp_service.py teardown --run-id` (run end). A start or initialize
+   failure is recorded in `data/lsp/failures/`; it is retried once, then every query is an `lsp-server-failed` gap.
+3. No project code runs: rust-analyzer build scripts, proc macros and check-on-save off; gopls with
+   `GOFLAGS=-mod=readonly GOPROXY=off GOTOOLCHAIN=local`; jdtls with Maven/Gradle import and autobuild off (recorded as
+   the `lsp-limit` `jdtls-build-import-disabled`: dependency types are unresolved); clangd with `--compile-commands-dir`,
+   no background index, no `--query-driver`, no clang-tidy; typescript-language-server without automatic type
+   acquisition. C# is withheld: csharp-ls loads projects through MSBuild, which runs project targets.
+4. Every live answer is written once to `data/lsp/recordings/<key>.json` (method, params, response, server name and
+   version, image id and digest, build variant and build-input hash, source snapshot, time), sealed by `record_sha256`.
+   The key hashes the query and the server identity, so the same query on the same inputs replays the same answer; a
+   recording that fails its hash is an `lsp-recording-invalid` gap.
+5. `02-lsp-xref` (`lsp_xref_job.py`; depends on `02-code-index` and optionally `02-native-build`; an optional edge
+   makes it upstream of `07-hypothesis-discovery`, so the menu can pin it for hunters and claim reviewers) asks
+   definition, references and incoming/outgoing calls for every indexed function, bounded by `max_queries` (over it:
+   `lsp-budget-exceeded`), and writes `lsp-xref.sqlite` (`lsp_functions`, `lsp_definitions`, `lsp_references`,
+   `lsp_calls`, `lsp_servers`, `lsp_files`) beside a hash-bound `lsp-xref.json`. Validation rebuilds the database from
+   the recordings alone. Gaps: not ready, no server, failed, unresolved includes (clangd `pp_file_not_found`), names
+   not located, budget.
+6. Model access: `code_definition`, `code_references`, `code_hover`, `code_call_hierarchy` answer from the precomputed
+   rows first, then from the broker (recorded, then live). They are granted through `code_query_grant` when the profile
+   lists them, `code_query_lsp_enabled` is on and the job's inputs pin an accepted `02-lsp-xref/.../lsp-xref.json`
+   (`supporting_evidence_menu` pins it for hunters and claim reviewers). `code_query_lsp_calls_max` bounds the calls per
+   cell. Profiles: `hypothesis-hunt-static`, `claim-review-static`, `owasp-participation-static`. Guide:
+   `tool-guides/code_lsp.md`.
+
+Not done here: no graph edge from `02-language-census` yet (that job lands on its own branch; add it as an optional
+dependency of `02-lsp-xref` when both are merged; until then the census is read if it was accepted first),
+`04-owasp-participation` does not pin `lsp-xref.json` yet (its owner adds it to the cell inputs), the run
+end does not call `lsp_service.py teardown` yet (the idle timeout stops servers meanwhile), and the buildenv images'
+servers are unqualified with these presets on a real target.
+
 ## Deferred
 
-- **Sealed code-intel sidecar.** Keeping build containers alive with their language servers (jdtls, gopls, clangd) and
-  querying them at model time. Deferred: the sidecar's answers depend on server state and build scripts, so replay would
-  not be deterministic; the build-script risk (a project's build running during analysis) needs a sandbox design first.
-  Replay rule if built: every answer is recorded in the run and hash-bound; a replayed job reads the recording, never the
-  live server. Evidence that would justify building it: reviewed runs where `complete=false` on `code_callers`/`code_type_info`
-  is the main reason a lead is left unresolved for Java/Go/C#.
 - **Query-time CodeQL.** Same determinism and cost concerns; the existing CodeQL SARIF and reachability tables stay the
   source. Revisit after the index has been used on freeciv21 and doom3-bfg.
 - **Lead-context (brief V):** attach SARIF code flows and index context to leads; starts after this merges.

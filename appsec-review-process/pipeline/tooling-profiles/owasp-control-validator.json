@@ -30,7 +30,11 @@
     "query tool: code_path",
     "query tool: code_address_taken",
     "query tool: code_overrides",
-    "query tool: code_exports"
+    "query tool: code_exports",
+    "query tool: code_definition",
+    "query tool: code_references",
+    "query tool: code_hover",
+    "query tool: code_call_hierarchy"
   ],
   "isolation": "Persona cell receives only bounded pinned bytes and read-only queries over the hash-bound accepted code index; no network, target execution, target mutation, credentials, dynamic execution or manual observation.",
   "disallowed_actions": [

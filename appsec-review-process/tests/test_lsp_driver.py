@@ -132,7 +132,7 @@ class Gaps(Base):
                    {"method": "documentSymbol", "path": "/etc/passwd"},
                    {"method": "documentSymbol", "path": "link.py"},
                    {"method": "definition", "path": "main.py"},
-                   {"method": "hover", "path": "main.py"},
+                   {"method": "typeDefinition", "path": "main.py"},
                    {"method": "documentSymbol", "path": "main.py"}]
         document = self.drive("ok", queries)
         self.assertEqual(self.kinds(document), ["path-outside-root"] * 3 + ["invalid-query"] * 2)

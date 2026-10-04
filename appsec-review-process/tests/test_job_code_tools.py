@@ -50,7 +50,7 @@ def package(tooling_profile: dict, *, index: bool = True, contract: dict | None 
 class ProfileGrantTests(unittest.TestCase):
     def test_each_profile_lists_exactly_the_hunt_profiles_code_tools(self):
         hunt = query.profile_tools(profile("hypothesis-hunt-static"))
-        self.assertEqual(len(hunt), 12)
+        self.assertEqual(len(hunt), 16)   # 12 code-index tools + 4 language-server tools (02-lsp-xref)
         for name in PROFILES:
             with self.subTest(profile=name):
                 self.assertEqual(query.profile_tools(profile(name)), hunt)

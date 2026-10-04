@@ -7,7 +7,7 @@
     "engagement": "SAMPLE - hello-autotools fixture (illustrative)",
     "run_id": "sample-hello-autotools",
     "sat_id": "20260927T141440Z",
-    "pipeline_commit": "sample; job-graph.json sha256:457627544077 (88 jobs)",
+    "pipeline_commit": "sample; job-graph.json sha256:f2f47f8a2f62 (89 jobs)",
     "report_date": "2026-09-29",
     "classification": "Internal - sample",
     "native_tier": "A",
@@ -48,7 +48,7 @@
     "family_weight": {
       "00-intake-recovery": 1,
       "01-component-characterization": 3,
-      "02-evidence-pregather": 52,
+      "02-evidence-pregather": 53,
       "03-threat-model-dfd-stride": 2,
       "04-asvs-masvs": 5,
       "05-native-memory": 1,
@@ -87,7 +87,7 @@
     {
       "id": "02-evidence-pregather",
       "name": "Lane 02: evidence pregather",
-      "note": "52 job(s) whose job-graph.json lane is 02-evidence-pregather."
+      "note": "53 job(s) whose job-graph.json lane is 02-evidence-pregather."
     },
     {
       "id": "03-threat-model-dfd-stride",
@@ -424,6 +424,13 @@
       "kind": "deterministic_python",
       "status": "OK",
       "tools": "pinned-source-sast (code_index_job.py:run)"
+    },
+    {
+      "id": "02-lsp-xref",
+      "family": "02-evidence-pregather",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "pinned-source-sast (lsp_xref_job.py:run)"
     },
     {
       "id": "02-native-sast",

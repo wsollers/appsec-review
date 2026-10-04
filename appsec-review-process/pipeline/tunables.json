@@ -36,6 +36,20 @@
       "unit": "flag",
       "value": true
     },
+    "code_query_lsp_calls_max": {
+      "description": "Most code_definition / code_references / code_hover / code_call_hierarchy calls one model job (one input server process, one cell) may make; further calls are refused and the job reports the gap.",
+      "kind": "safety",
+      "scale": "Each call may start or query a live language server; precomputed rows answer most calls without one.",
+      "unit": "count",
+      "value": 60
+    },
+    "code_query_lsp_enabled": {
+      "description": "Grant the code_definition, code_references, code_hover, code_call_hierarchy query tools to model jobs whose tooling profile lists them and whose pinned 02-lsp-xref summary can answer them. Off removes them from the prompt and from --allowedTools together.",
+      "kind": "safety",
+      "scale": "",
+      "unit": "flag",
+      "value": true
+    },
     "code_query_native_enabled": {
       "description": "Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together.",
       "kind": "safety",

@@ -114,6 +114,11 @@ workspace directories beneath `/scratch`. Java and TypeScript initialization set
 encoded in `qualify_tooling.py`. Network remains disabled for probes. Package restore or a
 language server that invokes project scripts needs the appropriate execution job and permissions.
 
+Pipeline jobs do not start servers by hand: `lsp_service.py` (the broker behind `02-lsp-xref` and the
+`code_definition`/`code_references`/`code_hover`/`code_call_hierarchy` tools) starts each server on the first query
+for its build variant, under a lock dir in `runs/<run>/data/lsp/locks/`, with the no-project-code presets, and records
+every answer for replay (`docs/code-query-tools.md`). `lsp_service.py teardown --run-id RUN_ID` stops them.
+
 For C/C++, supply the accepted variant's `compile_commands.json` to clangd using
 `--compile-commands-dir=<directory>`; retain debug/release and compiler identity. Initialization
 alone does not prove include paths, generated headers, symbols or cross-references are correct.

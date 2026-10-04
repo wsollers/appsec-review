@@ -1,0 +1,44 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "lsp-xref",
+  "display_name": "Recorded language-server cross-references for model query tools",
+  "required_files": [
+    "lsp-xref.json",
+    "lsp-xref.sqlite",
+    "lsp-xref-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "functions",
+    "queries",
+    "network",
+    "qualification"
+  ],
+  "result_schema": {
+    "artifact": "lsp-xref.json",
+    "schema_file": "lsp-xref.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "structural_source_evidence",
+    "allowed_assertions": [
+      "structural-record",
+      "source-locator",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "servers run in their pinned buildenv image through the B13 boundary: network none, source read-only, one run-owned scratch dir",
+    "no server is configured to run project scripts, build plugins or fetch dependencies; what that leaves unresolved is a recorded limit",
+    "every answer is a hash-sealed recording under data/lsp; validation rebuilds the database from the recordings alone",
+    "a server that is not ready, fails to start or is over budget is a gap, never zero references"
+  ]
+}

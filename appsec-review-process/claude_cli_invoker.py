@@ -293,7 +293,13 @@ def code_query_grant(package: Any) -> tuple[str | None, tuple[str, ...]]:
         summary = json.loads(by_ref[ref].data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         return None, ()
-    tools = tuple(code_query_mcp.grantable(profile, summary.get("capabilities") if isinstance(summary, dict) else None))
+    lsp_ref, lsp = code_query_mcp.lsp_summary_ref(list(by_ref)), None   # the lsp family: a pinned 02-lsp-xref
+    try:
+        lsp = json.loads(by_ref[lsp_ref].data.decode("utf-8")).get("capabilities") if lsp_ref else None
+    except (UnicodeDecodeError, ValueError, AttributeError):
+        lsp = None
+    tools = tuple(code_query_mcp.grantable(profile, summary.get("capabilities") if isinstance(summary, dict) else None,
+                                           lsp if isinstance(lsp, dict) else None))
     return (ref, tools) if tools else (None, ())
 
 

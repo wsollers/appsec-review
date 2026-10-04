@@ -883,6 +883,14 @@
             "not-applicable-non-native",
             "not-applicable-no-native-binaries"
           ]
+        },
+        {
+          "job": "02-lsp-xref",
+          "kind": "optional",
+          "contract": "lsp-xref",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
         }
       ],
       "planned_scope": "Code-reading hunter pool (general and known-list red-team personas) over component shards and P1/P2 tool-lead clusters; publishes checkout-resolved candidate vulnerability hypotheses for the claim ledger (ADR-0018).",
@@ -1878,6 +1886,38 @@
       "required_artifacts": [
         "code-index.json",
         "code-index.sqlite",
+        "status.json",
+        "permission.json",
+        "lineage.json"
+      ]
+    },
+    "02-lsp-xref": {
+      "lane": "02-evidence-pregather",
+      "contract": "lsp-xref",
+      "template": "02-lsp-xref",
+      "implemented": true,
+      "namespace": "02-lsp-xref",
+      "dependencies": [
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-build",
+          "kind": "optional",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
+        }
+      ],
+      "planned_scope": "On-demand language servers for the languages the code index (or an accepted 02-language-census) holds (lsp_service broker: started on first query in their pinned buildenv image, network none, source read-only, one lock per server and build variant) precompute definitions, references and call hierarchy for every indexed function; every answer is recorded and hash-bound for replay and for the code_* language-server query tools.",
+      "required_artifacts": [
+        "lsp-xref.json",
+        "lsp-xref.sqlite",
         "status.json",
         "permission.json",
         "lineage.json"

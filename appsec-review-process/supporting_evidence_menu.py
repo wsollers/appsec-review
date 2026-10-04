@@ -103,6 +103,9 @@ MENU = (
      ["evidence-index-derived.json"]),
     ("02-code-index", "index", "Structural code index summary (the SQLite database is not pinned: jobs granted the "
      "code_* query tools query it; the summary names its sha256, sources, capabilities and gaps)", ["code-index.json"]),
+    ("02-lsp-xref", "index", "Language-server cross-reference summary (the SQLite database is not pinned: jobs granted "
+     "code_definition / code_references / code_hover / code_call_hierarchy query it; the summary names its sha256, "
+     "servers, capabilities and gaps)", ["lsp-xref.json"]),
 )
 PROFILES = {
     "code": ("native", "tool-leads", "build", "architecture", "binary", "test", "docs", "dependency", "config", "index"),
