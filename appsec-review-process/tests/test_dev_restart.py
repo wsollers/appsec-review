@@ -448,3 +448,26 @@ class FingerprintScopeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CurrentCodeRepositoryPaths(unittest.TestCase):
+    """--explain on run 20261004T054551Z-357581 reported RERUN for jobs whose recorded repository-root
+    files (data/..., pipeline/...) were unchanged, because it looked for them under the process root."""
+
+    def test_repository_root_keys_hash_like_process_root_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            process = repo / "appsec-review-process"
+            (process / "sub").mkdir(parents=True)
+            (repo / "data" / "rules").mkdir(parents=True)
+            (repo / "schemas").mkdir()
+            (process / "sub" / "job.py").write_text("x = 1\n")
+            (repo / "data" / "rules" / "r.yml").write_text("rule: 1\n")
+            (repo / "schemas" / "s.json").write_text("{}\n")
+            keys = ["sub/job.py", "data/rules/r.yml", "schemas/s.json"]
+            first = dr.current_code(dict.fromkeys(keys, ""), process)
+            self.assertTrue(all(first[key] for key in keys), first)
+            self.assertEqual(dr._changed(first, dr.current_code(first, process)), [])
+            (repo / "data" / "rules" / "r.yml").write_text("rule: 2\n")
+            self.assertEqual(dr._changed(first, dr.current_code(first, process)),
+                             ["data/rules/r.yml changed"])
