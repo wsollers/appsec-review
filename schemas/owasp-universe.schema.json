@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-universe.schema.json",
+  "title": "04-owasp-universe result: the deterministic OWASP validation universe and its validator budget (ADR-0034)",
+  "description": "Python merges candidate search and participation into one target per ASVS chapter (asvs-V1..asvs-V17) with a decision and reason, rolls participating symbols up to files, binds one hash-bound source-excerpt bundle per participating chapter and computes planned validator calls = sum over participating chapters of ceil(l1_l2_control_rows / max_control_target_rows). Planned calls above max_validator_calls make the result BLOCKED: it is written for diagnosis, never accepted, and no validator call is made. Decision rules: participating when at least one validated record with role implements/enforces/consumes exists; not_applicable only for zero candidates with complete coverage, or for every candidate classified not_participating with resolved citations; otherwise gap. The MASVS family is not_applicable with a reason when the snapshot has no mobile platform.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "job_id", "source_snapshot_sha256", "status", "inputs", "config", "families", "targets",
+               "excluded", "budget", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-universe/1.0"},
+    "run_id": {"$ref": "common/formats.schema.json#/$defs/run_id"},
+    "job_id": {"const": "04-owasp-universe"},
+    "source_snapshot_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+    "status": {"anyOf": [{"$ref": "common/formats.schema.json#/$defs/ok_status"}, {"const": "BLOCKED"}]},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_search", "participation", "asvs_reference"],
+      "properties": {
+        "candidate_search": {"$ref": "#/$defs/binding"},
+        "participation": {"description": "null when 04-owasp-participation was skipped (no candidates in any chapter).",
+                          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/binding"}]},
+        "asvs_reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "edition", "snapshot_id", "manifest_sha256"],
+          "properties": {
+            "family": {"const": "owasp_asvs"},
+            "edition": {"const": "5.0.0"},
+            "snapshot_id": {"type": "string", "pattern": "^sha256-[0-9a-f]{16}\\Z"},
+            "manifest_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"}
+          }
+        }
+      }
+    },
+    "config": {"$ref": "#/$defs/config_ref"},
+    "families": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "decision", "reason_code", "reason"],
+        "properties": {
+          "family": {"enum": ["owasp_asvs", "owasp_masvs"]},
+          "decision": {"enum": ["in_scope", "not_applicable", "gap"]},
+          "reason_code": {"enum": ["chapter_universe", "no_mobile_platform", "mobile_platform_present", "mobile_detection_incomplete"]},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 600}
+        }
+      }
+    },
+    "targets": {
+      "description": "Exactly one target per ASVS 5.0.0 chapter, in order V1..V17.",
+      "type": "array", "minItems": 17, "maxItems": 17,
+      "items": {"$ref": "#/$defs/target"}
+    },
+    "excluded": {
+      "description": "Candidates classified not_participating, with the resolved citations that justify it. Search-time exclusions stay in the candidate-search artifact.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chapter_id", "candidate_id", "symbol", "file", "reason", "citations"],
+        "properties": {
+          "chapter_id": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"},
+          "candidate_id": {"$ref": "owasp-candidate-search.schema.json#/$defs/candidate_id"},
+          "symbol": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "file": {"$ref": "owasp-candidate-search.schema.json#/$defs/path"},
+          "reason": {"const": "not_participating"},
+          "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula", "max_validator_calls", "max_control_target_rows", "batch_config", "per_chapter",
+                   "planned_validator_calls", "within_budget"],
+      "properties": {
+        "formula": {"const": "sum(ceil(l1_l2_control_rows / max_control_target_rows)) over participating chapters"},
+        "max_validator_calls": {"type": "integer", "minimum": 1},
+        "max_control_target_rows": {"type": "integer", "minimum": 1, "maximum": 100},
+        "batch_config": {"$ref": "#/$defs/config_ref"},
+        "per_chapter": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["chapter_id", "control_rows", "planned_calls"],
+            "properties": {
+              "chapter_id": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"},
+              "control_rows": {"type": "integer", "minimum": 1},
+              "planned_calls": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "planned_validator_calls": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"},
+        "within_budget": {"type": "boolean"}
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gap_id", "kind", "chapter_ids", "statement"],
+        "properties": {
+          "gap_id": {"type": "string", "pattern": "^gap-[0-9a-f]{20}\\Z"},
+          "kind": {"enum": ["coverage_incomplete", "unclassified_candidates", "participation_unavailable",
+                            "budget_exceeded", "mobile_detection_incomplete", "bundle_truncated"]},
+          "chapter_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"}},
+          "statement": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "BLOCKED"}}},
+      "then": {"properties": {"budget": {"properties": {"within_budget": {"const": false}}}}},
+      "else": {"properties": {"budget": {"properties": {"within_budget": {"const": true}}}}}
+    }
+  ],
+  "$defs": {
+    "binding": {
+      "description": "An accepted upstream publication, hash-bound.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "attempt_id", "accepted_pointer_sha256", "artifact_path", "artifact_sha256"],
+      "properties": {
+        "job_id": {"$ref": "common/formats.schema.json#/$defs/job_id"},
+        "attempt_id": {"$ref": "common/formats.schema.json#/$defs/attempt_id"},
+        "accepted_pointer_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"},
+        "artifact_path": {"$ref": "owasp-candidate-search.schema.json#/$defs/path"},
+        "artifact_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"}
+      }
+    },
+    "config_ref": {
+      "description": "A tracked config file named by repository path, with execution_state.digest of its parsed content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "config_id", "version", "config_digest"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^appsec-review-process/config/owasp-(?:universe|batching)/[a-z0-9-]+\\.json\\Z"},
+        "config_id": {"$ref": "common/formats.schema.json#/$defs/slug"},
+        "version": {"$ref": "common/formats.schema.json#/$defs/semver"},
+        "config_digest": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"}
+      }
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line", "file_sha256"],
+      "properties": {
+        "file": {"$ref": "owasp-candidate-search.schema.json#/$defs/path"},
+        "line": {"$ref": "owasp-candidate-search.schema.json#/$defs/line"},
+        "file_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref_or_hex"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "chapter_id", "chapter_name", "decision", "reason_code", "reason", "control_rows",
+                   "candidate_count", "participants", "files", "evidence_bundle", "planned_validator_calls"],
+      "properties": {
+        "target_id": {"type": "string", "pattern": "^asvs-V(?:[1-9]|1[0-7])\\Z"},
+        "chapter_id": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"},
+        "chapter_name": {"type": "string", "minLength": 1, "maxLength": 80},
+        "decision": {"enum": ["participating", "not_applicable", "gap"]},
+        "reason_code": {"enum": ["participating_code_cited", "no_candidates_complete_coverage", "all_candidates_not_participating",
+                                 "coverage_incomplete", "unclassified_candidates", "participation_unavailable"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "control_rows": {"description": "L1+L2 controls of the chapter in the pinned ASVS snapshot.", "type": "integer", "minimum": 1},
+        "candidate_count": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"},
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["symbol", "file", "file_sha256", "start_line", "end_line", "roles", "candidate_ids", "citations"],
+            "properties": {
+              "symbol": {"type": "string", "minLength": 1, "maxLength": 1000},
+              "file": {"$ref": "owasp-candidate-search.schema.json#/$defs/path"},
+              "file_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref_or_hex"},
+              "start_line": {"$ref": "owasp-candidate-search.schema.json#/$defs/line"},
+              "end_line": {"$ref": "owasp-candidate-search.schema.json#/$defs/line"},
+              "roles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["implements", "enforces", "consumes"]}},
+              "candidate_ids": {"description": "Empty for a model-found function (candidate_id null in the reply).", "type": "array", "uniqueItems": true,
+                                "items": {"$ref": "owasp-candidate-search.schema.json#/$defs/candidate_id"}},
+              "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+            }
+          }
+        },
+        "files": {
+          "description": "Participants rolled up to files; a file may appear in several chapters.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256", "participant_count"],
+            "properties": {
+              "path": {"$ref": "owasp-candidate-search.schema.json#/$defs/path"},
+              "sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref_or_hex"},
+              "participant_count": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "evidence_bundle": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_id", "path", "sha256", "excerpt_count"],
+              "properties": {
+                "input_id": {"type": "string", "pattern": "^asvs-participants-V(?:[1-9]|1[0-7])\\Z"},
+                "path": {"type": "string", "pattern": "^outputs/asvs-participants-V(?:[1-9]|1[0-7])\\.json\\Z"},
+                "sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_hex"},
+                "excerpt_count": {"type": "integer", "minimum": 1}
+              }
+            }
+          ]
+        },
+        "planned_validator_calls": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"decision": {"const": "participating"}}},
+          "then": {"properties": {"reason_code": {"const": "participating_code_cited"}, "participants": {"minItems": 1},
+                                  "files": {"minItems": 1}, "evidence_bundle": {"type": "object"},
+                                  "planned_validator_calls": {"minimum": 1}}}
+        },
+        {
+          "if": {"properties": {"decision": {"const": "not_applicable"}}},
+          "then": {"properties": {"reason_code": {"enum": ["no_candidates_complete_coverage", "all_candidates_not_participating"]},
+                                  "participants": {"maxItems": 0}, "files": {"maxItems": 0}, "evidence_bundle": {"type": "null"},
+                                  "planned_validator_calls": {"const": 0}}}
+        },
+        {
+          "if": {"properties": {"decision": {"const": "gap"}}},
+          "then": {"properties": {"reason_code": {"enum": ["coverage_incomplete", "unclassified_candidates", "participation_unavailable"]},
+                                  "participants": {"maxItems": 0}, "files": {"maxItems": 0}, "evidence_bundle": {"type": "null"},
+                                  "planned_validator_calls": {"const": 0}}}
+        }
+      ]
+    }
+  }
+}
