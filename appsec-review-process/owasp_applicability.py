@@ -94,9 +94,26 @@ def _load_input_manifest(run_id: str, reference: dict[str, Any]) -> dict[str, An
     return manifest
 
 
+def _validate_universe_binding(run_id: str, request: dict[str, Any], input_manifest: dict[str, Any]) -> None:
+    """ADR-0034: recheck that the request is exactly the projection of the newest accepted universe."""
+    import owasp_component_routing as routing
+    import owasp_universe
+    universe, binding = owasp_universe.accepted(run_id)
+    if request["universe"] != binding:
+        raise Blocked("applicability request does not bind the newest accepted, within-budget 04-owasp-universe")
+    if "component_map" in request:
+        raise ValueError("a universe projection cannot also carry a component-map routing")
+    universe_entry, bundles = routing.admitted_universe(input_manifest, binding, universe)
+    components, rules, _gaps = routing.projection(universe, universe_entry, bundles)
+    if request["components"] != components or request["rules"] != sorted(rules, key=lambda row: row["rule_id"]):
+        raise Blocked("applicability request is not the exact projection of the accepted universe")
+
+
 def _validate_component_binding(run_id: str, request: dict[str, Any],
                                 input_manifest: dict[str, Any]) -> None:
     """Recheck the assembler's accepted component-map lineage at the T04 trust boundary."""
+    if "universe" in request:
+        return _validate_universe_binding(run_id, request, input_manifest)
     binding = request.get("component_map")
     if binding is None:  # Historical explicit T04 requests remain supported.
         return
@@ -178,7 +195,7 @@ def _validate_component_binding(run_id: str, request: dict[str, Any],
 def _validate_assembled_request_path(run_id: str, request_path: Path,
                                      request: dict[str, Any]) -> None:
     """Automatic requests are consumed only from the newest accepted assembler attempt."""
-    if "component_map" not in request:
+    if "component_map" not in request and "universe" not in request:
         return
     base = data_path(run_id, "jobs", "04-owasp-component-routing")
     pointer_path = base / "accepted.json"
@@ -309,6 +326,12 @@ def _rule_priority(rule: dict[str, Any], control: dict[str, Any]) -> int:
     return 1
 
 
+def _in_scope(component: dict[str, Any], control: dict[str, Any]) -> bool:
+    """ADR-0034: a ``control_scope`` limits the component to its chapters; no scope keeps every control."""
+    scope = component.get("control_scope")
+    return scope is None or _domain(control) in scope["domain_ids"]
+
+
 def _target_id(selection_id: str, control: dict[str, Any], component: dict[str, Any]) -> str:
     value = {"selection_id": selection_id, "family": control["standard_family"],
              "version": control["standard_version"], "control_id": control["control_id"],
@@ -397,16 +420,26 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
         if components[rule["component_id"]]["scope_status"] != "in_scope":
             raise ValueError(f"{rule['rule_id']}: rules cannot override engagement out_of_scope")
         component = components[rule["component_id"]]
-        bound = "component_map" in request and component.get("classification_state") in {"known", "partial"}
+        # The bound classification input that may positively exclude: the component map (explicit routing)
+        # or the deterministic universe's chapter decision (ADR-0034).
+        kind = "asvs_universe" if "universe" in request else "component_map" if "component_map" in request else None
+        bound = kind is not None and component.get("classification_state") in {"known", "partial"}
         _validate_decision(rule["decision"], entries, frozenset(
-            i for i in component["input_ids"] if bound and entries[i].get("kind") == "component_map"))
+            i for i in component["input_ids"] if bound and entries[i].get("kind") == kind))
         rules.append(rule)
 
     selection_id = input_manifest["selection_id"]
     rows = []
+    scoped = {component_id: [control for control in controls if _in_scope(component, control)]
+              for component_id, component in components.items()}
+    empty = sorted(component_id for component_id, values in scoped.items() if not values)
+    if empty:
+        raise ValueError("control_scope selects no selected control for: " + ", ".join(empty))
     for control in controls:
         for component_id in sorted(components):
             component = components[component_id]
+            if not _in_scope(component, control):
+                continue
             base = _base_row(selection_id, control, component, profiles[control["standard_family"]])
             if component["scope_status"] == "out_of_scope":
                 authority = component["scope_authority"]
@@ -482,7 +515,7 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
         rendered_overrides.append(override)
 
     rows.sort(key=lambda row: (row["standard_family"], row["control_id"], row["component_id"]))
-    expected = len(controls) * len(components)
+    expected = sum(len(values) for values in scoped.values())
     if len(rows) != expected or len({row["target_id"] for row in rows}) != expected:
         raise RuntimeError("no-silent-target applicability accounting failed")
     for index, row in enumerate(rows):
@@ -508,8 +541,8 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
     counts = {status: sum(row["applicability_status"] == status for row in rows)
               for status in ("applicable", "conditional", "not_applicable", "cannot_determine", "out_of_scope")}
     basis = {"request": request, "t03_input_fingerprint": input_manifest["input_fingerprint"],
-             "controls": [{"family": row["standard_family"], "id": row["control_id"],
-                            "hash": row["source_record_hash"]} for row in rows[::len(components)]],
+             "controls": [{"family": control["standard_family"], "id": control["control_id"],
+                            "hash": digest(control)} for control in controls],
              "components": request["components"]}
     fingerprint = digest(basis)
     reference_snapshots = [{key: pin[key] for key in ("family", "edition", "profile_or_level",

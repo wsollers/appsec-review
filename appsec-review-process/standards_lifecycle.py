@@ -13,6 +13,7 @@ import model_version_registry as mvr
 import owasp_applicability
 import owasp_component_routing
 import owasp_dispatch
+import owasp_universe
 import owasp_validation_worklist
 from publish_job_output import mark_attempt_started, publish_validated, validate_published
 import persona_invocation
@@ -78,14 +79,22 @@ def _component_targets(component: dict[str, Any], lane: str) -> list[dict[str, A
     return [row for row in component["functional_components"] if lane in row["downstream_lanes"]]
 
 
-def _owasp_routing(run_id: str, component_binding: dict[str, Any]) -> dict[str, Any]:
-    """P39: the accepted T04 routing request (components and rules), bound to this exact component map."""
+def _owasp_routing(run_id: str) -> dict[str, Any]:
+    """ADR-0034: the accepted 04-owasp-component-routing projection of the newest accepted, within-budget
+    04-owasp-universe (one asvs-V<n> component per chapter with its control_scope and decision rule),
+    bound to exactly that universe."""
+    _universe, binding = owasp_universe.accepted(run_id)
     routed, _binding = _load(run_id, ROUTING)
-    bound = routed.get("component_map") or {}
-    if (bound.get("attempt_id") != component_binding["attempt_id"] or
-            "sha256:" + str(bound.get("artifact_sha256")) != component_binding["artifact_sha256"]):
-        raise Blocked("standards lifecycle: accepted OWASP routing is bound to a different component map")
+    if routed.get("universe") != binding:
+        raise Blocked("standards lifecycle: accepted OWASP request is not the projection of the accepted universe")
     return routed
+
+
+def _in_scope(target: dict[str, Any], wrapper: dict[str, Any]) -> bool:
+    """A chapter target's ``control_scope`` keeps only its own chapter's controls."""
+    scope = (target.get("control_scope") or {}).get("domain_ids")
+    return scope is None or owasp_applicability._domain(
+        {"group": wrapper["record"].get("group", {})}) in scope
 
 
 def _routed_rule(routed: dict[str, Any], component_id: str, wrapper: dict[str, Any]) -> dict[str, Any] | None:
@@ -118,9 +127,11 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
     lane = "04-asvs-masvs" if family == "owasp" else "15-deployment-hardening"
     upstream = [COMPONENT, STANDARDS]
     if family == "owasp":
-        # P39: OWASP targets and applicability come from the accepted T04 routing; STIG/SRG has no
-        # routing equivalent and keeps the component map's downstream_lanes.
-        routed = _owasp_routing(run_id, component_binding)
+        # ADR-0034: OWASP targets and applicability come from the projected universe request (one
+        # target per ASVS chapter, scoped to its controls; gap chapters stay cannot_determine); the
+        # component map is report context only. STIG/SRG has no universe yet and keeps the component
+        # map's downstream_lanes. The routing publication binds the universe it projects.
+        routed = _owasp_routing(run_id)
         targets = [row for row in routed["components"] if row["scope_status"] == "in_scope"]
         upstream.append(ROUTING)
     else:
@@ -136,6 +147,8 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
         if wrapper["record_type"] != "control":
             continue
         for target in targets:
+            if family == "owasp" and not _in_scope(target, wrapper):
+                continue
             modes = sorted({mode for obligation in record.get("proof_obligations", [])
                             for mode in obligation.get("minimum_evidence_modes", [])})
             needs_runtime = "dynamic_runtime" in modes
@@ -166,7 +179,7 @@ def prepare_worklist(run_id: str, job_id: str) -> dict[str, Any]:
     pending = sum(row["applicability"] != "not_applicable" for row in controls)
     undecided = sum(row["applicability"] == "cannot_determine" for row in controls) if routed else 0
     if not targets:
-        source = "the accepted OWASP routing" if routed else lane
+        source = "the accepted OWASP universe projection" if routed else lane
         gaps = [f"No functional component is routed to {source}; the {family} worklist is empty."]
     else:
         gaps = [f"Control-specific assessment has not been performed for {pending} control x component work items."] if pending else []
@@ -206,23 +219,8 @@ def _reusable(base: Path, run_id: str, job_id: str, attempt_id: str) -> dict[str
     return pointer
 
 
-def _route_owasp(run_id: str, dagster_run_id: str) -> None:
-    """P39: produce, or reuse on unchanged inputs, the T03 lane-in and routing the OWASP worklist reads.
-
-    The join's T03-T06 chain runs the same deterministic workers later and reuses these publications;
-    ``force`` stays with the worklist itself.
-    """
-    import owasp_lane_in
-    import owasp_workbench_lifecycle as workbench
-    owasp_lane_in.admit(run_id, workbench._write_request(run_id, "owasp-lane-in-request.json",
-                                                         workbench.lane_in_request(run_id)))
-    owasp_component_routing.run(run_id, dagster_run_id)
-
-
 def run_worklist(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> dict[str, Any]:
     import bounded_transform_orchestration as orchestration
-    if job_id == owasp_validation_worklist.JOB:
-        _route_owasp(run_id, dagster_run_id)
     prepared = prepare_worklist(run_id, job_id)
     # No routed component publishes an empty worklist with its reason; routed components without
     # accepted controls are a failure to examine.

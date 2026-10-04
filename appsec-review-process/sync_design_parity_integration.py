@@ -37,6 +37,8 @@ WORKERS = {
                           "appsec-review-process/treesitter_ast_job.py:validate"),
     "02-code-index": ("deterministic_python", "appsec-review-process/code_index_job.py:run",
                       "appsec-review-process/code_index_job.py:validate"),
+    "02-lsp-xref": ("deterministic_python", "appsec-review-process/lsp_xref_job.py:run",
+                    "appsec-review-process/lsp_xref_job.py:validate"),
 }
 
 for _discovery_job in ("02-repository-partition-discovery", "02-dev-project-discovery",

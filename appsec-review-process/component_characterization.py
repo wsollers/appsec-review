@@ -16,7 +16,7 @@ import re
 import threading
 from typing import Any
 
-from claude_cli_invoker import ClaudeCliInvoker
+from claude_cli_invoker import ClaudeCliInvoker, code_index_pin
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, now, read_json, run_path
 import cwe_catalog
 import intake
@@ -293,11 +293,15 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     source_snapshot_sha256 = "sha256:" + identity["fingerprint"]
     evidence_attempt, evidence = _accepted_evidence(run_id, source_snapshot_sha256)
     evidence_root = _stage_evidence(run_id, evidence_attempt, evidence)
+    # The accepted 02-code-index summary (graph edge, required): pinned so the profile's code_* tools are
+    # granted. Without one the job runs on the evidence lookups and the map records the gap.
+    code_index, code_index_gap = code_index_pin(run_id)
     return {
         "job": JOB, "run_id": run_id, "target_root": str(target),
         "target_name": target.name, "source_revision": identity.get("revision"),
         "source_snapshot_sha256": source_snapshot_sha256,
         "evidence_root": str(evidence_root), "evidence": evidence, "code": _code_hashes(),
+        "code_index": code_index, "code_index_gap": code_index_gap,
     }
 
 
@@ -695,6 +699,10 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
         TEMPLATE, run_id=run_id, job_id=PERSONA_JOB_ID, attempt_id=attempt_id,
         target_root=target_root, source_snapshot_sha256=record["source_snapshot_sha256"],
         now=_clock(), store=store, upstream_root=evidence_root)
+    roots = {pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: evidence_root}
+    if record.get("code_index"):
+        request["readable_inputs"].append(dict(record["code_index"]))
+        roots[record["code_index"]["root"]] = data_path(run_id, "jobs").absolute()
     model_identity = request["model"]
     def extra_validate(result: dict[str, Any]) -> list[str]:
         return category_coverage_errors(result) + security_tag_errors(result)
@@ -703,7 +711,7 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
         invoker=ClaudeCliInvoker(effort=model["effort"], budget_usd=budget_usd,
                                  extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
-        readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: evidence_root},
+        readable_roots=roots,
         allowed_models=(model_identity,), source_snapshot_sha256=record["source_snapshot_sha256"],
         registry_ceiling=None, clock=_clock, cancel=threading.Event(), stop_grace_seconds=5)
     result = pi.run_invocation(runtime, run_id=run_id, job_id=PERSONA_JOB_ID,
@@ -1068,6 +1076,10 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         _repair_against_target(value, Path(inputs["target_root"]))
         _resolve_security_tags(value)
         _record_untagged_gaps(value)
+        if inputs.get("code_index_gap"):
+            _gap(value, "gap-code-index-unavailable", "tooling:code_*", inputs["code_index_gap"],
+                 "Characterization ran on the evidence lookups without the structural code_* query tools.",
+                 "Publish 02-code-index for this source generation and re-run characterization.")
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
         if errors:

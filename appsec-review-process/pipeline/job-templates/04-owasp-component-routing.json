@@ -1,7 +1,7 @@
 {
   "schema": "appsec-review/job-template/0.1",
   "job_template_id": "04-owasp-component-routing",
-  "display_name": "OWASP Component Applicability Routing",
+  "display_name": "OWASP ASVS Universe Projection (applicability request)",
   "process": "04-asvs-masvs",
   "budget_default": "probe",
   "composition": {
@@ -12,8 +12,8 @@
     "output_contract_id": "owasp-applicability-request"
   },
   "inputs": {
-    "required": ["newest accepted 01-component-characterization", "newest accepted 04-owasp-intel-lane-in with approved selection and exact component-map admission"],
-    "optional": []
+    "required": ["newest accepted, within-budget 04-owasp-universe", "newest accepted 04-owasp-intel-lane-in admitting asvs-universe and its asvs-participants-V<n> bundles"],
+    "optional": ["accepted 01-component-characterization (report context only; never routes)"]
   },
   "outputs": {
     "directory": "data/jobs/04-owasp-component-routing/attempts/<attempt_id>",
@@ -23,7 +23,7 @@
   "implemented": true,
   "execution": {"worker": "owasp_component_routing.py", "arguments": ["--run-id", "{run_id}"]},
   "permissions": ["read-run-data", "write-run-data"],
-  "applicability": "accepted component characterization and approved OWASP selection",
+  "applicability": "an accepted, within-budget 04-owasp-universe: 17 asvs-V<n> components with control_scope (owasp-component-routing/2.0), run by the 04-owasp-universe node after the universe is accepted",
   "timeout_seconds": 900,
   "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
   "coordinator": "intake-coordinator"

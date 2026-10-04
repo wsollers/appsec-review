@@ -145,7 +145,10 @@ class UpstreamOnlyMenuTests(unittest.TestCase):
                 ids = {item["item_id"] for item in sem.build("run-1", stage, [], Path(root) / "jobs")["items"]}
                 upstream = sem.upstream_jobs(stage)
                 self.assertTrue(ids <= upstream, sorted(ids - upstream))
-                self.assertFalse(any(job.startswith("02-codeql-") for job in ids))
+                # The 02-codeql-<lang> lanes are listed only because they are now upstream (through
+                # 02-evidence-index-derived), so they are terminal before the stage fingerprints its menu.
+                self.assertTrue(all(job in upstream for job in ids if job.startswith("02-codeql-")))
+                self.assertIn("02-codeql-cpp", sem.upstream_jobs("02-evidence-index-derived"))
                 self.assertNotIn(stage, ids)
             self.assertIn("01-component-characterization",
                           {item["item_id"] for item in sem.build("run-1", "03-threat-model-dfd-stride", [],

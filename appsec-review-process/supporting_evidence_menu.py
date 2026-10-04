@@ -39,8 +39,11 @@ MENU = (
      ["treesitter-ast.json", "treesitter-ast.records.jsonl"]),
     ("02-debug-symbol-index", "native", "Debug-symbol index summary plus records (JSON Lines): symbols to source file/line",
      ["debug-symbol-index.json", "debug-symbol-index.records.jsonl"]),
-    ("02-native-build", "native", "Native build units, compile databases and produced binaries (paths, hashes)",
-     ["native-build.json", "outputs/*/compile_commands.json"]),
+    ("02-native-build", "native", "Native build units, compile databases, produced binaries (paths, hashes), what each "
+     "unit consumed (build-dependencies.json: include/library dirs, headers and libraries with sha256 and OS package, "
+     "link lines, DT_NEEDED) and its configure-generated headers",
+     ["native-build.json", "outputs/*/compile_commands.json", "outputs/*/build-dependencies.json",
+      "outputs/*/generated-headers/*"]),
     ("02-ir-capture", "native", "LLVM IR capture per translation unit (module list)", ["ir-capture.json"]),
     ("02-ir-link", "native", "Linked IR modules per unit", ["ir-link.json"]),
     ("02-source-sast", "tool-leads", "Source SAST leads (artifact cited by tool-lead claims)", ["source-sast.json"]),
@@ -94,9 +97,15 @@ MENU = (
     ("02-api-collection-intelligence-ingest", "docs", "API collection intelligence", ["api-collection-intelligence.json"]),
     ("02-operations-doc-ingest", "docs", "Operations documentation intelligence", ["operations-doc-intelligence.json"]),
     ("02-evidence-index", "index", "Run evidence index over the target snapshot (SQLite FTS + ssdeep). Not pinned: "
-     "query it with evidence_search / evidence_read / evidence_similar / evidence_derived", []),
+     "query it with evidence_search / evidence_read / evidence_similar", []),
+    ("02-evidence-index-derived", "index", "Derived index after the producers: producer selection with exclusions and "
+     "gaps, derived records and build inputs (the database is not pinned: query it with evidence_derived)",
+     ["evidence-index-derived.json"]),
     ("02-code-index", "index", "Structural code index summary (the SQLite database is not pinned: jobs granted the "
      "code_* query tools query it; the summary names its sha256, sources, capabilities and gaps)", ["code-index.json"]),
+    ("02-lsp-xref", "index", "Language-server cross-reference summary (the SQLite database is not pinned: jobs granted "
+     "code_definition / code_references / code_hover / code_call_hierarchy query it; the summary names its sha256, "
+     "servers, capabilities and gaps)", ["lsp-xref.json"]),
 )
 PROFILES = {
     "code": ("native", "tool-leads", "build", "architecture", "binary", "test", "docs", "dependency", "config", "index"),

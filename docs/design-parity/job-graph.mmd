@@ -60,6 +60,7 @@ flowchart TD
   02_test_coverage_ingest_post -->|required| 02_evidence_assembly_config
   02_operations_doc_ingest_post -->|required| 02_evidence_assembly_config
   02_evidence_index_post -->|required| 02_evidence_assembly_config
+  02_evidence_index_derived_post -->|required| 02_evidence_assembly_config
   02_ossf_scorecard_post -->|required| 02_evidence_assembly_config
   02_secrets_inventory_post -->|required| 02_evidence_assembly_config
   02_iac_config_scan_post -->|required| 02_evidence_assembly_config
@@ -76,6 +77,7 @@ flowchart TD
   01_component_characterization_pre --> 01_component_characterization["01-component-characterization: work or reuse"]
   01_component_characterization --> 01_component_characterization_post["01-component-characterization: post-validation and publish"]
   02_evidence_assembly_post -->|required| 01_component_characterization_config
+  02_code_index_post -->|required| 01_component_characterization_config
   02_full_review_input_assembly_config["02-full-review-input-assembly: resolve job configuration"] --> 02_full_review_input_assembly_pre["02-full-review-input-assembly: pre-validation"]
   02_full_review_input_assembly_pre --> 02_full_review_input_assembly["02-full-review-input-assembly: work or reuse"]
   02_full_review_input_assembly --> 02_full_review_input_assembly_post["02-full-review-input-assembly: post-validation and publish"]
@@ -84,6 +86,7 @@ flowchart TD
   03_threat_model_dfd_stride_pre --> 03_threat_model_dfd_stride["03-threat-model-dfd-stride: work or reuse"]
   03_threat_model_dfd_stride --> 03_threat_model_dfd_stride_post["03-threat-model-dfd-stride: post-validation and publish"]
   01_component_characterization_post -->|required| 03_threat_model_dfd_stride_config
+  02_code_index_post -->|required| 03_threat_model_dfd_stride_config
   03_threat_model_reconciliation_config["03-threat-model-reconciliation: resolve job configuration"] --> 03_threat_model_reconciliation_pre["03-threat-model-reconciliation: pre-validation"]
   03_threat_model_reconciliation_pre --> 03_threat_model_reconciliation["03-threat-model-reconciliation: work or reuse"]
   03_threat_model_reconciliation --> 03_threat_model_reconciliation_post["03-threat-model-reconciliation: post-validation and publish"]
@@ -97,6 +100,8 @@ flowchart TD
   03_threat_model_dfd_stride_post -->|required| 04_asvs_masvs_config
   03_threat_model_reconciliation_post -->|required| 04_asvs_masvs_config
   04_owasp_validation_worklist_post -->|required| 04_asvs_masvs_config
+  02_code_index_post -->|required| 04_asvs_masvs_config
+  04_owasp_universe_post -->|required| 04_asvs_masvs_config
   05_native_memory_config["05-native-memory: resolve job configuration"] --> 05_native_memory_pre["05-native-memory: pre-validation"]
   05_native_memory_pre --> 05_native_memory["05-native-memory: work or reuse"]
   05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]
@@ -149,6 +154,7 @@ flowchart TD
   02_evidence_assembly_post -->|required| 07_hypothesis_discovery_config
   02_source_sast_post -->|required| 07_hypothesis_discovery_config
   02_native_sast_post -->|required| 07_hypothesis_discovery_config
+  02_lsp_xref_post -->|optional| 07_hypothesis_discovery_config
   claim_ledger_routing_config["claim-ledger-routing: resolve job configuration"] --> claim_ledger_routing_pre["claim-ledger-routing: pre-validation"]
   claim_ledger_routing_pre --> claim_ledger_routing["claim-ledger-routing: work or reuse"]
   claim_ledger_routing --> claim_ledger_routing_post["claim-ledger-routing: post-validation and publish"]
@@ -237,11 +243,32 @@ flowchart TD
   02_test_intelligence_ingest_pre --> 02_test_intelligence_ingest["02-test-intelligence-ingest: work or reuse"]
   02_test_intelligence_ingest --> 02_test_intelligence_ingest_post["02-test-intelligence-ingest: post-validation and publish"]
   00_intake_post -->|required| 02_test_intelligence_ingest_config
+  04_owasp_candidate_search_config["04-owasp-candidate-search: resolve job configuration"] --> 04_owasp_candidate_search_pre["04-owasp-candidate-search: pre-validation"]
+  04_owasp_candidate_search_pre --> 04_owasp_candidate_search["04-owasp-candidate-search: work or reuse"]
+  04_owasp_candidate_search --> 04_owasp_candidate_search_post["04-owasp-candidate-search: post-validation and publish"]
+  02_code_index_post -->|required| 04_owasp_candidate_search_config
+  02_code_property_graph_post -->|required| 04_owasp_candidate_search_config
+  02_treesitter_ast_post -->|required| 04_owasp_candidate_search_config
+  02_source_sast_post -->|optional| 04_owasp_candidate_search_config
+  02_evidence_index_post -->|required| 04_owasp_candidate_search_config
+  01_component_characterization_post -->|optional| 04_owasp_candidate_search_config
+  02_language_census_post -->|required| 04_owasp_candidate_search_config
+  04_owasp_participation_config["04-owasp-participation: resolve job configuration"] --> 04_owasp_participation_pre["04-owasp-participation: pre-validation"]
+  04_owasp_participation_pre --> 04_owasp_participation["04-owasp-participation: work or reuse"]
+  04_owasp_participation --> 04_owasp_participation_post["04-owasp-participation: post-validation and publish"]
+  04_owasp_candidate_search_post -->|required| 04_owasp_participation_config
+  02_code_index_post -->|required| 04_owasp_participation_config
+  04_owasp_universe_config["04-owasp-universe: resolve job configuration"] --> 04_owasp_universe_pre["04-owasp-universe: pre-validation"]
+  04_owasp_universe_pre --> 04_owasp_universe["04-owasp-universe: work or reuse"]
+  04_owasp_universe --> 04_owasp_universe_post["04-owasp-universe: post-validation and publish"]
+  04_owasp_candidate_search_post -->|required| 04_owasp_universe_config
+  04_owasp_participation_post -->|required| 04_owasp_universe_config
   04_owasp_validation_worklist_config["04-owasp-validation-worklist: resolve job configuration"] --> 04_owasp_validation_worklist_pre["04-owasp-validation-worklist: pre-validation"]
   04_owasp_validation_worklist_pre --> 04_owasp_validation_worklist["04-owasp-validation-worklist: work or reuse"]
   04_owasp_validation_worklist --> 04_owasp_validation_worklist_post["04-owasp-validation-worklist: post-validation and publish"]
   01_component_characterization_post -->|required| 04_owasp_validation_worklist_config
   02_standards_source_ingest_post -->|required| 04_owasp_validation_worklist_config
+  04_owasp_universe_post -->|required| 04_owasp_validation_worklist_config
   15_stig_srg_validation_worklist_config["15-stig-srg-validation-worklist: resolve job configuration"] --> 15_stig_srg_validation_worklist_pre["15-stig-srg-validation-worklist: pre-validation"]
   15_stig_srg_validation_worklist_pre --> 15_stig_srg_validation_worklist["15-stig-srg-validation-worklist: work or reuse"]
   15_stig_srg_validation_worklist --> 15_stig_srg_validation_worklist_post["15-stig-srg-validation-worklist: post-validation and publish"]
@@ -300,14 +327,24 @@ flowchart TD
   02_treesitter_ast_pre --> 02_treesitter_ast["02-treesitter-ast: work or reuse"]
   02_treesitter_ast --> 02_treesitter_ast_post["02-treesitter-ast: post-validation and publish"]
   00_intake_post -->|required| 02_treesitter_ast_config
+  02_language_census_config["02-language-census: resolve job configuration"] --> 02_language_census_pre["02-language-census: pre-validation"]
+  02_language_census_pre --> 02_language_census["02-language-census: work or reuse"]
+  02_language_census --> 02_language_census_post["02-language-census: post-validation and publish"]
+  00_intake_post -->|required| 02_language_census_config
   02_code_index_config["02-code-index: resolve job configuration"] --> 02_code_index_pre["02-code-index: pre-validation"]
   02_code_index_pre --> 02_code_index["02-code-index: work or reuse"]
   02_code_index --> 02_code_index_post["02-code-index: post-validation and publish"]
   02_code_property_graph_post -->|required| 02_code_index_config
   02_treesitter_ast_post -->|required| 02_code_index_config
-  02_binary_triage_post -->|required| 02_code_index_config
+  02_binary_triage_post -->|optional| 02_code_index_config
   02_ir_facts_post -->|optional| 02_code_index_config
   02_debug_symbol_index_post -->|optional| 02_code_index_config
+  02_lsp_xref_config["02-lsp-xref: resolve job configuration"] --> 02_lsp_xref_pre["02-lsp-xref: pre-validation"]
+  02_lsp_xref_pre --> 02_lsp_xref["02-lsp-xref: work or reuse"]
+  02_lsp_xref --> 02_lsp_xref_post["02-lsp-xref: post-validation and publish"]
+  02_code_index_post -->|required| 02_lsp_xref_config
+  02_native_build_post -->|optional| 02_lsp_xref_config
+  02_language_census_post -->|required| 02_lsp_xref_config
   02_native_sast_config["02-native-sast: resolve job configuration"] --> 02_native_sast_pre["02-native-sast: pre-validation"]
   02_native_sast_pre --> 02_native_sast["02-native-sast: work or reuse"]
   02_native_sast --> 02_native_sast_post["02-native-sast: post-validation and publish"]
@@ -357,6 +394,36 @@ flowchart TD
   02_evidence_index_pre --> 02_evidence_index["02-evidence-index: work or reuse"]
   02_evidence_index --> 02_evidence_index_post["02-evidence-index: post-validation and publish"]
   00_intake_post -->|required| 02_evidence_index_config
+  02_evidence_index_derived_config["02-evidence-index-derived: resolve job configuration"] --> 02_evidence_index_derived_pre["02-evidence-index-derived: pre-validation"]
+  02_evidence_index_derived_pre --> 02_evidence_index_derived["02-evidence-index-derived: work or reuse"]
+  02_evidence_index_derived --> 02_evidence_index_derived_post["02-evidence-index-derived: post-validation and publish"]
+  02_evidence_index_post -->|required| 02_evidence_index_derived_config
+  02_api_collection_intelligence_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_binary_cfg_post -->|optional| 02_evidence_index_derived_config
+  02_binary_intelligence_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_binary_triage_post -->|optional| 02_evidence_index_derived_config
+  02_code_property_graph_post -->|required| 02_evidence_index_derived_config
+  02_codeql_cpp_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_csharp_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_go_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_java_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_javascript_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_python_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_ruby_post -->|optional| 02_evidence_index_derived_config
+  02_codeql_rust_post -->|optional| 02_evidence_index_derived_config
+  02_debug_symbol_index_post -->|optional| 02_evidence_index_derived_config
+  02_doc_intelligence_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_ir_facts_post -->|optional| 02_evidence_index_derived_config
+  02_native_sast_post -->|optional| 02_evidence_index_derived_config
+  02_operations_doc_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_repository_partition_discovery_post -->|required| 02_evidence_index_derived_config
+  02_source_sast_post -->|required| 02_evidence_index_derived_config
+  02_test_coverage_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_test_execution_post -->|optional| 02_evidence_index_derived_config
+  02_test_intelligence_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_test_result_ingest_post -->|optional| 02_evidence_index_derived_config
+  02_treesitter_ast_post -->|optional| 02_evidence_index_derived_config
+  02_native_build_post -->|optional| 02_evidence_index_derived_config
   02_secrets_inventory_config["02-secrets-inventory: resolve job configuration"] --> 02_secrets_inventory_pre["02-secrets-inventory: pre-validation"]
   02_secrets_inventory_pre --> 02_secrets_inventory["02-secrets-inventory: work or reuse"]
   02_secrets_inventory --> 02_secrets_inventory_post["02-secrets-inventory: post-validation and publish"]

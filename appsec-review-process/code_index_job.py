@@ -4,9 +4,12 @@ A deterministic Python job, not an extension of ``02-evidence-index``: that inde
 source branch before any native or CPG work and is consumed by every lookup, so binding it to the
 CPG would re-run it (and invalidate its consumers) whenever the CPG changes, and hold the source
 index back until Joern finishes. This job waits for the accepted ``02-code-property-graph``,
-``02-treesitter-ast`` (or its language-absent skip) and ``02-binary-triage`` (or its native skips),
-and optionally ``02-ir-facts`` and ``02-debug-symbol-index`` (a skip there binds nothing and is no gap:
-there is nothing native to index), binds each by accepted pointer, envelope and attempt-tree hashes
+``02-treesitter-ast`` (or its language-absent skip), and optionally ``02-binary-triage``, ``02-ir-facts`` and
+``02-debug-symbol-index`` (a skip of the last two binds nothing and is no gap: there is nothing native to
+index). The CPG and the AST are source-only, so a native build that did not publish removes only the
+native tables: without an accepted, current binary triage the export tables stay empty, ``exports`` is
+false and a gap names the producer and its state (absent, skipped, not published, stale), never "no
+exports". Each source is bound by accepted pointer, envelope and attempt-tree hashes
 (``dep_reachability_lifecycle``'s rule), and publishes ``code-index.sqlite`` (``code_index.build``) plus ``code-index.json`` with the
 database's sha256, its logical ``content_sha256``, the source bindings, the capabilities the
 query tools are granted from, counts and gaps. Validation rebuilds the database from the bound
@@ -24,7 +27,7 @@ from typing import Any
 import code_index
 import dep_reachability_lifecycle as bindings
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json, run_path, tree_hashes
-from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
+from publish_job_output import NONCURRENT_SCHEMA, coordinate_worker_lifecycle, record_terminal_current, validate_published
 import registry_paths
 from schema_validate import validate_document
 import treesitter_ast_job
@@ -35,7 +38,8 @@ RESULT = code_index.RESULT
 SQLITE = code_index.SQLITE
 SUMMARY = "code-index-summary.md"
 SCHEMA_FILE = "code-index.schema.json"
-TRIAGE_JOB = "02-binary-triage"
+TRIAGE_JOB, TRIAGE_RESULT = "02-binary-triage", "binary-triage-manifest.json"
+NATIVE_JOB = "02-native-build"
 IR_JOB, IR_RESULT = "02-ir-facts", "ir-facts.json"
 DEBUG_JOB, DEBUG_RESULT = "02-debug-symbol-index", "debug-symbol-index.json"
 CONSUMER = "02-evidence-assembly"
@@ -87,6 +91,8 @@ def _published(run_id: str, job: str) -> tuple[dict[str, Any] | None, Path | Non
         return None, None, [f"source-absent:{job}"]
     try:
         pointer = read_json(pointer_path)
+        if pointer.get("schema") == NONCURRENT_SCHEMA:   # its newest attempt failed: no older success is used
+            return None, None, [f"source-not-published:{job}:{pointer.get('status') or 'UNKNOWN'}"]
         attempt = base / "attempts" / str(pointer.get("attempt_id"))
         if (pointer.get("run_id") != run_id or pointer.get("job") != job or attempt.is_symlink() or
                 not attempt.is_dir() or tree_hashes(attempt) != pointer.get("hashes") or
@@ -101,12 +107,31 @@ def _published(run_id: str, job: str) -> tuple[dict[str, Any] | None, Path | Non
     return {"attempt_id": pointer["attempt_id"], "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path)}, attempt, []
 
 
+def _native_current(run_id: str, job: str, attempt: Path, result: str) -> list[str]:
+    """A native-evidence attempt binds the native build it came from (``native_build.pointer_sha256``,
+    binary_evidence_core's rule). Its producer is now optional, so a later native build that did not
+    publish, or replaced it, must not leave the older attempt bound: that is a gap, never its rows."""
+    pointer = data_path(run_id, "jobs", NATIVE_JOB) / "accepted.json"
+    try:
+        bound = (read_json(attempt / result).get("native_build") or {}).get("pointer_sha256")
+        current = read_json(pointer) if pointer.is_file() and not pointer.is_symlink() else None
+    except (OSError, ValueError, AttributeError):
+        return [f"source-not-current:{job}"]
+    if current is None or current.get("schema") == NONCURRENT_SCHEMA:
+        state = "absent" if current is None else current.get("status") or "UNKNOWN"
+        return [f"source-not-current:{job}:{NATIVE_JOB}-{state}"]
+    return [] if bound == "sha256:" + file_hash(pointer) else [f"source-not-current:{job}:{NATIVE_JOB}-replaced"]
+
+
 def _triage(run_id: str) -> tuple[dict[str, Any] | None, list[str]]:
     """The accepted binary triage attempt and the receipt that hashes every per-binary summary
-    (``entry_exports.triage_binding``)."""
+    (``entry_exports.triage_binding``), or None and the gap naming its state."""
     import entry_exports
     head, attempt, gaps = _published(run_id, TRIAGE_JOB)
-    return ({**head, **entry_exports.triage_binding(attempt)}, []) if attempt is not None else (None, gaps)
+    if attempt is None:
+        return None, gaps
+    stale = _native_current(run_id, TRIAGE_JOB, attempt, TRIAGE_RESULT)
+    return (None, stale) if stale else ({**head, **entry_exports.triage_binding(attempt)}, [])
 
 
 def _native_only(gaps: list[str]) -> list[str]:
@@ -129,6 +154,9 @@ def _debug_symbols(run_id: str) -> tuple[dict[str, Any] | None, list[str]]:
         return None, [f"source-not-current:{DEBUG_JOB}"]
     if result.get("status") == "SKIPPED":
         return None, []
+    stale = _native_current(run_id, DEBUG_JOB, attempt, DEBUG_RESULT)
+    if stale:
+        return None, stale
     return {**head, "result_sha256": "sha256:" + file_hash(attempt / DEBUG_RESULT)}, []
 
 

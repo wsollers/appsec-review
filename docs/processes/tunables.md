@@ -13,8 +13,10 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `binary_raw_output_max_bytes` | 16 MiB | safety | Largest raw binary-tool output accepted (binary triage, debug symbols, CFG, binary intelligence). | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
 | `code_query_depth_max` | 4 count | window | Deepest code_callers / code_callees walk (hops). |  |
 | `code_query_exports_enabled` | True flag | safety | Grant the code_exports query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
-| `code_query_force_indexed_mode` | True flag | safety | A model job granted code_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools. |  |
+| `code_query_force_indexed_mode` | True flag | safety | A model job whose tooling profile grants tools (query tool: lines) gets the lookup tools even when its inputs fit inline (the inputs then stay inlined as well). Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools. |  |
 | `code_query_graph_enabled` | True flag | safety | Grant the code_callers, code_callees, code_path query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
+| `code_query_lsp_calls_max` | 60 count | safety | Most code_definition / code_references / code_hover / code_call_hierarchy calls one model job (one input server process, one cell) may make; further calls are refused and the job reports the gap. | Each call may start or query a live language server; precomputed rows answer most calls without one. |
+| `code_query_lsp_enabled` | True flag | safety | Grant the code_definition, code_references, code_hover, code_call_hierarchy query tools to model jobs whose tooling profile lists them and whose pinned 02-lsp-xref summary can answer them. Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_native_enabled` | True flag | safety | Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_outline_enabled` | True flag | safety | Grant the code_file_outline query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_path_depth_max` | 24 count | safety | Longest call path code_path explores (edges). |  |
@@ -52,6 +54,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `invoker_timeout_seconds` | 1800 s (30 min) | resource | Default wall-clock limit for one claude CLI dispatch. |  |
 | `item_memo` | dev id | safety | Per-item memo in loops (build-plan units): off, dev (only when APPSEC_RUN_MODE=dev) or on. An item whose own inputs (unit content, catalog, prompt, model) are unchanged reuses its earlier accepted result across attempts and fingerprint changes; today's validation is re-run on it. | multi-vuln re-planned 53 units (41 min) after a change that did not alter most units. |
 | `item_memo_max_entries` | 65536 count | safety | Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first. | One per planned unit per run; engine targets can have thousands. |
+| `max_tool_calls_per_cell` | 200 count | safety | Lookup-tool calls (input_*, evidence_*, code_*) one model invocation may make across all its repair rounds. Past it the input server answers every call with a fixed budget_exhausted error and the invoker records the refused calls as a coverage gap in the attempt. | Set from 2026-09-28 usage: ~2,760 calls in a whole run, build plan 871 calls over 138 invocations (~6 per call); 200 is ~30x that mean. Raise when receipts show budget_exhausted gaps on real work. |
 | `model_version_resolve_timeout_seconds` | 120 s (2 min) | resource | Timeout for resolving pinned model versions. |  |
 | `nvd_feed_concurrency` | 1 count | resource | Concurrent NVD feed jobs. |  |
 | `owasp_join_page_max_bytes` | 7 MiB | window | Page size when joining OWASP results. |  |
@@ -376,9 +379,32 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
-| `file_max_bytes` | 1 MiB | window | Bytes read per input file. |  |
+| `binary_document_max_bytes` | 32 MiB | safety | Largest PDF or DOCX converted (and the DOCX unpacked-size bound); larger ones are oversized-input gaps. | Typical design PDFs are 0.1-10 MB. |
+| `container_cpu_millis` | 1000 millicpu | resource | CPU quota (1000 = one core) (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_memory_bytes` | 1 GiB | resource | Memory limit for one conversion container (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_pids` | 64 count | resource | Process/thread limit (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_timeout_seconds` | 300 s (5 min) | resource | Wall-clock limit for one conversion container (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_tmpfs_bytes` | 64 MiB | resource | Size of the in-memory /tmp (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `converted_line_max_chars` | 4000 count | window | Longer converted lines are split; each piece keeps its line's provenance. |  |
+| `converted_text_max_bytes` | 2 MiB | window | Converted text kept per document (the evidence index text limit); the rest is a converted-text-truncated gap. |  |
+| `file_max_bytes` | 1 MiB | window | Bytes read per text, HTML or man-page document; larger ones are oversized-input gaps. |  |
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
+| `image_id` | audit-doc-convert id | resource | Pinned image holding pdftotext (poppler-utils) and pandoc for PDF/DOCX conversion. |  |
+| `pdf_min_text_chars_per_page` | 32 count | safety | Non-whitespace characters per page below which a PDF is an image-only-or-scanned-pdf gap (no OCR). |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
+
+### `02-evidence-index-derived`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `build_records_max` | 200000 count | safety | Most build-dependencies records indexed across units; the rest are counted in a gap. | Grows with headers and libraries a build consumes (02-native-build caps 8192 files per unit). |
+| `text_chunk_lines` | 60 lines | window | Lines per text FTS chunk (as 02-evidence-index). |  |
+| `text_max_file_bytes` | 2 MiB | safety | Largest text document chunked; larger ones are listed with a gap. |  |
+| `text_max_files` | 4096 count | safety | Most text documents (generated headers, converted documents) chunked; the rest are listed with status over-file-count and a gap. | Grows with generated headers per unit (02-native-build caps 256 per unit) and converted documents. |
+| `text_max_line_chars` | 16384 chars | safety | Longest line in a chunked text document; a longer line excludes the document with a gap. |  |
+| `text_max_total_bytes` | 128 MiB | safety | Total text bytes chunked; documents beyond it are listed with a gap. | Grows with the converted document set. |
 
 ### `02-evidence-index`
 
@@ -447,6 +473,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_tmpfs_bytes` | 512 MiB | resource | Size of the in-memory /tmp (IR link). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `ir_max_bytes` | 64 MiB | safety | Largest bitcode or disassembled IR file accepted. | Grows with target size; see docs/scale-audit-unreal-engine.md B: per-module IR only. |
 
+### `02-language-census`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_rows` | 200000 count | safety | Most per-file census rows listed; class and language counts still cover every file and the unlisted rows are a gap. | Grows with snapshot file count (00-intake bounds its inventory at 100000 files). |
+
 ### `02-license-scan`
 
 | Tunable | Value | Kind | What it does | Scale |
@@ -459,6 +491,22 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode scales with file count. A TIMEOUT (or OOM / failed exit) publishes OK_WITH_GAPS with a LICENSE_SCAN_TOOL_GAP and outputs/pinned-tool-gap.json instead of pinned-tool-evidence.json (ADR-0013). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `scancode_processes` | 4 count | resource | scancode -n: parallel scan processes. Keep container_cpu_millis at 1000 per process. | Scan time falls roughly with processes; doom3-bfg did not finish in 3600 s with one. |
+
+### `02-lsp-xref`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 4 GiB | resource | Memory limit for the container (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 512 count | resource | Process/thread limit (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 14400 s (240 min) | resource | Wall-clock limit for the container (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (language server). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `idle_seconds` | 900.0 seconds | resource | A started server stops after this long without a query (it restarts on the next one). |  |
+| `max_queries` | 40000 count | safety | Most language-server queries the precompute plans (4 per function: definition, references, incoming and outgoing calls); functions beyond it are an lsp-budget-exceeded gap. | freeciv21-size code indexes hold ~10K functions; Linux-size ones ~800K (a subset is precomputed, the live tools answer the rest). |
+| `request_seconds` | 30.0 seconds | safety | Timeout of one language-server request (call hierarchy: up to three). |  |
+| `start_seconds` | 300.0 seconds | safety | How long a first query waits for the server to start and initialize before it is a gap. | jdtls and rust-analyzer index for minutes on large trees. |
 
 ### `02-mobile-sast`
 
@@ -549,6 +597,21 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_timeout_seconds` | 900 s (15 min) | resource | Wall-clock limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 
+### `02-semantic-recall-index`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `batch_size` | 8 count | resource | Chunks per embedding batch; ONNX pads a batch to its longest chunk, so keep it small. | Legacy runs OOMed at 64 with 27K-char chunks; chunks are now capped at 4000 chars. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_pids` | 512 count | resource | Process/thread limit (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_timeout_seconds` | 7200 s (120 min) | resource | Wall-clock limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `image_id` | audit-static id | resource | Pinned image whose system python3 carries lancedb and fastembed and runs semantic_index_build.py (mounted, not copied). |  |
+| `max_file_bytes` | 4 MiB | safety | Largest source file read for chunks; larger files are file-too-large gaps. |  |
+
 ### `02-source-sast`
 
 | Tunable | Value | Kind | What it does | Scale |
@@ -607,6 +670,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `workbench_pin_target_source` | True flag | resource | Pin every target file as a readable input of each cell (lookup mode serves them), so cells can cite code by path and line. | Pool specs grow with file count: ~6,100 files for freeciv21. Turn off at engine scale; cells then cite menu evidence only. |
 | `workbench_records_per_cell_max` | 60 count | window | Most records of one family the join takes from one cell reply; the rest is recorded as a gap. |  |
 | `workbench_wave_timeout_seconds` | 5400 s (90 min) | resource | Wait-all limit for one workbench wave pool. | Cells run concurrently; raise with slow models, not with target size (lookup tools keep calls small). |
+
+### `04-owasp-validator-cell`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_parallel` | 4 count | resource | Validator cells T10 dispatches concurrently (ADR-0034); dagster_workflow caps it at the shared pool_persona_llm_slots. | A full ASVS universe plans at most 17 cells (max_validator_calls 20); each cell is one claude -p call. |
 
 ### `06-reachability-codeql`
 

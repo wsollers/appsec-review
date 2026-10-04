@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-universe-config.schema.json",
+  "title": "Versioned OWASP universe limits and model-call budgets (ADR-0034)",
+  "description": "Read by 04-owasp-participation (cell split and participation budget) and 04-owasp-universe (validator budget, excerpt limits). The validator row limit is not repeated here: it is the max_control_target_rows of the named batch config, which 04-owasp-control-batcher also uses.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "config_id", "version", "batch_config_path", "participation", "validation", "evidence_bundle"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-universe-config/1.0"},
+    "config_id": {"$ref": "common/formats.schema.json#/$defs/slug"},
+    "version": {"$ref": "common/formats.schema.json#/$defs/semver"},
+    "batch_config_path": {"type": "string", "pattern": "^appsec-review-process/config/owasp-batching/[a-z0-9-]+\\.json\\Z"},
+    "participation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_candidates_per_cell", "max_participation_calls"],
+      "properties": {
+        "max_candidates_per_cell": {"type": "integer", "minimum": 1, "maximum": 200},
+        "max_participation_calls": {"type": "integer", "minimum": 1, "maximum": 200}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_validator_calls"],
+      "properties": {
+        "max_validator_calls": {"type": "integer", "minimum": 1, "maximum": 200}
+      }
+    },
+    "evidence_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_excerpt_lines", "max_bundle_bytes"],
+      "properties": {
+        "max_excerpt_lines": {"type": "integer", "minimum": 1, "maximum": 2000},
+        "max_bundle_bytes": {"type": "integer", "minimum": 1024, "maximum": 8388608}
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@
 Starts one language server over stdio inside a compiler image, runs ``initialize``/``initialized``,
 opens the files the queries name, answers a closed set of questions and shuts the server down:
 
-    definition | references | documentSymbol | workspaceSymbol | incomingCalls | outgoingCalls
+    definition | references | hover | documentSymbol | workspaceSymbol | incomingCalls | outgoingCalls
 
 Every answer is a locator into the checkout, never a finding. Server output is untrusted data:
 locations are re-rooted and dropped (and counted) when they leave ``--root``; names are stripped
@@ -19,7 +19,10 @@ Positions: query and output ``line`` is 1-based (as in citations); ``character``
     python3 lsp_driver.py --server gopls --root /workspace/go \\
         --query '{"method": "documentSymbol", "path": "main.go"}'
 
-docs/language-servers.md §4 lists the presets and limits.
+docs/language-servers.md §4 lists the presets and limits. ``LiveServer`` keeps one initialized server
+open for many queries (``lsp_service``'s broker); with ``uri_root`` the server sees the checkout at that
+container path (``/workspace``) while files are read from ``root`` on the host, and ``process`` takes an
+already started process (a ``docker run --interactive`` child, or a test double speaking over pipes).
 """
 from __future__ import annotations
 
@@ -35,11 +38,11 @@ import sys
 import threading
 import time
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 SCHEMA = "appsec-review/lsp-query-result/1"
-METHODS = ("definition", "references", "documentSymbol", "workspaceSymbol", "incomingCalls", "outgoingCalls")
-CAPABILITY = {"definition": "definitionProvider", "references": "referencesProvider",
+METHODS = ("definition", "references", "hover", "documentSymbol", "workspaceSymbol", "incomingCalls", "outgoingCalls")
+CAPABILITY = {"definition": "definitionProvider", "references": "referencesProvider", "hover": "hoverProvider",
               "documentSymbol": "documentSymbolProvider", "workspaceSymbol": "workspaceSymbolProvider",
               "incomingCalls": "callHierarchyProvider", "outgoingCalls": "callHierarchyProvider"}
 DEFAULT_LIMITS = {"total_seconds": 120.0, "request_seconds": 30.0, "settle_seconds": 0.0,
@@ -47,6 +50,7 @@ DEFAULT_LIMITS = {"total_seconds": 120.0, "request_seconds": 30.0, "settle_secon
                   "max_queries": 200}
 MAX_HEADER_BYTES = 8192
 NAME_LIMIT = 200
+HOVER_LIMIT = 2000
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
 LANGUAGE_IDS = {
     ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp",
@@ -135,14 +139,17 @@ def read_frame(stream: Any, max_bytes: int) -> dict[str, Any] | None:
 class Session:
     """One server process: a reader thread frames stdout into a queue; stderr is drained and counted."""
 
-    def __init__(self, argv: list[str], root: Path, limits: dict[str, Any], env: dict[str, str]):
+    def __init__(self, argv: list[str], root: Path, limits: dict[str, Any], env: dict[str, str], *,
+                 cwd: Path | None = None, process: Any = None, root_uri: str | None = None):
         self.limits, self.root = limits, root
-        self.process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE, cwd=str(root), env=env)
+        self.root_uri = root_uri or root.as_uri()
+        self.process = process if process is not None else subprocess.Popen(
+            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(cwd or root), env=env)
         self.inbox: queue.Queue = queue.Queue()
         self.stderr_bytes = 0
         self.next_id = 0
         self.notifications = 0
+        self.unresolved_includes: dict[str, int] = {}   # uri -> clangd pp_file_not_found diagnostics
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._drain, daemon=True).start()
 
@@ -187,7 +194,7 @@ class Session:
                         "window/workDoneProgress/create", "window/showMessageRequest"):
             result = None
         elif method == "workspace/workspaceFolders":
-            result = [{"uri": self.root.as_uri(), "name": self.root.name or "root"}]
+            result = [{"uri": self.root_uri, "name": self.root.name or "root"}]
         else:
             self.send({"jsonrpc": "2.0", "id": message["id"],
                        "error": {"code": -32601, "message": "method not supported by lsp_driver"}})
@@ -215,7 +222,7 @@ class Session:
             if "method" in value and "id" in value:
                 self._answer_server_request(value)
             elif "method" in value:
-                self.notifications += 1
+                self._notification(value)
             elif value.get("id") == ident:
                 return value
 
@@ -232,7 +239,16 @@ class Session:
             if "method" in value and "id" in value:
                 self._answer_server_request(value)
             elif "method" in value:
-                self.notifications += 1
+                self._notification(value)
+
+    def _notification(self, message: dict[str, Any]) -> None:
+        """Counted; only the numeric/enumerated diagnostic code of clangd's missing-include error is kept."""
+        self.notifications += 1
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        if message.get("method") == "textDocument/publishDiagnostics" and isinstance(params.get("uri"), str):
+            missing = sum(1 for item in params.get("diagnostics") or [] if isinstance(item, dict)
+                          and item.get("code") == "pp_file_not_found")
+            self.unresolved_includes[params["uri"]] = missing
 
     def close(self) -> int | None:
         try:
@@ -256,10 +272,20 @@ class Session:
 
 
 class Driver:
-    def __init__(self, root: Path, limits: dict[str, Any]):
+    def __init__(self, root: Path, limits: dict[str, Any], uri_root: str | None = None):
         self.root, self.limits = root, limits
+        self.uri_root = PurePosixPath(uri_root) if uri_root else None
         self.gaps: list[dict[str, Any]] = []
         self.opened: set[str] = set()
+
+    def root_uri(self) -> str:
+        return ("file://" + quote(self.uri_root.as_posix())) if self.uri_root else self.root.as_uri()
+
+    def uri(self, relative: str) -> str:
+        """The URI the server knows ``relative`` by (its container path when ``uri_root`` is set)."""
+        if self.uri_root:
+            return "file://" + quote((self.uri_root / relative).as_posix())
+        return self.root.joinpath(*PurePosixPath(relative).parts).as_uri()
 
     def gap(self, kind: str, detail: str, query_index: int | None = None) -> None:
         record = {"kind": kind, "detail": clean(detail, 300) or kind}
@@ -290,6 +316,15 @@ class Driver:
         parsed = urlparse(uri)
         if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
             return None
+        if self.uri_root is not None:
+            pure = PurePosixPath(unquote(parsed.path))
+            try:
+                relative_pure = pure.relative_to(self.uri_root)
+            except ValueError:
+                return None
+            if not relative_pure.parts or any(part in ("", ".", "..") for part in relative_pure.parts):
+                return None
+            return relative_pure.as_posix() if self.resolve(relative_pure.as_posix()) else None
         path = Path(unquote(parsed.path))
         try:
             relative = path.resolve().relative_to(self.root)
@@ -318,7 +353,7 @@ class Driver:
             return False
         text = real.read_bytes().decode("utf-8", errors="replace")
         session.notify("textDocument/didOpen", {"textDocument": {
-            "uri": real.as_uri(), "languageId": LANGUAGE_IDS.get(real.suffix.lower(), "plaintext"),
+            "uri": self.uri(relative), "languageId": LANGUAGE_IDS.get(real.suffix.lower(), "plaintext"),
             "version": 1, "text": text}})
         self.opened.add(relative)
         return True
@@ -360,8 +395,7 @@ def _symbols(driver: Driver, result: Any, default_path: str | None) -> tuple[lis
                                                                          "end": {"line": 0, "character": 0}}))
                 parent = clean(item.get("containerName"))
             else:  # DocumentSymbol (hierarchical)
-                location = driver.location(driver.root.joinpath(default_path).as_uri() if default_path else None,
-                                           item.get("range"))
+                location = driver.location(driver.uri(default_path) if default_path else None, item.get("range"))
                 parent = container
             if location is None or name is None:
                 outside += 1
@@ -396,6 +430,17 @@ def _calls(driver: Driver, result: Any, direction: str) -> tuple[list[dict[str, 
         found.append({"name": name, "kind": peer.get("kind") if isinstance(peer.get("kind"), int) else None,
                       **location, "call_lines": lines})
     return found, outside
+
+
+def _hover_text(result: Any) -> str | None:
+    """Hover contents (MarkupContent, MarkedString or a list of them) as control-stripped, capped text."""
+    contents = result.get("contents") if isinstance(result, dict) else None
+    items = contents if isinstance(contents, list) else [contents]
+    parts = [item if isinstance(item, str) else item.get("value") for item in items
+             if isinstance(item, str) or isinstance(item, dict)]
+    text = "\n".join(part for part in parts if isinstance(part, str))
+    value = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]+", " ", text).strip()
+    return value[:HOVER_LIMIT] or None
 
 
 def _sort(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -440,8 +485,8 @@ def run_query(session: Session, driver: Driver, index: int, query: Any,
         relative, real = resolved
         if not driver.open(session, relative, real):
             return entry
-        document = {"uri": real.as_uri()}
-    if method in ("definition", "references", "incomingCalls", "outgoingCalls"):
+        document = {"uri": driver.uri(relative)}
+    if method in ("definition", "references", "hover", "incomingCalls", "outgoingCalls"):
         position = _position(query)
         if position is None:
             driver.gap("invalid-query", f"query {index}: line (1-based) and character (0-based) are required", index)
@@ -452,6 +497,15 @@ def run_query(session: Session, driver: Driver, index: int, query: Any,
         response = session.request("textDocument/references", {
             "textDocument": document, "position": position,
             "context": {"includeDeclaration": bool(query.get("include_declaration", True))}}, timeout)
+    elif method == "hover":
+        response = session.request("textDocument/hover", {"textDocument": document, "position": position}, timeout)
+        if "error" in response:
+            driver.gap("server-error", f"query {index}: hover returned error code {_code(response)}", index)
+            return entry
+        text = _hover_text(response.get("result"))
+        rows = [{"path": relative, "start_line": position["line"] + 1, "start_character": position["character"],
+                 "text": text}] if text else []
+        return _finish(driver, entry, rows, 0)
     elif method == "documentSymbol":
         response = session.request("textDocument/documentSymbol", {"textDocument": document}, timeout)
     elif method == "workspaceSymbol":
@@ -501,6 +555,106 @@ def _finish(driver: Driver, entry: dict[str, Any], rows: list[dict[str, Any]], o
     return entry
 
 
+def initialize(session: Session, driver: Driver, initialization_options: Any,
+               timeout: float) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """``initialize`` + ``initialized``: (server capabilities, cleaned serverInfo), or None with a gap."""
+    root_uri = driver.root_uri()
+    root_path = driver.uri_root.as_posix() if driver.uri_root else str(driver.root)
+    response = session.request("initialize", {
+        "processId": None if driver.uri_root else os.getpid(), "rootUri": root_uri, "rootPath": root_path,
+        "workspaceFolders": [{"uri": root_uri, "name": driver.root.name or "root"}],
+        "initializationOptions": initialization_options,
+        "capabilities": {
+            "workspace": {"configuration": True, "workspaceFolders": True, "symbol": {}},
+            "textDocument": {"definition": {"linkSupport": True}, "references": {},
+                             "hover": {"contentFormat": ["plaintext", "markdown"]},
+                             "documentSymbol": {"hierarchicalDocumentSymbolSupport": True},
+                             "callHierarchy": {}, "synchronization": {}, "publishDiagnostics": {}}}},
+        timeout)
+    result = response.get("result")
+    if "error" in response or not isinstance(result, dict):
+        driver.gap("initialize-failed", "initialize returned an error or no result")
+        return None
+    capabilities = result.get("capabilities") if isinstance(result.get("capabilities"), dict) else {}
+    info = result.get("serverInfo") if isinstance(result.get("serverInfo"), dict) else {}
+    session.notify("initialized", {})
+    return capabilities, {"name": clean(info.get("name")), "version": clean(info.get("version"), 80)}
+
+
+class LiveServer:
+    """One initialized server answering many queries until ``stop`` (``lsp_service``'s broker daemon).
+
+    ``ask`` never raises for a server fault: each answer is a ``results[]`` entry plus the gaps that
+    query produced; a protocol failure marks the server dead and every later answer is a gap."""
+
+    def __init__(self, argv: list[str], root: Path, *, limits: dict[str, Any] | None = None,
+                 initialization_options: Any = None, env: dict[str, str] | None = None, cwd: Path | None = None,
+                 uri_root: str | None = None, process: Any = None):
+        self.limits = {**DEFAULT_LIMITS, **(limits or {})}
+        self.argv, self.options, self.env, self.cwd, self.process = argv, initialization_options, env, cwd, process
+        self.driver = Driver(Path(root).resolve(), self.limits, uri_root)
+        self.session: Session | None = None
+        self.capabilities: dict[str, Any] = {}
+        self.info: dict[str, Any] = {}
+        self.alive = False
+        self.index = 0
+
+    def start(self) -> bool:
+        try:
+            self.session = Session(self.argv, self.driver.root, self.limits, dict(self.env or os.environ),
+                                   cwd=self.cwd, process=self.process, root_uri=self.driver.root_uri())
+        except OSError as exc:
+            self.driver.gap("server-start-failed", f"{type(exc).__name__}: {exc.strerror or exc}")
+            return False
+        try:
+            started = initialize(self.session, self.driver, self.options, self.limits["request_seconds"] * 2)
+        except (TimeoutError, ProtocolError) as exc:
+            self.driver.gap("initialize-failed", str(exc))
+            started = None
+        if started is None:
+            self.session.close()
+            return False
+        self.capabilities, self.info = started
+        if self.limits["settle_seconds"] > 0:
+            self.session.drain_notifications(self.limits["settle_seconds"])
+        self.alive = True
+        return True
+
+    def ask(self, query: Any) -> dict[str, Any]:
+        """{"entry": the results[] entry, "gaps": [...], "unresolved_includes": n for the queried file}."""
+        before = len(self.driver.gaps)
+        index, self.index = self.index, self.index + 1
+        entry = {"query_index": index, "query": query if isinstance(query, dict) else None, "status": "GAP",
+                 "results": [], "dropped_outside_root": 0, "truncated": False}
+        if not self.alive or self.session is None:
+            self.driver.gap("server-unavailable", "the server is not running", index)
+        else:
+            try:
+                entry = run_query(self.session, self.driver, index, query, self.capabilities,
+                                  time.monotonic() + self.limits["request_seconds"] * 3)
+            except TimeoutError as exc:
+                self.driver.gap("timeout", f"query {index}: {exc}", index)
+            except ProtocolError as exc:
+                self.driver.gap("protocol", str(exc), index)
+                self.alive = False
+        path = query.get("path") if isinstance(query, dict) else None
+        uri = self.driver.uri(path) if isinstance(path, str) and self.driver.resolve(path) else None
+        missing = self.session.unresolved_includes.get(uri, 0) if (self.session and uri) else 0
+        return {"entry": entry, "gaps": self.driver.gaps[before:], "unresolved_includes": missing}
+
+    def stop(self) -> int | None:
+        if self.session is None:
+            return None
+        if self.alive:
+            try:
+                self.session.request("shutdown", None, min(5.0, self.limits["request_seconds"]))
+                self.session.notify("exit", None)
+            except (TimeoutError, ProtocolError):
+                pass
+        self.alive = False
+        return self.session.close()
+
+
 def drive(argv: list[str], root: Path, queries: list[Any], *, limits: dict[str, Any] | None = None,
           initialization_options: Any = None, server_name: str = "custom",
           env: dict[str, str] | None = None) -> dict[str, Any]:
@@ -528,25 +682,12 @@ def drive(argv: list[str], root: Path, queries: list[Any], *, limits: dict[str, 
         return document
     initialized = False
     try:
-        response = session.request("initialize", {
-            "processId": os.getpid(), "rootUri": root.as_uri(), "rootPath": str(root),
-            "workspaceFolders": [{"uri": root.as_uri(), "name": root.name or "root"}],
-            "initializationOptions": initialization_options,
-            "capabilities": {
-                "workspace": {"configuration": True, "workspaceFolders": True, "symbol": {}},
-                "textDocument": {"definition": {"linkSupport": True}, "references": {},
-                                 "documentSymbol": {"hierarchicalDocumentSymbolSupport": True},
-                                 "callHierarchy": {}, "synchronization": {}}}},
-            min(limits["request_seconds"] * 2, deadline - time.monotonic()))
-        result = response.get("result")
-        if "error" in response or not isinstance(result, dict):
-            driver.gap("initialize-failed", "initialize returned an error or no result")
+        started = initialize(session, driver, initialization_options,
+                             min(limits["request_seconds"] * 2, deadline - time.monotonic()))
+        if started is None:
             return document
-        capabilities = result.get("capabilities") if isinstance(result.get("capabilities"), dict) else {}
-        info = result.get("serverInfo") if isinstance(result.get("serverInfo"), dict) else {}
-        document["server"]["info"] = {"name": clean(info.get("name")), "version": clean(info.get("version"), 80)}
+        capabilities, document["server"]["info"] = started
         document["capabilities"] = {method: _capable(capabilities, method) for method in METHODS}
-        session.notify("initialized", {})
         initialized = True
         for index, query in enumerate(queries):
             if isinstance(query, dict) and query.get("method") != "workspaceSymbol":

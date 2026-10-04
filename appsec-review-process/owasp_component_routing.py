@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""Assemble the complete OWASP applicability request from accepted run evidence.
+"""Project the accepted OWASP universe into the T04 applicability request (ADR-0034).
 
-This bridge closes the hand-authored T04 request gap.  It binds the newest accepted
-``01-component-characterization`` result to the newest accepted T03 OWASP lane-in manifest,
-projects every functional component exactly once, and emits deterministic rules only where the
-approved selection scope and the component classification positively match; a partial classification
-yields a conditional rule carrying its unknowns.  Technical N/A is emitted only for the web, session and
-API chapters of a positively classified CLI/library with no network trait; other ambiguity is left
-unmatched so T04 emits ``cannot_determine``.
+The job id stays; the routing is no longer decided here. ``04-owasp-universe`` (deterministic Python)
+already decided one target per ASVS 5.0.0 chapter. This job binds the newest accepted universe to the
+newest accepted T03 lane-in manifest that admits it (``asvs-universe`` as locator-only derived
+intelligence, every ``asvs-participants-V<n>`` bundle as canonical evidence) and projects every
+chapter target exactly once as a synthetic component ``asvs-V<n>`` whose ``control_scope`` is that
+chapter, so T04 enumerates only the chapter's L1+L2 controls (253 rows across the 17 chapters):
+
+* ``participating`` -> one ``applicable`` chapter rule citing the canonical participants bundle;
+* ``not_applicable`` -> one ``not_applicable`` chapter rule citing the universe decision;
+* ``gap`` -> one ``cannot_determine`` chapter rule carrying the universe reason (a visible gap).
+
+Nothing here reads component names, tags or the model's lanes; the component map is report context.
 """
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path, PurePosixPath
-import re
+from pathlib import Path
 import sys
 from typing import Any
 
 from execution_state import Blocked, atomic_json, data_path, digest, file_hash, identifier, read_json
 import owasp_applicability
+import owasp_universe
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
 
@@ -30,29 +35,16 @@ LANE_IN_JOB = owasp_applicability.UPSTREAM_JOB
 CONTRACT = "owasp-applicability-request"
 REQUEST = "owasp-applicability-request.json"
 ROUTING = "owasp-component-routing.json"
-# ASVS 5.0 chapters that only exist for a web/HTTP/session surface: V3 Web Frontend, V4 API and Web
-# Service, V7 Session Management, V9 Self-contained Tokens, V10 OAuth and OIDC, V17 WebRTC.
-NON_WEB_NA_DOMAINS = {"owasp_asvs": frozenset({"V3", "V4", "V7", "V9", "V10", "V17"})}
-LOCAL_KINDS = frozenset({"cli", "command", "commandline", "library", "libraries", "lib"})
-NETWORK_TRAITS = frozenset({"network", "networking", "http", "https", "web", "webapp", "api", "server", "service",
-                            "daemon", "socket", "sockets", "tcp", "udp", "tls", "rest", "grpc", "rpc", "websocket",
-                            "url", "browser", "html", "oauth", "oidc", "session", "cookie", "jwt", "webrtc"})
+FAMILY = "owasp_asvs"
+REVIEWER_ROLE = "owasp-applicability-reviewer"
 
 
 def root(run_id: str) -> Path:
     return data_path(run_id, "jobs", JOB)
 
 
-def _relative(value: Any) -> PurePosixPath:
-    if not isinstance(value, str) or not value or "\\" in value:
-        raise Blocked("OWASP routing: artifact path is not normalized POSIX syntax")
-    path = PurePosixPath(value)
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
-        raise Blocked("OWASP routing: artifact path escapes its run-owned root")
-    return path
-
-
 def _accepted_component(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The accepted component map (report context only) and its binding."""
     base = data_path(run_id, "jobs", COMPONENT_JOB)
     pointer_path = base / "accepted.json"
     if not pointer_path.is_file() or pointer_path.is_symlink():
@@ -118,259 +110,145 @@ def _accepted_lane_in(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     }
 
 
-def _component_entry(manifest: dict[str, Any], binding: dict[str, Any]) -> dict[str, Any]:
-    matches = []
-    for entry in manifest["entries"]:
+def admitted_universe(manifest: dict[str, Any], binding: dict[str, Any],
+                      universe: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The T03 entries that admit exactly this universe and every participating chapter's bundle."""
+    attempt = f"jobs/{owasp_universe.JOB}/whole/attempts/{binding['attempt_id']}/"
+
+    def produced(entry: dict[str, Any]) -> bool:
         producer = entry.get("producer") or {}
-        if (entry.get("kind") == "component_map" and
-                entry.get("artifact", {}).get("path") == binding["artifact_path"] and
-                entry.get("artifact", {}).get("sha256") == binding["artifact_sha256"] and
-                producer.get("job_id") == COMPONENT_JOB and
+        return (entry.get("admission") == "accepted_run_output" and producer.get("job_id") == owasp_universe.JOB and
                 producer.get("attempt_id") == binding["attempt_id"] and
                 producer.get("accepted_pointer_path") == binding["accepted_pointer_path"] and
-                producer.get("accepted_pointer_sha256") == binding["accepted_pointer_sha256"]):
-            matches.append(entry)
-    if len(matches) != 1:
-        raise Blocked("T03 must admit exactly the newest accepted component map with exact pointer/hash lineage")
-    entry = matches[0]
-    snapshot = entry.get("source_snapshot")
-    if not isinstance(snapshot, dict) or snapshot.get("snapshot_id") != binding["source_snapshot_sha256"]:
-        raise Blocked("T03 component-map entry has mixed or absent source-generation lineage")
-    if entry.get("evidence_class") != "derived_intelligence" or entry.get("use") != "locator_only":
-        raise Blocked("component characterization must remain derived locator intelligence")
-    return entry
+                producer.get("accepted_pointer_sha256") == binding["accepted_pointer_sha256"] and
+                (entry.get("source_snapshot") or {}).get("snapshot_id") == binding["source_snapshot_sha256"] and
+                entry.get("freshness", {}).get("status") == "current")
 
-
-def _validate_component_topology(component_map: dict[str, Any]) -> None:
-    components = component_map["functional_components"]
-    component_ids = [row["component_id"] for row in components]
-    if len(component_ids) != len(set(component_ids)):
-        raise Blocked("component map contains duplicate component identities")
-    known = set(component_ids)
-    assigned: dict[str, list[str]] = {component_id: [] for component_id in component_ids}
-    group_ids: set[str] = set()
-    for group in component_map["parallel_review_groups"]:
-        if group["group_id"] in group_ids:
-            raise Blocked("component map contains duplicate review-group identities")
-        group_ids.add(group["group_id"])
-        if len(group["component_ids"]) != len(set(group["component_ids"])):
-            raise Blocked("review group duplicates a component reference")
-        for component_id in group["component_ids"]:
-            if component_id not in known:
-                raise Blocked("review group contains an unresolved component reference")
-            assigned[component_id].append(group["group_id"])
-    for component in components:
-        owners = assigned[component["component_id"]]
-        if owners != [component["parallel_review_group"]]:
-            reason = "unassigned" if not owners else "overlapping or contradictory"
-            raise Blocked(f"component {component['component_id']} has {reason} review-group routing")
-    for relation in component_map["component_relationships"]:
-        if relation["from_component_id"] not in known or relation["to_component_id"] not in known:
-            raise Blocked("component relationship contains an unresolved reference")
-    for tag in component_map["tag_cloud"]:
-        if len(tag["component_ids"]) != len(set(tag["component_ids"])) or set(tag["component_ids"]) - known:
-            raise Blocked("component tag contains duplicate or unresolved references")
-
-
-def _tags(component_map: dict[str, Any]) -> dict[str, list[str]]:
-    result = {row["component_id"]: [] for row in component_map["functional_components"]}
-    for tag in component_map["tag_cloud"]:
-        for component_id in tag["component_ids"]:
-            result[component_id].append(tag["tag"])
-    return {key: sorted(set(value)) for key, value in result.items()}
-
-
-def _classification_state(component: dict[str, Any], component_map: dict[str, Any]) -> str:
-    affected = {component_id for row in component_map["unknowns"] for component_id in row["affected_component_ids"]}
-    if (component["confidence"] == "low" or component["ownership"]["kind"] == "unknown" or
-            component["deployability"] == "unknown"):
-        return "unknown"
-    if component["component_id"] in affected or component["confidence"] == "medium":
-        return "partial"
-    return "known"
-
-
-def _tokens(component: dict[str, Any], tags: list[str]) -> set[str]:
-    values = [component["component_type"], component["coarse_group"], component["observed_purpose"],
-              component["security_control_relevance"], *component["aliases"], *tags]
-    return _words(*values)
-
-
-def _words(*values: str) -> set[str]:
-    return {token for value in values for token in re.findall(r"[a-z0-9]+", value.lower())}
-
-
-def _unknowns(component: dict[str, Any], component_map: dict[str, Any]) -> list[dict[str, Any]]:
-    return [row for row in component_map["unknowns"] if component["component_id"] in row["affected_component_ids"]]
-
-
-def _local_only(component: dict[str, Any], tags: list[str], unknowns: list[dict[str, Any]]) -> bool:
-    """Positive classification as a CLI/library with no network trait and no open question touching one."""
-    kind = _words(component["component_type"], component["coarse_group"], *component["aliases"])
-    traits = _tokens(component, tags) | _words(component["trust_boundary_relevance"], *component["search_terms"],
-        *(text for row in unknowns for text in (row["subject"], row["question"], row["impact"])))
-    return (component["confidence"] == "high" and bool(kind & LOCAL_KINDS) and not traits & NETWORK_TRAITS)
-
-
-def _family_match(family: str, enabled_scope: list[str], tokens: set[str]) -> bool:
-    scope = {token for value in enabled_scope for token in re.findall(r"[a-z0-9]+", value.lower())}
-    if scope.intersection({"all", "application", "applications", "product"}):
-        return True
-    aliases = {
-        "owasp_asvs": {"api", "backend", "server", "service", "web", "webapp", "authentication", "authorization"},
-        "owasp_masvs": {"android", "ios", "mobile", "apk", "ipa"},
-    }
-    return bool(tokens.intersection(scope | aliases.get(family, set())))
-
-
-def _component_evidence_inputs(manifest: dict[str, Any], binding: dict[str, Any],
-                               component_ids: set[str]) -> dict[str, list[str]]:
-    """Return canonical T03 input IDs explicitly bound to this component-map generation."""
-    result = {component_id: [] for component_id in component_ids}
+    universes = [entry for entry in manifest["entries"] if entry.get("kind") == owasp_universe.UNIVERSE_KIND]
+    if (len(universes) != 1 or universes[0]["input_id"] != owasp_universe.UNIVERSE_INPUT or not produced(universes[0]) or
+            universes[0]["artifact"] != {"path": binding["artifact_path"], "sha256": binding["artifact_sha256"]} or
+            universes[0]["evidence_class"] != "derived_intelligence" or universes[0]["use"] != "locator_only"):
+        raise Blocked("T03 must admit exactly the newest accepted 04-owasp-universe as locator-only derived intelligence")
+    expected = {target["chapter_id"]: target["evidence_bundle"] for target in universe["targets"]
+                if target["evidence_bundle"] is not None}
+    bundles = {}
     for entry in manifest["entries"]:
-        scope = entry.get("component_scope")
-        if scope is None:
+        if entry.get("kind") != owasp_universe.BUNDLE_KIND:
             continue
-        if scope.get("component_map") != binding:
-            raise Blocked(f"{entry['input_id']}: component evidence is bound to a mixed or stale generation")
-        scoped = scope.get("component_ids", [])
-        if len(scoped) != len(set(scoped)) or set(scoped) - component_ids:
-            raise Blocked(f"{entry['input_id']}: component evidence has unresolved or duplicate scope")
-        if (entry.get("admission") != "accepted_run_output" or entry.get("use") != "canonical_evidence" or
-                entry.get("evidence_class") != "raw_evidence" or
-                entry.get("freshness", {}).get("status") != "current" or not entry.get("producer")):
-            raise Blocked(f"{entry['input_id']}: component evidence is not current accepted canonical raw evidence")
-        for component_id in scoped:
-            result[component_id].append(entry["input_id"])
-    return {component_id: sorted(set(values)) for component_id, values in result.items()}
+        chapter = entry["input_id"].removeprefix("asvs-participants-")
+        bundle = expected.get(chapter)
+        if (bundle is None or chapter in bundles or entry["input_id"] != bundle["input_id"] or not produced(entry) or
+                entry["artifact"] != {"path": attempt + bundle["path"], "sha256": bundle["sha256"]} or
+                entry["evidence_class"] != "raw_evidence" or entry["use"] != "canonical_evidence"):
+            raise Blocked(f"{entry['input_id']}: participants bundle is not the accepted universe's canonical evidence")
+        bundles[chapter] = entry
+    if set(bundles) != set(expected):
+        raise Blocked("T03 does not admit every participating chapter's participants bundle")
+    return universes[0], bundles
+
+
+def _citation(entry: dict[str, Any], locator: str, fact: str) -> dict[str, Any]:
+    return {"input_id": entry["input_id"], "artifact_path": entry["artifact"]["path"],
+            "sha256": entry["artifact"]["sha256"], "locator": locator, "observed_fact": fact}
+
+
+def projection(universe: dict[str, Any], universe_entry: dict[str, Any],
+               bundles: dict[str, dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Components, rules and gaps for every chapter target; T04 recomputes this to verify a request."""
+    components, rules, gaps = [], [], []
+    for target in universe["targets"]:
+        chapter, component_id, decision = target["chapter_id"], target["target_id"], target["decision"]
+        locator = f"$.targets[?target_id={component_id}]"
+        bundle = bundles.get(chapter)
+        components.append({
+            "component_id": component_id, "name": f"ASVS 5.0.0 {chapter} {target['chapter_name']}",
+            "classification_hash": digest(target), "input_ids": [universe_entry["input_id"]],
+            "evidence_input_ids": [bundle["input_id"]] if bundle else [],
+            "scope_status": "in_scope", "scope_authority": None,
+            "control_scope": {"domain_ids": [chapter]},
+            "tags": [decision, target["reason_code"]], "trust_role": "asvs-chapter",
+            "evidence_roots": [row["path"] for row in target["files"]],
+            "classification_state": "unknown" if decision == "gap" else "known",
+            "component_type": "asvs-chapter", "coarse_group": decision, "deployability": "source-snapshot",
+        })
+        universe_citation = _citation(universe_entry, locator,
+                                      f"The universe decides {chapter} {decision} ({target['reason_code']}).")
+        if decision == "participating":
+            files = len(target["files"])
+            fact = f"{len(target['participants'])} participating symbol(s) in {files} file(s) are cited for {chapter}."
+            decided = {"status": "applicable",
+                       "rationale": "Validated participation records cite code that implements, enforces or consumes "
+                                    f"{chapter} controls; every L1+L2 control of the chapter applies to that code.",
+                       "signals": [{"signal_type": "positive_presence", "fact": fact, "input_id": bundle["input_id"]}],
+                       "citations": [_citation(bundle, "$.excerpts", fact), universe_citation],
+                       "source_completeness": "adequate", "conditional_expression": None}
+        elif decision == "not_applicable":
+            decided = {"status": "not_applicable", "rationale": target["reason"],
+                       "signals": [{"signal_type": "positive_exclusion",
+                                    "fact": f"{target['reason_code']}: {target['reason']}",
+                                    "input_id": universe_entry["input_id"]}],
+                       "citations": [universe_citation], "source_completeness": "adequate",
+                       "conditional_expression": None}
+        else:
+            decided = {"status": "cannot_determine", "rationale": target["reason"], "signals": [],
+                       "citations": [universe_citation], "source_completeness": "unknown",
+                       "conditional_expression": None}
+            gaps.append({"gap_id": "gap-" + digest((component_id, target["reason_code"]))[:20],
+                         "component_id": component_id, "kind": "cannot_determine",
+                         "summary": f"{chapter}: {target['reason']}", "rescope_required": True})
+        rules.append({"rule_id": f"universe-{component_id}", "component_id": component_id,
+                      "selector": {"standard_family": FAMILY, "control_ids": [], "domain_ids": [chapter],
+                                   "all_controls": False},
+                      "decision": decided})
+    return components, rules, gaps
 
 
 def assemble(run_id: str, *, reference_root: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     run_id = identifier(run_id)
-    component_map, component_binding = _accepted_component(run_id)
+    universe, binding = owasp_universe.accepted(run_id)
     manifest, manifest_binding = _accepted_lane_in(run_id)
-    component_entry = _component_entry(manifest, component_binding)
-    _validate_component_topology(component_map)
+    universe_entry, bundles = admitted_universe(manifest, binding, universe)
     controls, _profiles = owasp_applicability._selected_controls(
         manifest, Path(reference_root or owasp_applicability.DEFAULT_REFERENCE_ROOT))
-
-    selections = {row["family"]: row for row in manifest["selection"]["selections"]}
-    tag_map = _tags(component_map)
-    evidence_inputs = _component_evidence_inputs(
-        manifest, component_binding,
-        {row["component_id"] for row in component_map["functional_components"]})
-    components, rules, gaps = [], [], []
-    for component in sorted(component_map["functional_components"], key=lambda row: row["component_id"]):
-        component_id = component["component_id"]
-        state = _classification_state(component, component_map)
-        context = {
-            "component_id": component_id,
-            "name": component["name"],
-            "classification_hash": digest(component),
-            "input_ids": [component_entry["input_id"]],
-            "evidence_input_ids": evidence_inputs[component_id],
-            "scope_status": "in_scope",
-            "scope_authority": None,
-            "tags": tag_map[component_id],
-            "trust_role": component["trust_boundary_relevance"],
-            "evidence_roots": sorted(set(component["path_patterns"] + component["representative_locations"])),
-            "classification_state": state,
-            "component_type": component["component_type"],
-            "coarse_group": component["coarse_group"],
-            "deployability": component["deployability"],
-        }
-        components.append(context)
-        if state == "unknown":
-            gaps.append({"gap_id": "gap-" + digest((component_id, "classification"))[:20],
-                         "component_id": component_id, "kind": "cannot_determine",
-                         "summary": "Component classification is incomplete; OWASP targets require reviewer resolution.",
-                         "rescope_required": True})
-            continue
-        tokens = _tokens(component, tag_map[component_id])
-        unknowns = _unknowns(component, component_map)
-        citation = {"input_id": component_entry["input_id"],
-                    "artifact_path": component_entry["artifact"]["path"],
-                    "sha256": component_entry["artifact"]["sha256"],
-                    "locator": f"$.functional_components[?component_id={component_id}]",
-                    "observed_fact": f"Accepted characterization identifies {component['name']} as {component['component_type']}."}
-        if state == "known":
-            decision = {"status": "applicable",
-                        "rationale": "The approved OWASP selection scope positively matches the accepted component classification.",
-                        "source_completeness": "adequate", "conditional_expression": None}
-            conditions = []
-        else:
-            conditions = [row["question"] for row in unknowns] or [
-                f"Confirm the {component['confidence']}-confidence classification of {component['name']} as {component['component_type']}."]
-            decision = {"status": "conditional",
-                        "rationale": "The approved OWASP selection scope matches a partially classified component; applicability holds only if its open classification questions resolve as characterized.",
-                        "source_completeness": "partial", "conditional_expression": " AND ".join(conditions)}
-        matched = False
-        for family in sorted({row["standard_family"] for row in controls}):
-            domains = sorted(NON_WEB_NA_DOMAINS.get(family, set()) & {
-                owasp_applicability._domain(row) for row in controls if row["standard_family"] == family})
-            if domains and _local_only(component, tag_map[component_id], unknowns):
-                rules.append({
-                    "rule_id": f"auto-{component_id}-{family.replace('_', '-')}-non-web-na",
-                    "component_id": component_id,
-                    "selector": {"standard_family": family, "control_ids": [], "domain_ids": domains, "all_controls": False},
-                    "decision": {"status": "not_applicable",
-                                 "rationale": "The accepted characterization positively classifies this component as a local CLI/library with no network, HTTP or session trait; web, API and session chapters do not apply.",
-                                 "signals": [{"signal_type": "positive_exclusion",
-                                              "fact": f"{component['component_type']} ({component['coarse_group']}) has no network/http trait in its classification.",
-                                              "input_id": component_entry["input_id"]}],
-                                 "citations": [citation], "source_completeness": "adequate",
-                                 "conditional_expression": None},
-                })
-            selected = selections.get(family)
-            if not selected or not _family_match(family, selected["enabled_scope"], tokens):
-                continue
-            matched = True
-            rules.append({
-                "rule_id": f"auto-{component_id}-{family.replace('_', '-')}",
-                "component_id": component_id,
-                "selector": {"standard_family": family, "control_ids": [], "domain_ids": [], "all_controls": True},
-                "decision": {**decision,
-                             "signals": [{"signal_type": "positive_presence",
-                                          "fact": f"{component['component_type']} matches approved scope {selected['enabled_scope']}.",
-                                          "input_id": component_entry["input_id"]},
-                                         *({"signal_type": "unresolved_condition", "fact": text,
-                                            "input_id": component_entry["input_id"]} for text in conditions)],
-                             "citations": [citation]},
-            })
-        if not matched:
-            gaps.append({"gap_id": "gap-" + digest((component_id, "selection-scope"))[:20],
-                         "component_id": component_id, "kind": "cannot_determine",
-                         "summary": "No approved OWASP selection scope positively matches this component; no N/A inference was made.",
-                         "rescope_required": True})
-
+    components, rules, gaps = projection(universe, universe_entry, bundles)
+    scoped = {row["component_id"]: sum(control["standard_family"] == FAMILY and
+                                      owasp_applicability._domain(control) in row["control_scope"]["domain_ids"]
+                                      for control in controls) for row in components}
+    if not all(scoped.values()):
+        raise Blocked("OWASP routing: a chapter target selects no ASVS control of the approved selection")
+    for family in sorted({row["standard_family"] for row in controls} - {FAMILY}):
+        masvs = next((row for row in universe["families"] if row["family"] == family), None)
+        decision = f"{masvs['decision']} ({masvs['reason_code']}): {masvs['reason']}" if masvs else "not decided"
+        gaps.append({"gap_id": "gap-" + digest((family, "not-projected"))[:20], "component_id": None,
+                     "kind": "family_not_projected",
+                     "summary": f"{family} is selected but the universe projects ASVS chapters only; universe decision {decision}",
+                     "rescope_required": True})
     request = {
         "schema": "appsec-review/owasp-applicability-request/1.0", "run_id": run_id,
-        "input_manifest": manifest_binding,
-        "component_map": component_binding,
-        "assigned_reviewer": {"reviewer_id": manifest["selection"]["approver"],
-                              "role": "owasp-applicability-reviewer"},
+        "input_manifest": manifest_binding, "universe": binding,
+        "assigned_reviewer": {"reviewer_id": manifest["selection"]["approver"], "role": REVIEWER_ROLE},
         "components": components, "rules": sorted(rules, key=lambda row: row["rule_id"]), "overrides": [],
     }
     errors = validate_document(request, "owasp-applicability-request.schema.json")
     if errors:
-        raise Blocked("assembled OWASP applicability request is invalid: " + errors[0])
+        raise Blocked("projected OWASP applicability request is invalid: " + errors[0])
     routing = {
-        "schema": "appsec-review/owasp-component-routing/1.0", "run_id": run_id,
-        "selection_id": manifest["selection_id"], "source_snapshot_sha256": component_binding["source_snapshot_sha256"],
-        "generation_sha256": component_binding["generation_sha256"],
-        "component_map": component_binding, "input_manifest": manifest_binding,
+        "schema": "appsec-review/owasp-component-routing/2.0", "run_id": run_id,
+        "selection_id": manifest["selection_id"], "source_snapshot_sha256": binding["source_snapshot_sha256"],
+        "universe": binding, "input_manifest": manifest_binding,
         "component_count": len(components), "selected_control_count": len(controls),
-        "expected_target_count": len(components) * len(controls),
+        "expected_target_count": sum(scoped.values()),
+        "planned_validator_calls": binding["planned_validator_calls"],
         "component_ids": [row["component_id"] for row in components],
         "rule_ids": [row["rule_id"] for row in request["rules"]],
         "gaps": sorted(gaps, key=lambda row: row["gap_id"]),
         "claim_limits": ["Routing does not assess or satisfy a control.",
-                         "Unknown or unmatched classification remains cannot_determine and requires rescope.",
-                         "not_applicable is generated only for ASVS web/API/session chapters of a positively classified local CLI/library."],
+                         "Every chapter target is the accepted 04-owasp-universe decision; nothing is inferred here.",
+                         "A universe gap stays cannot_determine and requires rescope; it is never not_applicable."],
     }
     errors = validate_document(routing, "owasp-component-routing.schema.json")
     if errors:
-        raise Blocked("assembled OWASP component routing is invalid: " + errors[0])
+        raise Blocked("projected OWASP component routing is invalid: " + errors[0])
     return request, routing
 
 
@@ -404,7 +282,7 @@ def run(run_id: str, dagster_id: str = "standalone-owasp-component-routing", *,
             base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
             worker_kind="deterministic_python", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
-            execution_status=status, summary="Complete OWASP component applicability routing assembled.",
+            execution_status=status, summary="Accepted OWASP universe projected into the applicability request.",
             status_record={"process": JOB, "status": status,
                            "components": inputs["routing"]["component_count"],
                            "selected_controls": inputs["routing"]["selected_control_count"],
@@ -422,7 +300,7 @@ def run(run_id: str, dagster_id: str = "standalone-owasp-component-routing", *,
             "preflight_error": f"{type(exc).__name__}: {exc}"}, force=force,
         post_validate=lambda attempt, _envelope, inputs: _validate_attempt(
             attempt, inputs["request"], inputs["routing"]),
-        blocked_summary="OWASP component routing preflight did not complete.",
+        blocked_summary="OWASP universe projection preflight did not complete.",
         failed_summary="OWASP component routing did not publish; no older request may be used.")
 
 

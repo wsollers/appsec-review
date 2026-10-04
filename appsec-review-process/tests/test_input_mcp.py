@@ -33,5 +33,59 @@ class InputReadDedup(unittest.TestCase):
         self.assertIn("2: two", other["text"])
 
 
+class ArgumentTypes(unittest.TestCase):
+    """The server validates arguments against each tool's inputSchema before calling it."""
+    schema = next(t["inputSchema"] for t in input_mcp.TOOLS if t["name"] == "input_read")
+
+    def test_boolean_again_is_accepted(self):
+        input_mcp._check(self.schema, {"ref": "t:a.c", "again": True})
+
+    def test_wrong_types_are_refused(self):
+        for args in ({"ref": "t:a.c", "again": 1}, {"ref": "t:a.c", "start": True}, {"ref": 3}):
+            with self.assertRaises(ValueError):
+                input_mcp._check(self.schema, args)
+
+
+class ToolCallCap(unittest.TestCase):
+    """max_tool_calls_per_cell: past the cap every call gets a fixed budget_exhausted error, is not run,
+    and is counted under _budget_exhausted for the invoker's receipt gap; the count spans repair rounds."""
+
+    def setUp(self):
+        import json
+        import tempfile
+        from unittest import mock
+        self.json = json
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.usage = Path(folder.name) / "tool-usage.json"
+        for patch in (mock.patch.object(input_mcp, "data_path", side_effect=lambda *p: Path(folder.name).joinpath(*p)),
+                      mock.patch.dict(input_mcp.USAGE, {"path": str(self.usage)}, clear=True),
+                      mock.patch.dict(input_mcp.BUDGET, {"max": 2})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        input_mcp._RETURNED.clear()
+
+    def ask(self):
+        self.start = getattr(self, "start", 0) + 1
+        return input_mcp.handle("run", _Inputs(), {"method": "tools/call", "params": {
+            "name": "input_read", "arguments": {"ref": "t:a.c", "start": self.start}}})
+
+    def test_calls_past_the_cap_are_refused_with_a_bounded_error_and_counted(self):
+        self.assertFalse(self.ask()["isError"])
+        self.assertFalse(self.ask()["isError"])
+        refused = self.ask()
+        self.assertTrue(refused["isError"])
+        self.assertTrue(refused["content"][0]["text"].startswith("budget_exhausted:"))
+        self.assertLess(len(refused["content"][0]["text"]), 400)
+        counts = self.json.loads(self.usage.read_text())
+        self.assertEqual(counts, {"input_read": 2, input_mcp.BUDGET_EXHAUSTED: 1})
+
+    def test_a_restarted_server_keeps_counting_against_the_same_cap(self):
+        self.usage.write_text(self.json.dumps({"input_read": 2}))
+        input_mcp.USAGE.pop("counts", None)
+        input_mcp._load_usage()
+        self.assertTrue(self.ask()["isError"])
+
+
 if __name__ == "__main__":
     unittest.main()

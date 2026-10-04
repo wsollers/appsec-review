@@ -22,7 +22,8 @@
                 "UNCHANGED",
                 "REDACTED",
                 "OVERSIZED",
-                "WITHHELD"
+                "WITHHELD",
+                "UNCONVERTED"
             ]
         },
         "redactions": {

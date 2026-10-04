@@ -106,13 +106,14 @@ def main() -> int:
             "note": "candidate call graph from tree-sitter names; confirm with source/CodeQL/Joern before treating as reachability proof",
         })
 
+    # An accepted 02-semantic-recall-index attempt copied (or linked) here; queries return locators only.
     semantic_index_dir = static / "semantic-index"
-    semantic_available = semantic_index_dir.exists()
+    semantic_available = (semantic_index_dir / "semantic-recall-index.json").is_file()
     semantic_queries = []
     for q in SECURITY_QUERIES:
         semantic_queries.append({
             "query": q,
-            "command": f"python3 scripts/audit-static/query_semantic_index.py {semantic_index_dir} {json.dumps(q)} --limit 10 --json",
+            "command": f"python3 -B appsec-review-process/semantic_recall_index.py query {semantic_index_dir} {json.dumps(q)} --limit 10",
             "available": semantic_available,
         })
 

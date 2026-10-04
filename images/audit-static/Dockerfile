@@ -340,8 +340,9 @@ RUN composer global require --no-interaction \
 ENV PATH="/root/.config/composer/vendor/bin:${PATH}"
 
 # --- Python-based tools ------------------------------------------------------
-# lancedb + fastembed back the semantic retrieval layer (build_semantic_index.py
-# / query_semantic_index.py). fastembed is deliberately used instead of
+# lancedb + fastembed back 02-semantic-recall-index: the job mounts its builder
+# (appsec-review-process/semantic_index_build.py) and the preseeded model at run
+# time; neither is copied here. fastembed is deliberately used instead of
 # sentence-transformers here — it's ONNX-based with no torch dependency, which
 # is the difference between this layer building in a couple of minutes and
 # timing out pulling in a multi-GB torch install for no benefit in this

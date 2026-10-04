@@ -45,7 +45,7 @@ def rng(line, start=0, end_line=None, end=4):
 
 
 CAPS = {"definitionProvider": True, "referencesProvider": True, "documentSymbolProvider": True,
-        "workspaceSymbolProvider": True, "callHierarchyProvider": True}
+        "workspaceSymbolProvider": True, "callHierarchyProvider": True, "hoverProvider": True}
 ITEM = {"name": "helper", "kind": 12, "uri": uri("main.py"), "range": rng(0, 0, 1), "selectionRange": rng(0, 4)}
 
 while True:
@@ -97,6 +97,8 @@ while True:
         result = [{"name": "helper", "kind": 12, "range": rng(0, 0, 1), "selectionRange": rng(0, 4),
                    "children": [{"name": "inner\x00name", "kind": 13, "range": rng(1, 4), "selectionRange": rng(1, 4)}]},
                   {"name": "main", "kind": 12, "range": rng(3, 0, 4), "selectionRange": rng(3, 4)}]
+    elif method == "textDocument/hover":
+        result = {"contents": {"kind": "markdown", "value": "def helper()\x1b[2J"}}
     elif method == "workspace/symbol":
         result = [{"name": "helper", "kind": 12, "containerName": "main",
                    "location": {"uri": uri("main.py"), "range": rng(0, 4)}}]

@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 84 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 90 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/pipeline/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -163,7 +163,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 84-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 90-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -202,6 +202,9 @@ graph job.
 | `02-doc-intelligence-ingest` | Worker blocked | Present |
 | `02-standards-source-ingest` | Worker blocked | Present |
 | `02-test-intelligence-ingest` | Worker blocked | Present |
+| `04-owasp-candidate-search` | Deterministic per-ASVS-chapter candidate search (ADR-0034); not yet live-qualified | Present |
+| `04-owasp-participation` | Participation classifier pool, classification only (ADR-0034); not yet live-qualified | Present |
+| `04-owasp-universe` | Deterministic OWASP universe and validator budget (ADR-0034); not yet live-qualified | Present |
 | `04-owasp-validation-worklist` | Worker blocked | Present |
 | `15-stig-srg-validation-worklist` | Worker blocked | Present |
 | `02-build-configure` | Dedicated offline B13 lock-replay worker; happy path qualified; fault/recovery qualification pending | Present |
@@ -219,6 +222,7 @@ graph job.
 | `02-test-coverage-ingest` | Worker blocked | Missing |
 | `02-operations-doc-ingest` | Worker blocked | Missing |
 | `02-evidence-index` | Qualified worker (`evidence_index.py`); see [evidence retrieval](../evidence/evidence-retrieval.md) | Present |
+| `02-evidence-index-derived` | Deterministic worker (`evidence_index_derived.py`): producer records and native build inputs after the producers, read by `evidence_derived` | Present |
 | `02-secrets-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-iac-config-scan` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-container-image-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
@@ -245,7 +249,9 @@ graph job.
 | `06-reachability-ir` | Implemented not qualified (see the generated readiness view; ADR-0023) | Present |
 | `02-code-property-graph` | Implemented not qualified (see the generated readiness view) | Present |
 | `02-treesitter-ast` | Implemented not qualified (see the generated readiness view) | Present |
+| `02-language-census` | Deterministic worker (`language_census.py`): one class per snapshot file and the program languages a catalog language server covers | Present |
 | `02-code-index` | Implemented not qualified (see the generated readiness view) | Present |
+| `02-lsp-xref` | Implemented not qualified (see the generated readiness view; docs/code-query-tools.md) | Present |
 | `persona-tool-pool-dispatch` | Implemented not qualified (see the generated readiness view) | Present |
 | `deterministic-pool-merge` | Implemented not qualified (see the generated readiness view) | Present |
 | `evidence-qualified-quorum` | Implemented not qualified (see the generated readiness view) | Present |

@@ -152,7 +152,9 @@ technical N/A, and ambiguous cases remain visible gaps.
 Implemented by `appsec-review-process/owasp_applicability.py` and the closed T04 applicability
 schemas documented in `schemas/README.md`. The worker:
 
-- receives its complete request automatically from `owasp_component_routing.py`, which binds the
+- (Superseded by ADR-0034: the request is now the projection of the accepted `04-owasp-universe`; the
+  component-map binding below is historical.) Receives its complete request automatically from
+  `owasp_component_routing.py`, which binds the
   newest accepted component-purpose map to the newest accepted T03 manifest, projects every
   functional component, preserves tags/trust roles/evidence roots and source generation, and leaves
   unknown or unmatched classifications as explicit `cannot_determine`/rescope gaps;
@@ -186,7 +188,9 @@ The full accepted-input bridge and T04 happy path can be run without hand-author
 python -B appsec-review-process/owasp_component_routing.py --run-id <run_id> --run-applicability
 ```
 
-This is not a registered graph job and does not dispatch validators or launch dynamic work. T05
+Since ADR-0034 the standalone job is removed: `04-owasp-universe` runs the projection inside
+`full_review`, and this command needs an accepted universe. It does not dispatch validators or launch
+dynamic work. T05
 control partitioning and deterministic batching is next.
 
 ## T05 — Control Partitioning And Batch Worklist — IMPLEMENTED FOUNDATION
