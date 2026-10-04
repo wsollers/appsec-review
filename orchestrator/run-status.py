@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Print one line per job partition of a run: latest attempt status and accepted status.
 
-    python3 orchestrator/run-status.py <run-id> [--failed]
+    python3 orchestrator/run-status.py <run-id> [--failed] [--tooling]
+
+--tooling appends the lookup-tool check of retrieval-report.py --check (findings only; the exit code
+stays 0, so nothing fails on it).
 """
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -52,7 +56,26 @@ def main() -> int:
             label = job.name if part == job else f"{job.name}/{part.name}"
             print(f"{label:55} {status:14} accepted={acc:10} {cause}")
     print("totals:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    if "--tooling" in sys.argv:
+        try:
+            tooling(run_id)
+        except Exception as exc:   # informational: a report problem never changes the status output
+            print(f"tooling check unavailable: {type(exc).__name__}: {exc}")
     return 0
+
+
+def tooling(run_id: str) -> None:
+    """retrieval-report.py --check, printed after the job lines; never changes the exit code."""
+    spec = importlib.util.spec_from_file_location("retrieval_report", Path(__file__).resolve().parent / "retrieval-report.py")
+    report = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(report)
+    report.RUNS = REPO / "appsec-review-process" / "runs"
+    loaded = report.load(run_id)
+    findings = report.check(report.summarize(loaded), report.feedback(loaded))
+    print("tooling check: " + (f"{len(findings)} finding(s)" if findings else "no finding")
+          + f" (details: orchestrator/retrieval-report.py {run_id} --summary --feedback)")
+    for rule, detail in findings:
+        print(f"  [{rule}] {detail}")
 
 
 if __name__ == "__main__":
