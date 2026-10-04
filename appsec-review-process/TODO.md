@@ -102,7 +102,19 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 - [ ] **appsec-multi-vuln: add a simple Android app case** (Kotlin or Java, Gradle, an `AndroidManifest.xml`
       with an exported component and a cleartext-traffic or insecure-storage defect, plus an answer-key row in
       `appsec-multi-vuln-guide`) so MASVS selection and the mobile lanes have a target. MASVS stays deferred
-      to mobile projects only.
+      to mobile projects only. Prerequisites (search-facility audit, 2026-10-04; today Kotlin, Swift,
+      Objective-C and Scala have no tree-sitter grammar and Joern has no Ruby, Kotlin or Swift frontend):
+      - Tree-sitter: pin the Kotlin, Swift, Objective-C and Scala grammars in the image that runs
+        `02-treesitter-ast` and extend `treesitter_ast.SUFFIXES`. Add an image test that every grammar
+        actually loads (the image only checks C, Python and PHP today). Parse `.h` as C++ when the target has
+        C++ sources (today always C).
+      - Joern: pin a Joern release that ships `kotlin2cpg`, `rubysrc2cpg` and `swiftsrc2cpg`, add them to
+        `joern_cpg.py`, and qualify each against a small fixture.
+      - Android: add a parser for `AndroidManifest.xml` (exported components, permissions, `debuggable`,
+        `allowBackup`, network security config); most MASVS evidence lives there.
+      - Rules: add Kotlin and Swift rules and MASVS rules to the OWASP rule table
+        (`data/owasp-asvs/category-rules-v1.json`).
+      - Acceptance test: this Android case in multi-vuln.
 
 - [x] **Source SAST Semgrep rules.** Done on branch ws-sast (see breakage log).
       Original note: `data/source-sast/rules-v1.yml` has only 4 C/C++ rules
