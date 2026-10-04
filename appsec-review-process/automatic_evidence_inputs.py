@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import tempfile
 from typing import Any
+import uuid
 
 import dependency_snapshot_registry as snapshots
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, identifier, read_json, run_path
@@ -311,6 +312,17 @@ def _reference_table(run_id: str, control: dict[str, Any]) -> tuple[Path, str]:
     return destination, wanted
 
 
+def _receipt_attempt(request_path: Path) -> str | None:
+    """The attempt id an earlier ``prepare`` of this same request receipt chose, if any."""
+    receipt = request_path.with_suffix(".receipt.json")
+    if not receipt.is_file() or receipt.is_symlink():
+        return None
+    try:
+        return identifier(Path(read_json(receipt)["orchestration"]["attempt_root"]).name)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def _write_request(path: Path, request: dict[str, Any]) -> None:
     if path.exists():
         if path.is_symlink() or read_json(path) != request:
@@ -403,8 +415,12 @@ def prepare(run_id: str, job_id: str, dagster_run_id: str, *, generated_at: str 
     manifest_path, manifest, generation = _manifest(run_id)
     permissions = _permissions(manifest, job_id)
     source, source_binding, source_files = source_projection(run_id)
-    attempt_id = "auto-" + digest({"dagster_run_id": dagster_run_id, "job_id": job_id})[:24]
-    request_path = data_path(run_id, "jobs", job_id, "automatic-inputs", attempt_id + ".json")
+    # The Dagster run names only the request receipt (prepare stays idempotent within one run). The
+    # attempt id is fresh, never the run id: the orchestration adapters reuse an accepted attempt by
+    # content before they allocate one (producer_reuse), so a resumed launch runs no container.
+    request_id = "auto-" + digest({"dagster_run_id": dagster_run_id, "job_id": job_id})[:24]
+    request_path = data_path(run_id, "jobs", job_id, "automatic-inputs", request_id + ".json")
+    attempt_id = _receipt_attempt(request_path) or "auto-" + uuid.uuid4().hex[:24]
     if generated_at is None and request_path.is_file() and not request_path.is_symlink():
         generated_at = read_json(request_path).get("generated_at")
     stamp = _timestamp(generated_at)

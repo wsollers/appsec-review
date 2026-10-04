@@ -3,6 +3,10 @@
 The adapter owns no scanner logic.  It binds explicit run-owned inputs to the public B13
 adapters, supplies only verified offline database snapshots, and then calls the dependency
 worker's immutable publication seam.  Snapshot synchronization deliberately lives elsewhere.
+
+The 02 dependency jobs are reused by content before any B13 container runs (``reuse_inputs``,
+``producer_reuse``): their requests carry a per-launch ``generated_at`` and orchestration attempt and
+bind upstreams by attempt, so the worker's own request fingerprint changes on every launch.
 """
 from __future__ import annotations
 
@@ -14,7 +18,9 @@ from typing import Any
 import dependency_b13_adapters as b13
 import dependency_workers as workers
 import automatic_evidence_inputs as automatic_inputs
-from execution_state import Blocked, atomic_json, beneath, data_path, file_hash, identifier, run_path
+from execution_state import Blocked, atomic_json, beneath, data_path, file_hash, identifier, read_json, run_path
+import producer_reuse
+import registry_paths
 
 REQUEST_SCHEMA = "appsec-review/dependency-orchestration-request/1.1"
 LEGACY_REQUEST_SCHEMA = "appsec-review/dependency-orchestration-request/1.0"
@@ -48,6 +54,47 @@ _TOOL_KEYS = {
 }
 _LEGACY_TOOL_KEYS = {**_TOOL_KEYS,
     "sca": {"sbom_root", "snapshot_registry", "max_database_age_seconds"}}
+REUSABLE = {"sbom", "sca", "license", "lifecycle"}       # the 02 producers 02-evidence-assembly joins
+_PATH_KEYS = {"target_path", "sbom_root", "snapshot_registry", "reference_table", "reachability_evidence"}
+CODE_FILES = ("dependency_orchestration.py", "dependency_workers.py", "dependency_b13_adapters.py",
+              "automatic_evidence_inputs.py", "producer_reuse.py")
+
+
+def _content(value: Any) -> Any:
+    """An upstream binding by its content hash, never its attempt id or path; skips stay as they are."""
+    if isinstance(value, dict) and "sha256" in value and "path" in value:
+        return {"sha256": value["sha256"]}
+    return value
+
+
+def reuse_inputs(kind: str, job_id: str, run_id: str, request: dict[str, Any], generation: str) -> dict[str, Any]:
+    """What the job's evidence is a function of: request content, upstream content by hash, the pinned
+    image records, its own code and contracts. Never ``generated_at``, an attempt id or a path."""
+    binding = request.get("source_binding") if isinstance(request.get("source_binding"), dict) else {}
+    contract = workers.JOBS[kind][1]
+    return {"job_id": job_id, "run_id": run_id, "source_generation": generation, "schema": request.get("schema"),
+        "source": {"fingerprint": binding.get("source_fingerprint"), "revision": binding.get("source_revision")},
+        "payload": {key: _content(value) for key, value in request["payload"].items() if key not in _PATH_KEYS},
+        "tool": {key: value for key, value in request["tool"].items() if key not in _PATH_KEYS},
+        "images": producer_reuse.images(spec["image"] for spec in b13.SPECS.values() if spec["job"] == job_id),
+        "code": producer_reuse.code(CODE_FILES + (registry_paths.contract_rel(contract),
+                                                  registry_paths.template_rel(job_id)))}
+
+
+def _still_current(kind: str, request: dict[str, Any]) -> None:
+    """A reused result must still pass the age ceilings at this launch's clock (else re-execute)."""
+    now = datetime.fromisoformat(request["generated_at"].replace("Z", "+00:00"))
+    if kind == "sca":
+        ceiling = request["tool"]["max_database_age_seconds"]
+        for identity in request["tool"].get("snapshot_identities") or []:
+            age = (now - datetime.fromisoformat(identity["data_timestamp"].replace("Z", "+00:00"))).total_seconds()
+            if age < 0 or age > ceiling:
+                raise Blocked("dependency orchestration: reused vulnerability database is out of its age ceiling")
+    elif kind == "lifecycle":
+        table = json.loads(Path(request["payload"]["reference_table"]).read_text(encoding="utf-8"))
+        age = (now.date() - datetime.fromisoformat(table["as_of"]).date()).days
+        if age < 0 or age > request["payload"]["max_reference_age_days"]:
+            raise Blocked("dependency orchestration: reused lifecycle reference table is out of its age ceiling")
 
 
 def _owned(value: Any, owner: Path, label: str, *, directory: bool = False) -> Path:
@@ -196,9 +243,25 @@ def execute(*, job_id: str, run_id: str, input_path: str, output_root: str,
         raise Blocked("dependency orchestration: tool config shape is not closed")
     _binding_paths(payload, owner, kind)
 
+    job_root = selected_output / job_id
+    content = reuse_inputs(kind, job_id, run_id, request, generation) if kind in REUSABLE and not legacy else None
+    if content is not None:
+        reused = producer_reuse.admit(job_root, content, run_id=run_id, job_id=job_id,
+                                      verify=lambda _attempt, _pointer, _record: _still_current(kind, request))
+        if reused is not None:
+            return read_json(job_root / "attempts" / reused["attempt_id"] / "result.json")
+
+    def remember(envelope: dict[str, Any]) -> dict[str, Any]:
+        pointer_path = job_root / "accepted.json"
+        if content is not None and pointer_path.is_file() and not pointer_path.is_symlink():
+            pointer = read_json(pointer_path)
+            if isinstance(pointer, dict) and pointer.get("attempt_id") == envelope.get("attempt_id"):
+                producer_reuse.remember(job_root, content, pointer, run_id=run_id, job_id=job_id)
+        return envelope
+
     resolved = _reuse_or_prepare(attempt, request_path)
     if resolved is not None:
-        return workers.run(kind, resolved)
+        return remember(workers.run(kind, resolved))
 
     worker_request = {"run_id": run_id, "source_snapshot_sha256": generation,
                       "generated_at": request["generated_at"], "output_root": str(selected_output), **payload}
@@ -253,6 +316,6 @@ def execute(*, job_id: str, run_id: str, input_path: str, output_root: str,
                                   osv_applicability=applicability)
         resolved = attempt / "worker-request.json"
         atomic_json(resolved, worker_request)
-        return workers.run(kind, resolved)
+        return remember(workers.run(kind, resolved))
     except (b13.AdapterBlocked, workers.WorkerBlocked) as exc:
         raise Blocked(str(exc)) from exc

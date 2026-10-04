@@ -355,9 +355,6 @@
     "intel-manifest-producer.schema.json": {
       "sha256_ref": 5
     },
-    "intel-manifest.schema.json": {
-      "sha256_ref": 7
-    },
     "intelligence-payload.schema.json": {
       "confidence": 1
     },

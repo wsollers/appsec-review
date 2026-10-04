@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import component_characterization as cc  # noqa: E402
 import evidence_assembly as worker  # noqa: E402
+import execution_state  # noqa: E402
 from execution_state import Blocked, atomic_json, file_hash, read_json, tree_hashes  # noqa: E402
 import pool_rendezvous as pr  # noqa: E402
 import pool_rendezvous_support as rendezvous_support  # noqa: E402
@@ -23,8 +25,10 @@ from worker_result import artifact_records, terminal_envelope  # noqa: E402
 PLAN = read_json(ROOT / "tests" / "fixtures" / "evidence-assembly" / "complete-plan.json")
 
 
-def make_rendezvous(folder):
-    workspace = rendezvous_support.RendezvousWorkspace(Path(folder).resolve())
+def make_rendezvous(folder, attempt_id="terminal-generation-1", workspace=None):
+    """One C01/C02 producer-binding generation; a second call with the same ``workspace`` is the next
+    launch's generation (same pool parent and context, new instance ids)."""
+    workspace = workspace or rendezvous_support.RendezvousWorkspace(Path(folder).resolve())
     dependencies = read_json(worker.GRAPH)["jobs"][worker.JOB]["dependencies"]
     groups = []
     for edge in dependencies:
@@ -33,7 +37,7 @@ def make_rendezvous(folder):
             job_id=worker.JOB, run_id=PLAN["run_id"])
         groups.append(group)
     spec = workspace.spec(groups, pool_id="evidence-assembly", lane="pregather",
-        run_id=PLAN["run_id"], job_id=worker.JOB, attempt_id="terminal-generation-1")
+        run_id=PLAN["run_id"], job_id=worker.JOB, attempt_id=attempt_id)
     plan = workspace.expand(spec)
     workspace.run(spec, plan, max_parallel=pr.MAX_PARALLEL)
     return workspace, spec, plan
@@ -301,6 +305,120 @@ class EvidenceAssemblyTests(unittest.TestCase):
                 atomic_json(path, candidate)
                 with mock.patch.object(worker, "GRAPH", path), self.assertRaises(Blocked):
                     worker._graph()
+
+
+def change_producer(supply_root, job):
+    """Republish one producer's evidence with different bytes (envelope and pointer resealed)."""
+    producer = Path(supply_root, "producers", job)
+    attempt = producer / "attempts" / read_json(producer / "accepted.json")["attempt_id"]
+    atomic_json(attempt / "evidence.json", {"producer": job, "evidence": "changed"})
+    envelope = read_json(attempt / "result.json")
+    envelope["artifacts"] = artifact_records(attempt, [item["path"] for item in envelope["artifacts"]])
+    atomic_json(attempt / "result.json", envelope)
+    reseal_producer(supply_root, job)
+
+
+class ResumeReuseTests(unittest.TestCase):
+    """Run 20261004T054551Z-357581: a resumed full_review re-ran 02-evidence-assembly and therefore
+    01/03 and every model stage, because the fingerprint and the manifest bound the per-launch
+    producer-binding pool (new instance ids every launch) instead of what the producers published."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pool_temporary = tempfile.TemporaryDirectory()
+        cls.workspace, cls.spec1, cls.plan1 = make_rendezvous(cls.pool_temporary.name, "generation-launch-1")
+        _workspace, cls.spec2, cls.plan2 = make_rendezvous(None, "generation-launch-2", cls.workspace)
+
+    @classmethod
+    def tearDownClass(cls):
+        rendezvous_support.join_pool_threads()
+        cls.pool_temporary.cleanup()
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.folder = Path(temporary.name)
+        runs = mock.patch.object(execution_state, "RUNS", self.folder / "runs")
+        runs.start(); self.addCleanup(runs.stop)
+
+    def supply(self, name, plan):
+        folder = self.folder / name
+        folder.mkdir()
+        return make_supply(folder, plan)
+
+    def arguments(self, spec, plan, supply):
+        return {"supply_root": supply, "source_snapshot_sha256": PLAN["source_snapshot_sha256"],
+                "pool_root": self.workspace.root(plan), "expected_spec": spec,
+                "context": self.workspace.context(), "rendezvous_parent": self.workspace.rendezvous_parent}
+
+    def launch(self, dagster_run_id, spec, plan, supply):
+        pointer = worker.run(PLAN["run_id"], dagster_run_id, **self.arguments(spec, plan, supply))
+        # What 01-component-characterization binds from the accepted assembly.
+        _attempt, evidence = cc._accepted_evidence(PLAN["run_id"], PLAN["source_snapshot_sha256"])
+        return pointer, evidence
+
+    def record(self, spec, plan, supply):
+        arguments = self.arguments(spec, plan, supply)
+        return worker.current_inputs(PLAN["run_id"], arguments.pop("supply_root"),
+                                     arguments.pop("source_snapshot_sha256"), **arguments)
+
+    def test_unchanged_producers_reuse_the_assembly_and_the_01_input_record_across_launches(self):
+        self.assertNotEqual({item.instance_id for item in self.plan1.instances},
+                            {item.instance_id for item in self.plan2.instances})
+        supply1, supply2 = self.supply("supply-1", self.plan1), self.supply("supply-2", self.plan2)
+        first_record = self.record(self.spec1, self.plan1, supply1)
+        second_record = self.record(self.spec2, self.plan2, supply2)
+        self.assertNotEqual(first_record["terminal_manifest_sha256"], second_record["terminal_manifest_sha256"])
+        self.assertEqual(worker.fingerprint(first_record), worker.fingerprint(second_record))
+
+        first, first_evidence = self.launch("dagster-launch-1", self.spec1, self.plan1, supply1)
+        second, second_evidence = self.launch("dagster-launch-2", self.spec2, self.plan2, supply2)
+        self.assertEqual(second, first)                       # REUSE: same attempt, fingerprint, pointer
+        self.assertEqual(second_evidence, first_evidence)     # 01 binds an identical record
+        attempts = worker.root(PLAN["run_id"]) / "attempts"
+        self.assertEqual([path.name for path in attempts.iterdir()], [first["attempt_id"]])
+
+        attempt = attempts / first["attempt_id"]
+        manifest = read_json(attempt / worker.RESULT)
+        self.assertEqual(manifest["schema"], worker.SCHEMA)
+        self.assertNotIn("terminal_instances", manifest)
+        self.assertFalse(any("terminal_instance_ids" in item for item in manifest["producers"]))
+        # The retained audit record names the generation that produced the attempt and re-verifies.
+        binding = read_json(attempt / worker.BINDING)
+        self.assertEqual(binding["manifest_sha256"], manifest["manifest_sha256"])
+        claimed = {iid for item in binding["producers"] for iid in item["terminal_instance_ids"]}
+        self.assertEqual(claimed, {item.instance_id for item in self.plan1.instances})
+        self.assertEqual(worker.validate(PLAN["run_id"], **self.arguments(self.spec2, self.plan2, supply2)),
+                         attempt)
+
+    def test_retained_terminal_binding_is_verified_against_its_pool(self):
+        supply1, supply2 = self.supply("supply-1", self.plan1), self.supply("supply-2", self.plan2)
+        first, _ = self.launch("dagster-launch-1", self.spec1, self.plan1, supply1)
+        attempt = worker.root(PLAN["run_id"]) / "attempts" / first["attempt_id"]
+        binding = read_json(attempt / worker.BINDING)
+        binding["producers"][0]["terminal_instance_ids"] = ["0" * 32]
+        atomic_json(attempt / worker.BINDING, binding)
+        # Reseal the envelope and the pointer so only the re-derivation from the pool can object.
+        envelope = read_json(attempt / "result.json")
+        envelope["artifacts"] = artifact_records(attempt, [item["path"] for item in envelope["artifacts"]])
+        atomic_json(attempt / "result.json", envelope)
+        base = worker.root(PLAN["run_id"])
+        pointer = read_json(base / "accepted.json")
+        pointer.update(envelope_sha256=file_hash(attempt / "result.json"), hashes=tree_hashes(attempt))
+        atomic_json(base / "accepted.json", pointer)
+        with self.assertRaisesRegex(Blocked, "does not re-verify against its pool"):
+            worker.validate(PLAN["run_id"], **self.arguments(self.spec2, self.plan2, supply2))
+
+    def test_changed_producer_content_makes_a_new_assembly_and_propagates_to_01(self):
+        supply1, supply2 = self.supply("supply-1", self.plan1), self.supply("supply-2", self.plan2)
+        change_producer(supply2, "02-source-sast")
+        first, first_evidence = self.launch("dagster-launch-1", self.spec1, self.plan1, supply1)
+        second, second_evidence = self.launch("dagster-launch-2", self.spec2, self.plan2, supply2)
+        self.assertNotEqual(second["attempt_id"], first["attempt_id"])
+        self.assertNotEqual(second["fingerprint"], first["fingerprint"])
+        self.assertNotEqual(second_evidence["manifest_self_sha256"], first_evidence["manifest_self_sha256"])
+        self.assertNotEqual(second_evidence["generation_sha256"], first_evidence["generation_sha256"])
+        self.assertNotEqual(second_evidence["attempt_id"], first_evidence["attempt_id"])
 
 
 if __name__ == "__main__":

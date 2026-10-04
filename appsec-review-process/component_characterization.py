@@ -55,6 +55,7 @@ INTEL_MANIFEST_SCHEMAS = (
     "intel-manifest-producer.schema.json",
     "intel-manifest-artifact.schema.json",
     "intel-manifest-gap.schema.json",
+    "evidence-assembly-terminal-binding.schema.json",
 )
 ABSENT_SCHEMA_SHA256 = "ABSENT"
 CODE_FILES = (
@@ -129,20 +130,37 @@ def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256
         errors.append("intel manifest source snapshot differs from the staged target")
     if manifest.get("assembly_status") != "COMPLETE":
         errors.append("intel manifest is not a COMPLETE evidence assembly")
-    terminal_instances = manifest.get("terminal_instances")
-    if terminal_instances["outcome"] != "COMPLETE":
-        errors.append("intel manifest terminal instance outcome is not COMPLETE")
-    if manifest["generation"]["terminal_manifest_sha256"] != terminal_instances["manifest_sha256"]:
-        errors.append("intel manifest generation and terminal-instance lineage differ")
-    terminal_path = terminal_instances["path"]
-    terminal_file = _beneath(attempt, terminal_path)
-    terminal_expected = terminal_instances["sha256"]
-    if (terminal_file is None or not terminal_file.is_file() or terminal_file.is_symlink() or
-            "sha256:" + file_hash(terminal_file) != terminal_expected or
-            "sha256:" + envelope_artifacts.get(terminal_path, "") != terminal_expected):
-        errors.append("intel manifest terminal instances are not the hash-bound assembly artifact")
+    # intel-manifest/2.0: the terminal generation is the retained terminal-binding.json audit record,
+    # hash-bound by the envelope and naming this manifest; it is outside manifest_sha256.
+    binding_path = manifest["terminal_binding"]["path"]
+    binding_file = _beneath(attempt, binding_path)
+    binding = None
+    if (binding_file is None or not binding_file.is_file() or binding_file.is_symlink() or
+            file_hash(binding_file) != envelope_artifacts.get(binding_path)):
+        errors.append("intel manifest terminal binding is not the hash-bound assembly artifact")
     else:
-        readable[terminal_path] = envelope_artifacts[terminal_path]
+        binding = read_json(binding_file)
+        if validate_document(binding, "evidence-assembly-terminal-binding.schema.json"):
+            errors.append("intel manifest terminal binding fails its schema")
+            binding = None
+        elif binding["manifest_sha256"] != manifest.get("manifest_sha256") or binding["run_id"] != run_id:
+            errors.append("intel manifest terminal binding names another manifest or run")
+            binding = None
+        else:
+            readable[binding_path] = envelope_artifacts[binding_path]
+    if binding is not None:
+        terminal_instances = binding["terminal_instances"]
+        if terminal_instances["outcome"] != "COMPLETE":
+            errors.append("intel manifest terminal instance outcome is not COMPLETE")
+        terminal_path = terminal_instances["path"]
+        terminal_file = _beneath(attempt, terminal_path)
+        terminal_expected = terminal_instances["sha256"]
+        if (terminal_file is None or not terminal_file.is_file() or terminal_file.is_symlink() or
+                "sha256:" + file_hash(terminal_file) != terminal_expected or
+                "sha256:" + envelope_artifacts.get(terminal_path, "") != terminal_expected):
+            errors.append("intel manifest terminal instances are not the hash-bound assembly artifact")
+        else:
+            readable[terminal_path] = envelope_artifacts[terminal_path]
     manifest_sha = manifest.get("manifest_sha256")
     if not isinstance(manifest_sha, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha):
         errors.append("intel manifest self hash is malformed")
@@ -242,6 +260,7 @@ def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, 
     if manifest_errors:
         raise Blocked(f"{JOB}: accepted {UPSTREAM_MANIFEST} is invalid ({len(manifest_errors)} errors)")
     readable[UPSTREAM_MANIFEST] = file_hash(manifest)
+    terminal = read_json(attempt / manifest_value["terminal_binding"]["path"])["terminal_instances"]
     # The standards corpus (OWASP/ASVS/STIG/OpenCRE text, ~1.2k files) is reference material for the
     # standards jobs, not evidence about the target; exposing it breaks the persona input ceiling.
     readable = {key: value for key, value in readable.items() if not _STANDARDS_CORPUS.match(key)}
@@ -252,9 +271,10 @@ def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, 
         "manifest_self_sha256": manifest_value["manifest_sha256"],
         "input_fingerprint": pointer["fingerprint"],
         **manifest_value["generation"],
-        "terminal_instances_path": manifest_value["terminal_instances"]["path"],
-        "terminal_instances_sha256": manifest_value["terminal_instances"]["sha256"],
-        "terminal_instances_manifest_sha256": manifest_value["terminal_instances"]["manifest_sha256"],
+        "terminal_manifest_sha256": terminal["manifest_sha256"],
+        "terminal_instances_path": terminal["path"],
+        "terminal_instances_sha256": terminal["sha256"],
+        "terminal_instances_manifest_sha256": terminal["manifest_sha256"],
         "producers_sha256": digest(manifest_value["producers"]),
         "artifact_set_sha256": digest(sorted(readable.items())),
         "artifacts": [list(item) for item in sorted(readable.items())],  # JSON-equal to inputs.json
