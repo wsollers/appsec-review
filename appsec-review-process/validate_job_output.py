@@ -185,6 +185,14 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "semantic_recall_locator",
         "allowed_assertions": {"candidate-locator", "coverage-gap"},
     },
+    "lsp-xref": {
+        "claim_class_id": "structural_source_evidence",
+        "allowed_assertions": {"structural-record", "source-locator", "coverage-gap"},
+    },
+    "owasp-participation": {
+        "claim_class_id": "candidate_only",
+        "allowed_assertions": {"participation-classification", "coverage-gap"},
+    },
     "debug-symbol-index": {"claim_class_id": "debug_symbol_static_evidence",
         "allowed_assertions": {"symbol-record", "coverage-gap"}},
     "binary-triage": {"claim_class_id": "binary_inventory_static_evidence",
