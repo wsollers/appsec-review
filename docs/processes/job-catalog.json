@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 85,
+  "lifecycle_jobs": 86,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1491,6 +1491,23 @@
        ]
       },
       {
+       "ref": "job:02-language-census",
+       "id": "02-language-census",
+       "name": "Language census (file classes and program languages)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-language-census"
+       ],
+       "declared_inputs": [
+        "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)",
+        "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs",
+        "tooling/buildenv-catalog.json language servers"
+       ]
+      },
+      {
        "ref": "job:02-code-index",
        "id": "02-code-index",
        "name": "Structural code index (SQLite)",
@@ -1919,7 +1936,8 @@
       "leaves": [
        "legacy-pregather",
        "job:02-build-resolution",
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-language-census"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -2010,6 +2028,9 @@
        "hash-bound Joern exporter",
        "pinned compiler image with the vendored /opt/treesitter venv",
        "hash-bound treesitter_ast.py",
+       "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)",
+       "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs",
+       "tooling/buildenv-catalog.json language servers",
        "accepted code property graph records file",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
@@ -2906,6 +2927,7 @@
      "build-attempts",
      "build-lock",
      "build-execution",
+     "job:02-language-census",
      "lane-handoff",
      "job:02-full-review-input-assembly",
      "threat-model-reconciliation-planned",
@@ -3057,6 +3079,9 @@
      "hash-bound Joern exporter",
      "pinned compiler image with the vendored /opt/treesitter venv",
      "hash-bound treesitter_ast.py",
+     "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)",
+     "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs",
+     "tooling/buildenv-catalog.json language servers",
      "accepted code property graph records file",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
@@ -4498,6 +4523,23 @@
        ]
       },
       {
+       "ref": "job:02-language-census",
+       "id": "02-language-census",
+       "name": "Language census (file classes and program languages)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-language-census"
+       ],
+       "declared_inputs": [
+        "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)",
+        "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs",
+        "tooling/buildenv-catalog.json language servers"
+       ]
+      },
+      {
        "ref": "job:02-code-index",
        "id": "02-code-index",
        "name": "Structural code index (SQLite)",
@@ -4935,7 +4977,8 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-language-census"
       ],
       "passes": [
        "job:02-ossf-scorecard",
@@ -5038,6 +5081,9 @@
        "hash-bound Joern exporter",
        "pinned compiler image with the vendored /opt/treesitter venv",
        "hash-bound treesitter_ast.py",
+       "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)",
+       "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs",
+       "tooling/buildenv-catalog.json language servers",
        "accepted code property graph records file",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
@@ -6051,6 +6097,7 @@
      "artifact-manifest"
     ],
     "leaves": [
+     "job:02-language-census",
      "job:02-full-review-input-assembly",
      "job:final-publication-gate"
     ],
@@ -6191,6 +6238,9 @@
      "hash-bound Joern exporter",
      "pinned compiler image with the vendored /opt/treesitter venv",
      "hash-bound treesitter_ast.py",
+     "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)",
+     "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs",
+     "tooling/buildenv-catalog.json language servers",
      "accepted code property graph records file",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
@@ -11572,6 +11622,68 @@
    ]
   },
   {
+   "id": "02-language-census",
+   "lane": "02-evidence-pregather",
+   "name": "Language census (file classes and program languages)",
+   "contract": "language-census",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/language_census.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-indexer",
+    "domain_id": "intake-state",
+    "tooling_profile_id": "local-evidence-retrieval",
+    "output_contract_id": "language-census"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted 00-intake staged source snapshot (inputs/artifact-manifest.json target.repo_path)"
+    },
+    {
+     "need": "required",
+     "input": "data/owasp-asvs/category-rules-v1.json vendored and generated exclusion globs"
+    },
+    {
+     "need": "required",
+     "input": "tooling/buildenv-catalog.json language servers"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/02-language-census.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-language-census/",
+   "output_files": [
+    "language-census.json",
+    "language-census-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/language-census.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-language-census"
+   ]
+  },
+  {
    "id": "02-code-index",
    "lane": "02-evidence-pregather",
    "name": "Structural code index (SQLite)",
@@ -14734,6 +14846,7 @@
     "job:02-codeql-rust",
     "job:02-code-property-graph",
     "job:02-treesitter-ast",
+    "job:02-language-census",
     "job:02-operations-doc-ingest",
     "job:02-evidence-index",
     "job:02-secrets-inventory",
@@ -15487,6 +15600,16 @@
     "job:02-code-index",
     "job:02-evidence-index-derived"
    ]
+  },
+  "job:02-language-census": {
+   "id": "job:02-language-census",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-language-census/",
+   "about": "Accepted language-census output of 02-language-census.",
+   "produced_by": [
+    "job:02-language-census"
+   ],
+   "consumed_by": []
   },
   "job:02-code-index": {
    "id": "job:02-code-index",

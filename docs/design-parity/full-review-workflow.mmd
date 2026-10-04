@@ -53,6 +53,7 @@ flowchart TD
   j_02_codeql_rust["02-codeql-rust<br/>implemented_not_qualified"]
   j_02_code_property_graph["02-code-property-graph<br/>implemented_not_qualified"]
   j_02_treesitter_ast["02-treesitter-ast<br/>implemented_not_qualified"]
+  j_02_language_census["02-language-census<br/>implemented_not_qualified"]
   j_02_code_index["02-code-index<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>implemented_not_qualified"]
   j_02_ir_capture["02-ir-capture<br/>implemented_not_qualified"]
@@ -228,6 +229,7 @@ flowchart TD
   j_00_intake --> j_02_codeql_rust
   j_00_intake --> j_02_code_property_graph
   j_00_intake --> j_02_treesitter_ast
+  j_00_intake --> j_02_language_census
   j_02_code_property_graph --> j_02_code_index
   j_02_treesitter_ast --> j_02_code_index
   j_02_binary_triage --> j_02_code_index

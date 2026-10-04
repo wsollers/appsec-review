@@ -376,8 +376,20 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
-| `file_max_bytes` | 1 MiB | window | Bytes read per input file. |  |
+| `binary_document_max_bytes` | 32 MiB | safety | Largest PDF or DOCX converted (and the DOCX unpacked-size bound); larger ones are oversized-input gaps. | Typical design PDFs are 0.1-10 MB. |
+| `container_cpu_millis` | 1000 millicpu | resource | CPU quota (1000 = one core) (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_memory_bytes` | 1 GiB | resource | Memory limit for one conversion container (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_pids` | 64 count | resource | Process/thread limit (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_timeout_seconds` | 300 s (5 min) | resource | Wall-clock limit for one conversion container (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `container_tmpfs_bytes` | 64 MiB | resource | Size of the in-memory /tmp (document conversion). | Converted text per PDF/DOCX document grows with page count; one container per document. |
+| `converted_line_max_chars` | 4000 count | window | Longer converted lines are split; each piece keeps its line's provenance. |  |
+| `converted_text_max_bytes` | 2 MiB | window | Converted text kept per document (the evidence index text limit); the rest is a converted-text-truncated gap. |  |
+| `file_max_bytes` | 1 MiB | window | Bytes read per text, HTML or man-page document; larger ones are oversized-input gaps. |  |
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
+| `image_id` | audit-doc-convert id | resource | Pinned image holding pdftotext (poppler-utils) and pandoc for PDF/DOCX conversion. |  |
+| `pdf_min_text_chars_per_page` | 32 count | safety | Non-whitespace characters per page below which a PDF is an image-only-or-scanned-pdf gap (no OCR). |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
 
 ### `02-evidence-index-derived`
@@ -457,6 +469,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_timeout_seconds` | 300 s (5 min) | resource | Wall-clock limit for the container (IR link). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 512 MiB | resource | Size of the in-memory /tmp (IR link). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `ir_max_bytes` | 64 MiB | safety | Largest bitcode or disassembled IR file accepted. | Grows with target size; see docs/scale-audit-unreal-engine.md B: per-module IR only. |
+
+### `02-language-census`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_rows` | 200000 count | safety | Most per-file census rows listed; class and language counts still cover every file and the unlisted rows are a gap. | Grows with snapshot file count (00-intake bounds its inventory at 100000 files). |
 
 ### `02-license-scan`
 

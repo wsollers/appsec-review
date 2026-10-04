@@ -41,6 +41,15 @@ What the index cannot answer is a gap, never zero hits (AGENTS.md rule 2):
   for (``no-grammar``) or did not parse and the CPG did not index (``grammar-unavailable``,
   ``max-files``, ``file-too-large``, ``unreadable``) is an ``unsearched_languages`` row; coverage is
   then incomplete for every chapter (FTS hits there widen, they do not complete the search);
+* with the accepted ``02-language-census`` (``language_census``) only ``program:*`` files (and
+  ``unknown_text`` files with a shebang) that are in scope and not indexed count as unsearched
+  (``no_grammar``, or ``not_indexed`` for a grammar language); census rows it could not list or read
+  are an ``unclassified`` row. Every other class (build system, docs, data, media, patches,
+  generated, vendored) is published in ``coverage.file_classes`` with its count and sample paths and
+  never changes coverage; ``unknown_text`` without a shebang is an ``unclassified_text`` gap that does
+  not either. The census also names the language of suffix-less indexed scripts. Without it, every
+  tree-sitter ``no-grammar`` file (by path where listed, exclusion globs applied) is unsearched and
+  ``language_census_absent`` is a gap;
 * a rule whose facet the index lacks for a present language (``identifiers``/``literals`` and call
   propagation come from the CPG only, ``imports`` from tree-sitter only, ``exported_symbol`` from the
   binary export tables only, entry names ``ENTRY_POINT_SOURCES`` does not list) is
@@ -70,14 +79,16 @@ CLI (the job wrapper binds accepted inputs and calls ``search``; this entry runs
     python3 owasp_candidate_search.py --index code-index.sqlite [--rules category-rules-v1.json]
         [--source-sast source-sast.json] [--treesitter-ast treesitter-ast.json]
         [--evidence-run-id RUN_ID] [--component-map component-map.json]
-        [--semantic-index INDEX_ROOT] [--source-root SNAPSHOT] [--output out.json]
+        [--semantic-index INDEX_ROOT] [--source-root SNAPSHOT] [--language-census language-census.json]
+        [--output out.json]
 
 ``--source-sast`` is the accepted ``02-source-sast`` result (its ``leads``) or a JSON list of
 ``{rule_id, path, start_line}``; omitted means SAST was not accepted (a gap). ``--treesitter-ast``
 is the accepted ``02-treesitter-ast`` document (its ``gaps``) or a JSON list of gaps; omitted means
 none. ``--evidence-run-id`` binds the run's accepted ``02-evidence-index`` (``evidence_index_for``).
 ``--component-map`` is the accepted component purpose map. ``--semantic-index`` is the accepted
-``02-semantic-recall-index`` root queried through ``semantic_recall_index.query``. The ``search``
+``02-semantic-recall-index`` root queried through ``semantic_recall_index.query``.
+``--language-census`` is the accepted ``02-language-census`` document. The ``search``
 members (``coverage, chapters, candidates, excluded, gaps``) are written as JSON (stdout without
 ``--output``); ``document`` wraps them into the published ``owasp-candidate-search.schema.json`` shape.
 Exit 2 with ``OWASP_CANDIDATE_SEARCH_BLOCKED`` on bad input.
@@ -148,6 +159,9 @@ TAG_CHAPTERS: dict[str, tuple[str, ...]] = {
     "threading": ("V15",), "memory": ("V15",), "plugin": ("V15",), "ffi": ("V15",), "logging": ("V16",),
     "audit": ("V16",), "error-handling": ("V16",), "errors": ("V16",), "webrtc": ("V17",), "media": ("V17",)}
 _SUFFIX_COUNT = re.compile(r"(\d+) file\(s\) with suffix (\S+)")
+_UNLISTED = re.compile(r"(\d+) more file\(s\) without a grammar")
+CENSUS_PROGRAM = "program:"
+FILE_CLASS_PATHS = 20   # sample paths per non-program class in coverage.file_classes
 _STRING = re.compile(r'"((?:[^"\\\n]|\\.){0,400})"|\'((?:[^\'\\\n]|\\.){0,400})\'')
 _IDENTIFIER = re.compile(r"[A-Za-z_$][\w$]*")
 # A source line that is an import as the tree-sitter import rows record it (FTS import_regex re-check).
@@ -541,14 +555,69 @@ def _not_applicable(rules: dict[str, Any]) -> dict[str, dict[str, str]]:
     return {chapter["chapter_id"]: dict(chapter.get("languages_not_applicable") or {}) for chapter in rules["chapters"]}
 
 
+class _Census:
+    """The accepted 02-language-census: per-path class, language and shebang interpreter."""
+
+    def __init__(self, document: dict[str, Any]) -> None:
+        rows = document.get("files")
+        if not isinstance(rows, list):
+            raise ValueError("language census has no files list")
+        self.rows = {row["path"]: (row["class"], row.get("language"), row.get("interpreter")) for row in rows}
+        self.counts = {row["class"]: int(row["file_count"]) for row in document.get("classes") or []}
+        self.unknown = (int((document.get("totals") or {}).get("unlisted") or 0)
+                        + sum(1 for gap in document.get("gaps") or [] if gap.get("kind") == "unreadable"))
+
+    def program(self, path: str) -> str | None:
+        """The program language of a path (a shebang interpreter for unknown_text), else None."""
+        cls, language, interpreter = self.rows.get(path, (None, None, None))
+        if cls and cls.startswith(CENSUS_PROGRAM):
+            return language or cls[len(CENSUS_PROGRAM):]
+        return interpreter if cls == "unknown_text" and interpreter else None
+
+
+def _census_rows(index: _Index, census: _Census, excluded, counted: set[str], rows: dict[tuple[str, str], int],
+                 gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Program files (and shebang scripts of an unknown interpreter) in scope that the index does not
+    hold become unsearched rows; every other class is published in ``file_classes`` and never counts
+    against completeness. Census rows the census could not list or read are unsearched too."""
+    import treesitter_ast
+    classes: dict[str, list[str]] = {}
+    scripts = 0   # unknown_text with a shebang: counted as program, not as a file class
+    for path, (cls, _, _) in sorted(census.rows.items()):
+        language = census.program(path)
+        if language is None:
+            classes.setdefault(cls, []).append(path)
+            continue
+        scripts += cls == "unknown_text"
+        if path not in index.files and path not in counted and not excluded(path):
+            key = (language, "not_indexed" if language in treesitter_ast.GRAMMARS else "no_grammar")
+            rows[key] = rows.get(key, 0) + 1
+    if census.unknown:
+        rows[("unclassified", "not_indexed")] = rows.get(("unclassified", "not_indexed"), 0) + census.unknown
+    counts = {cls: census.counts.get(cls, len(paths)) - (scripts if cls == "unknown_text" else 0)
+              for cls, paths in classes.items()}
+    unknown = classes.get("unknown_text", [])
+    if unknown:
+        gaps.append(_gap("unclassified_text", CHAPTERS, _clip(
+            f"{counts['unknown_text']} text file(s) without a recognised name, suffix or shebang were not searched "
+            "as program source (coverage unchanged): " + ", ".join(unknown[:10]))))
+    return [{"class": cls, "file_count": counts[cls], "paths": paths[:FILE_CLASS_PATHS]}
+            for cls, paths in sorted(classes.items())]
+
+
 def _unsearched(index: _Index, rules: dict[str, Any], treesitter_gaps: Iterable[dict[str, Any]], excluded,
-                gaps: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, Any]], dict[str, int]]:
+                gaps: list[dict[str, Any]], census: _Census | None = None
+                ) -> tuple[list[str], list[dict[str, Any]], dict[str, int], list[dict[str, Any]] | None]:
     table_languages = set(rules["languages"])
     exempt = _not_applicable(rules)
     counts: dict[str, int] = {}
     for path, (_, language, _) in index.files.items():
         if path.startswith("<") or excluded(path):
             continue
+        if language is None and census is not None and path in census.rows:
+            language = census.program(path)
+            if language is None:      # indexed, but the census says it is not program source
+                continue
         name = language or _suffix_language(PurePosixPath(path).suffix)
         counts[name] = counts.get(name, 0) + 1
     present = {name: count for name, count in counts.items() if name not in NON_PROGRAM_LANGUAGES}
@@ -557,23 +626,35 @@ def _unsearched(index: _Index, rules: dict[str, Any], treesitter_gaps: Iterable[
         # Without rules a language is unsearched unless every chapter exempts it with a reason.
         if name not in table_languages and not all(name in exempt.get(chapter, {}) for chapter in CHAPTERS):
             rows[(name, "no_rules_for_language")] = count
-    cpg_only, truncated = 0, []
-    for gap in treesitter_gaps or ():
+    cpg_only, truncated, counted = 0, [], set()
+    treesitter_gaps = list(treesitter_gaps or ())
+    # tree-sitter lists no-grammar files by path (bounded, then an overflow count) besides the per-suffix
+    # counts; with paths, exclusion globs apply and the counts are not used. The census supersedes both.
+    listed = any(gap.get("kind") == "no-grammar" and gap.get("path") for gap in treesitter_gaps)
+    for gap in treesitter_gaps:
         kind, path, detail = gap.get("kind"), gap.get("path"), str(gap.get("detail") or "")
         if kind == "no-grammar":
-            match = _SUFFIX_COUNT.search(detail)
-            if match:
-                key = (_suffix_language(match.group(2)), "no_grammar")
-                rows[key] = rows.get(key, 0) + int(match.group(1))
+            if census is not None:
+                continue
+            match = _SUFFIX_COUNT.search(detail) if not listed else None
+            overflow = _UNLISTED.search(detail) if listed and not path else None
+            if path and not excluded(path):
+                key = (_suffix_language(PurePosixPath(path).suffix), "no_grammar")
+                rows[key] = rows.get(key, 0) + 1
+            elif match or overflow:
+                key = (_suffix_language(match.group(2)) if match else "unknown", "no_grammar")
+                rows[key] = rows.get(key, 0) + int((match or overflow).group(1))
         elif kind == "rows-truncated":
             truncated.append(f"{path}: {detail}")
         elif (kind in TREESITTER_TRUNCATED or kind in TREESITTER_UNPARSED) and path:
             if excluded(path):
                 continue
+            counted.add(path)
             if "cpg" in (index.files.get(path) or (None, None, ""))[2]:
                 cpg_only += 1
                 continue
-            language = code_index.language_of(path) or _suffix_language(PurePosixPath(path).suffix)
+            language = (code_index.language_of(path) or (census.program(path) if census else None)
+                        or _suffix_language(PurePosixPath(path).suffix))
             if language in NON_PROGRAM_LANGUAGES:
                 continue
             key = (language, "index_truncated" if kind in TREESITTER_TRUNCATED else "not_indexed")
@@ -586,6 +667,13 @@ def _unsearched(index: _Index, rules: dict[str, Any], treesitter_gaps: Iterable[
     if cpg_only:
         gaps.append(_gap("index_incomplete", CHAPTERS, f"{cpg_only} file(s) were not parsed by tree-sitter and are "
                          "searched through the CPG only (no imports, first-line spans)"))
+    file_classes = None
+    if census is not None:
+        file_classes = _census_rows(index, census, excluded, counted, rows, gaps)
+    else:
+        gaps.append(_gap("language_census_absent", CHAPTERS, "02-language-census was not supplied: every file without "
+                         "a grammar (images, patches, build scripts, docs included) counts as unsearched source, so "
+                         "coverage is strict and a zero-candidate chapter cannot be not applicable"))
     unsearched = [{"language": language, "file_count": count, "reason": reason}
                   for (language, reason), count in sorted(rows.items())]
     for row in unsearched:
@@ -595,7 +683,7 @@ def _unsearched(index: _Index, rules: dict[str, Any], treesitter_gaps: Iterable[
         gaps.append(_gap("language_not_searched", CHAPTERS, f"{row['file_count']} {row['language']} file(s) not "
                          f"searched by the code index ({row['reason']}){missing}: any chapter may have code there"))
     searched = sorted(name for name in present if name in table_languages)
-    return searched, unsearched, counts
+    return searched, unsearched, counts, file_classes
 
 
 def _tagged_files(index: _Index, tag_cloud: dict[str, Any]) -> tuple[dict[str, list[tuple[str, str, str]]], list[str]]:
@@ -623,17 +711,25 @@ def _tagged_files(index: _Index, tag_cloud: dict[str, Any]) -> tuple[dict[str, l
 def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[dict[str, Any]] | None,
            treesitter_gaps: Iterable[dict[str, Any]], evidence_index: dict[str, Any] | None = None,
            tag_cloud: dict[str, Any] | None = None, semantic_index: Callable[..., list[dict[str, Any]]] | None = None,
-           source_root: Path | None = None) -> dict[str, Any]:
+           source_root: Path | None = None, language_census: dict[str, Any] | None = None) -> dict[str, Any]:
     """Evaluate every chapter's rules over the open code index and widen with the optional facilities.
 
     ``evidence_index`` is ``{"query": evidence_store.query-shaped callable (action, text=, path=, limit=,
     start=), "manifest": the accepted manifest}`` (``evidence_index_for``); ``tag_cloud`` the accepted
     component map; ``semantic_index`` a ``query(text, *, limit)`` callable; ``source_root`` the snapshot
-    semantic hits are dereferenced against (else the evidence index). See the module docstring."""
+    semantic hits are dereferenced against (else the evidence index); ``language_census`` the accepted
+    ``02-language-census`` document. See the module docstring."""
     view, excluded_path = _Index(index), _exclusion(rules)
+    census = _Census(language_census) if language_census is not None else None
+    if census is not None:
+        # Suffix-less scripts: the index keys language by suffix; the census names it (shebang).
+        for path, (sha, language, source) in list(view.files.items()):
+            if language is None and census.program(path):
+                view.files[path] = (sha, census.program(path), source)
     evidence = _Evidence(evidence_index) if evidence_index else None
     gaps: list[dict[str, Any]] = []
-    searched, unsearched, file_counts = _unsearched(view, rules, treesitter_gaps, excluded_path, gaps)
+    searched, unsearched, file_counts, file_classes = _unsearched(view, rules, treesitter_gaps, excluded_path, gaps,
+                                                                  census)
     exempt = _not_applicable(rules)
     empty = not view.files
     if empty:
@@ -908,10 +1004,17 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
         {"facility": "tag_cloud", "status": "unavailable" if tag_cloud is None else "used",
          "detail": "no accepted component map" if tag_cloud is None else _clip(
              f"{tag_hits} file-level widening candidate(s); {len(tag_skipped)} tagged file(s) under exclusion "
-             f"globs left excluded; unmapped tags: {', '.join(unmapped) or 'none'}")}]
+             f"globs left excluded; unmapped tags: {', '.join(unmapped) or 'none'}")},
+        {"facility": "language_census", "status": "unavailable" if census is None else "used",
+         "detail": "language-census-absent: strict per-suffix coverage" if census is None else _clip(
+             f"{len(census.rows)} classified file(s); " + ", ".join(f"{row['class']} {row['file_count']}"
+                                                                     for row in file_classes or []))}]
     unique = {gap["gap_id"]: gap for gap in gaps}
-    return {"coverage": {"complete": complete, "searched_languages": searched, "unsearched_languages": unsearched,
-                         "sast_available": sast_hits is not None, "facilities": facilities},
+    coverage = {"complete": complete, "searched_languages": searched, "unsearched_languages": unsearched,
+                "sast_available": sast_hits is not None, "facilities": facilities}
+    if file_classes is not None:
+        coverage["file_classes"] = file_classes
+    return {"coverage": coverage,
             "chapters": [{key: chapter[key] for key in ("chapter_id", "candidate_count", "excluded_count",
                                                          "coverage_complete", "search_basis")} for chapter in chapters],
             "candidates": rows, "excluded": dropped,
@@ -958,6 +1061,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--component-map", type=Path, help="accepted component purpose map (tag cloud)")
     parser.add_argument("--semantic-index", type=Path, help="accepted 02-semantic-recall-index root")
     parser.add_argument("--source-root", type=Path, help="snapshot root semantic hits are dereferenced against")
+    parser.add_argument("--language-census", type=Path, help="accepted 02-language-census language-census.json")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -965,13 +1069,16 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"{args.index}: no code index")
         rules = json.loads(args.rules.read_text(encoding="utf-8"))
         component_map = json.loads(args.component_map.read_text(encoding="utf-8")) if args.component_map else None
+        census = json.loads(args.language_census.read_text(encoding="utf-8")) if args.language_census else None
+        if census is not None and not isinstance(census, dict):
+            raise ValueError(f"{args.language_census}: expected a language-census document")
         evidence = evidence_index_for(args.evidence_run_id) if args.evidence_run_id else None
         connection = code_index.open_readonly(args.index)
         try:
             result = search(connection, rules, sast_hits=_load(args.source_sast, "leads"),
                             treesitter_gaps=_load(args.treesitter_ast, "gaps") or [], evidence_index=evidence,
                             tag_cloud=component_map, semantic_index=_semantic(args.semantic_index),
-                            source_root=args.source_root)
+                            source_root=args.source_root, language_census=census)
         finally:
             connection.close()
     except Exception as exc:  # noqa: BLE001 - every input failure is a blocked CLI run with its reason

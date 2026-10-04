@@ -1678,6 +1678,28 @@
         "lineage.json"
       ]
     },
+    "02-language-census": {
+      "lane": "02-evidence-pregather",
+      "contract": "language-census",
+      "template": "02-language-census",
+      "implemented": true,
+      "namespace": "02-language-census",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Deterministic file census of the staged snapshot: one class per file (program language, build system, documentation, data/config, binary/media, patch, generated, vendored, unknown text) by path, name, suffix, shebang and content sniff, and the program languages a catalog language server covers.",
+      "required_artifacts": [
+        "language-census.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
+      ]
+    },
     "02-code-index": {
       "lane": "02-evidence-pregather",
       "contract": "code-index",

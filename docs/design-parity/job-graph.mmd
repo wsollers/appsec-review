@@ -301,6 +301,10 @@ flowchart TD
   02_treesitter_ast_pre --> 02_treesitter_ast["02-treesitter-ast: work or reuse"]
   02_treesitter_ast --> 02_treesitter_ast_post["02-treesitter-ast: post-validation and publish"]
   00_intake_post -->|required| 02_treesitter_ast_config
+  02_language_census_config["02-language-census: resolve job configuration"] --> 02_language_census_pre["02-language-census: pre-validation"]
+  02_language_census_pre --> 02_language_census["02-language-census: work or reuse"]
+  02_language_census --> 02_language_census_post["02-language-census: post-validation and publish"]
+  00_intake_post -->|required| 02_language_census_config
   02_code_index_config["02-code-index: resolve job configuration"] --> 02_code_index_pre["02-code-index: pre-validation"]
   02_code_index_pre --> 02_code_index["02-code-index: work or reuse"]
   02_code_index --> 02_code_index_post["02-code-index: post-validation and publish"]
