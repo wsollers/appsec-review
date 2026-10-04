@@ -252,6 +252,7 @@ flowchart TD
   02_source_sast_post -->|optional| 04_owasp_candidate_search_config
   02_evidence_index_post -->|required| 04_owasp_candidate_search_config
   01_component_characterization_post -->|optional| 04_owasp_candidate_search_config
+  02_language_census_post -->|required| 04_owasp_candidate_search_config
   04_owasp_participation_config["04-owasp-participation: resolve job configuration"] --> 04_owasp_participation_pre["04-owasp-participation: pre-validation"]
   04_owasp_participation_pre --> 04_owasp_participation["04-owasp-participation: work or reuse"]
   04_owasp_participation --> 04_owasp_participation_post["04-owasp-participation: post-validation and publish"]
@@ -343,6 +344,7 @@ flowchart TD
   02_lsp_xref --> 02_lsp_xref_post["02-lsp-xref: post-validation and publish"]
   02_code_index_post -->|required| 02_lsp_xref_config
   02_native_build_post -->|optional| 02_lsp_xref_config
+  02_language_census_post -->|required| 02_lsp_xref_config
   02_native_sast_config["02-native-sast: resolve job configuration"] --> 02_native_sast_pre["02-native-sast: pre-validation"]
   02_native_sast_pre --> 02_native_sast["02-native-sast: work or reuse"]
   02_native_sast --> 02_native_sast_post["02-native-sast: post-validation and publish"]

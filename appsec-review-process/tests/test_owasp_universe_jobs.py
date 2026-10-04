@@ -34,7 +34,8 @@ class GraphWiringTests(unittest.TestCase):
             "02-treesitter-ast": ("required", ["not-applicable-language-absent"]),
             "02-source-sast": ("optional", ["not-applicable-after-partition-review"]),
             "02-evidence-index": ("required", []),
-            "01-component-characterization": ("optional", ["not-applicable-after-partition-review"])})
+            "01-component-characterization": ("optional", ["not-applicable-after-partition-review"]),
+            "02-language-census": ("required", [])})
         self.assertEqual(edges[jobs.PARTICIPATION], {jobs.CANDIDATES: ("required", []), "02-code-index": ("required", [])})
         self.assertEqual(edges[jobs.UNIVERSE], {jobs.CANDIDATES: ("required", []),
                                                 jobs.PARTICIPATION: ("required", ["no-candidates"])})
@@ -87,6 +88,7 @@ class LifecycleTests(unittest.TestCase):
         else:
             self.publish("02-treesitter-ast", status="SKIPPED", skip_reason="not-applicable-language-absent")
         self.publish("02-evidence-index", whole=True)
+        self.publish("02-language-census", content=b'{"files": [], "classes": [], "totals": {}, "gaps": []}')
         if tags:
             self.publish("01-component-characterization")
         return index
@@ -103,6 +105,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(flags["--index"], str(index))
         self.assertEqual(flags["--evidence-run-id"], RUN)
         self.assertTrue(flags["--component-map"].endswith("component-purpose-map.json"))
+        self.assertTrue(flags["--language-census"].endswith("language-census.json"))
         self.assertEqual(flags["--output"], str(attempt / "owasp-candidate-search.json"))
         self.assertEqual(flags["--source-root"], str(self.checkout.resolve()))
         self.assertNotIn("--treesitter-ast", flags)   # skipped by an allowed reason: the module records it
