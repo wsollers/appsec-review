@@ -97,6 +97,7 @@ flowchart TD
   03_threat_model_dfd_stride_post -->|required| 04_asvs_masvs_config
   03_threat_model_reconciliation_post -->|required| 04_asvs_masvs_config
   04_owasp_validation_worklist_post -->|required| 04_asvs_masvs_config
+  04_owasp_universe_post -->|required| 04_asvs_masvs_config
   05_native_memory_config["05-native-memory: resolve job configuration"] --> 05_native_memory_pre["05-native-memory: pre-validation"]
   05_native_memory_pre --> 05_native_memory["05-native-memory: work or reuse"]
   05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]
@@ -237,11 +238,31 @@ flowchart TD
   02_test_intelligence_ingest_pre --> 02_test_intelligence_ingest["02-test-intelligence-ingest: work or reuse"]
   02_test_intelligence_ingest --> 02_test_intelligence_ingest_post["02-test-intelligence-ingest: post-validation and publish"]
   00_intake_post -->|required| 02_test_intelligence_ingest_config
+  04_owasp_candidate_search_config["04-owasp-candidate-search: resolve job configuration"] --> 04_owasp_candidate_search_pre["04-owasp-candidate-search: pre-validation"]
+  04_owasp_candidate_search_pre --> 04_owasp_candidate_search["04-owasp-candidate-search: work or reuse"]
+  04_owasp_candidate_search --> 04_owasp_candidate_search_post["04-owasp-candidate-search: post-validation and publish"]
+  02_code_index_post -->|required| 04_owasp_candidate_search_config
+  02_code_property_graph_post -->|required| 04_owasp_candidate_search_config
+  02_treesitter_ast_post -->|required| 04_owasp_candidate_search_config
+  02_source_sast_post -->|optional| 04_owasp_candidate_search_config
+  02_evidence_index_post -->|required| 04_owasp_candidate_search_config
+  01_component_characterization_post -->|optional| 04_owasp_candidate_search_config
+  04_owasp_participation_config["04-owasp-participation: resolve job configuration"] --> 04_owasp_participation_pre["04-owasp-participation: pre-validation"]
+  04_owasp_participation_pre --> 04_owasp_participation["04-owasp-participation: work or reuse"]
+  04_owasp_participation --> 04_owasp_participation_post["04-owasp-participation: post-validation and publish"]
+  04_owasp_candidate_search_post -->|required| 04_owasp_participation_config
+  02_code_index_post -->|required| 04_owasp_participation_config
+  04_owasp_universe_config["04-owasp-universe: resolve job configuration"] --> 04_owasp_universe_pre["04-owasp-universe: pre-validation"]
+  04_owasp_universe_pre --> 04_owasp_universe["04-owasp-universe: work or reuse"]
+  04_owasp_universe --> 04_owasp_universe_post["04-owasp-universe: post-validation and publish"]
+  04_owasp_candidate_search_post -->|required| 04_owasp_universe_config
+  04_owasp_participation_post -->|required| 04_owasp_universe_config
   04_owasp_validation_worklist_config["04-owasp-validation-worklist: resolve job configuration"] --> 04_owasp_validation_worklist_pre["04-owasp-validation-worklist: pre-validation"]
   04_owasp_validation_worklist_pre --> 04_owasp_validation_worklist["04-owasp-validation-worklist: work or reuse"]
   04_owasp_validation_worklist --> 04_owasp_validation_worklist_post["04-owasp-validation-worklist: post-validation and publish"]
   01_component_characterization_post -->|required| 04_owasp_validation_worklist_config
   02_standards_source_ingest_post -->|required| 04_owasp_validation_worklist_config
+  04_owasp_universe_post -->|required| 04_owasp_validation_worklist_config
   15_stig_srg_validation_worklist_config["15-stig-srg-validation-worklist: resolve job configuration"] --> 15_stig_srg_validation_worklist_pre["15-stig-srg-validation-worklist: pre-validation"]
   15_stig_srg_validation_worklist_pre --> 15_stig_srg_validation_worklist["15-stig-srg-validation-worklist: work or reuse"]
   15_stig_srg_validation_worklist --> 15_stig_srg_validation_worklist_post["15-stig-srg-validation-worklist: post-validation and publish"]

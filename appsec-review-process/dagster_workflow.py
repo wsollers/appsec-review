@@ -38,10 +38,11 @@ import automatic_discovery
 import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
-import owasp_component_routing as owasp_component_routing_worker
 import owasp_dispatch
 import owasp_join_publisher as owasp_join_publisher_worker
 import owasp_workbench_lifecycle
+import owasp_universe_jobs
+import tunables
 import ir_evidence as ir_evidence_worker
 import joern_cpg as joern_cpg_worker
 import api_collection_intelligence_ingest as api_collection_intelligence_worker
@@ -892,6 +893,39 @@ def hypothesis_discovery_lifecycle_op():
 hypothesis_discovery_lifecycle_work = hypothesis_discovery_lifecycle_op()
 
 
+def owasp_universe_lifecycle_op(job_id, pool):
+    """ADR-0034: 04-owasp-candidate-search / -participation / -universe. owasp_universe_jobs imports
+    the job modules only when a job runs. The universe raises
+    Blocked over budget (nothing downstream runs); an accepted one is projected into the applicability
+    request the worklist and T03-T06 read."""
+    @op(name='job_' + job_id.replace('-', '_'), ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def owasp_universe_stage(context, configured, upstream):
+        run_id, force = configured['engagement_run_id'], configured.get('force', False)
+        if job_id == owasp_universe_jobs.UNIVERSE:
+            result = owasp_universe_jobs.run_universe(run_id, context.run_id, force)
+            context.add_output_metadata({'attempt_id': result['attempt_id'], 'reused': bool(result.get('reused')),
+                                         'planned_validator_calls': result.get('planned_validator_calls', 0),
+                                         'projection_attempt_id': result['projection']['attempt_id']})
+            return result
+        if job_id == owasp_universe_jobs.PARTICIPATION:
+            result = owasp_universe_jobs.run_participation(run_id, context.run_id, force)
+            output = 'owasp-participation.json'
+        else:
+            result = owasp_universe_jobs.run(job_id, run_id, context.run_id, force)
+            output = owasp_universe_jobs.JOBS[job_id][1]
+        attempt = owasp_universe_jobs.root(run_id, job_id) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({'output': MetadataValue.path(str(attempt / output)),
+                                     'envelope': MetadataValue.path(str(attempt / 'result.json')),
+                                     'attempt_id': result['attempt_id']})
+        return result
+    return owasp_universe_stage
+
+
+owasp_candidate_search_lifecycle_work = owasp_universe_lifecycle_op('04-owasp-candidate-search', CPU_POOL)
+owasp_participation_lifecycle_work = owasp_universe_lifecycle_op('04-owasp-participation', PERSONA_POOL)
+owasp_universe_lifecycle_work = owasp_universe_lifecycle_op('04-owasp-universe', CPU_POOL)
+
+
 def attack_chain_lifecycle_op(job_id, worker):
     """Lane 14 (ADR-0016) is an optional input of 10-synthesis-report: its own lifecycle records a
     FAILED/BLOCKED terminal, and this op then returns instead of raising so the report is never held."""
@@ -1115,23 +1149,9 @@ def owasp_validation_worklist():
     owasp_validation_worklist_work(build_execution_config())
 
 
-@op(pool=CPU_POOL)
-def owasp_component_routing_work(context, configured):
-    result = owasp_component_routing_worker.run(
-        configured['engagement_run_id'], context.run_id, force=configured['force'])
-    attempt = owasp_component_routing_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({
-        'request': MetadataValue.path(str(attempt / owasp_component_routing_worker.REQUEST)),
-        'routing': MetadataValue.path(str(attempt / owasp_component_routing_worker.ROUTING)),
-        'attempt_id': result['attempt_id']})
-    return result
-
-
-@job(resource_defs={'workflow_settings': workflow_settings},
-     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
-     op_retry_policy=RetryPolicy(max_retries=0))
-def owasp_component_routing():
-    owasp_component_routing_work(build_execution_config())
+def owasp_validator_max_parallel():
+    """ADR-0034: the 04-owasp-validator-cell tunable; run_dispatch caps it at pool_persona_llm_slots."""
+    return tunables.value('04-owasp-validator-cell', 'max_parallel')
 
 
 def run_owasp_validator_handoffs(context, configured):
@@ -1146,7 +1166,8 @@ def run_owasp_validator_dispatch(context, configured):
     """T10: dispatch every static validator cell under the join's own facts, wait for all, and
     publish the accepted accounting (an EMPTY one when T06 produced no handoff)."""
     result = owasp_workbench_lifecycle.run_dispatch(
-        configured['engagement_run_id'], context.run_id, configured.get('force', False))
+        configured['engagement_run_id'], context.run_id, configured.get('force', False),
+        max_parallel=owasp_validator_max_parallel())
     context.add_output_metadata({
         'accounting': MetadataValue.path(str(owasp_dispatch._base(configured['engagement_run_id'])
                                              / 'attempts' / result['attempt_id'] / owasp_dispatch.ACCOUNTING_ARTIFACT)),
@@ -1841,6 +1862,9 @@ LIFECYCLE_OPS['06-reachability-codeql']=reachability_codeql_lifecycle_work
 LIFECYCLE_OPS['06-reachability-ir']=reachability_ir_lifecycle_work
 LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
 LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
+LIFECYCLE_OPS['04-owasp-candidate-search']=owasp_candidate_search_lifecycle_work
+LIFECYCLE_OPS['04-owasp-participation']=owasp_participation_lifecycle_work
+LIFECYCLE_OPS['04-owasp-universe']=owasp_universe_lifecycle_work
 LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
 LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
 LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
@@ -1913,7 +1937,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -1923,7 +1947,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,codeql_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

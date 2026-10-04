@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 84 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 87 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/pipeline/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -163,7 +163,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 84-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 87-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -202,6 +202,9 @@ graph job.
 | `02-doc-intelligence-ingest` | Worker blocked | Present |
 | `02-standards-source-ingest` | Worker blocked | Present |
 | `02-test-intelligence-ingest` | Worker blocked | Present |
+| `04-owasp-candidate-search` | Deterministic per-ASVS-chapter candidate search (ADR-0034); not yet live-qualified | Present |
+| `04-owasp-participation` | Participation classifier pool, classification only (ADR-0034); not yet live-qualified | Present |
+| `04-owasp-universe` | Deterministic OWASP universe and validator budget (ADR-0034); not yet live-qualified | Present |
 | `04-owasp-validation-worklist` | Worker blocked | Present |
 | `15-stig-srg-validation-worklist` | Worker blocked | Present |
 | `02-build-configure` | Dedicated offline B13 lock-replay worker; happy path qualified; fault/recovery qualification pending | Present |

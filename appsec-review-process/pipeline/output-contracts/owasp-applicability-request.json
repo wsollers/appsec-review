@@ -1,7 +1,7 @@
 {
   "schema": "appsec-review/output-contract/0.1",
   "contract_id": "owasp-applicability-request",
-  "display_name": "OWASP Component Applicability Request Assembly",
+  "display_name": "OWASP ASVS Universe Projection into the Applicability Request (ADR-0034)",
   "required_files": ["owasp-applicability-request.json", "owasp-component-routing.json", "status.json"],
   "required_status_fields": ["process", "status", "components", "selected_controls", "expected_targets"],
   "result_schema": {"artifact": "owasp-applicability-request.json", "schema_file": "owasp-applicability-request.schema.json"},
@@ -11,10 +11,11 @@
     "forbidden_promotions": ["finding", "severity", "runtime-state"]
   },
   "validation_rules": [
-    "newest accepted component map and T03 input manifest are hash and pointer bound",
-    "every functional component is projected exactly once",
-    "selected-control by component target count is explicit",
-    "unknown or unmatched classification remains cannot_determine",
+    "the newest accepted, within-budget 04-owasp-universe and its T03 admission are hash and pointer bound",
+    "every ASVS chapter target is projected exactly once as asvs-V<n> with control_scope {domain_ids: [V<n>]} (17 components; owasp-component-routing/2.0)",
+    "each chapter rule carries the universe decision: participating is applicable with its participant bundle, not_applicable cites the universe reason, a gap stays cannot_determine with a visible gap",
+    "selected-control by chapter target count is explicit",
+    "no keyword, component-map or model output decides a target, an applicability or a budget",
     "technical not_applicable is never inferred"
   ]
 }

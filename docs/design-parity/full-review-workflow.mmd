@@ -38,6 +38,9 @@ flowchart TD
   j_02_doc_intelligence_ingest["02-doc-intelligence-ingest<br/>implemented_not_qualified"]
   j_02_standards_source_ingest["02-standards-source-ingest<br/>implemented_not_qualified"]
   j_02_test_intelligence_ingest["02-test-intelligence-ingest<br/>implemented_not_qualified"]
+  j_04_owasp_candidate_search["04-owasp-candidate-search<br/>implemented_not_qualified"]
+  j_04_owasp_participation["04-owasp-participation<br/>implemented_not_qualified"]
+  j_04_owasp_universe["04-owasp-universe<br/>implemented_not_qualified"]
   j_04_owasp_validation_worklist["04-owasp-validation-worklist<br/>implemented_not_qualified"]
   j_15_stig_srg_validation_worklist["15-stig-srg-validation-worklist<br/>implemented_not_qualified"]
   j_02_build_configure["02-build-configure<br/>implemented_and_qualified"]
@@ -134,6 +137,7 @@ flowchart TD
   j_03_threat_model_dfd_stride --> j_04_asvs_masvs
   j_03_threat_model_reconciliation --> j_04_asvs_masvs
   j_04_owasp_validation_worklist --> j_04_asvs_masvs
+  j_04_owasp_universe --> j_04_asvs_masvs
   j_01_component_characterization --> j_05_native_memory
   j_02_native_sast --> j_05_native_memory
   j_02_ir_facts --> j_05_native_memory
@@ -208,8 +212,19 @@ flowchart TD
   j_00_intake --> j_02_doc_intelligence_ingest
   j_00_intake --> j_02_standards_source_ingest
   j_00_intake --> j_02_test_intelligence_ingest
+  j_02_code_index --> j_04_owasp_candidate_search
+  j_02_code_property_graph --> j_04_owasp_candidate_search
+  j_02_treesitter_ast --> j_04_owasp_candidate_search
+  j_02_source_sast --> j_04_owasp_candidate_search
+  j_02_evidence_index --> j_04_owasp_candidate_search
+  j_01_component_characterization --> j_04_owasp_candidate_search
+  j_04_owasp_candidate_search --> j_04_owasp_participation
+  j_02_code_index --> j_04_owasp_participation
+  j_04_owasp_candidate_search --> j_04_owasp_universe
+  j_04_owasp_participation --> j_04_owasp_universe
   j_01_component_characterization --> j_04_owasp_validation_worklist
   j_02_standards_source_ingest --> j_04_owasp_validation_worklist
+  j_04_owasp_universe --> j_04_owasp_validation_worklist
   j_01_component_characterization --> j_15_stig_srg_validation_worklist
   j_02_standards_source_ingest --> j_15_stig_srg_validation_worklist
   j_02_build_resolution --> j_02_build_configure

@@ -549,6 +549,21 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_timeout_seconds` | 900 s (15 min) | resource | Wall-clock limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 
+### `02-semantic-recall-index`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `batch_size` | 8 count | resource | Chunks per embedding batch; ONNX pads a batch to its longest chunk, so keep it small. | Legacy runs OOMed at 64 with 27K-char chunks; chunks are now capped at 4000 chars. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_pids` | 512 count | resource | Process/thread limit (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_timeout_seconds` | 7200 s (120 min) | resource | Wall-clock limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `image_id` | audit-static id | resource | Pinned image whose system python3 carries lancedb and fastembed and runs semantic_index_build.py (mounted, not copied). |  |
+| `max_file_bytes` | 4 MiB | safety | Largest source file read for chunks; larger files are file-too-large gaps. |  |
+
 ### `02-source-sast`
 
 | Tunable | Value | Kind | What it does | Scale |
@@ -607,6 +622,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `workbench_pin_target_source` | True flag | resource | Pin every target file as a readable input of each cell (lookup mode serves them), so cells can cite code by path and line. | Pool specs grow with file count: ~6,100 files for freeciv21. Turn off at engine scale; cells then cite menu evidence only. |
 | `workbench_records_per_cell_max` | 60 count | window | Most records of one family the join takes from one cell reply; the rest is recorded as a gap. |  |
 | `workbench_wave_timeout_seconds` | 5400 s (90 min) | resource | Wait-all limit for one workbench wave pool. | Cells run concurrently; raise with slow models, not with target size (lookup tools keep calls small). |
+
+### `04-owasp-validator-cell`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `max_parallel` | 4 count | resource | Validator cells T10 dispatches concurrently (ADR-0034); dagster_workflow caps it at the shared pool_persona_llm_slots. | A full ASVS universe plans at most 17 cells (max_validator_calls 20); each cell is one claude -p call. |
 
 ### `06-reachability-codeql`
 

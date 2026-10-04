@@ -531,6 +531,12 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
+        },
+        {
+          "job": "04-owasp-universe",
+          "kind": "required",
+          "contract": "owasp-universe",
+          "allowed_skip_reasons": []
         }
       ]
     },
@@ -1339,6 +1345,121 @@
         "lineage.json"
       ]
     },
+    "04-owasp-candidate-search": {
+      "lane": "04-asvs-masvs",
+      "contract": "owasp-candidate-search",
+      "template": "04-owasp-candidate-search",
+      "implemented": true,
+      "namespace": "04-owasp-candidate-search",
+      "dependencies": [
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-code-property-graph",
+          "kind": "required",
+          "contract": "code-property-graph",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-treesitter-ast",
+          "kind": "required",
+          "contract": "treesitter-ast",
+          "allowed_skip_reasons": [
+            "not-applicable-language-absent"
+          ]
+        },
+        {
+          "job": "02-source-sast",
+          "kind": "optional",
+          "contract": "source-sast",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-evidence-index",
+          "kind": "required",
+          "contract": "evidence-index",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "01-component-characterization",
+          "kind": "optional",
+          "contract": "component-map",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        }
+      ],
+      "planned_scope": "ADR-0034: deterministic per-ASVS-chapter (V1..V17) candidate search at function/symbol level over the accepted code index, CPG, tree-sitter, evidence-index full-text search, optional source-SAST rule ids and the optional component tag cloud, driven by data/owasp-asvs/category-rules-v1.json; zero candidates are published with their search basis and unindexed languages or an absent optional input are coverage gaps.",
+      "required_artifacts": [
+        "owasp-candidate-search.json",
+        "status.json"
+      ]
+    },
+    "04-owasp-participation": {
+      "lane": "04-asvs-masvs",
+      "contract": "owasp-participation",
+      "template": "04-owasp-participation",
+      "implemented": true,
+      "namespace": "04-owasp-participation",
+      "dependencies": [
+        {
+          "job": "04-owasp-candidate-search",
+          "kind": "required",
+          "contract": "owasp-candidate-search",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "ADR-0034: one read-only code-tool model cell per chapter with candidates (split by max_candidates_per_cell) classifies each candidate (implements, enforces, consumes, not_participating) with citations only; Python checks every citation and that every candidate has exactly one record, and enforces the participation budget before the first call. Zero candidates publishes OK with no cells.",
+      "required_artifacts": [
+        "owasp-participation.json",
+        "owasp-participation.md",
+        "permission.json",
+        "lineage.json",
+        "pool-receipt.json",
+        "status.json",
+        "cells/*.json"
+      ]
+    },
+    "04-owasp-universe": {
+      "lane": "04-asvs-masvs",
+      "contract": "owasp-universe",
+      "template": "04-owasp-universe",
+      "implemented": true,
+      "namespace": "04-owasp-universe",
+      "dependencies": [
+        {
+          "job": "04-owasp-candidate-search",
+          "kind": "required",
+          "contract": "owasp-candidate-search",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "04-owasp-participation",
+          "kind": "required",
+          "contract": "owasp-participation",
+          "allowed_skip_reasons": [
+            "no-candidates"
+          ]
+        }
+      ],
+      "planned_scope": "ADR-0034: deterministic per-chapter OWASP universe (participating, not_applicable or gap, each with its reason), hash-bound participant excerpt bundles and the validator budget; over budget is BLOCKED before any validator call. Its accepted result is projected into the OWASP applicability request the worklist and T04-T06 read.",
+      "required_artifacts": [
+        "outputs/owasp-universe.json",
+        "status.json"
+      ]
+    },
     "04-owasp-validation-worklist": {
       "lane": "04-asvs-masvs",
       "contract": "owasp-validation-worklist",
@@ -1356,6 +1477,12 @@
           "job": "02-standards-source-ingest",
           "kind": "required",
           "contract": "standards-source-extract",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "04-owasp-universe",
+          "kind": "required",
+          "contract": "owasp-universe",
           "allowed_skip_reasons": []
         }
       ],
