@@ -1,4 +1,4 @@
-"""Live compatibility qualification for T03 -> component routing -> T04 ... T14."""
+"""Live compatibility qualification for universe -> T03 -> routing projection -> T04 ... T14 (ADR-0034)."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -28,7 +28,9 @@ import owasp_validator_handoff  # noqa: E402
 import persona_invocation  # noqa: E402
 import persona_invocation_support as invocation_support  # noqa: E402
 import pool_rendezvous  # noqa: E402
+import owasp_workbench_lifecycle as workbench  # noqa: E402
 import test_owasp_component_routing as routing_fixture  # noqa: E402
+import test_owasp_universe as universe_fixture  # noqa: E402
 
 sha, write_json = routing_fixture.sha, routing_fixture.write_json
 
@@ -50,6 +52,10 @@ class OwaspChainQualificationTests(unittest.TestCase):
         fixture.run_id, fixture.run, fixture.data = self.run_id, self.run, self.data
         self.component_map = fixture._freeciv_like_map()
         self.component_pointer = fixture._publish_component(self.component_map)
+        self.universe = universe_fixture.UniverseRun(self, self.run_id)
+        self.universe.publish()
+        universe_entries = [row for row in workbench.lane_in_request(self.run_id)["entries"]
+                            if row["kind"] != "component_map"]
 
         asvs_root = next((ROOT / "data/reference/owasp/owasp_asvs/5.0.0").iterdir())
         reference_path = asvs_root / "manifest.json"
@@ -118,7 +124,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
                 "redaction_status": "not_required", "caveats": [], "use": "canonical_evidence",
                 "component_scope": {"component_ids": ["freeciv-server"],
                                     "component_map": component_binding},
-            }],
+            }, *universe_entries],
             "nvd": {"requested": False, "snapshot_id": None, "manifest_sha256": None,
                     "advisory_freshness_seconds": 86400},
             "completeness_gaps": [],
@@ -138,38 +144,8 @@ class OwaspChainQualificationTests(unittest.TestCase):
         t04_root = self.data / "jobs" / owasp_applicability.JOB_ID / "whole"
         model_path = (t04_root / "attempts" / t04["attempt_id"] / "outputs" /
                       "owasp-applicability-model.json")
-        projected = json.loads(applicability_request.read_text(encoding="utf-8"))["components"]
-        source = {row["component_id"]: row for row in self.component_map["functional_components"]}
-        contexts = [{
-            "component_id": row["component_id"],
-            "component_group_id": source[row["component_id"]]["parallel_review_group"],
-            "trust_role": source[row["component_id"]]["component_type"],
-            "evidence_root_input_ids": row.get("evidence_input_ids", row["input_ids"]),
-        } for row in sorted(projected, key=lambda value: value["component_id"])]
-        config = json.loads((PROCESS / "config/owasp-batching/default-v1.json").read_text())
         request_path = self.run / "inputs" / "owasp-batch-request.json"
-        write_json(request_path, {
-            "schema": "appsec-review/owasp-batch-request/1.0", "run_id": self.run_id,
-            "applicability": {
-                "attempt_id": t04["attempt_id"],
-                "accepted_pointer_path": f"jobs/{owasp_applicability.JOB_ID}/whole/accepted.json",
-                "accepted_pointer_sha256": sha(t04_root / "accepted.json"),
-                "model_path": model_path.relative_to(self.data).as_posix(),
-                "model_sha256": sha(model_path),
-            },
-            "batch_config": {"path": "appsec-review-process/config/owasp-batching/default-v1.json",
-                             "config_digest": execution_state.digest(config)},
-            "component_contexts": contexts,
-            "routing_rules": [{
-                "route_id": "static-offline-all",
-                "selector": {"standard_family": "owasp_asvs", "obligation_ids": [],
-                             "control_ids": [], "domain_ids": [], "all_controls": True,
-                             "component_ids": [], "all_components": True},
-                "primary_evidence_mode": "static_source", "authorization_boundary": "static_offline",
-                "tooling_profile_id": "read-only-source", "validator_role": "owasp-validator",
-                "linked_test_ids": [],
-            }],
-        })
+        write_json(request_path, workbench.batch_request(self.run_id, t04, applicability_request))
         return owasp_batching.build(self.run_id, request_path)
 
     def _build_t06(self, t05: dict) -> tuple[dict, Path]:
@@ -213,19 +189,20 @@ class OwaspChainQualificationTests(unittest.TestCase):
         model = json.loads(model_path.read_text(encoding="utf-8"))
 
         self.assertEqual(t03["status"], "OK")
-        self.assertEqual(assembled["status"], "OK_WITH_GAPS")
-        self.assertEqual(t04["status"], "OK_WITH_GAPS")
-        self.assertEqual(model["counts"]["components"], 4)
-        self.assertEqual(model["counts"]["not_applicable"], 0)
-        self.assertGreater(model["counts"]["applicable"], 0)
-        self.assertGreater(model["counts"]["cannot_determine"], 0)
+        self.assertEqual(assembled["status"], "OK")
+        self.assertEqual(t04["status"], "OK")
+        self.assertEqual(model["counts"]["components"], 17)
+        self.assertEqual(model["counts"]["control_targets"], 253)
+        self.assertEqual(model["counts"]["applicable"], 63)
+        self.assertEqual(model["counts"]["not_applicable"], 253 - 63)
+        self.assertEqual(model["counts"]["cannot_determine"], 0)
 
         t05 = self._build_t05(t04, request_path)
         t06, handoff_path = self._build_t06(t05)
         handoff_set = json.loads(handoff_path.read_text(encoding="utf-8"))
         self.assertIn(t05["status"], {"OK", "OK_WITH_GAPS"})
         self.assertIn(t06["status"], {"OK", "OK_WITH_GAPS"})
-        self.assertGreater(len(handoff_set["handoffs"]), 0)
+        self.assertEqual(len(handoff_set["handoffs"]), 4)  # = the universe's planned validator calls
 
         t06_root = self.data / "jobs" / owasp_validator_handoff.JOB_ID / "whole"
         config = json.loads((PROCESS / "config/owasp-dispatch/default-v1.json").read_text())
@@ -268,7 +245,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
         attempt = owasp_join_publisher.validate(self.run_id, facts, t14)
         manifest = json.loads((attempt / owasp_join_publisher.MATRIX_MANIFEST).read_text(encoding="utf-8"))
         self.assertIn(t14["status"], {"OK", "OK_WITH_GAPS"})
-        self.assertGreater(len(manifest["pages"]), 1)
+        self.assertGreaterEqual(len(manifest["pages"]), 1)  # 253 chapter-scoped rows (no longer 4 x 345)
         self.assertEqual(manifest["row_count"], model["counts"]["control_targets"])
         self.assertEqual(manifest["matrix_header"]["denominators"]["assessed"],
                          model["counts"]["applicable"])
@@ -297,20 +274,13 @@ class OwaspChainQualificationTests(unittest.TestCase):
         with self.assertRaisesRegex(execution_state.Blocked, "must be current"):
             owasp_lane_in.admit(self.run_id, self.request_path)
 
+        # ADR-0034: component-scoped evidence no longer routes anything; routing projects the universe.
         request["entries"][1]["freshness"]["status"] = "current"
-        request["entries"][1]["component_scope"]["component_map"]["generation_sha256"] = "sha256:" + "0" * 64
-        write_json(self.request_path, request)
-        owasp_lane_in.admit(self.run_id, self.request_path)
-        with self.assertRaisesRegex(execution_state.Blocked, "mixed or stale generation"):
-            routing.assemble(self.run_id)
-
-        request["entries"][1]["component_scope"]["component_map"]["generation_sha256"] = \
-            self.component_map["evidence_manifest_lineage"]["generation_sha256"]
         request["entries"][1]["component_scope"]["component_ids"] = ["missing-component"]
         write_json(self.request_path, request)
         owasp_lane_in.admit(self.run_id, self.request_path)
-        with self.assertRaisesRegex(execution_state.Blocked, "unresolved or duplicate scope"):
-            routing.assemble(self.run_id)
+        request_value, _route = routing.assemble(self.run_id)
+        self.assertEqual(len(request_value["components"]), 17)
 
     def test_validator_authority_is_separate_from_worklist_builder(self):
         registry = registry_paths.REGISTRY

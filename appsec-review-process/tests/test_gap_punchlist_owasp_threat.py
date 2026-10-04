@@ -91,53 +91,30 @@ class OwaspJoinGapTests(DispatchCase):
 
 
 class OwaspComponentRoutingGapTests(unittest.TestCase):
-    _cls = routing_tests.OwaspComponentRoutingTests
-    _freeciv_like_map = _cls._freeciv_like_map
-    _publish_component = _cls._publish_component
-    _publish_lane_in = _cls._publish_lane_in
+    """P24/P25 after ADR-0034: chapter decisions come from the deterministic universe, not keyword routing."""
 
-    def _setup(self, edit):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.addCleanup(setattr, execution_state, "RUNS", execution_state.RUNS)
-        execution_state.RUNS = Path(self.temporary.name) / "runs"
+    def _setup(self, **fixture):
+        import test_owasp_universe as universe_tests
+        universe_tests.isolated_runs(self)
         self.run_id = "freeciv-routing"
-        self.run = execution_state.RUNS / self.run_id
-        self.data = self.run / "data"
-        routing_tests.write_json(self.run / "run-status.json", {"run_id": self.run_id, "status": "READY"})
-        self.component_map = self._freeciv_like_map()
-        edit(self.component_map)
-        self.component_pointer = self._publish_component(self.component_map)
-        self.manifest, self.manifest_path, self.t03_pointer = self._publish_lane_in()
+        universe_tests.UniverseRun(self, self.run_id, **fixture).publish()
+        routing_tests.admit_universe(self, self.run_id)
         return routing.assemble(self.run_id)
 
-    @staticmethod
-    def _component(value, component_id):
-        return next(row for row in value["functional_components"] if row["component_id"] == component_id)
-
     def test_p24_known_cli_without_network_trait_gets_domain_not_applicable_rule(self):
-        """P24: a known high-confidence CLI component with no network trait gets domain-selector not_applicable rules."""
-        def edit(value):
-            row = self._component(value, "ruleset-loader")
-            row.update(component_type="command-line application", coarse_group="native-runtime",
-                       aliases=["cli"], confidence="high", deployability="deployable",
-                       observed_purpose="Implements a local command-line tool.")
-        request, _route = self._setup(edit)
-        rules = [rule for rule in request["rules"] if rule["component_id"] == "ruleset-loader"]
-        not_applicable = [rule for rule in rules if rule["decision"]["status"] == "not_applicable"
+        """P24: a chapter the universe decides not_applicable (no candidates, complete coverage) gets a
+        domain-selector not_applicable rule; a CLI's web chapters are N/A by evidence, not by keywords."""
+        request, _route = self._setup()
+        not_applicable = [rule for rule in request["rules"] if rule["decision"]["status"] == "not_applicable"
                           and rule["selector"]["domain_ids"]]
-        self.assertTrue(not_applicable, f"no not_applicable domain rule for the CLI component: {rules}")
+        self.assertIn("asvs-V3", [rule["component_id"] for rule in not_applicable])
 
     def test_p25_medium_confidence_component_gets_rule_and_no_incomplete_gap(self):
-        """P25: a medium-confidence (partial) component still gets a rule and no incomplete-classification gap."""
-        def edit(value):
-            self._component(value, "freeciv-server")["confidence"] = "medium"
-        request, route = self._setup(edit)
-        self.assertIn("freeciv-server", [rule["component_id"] for rule in request["rules"]],
-                      "medium-confidence component received no applicability rule")
-        incomplete = [gap for gap in route["gaps"] if gap["component_id"] == "freeciv-server"
-                      and "classification is incomplete" in gap["summary"]]
-        self.assertEqual(incomplete, [])
+        """P25: a chapter whose coverage is incomplete still gets a rule (cannot_determine) and a visible gap."""
+        request, route = self._setup(incomplete=("V3",))
+        rule = next(rule for rule in request["rules"] if rule["component_id"] == "asvs-V3")
+        self.assertEqual(rule["decision"]["status"], "cannot_determine")
+        self.assertEqual([gap["component_id"] for gap in route["gaps"]], ["asvs-V3"])
 
 
 class StandardsLifecycleGapTests(unittest.TestCase):
