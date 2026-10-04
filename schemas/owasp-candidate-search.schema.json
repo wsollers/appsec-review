@@ -62,7 +62,21 @@
             }
           }
         },
-        "sast_available": {"type": "boolean"}
+        "sast_available": {"type": "boolean"},
+        "facilities": {
+          "description": "Every search facility and whether it was used. Widening facilities (fts, semantic, tag_cloud) only add candidates; an unavailable one is also a gap.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["facility", "status", "detail"],
+            "properties": {
+              "facility": {"enum": ["code_index", "code_index_names", "source_sast", "evidence_index_fts", "semantic_index", "tag_cloud"]},
+              "status": {"enum": ["used", "unavailable"]},
+              "detail": {"type": "string", "maxLength": 500}
+            }
+          }
+        }
       }
     },
     "chapters": {
@@ -85,7 +99,7 @@
               "additionalProperties": false,
               "required": ["rule_id", "kind", "hits"],
               "properties": {
-                "rule_id": {"$ref": "owasp-category-rules.schema.json#/$defs/rule_id"},
+                "rule_id": {"$ref": "#/$defs/rule_ref"},
                 "kind": {"$ref": "#/$defs/match_kind"},
                 "hits": {"$ref": "common/formats.schema.json#/$defs/nonneg_int"}
               }
@@ -108,7 +122,7 @@
           "symbol": {"type": "string", "minLength": 1, "maxLength": 1000},
           "file": {"$ref": "#/$defs/path"},
           "file_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref_or_hex"},
-          "language": {"$ref": "owasp-category-rules.schema.json#/$defs/language"},
+          "language": {"description": "A rule-table language, or the name of a language the code index did not parse (a widening hit in a Kotlin, Swift, ... file).", "anyOf": [{"$ref": "owasp-category-rules.schema.json#/$defs/language"}, {"type": "string", "pattern": "^[a-z][a-z0-9_.+-]{0,39}\\Z"}]},
           "start_line": {"$ref": "#/$defs/line"},
           "end_line": {"$ref": "#/$defs/line"},
           "span_source": {"description": "treesitter: real function span; cpg-first-line: CPG method with no tree-sitter span (end_line = start_line); module-scope: a hit outside any function (an import, a global initializer), symbol <module> and span = the hit line.", "enum": ["treesitter", "cpg-first-line", "module-scope"]},
@@ -119,7 +133,7 @@
               "additionalProperties": false,
               "required": ["rule_id", "kind", "file", "line", "detail"],
               "properties": {
-                "rule_id": {"$ref": "owasp-category-rules.schema.json#/$defs/rule_id"},
+                "rule_id": {"$ref": "#/$defs/rule_ref"},
                 "kind": {"$ref": "#/$defs/match_kind"},
                 "file": {"$ref": "#/$defs/path"},
                 "line": {"$ref": "#/$defs/line"},
@@ -138,7 +152,7 @@
         "required": ["chapter_id", "rule_id", "symbol", "file", "line", "reason", "detail"],
         "properties": {
           "chapter_id": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"},
-          "rule_id": {"$ref": "owasp-category-rules.schema.json#/$defs/rule_id"},
+          "rule_id": {"$ref": "#/$defs/rule_ref"},
           "symbol": {"type": ["string", "null"], "maxLength": 1000},
           "file": {"$ref": "#/$defs/path"},
           "line": {"$ref": "#/$defs/line"},
@@ -157,7 +171,8 @@
         "properties": {
           "gap_id": {"type": "string", "pattern": "^gap-[0-9a-f]{20}\\Z"},
           "kind": {"enum": ["language_not_searched", "index_incomplete", "sast_unavailable", "treesitter_unavailable",
-                            "rule_without_index_support", "rows_truncated"]},
+                            "rule_without_index_support", "rows_truncated", "evidence_index_unavailable",
+                            "tag_cloud_unavailable", "semantic_index_absent"]},
           "chapter_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "owasp-category-rules.schema.json#/$defs/chapter_id"}},
           "statement": {"type": "string", "minLength": 1, "maxLength": 1000}
         }
@@ -168,7 +183,9 @@
     "path": {"type": "string", "pattern": "^[^/\\\\\\r\\n][^\\\\\\r\\n]{0,1023}\\Z"},
     "line": {"type": "integer", "minimum": 1},
     "candidate_id": {"type": "string", "pattern": "^cand-V(?:[1-9]|1[0-7])-[0-9a-f]{16}\\Z"},
-    "match_kind": {"enum": ["calls_to", "symbol_regex", "identifier_regex", "literal_regex", "import_regex", "sast_rule_ids",
-                            "entry_point", "propagation"]}
+    "match_kind": {"description": "A rule-table kind, propagation, or a widening facility: fts (02-evidence-index full-text hit dereferenced to the line), semantic (semantic recall locator dereferenced to the snapshot), tag_cloud (component tag-cloud model metadata; widens only). The widening kinds carry rule_id null except fts, which names the rule whose terms matched.",
+                   "enum": ["calls_to", "symbol_regex", "identifier_regex", "literal_regex", "import_regex", "sast_rule_ids",
+                            "entry_point", "propagation", "fts", "semantic", "tag_cloud"]},
+    "rule_ref": {"oneOf": [{"type": "null"}, {"$ref": "owasp-category-rules.schema.json#/$defs/rule_id"}]}
   }
 }

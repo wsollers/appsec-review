@@ -55,6 +55,11 @@
             "type": "array",
             "items": {"$ref": "#/$defs/rule"}
           },
+          "semantic_queries": {
+            "description": "Optional bounded natural-language queries run against the semantic recall index; hits are locators that only widen the candidate set (ADR-0034 addition).",
+            "type": "array", "maxItems": 4, "uniqueItems": true,
+            "items": {"type": "string", "minLength": 3, "maxLength": 200}
+          },
           "propagation": {
             "description": "Optional widening from seed rules of this chapter along resolved code_index calls (resolution not escape/external). V2 uses it from input sources.",
             "oneOf": [
