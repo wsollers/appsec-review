@@ -105,6 +105,96 @@ class PersistLlmTranscriptTests(unittest.TestCase):
             self.fail(f"_persist_llm_transcript raised {exc!r}")
 
 
+class ToolingFeedbackTests(unittest.TestCase):
+    """The optional envelope-level tooling_feedback block of a tool-granted reply: stripped before the
+    result is validated or derived, persisted beside tool-usage.json, dropped (never a failure) when invalid."""
+
+    FEEDBACK = {"useful_tools": ["input_read"], "unhelpful_tools": [{"tool": "input_grep", "reason": "slow"}],
+                "wanted": [{"kind": "query", "what": "call graph", "why": "reach"}],
+                "coverage_confidence": "medium", "would_change": "index the build files"}
+
+    def run_invoke(self, feedback=None, *, profile=("query tool: code_symbol",), fill_result=None):
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads((registry_paths.contract("project-discovery")).read_text())
+        reply = {"project_inventory": inventory(), "project_discovery_summary": "# s"}
+        if feedback is not None:
+            reply["tooling_feedback"] = feedback
+        prompts, written, keys = [], {}, []
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            prompts.append(prompt)
+            return {"timed_out": False, "final_result": {"result": json.dumps(reply)}}
+
+        def item(path):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x\n", sha256="a" * 64)
+
+        package = SimpleNamespace(
+            composition={"output_contract": contract, "tooling_profile": {"allowed_actions": list(profile)}},
+            prompt=b"OUTER", inputs=(item("configure.ac"), item("Makefile.am")),
+            request={"model": {"family": "claude-sonnet-5"}, "run_id": "fb-run", "job_id": "d02", "attempt_id": "a1",
+                     "budget": {"input_unit_limit": 10 ** 9}},
+            allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        real_key = invoker.persona_cache_key
+        with tempfile.TemporaryDirectory() as runs, tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 0}}), \
+                mock.patch.object(invoker.pi, "write_invoker_output",
+                                  side_effect=lambda package, root, **kw: written.update(kw)), \
+                mock.patch.object(invoker, "persona_cache_key",
+                                  side_effect=lambda pkg, text, *a: keys.append(text) or real_key(pkg, text, *a)), \
+                mock.patch.object(invoker, "data_path", side_effect=lambda run, *parts: Path(runs, run, "data", *parts)):
+            invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn, fill_result=fill_result).invoke(
+                package, output_root=Path(out), cancel=threading.Event())
+            published = json.loads((Path(out) / "project-inventory.json").read_text())
+            dest = Path(runs, "fb-run", "data", "llm-transcripts", "d02", "a1")
+            stored = {p.name: json.loads(p.read_text()) for p in dest.glob("*.json")} if dest.is_dir() else {}
+        return published, written, stored, prompts, keys, reply
+
+    def test_valid_feedback_is_stripped_persisted_and_the_result_is_unchanged(self):
+        published, written, stored, prompts, _keys, reply = self.run_invoke(self.FEEDBACK)
+        self.assertEqual(published, reply["project_inventory"])
+        self.assertEqual(stored["tooling-feedback.json"], self.FEEDBACK)
+        self.assertEqual(stored["tool-grant.json"]["tools"][-1], "evidence_derived")
+        self.assertFalse(any("tooling feedback" in line for line in written["limitations"]))
+        self.assertNotIn("tooling_feedback", json.dumps(written["claims"]))
+        self.assertIn("tooling_feedback", prompts[0])   # a tool-granted job is asked for it
+
+    def test_invalid_or_oversized_feedback_is_dropped_with_a_limitation(self):
+        for bad in ({"coverage_confidence": "total"}, {"would_change": "x" * 301}, {"wanted": [{"kind": "query", "what": "y" * 10000}]}, "text"):
+            published, written, stored, _p, _k, reply = self.run_invoke(bad)
+            self.assertEqual(published, reply["project_inventory"])
+            self.assertNotIn("tooling-feedback.json", stored)
+            self.assertTrue(any(line.startswith("tooling feedback dropped:") for line in written["limitations"]), bad)
+
+    def test_a_reply_without_feedback_is_unchanged(self):
+        published, written, stored, _p, _k, reply = self.run_invoke(None)
+        self.assertEqual(published, reply["project_inventory"])
+        self.assertNotIn("tooling-feedback.json", stored)
+        self.assertFalse(any("tooling feedback" in line for line in written["limitations"]))
+
+    def test_feedback_never_reaches_the_derive_step(self):
+        seen = []
+
+        def fill(envelope, field):
+            seen.append(sorted(envelope))
+            return []
+        self.run_invoke(self.FEEDBACK, fill_result=fill)
+        self.assertEqual(seen, [["project_discovery_summary", "project_inventory"]])
+
+    def test_untooled_job_is_not_asked_and_a_stray_block_is_dropped(self):
+        published, written, stored, prompts, _k, reply = self.run_invoke(self.FEEDBACK, profile=())
+        self.assertEqual(published, reply["project_inventory"])
+        self.assertNotIn("tooling_feedback", prompts[0])
+        self.assertNotIn("tooling-feedback.json", stored)
+        self.assertIn("tooling feedback dropped: this invocation was granted no lookup tools", written["limitations"])
+
+    def test_persona_cache_key_excludes_the_feedback_instruction(self):
+        _pub, _w, _s, prompts, keys, _r = self.run_invoke(self.FEEDBACK)
+        self.assertEqual(len(keys), 1)
+        self.assertNotIn("tooling_feedback", keys[0])
+        self.assertEqual(prompts[0], keys[0] + invoker.tooling_feedback_instructions())
+
+
 if __name__ == "__main__":
     unittest.main()
 

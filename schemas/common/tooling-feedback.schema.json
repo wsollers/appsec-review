@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common/tooling-feedback.schema.json",
+  "title": "Model tooling feedback",
+  "description": "Optional envelope-level block a tool-granted model job may add to its reply: which lookup tools helped, which did not, and what it wanted to go deeper. claude_cli_invoker strips it before the result is validated or derived and persists it to runs/<run>/data/llm-transcripts/<job>/<attempt>/tooling-feedback.json. Model text, untrusted: it never feeds evidence, findings, routing or a fingerprint; an invalid block is dropped with a limitation line.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "useful_tools": {
+      "type": "array", "maxItems": 8, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"}
+    },
+    "unhelpful_tools": {
+      "type": "array", "maxItems": 8,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["tool", "reason"],
+        "properties": {
+          "tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 200}
+        }
+      }
+    },
+    "wanted": {
+      "type": "array", "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["kind", "what"],
+        "properties": {
+          "kind": {"enum": ["query", "data", "language", "file_type", "tool", "other"]},
+          "what": {"type": "string", "minLength": 1, "maxLength": 200},
+          "why": {"type": "string", "maxLength": 200}
+        }
+      }
+    },
+    "coverage_confidence": {"$ref": "common/formats.schema.json#/$defs/confidence"},
+    "would_change": {"type": "string", "maxLength": 300}
+  }
+}

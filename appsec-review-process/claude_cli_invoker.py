@@ -324,6 +324,9 @@ def _max_tool_calls() -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 1
 
 
+TOOL_GRANT_FILE = "tool-grant.json"
+
+
 def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
                           code: tuple[str | None, tuple[str, ...]] = (None, ())) -> Path:
     """Write the package's pinned bytes to a private folder for ``input_mcp.py`` and return the
@@ -348,6 +351,11 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
                        *(["--output-root", str(output_root)] if output_root else [])]}
     config = scratch / "mcp-config.json"
     config.write_text(json.dumps({"mcpServers": {INPUT_MCP_SERVER: server}}), encoding="utf-8")
+    # What this invocation was granted, beside tool-usage.json, so retrieval-report.py can tell a granted
+    # but unused tool from one never offered (tool names and the cap only).
+    (scratch / TOOL_GRANT_FILE).write_text(json.dumps(
+        {"tools": granted_tool_names(code[1]), "code_index": code[0],
+         "max_tool_calls_per_cell": _max_tool_calls()}, sort_keys=True), encoding="utf-8")
     return config
 
 
@@ -469,6 +477,46 @@ def _render_readable_inputs(inputs: tuple) -> str:
     return "\n".join(parts)
 
 
+TOOLING_FEEDBACK_KEY = "tooling_feedback"   # optional envelope-level block of a tool-granted reply
+TOOLING_FEEDBACK_SCHEMA = "common/tooling-feedback.schema.json"
+TOOLING_FEEDBACK_FILE = "tooling-feedback.json"
+TOOLING_FEEDBACK_MAX_BYTES = 8_000
+
+
+def tooling_feedback_instructions() -> str:
+    """The shared fragment asking a tool-granted job for the optional block. Appended to the dispatched
+    prompt after ``persona_cache_key`` is computed, so it never changes an existing cache key."""
+    import registry_paths
+    try:
+        return "\n\n" + (registry_paths.PROMPT_FRAGMENTS_DIR / "tooling-feedback.md").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _take_tooling_feedback(envelope: dict[str, Any], served: bool, scratch: Path, store: SchemaStore) -> list[str]:
+    """Strip the optional ``tooling_feedback`` key from a parsed envelope (in place) before anything else
+    sees it, and write it to ``scratch/tooling-feedback.json`` when it validates. Returns limitation lines.
+    Model text about the tools only: never part of the result, its claims, routing or any fingerprint;
+    an invalid, oversized or unasked-for block is dropped, never a rejection."""
+    (scratch / TOOLING_FEEDBACK_FILE).unlink(missing_ok=True)   # a repair round must not inherit an earlier block
+    if TOOLING_FEEDBACK_KEY not in envelope:
+        return []
+    value = envelope.pop(TOOLING_FEEDBACK_KEY)
+    if not served:
+        return ["tooling feedback dropped: this invocation was granted no lookup tools"]
+    text = json.dumps(value, sort_keys=True)
+    if len(text) > TOOLING_FEEDBACK_MAX_BYTES:
+        return [f"tooling feedback dropped: {len(text)} bytes is above {TOOLING_FEEDBACK_MAX_BYTES}"]
+    errors = validate_document(value, TOOLING_FEEDBACK_SCHEMA, store)
+    if errors:
+        return [f"tooling feedback dropped: {len(errors)} schema error(s) (first: {errors[0][:120]})"]
+    try:
+        atomic_bytes(scratch / TOOLING_FEEDBACK_FILE, (text + "\n").encode("utf-8"))
+    except OSError:
+        return ["tooling feedback dropped: could not be written"]
+    return []
+
+
 def build_prompt_text(package: Any, output_contract: dict[str, Any], store: SchemaStore,
                       indexed: bool = False, persona_schema: str | None = None,
                       tool_guides_text: str = "") -> str:
@@ -538,8 +586,9 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
     own diagnostics_dir comment). Called from a `finally`, so a failed or timed-out dispatch is
     captured too, which is usually when it matters most; never raises itself, since a disk problem
     here must not turn a real dispatch outcome into a different one."""
-    # repair-log.json and tool-usage.json are copied ALWAYS: they hold only the invoker's own validation
-    # messages and lookup-tool counts (no model text, no target content), and in /tmp it did not survive a reboot (B9, 2026-10-01). Transcripts
+    # repair-log.json, tool-usage.json, tool-grant.json and tooling-feedback.json are copied ALWAYS: they hold the
+    # invoker's own validation messages, the tool grant and call counts, and the model's bounded, schema-checked
+    # tool feedback (no target content), and in /tmp it did not survive a reboot (B9, 2026-10-01). Transcripts
     # and raw responses carry target content and stay behind save_llm_transcripts.
     enabled = _transcripts_enabled(cfg)
     try:
@@ -548,7 +597,7 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
             return
         dest = data_path(run_id, "llm-transcripts", job_id, attempt_id)
         for source in sorted(diagnostics_dir.iterdir()):
-            if source.is_file() and (source.name in ("repair-log.json", "tool-usage.json") or
+            if source.is_file() and (source.name in ("repair-log.json", "tool-usage.json", TOOL_GRANT_FILE, TOOLING_FEEDBACK_FILE) or
                                      (enabled and source.name.startswith(("transcript", "raw-response")))):
                 atomic_bytes(dest / source.name, source.read_bytes())
     except Exception:
@@ -1383,6 +1432,7 @@ class ClaudeCliInvoker:
         # accepted partition map) is scope, so it never enters claim citation resolution.
         target_inputs = tuple(item for item in package.inputs if item.root != pd.UPSTREAM_ROOT_ID)
         fill_notes: list[str] = []   # limitations returned by the last fill_result call
+        feedback_notes: list[str] = []   # limitations from the last reply's tooling_feedback block
 
         def accept(dispatch: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             """Parse, validate and build claims; raises InvokerOutputError with its details."""
@@ -1398,6 +1448,7 @@ class ClaudeCliInvoker:
                 envelope = _salvage_envelope(result_text, fields)
                 if not envelope and self._fill_result is None:
                     raise
+            feedback_notes[:] = _take_tooling_feedback(envelope, served, diagnostics_dir, store)
             if parse_error is not None and result_field not in envelope and self._fill_result is None:
                 # Salvage found no result object: report why the response did not parse, not the
                 # key mismatch that follows from it.
@@ -1452,13 +1503,15 @@ class ClaudeCliInvoker:
                           "cached_from": cached.get("attempt"), "cached_at": cached.get("stored_at")}
             except (InvokerOutputError, OSError, ValueError, KeyError):
                 reused = None
+        # Asked only of a tool-granted job, and appended after the cache key: an existing key is unchanged.
+        dispatch_prompt = prompt_text + (tooling_feedback_instructions() if served else "")
         clean_success = False
         label_token = rc.DISPATCH_LABEL.set(
             f"{package.request.get('job_id')}#{str(package.request.get('attempt_id'))[:12]}")
         try:
             started = time.time()
             rounds = reused or _dispatch_until_accepted(
-                dispatch_fn=self._dispatch_fn, accept=accept, prompt_text=prompt_text,
+                dispatch_fn=self._dispatch_fn, accept=accept, prompt_text=dispatch_prompt,
                 argv_for=lambda budget: _dispatch_argv(model_alias, self.effort, budget, self.timeout_seconds,
                                                        binary, mcp_config, code_grant[1]),
                 budget_usd=self.budget_usd, timeout_seconds=self.timeout_seconds,
@@ -1500,6 +1553,7 @@ class ClaudeCliInvoker:
                                f"(persona cache {cache_key[:16]}, first answered in attempt "
                                f"{reused.get('cached_from')} at {reused.get('cached_at')}); no model call"]
             limitations.extend(fill_notes)
+            limitations.extend(feedback_notes)
             if served:
                 # Reproducibility (brief U4/U5): which lookup tools and guides this prompt carried,
                 # and how often the model called each tool (counted by the input server).

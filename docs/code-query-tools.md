@@ -62,6 +62,34 @@ tell the model never to conclude "no callers" or "unreachable" from an incomplet
 records each call; `orchestrator/retrieval-report.py` prints a code-tool block (calls, incomplete answers, truncations
 per tool) beside the "files read" line.
 
+After a run (no model, Docker or network; reads only the run tree):
+
+```
+python3 orchestrator/retrieval-report.py <run> --summary [--json] [--compare <other run>]
+python3 orchestrator/retrieval-report.py <run> --feedback [--json]
+python3 orchestrator/retrieval-report.py <run> --check     # exit 1 when there is a finding
+python3 orchestrator/run-status.py <run> --tooling          # the same findings after the job lines; exit stays 0
+```
+
+`--summary`: the share of tool-served invocations that made a lookup call (overall and per job); per family
+(`input`, `evidence`, `code_structural`, `code_lsp`) the share of granted invocations that used it, calls and
+empty/error/truncation rates; granted-but-unused tools per job; invocations that hit `max_tool_calls_per_cell`;
+citation backing per job. The grant comes from `llm-transcripts/<job>/<attempt>/tool-grant.json` (written by the
+invoker beside `tool-usage.json`; older runs: the `lookup tools granted:` limitation). `--compare` prints this run
+minus the other. `--check` thresholds (constants at the top of the script): a granted family never called; empty
+rate > 50% for a tool with >= 10 calls; error rate > 10% for a tool with >= 5 calls; any cap exhaustion; citation
+backing < 80%; lsp granted and every lsp call answered server failed / not ready; > 30% of feedback blocks with
+`coverage_confidence: low`; a run with no tool-served invocation is reported as a gap, not a pass.
+
+A tool-granted model job may add an optional envelope-level `tooling_feedback` block
+(`schemas/common/tooling-feedback.schema.json`: useful and unhelpful tools, up to five `wanted` items, coverage
+confidence, what it would change). The invoker strips it before the result is validated or derived, writes it to
+`llm-transcripts/<job>/<attempt>/tooling-feedback.json` (always copied, like `tool-usage.json`) and drops an invalid
+or oversized block with a `tooling feedback dropped:` limitation. It never feeds evidence, findings, routing or a
+fingerprint. The request (`pipeline/prompt-fragments/tooling-feedback.md`) is appended to the dispatched prompt
+after the persona cache key is computed, so existing cache keys are unchanged. `--feedback` groups the blocks per
+job beside the measured numbers for the same job and tool; model text is printed as data, truncated.
+
 `code_query_force_indexed_mode` (flag, default on): a job whose profile grants tools gets the lookup tools even when
 its inputs fit inline (the inputs stay inlined too). Turn it off to compare runs (for example freeciv21 with and
 without the query tools): a small job then stays inline with no tools and its grant is dropped, so the prompt's tool
