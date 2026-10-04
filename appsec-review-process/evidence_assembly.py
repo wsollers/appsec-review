@@ -3,7 +3,6 @@
 This module consumes one explicit supplied generation rooted at ``supply_root``::
 
     assembly-supply.json
-    terminal-instances.json
     producers/<job>/accepted.json
     producers/<job>/latest.json
     producers/<job>/attempts/<attempt>/result.json
@@ -12,6 +11,14 @@ Every producer artifact, including ``permission.json``, remains below its immuta
 complete assembly copies only envelope-declared, hash-verified artifacts into its own attempt and
 publishes their assembly-relative identities in ``intel-manifest.json``.  Missing producers can be
 rendered for diagnostics, but can never pass the publication preflight.
+
+The manifest and the reuse fingerprint are content only: what the producers published, the graph,
+the source snapshot, the binding-pool specification without its generation id, and the code.  The
+C01/C02 terminal generation re-runs on every launch with new instance ids, so its record
+(``terminal-instances.json`` plus the per-producer instance claims) is a retained audit artifact,
+``terminal-binding.json``, beside the manifest: hash-bound by the envelope, re-verified against its
+own pool on every validation, and never part of ``manifest_sha256`` or the fingerprint (resume
+reuse, run 20261004T054551Z-357581).
 """
 from __future__ import annotations
 
@@ -35,8 +42,10 @@ WORKER_KIND = "join_controller"
 RESULT = "intel-manifest.json"
 SUPPLY = "assembly-supply.json"
 TERMINAL = "terminal-instances.json"
+BINDING = "terminal-binding.json"
 GRAPH = registry_paths.JOB_GRAPH
-SCHEMA = "appsec-review/intel-manifest/1.0"
+SCHEMA = "appsec-review/intel-manifest/2.0"
+BINDING_SCHEMA = "appsec-review/evidence-assembly-terminal-binding/1.0"
 SUPPLY_SCHEMA = "appsec-review/evidence-assembly-supply/1.0"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
@@ -108,6 +117,11 @@ def _graph() -> tuple[list[dict[str, Any]], str]:
             "all-required-terminal-accepted" or not isinstance(dependencies, list)):
         raise Blocked(f"{JOB}: graph must describe the implemented fail-closed barrier")
     return dependencies, "sha256:" + file_hash(GRAPH)
+
+
+def spec_content_sha256(spec: Any) -> str:
+    """The binding-pool specification without its per-launch generation id."""
+    return _hash({key: value for key, value in pr.thaw(spec).items() if key != "attempt_id"})
 
 
 def _terminal(pool_root: Path, *, expected_spec: Any, context: Any,
@@ -225,7 +239,7 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
         "source_snapshot_sha256": source,
         "producer_source_snapshot_sha256": producer_source,
         "build_lineage_sha256": binding["build_lineage_sha256"],
-        "terminal_instance_ids": list(terminal_ids), "permissions": list(binding["permissions"]),
+        "permissions": list(binding["permissions"]),
         "artifacts": sorted(artifacts, key=lambda item: item["path"]),
         "gaps": list(envelope["gaps"]), "skip_reason": envelope["skip_reason"]}
     return entry, copies
@@ -235,6 +249,18 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
                    pool_root: Path, expected_spec: Any, context: Any, rendezvous_parent: Path
                    ) -> tuple[dict[str, Any], list[tuple[Path, str]]]:
     """Return the deterministic candidate manifest and copy plan; never writes."""
+    manifest, copies, _binding = _inspect(
+        supply_root, run_id=run_id, source_snapshot_sha256=source_snapshot_sha256,
+        pool_root=pool_root, expected_spec=expected_spec, context=context,
+        rendezvous_parent=rendezvous_parent)
+    return manifest, copies
+
+
+def _inspect(supply_root: Path, *, run_id: str, source_snapshot_sha256: str, pool_root: Path,
+             expected_spec: Any, context: Any, rendezvous_parent: Path, verified: tuple | None = None
+             ) -> tuple[dict[str, Any], list[tuple[Path, str]], dict[str, Any]]:
+    """(content manifest, copy plan, terminal-binding audit record); never writes. ``verified`` is
+    a ``_terminal`` result the caller already obtained for these exact arguments."""
     supply_root = _real_directory(supply_root, "supply_root")
     supply = read_json(_owned_file(supply_root, PurePosixPath(SUPPLY), "assembly supply"))
     errors = validate_document(supply, "evidence-assembly-supply.schema.json")
@@ -242,7 +268,7 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
         raise Blocked(f"{JOB}: assembly supply schema failed ({len(errors)} errors)")
     if supply["run_id"] != run_id or supply["source_snapshot_sha256"] != source_snapshot_sha256:
         raise Blocked(f"{JOB}: supply run/source identity mismatch")
-    terminal, terminal_path, terminal_file_sha = _terminal(
+    terminal, terminal_path, terminal_file_sha = verified or _terminal(
         pool_root, expected_spec=expected_spec, context=context,
         rendezvous_parent=rendezvous_parent, run_id=run_id)
     dependencies, graph_sha = _graph()
@@ -264,7 +290,7 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
                 "accepted_pointer_sha256": None, "envelope_sha256": None,
                 "source_snapshot_sha256": None,
                 "producer_source_snapshot_sha256": None,
-                "build_lineage_sha256": None, "terminal_instance_ids": [], "permissions": [],
+                "build_lineage_sha256": None, "permissions": [],
                 "artifacts": [], "gaps": [], "skip_reason": None})
             gaps.append({"producer_job_id": job, "kind": "missing-producer",
                          "detail": "Required producer has no supplied accepted terminal envelope."})
@@ -287,7 +313,6 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
     complete = (not any(item["disposition"] == "missing" for item in producers)
                 and claimed == set(terminal_by_id) and terminal["outcome"] == "COMPLETE")
     generation = {"source_snapshot_sha256": source_snapshot_sha256,
-        "terminal_manifest_sha256": terminal["manifest_sha256"],
         "producer_envelopes": [(item["job_id"], item["accepted_pointer_sha256"],
                                  item["envelope_sha256"],
                                  item["producer_source_snapshot_sha256"],
@@ -295,24 +320,32 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
     manifest = {"schema": SCHEMA, "run_id": run_id,
         "source_snapshot_sha256": source_snapshot_sha256,
         "assembly_status": "COMPLETE" if complete else "INCOMPLETE",
-        "generation": {"generation_sha256": _hash(generation), "graph_sha256": graph_sha,
-                       "terminal_manifest_sha256": terminal["manifest_sha256"]},
-        "terminal_instances": {"path": TERMINAL, "sha256": terminal_file_sha,
-            "manifest_sha256": terminal["manifest_sha256"], "outcome": terminal["outcome"],
-            "counts": terminal["counts"]},
+        "generation": {"generation_sha256": _hash(generation), "graph_sha256": graph_sha},
+        "terminal_binding": {"path": BINDING},
         "producers": producers, "coverage_gaps": gaps}
     manifest["manifest_sha256"] = manifest_sha256(manifest)
     schema_errors = validate_document(manifest, "intel-manifest.schema.json")
     if schema_errors:
         raise Blocked(f"{JOB}: derived intel manifest schema failed ({len(schema_errors)} errors)")
-    return manifest, copies
+    binding = {"schema": BINDING_SCHEMA, "run_id": run_id, "manifest_sha256": manifest["manifest_sha256"],
+        "expected_spec_sha256": _hash(expected_spec),
+        "terminal_instances": {"path": TERMINAL, "sha256": terminal_file_sha,
+            "manifest_sha256": terminal["manifest_sha256"], "outcome": terminal["outcome"],
+            "counts": terminal["counts"]},
+        "producers": [{"job_id": item["job_id"], "terminal_instance_ids":
+                       list(bindings[item["job_id"]]["terminal_instance_ids"]) if item["job_id"] in bindings else []}
+                      for item in producers]}
+    schema_errors = validate_document(binding, "evidence-assembly-terminal-binding.schema.json")
+    if schema_errors:
+        raise Blocked(f"{JOB}: derived terminal binding schema failed ({len(schema_errors)} errors)")
+    return manifest, copies, binding
 
 
 def _code_hashes() -> dict[str, str]:
     result = {name: file_hash(ROOT / name) for name in CODE_FILES}
     for name in ("intel-manifest.schema.json", "intel-manifest-producer.schema.json",
                  "intel-manifest-artifact.schema.json", "intel-manifest-gap.schema.json",
-                 "evidence-assembly-supply.schema.json",
+                 "evidence-assembly-supply.schema.json", "evidence-assembly-terminal-binding.schema.json",
                  "pool-rendezvous-manifest.schema.json", "worker-result-envelope.schema.json"):
         result["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     result[registry_paths.GRAPH_REL] = file_hash(GRAPH)
@@ -322,48 +355,73 @@ def _code_hashes() -> dict[str, str]:
 def current_inputs(run_id: str, supply_root: Path, source_snapshot_sha256: str, *,
                    pool_root: Path, expected_spec: Any, context: Any,
                    rendezvous_parent: Path) -> dict[str, Any]:
+    """The attempt record. Only ``content`` is fingerprinted; the paths, tree hashes, the full
+    specification and the terminal identities stay as the audit trail ``_validate_attempt`` uses to
+    re-verify the attempt against the exact generation that produced it."""
     supply_root = _real_directory(supply_root, "supply_root")
     pool_root = _real_directory(pool_root, "pool_root")
     rendezvous_parent = _real_directory(rendezvous_parent, "rendezvous_parent")
-    terminal, terminal_path, terminal_file_sha = _terminal(
-        pool_root, expected_spec=expected_spec, context=context,
-        rendezvous_parent=rendezvous_parent, run_id=run_id)
+    verified = _terminal(pool_root, expected_spec=expected_spec, context=context,
+                         rendezvous_parent=rendezvous_parent, run_id=run_id)
+    terminal, terminal_path, terminal_file_sha = verified
+    manifest, _copies, _binding = _inspect(
+        supply_root, run_id=run_id, source_snapshot_sha256=source_snapshot_sha256, pool_root=pool_root,
+        expected_spec=expected_spec, context=context, rendezvous_parent=rendezvous_parent, verified=verified)
+    code = _code_hashes()
+    # The rendezvous parent holds every launch's generation; hash only this one's root.
     return {"run_id": run_id, "job": JOB, "supply_root": str(supply_root),
             "source_snapshot_sha256": source_snapshot_sha256,
             "supply_hashes": tree_hashes(supply_root), "pool_root": str(pool_root),
             "pool_hashes": tree_hashes(pool_root), "rendezvous_parent": str(rendezvous_parent),
-            "rendezvous_hashes": tree_hashes(rendezvous_parent),
-            "expected_spec_sha256": _hash(expected_spec),
+            "rendezvous_hashes": tree_hashes(terminal_path.parent),
+            "expected_spec": pr.thaw(expected_spec), "expected_spec_sha256": _hash(expected_spec),
             "terminal_manifest_sha256": terminal["manifest_sha256"],
             "terminal_file_sha256": terminal_file_sha,
-            "terminal_path": str(terminal_path), "code": _code_hashes()}
+            "terminal_path": str(terminal_path), "code": code,
+            "content": {"run_id": run_id, "job": JOB, "source_snapshot_sha256": source_snapshot_sha256,
+                        "manifest_sha256": manifest["manifest_sha256"],
+                        "assembly_status": manifest["assembly_status"],
+                        "spec_sha256": spec_content_sha256(expected_spec), "code": code}}
 
 
-def _derive_from_record(record: dict[str, Any], *, expected_spec: Any, context: Any):
+def fingerprint(record: dict[str, Any]) -> str:
+    """Content only: never the pool, rendezvous or supply trees, their paths or the instance ids.
+    A preflight-failure record has no content and is hashed whole."""
+    return _hash(record["content"] if "content" in record else record)
+
+
+def _derive_from_record(record: dict[str, Any], *, context: Any):
+    """Re-derive (manifest, copies, binding) from the generation this record names."""
     supply_root = Path(record["supply_root"])
     pool_root = Path(record["pool_root"])
     rendezvous_parent = Path(record["rendezvous_parent"])
+    expected_spec = record["expected_spec"]
     if (_hash(expected_spec) != record["expected_spec_sha256"] or
             tree_hashes(supply_root) != record["supply_hashes"] or
             tree_hashes(pool_root) != record["pool_hashes"] or
-            tree_hashes(rendezvous_parent) != record["rendezvous_hashes"]):
+            tree_hashes(Path(record["terminal_path"]).parent) != record["rendezvous_hashes"]):
         raise Blocked(f"{JOB}: supplied generation changed after inputs were recorded")
-    return inspect_supply(supply_root, run_id=record["run_id"],
-                          source_snapshot_sha256=record["source_snapshot_sha256"],
-                          pool_root=pool_root, expected_spec=expected_spec, context=context,
-                          rendezvous_parent=rendezvous_parent)
+    return _inspect(supply_root, run_id=record["run_id"],
+                    source_snapshot_sha256=record["source_snapshot_sha256"],
+                    pool_root=pool_root, expected_spec=expected_spec, context=context,
+                    rendezvous_parent=rendezvous_parent)
 
 
-def _validate_attempt(attempt: Path, record: dict[str, Any], *, expected_spec: Any,
-                      context: Any) -> None:
-    if read_json(attempt / "inputs.json") != record:
+def _validate_attempt(attempt: Path, record: dict[str, Any], *, context: Any) -> None:
+    """Re-verify an attempt from its own recorded generation (on reuse: an earlier launch's pool and
+    supply), then bind its content manifest to the current derivation."""
+    stored = read_json(attempt / "inputs.json")
+    if not isinstance(stored, dict) or stored.get("content") != record["content"]:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
-    expected, _copies = _derive_from_record(record, expected_spec=expected_spec, context=context)
+    expected, _copies, binding = _derive_from_record(stored, context=context)
     found = read_json(attempt / RESULT)
-    if found != expected or found["manifest_sha256"] != manifest_sha256(found):
+    if (found != expected or found["manifest_sha256"] != manifest_sha256(found) or
+            found["manifest_sha256"] != record["content"]["manifest_sha256"]):
         raise Blocked(f"{JOB}: intel manifest is stale or changed")
+    if read_json(_owned_file(attempt, PurePosixPath(BINDING), "terminal binding")) != binding:
+        raise Blocked(f"{JOB}: retained terminal binding does not re-verify against its pool")
     terminal_path = _owned_file(attempt, PurePosixPath(TERMINAL), "assembled terminal manifest")
-    if "sha256:" + file_hash(terminal_path) != found["terminal_instances"]["sha256"]:
+    if "sha256:" + file_hash(terminal_path) != binding["terminal_instances"]["sha256"]:
         raise Blocked(f"{JOB}: assembled terminal manifest hash changed")
     for producer in found["producers"]:
         for artifact in producer["artifacts"]:
@@ -385,8 +443,8 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
     def derive():
         record = current_inputs(run_id, supply_root, source_snapshot_sha256, pool_root=pool_root,
             expected_spec=expected_spec, context=context, rendezvous_parent=rendezvous_parent)
-        manifest, _copies = _derive_from_record(record, expected_spec=expected_spec, context=context)
-        if manifest["assembly_status"] != "COMPLETE":
+        if record["content"]["assembly_status"] != "COMPLETE":
+            manifest, _copies, _binding = _derive_from_record(record, context=context)
             missing = [item["job_id"] for item in manifest["producers"]
                        if item["disposition"] == "missing"]
             raise Blocked(f"{JOB}: early publication refused; missing producers: {', '.join(missing)}")
@@ -394,12 +452,13 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
 
     def execute(allocation, record, fingerprint):
         attempt = allocation["attempt"]
-        manifest, copies = _derive_from_record(record, expected_spec=expected_spec, context=context)
+        manifest, copies, binding = _derive_from_record(record, context=context)
         for source, relative in copies:
             target = attempt.joinpath(*PurePosixPath(relative).parts)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
         atomic_bytes(attempt / RESULT, serialize(manifest))
+        atomic_bytes(attempt / BINDING, serialize(binding))
         if record["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed during assembly")
         status = {"process": "02-evidence-pregather", "status": "OK_WITH_GAPS" if manifest["coverage_gaps"] else "OK",
@@ -408,7 +467,7 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
             "generation_sha256": manifest["generation"]["generation_sha256"],
             "producers": len(manifest["producers"]), "permissions": ["read-run-data", "write-run-data"],
             "started_at": allocation["started_at"], "ended_at": now()}
-        artifact_paths = [RESULT, TERMINAL, "status.json"] + [artifact["path"]
+        artifact_paths = [RESULT, BINDING, TERMINAL, "status.json"] + [artifact["path"]
             for producer in manifest["producers"] for artifact in producer["artifacts"]]
         # Name the producer: the bare details repeated across producers without attribution (run
         # 20261001T032047Z-fd64eb: clang-tidy x9, "not-applicable-no-test-plan" x2, ...).
@@ -420,16 +479,14 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
             execution_status="OK_WITH_GAPS" if gaps else "OK",
             summary=f"Assembled {len(manifest['producers'])} terminal producer records without executing target content.",
             status_record=status, artifact_paths=artifact_paths, gaps=gaps or None,
-            pre_envelope_validate=lambda path, _status: _validate_attempt(
-                path, record, expected_spec=expected_spec, context=context))
+            pre_envelope_validate=lambda path, _status: _validate_attempt(path, record, context=context))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
         worker_kind=WORKER_KIND, output_contract=CONTRACT, resume_command=resume,
-        derive_inputs=derive, fingerprint_inputs=lambda value: _hash(value),
+        derive_inputs=derive, fingerprint_inputs=fingerprint,
         execute_attempt=execute, preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes()}, force=force,
-        post_validate=lambda attempt, _envelope, record: _validate_attempt(
-            attempt, record, expected_spec=expected_spec, context=context),
+        post_validate=lambda attempt, _envelope, record: _validate_attempt(attempt, record, context=context),
         blocked_summary="Evidence assembly preflight refused incomplete, stale, or corrupt producers.",
         failed_summary="Evidence assembly did not publish.")
 
@@ -441,9 +498,9 @@ def validate(run_id: str, *, supply_root: Path, source_snapshot_sha256: str,
     record = current_inputs(run_id, supply_root, source_snapshot_sha256, pool_root=pool_root,
         expected_spec=expected_spec, context=context, rendezvous_parent=rendezvous_parent)
     pointer = pointer or read_json(base / "accepted.json")
-    attempt, _envelope = validate_published(base, pointer, _hash(record),
+    attempt, _envelope = validate_published(base, pointer, fingerprint(record),
         expected_run_id=run_id, expected_job_id=JOB)
-    _validate_attempt(attempt, record, expected_spec=expected_spec, context=context)
+    _validate_attempt(attempt, record, context=context)
     return attempt
 
 

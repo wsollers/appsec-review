@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence-assembly-terminal-binding.schema.json",
+  "title": "Evidence-assembly terminal binding (retained audit record)",
+  "description": "appsec-review/evidence-assembly-terminal-binding/1.0: terminal-binding.json in a 02-evidence-assembly attempt. Records the C01/C02 producer-binding generation that verified this assembly: the copied terminal-instances.json (path, file hash, its manifest_sha256, outcome, counts), the hash of the full pool specification and each producer's claimed instance ids. It names the content manifest it accompanies by manifest_sha256; the manifest names it by path only, so a re-run generation with new instance ids never changes the manifest or the reuse fingerprint. The assembly envelope hash-binds this file and validation re-derives it from the recorded pool.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "manifest_sha256", "expected_spec_sha256", "terminal_instances", "producers"],
+  "properties": {
+    "schema": {"const": "appsec-review/evidence-assembly-terminal-binding/1.0"},
+    "run_id": {"$ref": "common/formats.schema.json#/$defs/run_id"},
+    "manifest_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+    "expected_spec_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+    "terminal_instances": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "manifest_sha256", "outcome", "counts"],
+      "properties": {
+        "path": {"const": "terminal-instances.json"}, "sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+        "manifest_sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+        "outcome": {"enum": ["EMPTY", "COMPLETE", "DEGRADED", "FAILED", "CANCELED"]},
+        "counts": {"type": "object"}
+      }
+    },
+    "producers": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["job_id", "terminal_instance_ids"],
+        "properties": {
+          "job_id": {"type": "string"},
+          "terminal_instance_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

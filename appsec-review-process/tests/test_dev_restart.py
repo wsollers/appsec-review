@@ -284,6 +284,24 @@ class ExplainRunTests(unittest.TestCase):
         self.assertIn('upstream X reruns', lines['Y'])
         self.assertTrue(lines['Z'].startswith('REUSE'))
 
+    def test_content_keyed_producer_is_predicted_from_its_reuse_record(self):
+        # Resume reuse: a vendor producer keeps no code in inputs.json; producer_reuse records it in
+        # reuse.json beside the accepted pointer (whole scope), and --explain reads it from there.
+        base = self.run / 'data' / 'jobs' / 'Z'
+        (base / 'attempts' / 'a1' / 'inputs.json').unlink()
+        (base / 'accepted.json').unlink()
+        whole = base / 'whole'
+        (whole / 'attempts' / 'auto-1').mkdir(parents=True)
+        state.atomic_json(whole / 'accepted.json', {'attempt_id': 'auto-1', 'status': 'OK'})
+        state.atomic_json(whole / 'reuse.json', {'attempt_id': 'auto-1', 'inputs': {
+            'code': {'z.py': state.file_hash(self.process / 'z.py')}}})
+        line = next(line for line in dr.explain_run(self.run, self.graph, self.process, mode='prod') if ' Z:' in line)
+        self.assertTrue(line.startswith('REUSE'), line)
+        self.assertNotIn('no code record', line)
+        (self.process / 'z.py').write_text('z = 2\n')
+        line = next(line for line in dr.explain_run(self.run, self.graph, self.process, mode='prod') if ' Z:' in line)
+        self.assertTrue(line.startswith('RERUN  Z: legacy fingerprint: code hash of z.py changed'), line)
+
     def test_force_and_missing_results(self):
         (self.run / 'data' / 'jobs' / 'Z' / 'accepted.json').unlink()
         lines = dr.explain_run(self.run, self.graph, self.process, mode='dev', forced=['X'])
