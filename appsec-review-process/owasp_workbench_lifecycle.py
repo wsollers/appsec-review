@@ -53,7 +53,7 @@ BASELINE_APPROVED_AT = "2026-09-20T00:00:00Z"
 BASELINE_SCOPE = ["server"]
 BUDGET = "standard"
 BATCH_CONFIG = "appsec-review-process/config/owasp-batching/default-v2.json"
-HANDOFF_CONFIG = "appsec-review-process/config/owasp-validator-handoff/default-v1.json"
+HANDOFF_CONFIG = "appsec-review-process/config/owasp-validator-handoff/default-v2.json"
 DISPATCH_CONFIG = "appsec-review-process/config/owasp-dispatch/default-v1.json"
 # One static-offline route for every obligation of every chapter target: with batch config v2 each
 # chapter is its own batch key, so T05 cuts exactly ceil(chapter rows / 40) batches per chapter.

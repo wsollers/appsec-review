@@ -16,6 +16,7 @@
 #      tool-shellcheck), B16 records, code location, targets at their pins, base-image cache (6b)
 #   3. OSV feed (E1): osv_feed.py sync + verify into APPSEC_OSV_ROOT (default data/feeds/osv), now
 #      including the Debian and Alpine ecosystems
+#  3b. embedding model: semantic_recall_index.py fetch-model at the committed pin, then model-status
 #   4. reload the code location so it sees the new feed and records; check the B16 records
 #   5. final prepare-host.sh --check, then print the commands that start the re-run
 # Log: orchestrator/dagster/.host/prep-rerun-<UTC time>.log
@@ -30,7 +31,7 @@ for arg in "$@"; do
         --skip-osv) OSV=0 ;;
         --no-claude) HOST_ARGS+=(--no-claude) ;;
         --publish) PUBLISH=1 ;;
-        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -112,6 +113,19 @@ else
     else
         bad "osv" "osv_feed.py sync/verify failed (above); the previous good snapshot, if any, is kept"
     fi
+fi
+
+# ---- 3b. embedding model for 02-semantic-recall-index --------------------------------------------
+step "3b. embedding model (02-semantic-recall-index)"
+SRI=appsec-review-process/semantic_recall_index.py
+if out="$(python3 -B "$SRI" model-status 2>&1)"; then
+    ok "model present and matches its pin"
+elif [[ $CHECK -eq 1 ]]; then
+    todo "model missing or unpinned: $(echo "$out" | tail -1)"
+elif python3 -B "$SRI" fetch-model 2>&1 | tail -3 | sed 's/^/    /' && python3 -B "$SRI" model-status >/dev/null 2>&1; then
+    ok "model fetched at the pinned revision and verified"
+else
+    bad "embedding-model" "fetch-model failed (above); semantic recall stays a gap until the pinned model is present"
 fi
 
 # ---- 4. code location and registry records ---------------------------------------------------------
