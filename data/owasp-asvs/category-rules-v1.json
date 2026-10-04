@@ -1,12 +1,13 @@
 {
   "schema": "appsec-review/owasp-category-rules/1.0",
   "rules_id": "owasp-asvs-category-rules",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "standard": {
     "family": "owasp_asvs",
     "edition": "5.0.0"
   },
   "languages": [
+    "bash",
     "c",
     "cpp",
     "c_sharp",
@@ -94,7 +95,25 @@
       "path_globs": [
         "**/CMakeFiles/**",
         "**/autom4te.cache/**",
-        "**/build-aux/**"
+        "**/build-aux/**",
+        "**/configure",
+        "**/config.status",
+        "**/config.guess",
+        "**/config.sub",
+        "**/config.rpath",
+        "**/libtool",
+        "**/ltmain.sh",
+        "**/install-sh",
+        "**/missing",
+        "**/depcomp",
+        "**/compile",
+        "**/test-driver",
+        "**/ar-lib",
+        "**/mkinstalldirs",
+        "**/py-compile",
+        "**/ylwrap",
+        "**/aclocal.m4",
+        "**/m4/*.m4"
       ]
     }
   ],
@@ -404,8 +423,55 @@
           ],
           "pattern": "std::process|\\bdiesel::sql_query\\b|\\bsqlx\\b|\\bquick_xml\\b|\\bserde_yaml\\b",
           "rationale": "Process, raw SQL and deserializer crates."
+        },
+        {
+          "rule_id": "V1-bash-command-exec",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V1.2"
+          ],
+          "rationale": "Shell evaluates or runs text as a command: eval, exec, source, sh -c (V1.2.5). Arguments are not indexed; the enclosing function is the candidate.",
+          "names": [
+            "eval",
+            "exec",
+            "source",
+            "xargs",
+            "sh",
+            "bash",
+            "dash",
+            "ksh",
+            "zsh"
+          ]
+        },
+        {
+          "rule_id": "V1-bash-sast-injection",
+          "kind": "sast_rule_ids",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V1.2"
+          ],
+          "rationale": "ShellCheck unquoted expansion or command substitution (argument injection, globbing) and output executed as a command (V1.2.5).",
+          "sast_rule_ids": [
+            "SC2086",
+            "SC2046",
+            "SC2048",
+            "SC2068",
+            "SC2206",
+            "SC2207",
+            "SC2091",
+            "SC2156",
+            "SC2294"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "building a shell command or SQL query from external input",
         "parsing XML or deserializing untrusted data"
@@ -603,8 +669,28 @@
             "read_to_string"
           ],
           "rationale": "Reads arguments or stream input."
+        },
+        {
+          "rule_id": "V2-bash-input",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V2.2"
+          ],
+          "rationale": "Shell reads arguments, options or stdin: validation point for untrusted input (V2.2.1).",
+          "names": [
+            "read",
+            "getopts",
+            "getopt",
+            "shift"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "validating command line arguments or request parameters",
         "parsing numbers from untrusted input"
@@ -726,6 +812,10 @@
           "rationale": "Embedded HTTP server response header."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts emit no browser content: no DOM, cookies, CSP or other response headers a browser renders.",
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "setting HTTP security headers or cookies for a browser",
         "writing HTML into the DOM"
@@ -886,6 +976,9 @@
           "rationale": "HTTP/gRPC server."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts do not implement HTTP/REST/GraphQL/WebSocket service endpoints; HTTP clients they run (curl, wget) are searched under V12."
+      },
       "semantic_queries": [
         "registering HTTP routes and request handlers",
         "starting an HTTP or GraphQL server"
@@ -1138,8 +1231,38 @@
           ],
           "pattern": "std::fs|tokio::fs|\\bzip::|\\btar::|\\bflate2\\b",
           "rationale": "File or archive API."
+        },
+        {
+          "rule_id": "V5-bash-file-ops",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V5.2",
+            "V5.3"
+          ],
+          "rationale": "Shell file permission, temporary file, link, removal or archive extraction (chmod 777, umask, mktemp, tar -x).",
+          "names": [
+            "chmod",
+            "chown",
+            "chgrp",
+            "umask",
+            "mktemp",
+            "tempfile",
+            "ln",
+            "install",
+            "rm",
+            "tar",
+            "unzip",
+            "cpio",
+            "dd"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "opening a file from a user supplied path",
         "extracting an archive or handling an upload"
@@ -1181,6 +1304,7 @@
           "rule_id": "V6-auth-symbols",
           "kind": "symbol_regex",
           "languages": [
+            "bash",
             "c",
             "cpp",
             "c_sharp",
@@ -1314,8 +1438,32 @@
           ],
           "pattern": "\\b(?:argon2|bcrypt|totp_rs|webauthn_rs)\\b",
           "rationale": "Password hash or MFA crate."
+        },
+        {
+          "rule_id": "V6-bash-credentials",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V6.2",
+            "V6.3"
+          ],
+          "rationale": "Shell sets, passes or scripts a credential (sshpass -p, chpasswd, htpasswd).",
+          "names": [
+            "passwd",
+            "chpasswd",
+            "htpasswd",
+            "sshpass",
+            "kinit",
+            "mkpasswd",
+            "expect"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "password verification and credential storage",
         "login and multi-factor authentication"
@@ -1454,6 +1602,10 @@
           "rationale": "PHP session lifecycle."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts hold no server-side web sessions or session cookies.",
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "session token creation and invalidation",
         "session timeout and cookie handling"
@@ -1579,6 +1731,10 @@
           "rationale": "ASP.NET authorization."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts make no application access-control decisions; privilege use in them (sudo, chmod) is searched under V5 and V13.",
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "permission and role checks before an action",
         "dropping or changing process privileges"
@@ -1725,6 +1881,10 @@
           "rationale": "JWT crate."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts do not issue or verify self-contained tokens (JWT/JWS/JWE); a token a script carries is a V13 secret.",
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "signing and verifying JSON web tokens"
       ],
@@ -1872,6 +2032,9 @@
           "rationale": "OAuth/OIDC crate."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts are not OAuth 2 / OIDC clients, resource servers or authorization servers; credentials they pass are V13 secrets."
+      },
       "semantic_queries": [
         "OAuth authorization code flow and redirect URI handling"
       ],
@@ -2101,8 +2264,37 @@
           ],
           "pattern": "\\b(?:ring|rand|aes_gcm|openssl|sha2|sha1|md5|hmac|chacha20poly1305|ed25519_dalek|rsa)\\b",
           "rationale": "Crypto or random crate."
+        },
+        {
+          "rule_id": "V11-bash-crypto",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V11.2",
+            "V11.3",
+            "V11.4"
+          ],
+          "rationale": "Shell runs a crypto or digest tool (openssl enc/dgst options, md5sum/sha1sum integrity checks).",
+          "names": [
+            "openssl",
+            "gpg",
+            "gpg2",
+            "md5sum",
+            "sha1sum",
+            "sha256sum",
+            "sha512sum",
+            "shasum",
+            "b2sum",
+            "cksum",
+            "age"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "encryption key generation and cipher usage",
         "generating random numbers for security"
@@ -2301,6 +2493,32 @@
           ],
           "pattern": "\\b(?:rustls|native_tls|reqwest|hyper|tonic)\\b|tokio::net|std::net",
           "rationale": "Network/TLS crate."
+        },
+        {
+          "rule_id": "V12-bash-network",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V12.1",
+            "V12.3"
+          ],
+          "rationale": "Shell network transfer or connection: curl -k/--insecure, wget --no-check-certificate, cleartext URLs.",
+          "names": [
+            "curl",
+            "wget",
+            "nc",
+            "ncat",
+            "netcat",
+            "socat",
+            "ssh",
+            "scp",
+            "sftp",
+            "rsync",
+            "ftp",
+            "telnet"
+          ]
         }
       ],
       "semantic_queries": [
@@ -2506,6 +2724,25 @@
           ],
           "pattern": "std::env|\\b(?:dotenvy|dotenv|config)\\b",
           "rationale": "Environment or config crate."
+        },
+        {
+          "rule_id": "V13-bash-config",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V13.2",
+            "V13.3"
+          ],
+          "rationale": "Shell reads or forwards configuration and environment, or runs a command with elevated rights (sudo).",
+          "names": [
+            "env",
+            "printenv",
+            "envsubst",
+            "source",
+            "sudo"
+          ]
         }
       ],
       "semantic_queries": [
@@ -2599,6 +2836,23 @@
           ],
           "pattern": "^(?:localStorage|sessionStorage|indexedDB)$",
           "rationale": "Browser storage."
+        },
+        {
+          "rule_id": "V14-bash-sensitive-data",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V14.2"
+          ],
+          "rationale": "Shell wipes data or reads command history that may hold secrets.",
+          "names": [
+            "shred",
+            "wipe",
+            "srm",
+            "history"
+          ]
         }
       ],
       "semantic_queries": [
@@ -2807,8 +3061,32 @@
           ],
           "pattern": "std::sync|std::thread|std::mem::transmute|\\blibc\\b|\\blibloading\\b",
           "rationale": "Concurrency, transmute, FFI or dynamic loading."
+        },
+        {
+          "rule_id": "V15-bash-dangerous",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V15.2",
+            "V15.4"
+          ],
+          "rationale": "Shell error mode (set -e/-u), signal traps, temporary-file races, locking and background processes.",
+          "names": [
+            "set",
+            "trap",
+            "mktemp",
+            "flock",
+            "kill",
+            "nohup",
+            "source"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "loading dynamic libraries or plugins",
         "thread synchronization and race conditions"
@@ -2883,6 +3161,7 @@
           "rule_id": "V16-log-symbols",
           "kind": "symbol_regex",
           "languages": [
+            "bash",
             "c",
             "cpp",
             "c_sharp",
@@ -2995,8 +3274,27 @@
           ],
           "pattern": "\\b(?:log|tracing|env_logger|slog)::",
           "rationale": "Logging crate."
+        },
+        {
+          "rule_id": "V16-bash-logging",
+          "kind": "calls_to",
+          "languages": [
+            "bash"
+          ],
+          "sections": [
+            "V16.2",
+            "V16.5"
+          ],
+          "rationale": "Shell writes to syslog or handles abnormal termination (logger, trap ERR/EXIT).",
+          "names": [
+            "logger",
+            "trap"
+          ]
         }
       ],
+      "languages_not_applicable": {
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "writing security logs and audit events",
         "error handling and abnormal termination"
@@ -3090,6 +3388,10 @@
           "rationale": "WebRTC library."
         }
       ],
+      "languages_not_applicable": {
+        "bash": "Shell scripts do not run WebRTC peer connections, ICE/TURN/STUN or SRTP.",
+        "json": "JSON is data with no functions or statements: no construct in it can be a candidate for this chapter."
+      },
       "semantic_queries": [
         "WebRTC peer connection and ICE servers"
       ],

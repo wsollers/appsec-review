@@ -46,18 +46,23 @@ What the index cannot answer is a gap, never zero hits (AGENTS.md rule 2):
   binary export tables only, entry names ``ENTRY_POINT_SOURCES`` does not list) is
   ``rule_without_index_support`` and makes that chapter's coverage incomplete;
 * a searched language no rule of a chapter covers makes that chapter incomplete
-  (``language_not_searched``);
+  (``language_not_searched``) unless the chapter's ``languages_not_applicable`` gives a reason (a CLI
+  or library may be not applicable to some chapters: shell has no browser, session or OAuth surface);
+  such a language stays visible as a ``not_applicable_language`` search-basis row with its reason and
+  file count. A language without rules is unsearched unless every chapter exempts it;
 * limits that leave the search a lower bound are published as gaps without changing coverage:
   literals are call-argument strings only, exports are binary export tables only, Rust ``unsafe``
-  blocks are not selected by any rule, tree-sitter rows truncated, CPG coverage gaps the index
-  recorded, source SAST not accepted (``sast_hits`` None), and every unavailable widening facility.
+  blocks are not selected by any rule, shell rows are command and function names only (no
+  arguments or assignments), JSON data files no chapter rule searches, tree-sitter rows truncated,
+  CPG coverage gaps the index recorded, an empty ``names`` table (no IR-function or debug-symbol
+  rows), source SAST not accepted (``sast_hits`` None), and every unavailable widening facility.
 
 An empty index makes every chapter a gap, never "no candidates". ``coverage.complete`` is the
 language-level answer; each chapter's ``coverage_complete`` is that AND its own rule support, and is
 what a zero-candidate chapter must be read against. ``coverage.facilities`` lists every facility.
 
 Output is sorted and stable: chapters V1..V17 with their search basis in rule-table order (then
-``fts``, ``semantic``, ``tag_cloud``), candidates by (chapter, file, start_line, symbol), excluded by
+``fts``, ``semantic``, ``tag_cloud``, ``not_applicable_language`` by language), candidates by (chapter, file, start_line, symbol), excluded by
 (chapter, file, line, rule, symbol), gaps by (kind, gap_id); ids are content hashes.
 
 CLI (the job wrapper binds accepted inputs and calls ``search``; this entry runs it on plain files)::
@@ -531,19 +536,26 @@ def _gap(kind: str, chapters: Iterable[str], statement: str) -> dict[str, Any]:
             "statement": statement[:1000]}
 
 
+def _not_applicable(rules: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """{chapter: {language: reason}} from the table's per-chapter ``languages_not_applicable``."""
+    return {chapter["chapter_id"]: dict(chapter.get("languages_not_applicable") or {}) for chapter in rules["chapters"]}
+
+
 def _unsearched(index: _Index, rules: dict[str, Any], treesitter_gaps: Iterable[dict[str, Any]], excluded,
-                gaps: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, Any]]]:
+                gaps: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, Any]], dict[str, int]]:
     table_languages = set(rules["languages"])
-    present: dict[str, int] = {}
+    exempt = _not_applicable(rules)
+    counts: dict[str, int] = {}
     for path, (_, language, _) in index.files.items():
         if path.startswith("<") or excluded(path):
             continue
         name = language or _suffix_language(PurePosixPath(path).suffix)
-        if name not in NON_PROGRAM_LANGUAGES:
-            present[name] = present.get(name, 0) + 1
+        counts[name] = counts.get(name, 0) + 1
+    present = {name: count for name, count in counts.items() if name not in NON_PROGRAM_LANGUAGES}
     rows: dict[tuple[str, str], int] = {}
     for name, count in present.items():
-        if name not in table_languages:
+        # Without rules a language is unsearched unless every chapter exempts it with a reason.
+        if name not in table_languages and not all(name in exempt.get(chapter, {}) for chapter in CHAPTERS):
             rows[(name, "no_rules_for_language")] = count
     cpg_only, truncated = 0, []
     for gap in treesitter_gaps or ():
@@ -577,10 +589,13 @@ def _unsearched(index: _Index, rules: dict[str, Any], treesitter_gaps: Iterable[
     unsearched = [{"language": language, "file_count": count, "reason": reason}
                   for (language, reason), count in sorted(rows.items())]
     for row in unsearched:
+        missing = (f"; rule table {rules.get('rules_id')} {rules.get('version')} has no {row['language']} rule and no "
+                   f"languages_not_applicable reason for it in any chapter, so its {row['language']} rules for "
+                   f"V1..V17 are missing" if row["reason"] == "no_rules_for_language" else "")
         gaps.append(_gap("language_not_searched", CHAPTERS, f"{row['file_count']} {row['language']} file(s) not "
-                         f"searched by the code index ({row['reason']}): any chapter may have code there"))
+                         f"searched by the code index ({row['reason']}){missing}: any chapter may have code there"))
     searched = sorted(name for name in present if name in table_languages)
-    return searched, unsearched
+    return searched, unsearched, counts
 
 
 def _tagged_files(index: _Index, tag_cloud: dict[str, Any]) -> tuple[dict[str, list[tuple[str, str, str]]], list[str]]:
@@ -618,7 +633,8 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
     view, excluded_path = _Index(index), _exclusion(rules)
     evidence = _Evidence(evidence_index) if evidence_index else None
     gaps: list[dict[str, Any]] = []
-    searched, unsearched = _unsearched(view, rules, treesitter_gaps, excluded_path, gaps)
+    searched, unsearched, file_counts = _unsearched(view, rules, treesitter_gaps, excluded_path, gaps)
+    exempt = _not_applicable(rules)
     empty = not view.files
     if empty:
         gaps.append(_gap("index_incomplete", CHAPTERS, "the code index lists no files: nothing was searched, so no "
@@ -640,6 +656,7 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
     fts_truncated, fts_unsearchable, fts_chapters = [], [], set()
     semantic_unresolved, semantic_failures, semantic_hits, tag_hits = [], [], 0, 0
     tag_skipped: set[str] = set()
+    data_chapters: dict[str, set[str]] = {}
 
     def place(chapter: str, rule_id: str | None, kind: str, path: str, line: int, detail: str, unit: tuple,
               sha: str | None = None) -> bool:
@@ -676,9 +693,13 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
             gaps.append(_gap("rule_without_index_support", [chapter_id], _clip(f"{chapter_id} has no search rules: "
                              f"{chapter['scope_note']}")))
         covered = {language for rule in chapter["rules"] for language in rule["languages"]}
-        for language in sorted(present - covered):
+        for language in sorted(present - covered - set(exempt[chapter_id])):
             incomplete.add(chapter_id)
-            gaps.append(_gap("language_not_searched", [chapter_id], f"no {chapter_id} rule covers {language}"))
+            gaps.append(_gap("language_not_searched", [chapter_id], f"no {chapter_id} rule covers {language} and the "
+                             "rule table gives no languages_not_applicable reason for it"))
+        for language in sorted(set(file_counts) - covered - set(exempt[chapter_id])):
+            if language in NON_PROGRAM_LANGUAGES:
+                data_chapters.setdefault(language, set()).add(chapter_id)
         propagation = chapter.get("propagation")
         seed_ids = set(propagation["seed_rule_ids"]) if propagation else set()
         fts_basis = []
@@ -774,6 +795,10 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
                     added.add(path)
             tag_hits += len(added)
             basis.append({"rule_id": None, "kind": "tag_cloud", "hits": len(rows)})
+        basis += [{"rule_id": None, "kind": "not_applicable_language", "hits": 0, "language": language,
+                   "file_count": file_counts[language], "reason": _clip(reason)}
+                  for language, reason in sorted(exempt[chapter_id].items())
+                  if file_counts.get(language) and language not in covered]
         chapters.append({"chapter_id": chapter_id, "search_basis": basis})
     if literal_chapters:
         gaps.append(_gap("index_incomplete", literal_chapters, "code-index literals are string literals in "
@@ -785,6 +810,17 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
     if sast_chapters:
         gaps.append(_gap("sast_unavailable", sast_chapters, "02-source-sast was not accepted: the sast_rule_ids rules "
                          "did not run"))
+    for language, chapter_ids in sorted(data_chapters.items()):
+        gaps.append(_gap("index_incomplete", chapter_ids, f"{file_counts[language]} {language} data file(s) are not "
+                         "program source: neither the code index nor these chapters' rules search them, so values "
+                         "there (configuration, endpoints, secrets) are a lower bound here; secrets are "
+                         "02-secrets-inventory's"))
+    if "bash" in present:
+        gaps.append(_gap("index_incomplete", [row["chapter_id"] for row in rules["chapters"]
+                                              if any("bash" in rule["languages"] for rule in row["rules"])],
+                         "shell is indexed by tree-sitter only: bash rules see command and function names, not command "
+                         "arguments (curl -k, chmod 777) or variable assignments and declarations (PASSWORD=, export "
+                         "TOKEN=); the enclosing function is the candidate, and those values are a lower bound"))
     if "rust" in present:
         gaps.append(_gap("index_incomplete", ["V1", "V15"], "Rust unsafe blocks are not indexed and no rule selects "
                          "them; unsafe code is a candidate only when another rule hits it"))
@@ -845,11 +881,22 @@ def search(index: sqlite3.Connection, rules: dict[str, Any], *, sast_hits: list[
         chapter.update({"candidate_count": sum(1 for row in rows if row["chapter_id"] == chapter_id),
                         "excluded_count": sum(1 for row in dropped if row["chapter_id"] == chapter_id),
                         "coverage_complete": complete and chapter_id not in incomplete})
+    try:
+        name_rows = view.db.execute("SELECT COUNT(*) FROM names WHERE kind IN "
+                                    f"({','.join(repr(kind) for kind in NAME_KINDS)})").fetchone()[0]
+    except sqlite3.Error:
+        name_rows = 0
+    if not name_rows and not empty:
+        gaps.append(_gap("index_incomplete", [row["chapter_id"] for row in rules["chapters"]
+                                              if any(rule["kind"] == "symbol_regex" for rule in row["rules"])],
+                         "the code index holds no IR-function or debug-symbol names rows: symbol_regex rules searched "
+                         "the method and tree-sitter function tables only"))
     facilities = [
         {"facility": "code_index", "status": "used" if view.files else "unavailable",
          "detail": f"{len(view.files)} indexed file(s), {len(view.methods)} method(s)"},
-        {"facility": "code_index_names", "status": "used",
-         "detail": f"{view.names_used} IR-function/debug-symbol name hit(s) beyond the method tables"},
+        {"facility": "code_index_names", "status": "used" if name_rows else "unavailable",
+         "detail": f"{name_rows} IR-function/debug-symbol name row(s); {view.names_used} name hit(s) beyond the "
+                   "method tables"},
         {"facility": "source_sast", "status": "unavailable" if sast_hits is None else "used",
          "detail": "02-source-sast not accepted" if sast_hits is None else f"{len(sast_hits)} lead(s)"},
         {"facility": "evidence_index_fts", "status": "unavailable" if evidence is None else "used",
