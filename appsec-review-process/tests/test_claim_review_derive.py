@@ -239,12 +239,28 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
         decision = decisions_of(document)[A]
         self.assertEqual(set(decision), lifecycle.DECISION_KEYS[VERIFY])
         self.assertEqual(decision["verifier"]["role_id"], "independent-verifier")
-        # An id list cannot carry the new independent evidence VERIFIED needs: rejected, not faked.
+        # An id list cannot carry the new independent evidence VERIFIED needs: this lane never offers
+        # VERIFIED, and a reply that uses it goes back for repair naming the claim, never faked.
         reply["decisions"][0]["disposition"] = "VERIFIED"
         reply["decisions"][0]["proof_obligations"][0]["status"] = "SATISFIED"
         with self.assertRaises(InvokerOutputError) as caught:
             run(VERIFY, reply)
-        self.assertIn("new independent evidence", str(caught.exception))
+        self.assertIn(f"claim {A}: disposition VERIFIED is not allowed at {VERIFY}", " ".join(caught.exception.details))
+
+    def test_cross_stage_disposition_goes_back_with_the_fix(self):
+        """09 re-run 2026-10-04: the shared persona enum let a verifier answer SURVIVING (the 08 outcome),
+        which failed only at the closed record schema with no claim named."""
+        reply = {"decisions": [
+            {"claim_id": claim, "disposition": "SURVIVING", "method": "static review of cited flow",
+             "citation_ids": [cite], "proof_obligations": [{"obligation_id": ob, "status": "SATISFIED",
+                                                            "citation_ids": [cite]}]}
+            for claim, cite, ob in ((A, "citation-a", "po-a"), (B, "citation-b", "po-b"))]}
+        with self.assertRaises(InvokerOutputError) as caught:
+            run(VERIFY, reply)
+        errors = caught.exception.details
+        self.assertEqual(len(errors), 2)
+        self.assertIn(f"claim {A}: disposition SURVIVING is not allowed at {VERIFY}", errors[0])
+        self.assertIn("is UNRESOLVED", errors[0])
 
     def test_scoring_passes_judgment_through_and_wraps_it(self):
         records = upstream(SCORE)["verifications"]
