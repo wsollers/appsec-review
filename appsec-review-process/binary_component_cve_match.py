@@ -14,6 +14,10 @@ vector, remarks and descriptions are never published (severity is assigned in st
 and its raw reports stay in the unpublished execution root, bound by hash. A match is a lead, never a
 finding or a reachability claim (ADR-0015). Nothing detected is a named coverage gap, never "no
 known vulnerabilities".
+
+A launch whose binaries, NVD-derived database, pinned image and code equal those of the accepted
+attempt reuses it without starting the container (``reuse_inputs``, ``producer_reuse``); attempt ids
+are fresh, never the Dagster run id.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import json
 from pathlib import Path
 import shutil
 from typing import Any, Callable
+import uuid
 
 import binary_hardening_input
 import container_execution as ce
@@ -31,7 +36,8 @@ import cve_bin_tool_db as cvedb
 import evidence_redaction
 from execution_state import Blocked, data_path, file_hash, identifier, read_json, run_path
 import permission_capabilities as pc
-from publish_job_output import mark_attempt_started, publish_validated, record_noncurrent
+import producer_reuse
+from publish_job_output import mark_attempt_started, publish_validated, record_noncurrent, validate_published
 import registry_paths
 import sca_nvd_snapshot as nvd
 import tunables
@@ -315,6 +321,36 @@ def materialize(documents: dict[str, Any], attempt: Path, *, dagster_run_id: str
     return envelope
 
 
+CODE_FILES = ("binary_component_cve_match.py", "cve_bin_tool_db.py", "sca_nvd_snapshot.py",
+              "binary_hardening_input.py", "container_mobile_binary_contracts.py", "producer_reuse.py",
+              registry_paths.contract_rel(CONTRACT), registry_paths.template_rel(JOB))
+
+
+def reuse_inputs(run_id: str, source: Path, generation: str, now: datetime, *, nvd_data_root: Path | None = None,
+                 db_root: Path | None = None, tool: dict[str, str] | None = None, **_options: Any) -> dict[str, Any] | None:
+    """What one attempt's evidence is a function of: the scanned binaries by content, the database the
+    preflight resolves now, the pinned image, the scan launcher and the code. None when the preflight
+    would not resolve a database (nothing to reuse; ``build`` records that failure)."""
+    binaries, database = scanned_binaries(source), None
+    try:
+        tool = tool or cvedb.pinned_tool()
+        if binaries:
+            ceiling = timedelta(seconds=tunables.shared("reference_snapshot_max_age_seconds"))
+            resolved = nvd.resolve_snapshot(nvd_data_root or cvedb.nvd_root(), max_age=ceiling, now=now)
+            if not resolved.usable:
+                return None
+            found = cvedb.resolve_db(db_root or cvedb.feed_root(), nvd_identity=resolved.identity, tool=tool, now=now)
+            database = {key: found[key] for key in ("manifest_sha256", "nvd_manifest_sha256", "nvd_cursor",
+                                                     "image_digest", "tool_version", "built_at", "cve_count")}
+    except cvedb.DbUnavailable:
+        return None
+    launcher = {path.relative_to(LAUNCHER).as_posix(): file_hash(path) for path in sorted(LAUNCHER.rglob("*"))
+                if path.is_file() and "__pycache__" not in path.parts} if LAUNCHER.is_dir() else None
+    return {"job_id": JOB, "run_id": run_id, "source_generation": generation, "binaries": binaries,
+            "database": database, "tool": tool, "images": producer_reuse.images([cvedb.IMAGE_ID]),
+            "launcher": launcher, "code": producer_reuse.code(CODE_FILES)}
+
+
 def execute(*, run_id: str, dagster_run_id: str, now: datetime | None = None, **options: Any) -> dict[str, Any]:
     """Stage the accepted native-build binaries, build, publish one attempt (or record it non-current)."""
     run_id, dagster_run_id = identifier(run_id), identifier(dagster_run_id)
@@ -322,7 +358,15 @@ def execute(*, run_id: str, dagster_run_id: str, now: datetime | None = None, **
     source = binary_hardening_input.stage(run_id, job=JOB)
     generation = "sha256:" + file_hash(run_path(run_id) / "inputs" / "artifact-manifest.json")
     base = data_path(run_id, "jobs", JOB, "whole").absolute()
-    attempt_id = "native-" + dagster_run_id
+    content = reuse_inputs(run_id, source, generation, moment, **options)
+    if content is not None:
+        reused = producer_reuse.admit(base, content, run_id=run_id, job_id=JOB,
+            verify=lambda _attempt, pointer, _record: validate_published(
+                base, pointer, pointer["fingerprint"], expected_run_id=run_id, expected_job_id=JOB,
+                consumer_job_id="02-evidence-assembly", reuse=True))
+        if reused is not None:
+            return reused
+    attempt_id = "native-" + str(uuid.uuid4())     # the native-<uuid> shape evidence_redaction exempts
     attempt, execution = base / "attempts" / attempt_id, base / "executions" / attempt_id
     if attempt.exists() or execution.exists():
         raise Blocked(f"{JOB}: attempt {attempt_id} already exists")
@@ -338,5 +382,9 @@ def execute(*, run_id: str, dagster_run_id: str, now: datetime | None = None, **
         pointer = record_noncurrent(base, envelope_path, envelope)
         raise Blocked(f"{JOB}: did not produce current evidence: {documents['status']} ({documents['cause']})"
                       + f" [{pointer['status']}]")
-    return publish_validated(base, attempt, envelope_path, envelope["input_fingerprint"], expected_run_id=run_id,
-                             expected_job_id=JOB, consumer_job_id="02-evidence-assembly")
+    pointer = publish_validated(base, attempt, envelope_path, envelope["input_fingerprint"], expected_run_id=run_id,
+                                expected_job_id=JOB, consumer_job_id="02-evidence-assembly")
+    if content is not None:
+        producer_reuse.remember(base, content, pointer, run_id=run_id, job_id=JOB,
+                                facts={"dagster_run_id": dagster_run_id})
+    return pointer

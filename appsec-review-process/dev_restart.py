@@ -381,6 +381,15 @@ def explain_legacy(job: str, jobs_root: Path, process_root: Path, upstream: list
             recorded = code if isinstance(code, dict) else None
         except (OSError, ValueError, AttributeError):
             recorded = None
+    reuse_path = attempt.parent.parent / 'reuse.json' if attempt is not None else None
+    if recorded is None and reuse_path is not None and reuse_path.is_file():
+        # A content-keyed producer (producer_reuse) records its code beside the accepted pointer.
+        try:
+            reuse = _read(reuse_path)
+            code = reuse.get('inputs', {}).get('code') if reuse.get('attempt_id') == attempt.name else None
+            recorded = code if isinstance(code, dict) else None
+        except (OSError, ValueError, AttributeError):
+            recorded = None
     note = prod_note(recorded, current_code(recorded, process_root)) if recorded is not None else None
     if forced:
         return _decision(job, RERUN, ['--force']), note

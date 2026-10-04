@@ -51,10 +51,10 @@ class DependencyOrchestrationTests(unittest.TestCase):
         self.source_patch.stop(); self.validate_patch.stop()
         self.temp.cleanup()
 
-    def request(self, job, payload, tool):
+    def request(self, job, payload, tool, generated_at="2026-09-27T12:00:00Z"):
         path = self.owner / "inputs" / (job + ".json")
         path.write_text(json.dumps({"schema": orchestration.REQUEST_SCHEMA, "run_id": self.run_id,
-            "job_id": job, "source_generation": self.generation, "generated_at": "2026-09-27T12:00:00Z",
+            "job_id": job, "source_generation": self.generation, "generated_at": generated_at,
             "source_binding": self.source_binding, "payload": payload, "tool": tool}))
         return path
 
@@ -155,6 +155,83 @@ class DependencyOrchestrationTests(unittest.TestCase):
             orchestration.execute(job_id="02-sbom-inventory", run_id=self.run_id,
                 input_path=str(request), output_root=str(self.owner / "data"),
                 attempt_root=str(self.jobs / "02-sbom-inventory" / "orchestration-attempts" / "x"))
+
+    # --- resume reuse (run 20261004T054551Z-357581) ----------------------------------------------
+
+    def publishing_worker(self, kind, resolved):
+        """Stands in for dependency_workers.run: one immutable attempt and the common pointer."""
+        request = json.loads(Path(resolved).read_text())
+        job = orchestration.workers.JOBS[kind][0]
+        root = self.jobs / job
+        attempt_id = job + "-" + hashlib.sha256(Path(resolved).read_bytes()).hexdigest()[:20]
+        attempt = root / "attempts" / attempt_id
+        attempt.mkdir(parents=True)
+        envelope = {"attempt_id": attempt_id, "acceptance_status": "CURRENT", "execution_status": "OK",
+                    "started_at": request["generated_at"]}
+        execution_state.atomic_json(attempt / "result.json", envelope)
+        execution_state.atomic_json(root / "latest.json", {"attempt_id": attempt_id})
+        execution_state.atomic_json(root / "accepted.json", {
+            "schema": "appsec-review/accepted-worker-result/1.0", "run_id": self.run_id, "job": job,
+            "attempt_id": attempt_id, "status": "OK", "fingerprint": "sha256:" + "f" * 64,
+            "envelope_path": "result.json", "envelope_sha256": execution_state.file_hash(attempt / "result.json"),
+            "hashes": execution_state.tree_hashes(attempt), "accepted_at": request["generated_at"]})
+        return envelope
+
+    def launch_sbom(self, generated_at, suffix):
+        request = self.request("02-sbom-inventory", {"source_files": {"a.c": "sha256:" + "1" * 64},
+            "build_index": self.build_index}, {"target_path": str(self.owner / "inputs" / "target")}, generated_at)
+        with patch.object(orchestration.b13, "execute", return_value={"b13_attempt": {"verified": True}}) as container, \
+             patch.object(orchestration.workers, "run", side_effect=self.publishing_worker):
+            envelope = self.execute("02-sbom-inventory", request, suffix)
+        return envelope, container.call_count
+
+    def test_unchanged_request_reuses_the_accepted_attempt_without_a_container_call(self):
+        first, ran = self.launch_sbom("2026-09-27T12:00:00Z", "auto-launch-1")
+        self.assertEqual(ran, 1)
+        second, ran = self.launch_sbom("2026-10-04T05:45:51Z", "auto-launch-2")
+        self.assertEqual(ran, 0)
+        self.assertEqual(second, first)
+        self.assertFalse((self.jobs / "02-sbom-inventory" / "orchestration-attempts" / "auto-launch-2").exists())
+        record = json.loads((self.jobs / "02-sbom-inventory" / "reuse.json").read_text())
+        self.assertEqual(record["inputs"]["payload"]["build_index"],
+                         {"sha256": self.build_index["sha256"]})
+
+    def test_changed_upstream_content_re_executes(self):
+        first, _ = self.launch_sbom("2026-09-27T12:00:00Z", "auto-launch-1")
+        Path(self.build_index["path"]).write_text('{"changed": true}\n')
+        self.build_index["sha256"] = "sha256:" + hashlib.sha256(Path(self.build_index["path"]).read_bytes()).hexdigest()
+        second, ran = self.launch_sbom("2026-09-27T12:00:00Z", "auto-launch-2")
+        self.assertEqual(ran, 1)
+        self.assertNotEqual(second["attempt_id"], first["attempt_id"])
+
+    def test_reuse_past_the_database_age_ceiling_re_executes(self):
+        outputs = self.jobs / "02-sbom-inventory" / "attempts" / "a" / "outputs"
+        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text(json.dumps({
+            "components": [{"component_id": "SC-000001", "purl": "pkg:npm/example@1.0.0"}]}))
+        accepted = self.jobs / "02-sbom-inventory" / "accepted.json"; accepted.write_text("{}")
+        registry = Path(self.temp.name) / "offline-registry"; registry.mkdir()
+        payload = {"sbom": {"attempt_id": "a", "path": str(manifest),
+                            "sha256": "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                            "accepted_path": str(accepted)}}
+        identities = [{"database_kind": kind, "vendor_build": "v", "schema_version": "1",
+                       "snapshot_id": kind + "-one", "sha256": "sha256:" + "2" * 64,
+                       "data_timestamp": "2026-09-27T11:00:00Z"} for kind in ("grype-db", "osv")]
+        def registered(kind, **kwargs):
+            database_kind = "grype-db" if kind == "grype" else "osv"
+            return {"b13_attempt": {"kind": kind},
+                    "database": next(row for row in identities if row["database_kind"] == database_kind)}
+        calls = []
+        for generated_at, suffix in (("2026-09-27T11:30:00Z", "one"), ("2026-09-27T11:40:00Z", "two"),
+                                     ("2026-09-27T13:00:00Z", "three")):
+            request = self.request("02-sca-vulnerability-match", payload,
+                {"sbom_root": str(outputs), "snapshot_registry": str(registry), "max_database_age_seconds": 3600,
+                 "snapshot_identities": identities}, generated_at)
+            with patch.object(orchestration.b13, "execute_registered", side_effect=registered) as execute, \
+                 patch.object(orchestration.workers, "run", side_effect=self.publishing_worker):
+                self.execute("02-sca-vulnerability-match", request, suffix)
+            calls.append(execute.call_count)
+        # Reused inside the ceiling; past it the job re-executes (and its worker then refuses the stale DB).
+        self.assertEqual(calls, [2, 0, 2])
 
     def test_shared_claim_policies_keep_dependency_outputs_bounded(self):
         expected = {

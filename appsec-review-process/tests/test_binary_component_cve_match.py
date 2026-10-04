@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -19,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import binary_component_cve_match as job  # noqa: E402
 import cve_bin_tool_db as db  # noqa: E402
+import execution_state  # noqa: E402
 from test_cve_bin_tool_db import T0, TOOL, Publisher, fake_runner  # noqa: E402
 import validate_job_output as validator  # noqa: E402
 
@@ -170,6 +172,27 @@ class BinaryComponentCveMatchTests(unittest.TestCase):
                            source_sha=SOURCE_SHA, now="2026-09-30T16:00:00Z",
                            runtime_factory=lambda sha, now: object(), run_container=refuse)
         self.assertEqual(outcome, {"status": "BLOCKED", "cause": "request-invalid"})
+
+    def launch(self, dagster_run_id, now=NOW):
+        """One full-review launch of the node (the container is the recorded scanner)."""
+        with patch.object(execution_state, "RUNS", self.tmp / "runs"), \
+             patch.object(job.binary_hardening_input, "stage", return_value=self.source):
+            return job.execute(run_id="run-1", dagster_run_id=dagster_run_id, now=now, nvd_data_root=self.nvd_root,
+                               db_root=self.db_root, tool=TOOL, scanner=recorded_scanner(self.calls))
+
+    def test_unchanged_binaries_and_database_reuse_the_attempt_without_a_container_call(self):
+        (self.run_root / "inputs").mkdir(parents=True)
+        (self.run_root / "inputs" / "artifact-manifest.json").write_text('{"run_id": "run-1"}\n')
+        first = self.launch("dagster-1")
+        self.assertEqual(len(self.calls), 1)
+        self.assertNotIn("dagster-1", first["attempt_id"])
+        second = self.launch("dagster-2", NOW + timedelta(minutes=5))
+        self.assertEqual(len(self.calls), 1)          # no second container call
+        self.assertEqual(second, first)
+        (self.source / "case001").write_bytes(b"\x7fELF\x02\x01\x01\x00case001-rebuilt")
+        third = self.launch("dagster-3")
+        self.assertEqual(len(self.calls), 2)          # a changed binary re-executes
+        self.assertNotEqual(third["attempt_id"], first["attempt_id"])
 
     def test_the_container_request_is_offline_and_mounts_the_database_read_only(self):
         database = json.loads((self.db_root / "current.json").read_text())["snapshot_id"]

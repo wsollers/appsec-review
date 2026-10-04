@@ -3,6 +3,11 @@
 This adapter owns paths and publication only. Scanner execution remains in the public
 ``build`` seams, which in turn use the authenticated B13 collector. Each scanner sibling
 therefore retains its own terminal status and coverage gaps.
+
+Before any container runs, ``execute`` derives the request's content record (``reuse_inputs``) and
+returns the accepted attempt unchanged when it was produced from the same content and still passes
+the publication validator (``producer_reuse``). Attempt ids are fresh per execution, never the
+Dagster run id, which stays in the orchestration facts and receipts.
 """
 from __future__ import annotations
 
@@ -10,6 +15,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 from typing import Any
+import uuid
 
 import binary_hardening
 import binary_hardening_input
@@ -19,9 +25,12 @@ from execution_state import Blocked, beneath, data_path, digest, file_hash, iden
 import iac_config_scan
 import mobile_sast
 import vendor_evidence_workers as vendor_workers
-from publish_job_output import mark_attempt_started, publish_validated, record_noncurrent
+import producer_reuse
+from publish_job_output import mark_attempt_started, publish_validated, record_noncurrent, validate_published
+import registry_paths
 import secrets_inventory
 from validate_job_output import OrchestrationFacts
+import vendor_evidence_b13
 
 REQUEST_SCHEMA = "appsec-review/vendor-evidence-orchestration-request/1.1"
 LEGACY_BINARY_REQUEST_SCHEMA = "appsec-review/vendor-evidence-orchestration-request/1.0"
@@ -35,6 +44,45 @@ WORKERS = {
 _REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_at",
                  "source_root", "source_binding", "applicability"}
 _LEGACY_BINARY_REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_at", "source_root"}
+# Per-launch request values: the clock, the (intake-attempt-named) projection path and the intake
+# attempt binding. The content they stand for is keyed by ``reuse_inputs`` instead.
+_PER_LAUNCH_KEYS = {"generated_at", "source_root", "source_binding"}
+CODE_FILES = ("vendor_evidence_orchestration.py", "vendor_evidence_workers.py", "vendor_evidence_b13.py",
+              "automatic_evidence_inputs.py", "binary_hardening_input.py", "producer_reuse.py")
+
+
+def fresh_attempt_id(prefix: str) -> str:
+    """A fresh attempt id in a shape evidence_redaction exempts: auto-<24 hex> or native-<uuid>."""
+    return prefix + "-" + (str(uuid.uuid4()) if prefix == "native" else uuid.uuid4().hex[:24])
+
+
+def reuse_inputs(job_id: str, run_id: str, request: dict[str, Any], source: Path,
+                 generation: str) -> dict[str, Any]:
+    """What this attempt's evidence is a function of: request content, the bytes it reads, the pinned
+    image records, its own code and contracts. Never a run id, attempt id, timestamp or path."""
+    contract, tools = vendor_workers.SPECS[job_id]
+    binding = request.get("source_binding") if isinstance(request.get("source_binding"), dict) else {}
+    return {"job_id": job_id, "run_id": run_id, "source_generation": generation,
+        "request": {key: value for key, value in request.items() if key not in _PER_LAUNCH_KEYS},
+        "source": {"fingerprint": binding.get("source_fingerprint"), "revision": binding.get("source_revision"),
+                   "content_sha256": vendor_workers.fingerprint(job_id, source, generation)},
+        "images": producer_reuse.images(vendor_evidence_b13.SPECS[tool].image_id
+                                        for tool in tools if tool in vendor_evidence_b13.SPECS),
+        "code": producer_reuse.code(CODE_FILES + (
+            WORKERS[job_id].__name__ + ".py", registry_paths.contract_rel(contract),
+            registry_paths.template_rel(job_id)))}
+
+
+def _reuse_verifier(base: Path, run_id: str, job_id: str, generation: str):
+    """Re-run the publication validator with the facts of the run that PRODUCED the attempt."""
+    def verify(attempt: Path, pointer: dict[str, Any], record: dict[str, Any]) -> None:
+        if read_json(attempt / "status.json").get("dagster_run_id") != record.get("dagster_run_id"):
+            raise Blocked("vendor evidence orchestration: reuse record names another producing run")
+        validate_published(base, pointer, pointer["fingerprint"], expected_run_id=run_id,
+            expected_job_id=job_id, consumer_job_id="02-evidence-assembly", reuse=True,
+            orchestration=OrchestrationFacts(record["dagster_run_id"], generation,
+                                             _timestamp(record.get("observed_at"))))
+    return verify
 
 
 def _owned(value: Any, owner: Path, label: str, *, directory: bool = False) -> Path:
@@ -128,6 +176,11 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
     if job_id == "02-container-image-inventory" and source != (owner / "inputs").absolute():
         raise Blocked("vendor evidence orchestration: container inventory source must be the run inputs root")
 
+    content = reuse_inputs(job_id, run_id, request, source, generation)
+    reused = producer_reuse.admit(base, content, run_id=run_id, job_id=job_id,
+                                  verify=_reuse_verifier(base, run_id, job_id, generation))
+    if reused is not None:
+        return reused
     attempt_id = identifier(Path(attempt_root).name)
     attempt = _new_canonical(attempt_root, base / "attempts" / attempt_id, owner, "attempt root")
     execution = _new_canonical(execution_root, base / "executions" / attempt_id, owner, "execution root")
@@ -149,6 +202,8 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
         expected_run_id=run_id, expected_job_id=job_id,
         consumer_job_id="02-evidence-assembly",
         orchestration=OrchestrationFacts(dagster_run_id, generation, observed_at))
+    producer_reuse.remember(base, content, pointer, run_id=run_id, job_id=job_id,
+                            facts={"dagster_run_id": dagster_run_id, "observed_at": request["generated_at"]})
     return pointer
 
 
@@ -157,7 +212,7 @@ def execute_binary_from_native(*, run_id: str, dagster_run_id: str) -> dict[str,
     run_id, dagster_run_id = identifier(run_id), identifier(dagster_run_id)
     request = binary_hardening_input.stage_request(run_id, dagster_run_id)
     base = data_path(run_id, "jobs", "02-binary-hardening", "whole").absolute()
-    attempt_id = "native-" + dagster_run_id
+    attempt_id = fresh_attempt_id("native")
     return execute(job_id="02-binary-hardening", run_id=run_id,
         dagster_run_id=dagster_run_id, input_path=str(request), output_root=str(base),
         attempt_root=str(base / "attempts" / attempt_id),
