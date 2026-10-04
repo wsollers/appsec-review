@@ -13,7 +13,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `binary_raw_output_max_bytes` | 16 MiB | safety | Largest raw binary-tool output accepted (binary triage, debug symbols, CFG, binary intelligence). | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
 | `code_query_depth_max` | 4 count | window | Deepest code_callers / code_callees walk (hops). |  |
 | `code_query_exports_enabled` | True flag | safety | Grant the code_exports query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
-| `code_query_force_indexed_mode` | True flag | safety | A model job granted code_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools. |  |
+| `code_query_force_indexed_mode` | True flag | safety | A model job whose tooling profile grants tools (query tool: lines) gets the lookup tools even when its inputs fit inline (the inputs then stay inlined as well). Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools. |  |
 | `code_query_graph_enabled` | True flag | safety | Grant the code_callers, code_callees, code_path query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_native_enabled` | True flag | safety | Grant the code_calls_to, code_address_taken query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
 | `code_query_outline_enabled` | True flag | safety | Grant the code_file_outline query tools to model jobs whose tooling profile lists them and whose pinned code index can answer them (brief U3). Off removes them from the prompt and from --allowedTools together. |  |
@@ -52,6 +52,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `invoker_timeout_seconds` | 1800 s (30 min) | resource | Default wall-clock limit for one claude CLI dispatch. |  |
 | `item_memo` | dev id | safety | Per-item memo in loops (build-plan units): off, dev (only when APPSEC_RUN_MODE=dev) or on. An item whose own inputs (unit content, catalog, prompt, model) are unchanged reuses its earlier accepted result across attempts and fingerprint changes; today's validation is re-run on it. | multi-vuln re-planned 53 units (41 min) after a change that did not alter most units. |
 | `item_memo_max_entries` | 65536 count | safety | Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first. | One per planned unit per run; engine targets can have thousands. |
+| `max_tool_calls_per_cell` | 200 count | safety | Lookup-tool calls (input_*, evidence_*, code_*) one model invocation may make across all its repair rounds. Past it the input server answers every call with a fixed budget_exhausted error and the invoker records the refused calls as a coverage gap in the attempt. | Set from 2026-09-28 usage: ~2,760 calls in a whole run, build plan 871 calls over 138 invocations (~6 per call); 200 is ~30x that mean. Raise when receipts show budget_exhausted gaps on real work. |
 | `model_version_resolve_timeout_seconds` | 120 s (2 min) | resource | Timeout for resolving pinned model versions. |  |
 | `nvd_feed_concurrency` | 1 count | resource | Concurrent NVD feed jobs. |  |
 | `owasp_join_page_max_bytes` | 7 MiB | window | Page size when joining OWASP results. |  |
@@ -548,6 +549,21 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_timeout_seconds` | 900 s (15 min) | resource | Wall-clock limit for the container (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (vendor tools). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+
+### `02-semantic-recall-index`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `batch_size` | 8 count | resource | Chunks per embedding batch; ONNX pads a batch to its longest chunk, so keep it small. | Legacy runs OOMed at 64 with 27K-char chunks; chunks are now capped at 4000 chars. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_pids` | 512 count | resource | Process/thread limit (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stderr_limit_bytes` | 8 MiB | resource | Captured stderr; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_stdout_limit_bytes` | 8 MiB | resource | Captured stdout; beyond this the log is truncated (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_timeout_seconds` | 7200 s (120 min) | resource | Wall-clock limit for the container (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (semantic recall embedding). | Grows with function count; ~3 KB of vectors per row (768 float32), CPU embedding. |
+| `image_id` | audit-static id | resource | Pinned image whose system python3 carries lancedb and fastembed and runs semantic_index_build.py (mounted, not copied). |  |
+| `max_file_bytes` | 4 MiB | safety | Largest source file read for chunks; larger files are file-too-large gaps. |  |
 
 ### `02-source-sast`
 

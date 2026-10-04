@@ -1530,7 +1530,8 @@
         "node": "01-component-characterization",
         "implemented": true,
         "dependencies": [
-          "02-evidence-assembly"
+          "02-evidence-assembly",
+          "02-code-index"
         ]
       },
       "registry": {
@@ -1670,7 +1671,8 @@
         "node": "03-threat-model-dfd-stride",
         "implemented": true,
         "dependencies": [
-          "01-component-characterization"
+          "01-component-characterization",
+          "02-code-index"
         ]
       },
       "registry": {
@@ -1818,7 +1820,8 @@
           "01-component-characterization",
           "03-threat-model-dfd-stride",
           "03-threat-model-reconciliation",
-          "04-owasp-validation-worklist"
+          "04-owasp-validation-worklist",
+          "02-code-index"
         ]
       },
       "registry": {

@@ -19,7 +19,8 @@
   "inputs": {
     "required": [
       "current accepted F03 component map",
-      "exact F02 evidence assembly and dereferenced artifact cited through F03"
+      "exact F02 evidence assembly and dereferenced artifact cited through F03",
+      "accepted 02-code-index code-index.json (pinned for the workbench cells; serves the code_* query tools)"
     ],
     "optional": []
   },

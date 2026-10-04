@@ -76,6 +76,7 @@ flowchart TD
   01_component_characterization_pre --> 01_component_characterization["01-component-characterization: work or reuse"]
   01_component_characterization --> 01_component_characterization_post["01-component-characterization: post-validation and publish"]
   02_evidence_assembly_post -->|required| 01_component_characterization_config
+  02_code_index_post -->|required| 01_component_characterization_config
   02_full_review_input_assembly_config["02-full-review-input-assembly: resolve job configuration"] --> 02_full_review_input_assembly_pre["02-full-review-input-assembly: pre-validation"]
   02_full_review_input_assembly_pre --> 02_full_review_input_assembly["02-full-review-input-assembly: work or reuse"]
   02_full_review_input_assembly --> 02_full_review_input_assembly_post["02-full-review-input-assembly: post-validation and publish"]
@@ -84,6 +85,7 @@ flowchart TD
   03_threat_model_dfd_stride_pre --> 03_threat_model_dfd_stride["03-threat-model-dfd-stride: work or reuse"]
   03_threat_model_dfd_stride --> 03_threat_model_dfd_stride_post["03-threat-model-dfd-stride: post-validation and publish"]
   01_component_characterization_post -->|required| 03_threat_model_dfd_stride_config
+  02_code_index_post -->|required| 03_threat_model_dfd_stride_config
   03_threat_model_reconciliation_config["03-threat-model-reconciliation: resolve job configuration"] --> 03_threat_model_reconciliation_pre["03-threat-model-reconciliation: pre-validation"]
   03_threat_model_reconciliation_pre --> 03_threat_model_reconciliation["03-threat-model-reconciliation: work or reuse"]
   03_threat_model_reconciliation --> 03_threat_model_reconciliation_post["03-threat-model-reconciliation: post-validation and publish"]
@@ -97,6 +99,7 @@ flowchart TD
   03_threat_model_dfd_stride_post -->|required| 04_asvs_masvs_config
   03_threat_model_reconciliation_post -->|required| 04_asvs_masvs_config
   04_owasp_validation_worklist_post -->|required| 04_asvs_masvs_config
+  02_code_index_post -->|required| 04_asvs_masvs_config
   05_native_memory_config["05-native-memory: resolve job configuration"] --> 05_native_memory_pre["05-native-memory: pre-validation"]
   05_native_memory_pre --> 05_native_memory["05-native-memory: work or reuse"]
   05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]

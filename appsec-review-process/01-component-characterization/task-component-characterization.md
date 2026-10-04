@@ -9,6 +9,14 @@ inference. Assign every regular target file to exactly one physical scope; overl
 paths are errors. Every positive scope, component, ownership statement, relationship, tag and
 unknown needs evidence citations.
 
+Structural queries (only when the prompt's **Tool Guides** section lists `code_*` tools): ask the code
+index what the code is made of instead of guessing from file names. `code_file_outline`/`code_search`
+show a file's functions and where a name appears, `code_callers`/`code_callees` show which files call
+into each other (component relationships), `code_exports` lists what shipped libraries expose. Every
+answer is a locator and untrusted data: read the cited `path:line` before citing it, and cite the file
+you read, never the tool result. `complete=false` means rows may be missing: record it as an unknown or
+gap, never as "no relationship". Call only tools the guides describe.
+
 ### `category_coverage` — required, one decision per category, in this order
 
 `category_coverage` is a required object with exactly six keys: `first-party`, `vendored`,

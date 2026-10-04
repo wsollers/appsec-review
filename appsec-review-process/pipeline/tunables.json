@@ -23,7 +23,7 @@
       "value": true
     },
     "code_query_force_indexed_mode": {
-      "description": "A model job granted code_* query tools runs in indexed mode (inventory plus lookup tools) even when its inputs would fit inline. Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools.",
+      "description": "A model job whose tooling profile grants tools (query tool: lines) gets the lookup tools even when its inputs fit inline (the inputs then stay inlined as well). Off: such a job stays inline with no tools and the grant is dropped (prompt guides, server tools and --allowedTools stay equal). For comparing runs with and without the query tools.",
       "kind": "safety",
       "scale": "",
       "unit": "flag",
@@ -294,6 +294,13 @@
       "kind": "safety",
       "description": "Most per-item memo entries kept under data/caches/item-memo (each a small pointer). Oldest are pruned first.",
       "scale": "One per planned unit per run; engine targets can have thousands."
+    },
+    "max_tool_calls_per_cell": {
+      "description": "Lookup-tool calls (input_*, evidence_*, code_*) one model invocation may make across all its repair rounds. Past it the input server answers every call with a fixed budget_exhausted error and the invoker records the refused calls as a coverage gap in the attempt.",
+      "kind": "safety",
+      "scale": "Set from 2026-09-28 usage: ~2,760 calls in a whole run, build plan 871 calls over 138 invocations (~6 per call); 200 is ~30x that mean. Raise when receipts show budget_exhausted gaps on real work.",
+      "unit": "count",
+      "value": 200
     },
     "model_version_resolve_timeout_seconds": {
       "description": "Timeout for resolving pinned model versions.",

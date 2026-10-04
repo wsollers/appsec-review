@@ -417,6 +417,12 @@
           "kind": "required",
           "contract": "pregather",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
+          "allowed_skip_reasons": []
         }
       ]
     },
@@ -450,6 +456,12 @@
           "job": "01-component-characterization",
           "kind": "required",
           "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
           "allowed_skip_reasons": []
         }
       ],
@@ -531,6 +543,12 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
+        },
+        {
+          "job": "02-code-index",
+          "kind": "required",
+          "contract": "code-index",
+          "allowed_skip_reasons": []
         }
       ]
     },

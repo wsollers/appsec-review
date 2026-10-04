@@ -183,6 +183,8 @@ _RETURNED: set = set()   # (ref, first, last) ranges input_read has returned in 
 SERVED: list = list(TOOLS)   # tools/list and tools/call: the base tools plus the granted code tools
 CODE: dict = {}      # {"ref": pinned code-index.json ref, "index": CodeIndex | Exception}
 USAGE: dict = {}     # {"path": usage file, "counts": {tool: calls}} for the invoker's attempt record
+BUDGET: dict = {"max": None}   # max_tool_calls_per_cell: lookup calls this invocation may make (None: no cap)
+BUDGET_EXHAUSTED = "_budget_exhausted"   # usage key: calls refused at the cap (the invoker records a gap)
 
 
 def _code_index(run_id: str, inputs: "Inputs | None") -> "code_query_mcp.CodeIndex":
@@ -215,11 +217,29 @@ def _scope(inputs: "Inputs | None"):
     return code_query_mcp.scope_matchers(pinned("repository-partition-map.json"), pinned("component-purpose-map.json"))
 
 
-def _count(name: str) -> None:
-    if not USAGE.get("path"):
+def _load_usage() -> None:
+    """Counts already written by an earlier server process of the same invocation (a repair round
+    restarts the CLI and this server): the per-cell cap spans every round."""
+    try:
+        counts = json.loads(Path(USAGE["path"]).read_text(encoding="utf-8"))
+    except (KeyError, OSError, ValueError):
         return
+    if isinstance(counts, dict):
+        USAGE["counts"] = {str(k): v for k, v in counts.items() if isinstance(v, int) and not isinstance(v, bool)}
+
+
+def _exhausted() -> bool:
+    """True when this invocation has used its max_tool_calls_per_cell lookup calls."""
+    cap = BUDGET.get("max")
+    used = sum(v for k, v in USAGE.get("counts", {}).items() if k != BUDGET_EXHAUSTED)
+    return cap is not None and used >= cap
+
+
+def _count(name: str) -> None:
     counts = USAGE.setdefault("counts", {})
     counts[name] = counts.get(name, 0) + 1
+    if not USAGE.get("path"):
+        return
     try:
         Path(USAGE["path"]).write_text(json.dumps(counts, sort_keys=True), encoding="utf-8")
     except OSError:
@@ -273,6 +293,11 @@ def grant(ref: str | None, names: list[str]) -> None:
         CODE["ref"] = ref
 
 
+BUDGET_EXHAUSTED_TEXT = ("budget_exhausted: this invocation has used its {cap} lookup tool calls "
+                         "(max_tool_calls_per_cell); no further tool call is answered. Finish from what you have read "
+                         "and report what you could not examine as a coverage gap, never as 'none'.")
+
+
 def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
     method = request.get("method")
     params = request.get("params") or {}
@@ -290,6 +315,10 @@ def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
     if tool is None:
         raise ValueError("unknown tool")
     args = params.get("arguments") or {}
+    if _exhausted():
+        # Bounded and fixed: the call is not run. The invoker records the refused count as a coverage gap.
+        _count(BUDGET_EXHAUSTED)
+        return {"content": [{"type": "text", "text": BUDGET_EXHAUSTED_TEXT.format(cap=BUDGET["max"])}], "isError": True}
     audit = data_path(run_id, "retrieval", uuid.uuid4().hex)
     started = time.monotonic()
     atomic_json(audit / "request.json", {"time": now(), "server": SERVER_NAME, "tool": tool["name"],
@@ -317,10 +346,16 @@ def main() -> None:
     parser.add_argument("--code-index", help="pinned ref of the granted 02-code-index code-index.json")
     parser.add_argument("--code-tools", default="", help="comma-separated code_* tools this job is granted")
     parser.add_argument("--usage-file", help="private scratch file for per-tool call counts")
+    parser.add_argument("--max-tool-calls", type=int,
+                        help="lookup calls this invocation may make (default: tunable max_tool_calls_per_cell)")
     args = parser.parse_args()
     data_path(args.run_id)
     grant(args.code_index, [name for name in args.code_tools.split(",") if name])
     USAGE.update({"path": args.usage_file} if args.usage_file else {})
+    if args.usage_file:
+        _load_usage()
+    BUDGET["max"] = (args.max_tool_calls if args.max_tool_calls and args.max_tool_calls > 0
+                     else tunables.shared("max_tool_calls_per_cell"))
     CONTEXT.update({key: value for key, value in (
         ("job_id", args.job_id), ("attempt_id", args.attempt_id), ("output_root", args.output_root)) if value})
     inputs = Inputs(Path(args.inputs)) if args.inputs else None

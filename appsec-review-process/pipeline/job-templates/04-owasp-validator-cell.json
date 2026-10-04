@@ -15,7 +15,8 @@
     "required": [
       "exact T06 validator handoff",
       "exact accepted T06 publication",
-      "pinned evidence named by the handoff"
+      "pinned evidence named by the handoff",
+      "accepted 02-code-index code-index.json (pinned by the dispatch; serves the code_* query tools, absent is a recorded gap)"
     ],
     "optional": []
   },
