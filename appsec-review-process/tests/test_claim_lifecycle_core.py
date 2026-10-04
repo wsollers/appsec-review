@@ -395,3 +395,24 @@ class RegistryAndSchemaTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class SchemaProblemMessages(unittest.TestCase):
+    """A closed-schema refusal names the failing path and rule (09 re-run 2026-10-04 looped on a bare
+    "fails its closed schema"), masking only the reviewer's own value."""
+
+    def test_paths_and_rules_are_named_and_values_masked(self):
+        import claim_lifecycle_core as core
+        text = core._schema_problems([
+            "$.verifications[0].verification_method: 'ran it: secret text' not in enum ['static', 'dynamic']",
+            "$.verifications[1]: missing required property 'verifier'",
+            "$.schema: expected const 'appsec-review/independent-verification/1.0', got 'x'"])
+        self.assertIn("$.verifications[0].verification_method: <value> not in enum ['static', 'dynamic']", text)
+        self.assertIn("missing required property 'verifier'", text)
+        self.assertIn("got <value>", text)
+        self.assertNotIn("secret text", text)
+
+    def test_validate_raises_with_the_problems(self):
+        import claim_lifecycle_core as core
+        with self.assertRaisesRegex(Exception, r"fails its closed schema: \$"):
+            core._validate({}, "09-independent-verification.schema.json")

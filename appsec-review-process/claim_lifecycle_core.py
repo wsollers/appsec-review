@@ -437,9 +437,33 @@ def _merge_ids(existing: list[str], added: list[str]) -> list[str]:
     return list(existing) + sorted(value for value in added if value not in set(existing))
 
 
+def _schema_problems(errors: list[str], limit: int = 6) -> str:
+    """Schema errors as JSON path plus the rule broken, the offending value replaced by ``<value>``:
+    the repair round and the log learn which field breaks which rule (enum options, required
+    properties) without echoing reviewer text."""
+    import re
+    masks = (re.compile(r"^([^:]+): .*? (not in enum .*)$", re.S),
+             re.compile(r"^([^:]+): .*? (does not match pattern .*)$", re.S),
+             re.compile(r"^([^:]+): .*? (is not a valid \S+)$", re.S),
+             re.compile(r"^([^:]+): (expected const .*?, got) .*$", re.S))
+    shown = []
+    for error in errors[:limit]:
+        for mask in masks:
+            match = mask.match(error)
+            if match:
+                error = (f"{match.group(1)}: {match.group(2)} <value>" if "expected const" in match.group(2)
+                         else f"{match.group(1)}: <value> {match.group(2)}")
+                break
+        shown.append(error[:240])
+    more = f"; and {len(errors) - limit} more" if len(errors) > limit else ""
+    return "; ".join(shown) + more
+
+
 def _validate(result: dict[str, Any], schema: str) -> dict[str, Any]:
-    if validate_document(result, schema):
-        raise Blocked("claim lifecycle: normalized decision output fails its closed schema")
+    errors = validate_document(result, schema)
+    if errors:
+        raise Blocked("claim lifecycle: normalized decision output fails its closed schema: "
+                      + _schema_problems(errors))
     return result
 
 
