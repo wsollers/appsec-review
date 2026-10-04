@@ -5,13 +5,13 @@
 | SQLite FTS5 in `02-evidence-index` | Exact source/evidence terms and line windows | Locator only; dereference the stored object or producer artifact |
 | Derived-record index | Component/partition-filtered IR, binary, test and characterization records | Locator only; dereference artifact plus JSON pointer |
 | ssdeep | Similar files or bytes | Retrieval hint only |
-| LanceDB semantic index | Meaning-based code recall | Legacy pre-pass today; never evidence or reachability |
+| LanceDB semantic recall (`02-semantic-recall-index`) | Meaning-based recall of function spans | Locator only; dereference source; never evidence or reachability |
 | Joern CPG/AST | Calls, symbols, types and graph relationships | Requires an accepted producer and source locations |
 | LLVM IR facts | Compiled calls, memory operations and debug locations | Derived evidence bound to source/build generation |
 
-The accepted lifecycle currently uses SQLite FTS5 and bounded derived-record projections. LanceDB
-exists under `images/audit-static-opengrep/scripts/` and the legacy pre-pass, but is not yet an
-accepted Dagster producer. Joern is pinned and smoke-tested in `images/audit-native`; accepted
+The accepted lifecycle uses SQLite FTS5 and bounded derived-record projections. LanceDB semantic
+recall is the optional `02-semantic-recall-index` job (`semantic_recall_index.py query`, at most 100
+locators, pinned embedding model). Joern is pinned and smoke-tested in `images/audit-native`; accepted
 AST/CPG production and indexing are under active implementation. Check current accepted pointers
 and qualification artifacts rather than relying on this status paragraph.
 

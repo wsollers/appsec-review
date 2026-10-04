@@ -1,0 +1,11 @@
+{
+  "schema": "appsec-review/embedding-model-pin/1",
+  "model_id": "jinaai/jina-embeddings-v2-base-code",
+  "source": "https://huggingface.co/jinaai/jina-embeddings-v2-base-code",
+  "license": "apache-2.0",
+  "consumer": "02-semantic-recall-index",
+  "note": "Unpinned until the first host fetch: `python3 -B appsec-review-process/semantic_recall_index.py fetch-model --revision <40-hex commit> --pin` records revision, per-file sha256 and artifact_sha256 here; commit the result. Every later fetch verifies against it. 02-semantic-recall-index is BLOCKED while this pin is empty.",
+  "revision": null,
+  "files": {},
+  "artifact_sha256": null
+}

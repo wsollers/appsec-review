@@ -88,16 +88,13 @@ into discrete run-owned Dagster jobs (`02-secrets-inventory`, `02-iac-config-sca
 `02-container-image-inventory`, `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`,
 `02-dependency-lifecycle`, `02-binary-hardening`, `02-mobile-sast`, `02-source-sast`, `02-evidence-index`).
 
-The `semantic-index` step is intentionally low-memory by default. Both host runners invoke
-`/opt/scripts/run-semantic-index-batched.sh`, which runs `build_semantic_index.py` in fresh
-embedding batches with `SEMANTIC_INDEX_BATCH_SIZE=1` and `SEMANTIC_INDEX_SLICE_LIMIT=0` unless
-overridden in the host environment. `SLICE_LIMIT=0` means one normal process; the builder writes
-each embedded batch to LanceDB immediately instead of accumulating all vectors in memory. The
-runners pass through `SEMANTIC_INDEX_BATCH_SIZE`,
-`SEMANTIC_INDEX_SLICE_LIMIT`, `SEMANTIC_INDEX_START`, `SEMANTIC_INDEX_MODEL`, and
-`SEMANTIC_INDEX_TABLE` when set. Set `SEMANTIC_INDEX_SLICE_LIMIT` to a positive value only if
-the target still needs fresh process boundaries. The final `semantic-index/index.json` is only
-complete after the wrapper has processed every selected slice.
+Semantic recall is the run-owned job `02-semantic-recall-index`
+(`appsec-review-process/semantic_recall_index.py`): it embeds one chunk per accepted `02-code-index`
+function span with a preseeded, hash-pinned model (`fetch-model` once per host; pin in
+`data/embedding-models/`) inside the pinned image, network none, and publishes locators only.
+The legacy `build_semantic_index.py`, `query_semantic_index.py`, `run-semantic-index-batched.sh` and
+`find_oversized_chunks.py` were ported into it (`semantic_index_build.py`, `semantic_index_oversized.py`)
+and deleted; their OOM history is kept in those modules' docstrings.
 
 Tools live in the images (`images/*/Dockerfile`) — that is the catalog; digests are recorded in
 every manifest. Run from WSL2 on Windows with sources on the WSL filesystem (fast); from a

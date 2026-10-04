@@ -16,6 +16,8 @@
 /data/feeds/base-images/
 # cve-bin-tool's database, derived from the NVD snapshot (cve_bin_tool_db.py; ~530 MB for the full NVD).
 /data/feeds/cve-bin-tool/
+# Preseeded embedding models (semantic_recall_index.py fetch-model; pins under data/embedding-models/).
+/data/feeds/embedding-models/
 # Tool-output cache and per-item memo (brief N): pointers into run trees, never committed.
 /data/caches/
 *.jsonl
