@@ -470,9 +470,6 @@
       "sha256_hex": 2,
       "sha256_ref": 2
     },
-    "owasp-component-routing.schema.json": {
-      "sha256_ref": 2
-    },
     "owasp-control-assessment-request.schema.json": {
       "sha256_hex": 4
     },
