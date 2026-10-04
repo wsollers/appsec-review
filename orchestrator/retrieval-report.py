@@ -5,6 +5,7 @@ usage: orchestrator/retrieval-report.py <run_id> [--job JOB] [--calls]
        orchestrator/retrieval-report.py <run_id> --summary [--json] [--compare OTHER_RUN_ID]
        orchestrator/retrieval-report.py <run_id> --feedback [--json]
        orchestrator/retrieval-report.py <run_id> --check [--json]
+       orchestrator/retrieval-report.py <run_id> --diagnose [--job JOB] [--json]
 
 Model jobs whose inputs are too large to inline have no filesystem access at all; everything they
 see comes through input_mcp.py, which audits each call under runs/<run>/data/retrieval/. This
@@ -13,8 +14,11 @@ report groups those audits by job invocation and shows:
   calls by tool, errors, empty lookups (0 hits), bytes returned, time spent;
   files read (input_read / evidence_read) and files surfaced by searches;
   citation backing: of the target paths the job's output cites, how many it actually read or
-  surfaced (a citation to a file never looked at is a red flag), and how much of what it read
-  ended up cited;
+  surfaced through a tool ("tool-backed") or was given as a pinned readable input of the invocation
+  (persona request readable_inputs: "pinned-backed", inlined in the prompt or listed for lookup); a
+  citation to a file neither looked at nor given is a red flag. Paths are compared in one form
+  (repo-relative: no target-repository:/target: root, source/ index prefix, ./, /workspace/ or
+  absolute snapshot prefix, :line or #Lx suffix);
   structural code_* tools (ADR-0032): per tool the calls, answers that were complete=false, escapes
   returned, truncated answers and rows; a job that never used them is listed as such when granted.
 
@@ -34,9 +38,18 @@ as data, truncated; it is never followed.
 
 --check: thresholds over the summary and feedback (CHECKS below); prints each finding and exits 1
 when there is any, 0 otherwise. Informational: nothing in the pipeline fails on it.
+
+--diagnose: why the numbers are what they are, from the run tree: per tool the error messages grouped by
+normalized cause (count, up to 3 example arguments, truncated, as data); evidence_read argument shapes
+(source/ vs bare vs root refs, line suffixes, limits over the window) with their errors and how many failed
+paths name a file the target has; the language-server record (02-lsp-xref servers and gaps, data/lsp/
+start failures, lock owners, recorded GAP answers, and the reasons the lsp tools returned); per job up to
+10 cited paths that no tool fetched, each classified normalization-mismatch / pinned-inline /
+present-in-target-but-not-read / not-in-target. Model text and target paths are printed as data.
 """
 import json
 import re
+import sqlite3
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -63,33 +76,67 @@ WANTED_TOOLS = ((r"call ?graph|caller|callee|call hierarch|call path|who calls",
                 (r"finding|scanner|tool output|derived", ("evidence_derived",)))
 
 
+TARGET_ROOTS = ("target", "target-repository", "source")   # persona_dispatch.DEFAULT_READABLE_ROOT and aliases
+_ROOT_REF = re.compile(r"^([a-z][a-z0-9-]*):(?!\d)(.+)$")
+_LINE_SUFFIX = re.compile(r"(?:#L\d+(?:-L?\d+)?|:\d+(?:[-:]\d+)*)$")
+
+
 def norm(ref: str) -> str:
+    """One form for a cited or looked-at path: target files repo-relative (no target-repository:/target: root,
+    source/ index prefix, ./, /workspace/ or absolute snapshot prefix, :line / #Lx suffix); other pinned roots
+    as root:path (upstream-artifacts: as upstream:)."""
+    ref = str(ref).strip().removeprefix("file://")
+    root, match = None, _ROOT_REF.match(ref)
+    if match:
+        root, ref = match.group(1), match.group(2)
+    ref = _LINE_SUFFIX.sub("", ref)
+    if ref.startswith("/"):
+        ref = ref.split("/source/", 1)[1] if "/source/" in ref else (
+            ref[len("/workspace/"):] if ref.startswith("/workspace/") else ref)
+    while ref.startswith("./"):
+        ref = ref[2:]
+    if root is None or root in TARGET_ROOTS:
+        return ref.removeprefix("source/")
+    return ("upstream" if root == "upstream-artifacts" else root) + ":" + ref
+
+
+def _legacy(ref: str) -> str:
+    """The form the report compared before paths were normalized (diagnose: normalization mismatches)."""
     ref = str(ref)
+    ref = ref.split(":")[0] if ref.count(":") == 1 and not ref.startswith("target:") else ref
     head, sep, rest = ref.partition(":")
     if sep and head in ("target", "target-repository", "upstream-artifacts"):
         ref = rest if head != "upstream-artifacts" else "upstream:" + rest
-    if ref.startswith("source/"):
-        ref = ref[len("source/"):]
-    return ref
+    return ref[len("source/"):] if ref.startswith("source/") else ref
 
 
-def citations(value, inside=False, found=None):
-    """Target paths cited anywhere under a key containing 'citation' (or 'evidence')."""
+def cited(value, inside=False, found=None, ids=None) -> tuple[set, set]:
+    """(raw cited path strings, citation ids) anywhere under a key containing 'citation' (or 'evidence').
+    A citation object's own non-target ``root`` is kept as root:path."""
     found = set() if found is None else found
+    ids = set() if ids is None else ids
     if isinstance(value, dict):
+        root = value.get("root") if inside and isinstance(value.get("root"), str) else None
         for key, item in value.items():
             nested = inside or "citation" in key.lower() or key.lower() in ("evidence", "evidence_paths")
-            if nested and key in ("path", "file", "source_path") and isinstance(item, str):
-                found.add(norm(item))
+            if key.lower() in ("citation_id", "citation_ids", "citation_refs"):
+                ids.update(str(i) for i in (item if isinstance(item, list) else [item]) if isinstance(i, (str, int)))
+            elif nested and key in ("path", "file", "source_path") and isinstance(item, str):
+                found.add(item if root is None or root in TARGET_ROOTS else f"{root}:{item}")
             else:
-                citations(item, nested, found)
+                cited(item, nested, found, ids)
     elif isinstance(value, list):
         for item in value:
-            if inside and isinstance(item, str) and "/" in item or inside and isinstance(item, str) and "." in item:
-                found.add(norm(item.split(":")[0] if item.count(":") == 1 and not item.startswith("target:") else item))
+            if inside and isinstance(item, str) and ("/" in item or "." in item):
+                found.add(item)
             else:
-                citations(item, inside, found)
-    return found
+                cited(item, inside, found, ids)
+    return found, ids
+
+
+def citations(value) -> set:
+    """Target paths cited anywhere under a key containing 'citation' (or 'evidence'), normalized."""
+    return {norm(item) for item in cited(value)[0]}
 
 
 def family(tool: str) -> str:
@@ -151,6 +198,8 @@ def load(run: str, only: str | None = None) -> dict:
         if isinstance(grant, dict) and isinstance(grant.get("tools"), list):
             row["granted"] = [str(t) for t in grant["tools"]]
             row["cap"] = grant.get("max_tool_calls_per_cell")
+            row["output_root"] = row["output_root"] or grant.get("output_root")
+            row["input_mode"] = grant.get("input_mode")
         row["usage"] = {k: v for k, v in usage.items() if isinstance(v, int)} if isinstance(usage, dict) else {}
         row["feedback"] = feedback if isinstance(feedback, dict) else None
     for row in invocations.values():
@@ -165,33 +214,73 @@ def load(run: str, only: str | None = None) -> dict:
     return {"invocations": dict(invocations), "inline": inline}
 
 
-def looked(calls: list) -> tuple[set, set]:
-    """(files read, files surfaced by searches) over an invocation's successful calls."""
+READ_TOOLS = ("input_read", "evidence_read", "input_jq")
+
+
+def _looked_raw(calls: list) -> tuple[set, set]:
+    """(raw refs read, raw refs surfaced by searches) over an invocation's successful calls."""
     read, surfaced = set(), set()
     for request, outcome in calls:
         if outcome.get("_kind") != "result":
             continue
-        refs = {norm(r) for r in outcome.get("refs", []) or [] if r}
-        if request["tool"] in ("input_read", "evidence_read", "input_jq"):
+        refs = {str(r) for r in outcome.get("refs", []) or [] if r}
+        if request["tool"] in READ_TOOLS:
             arguments = request.get("arguments") or {}
-            read |= refs or {norm(arguments.get("ref") or arguments.get("path", ""))}
+            read |= refs or {str(arguments.get("ref") or arguments.get("path", ""))}
         else:
             surfaced |= refs
     return read, surfaced
 
 
+def looked(calls: list) -> tuple[set, set]:
+    """(files read, files surfaced by searches) over an invocation's successful calls."""
+    read, surfaced = _looked_raw(calls)
+    return {norm(r) for r in read}, {norm(r) for r in surfaced}
+
+
+def persona_request(output_root) -> dict | None:
+    """The persona request (persona_invocation writes it to <attempt>/<log_path>/request.json) whose
+    output_root is this invocation's: its readable_inputs are what the model was given."""
+    out = Path(output_root)
+    for ancestor in list(out.parents)[:4]:
+        for candidate in sorted(ancestor.glob("*/request.json")) + sorted(ancestor.glob("*/*/request.json")):
+            request = _json(candidate)
+            if (isinstance(request, dict) and isinstance(request.get("readable_inputs"), list)
+                    and isinstance(request.get("output_root"), str)
+                    and ancestor.joinpath(*request["output_root"].split("/")) == out):
+                return request
+    return None
+
+
+def pinned_paths(request: dict | None) -> set:
+    """Normalized paths of a persona request's readable_inputs (target roots repo-relative, others root:path)."""
+    out = set()
+    for entry in (request or {}).get("readable_inputs") or []:
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+            root = str(entry.get("root") or "")
+            out.add(norm(entry["path"]) if root in TARGET_ROOTS or not root else norm(f"{root}:{entry['path']}"))
+    return out
+
+
 def backing(row: dict) -> dict | None:
-    """Cited target paths of the invocation's output and how many were read or surfaced (None: no output)."""
+    """Cited target paths of the invocation's output and how they are backed (None: no output): tool-backed
+    (read or surfaced by a call) or pinned-backed (a readable input of the invocation, never fetched)."""
     read, surfaced = looked(row["calls"])
     root = row["output_root"]
     if not root or not Path(root).is_dir():
         return None
-    cited = set()
+    raw, ids = set(), set()
     for path in Path(root).glob("*.json"):
         if path.name != "invoker-output.json":
-            cited |= citations(_json(path) or {})
+            cited(_json(path) or {}, found=raw, ids=ids)
+    paths = {norm(item) for item in raw}
+    request = persona_request(root)
+    pinned = pinned_paths(request)
     seen = read | surfaced
-    return {"read": read, "surfaced": surfaced, "cited": cited, "backed": cited & seen, "unbacked": sorted(cited - seen)}
+    tool, given = paths & seen, (paths & pinned) - seen
+    return {"read": read, "surfaced": surfaced, "cited": paths, "raw": raw, "ids": ids, "pinned": pinned,
+            "request": request, "tool_backed": tool, "pinned_backed": given, "backed": tool | given,
+            "unbacked": sorted(paths - seen - pinned)}
 
 
 def lsp_failed(outcome: dict) -> bool:
@@ -219,7 +308,8 @@ def summarize(loaded: dict) -> dict:
     invocations = loaded["invocations"]
     served = {k: r for k, r in invocations.items() if r["granted"] or r["calls"] or r["usage"]}
     jobs = defaultdict(lambda: {"invocations": 0, "used": 0, "calls": 0, "unused": Counter(), "cited": 0,
-                                "backed": 0, "unbacked": 0, "with_output": 0})
+                                "backed": 0, "tool_backed": 0, "pinned_backed": 0, "unbacked": 0, "ids": 0,
+                                "with_output": 0, "with_request": 0})
     fam = {f: {"granted": 0, "used": 0, "calls": []} for f in FAMILIES}
     tools, cap_hits, lsp = defaultdict(list), [], {"granted": 0, "calls": 0, "failed": 0}
     for (job, attempt), row in sorted(served.items()):
@@ -250,7 +340,10 @@ def summarize(loaded: dict) -> dict:
         back = backing(row)
         if back is not None:
             j["with_output"] += 1
+            j["with_request"] += 1 if back["request"] is not None else 0
             j["cited"] += len(back["cited"]); j["backed"] += len(back["backed"]); j["unbacked"] += len(back["unbacked"])
+            j["tool_backed"] += len(back["tool_backed"]); j["pinned_backed"] += len(back["pinned_backed"])
+            j["ids"] += len(back["ids"])
     used = sum(j["used"] for j in jobs.values())
     return {
         "served_invocations": len(served), "used_invocations": used, "used_rate": _rate(used, len(served)),
@@ -258,7 +351,11 @@ def summarize(loaded: dict) -> dict:
         "jobs": {job: {"invocations": j["invocations"], "used": j["used"], "used_rate": _rate(j["used"], j["invocations"]),
                        "calls": j["calls"], "granted_unused": dict(sorted(j["unused"].items())),
                        "citations": ({"cited": j["cited"], "backed": j["backed"], "unbacked": j["unbacked"],
-                                      "backed_rate": _rate(j["backed"], j["cited"])} if j["with_output"] else None)}
+                                      "backed_rate": _rate(j["backed"], j["cited"]),
+                                      "tool_backed": j["tool_backed"], "tool_backed_rate": _rate(j["tool_backed"], j["cited"]),
+                                      "pinned_backed": j["pinned_backed"], "cited_ids": j["ids"],
+                                      "pinned_inputs_found": j["with_request"], "with_output": j["with_output"]}
+                                     if j["with_output"] else None)}
                  for job, j in sorted(jobs.items())},
         "families": {f: {"granted_invocations": v["granted"], "used_invocations": v["used"],
                          "used_rate": _rate(v["used"], v["granted"]), **_tool_row(v["calls"])} for f, v in fam.items()},
@@ -279,7 +376,9 @@ def print_summary(run: str, s: dict) -> None:
     for job, j in s["jobs"].items():
         c = j["citations"]
         cites = "citations unavailable (output not found)" if c is None else (
-            f"cited {c['cited']}, backed {_pct(c['backed_rate'])}, unbacked {c['unbacked']}")
+            f"cited {c['cited']}, backed {_pct(c['backed_rate'])} (tool {c['tool_backed']}, pinned {c['pinned_backed']}"
+            + ("" if c["pinned_inputs_found"] else ", pinned inputs not found") + f"), unbacked {c['unbacked']}"
+            + (f", cited by id {c['cited_ids']} (not path-backed)" if c["cited_ids"] else ""))
         print(f"   {job:<45} {j['invocations']:>3}  used {_pct(j['used_rate']):>4}  calls {j['calls']:>4}  {cites}")
     print("-- per family: invocations granted, used, calls, empty, errors, truncated")
     for f, v in s["families"].items():
@@ -444,8 +543,9 @@ def check(s: dict, f: dict) -> list:
     for job, j in s["jobs"].items():
         c = j["citations"]
         if c and c["cited"] and c["backed_rate"] < BACKING_MIN:
-            found.append(("citation-backing", f"{job}: {c['backed']}/{c['cited']} cited paths read or surfaced "
-                                              f"({_pct(c['backed_rate'])}), {c['unbacked']} unbacked"))
+            found.append(("citation-backing", f"{job}: {c['backed']}/{c['cited']} cited paths read, surfaced or "
+                                              f"pinned ({_pct(c['backed_rate'])}; tool {c['tool_backed']}, pinned "
+                                              f"{c['pinned_backed']}), {c['unbacked']} unbacked"))
     lsp = s["lsp"]
     if lsp["granted"] and lsp["calls"] and lsp["failed"] == lsp["calls"]:
         found.append(("lsp-down", f"lsp tools granted in {lsp['granted']} invocation(s); all {lsp['calls']} call(s) "
@@ -455,6 +555,261 @@ def check(s: dict, f: dict) -> list:
     if total and low / total > LOW_CONFIDENCE_MAX:
         found.append(("low-confidence", f"{low}/{total} invocations with feedback reported coverage_confidence low"))
     return found
+
+
+# ---- --diagnose ------------------------------------------------------------------------------------------
+EXAMPLES, UNBACKED_SHOWN = 3, 10
+EVIDENCE_WINDOW = 50   # evidence_mcp evidence_read limit maximum (shared tunable evidence_query_results_max)
+
+
+def cause(message) -> str:
+    """An error or reason with its specifics (quoted values, paths, hashes, numbers) replaced, for grouping."""
+    value = text(message, 400)
+    value = re.sub(r"'[^']*'|\"[^\"]*\"", "<q>", value)
+    value = re.sub(r"sha256:[0-9a-f]+|\b[0-9a-f]{16,}\b", "<hash>", value)
+    value = re.sub(r"(?<![\w<])[\w.+-]*(?:/[\w.+-]+)+/?", "<path>", value)
+    value = re.sub(r"\b\d+\b", "N", value)
+    return value[:160]
+
+
+def _example(request: dict) -> str:
+    return text(json.dumps(request.get("arguments"), sort_keys=True), 120)
+
+
+def _group(rows) -> list[dict]:
+    """[(cause text, example)] -> [{cause, count, examples}] most frequent first."""
+    groups: dict[str, dict] = {}
+    for message, example in rows:
+        key = cause(message)
+        group = groups.setdefault(key, {"cause": key, "count": 0, "examples": []})
+        group["count"] += 1
+        if example is not None and len(group["examples"]) < EXAMPLES and example not in group["examples"]:
+            group["examples"].append(example)
+    return sorted(groups.values(), key=lambda g: (-g["count"], g["cause"]))
+
+
+def path_shape(path) -> str:
+    """The form of an evidence path argument."""
+    raw = str(path or "")
+    match = _ROOT_REF.match(raw)
+    if match:
+        shape = ("target root ref (" if match.group(1) in TARGET_ROOTS else "other root ref (") + match.group(1) + ":)"
+    elif raw.startswith(("source/", "evidence/")):
+        shape = raw.split("/", 1)[0] + "/ prefix (index form)"
+    elif raw.startswith("./"):
+        shape = "./ prefix"
+    elif raw.startswith("/"):
+        shape = "absolute path"
+    elif not raw:
+        shape = "empty"
+    else:
+        shape = "bare repository path"
+    return shape + (" + line suffix" if _LINE_SUFFIX.search(raw) else "")
+
+
+def target_files(run: str, extra: set) -> set | None:
+    """Repo-relative paths of the target: the accepted evidence index's source/ files, plus the target-root
+    readable inputs of the persona requests found. None when neither is available."""
+    found = set(extra)
+    base = RUNS / run / "data" / "jobs" / "02-evidence-index" / "whole"
+    pointer = _json(base / "accepted.json") or {}
+    database = base / "attempts" / str(pointer.get("attempt_id")) / "index.sqlite"
+    index = False
+    if pointer.get("attempt_id") and database.is_file():
+        try:
+            connection = sqlite3.connect(database.as_uri() + "?mode=ro&immutable=1", uri=True)
+            try:
+                found |= {path[len("source/"):] for (path,) in connection.execute("SELECT path FROM files")
+                          if path.startswith("source/")}
+                index = True
+            finally:
+                connection.close()
+        except sqlite3.Error:
+            pass
+    return found if found or index else None
+
+
+def _lsp_record(run: str) -> dict:
+    """What 02-lsp-xref published and what the broker recorded under data/lsp/."""
+    data = RUNS / run / "data"
+    jobs = data / "jobs" / "02-lsp-xref"
+    pointer = _json(jobs / "accepted.json") or {}
+    summaries = sorted((jobs / "attempts").glob("*/lsp-xref.json")) if (jobs / "attempts").is_dir() else []
+    chosen = next((p for p in summaries if p.parent.name == pointer.get("attempt_id")), summaries[-1] if summaries else None)
+    out = {"xref": None, "failures": [], "owners": Counter(), "recordings": 0, "recorded_gaps": [], "recoveries": 0}
+    summary = _json(chosen) if chosen else None
+    if isinstance(summary, dict):
+        out["xref"] = {"attempt_id": chosen.parent.name, "accepted": chosen.parent.name == pointer.get("attempt_id"),
+                       "status": summary.get("status"), "counts": summary.get("counts"),
+                       "native_build": (summary.get("inputs") or {}).get("native_build"),
+                       "servers": [{k: server.get(k) for k in ("server_key", "variant", "server", "image_id", "image_digest")}
+                                   | {"build_input": {k: (server.get("build_input") or {}).get(k) for k in ("kind", "unit_id")}}
+                                   for server in summary.get("servers") or [] if isinstance(server, dict)],
+                       "gaps": [{"kind": gap.get("kind"), "detail": text(gap.get("detail"), 300)}
+                                for gap in summary.get("gaps") or [] if isinstance(gap, dict)]}
+    lsp = data / "lsp"
+    for path in sorted((lsp / "failures").glob("*.json")) if (lsp / "failures").is_dir() else []:
+        record = _json(path) or {}
+        out["failures"].append({"lock": record.get("lock", path.stem), "attempts": record.get("attempts"),
+                                "error": text(record.get("error"), 300), "at": record.get("at")})
+    for owner in list(lsp.glob("locks/*.lock/owner.json")) + list(lsp.glob("locks/released/*/owner.json")):
+        record = _json(owner) or {}
+        out["owners"][f"{record.get('server_key', '?')}/{record.get('variant', '?')}: {record.get('state')}"
+                      + (f" ({record.get('reason')})" if record.get("reason") else "")] += 1
+    rows = []
+    for path in lsp.glob("recordings/*/*.json"):
+        out["recordings"] += 1
+        record = _json(path) or {}
+        response = record.get("response") or {}
+        if response.get("status") != "OK":
+            for gap in response.get("gaps") or [{"kind": "GAP", "detail": "no gap recorded"}]:
+                rows.append((f"{gap.get('kind')}: {gap.get('detail')}", f"{record.get('method')} "
+                             f"{(record.get('params') or {}).get('path')}:{(record.get('params') or {}).get('line')}"))
+    out["recorded_gaps"] = _group(rows)
+    out["recoveries"] = len(list(lsp.glob("recoveries/*.json")))
+    out["owners"] = dict(sorted(out["owners"].items()))
+    return out
+
+
+def diagnose(run: str, loaded: dict) -> dict:
+    invocations = loaded["invocations"]
+    errors, lsp_reasons = defaultdict(list), []
+    shapes = defaultdict(lambda: {"calls": 0, "errors": 0, "causes": []})
+    over_window = {"calls": 0, "errors": 0}
+    failed_paths, resolved = [], 0
+    for (job, attempt), row in sorted(invocations.items()):
+        for request, outcome in row["calls"]:
+            tool, example = request["tool"], _example(request)
+            if outcome.get("_kind") == "error":
+                errors[tool].append((outcome.get("error", ""), example))
+            if tool in LSP_TOOLS:
+                for item in [outcome.get("error")] if outcome.get("_kind") == "error" else \
+                        list(outcome.get("reasons") or []) + list(outcome.get("gaps") or []):
+                    if item:
+                        lsp_reasons.append((item, example))
+            if tool == "evidence_read":
+                arguments = request.get("arguments") or {}
+                shape = shapes[path_shape(arguments.get("path"))]
+                shape["calls"] += 1
+                failed = outcome.get("_kind") == "error"
+                if isinstance(arguments.get("limit"), int) and arguments["limit"] > EVIDENCE_WINDOW:
+                    over_window["calls"] += 1
+                    over_window["errors"] += 1 if failed else 0
+                resolved += 1 if outcome.get("notes") else 0   # input_mcp resolved the path form or clamped the limit
+                if failed:
+                    shape["errors"] += 1
+                    shape["causes"].append((outcome.get("error", ""), example))
+                    failed_paths.append(str(arguments.get("path", "")))
+    backs, given = {}, set()
+    for key, row in sorted(invocations.items()):
+        back = backing(row)
+        if back is not None:
+            backs[key] = back
+            given |= {norm(e["path"]) for e in (back["request"] or {}).get("readable_inputs") or []
+                      if isinstance(e, dict) and isinstance(e.get("path"), str) and e.get("root") in TARGET_ROOTS}
+    target = target_files(run, given)
+    in_target = sum(1 for path in failed_paths if target is not None and norm(path) in target)
+    evidence = {"shapes": {name: {"calls": v["calls"], "errors": v["errors"], "causes": _group(v["causes"])}
+                           for name, v in sorted(shapes.items(), key=lambda kv: -kv[1]["errors"])},
+                "limit_over_window": over_window, "failed_paths_naming_a_target_file": in_target,
+                "answered_with_a_note": resolved,
+                "failed_paths": len(failed_paths), "target_files_known": target is not None}
+    jobs = defaultdict(lambda: {"classes": Counter(), "examples": [], "invocations": 0, "pinned_inputs_found": 0,
+                                "input_modes": Counter(), "cited_ids": 0})
+    for (job, _attempt), back in backs.items():
+        row = invocations[(job, _attempt)]
+        read_raw, surfaced_raw = _looked_raw(row["calls"])
+        legacy_seen = {_legacy(r) for r in read_raw | surfaced_raw}
+        seen = back["read"] | back["surfaced"]
+        j = jobs[job]
+        j["invocations"] += 1
+        j["pinned_inputs_found"] += 1 if back["request"] is not None else 0
+        j["input_modes"][row.get("input_mode") or "unknown"] += 1
+        j["cited_ids"] += len(back["ids"])
+        for raw in sorted(back["raw"]):
+            path = norm(raw)
+            if path in seen:
+                if _legacy(raw) in legacy_seen:
+                    continue
+                kind = "normalization-mismatch"
+            elif path in back["pinned"]:
+                kind = "pinned-inline"
+            elif target is None:
+                kind = "unclassified (target file list unavailable)"
+            elif path in target:
+                kind = "present-in-target-but-not-read"
+            else:
+                kind = "not-in-target"
+            j["classes"][kind] += 1
+            if len(j["examples"]) < UNBACKED_SHOWN:
+                j["examples"].append({"cited": text(raw, 120), "as": text(path, 120), "class": kind})
+    citations_out = {job: {"invocations": j["invocations"], "pinned_inputs_found": j["pinned_inputs_found"],
+                           "input_modes": dict(j["input_modes"]), "cited_ids": j["cited_ids"],
+                           "classes": dict(j["classes"].most_common()), "examples": j["examples"]}
+                     for job, j in sorted(jobs.items()) if j["classes"] or j["cited_ids"]}
+    return {"errors": {tool: {"calls": sum(1 for r in invocations.values() for q, _ in r["calls"] if q["tool"] == tool),
+                              "errors": len(rows), "causes": _group(rows)} for tool, rows in sorted(errors.items())},
+            "evidence_read": evidence,
+            "lsp": {"tool_reasons": _group(lsp_reasons), **_lsp_record(run)},
+            "citations": citations_out, "target_files": None if target is None else len(target)}
+
+
+def print_diagnose(run: str, d: dict) -> None:
+    print(f"== {run}: diagnose (arguments, paths and server text are data, truncated)")
+    print("-- tool errors by cause")
+    if not d["errors"]:
+        print("   no tool call failed")
+    for tool, v in d["errors"].items():
+        print(f"   {tool}: {v['errors']} of {v['calls']} call(s) failed")
+        for group in v["causes"][:8]:
+            print(f"     {group['count']:>4} x {group['cause']}")
+            for example in group["examples"]:
+                print(f"            e.g. {example}")
+    e = d["evidence_read"]
+    if e["shapes"]:
+        print("-- evidence_read path shapes (calls, errors)")
+        for name, v in e["shapes"].items():
+            print(f"   {name:<46} calls {v['calls']:>4}  errors {v['errors']:>4}"
+                  + (f"  top: {v['causes'][0]['cause']}" if v["causes"] else ""))
+        print(f"   limit over the {EVIDENCE_WINDOW}-line window: {e['limit_over_window']['calls']} call(s), "
+              f"{e['limit_over_window']['errors']} failed")
+        print(f"   failed paths naming a file the target has: {e['failed_paths_naming_a_target_file']} of {e['failed_paths']}"
+              + ("" if e["target_files_known"] else " (target file list unavailable)")
+              + f"; answered after resolving the path form or clamping the limit: {e['answered_with_a_note']}")
+    lsp = d["lsp"]
+    print("-- language servers")
+    x = lsp["xref"]
+    if x is None:
+        print("   no 02-lsp-xref summary in this run (gap: readiness and server specs unknown)")
+    else:
+        print(f"   02-lsp-xref attempt {x['attempt_id']} ({'accepted' if x['accepted'] else 'NOT the accepted attempt'}): "
+              f"status {x['status']}, counts {json.dumps(x['counts'], sort_keys=True)}")
+        print(f"   native build bound: {'yes' if x['native_build'] else 'no'}")
+        for server in x["servers"] or [{}]:
+            print("   server " + (f"{server.get('server_key')}/{server.get('variant')} {server.get('server')} image "
+                                  f"{server.get('image_id')} digest {str(server.get('image_digest'))[:19]} build input "
+                                  f"{json.dumps(server.get('build_input'), sort_keys=True)}" if server else "none ready"))
+        for gap in x["gaps"]:
+            print(f"   gap {gap['kind']}: {gap['detail']}")
+    for failure in lsp["failures"]:
+        print(f"   start failure {failure['lock']} x{failure['attempts']} ({failure['at']}): {failure['error']}")
+    for owner, n in lsp["owners"].items():
+        print(f"   lock owner {owner} x{n}")
+    print(f"   recordings {lsp['recordings']}, lock recoveries {lsp['recoveries']}")
+    for group in lsp["recorded_gaps"][:8]:
+        print(f"     recorded GAP {group['count']:>4} x {group['cause']}" + (f"  e.g. {group['examples'][0]}" if group["examples"] else ""))
+    for group in lsp["tool_reasons"][:8]:
+        print(f"     tool answer {group['count']:>4} x {group['cause']}" + (f"  e.g. {group['examples'][0]}" if group["examples"] else ""))
+    print("-- cited paths no tool fetched (per job, up to 10)")
+    if not d["citations"]:
+        print("   none (or no job output found)")
+    for job, j in d["citations"].items():
+        print(f"   {job}: {j['invocations']} invocation(s) with output, pinned inputs found for {j['pinned_inputs_found']}, "
+              f"input mode {json.dumps(j['input_modes'], sort_keys=True)}; "
+              + ", ".join(f"{k} {n}" for k, n in j["classes"].items())
+              + (f"; cited by id {j['cited_ids']} (claim stages: not path-backed)" if j["cited_ids"] else ""))
+        for example in j["examples"]:
+            print(f"     [{example['class']}] {example['cited']!r}" + (f" -> {example['as']!r}" if example["as"] != example["cited"] else ""))
 
 
 def main() -> int:
@@ -468,6 +823,13 @@ def main() -> int:
     if not (RUNS / run).is_dir():
         print(f"no such run: {RUNS / run}", file=sys.stderr)
         return 2
+    if "--diagnose" in argv:
+        d = diagnose(run, load(run, only))
+        if as_json:
+            print(json.dumps({"run_id": run, "diagnose": d}, indent=2, sort_keys=True, default=sorted))
+        else:
+            print_diagnose(run, d)
+        return 0
     if "--summary" in argv or "--feedback" in argv or "--check" in argv or "--compare" in argv:
         loaded = load(run, only)
         s = summarize(loaded)
@@ -532,8 +894,9 @@ def main() -> int:
             print("   granted code tools never called: " + ", ".join(unused))
         if back is not None:
             cited = back["cited"]
-            print(f"   cited paths {len(cited)}: backed by a read/search {len(back['backed'])}"
-                  + (f" ({100 * len(back['backed']) // len(cited)}%)" if cited else "")
+            print(f"   cited paths {len(cited)}: backed by a read/search {len(back['tool_backed'])}"
+                  + (f" ({100 * len(back['tool_backed']) // len(cited)}%)" if cited else "")
+                  + f", pinned input never fetched {len(back['pinned_backed'])}"
                   + f"; read files that were cited {len(read & cited)}/{len(read)}")
             if back["unbacked"]:
                 print("   cited without being looked at: " + ", ".join(back["unbacked"][:10])

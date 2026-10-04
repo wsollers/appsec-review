@@ -328,7 +328,7 @@ TOOL_GRANT_FILE = "tool-grant.json"
 
 
 def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None,
-                          code: tuple[str | None, tuple[str, ...]] = (None, ())) -> Path:
+                          code: tuple[str | None, tuple[str, ...]] = (None, ()), mode: str | None = None) -> Path:
     """Write the package's pinned bytes to a private folder for ``input_mcp.py`` and return the
     MCP config path. Outside the attempt tree, like the other diagnostics. ``code`` is the
     ``code_query_grant``: the server serves exactly those code tools over that pinned index."""
@@ -352,10 +352,13 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
     config = scratch / "mcp-config.json"
     config.write_text(json.dumps({"mcpServers": {INPUT_MCP_SERVER: server}}), encoding="utf-8")
     # What this invocation was granted, beside tool-usage.json, so retrieval-report.py can tell a granted
-    # but unused tool from one never offered (tool names and the cap only).
+    # but unused tool from one never offered (tool names and the cap only); output_root and the input mode let it
+    # find the invocation's output and its persona request (readable_inputs) for citation backing even when the
+    # model made no audited call, and tell inputs whose bytes were in the prompt from ones only listed.
     (scratch / TOOL_GRANT_FILE).write_text(json.dumps(
         {"tools": granted_tool_names(code[1]), "code_index": code[0],
-         "max_tool_calls_per_cell": _max_tool_calls()}, sort_keys=True), encoding="utf-8")
+         "max_tool_calls_per_cell": _max_tool_calls(),
+         "output_root": str(output_root) if output_root else None, "input_mode": mode}, sort_keys=True), encoding="utf-8")
     return config
 
 
@@ -1416,8 +1419,8 @@ class ClaudeCliInvoker:
         # structurally testing this module: the first draft wrote them under
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
-        mcp_config = (_stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root), code_grant)
-                      if served else None)
+        mcp_config = (_stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root), code_grant,
+                                            "indexed" if indexed else "inline+tools") if served else None)
         size_log.observe(package.request.get("run_id"), package.request.get("job_id"), "prompt_input_mode",
                          inline_bytes, _inline_input_limit(cfg),
                          mode="indexed" if indexed else ("inline+tools" if served else "inline"),
