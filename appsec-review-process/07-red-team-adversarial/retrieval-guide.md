@@ -62,15 +62,15 @@ not proof of exploitability.
 
 ## Semantic Index
 
-If `static-evidence/semantic-index/index.json` exists and is marked complete, use
-`scripts/audit-static/query_semantic_index.py` for concept searches. Keep queries specific to the component and
-attack class.
+If the run has an accepted `02-semantic-recall-index` attempt, use
+`appsec-review-process/semantic_recall_index.py query` for concept searches. Keep queries specific to the
+component and attack class. Hits are function locators ranked by vector similarity, never evidence:
+read the cited lines from the accepted source before citing them, and treat zero hits as no signal.
 
 ```bash
-python scripts/audit-static/query_semantic_index.py \
-  --index scratch/<project>-engagement/static-evidence/semantic-index \
-  --query '<component purpose plus issue class>' \
-  --top-k 10
+python3 -B appsec-review-process/semantic_recall_index.py query \
+  <run>/data/jobs/02-semantic-recall-index/attempts/<accepted attempt_id> \
+  '<component purpose plus issue class>' --limit 10
 ```
 
 ## CodeQL Follow-Up

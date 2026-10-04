@@ -170,7 +170,7 @@ class CodeGraphEvidenceTests(unittest.TestCase):
         rules = " ".join(contract["validation_rules"])
         self.assertIn("Vector distance", rules)
         self.assertIn("SQLite FTS5 remains", rules)
-        self.assertFalse(template["implemented"])
+        self.assertTrue(template["implemented"])   # semantic_recall_index.py (tests/test_semantic_recall_index.py)
         self.assertNotIn("02-semantic-recall-index", enrichment.PROFILES)
         manifest = {"schema":"appsec-review/semantic-recall-index/1.0","run_id":"run",
             "status":"OK","authority":"SEMANTIC_RECALL_ONLY_LOCATORS_REQUIRE_DEREFERENCE",
