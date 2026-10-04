@@ -1340,7 +1340,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-codeql-rust`](#job-02-codeql-rust) | `codeql-language` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-code-property-graph`](#job-02-code-property-graph) | `code-property-graph` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-treesitter-ast`](#job-02-treesitter-ast) | `treesitter-ast` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-code-index`](#job-02-code-index) | `code-index` | implemented_not_qualified | `02-code-property-graph`, `02-treesitter-ast`, `02-binary-triage`, `02-ir-facts` (optional), `02-debug-symbol-index` (optional) |
+| `02-evidence-pregather` | [`02-code-index`](#job-02-code-index) | `code-index` | implemented_not_qualified | `02-code-property-graph`, `02-treesitter-ast`, `02-binary-triage` (optional), `02-ir-facts` (optional), `02-debug-symbol-index` (optional) |
 | `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `ir-link` | implemented_not_qualified | `02-ir-capture` |
@@ -1986,7 +1986,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `cpu` |
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
-| Consumes (graph) | [`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-treesitter-ast`](#job-02-treesitter-ast) (required, contract `treesitter-ast`)<br>[`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-ir-facts`](#job-02-ir-facts) (optional, contract `ir-facts`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (optional, contract `debug-symbol-index`) |
+| Consumes (graph) | [`02-code-property-graph`](#job-02-code-property-graph) (required, contract `code-property-graph`)<br>[`02-treesitter-ast`](#job-02-treesitter-ast) (required, contract `treesitter-ast`)<br>[`02-binary-triage`](#job-02-binary-triage) (optional, contract `binary-triage`)<br>[`02-ir-facts`](#job-02-ir-facts) (optional, contract `ir-facts`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (optional, contract `debug-symbol-index`) |
 | Declared inputs (pipeline/job-templates/02-code-index.json) | accepted code property graph records file<br>accepted tree-sitter AST summary *(optional)*<br>accepted binary triage export tables *(optional)*<br>accepted IR facts *(optional)*<br>accepted debug-symbol index records *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-code-index/` |
 | Output files (pipeline/output-contracts/code-index.json) | code-index.json<br>code-index.sqlite<br>code-index-summary.md<br>status.json<br>permission.json<br>lineage.json |
