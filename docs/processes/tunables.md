@@ -380,6 +380,17 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `files_logged` | 200 count | logged | Former cap on applicable input files; now logged. |  |
 | `records_logged` | 1000 count | logged | Former cap on extracted records; now logged. | freeciv21 doc ingest: 1,220. |
 
+### `02-evidence-index-derived`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `build_records_max` | 200000 count | safety | Most build-dependencies records indexed across units; the rest are counted in a gap. | Grows with headers and libraries a build consumes (02-native-build caps 8192 files per unit). |
+| `text_chunk_lines` | 60 lines | window | Lines per text FTS chunk (as 02-evidence-index). |  |
+| `text_max_file_bytes` | 2 MiB | safety | Largest text document chunked; larger ones are listed with a gap. |  |
+| `text_max_files` | 4096 count | safety | Most text documents (generated headers, converted documents) chunked; the rest are listed with status over-file-count and a gap. | Grows with generated headers per unit (02-native-build caps 256 per unit) and converted documents. |
+| `text_max_line_chars` | 16384 chars | safety | Longest line in a chunked text document; a longer line excludes the document with a gap. |  |
+| `text_max_total_bytes` | 128 MiB | safety | Total text bytes chunked; documents beyond it are listed with a gap. | Grows with the converted document set. |
+
 ### `02-evidence-index`
 
 | Tunable | Value | Kind | What it does | Scale |

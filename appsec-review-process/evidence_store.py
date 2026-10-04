@@ -377,16 +377,7 @@ def collect(run_id, attempt):
       CREATE TABLE files(path TEXT PRIMARY KEY, sha256 TEXT NOT NULL, bytes INTEGER NOT NULL,
                          ssdeep TEXT NOT NULL, text_status TEXT NOT NULL);
       CREATE VIRTUAL TABLE chunks USING fts5(path UNINDEXED, sha256 UNINDEXED,
-        start_line UNINDEXED, end_line UNINDEXED, content, tokenize='unicode61');
-      CREATE TABLE derived_records(record_id TEXT PRIMARY KEY, producer_job_id TEXT NOT NULL,
-        producer_attempt_id TEXT NOT NULL, producer_contract TEXT NOT NULL,
-        artifact_path TEXT NOT NULL, artifact_sha256 TEXT NOT NULL,
-        record_path TEXT NOT NULL, record_sha256 TEXT NOT NULL, type_label TEXT NOT NULL,
-        authority TEXT NOT NULL, redaction TEXT NOT NULL, source_snapshot_sha256 TEXT NOT NULL,
-        build_lineage_sha256 TEXT, partition_ids TEXT NOT NULL, component_ids TEXT NOT NULL,
-        search_text TEXT NOT NULL);
-      CREATE VIRTUAL TABLE derived_chunks USING fts5(record_id UNINDEXED,
-        partition_ids UNINDEXED, component_ids UNINDEXED, search_text, tokenize='unicode61');''')
+        start_line UNINDEXED, end_line UNINDEXED, content, tokenize='unicode61');''' + DERIVED_DDL)
     total = chunks = 0
     signatures = io.StringIO()
     signatures.write('ssdeep,1.1--blocksize:hash:hash,filename\n')
@@ -431,17 +422,7 @@ def collect(run_id, attempt):
                                                                         '\n'.join(lines[start:end])))
                     chunks += 1
         db.commit()
-        for record in derived['records']:
-            partition_ids = json.dumps(record['partition_ids'], separators=(',', ':'))
-            component_ids = json.dumps(record['component_ids'], separators=(',', ':'))
-            db.execute('INSERT INTO derived_records VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (
-                record['record_id'], record['producer_job_id'], record['producer_attempt_id'],
-                record['producer_contract'], record['artifact_path'], record['artifact_sha256'], record['record_path'],
-                record['record_sha256'], record['type_label'], record['authority'], record['redaction'],
-                record['source_snapshot_sha256'], record['build_lineage_sha256'],
-                partition_ids, component_ids, record['search_text']))
-            db.execute('INSERT INTO derived_chunks VALUES (?,?,?,?)',
-                       (record['record_id'], partition_ids, component_ids, record['search_text']))
+        insert_derived(db, derived['records'])
         db.commit()
         db.execute("INSERT INTO chunks(chunks) VALUES ('integrity-check')")
         db.commit()
@@ -475,6 +456,67 @@ def collect(run_id, attempt):
         db.close()
 
 
+# Derived-record tables, shared with 02-evidence-index-derived (evidence_index_derived.py).
+DERIVED_DDL = '''
+      CREATE TABLE derived_records(record_id TEXT PRIMARY KEY, producer_job_id TEXT NOT NULL,
+        producer_attempt_id TEXT NOT NULL, producer_contract TEXT NOT NULL,
+        artifact_path TEXT NOT NULL, artifact_sha256 TEXT NOT NULL,
+        record_path TEXT NOT NULL, record_sha256 TEXT NOT NULL, type_label TEXT NOT NULL,
+        authority TEXT NOT NULL, redaction TEXT NOT NULL, source_snapshot_sha256 TEXT NOT NULL,
+        build_lineage_sha256 TEXT, partition_ids TEXT NOT NULL, component_ids TEXT NOT NULL,
+        search_text TEXT NOT NULL);
+      CREATE VIRTUAL TABLE derived_chunks USING fts5(record_id UNINDEXED,
+        partition_ids UNINDEXED, component_ids UNINDEXED, search_text, tokenize='unicode61');'''
+_DERIVED_COLUMNS = ('record_id', 'producer_job_id', 'producer_attempt_id', 'producer_contract', 'artifact_path',
+                    'artifact_sha256', 'record_path', 'record_sha256', 'type_label', 'authority', 'redaction',
+                    'source_snapshot_sha256', 'build_lineage_sha256', 'partition_ids', 'component_ids', 'search_text')
+
+
+def _derived_row(record):
+    return tuple(json.dumps(record[name], separators=(',', ':')) if name in ('partition_ids', 'component_ids')
+                 else record[name] for name in _DERIVED_COLUMNS)
+
+
+def insert_derived(db, records):
+    for record in records:
+        row = _derived_row(record)
+        db.execute('INSERT INTO derived_records VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', row)
+        db.execute('INSERT INTO derived_chunks VALUES (?,?,?,?)', (row[0], row[13], row[14], row[15]))
+
+
+def check_derived_rows(database, records):
+    """Every derived_records and derived_chunks row equals the hash-bound records, nothing more."""
+    db = sqlite3.connect(Path(database).as_uri() + '?mode=ro&immutable=1', uri=True)
+    try:
+        rows = db.execute('SELECT ' + ','.join(_DERIVED_COLUMNS) + ' FROM derived_records ORDER BY record_id').fetchall()
+        fts_rows = db.execute('SELECT record_id,partition_ids,component_ids,search_text '
+                              'FROM derived_chunks ORDER BY record_id').fetchall()
+    finally:
+        db.close()
+    expected = sorted(_derived_row(record) for record in records)
+    if rows != expected:
+        raise Blocked('SQLite derived records differ from the hash-bound enrichment artifact')
+    if fts_rows != [(row[0], row[13], row[14], row[15]) for row in expected]:
+        raise Blocked('SQLite derived FTS rows differ from the hash-bound enrichment artifact')
+
+
+def search_derived(db, text='', partition_id='', component_id='', limit=10):
+    """Record ids matching literal ``text`` terms (AND) and the optional partition/component filter."""
+    clauses, values = [], []
+    if text.strip():
+        clauses.append('derived_chunks MATCH ?')
+        values.append(' AND '.join('"' + word.replace('"', '""') + '"' for word in text.split()))
+    if partition_id:
+        clauses.append('instr(partition_ids,json_quote(?))>0'); values.append(partition_id)
+    if component_id:
+        clauses.append('instr(component_ids,json_quote(?))>0'); values.append(component_id)
+    where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
+    return [row[0] for row in db.execute(
+        'SELECT record_id FROM derived_chunks' + where +
+        (' ORDER BY bm25(derived_chunks),record_id' if text.strip() else ' ORDER BY record_id') +
+        ' LIMIT ?', (*values, limit))]
+
+
 def check_enrichment(run_id, attempt, plan):
     """Re-derive the bounded derived-record index without writing to the immutable attempt."""
     source = read_json(phase1.job_root(run_id) / 'attempts' /
@@ -491,32 +533,7 @@ def check_enrichment(run_id, attempt, plan):
                    'producer_count': found['producer_count'], 'record_count': found['record_count'],
                    'coverage_gaps': found['coverage_gaps']}:
         raise Blocked('manifest derived enrichment identity is invalid')
-    db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
-    try:
-        rows = db.execute('SELECT record_id,producer_job_id,producer_attempt_id,producer_contract,artifact_path,artifact_sha256,'
-                          'record_path,record_sha256,type_label,authority,redaction,source_snapshot_sha256,'
-                          'build_lineage_sha256,partition_ids,component_ids,search_text '
-                          'FROM derived_records ORDER BY record_id').fetchall()
-    finally:
-        db.close()
-    expected_rows = sorted((r['record_id'], r['producer_job_id'], r['producer_attempt_id'], r['producer_contract'], r['artifact_path'],
-        r['artifact_sha256'], r['record_path'], r['record_sha256'], r['type_label'], r['authority'],
-        r['redaction'], r['source_snapshot_sha256'], r['build_lineage_sha256'],
-        json.dumps(r['partition_ids'], separators=(',', ':')),
-        json.dumps(r['component_ids'], separators=(',', ':')), r['search_text']) for r in found['records'])
-    if rows != expected_rows:
-        raise Blocked('SQLite derived records differ from the hash-bound enrichment artifact')
-    db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
-    try:
-        fts_rows = db.execute('SELECT record_id,partition_ids,component_ids,search_text '
-                              'FROM derived_chunks ORDER BY record_id').fetchall()
-    finally:
-        db.close()
-    expected_fts = sorted((r['record_id'], json.dumps(r['partition_ids'], separators=(',', ':')),
-                           json.dumps(r['component_ids'], separators=(',', ':')), r['search_text'])
-                          for r in found['records'])
-    if fts_rows != expected_fts:
-        raise Blocked('SQLite derived FTS rows differ from the hash-bound enrichment artifact')
+    check_derived_rows(attempt / 'index.sqlite', found['records'])
     permission = {'schema': enrichment.PERMISSION_SCHEMA, 'run_id': run_id, 'job_id': JOB,
                   'source_snapshot_sha256': source_snapshot_sha256,
                   'permissions': canonical_permissions(plan)}
@@ -655,19 +672,7 @@ def query_derived(run_id, text='', partition_id='', component_id='', limit=10, f
         db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
         db.row_factory = sqlite3.Row
         try:
-            clauses, values = [], []
-            if text.strip():
-                match = ' AND '.join('"' + word.replace('"', '""') + '"' for word in text.split())
-                clauses.append('derived_chunks MATCH ?'); values.append(match)
-            if partition_id:
-                clauses.append('instr(partition_ids,json_quote(?))>0'); values.append(partition_id)
-            if component_id:
-                clauses.append('instr(component_ids,json_quote(?))>0'); values.append(component_id)
-            where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
-            ids = [row['record_id'] for row in db.execute(
-                'SELECT record_id FROM derived_chunks' + where +
-                (' ORDER BY bm25(derived_chunks),record_id' if text.strip() else ' ORDER BY record_id') +
-                ' LIMIT ?', (*values, limit))]
+            ids = search_derived(db, text, partition_id, component_id, limit)
         finally:
             db.close()
         records = {record['record_id']: record for record in read_json(attempt / enrichment.RESULT)['records']}

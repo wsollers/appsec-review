@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "derived-text-manifest.schema.json",
+  "title": "Text artifacts a producer offers to 02-evidence-index-derived (derived-text-manifest.json)",
+  "description": "A producer that publishes text (for example documents converted to plain text) lists each text artifact here and lists this manifest and every text artifact in its accepted envelope. 02-evidence-index-derived chunks each document into its text_chunks FTS table with provenance: producer job and attempt, artifact path, source path, page (when pages are given) and line range. artifact_path is relative to the producer's attempt; sha256 must equal the envelope's hash of that artifact. pages, when present, maps 1-based page numbers to inclusive line ranges of the text artifact; chunks never cross a page. Documents over the derived index's bounds or not strict UTF-8 are listed with their status and reported as gaps.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "documents"],
+  "properties": {
+    "schema": {"const": "appsec-review/derived-text-manifest/1.0"},
+    "documents": {
+      "type": "array",
+      "maxItems": 65536,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_path", "sha256", "source_path", "source_sha256", "converter", "converter_version"],
+        "properties": {
+          "artifact_path": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "sha256": {"$ref": "common/formats.schema.json#/$defs/sha256_ref"},
+          "source_path": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "source_sha256": {"anyOf": [{"$ref": "common/formats.schema.json#/$defs/sha256_ref"}, {"type": "null"}]},
+          "converter": {"type": ["string", "null"], "maxLength": 128},
+          "converter_version": {"type": ["string", "null"], "maxLength": 128},
+          "pages": {
+            "type": ["array", "null"],
+            "maxItems": 100000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["page", "start_line", "end_line"],
+              "properties": {
+                "page": {"type": "integer", "minimum": 1},
+                "start_line": {"type": "integer", "minimum": 1},
+                "end_line": {"type": "integer", "minimum": 1}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
