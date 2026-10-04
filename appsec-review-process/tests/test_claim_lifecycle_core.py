@@ -143,6 +143,20 @@ class ClaimLifecycleTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             core.verify(refuted, binding(), fixture("verification-decisions.json"))
 
+    def test_unresolved_without_unresolved_obligation_names_the_claim(self):
+        """09 re-run 2026-10-04: UNRESOLVED with every obligation SATISFIED looped three repair rounds on a
+        message that named no claim; it now names the claim and the obligation statuses."""
+        _red, blue, _verification, _scoring = self.chain()
+        decisions = fixture("verification-decisions.json")
+        decision = decisions["decisions"][0]
+        decision["disposition"] = "UNRESOLVED"
+        for obligation in decision["proof_obligations"]:
+            obligation["status"] = "SATISFIED"
+        with self.assertRaisesRegex(Blocked, r"unresolved disposition must remain explicit \(claim "
+                                    + decision["claim_id"] + r": disposition UNRESOLVED, obligation statuses "
+                                    r"\['SATISFIED'\]; mark UNRESOLVED"):
+            core.verify(blue, binding(), decisions)
+
     def test_preverification_promotion_and_unverified_scoring_fail_closed(self):
         red_decisions = fixture("red-decisions.json")
         red_decisions["decisions"][0]["severity"] = "HIGH"

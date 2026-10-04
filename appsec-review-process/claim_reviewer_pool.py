@@ -98,8 +98,10 @@ def _runtime_instructions(package: Any) -> str:
                 "every obligation SATISFIED, UNRESOLVED keeps an UNRESOLVED obligation")
     elif stage == "09-independent-verification":
         rule = ("answer every upstream proof obligation by obligation_id; this invocation has no new "
-                "independent target evidence, so never emit VERIFIED; UNRESOLVED or BLOCKED keeps an "
-                "UNRESOLVED obligation")
+                "independent target evidence, so never emit VERIFIED. UNRESOLVED or BLOCKED must keep at "
+                "least one obligation UNRESOLVED: when the existing citations seem to satisfy every "
+                "obligation, mark UNRESOLVED the obligation(s) that still need new independent evidence "
+                "to verify, rather than all SATISFIED")
     else:
         rule = "factors are null unless the accepted upstream status is VERIFIED; otherwise each factor is 0..4"
     citable = {"07-red-team-adversarial": "the claim's citations",
