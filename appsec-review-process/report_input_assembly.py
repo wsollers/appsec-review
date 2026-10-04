@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any
@@ -36,6 +38,21 @@ SPECS = {
     "scoring": ("12-scoring-prioritization", "12-scoring-prioritization",
                 "scoring-prioritization.json", "scoring-prioritization.schema.json", ()),
 }
+RECEIPTS = ("permission.json", "lineage.json")
+# 04 publishes its matrix paginated behind a manifest (owasp_join_publisher._partition_matrix); a
+# legacy single-file matrix is still accepted. Pages are reassembled into the same logical document.
+MATRIX_MANIFEST = "owasp-control-status-matrix-manifest.json"
+PAGE_DIRECTORY = "owasp-control-status-matrix-pages"
+PAGINATED = {"owasp": (MATRIX_MANIFEST, "owasp-control-status-matrix-manifest.schema.json",
+                       "owasp-control-status-matrix-page.schema.json")}
+# Producers that emit no permission/lineage receipts (01's contract has none). Their generation is
+# bound from the primary artifact's own source/lineage fields against the attempt's hash-bound
+# inputs.json; the absent permission record reaches the report as a named gap.
+RECEIPTLESS = frozenset({"component"})
+RECEIPT_GAP = ("REPORT-GAP component-receipts-absent: 01-component-characterization publishes no "
+               "permission or lineage receipt; its source generation is bound from "
+               "component-purpose-map.json (source_snapshot_sha256, evidence_manifest_lineage) and the "
+               "attempt's inputs.json, and no producer permission record exists for it.")
 
 CANONICAL_PERMISSIONS = {
     "01-component-characterization": ["read-source", "read-run-data", "write-run-data"],
@@ -168,18 +185,15 @@ def load_accepted(pointer_path: Path, *, run_id: str, name: str) -> dict[str, An
     for relative, item in artifacts.items():
         if not isinstance(relative, str) or file_hash(_owned(attempt, relative)) != item.get("sha256"):
             raise Blocked(f"{JOB}: accepted artifact hash is invalid")
-    required = [primary, "permission.json", "lineage.json", *(item[0] for item in supporting)]
+    published = PAGINATED[name][0] if name in PAGINATED and primary not in artifacts else primary
+    receiptless = name in RECEIPTLESS and not any(item in artifacts for item in RECEIPTS)
+    required = [published, *(() if receiptless else RECEIPTS), *(item[0] for item in supporting)]
     if any(item not in artifacts for item in required):
         raise Blocked(f"{JOB}: required report input or receipt is absent")
-    permission_path, lineage_path = _owned(attempt, "permission.json"), _owned(attempt, "lineage.json")
-    permission, lineage = read_json(permission_path), read_json(lineage_path)
-    _receipt(permission, schema="appsec-review/producer-permission-receipt/1.0", run_id=run_id, job_id=job_id)
-    _receipt(lineage, schema="appsec-review/producer-lineage-receipt/1.0", run_id=run_id, job_id=job_id)
-    if permission["source_snapshot_sha256"] != lineage["source_snapshot_sha256"]:
-        raise Blocked(f"{JOB}: producer receipts bind different source generations")
     documents = {}
     for relative, schema in ((primary, primary_schema), *supporting):
-        document = read_json(_owned(attempt, relative))
+        document = (reassemble_matrix(attempt, artifacts, run_id) if relative == primary != published
+                    else read_json(_owned(attempt, relative)))
         try:
             schema_errors = validate_document(document, schema) if schema else []
         except (FileNotFoundError, ValueError) as exc:
@@ -187,15 +201,80 @@ def load_accepted(pointer_path: Path, *, run_id: str, name: str) -> dict[str, An
         if schema_errors:
             raise Blocked(f"{JOB}: accepted {name} artifact fails its closed schema")
         documents[relative] = document
+    if receiptless:
+        receipt_hashes = (None, None)
+        source = _receiptless_generation(attempt, envelope, documents[primary], run_id=run_id, job_id=job_id)
+    else:
+        permission_path, lineage_path = _owned(attempt, "permission.json"), _owned(attempt, "lineage.json")
+        permission, lineage = read_json(permission_path), read_json(lineage_path)
+        _receipt(permission, schema="appsec-review/producer-permission-receipt/1.0", run_id=run_id, job_id=job_id)
+        _receipt(lineage, schema="appsec-review/producer-lineage-receipt/1.0", run_id=run_id, job_id=job_id)
+        if permission["source_snapshot_sha256"] != lineage["source_snapshot_sha256"]:
+            raise Blocked(f"{JOB}: producer receipts bind different source generations")
+        receipt_hashes = ("sha256:" + file_hash(permission_path), "sha256:" + file_hash(lineage_path))
+        source = permission["source_snapshot_sha256"]
     reference = {"job_id": job_id, "attempt_id": pointer["attempt_id"], "contract_id": contract,
-        "artifact_path": primary, "artifact_sha256": "sha256:" + file_hash(attempt / primary),
+        "artifact_path": published, "artifact_sha256": "sha256:" + file_hash(attempt / published),
         "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
-        "permission_receipt_sha256": "sha256:" + file_hash(permission_path),
-        "lineage_receipt_sha256": "sha256:" + file_hash(lineage_path),
+        "permission_receipt_sha256": receipt_hashes[0], "lineage_receipt_sha256": receipt_hashes[1],
         "supporting_artifacts": [{"artifact_path": relative,
             "artifact_sha256": "sha256:" + file_hash(attempt / relative), "schema": schema}
             for relative, schema in supporting]}
-    return {"reference": reference, "documents": documents, "source_generation": permission["source_snapshot_sha256"]}
+    return {"reference": reference, "documents": documents, "source_generation": source}
+
+
+def reassemble_matrix(attempt: Path, artifacts: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """Rebuild 04's logical matrix from its manifest and envelope-bound pages, exactly as split."""
+    manifest_name, manifest_schema, page_schema = PAGINATED["owasp"]
+    manifest = read_json(_owned(attempt, manifest_name))
+    if validate_document(manifest, manifest_schema) or manifest.get("run_id") != run_id:
+        raise Blocked(f"{JOB}: OWASP matrix manifest fails its closed schema or run identity")
+    rows, listed = [], set()
+    for index, record in enumerate(manifest["pages"]):
+        path = record["path"]; listed.add(path)
+        if (record["page_index"] != index or path != f"{PAGE_DIRECTORY}/page-{index:04d}.json" or
+                path not in artifacts or record["first_row_index"] != len(rows) or
+                record["last_row_index"] != len(rows) + record["row_count"] - 1):
+            raise Blocked(f"{JOB}: OWASP matrix page is absent or out of order")
+        data = _owned(attempt, path).read_bytes()
+        if (len(data) != record["byte_size"] or hashlib.sha256(data).hexdigest() != record["sha256"] or
+                artifacts[path].get("sha256") != record["sha256"]):
+            raise Blocked(f"{JOB}: OWASP matrix page hash or size differs from its manifest")
+        page = json.loads(data)
+        if (validate_document(page, page_schema) or page.get("run_id") != run_id or
+                page.get("selection_id") != manifest["selection_id"] or page.get("page_index") != index or
+                page.get("first_row_index") != record["first_row_index"] or
+                page.get("last_row_index") != record["last_row_index"] or
+                page.get("row_count") != record["row_count"] or len(page.get("rows", [])) != record["row_count"]):
+            raise Blocked(f"{JOB}: OWASP matrix page fails its schema or manifest identity")
+        rows.extend(page["rows"])
+    if any(path.startswith(PAGE_DIRECTORY + "/") and path not in listed for path in artifacts):
+        raise Blocked(f"{JOB}: OWASP matrix publishes a page its manifest does not list")
+    matrix = {**manifest["matrix_header"], "rows": rows}
+    if (len(rows) != manifest["row_count"] or digest(rows) != manifest["rows_sha256"] or
+            digest(matrix) != manifest["logical_matrix_sha256"] or
+            matrix.get("schema") != manifest["logical_matrix_schema"] or
+            matrix.get("run_id") != run_id or matrix.get("selection_id") != manifest["selection_id"]):
+        raise Blocked(f"{JOB}: OWASP matrix pages do not reconstruct the published logical matrix")
+    return matrix
+
+
+def _receiptless_generation(attempt: Path, envelope: dict[str, Any], document: dict[str, Any], *,
+                            run_id: str, job_id: str) -> str:
+    """Source generation of a receipt-less producer: the artifact's own source and lineage fields must
+    match the attempt's inputs.json, bound by the pointer's tree hashes and the envelope fingerprint."""
+    inputs = read_json(_owned(attempt, "inputs.json"))
+    evidence = inputs.get("evidence") if isinstance(inputs, dict) else None
+    lineage = document.get("evidence_manifest_lineage")
+    source = document.get("source_snapshot_sha256")
+    if (not isinstance(evidence, dict) or not isinstance(lineage, dict) or
+            _sha(inputs) != envelope.get("input_fingerprint") or
+            inputs.get("run_id") != run_id or inputs.get("job") != job_id or
+            not HASH.fullmatch(str(source)) or inputs.get("source_snapshot_sha256") != source or
+            lineage.get("producer_attempt_id") != evidence.get("attempt_id") or
+            lineage.get("accepted_pointer_sha256") != "sha256:" + str(evidence.get("pointer_sha256"))):
+        raise Blocked(f"{JOB}: receipt-less {job_id} artifact does not bind its attempt's source generation")
+    return source
 
 
 def _reject_promotions(value: Any, path: str = "$") -> None:
