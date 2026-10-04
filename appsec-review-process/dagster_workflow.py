@@ -726,7 +726,7 @@ def automatic_common_lifecycle_op(job_id, worker, pool):
 api_collection_intelligence_work = automatic_common_lifecycle_op(
     '02-api-collection-intelligence-ingest', api_collection_intelligence_worker, CPU_POOL)
 doc_intelligence_work = automatic_common_lifecycle_op(
-    '02-doc-intelligence-ingest', doc_intelligence_worker, CPU_POOL)
+    '02-doc-intelligence-ingest', doc_intelligence_worker, OFFLINE_DOCKER_POOL)  # gap 7: PDF/DOCX conversion containers
 test_intelligence_work = automatic_common_lifecycle_op(
     '02-test-intelligence-ingest', test_intelligence_worker, CPU_POOL)
 operations_doc_work = automatic_common_lifecycle_op(

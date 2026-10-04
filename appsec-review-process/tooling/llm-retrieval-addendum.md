@@ -56,6 +56,18 @@ No OCR, archive unpacking, semantic embeddings or decompilation is implied. Sour
 intake/discovery outputs are the current corpus; new native/scanner consumers need an explicit
 producer adapter before their evidence joins it.
 
+The raw index above holds source bytes: a PDF or DOCX is a `binary` row and HTML is indexed with its
+markup. Their text reaches search through `02-doc-intelligence-ingest` instead: HTML (stdlib parser,
+scripts, styles and comments dropped) and man pages (macros stripped) are converted in Python, PDF
+(`pdftotext -layout`) and DOCX (`pandoc --sandbox`) in the pinned `audit-doc-convert` image with network
+none and a read-only checkout. Each converted text is published with `doc-text-manifest.json` (source
+sha256, converter, version, output sha256, line or page provenance) and `derived-text-manifest.json`,
+which `02-evidence-index-derived` chunks into `text_chunks` (search with `evidence_index_derived.query`;
+hits carry source path, page and line range). Encrypted, corrupt, oversized and image-only PDFs are
+coverage gaps, never empty documents, and there is still no OCR. Only README*, SECURITY*,
+CHANGELOG*/HISTORY*/NEWS, CONTRIBUTING*, man pages and documents under doc/design/spec-like paths are
+converted; every other document-like file is listed in `skipped` with its reason.
+
 ## MCP connection
 
 The repo supplies a run-bound, read-only stdio MCP server. Configure the MCP client with this

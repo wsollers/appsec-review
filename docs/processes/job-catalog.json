@@ -1256,9 +1256,8 @@
         "job:02-doc-intelligence-ingest"
        ],
        "declared_inputs": [
-        "document source path",
-        "source type",
-        "redaction policy"
+        "accepted 00-intake source inventory and checkout (read-only)",
+        "evidence redaction ruleset"
        ]
       },
       {
@@ -1995,9 +1994,8 @@
        "accepted native-build binary lineage",
        "accepted binary-triage result",
        "accepted binary-cfg result",
-       "document source path",
-       "source type",
-       "redaction policy",
+       "accepted 00-intake source inventory and checkout (read-only)",
+       "evidence redaction ruleset",
        "exact accepted intake source identity",
        "run-owned standards-source-binding.json",
        "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -3043,9 +3041,8 @@
      "accepted native-build binary lineage",
      "accepted binary-triage result",
      "accepted binary-cfg result",
-     "document source path",
-     "source type",
-     "redaction policy",
+     "accepted 00-intake source inventory and checkout (read-only)",
+     "evidence redaction ruleset",
      "exact accepted intake source identity",
      "run-owned standards-source-binding.json",
      "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -4229,9 +4226,8 @@
         "job:02-doc-intelligence-ingest"
        ],
        "declared_inputs": [
-        "document source path",
-        "source type",
-        "redaction policy"
+        "accepted 00-intake source inventory and checkout (read-only)",
+        "evidence redaction ruleset"
        ]
       },
       {
@@ -5022,9 +5018,8 @@
        "accepted native-build binary lineage",
        "accepted binary-triage result",
        "accepted binary-cfg result",
-       "document source path",
-       "source type",
-       "redaction policy",
+       "accepted 00-intake source inventory and checkout (read-only)",
+       "evidence redaction ruleset",
        "exact accepted intake source identity",
        "run-owned standards-source-binding.json",
        "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -6176,9 +6171,8 @@
      "accepted native-build binary lineage",
      "accepted binary-triage result",
      "accepted binary-cfg result",
-     "document source path",
-     "source type",
-     "redaction policy",
+     "accepted 00-intake source inventory and checkout (read-only)",
+     "evidence redaction ruleset",
      "exact accepted intake source identity",
      "run-owned standards-source-binding.json",
      "repository-pinned data/reference/source-lock.json and selected snapshots",
@@ -10387,27 +10381,15 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "document source path"
+     "input": "accepted 00-intake source inventory and checkout (read-only)"
     },
     {
      "need": "required",
-     "input": "source type"
-    },
-    {
-     "need": "required",
-     "input": "redaction policy"
+     "input": "evidence redaction ruleset"
     },
     {
      "need": "optional",
-     "input": "existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json"
-    },
-    {
-     "need": "optional",
-     "input": "component map"
-    },
-    {
-     "need": "optional",
-     "input": "product glossary"
+     "input": "B16 record of the pinned audit-doc-convert image (pdftotext, pandoc); needed only when a PDF or DOCX is in the document universe"
     }
    ],
    "inputs_source": "pipeline/job-templates/02-doc-intelligence-ingest.json",
