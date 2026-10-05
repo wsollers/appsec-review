@@ -243,6 +243,22 @@ class IndependenceRuleTests(unittest.TestCase):
             core.blue_team(red, dt.binding(RED, "red-team-adversarial.json"), decisions)
 
 
+class PresentationTests(unittest.TestCase):
+    """The 10-synthesis-report presentation shows a structural citation by its observed_fact."""
+
+    def test_structural_citation_location_is_its_summary(self):
+        import synthesis_report_presentation as presentation
+        citation = _synthetic("code_path", True, VERIFY, "verify-1")
+        rows, ids = presentation._evidence({"citations": [citation]})
+        self.assertEqual(rows[0]["kind"], "structural query record (re-run verified)")
+        (finding,) = presentation._findings({"verified_findings": [{
+            "claim_id": A, "title": "Unbounded copy", "component_ids": ["component-1"], "score": 16,
+            "priority": "P0", "severity": "CRITICAL", "verification_citations": [citation]}]}, ids)
+        self.assertEqual(finding["location"], "structural query: " + citation["observed_fact"])
+        self.assertEqual(finding["summary"], citation["observed_fact"])
+        self.assertTrue(citation["observed_fact"].endswith("[complete]"))
+
+
 class DeriveResolutionTests(Case):
     """claim_review_derive resolves tev: ids against the invocation's own records; unknown ones go back."""
 

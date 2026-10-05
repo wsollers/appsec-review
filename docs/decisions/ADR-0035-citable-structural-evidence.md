@@ -142,9 +142,10 @@ locators and names.
 
 - 09 can legitimately reach VERIFIED (or REFUTED) from a complete structural answer it re-ran itself.
   A prose description of a query is never evidence.
-- The report gets citations whose artifact is a tool-evidence record and not a `jobs/` attempt.
-  `report_input_assembly._verify_citation` and the final ledger have to resolve
-  `tool-evidence/<job>/<attempt>/<hex>.json` under the run's `data/`, ideally through
-  `tool_evidence.verify_citation`. That is a hand-off to their owners.
+- The report gets citations whose artifact is a tool-evidence record, not a `jobs/` attempt.
+  `report_input_assembly._verify_citation` resolves `tool-evidence/<job>/<attempt>/<hex>.json` under the run's
+  `data/` and calls `tool_evidence.verify_citation` (every copy of the citation object); `claim_ledger_final`
+  re-verifies every `tev:` citation of the 07/08/09 rows before appending them; both report renderers show a
+  structural citation as `structural query: <observed_fact>`.
 - Native code with indirect calls often gives `complete=false` answers. Those can never verify, which
   is accurate.

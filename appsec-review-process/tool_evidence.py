@@ -105,9 +105,14 @@ def relative_path(job_id: str, attempt_id: str, citation_id: str) -> str:
     return f"{FOLDER}/{job_id}/{attempt_id}/{match.group(1)}.json"
 
 
-def _path(run_id: str, relative: str) -> Path:
-    path = data_path(run_id, *PurePosixPath(relative).parts)
-    cursor = data_path(run_id)
+def _data(run_id: str, root: Path | None, *parts: str) -> Path:
+    """The run's ``data/`` (or an explicit data root, e.g. the report's ``jobs_root`` parent)."""
+    return Path(root).joinpath(*parts) if root is not None else data_path(run_id, *parts)
+
+
+def _path(run_id: str, relative: str, root: Path | None = None) -> Path:
+    path = _data(run_id, root, *PurePosixPath(relative).parts)
+    cursor = _data(run_id, root)
     for part in PurePosixPath(relative).parts:
         cursor = cursor / part
         if cursor.is_symlink():
@@ -197,23 +202,23 @@ class _NoBroker:
 _INDEXES: dict[tuple, Any] = {}
 
 
-def _summary(run_id: str, index: dict[str, Any]) -> tuple[Path, str, dict[str, Any]]:
+def _summary(run_id: str, index: dict[str, Any], root: Path | None = None) -> tuple[Path, str, dict[str, Any]]:
     ref = index.get("ref")
     if not isinstance(ref, str) or ":" not in ref:
         raise ValueError("tool evidence names no pinned index summary")
     relative = ref.split(":", 1)[1]
-    jobs = data_path(run_id, "jobs")
+    jobs = _data(run_id, root, "jobs")
     path = jobs.joinpath(*PurePosixPath(relative).parts)
     if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != index.get("summary_sha256"):
         raise ValueError(f"the index summary {relative} the record was bound to is missing or changed")
     return jobs, relative, json.loads(path.read_text(encoding="utf-8"))
 
 
-def rerun(run_id: str, record: dict[str, Any]) -> dict[str, Any]:
+def rerun(run_id: str, record: dict[str, Any], root: Path | None = None) -> dict[str, Any]:
     """The answer the recorded query gives now against the recorded, re-hashed index."""
     import code_query_mcp
     body = record["body"]
-    jobs, relative, summary = _summary(run_id, body["index"])
+    jobs, relative, summary = _summary(run_id, body["index"], root)
     key = (str(jobs), json.dumps(body["index"], sort_keys=True))
     lsp = body["index"].get("kind") == "lsp-xref"
     if key not in _INDEXES:
@@ -228,20 +233,21 @@ def rerun(run_id: str, record: dict[str, Any]) -> dict[str, Any]:
     return code_query_mcp.call(index, body["tool"], dict(body["arguments"]))
 
 
-def verify_citation(run_id: str, given: dict[str, Any]) -> dict[str, Any]:
+def verify_citation(run_id: str, given: dict[str, Any], *, data_root: Path | None = None) -> dict[str, Any]:
     """Raise ValueError unless ``given`` is exactly the canonical citation of an untampered record whose
-    query re-runs to the same answer; return the canonical citation."""
+    query re-runs to the same answer; return the canonical citation. ``data_root``: the run's ``data/``
+    when the caller holds it explicitly (report assembly, ledger)."""
     relative = relative_path(given.get("producer_job_id"), given.get("producer_attempt_id"), given.get("citation_id"))
     if given.get("artifact_path") != relative:
         raise ValueError(f"tool evidence {given.get('citation_id')!r} names another record path")
-    path = _path(run_id, relative)
+    path = _path(run_id, relative, data_root)
     if not path.is_file():
         raise ValueError(f"tool evidence {given['citation_id']!r} is not a record of {given['producer_job_id']}/"
                          f"{given['producer_attempt_id']}")
     record = check(json.loads(path.read_text(encoding="utf-8")), job_id=given["producer_job_id"],
                    attempt_id=given["producer_attempt_id"], citation_id=given["citation_id"])
     try:
-        again = rerun(run_id, record)
+        again = rerun(run_id, record, data_root)
     except ValueError as exc:
         raise ValueError(f"tool evidence {given['citation_id']!r} cannot be re-run: {exc}") from None
     if answer_sha256(again) != record["body"]["answer_sha256"]:
