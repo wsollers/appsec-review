@@ -147,10 +147,16 @@ def _derive_fill(package: Any):
     first = package.inputs[0]
     upstream = derive.upstream_from_bytes(stage, first.data)
 
+    carry: dict[str, dict[str, Any]] = {}   # well-formed rows from this invocation's rejected rounds
+
     def fill(envelope: dict[str, Any], result_field: str) -> list[str]:
-        value, limitations = derive.derive(stage, upstream, envelope.get(result_field),
-            request=package.request, request_sha256=package.request_sha256,
-            evidence_sha256=first.sha256)
+        try:
+            value, limitations = derive.derive(stage, upstream, envelope.get(result_field),
+                request=package.request, request_sha256=package.request_sha256,
+                evidence_sha256=first.sha256, carry=carry)
+        except cli.InvokerOutputError as exc:
+            carry.update(getattr(exc, "rows", None) or {})
+            raise
         envelope[result_field] = value
         return limitations
 
