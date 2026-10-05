@@ -443,7 +443,8 @@ def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, An
     row_citations = row.get("citations") if isinstance(row.get("citations"), list) else None
     dissent = row.get("dissent_ids") if isinstance(row.get("dissent_ids"), list) else None
     if (errors or not isinstance(actor, dict) or actor.get("job_id") != job_id or
-            actor.get("attempt_id") != pointer["attempt_id"] or actor.get("role_id") != role or
+            actor != _pool_actor(jobs_root, run_id, job_id, attempt, pointer, entry) or
+            actor.get("role_id") != role or
             actor.get("source_generation") != source_generation or
             actor.get("component_generation") != component_generation or
             expected_status != entry.get("status") or
@@ -452,6 +453,15 @@ def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, An
             entry["citations"][:len(row_citations)] != row_citations or dissent is None or
             entry.get("dissent_ids") != sorted(set(prior.get("dissent_ids", [])) | set(dissent))):
         raise Blocked(f"{JOB}: lifecycle decision artifact does not support its authority")
+
+
+def _pool_actor(jobs_root: Path, run_id: str, job_id: str, attempt: Path, pointer: dict[str, Any],
+                entry: dict[str, Any]) -> dict[str, Any] | None:
+    """The pool reviewer the accepted attempt's own hashed chain says decided the entry's claim
+    (claim_ledger.pool_decision_actor: the actor names a reviewer-pool request, not the stage attempt)."""
+    import claim_ledger
+    return claim_ledger.pool_decision_actor(run_id, jobs_root, job_id, attempt, pointer["fingerprint"],
+                                            entry.get("claim_id"), label=JOB)
 
 
 # Reviewer judgment carried on 09/12 records (ADR-0020/0026; the closed record schemas allow them).

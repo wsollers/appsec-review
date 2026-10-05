@@ -160,11 +160,11 @@ def _rebind(grants, run_id, source):
             for g in grants]
 
 
-def _permission(control: dict[str, Any], job: str, run_id: str, source: str) -> dict[str, Any]:
+def _permission(control: dict[str, Any], job: str, run_id: str, source: str, at: str) -> dict[str, Any]:
     requirement = control["requirements"][job]
     grants = _rebind([g for g in control["grants"] if g["binding"]["job_id"] == job], run_id, source)
     context = {"run_id": run_id, "job_id": job, "source_snapshot_sha256": source,
-               "now": _utc_now(), "registry_ceiling": None}
+               "now": at, "registry_ceiling": None}
     decision = pc.evaluate(requirement, grants, context)
     capabilities = pc.require_granted(decision, requirement=requirement, grants=grants,
                                       context=context)
@@ -220,7 +220,9 @@ def _upstream(run_id: str, job: str) -> tuple[Path, dict[str, Any], dict[str, An
     return resolution, lock_set, resolution_binding
 
 
-def current_inputs(run_id: str, job: str) -> dict[str, Any]:
+def current_inputs(run_id: str, job: str, at: str | None = None) -> dict[str, Any]:
+    """``at``: when the permission gate is evaluated: now for new work, the accepted attempt's own
+    start when validate() re-checks it (build_resolution.accepted_started_at)."""
     cpath = control_path(run_id)
     if not cpath.is_file():
         raise Blocked(f"{job}: missing data/controls/{CONTROL_FILE}; explicit grants were not staged")
@@ -230,7 +232,7 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
         raise Blocked(f"{job}: control fails its closed schema ({len(errors)} errors)")
     source = _source_snapshot(run_id)
     target = _target(run_id)
-    permission = _permission(control, job, run_id, source)
+    permission = _permission(control, job, run_id, source, at or _utc_now())
     _resolution, lock_set, upstream = _upstream(run_id, job)
     records = {}
     for lock in lock_set["locks"]:
@@ -616,7 +618,7 @@ def runner_argv(cfg: dict) -> list[str]:
 def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], lock: dict[str, Any],
              inputs: dict[str, Any]) -> dict[str, Any]:
     control = inputs["control"]["value"]
-    permission = _permission(control, job, run_id, inputs["source_snapshot_sha256"])
+    permission = _permission(control, job, run_id, inputs["source_snapshot_sha256"], _utc_now())
     phases = spec(job)["phases"]
     commands = [item for phase in phases for item in lock[phase]]
     cfg = {"runner": RUNNER_VERSION, "mode": "native" if job == "02-native-build" else "configure",
@@ -788,6 +790,8 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
         attempt = allocation["attempt"]
         if inputs["code"] != _code_hashes(job):
             raise Blocked(f"{job}: implementation changed before execution")
+        # New work gates on now (inputs may have been derived at an accepted attempt's start).
+        _permission(inputs["control"]["value"], job, run_id, inputs["source_snapshot_sha256"], _utc_now())
         units=[]; receipts=[]
         for lock in inputs["lock_set"]["locks"]:
             unit_key = digest(lock["unit_id"])[:12]
@@ -890,7 +894,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
         worker_kind="pinned_container", output_contract=cfg["contract"], resume_command=resume,
-        derive_inputs=lambda: current_inputs(run_id, job),
+        derive_inputs=lambda: build_resolution.lifecycle_inputs(base, lambda at: current_inputs(run_id, job, at)),
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(job)}, force=force,
@@ -901,9 +905,12 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
 
 def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None) -> Path:
     base = root(run_id, job); pointer = pointer or read_json(base / "accepted.json")
-    inputs = current_inputs(run_id, job)
+    at = build_resolution.accepted_started_at(base, pointer)
+    inputs = current_inputs(run_id, job, at)
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
                                     expected_run_id=run_id, expected_job_id=job)
+    if build_resolution.accepted_started_at(base, {"attempt_id": attempt.name}) != at:
+        raise Blocked(f"{job}: accepted attempt start time changed during validation")
     _validate_attempt(run_id, job, attempt, inputs)
     return attempt
 

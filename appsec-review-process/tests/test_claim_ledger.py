@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 import registry_paths
 
 import claim_ledger as ledger
+import demo_report_fixture
 import execution_state
 from schema_validate import SchemaStore, validate_document
 import threat_model_core
@@ -65,8 +66,10 @@ class ClaimLedgerTests(unittest.TestCase):
         artifact, collection, actor_field, role = specifications[producer]
         base = jobs / producer; attempt = base / "attempts" / attempt_id
         attempt.mkdir(parents=True)
-        actor = {"job_id": producer, "attempt_id": attempt_id, "role_id": role,
-                 "source_generation": source_generation, "component_generation": component_generation}
+        # The real reviewer identity: the reviewer-pool request (claim_review_derive.actor), not the
+        # stage attempt; the attempt's inputs.json + lineage.json bind the accepted pool that decided it.
+        actor = demo_report_fixture.reviewer_actor("run1", producer, source_generation, component_generation,
+                                                   label=attempt_id)
         citation_field = {"07-red-team-adversarial": "review_citations",
                           "08-blue-team-refutation": "refutation_citations",
                           "09-independent-verification": "verification_citations"}[producer]
@@ -83,15 +86,21 @@ class ClaimLedgerTests(unittest.TestCase):
         execution_state.atomic_json(attempt / artifact, result)
         execution_state.atomic_json(attempt / "permission.json", permission)
         execution_state.atomic_json(attempt / "status.json", {"status": "OK"})
+        inputs = demo_report_fixture.stage_inputs(jobs, "run1", producer, source_generation,
+                                                  result[collection], None)
+        execution_state.atomic_json(attempt / "inputs.json", inputs)
+        execution_state.atomic_json(attempt / "lineage.json", demo_report_fixture.stage_lineage(inputs))
+        fingerprint = "sha256:" + execution_state.digest(inputs)
         envelope = terminal_envelope(run_id="run1", job_id=producer, attempt_id=attempt_id,
             worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
-            input_fingerprint="sha256:" + "a" * 64, output_contract=producer,
+            input_fingerprint=fingerprint, output_contract=producer,
             started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z",
-            summary="fixture", artifacts=artifact_records(attempt, [artifact, "permission.json", "status.json"]), gaps=[])
+            summary="fixture", artifacts=artifact_records(attempt, [artifact, "permission.json", "lineage.json",
+                                                                   "status.json"]), gaps=[])
         execution_state.atomic_json(attempt / "result.json", envelope)
         execution_state.atomic_json(base / "latest.json", {"attempt_id": attempt_id})
         pointer = {"schema": ACCEPTED_SCHEMA, "status": "OK", "run_id": "run1", "job": producer,
-                   "attempt_id": attempt_id, "fingerprint": "sha256:" + "a" * 64,
+                   "attempt_id": attempt_id, "fingerprint": fingerprint,
                    "envelope_path": "result.json", "envelope_sha256": execution_state.file_hash(attempt / "result.json"),
                    "hashes": execution_state.tree_hashes(attempt), "accepted_at": "2026-01-01T00:00:02Z"}
         execution_state.atomic_json(base / "accepted.json", pointer)
@@ -398,6 +407,42 @@ class ClaimLedgerTests(unittest.TestCase):
         self.assertEqual(tier("cppcheck", "uninitvar", "undefined-behavior"), "P1")
         self.assertEqual(tier("psalm", "PossiblyInvalidCast", "language-security-static-analysis"), "P2")
         self.assertEqual(tier("key-material-file-inventory", "pem-private-key-header", "private-key", "secret"), "P1")
+
+    def test_current_inputs_reads_owasp_routes_where_the_04_lifecycle_publishes_them(self):
+        """Graph job 04-asvs-masvs publishes T14 under data/jobs/04-owasp-join-report; the ledger read
+        data/jobs/04-asvs-masvs, found nothing and silently admitted no OWASP route."""
+        import owasp_join_publisher
+        self.assertEqual(ledger.OWASP_JOB, owasp_join_publisher.JOB)
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(execution_state, "RUNS", Path(directory)):
+            jobs = Path(directory) / "run1" / "data" / "jobs"
+            threat = jobs / threat_model_core.JOB / "attempts" / "threat-attempt-1"
+            execution_state.atomic_json(threat / threat_model_core.RESULT, self.threat_source["artifact"])
+            execution_state.atomic_json(threat.parent.parent / "accepted.json", {"attempt_id": "threat-attempt-1"})
+            base = jobs / ledger.OWASP_JOB; attempt = base / "attempts" / "owasp-1"
+            execution_state.atomic_json(attempt / "owasp-candidate-promotion-routes.json",
+                                        self.owasp_source["artifact"])
+            envelope = terminal_envelope(run_id="run1", job_id=ledger.OWASP_JOB, attempt_id="owasp-1",
+                worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+                input_fingerprint="sha256:" + "a" * 64, output_contract="owasp-join-report",
+                started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z", summary="fixture",
+                artifacts=artifact_records(attempt, ["owasp-candidate-promotion-routes.json"]), gaps=[])
+            execution_state.atomic_json(attempt / "result.json", envelope)
+            execution_state.atomic_json(base / "latest.json", {"attempt_id": "owasp-1"})
+            execution_state.atomic_json(base / "accepted.json", {"schema": ACCEPTED_SCHEMA, "status": "OK",
+                "run_id": "run1", "job": ledger.OWASP_JOB, "attempt_id": "owasp-1",
+                "fingerprint": "sha256:" + "a" * 64, "envelope_path": "result.json",
+                "envelope_sha256": execution_state.file_hash(attempt / "result.json"),
+                "hashes": execution_state.tree_hashes(attempt), "accepted_at": "2026-01-01T00:00:02Z"})
+            with mock.patch.object(threat_model_core, "validate", return_value=threat), \
+                    mock.patch.object(ledger, "lead_sources", return_value=([], [])), \
+                    mock.patch.object(ledger, "hunter_source", return_value=(None, {"job_id": "hunter"})):
+                inputs = ledger.current_inputs("run1")
+        owasp = [item for item in inputs["sources"] if item["contract_id"] == "owasp-join-report"]
+        self.assertEqual(len(owasp), 1)
+        self.assertEqual((owasp[0]["producer_job_id"], owasp[0]["producer_attempt_id"]), (ledger.OWASP_JOB, "owasp-1"))
+        self.assertTrue(owasp[0]["artifact_path"].startswith("jobs/04-owasp-join-report/attempts/owasp-1/"))
+        self.assertTrue(ledger.owasp_candidates(owasp[0]))
 
     def test_absent_and_skipped_lead_producers_are_coverage_not_failure(self):
         with tempfile.TemporaryDirectory() as directory, \

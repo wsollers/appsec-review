@@ -189,6 +189,50 @@ class BuildResolutionTests(unittest.TestCase):
         self.assertEqual(path.relative_to(state.run_path("run-1")).as_posix(),
                          "data/controls/build-resolution.json")
 
+    def test_validation_gates_the_grant_at_the_accepted_attempts_start_not_now(self):
+        """Run 20261004T054551Z-357581: native-build consumers re-validate this job through
+        build_replay._upstream; evaluating its one-day grant at now failed STALE_GRANT after 24 h."""
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            state.atomic_json(base / "attempts" / "a1" / "result.json",
+                              {"started_at": "2026-10-04T06:01:02.987654+00:00"})
+            self.assertEqual(worker.accepted_started_at(base, {"attempt_id": "a1"}), "2026-10-04T06:01:02Z")
+            for bad in ({"attempt_id": "../a1"}, {"attempt_id": ""}, {}):
+                with self.assertRaises(state.Blocked):
+                    worker.accepted_started_at(base, bad)
+            state.atomic_json(base / "attempts" / "a2" / "result.json", {"started_at": "2026-10-04T06:01:02"})
+            with self.assertRaises(state.Blocked):
+                worker.accepted_started_at(base, {"attempt_id": "a2"})
+            seen = []
+            with mock.patch.object(worker, "root", return_value=base), \
+                 mock.patch.object(worker, "current_inputs", side_effect=lambda run, at=None: seen.append(at) or {}), \
+                 mock.patch.object(worker, "validate_published", return_value=(base / "attempts" / "a1", {})), \
+                 mock.patch.object(worker, "_validate_attempt"):
+                worker.validate("run", {"attempt_id": "a1"})
+            self.assertEqual(seen, ["2026-10-04T06:01:02Z"])
+
+    def test_resume_after_the_grant_lifetime_reuses_the_accepted_attempt_but_new_work_gates_on_now(self):
+        def derive(at):
+            if at is None:
+                raise worker.pc.PermissionDenied("permission denied: STALE_GRANT")
+            return {"at": at}
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            with self.assertRaisesRegex(worker.pc.PermissionDenied, "STALE_GRANT"):
+                worker.lifecycle_inputs(base, derive)          # nothing accepted: new work is refused
+            state.atomic_json(base / "attempts" / "a1" / "result.json",
+                              {"started_at": "2026-10-04T06:01:02.5+00:00"})
+            state.atomic_json(base / "accepted.json", {"attempt_id": "a1", "status": "OK"})
+            self.assertEqual(worker.lifecycle_inputs(base, derive), {"at": "2026-10-04T06:01:02Z"})
+            self.assertEqual(worker.lifecycle_inputs(base, lambda at: {"at": at}), {"at": None})
+            def denied(at):
+                raise worker.pc.PermissionDenied("permission denied: EXPLICIT_DENY")
+            with self.assertRaisesRegex(worker.pc.PermissionDenied, "EXPLICIT_DENY"):
+                worker.lifecycle_inputs(base, denied)
+            state.atomic_json(base / "accepted.json", {"attempt_id": "a1", "status": "FAILED"})
+            with self.assertRaisesRegex(worker.pc.PermissionDenied, "STALE_GRANT"):
+                worker.lifecycle_inputs(base, derive)
+
 
 if __name__ == "__main__":
     unittest.main()

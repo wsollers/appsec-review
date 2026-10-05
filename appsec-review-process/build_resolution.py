@@ -69,6 +69,48 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def accepted_started_at(base: Path, pointer: dict[str, Any]) -> str:
+    """The whole-second UTC start of the accepted attempt ``pointer`` names.
+
+    A consumer that re-validates an accepted grant-gated attempt evaluates the staged grants at the
+    instant that attempt executed, not at the consumer's wall clock: the grant authorizes executing
+    the target, and that execution is over. Evaluating at "now" made every consumer fail
+    ``STALE_GRANT`` once the one-day staged grant expired (run 20261004T054551Z-357581, 11 after 24 h)
+    although nothing re-executed. B13 re-verification already evaluates at the result's own
+    ``started_at``. The caller must authenticate the value: validate_published re-checks the envelope
+    hash against the accepted pointer, and the caller compares its ``started_at`` with this one.
+    """
+    attempt_id = pointer.get("attempt_id") if isinstance(pointer, dict) else None
+    if not isinstance(attempt_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", attempt_id):
+        raise Blocked("accepted pointer names no canonical attempt")
+    envelope = read_json(Path(base) / "attempts" / attempt_id / "result.json")
+    try:
+        started = datetime.fromisoformat(str(envelope.get("started_at")).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise Blocked("accepted attempt has no recorded start time") from exc
+    if started.tzinfo is None:
+        raise Blocked("accepted attempt start time is not UTC")
+    return started.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def lifecycle_inputs(base: Path, derive: Any) -> dict[str, Any]:
+    """Inputs for a grant-gated producer's lifecycle: ``derive(None)`` gates at now. When only the
+    grant clock refuses (``STALE_GRANT``) and an accepted attempt exists, the inputs are derived at
+    that attempt's own start, so an unchanged accepted result is still reused on a resume more than a
+    grant lifetime later (the permission fingerprint carries no time). New work never runs on that:
+    the producer's request builder and the B13 adapter re-gate at now before anything executes."""
+    try:
+        return derive(None)
+    except pc.PermissionDenied as exc:
+        pointer_path = Path(base) / "accepted.json"
+        if "STALE_GRANT" not in str(exc) or not pointer_path.is_file():
+            raise
+        pointer = read_json(pointer_path)
+        if pointer.get("status") not in {"OK", "OK_WITH_GAPS"}:
+            raise
+        return derive(accepted_started_at(base, pointer))
+
+
 def _cap(kind: str, *, origin: str, target_path: str | None = None) -> dict[str, Any]:
     params = {name: None for name in pc.PARAMETER_NAMES}
     if kind == "package-restore":
@@ -175,7 +217,9 @@ def _code_hashes() -> dict[str, str]:
     return result
 
 
-def current_inputs(run_id: str) -> dict[str, Any]:
+def current_inputs(run_id: str, at: str | None = None) -> dict[str, Any]:
+    """``at``: when the permission gate is evaluated: now for new work, the accepted attempt's own
+    start when validate() re-checks it (accepted_started_at)."""
     cpath = control_path(run_id)
     if not cpath.is_file():
         raise Blocked(f"{JOB}: missing data/controls/{CONTROL_FILE}; explicit grants were not staged")
@@ -184,7 +228,7 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     if errors:
         raise Blocked(f"{JOB}: control fails its closed schema ({len(errors)} errors)")
     source = _source_snapshot(run_id)
-    permission = _permission(control, run_id, source, _utc_now())
+    permission = _permission(control, run_id, source, at or _utc_now())
     plan_attempt = build_plan.validate(run_id)
     plan_path = plan_attempt / build_plan.RESULT
     plan = read_json(plan_path)
@@ -672,6 +716,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         attempt = allocation["attempt"]; control = inputs["control"]["value"]
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
+        # New work gates on now (inputs may have been derived at an accepted attempt's start).
+        _permission(control, run_id, inputs["source_snapshot_sha256"], _utc_now())
         units=[]; locks=[]; receipts=[]; gaps=[]; install_files=[]
         plans = inputs["plan"]["value"]["plans"]
         if not plans:
@@ -763,7 +809,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
         worker_kind="pinned_container", output_contract=CONTRACT, resume_command=resume,
-        derive_inputs=lambda: current_inputs(run_id),
+        derive_inputs=lambda: lifecycle_inputs(base, lambda at: current_inputs(run_id, at)),
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes()}, force=force,
@@ -774,9 +820,12 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
 
 def validate(run_id: str, pointer: dict[str, Any] | None = None) -> Path:
     base = root(run_id); pointer = pointer or read_json(base / "accepted.json")
-    record = current_inputs(run_id)
+    at = accepted_started_at(base, pointer)
+    record = current_inputs(run_id, at)
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(record),
                                     expected_run_id=run_id, expected_job_id=JOB)
+    if accepted_started_at(base, {"attempt_id": attempt.name}) != at:
+        raise Blocked(f"{JOB}: accepted attempt start time changed during validation")
     _validate_attempt(run_id, attempt, record)
     return attempt
 

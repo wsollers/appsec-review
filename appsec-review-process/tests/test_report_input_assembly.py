@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import demo_report_fixture
 import report_input_assembly as report
 import tool_evidence_fixture
 from execution_state import Blocked, atomic_json, digest, file_hash, tree_hashes
@@ -77,7 +78,9 @@ class ReportInputAssemblyTests(unittest.TestCase):
                         "artifact_sha256": "sha256:" + "2" * 64},
                     "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
                     collection: [row]}
-            stage_pointers[job] = self._publish_job(job, job, attempt_id, {artifact: document})
+            stage_pointers[job] = self._publish_job(job, job, attempt_id, {artifact: document},
+                inputs=demo_report_fixture.stage_inputs(self.jobs, RUN_ID, job, SOURCE, document[collection],
+                                                        document["upstream"]))
         ledger["entries"][1]["decision_authority"] = self._authority(
             stage_pointers["07-red-team-adversarial"], "red-team-adversarial.json", "red-team-adversary")
         ledger["entries"][2]["decision_authority"] = self._authority(
@@ -119,13 +122,6 @@ class ReportInputAssemblyTests(unittest.TestCase):
         return previous
 
     def _documents(self):
-        def actor(job, attempt, role, artifact, fill):
-            return {"job_id": job, "attempt_id": attempt, "role_id": role,
-                "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT,
-                "artifact_path": artifact, "artifact_sha256": "sha256:" + fill * 64,
-                "permission_receipt_path": "permission.json",
-                "permission_receipt_sha256": "sha256:" + fill * 64,
-                "reason": f"Authorized {role} fixture decision."}
         component = json.loads((ROOT / "tests/fixtures/component-characterization/hello-autotools.json").read_text())
         component["source_snapshot_sha256"] = SOURCE
         threat = json.loads((ROOT / "tests/fixtures/threat-workbench/schema/integrated-threat-model.golden.json").read_text())
@@ -173,12 +169,11 @@ class ReportInputAssemblyTests(unittest.TestCase):
                   "claim_states": [{"claim_id": CLAIM, "latest_event_id": verified["event_id"], "status": "verified"}],
                   "claim_limits": {"candidate_only": True, "finding_created": False,
                   "severity_assigned": False, "runtime_claimed": False, "compliance_claimed": False}}
-        red_actor = actor("07-red-team-adversarial", "red-1", "red-team-adversary",
-                          "red-assessment.json", "7")
-        blue_actor = actor("08-blue-team-refutation", "blue-1", "blue-team-refuter",
-                           "blue-assessment.json", "8")
-        verifier = actor("09-independent-verification", "verification-1", "independent-verifier",
-                         "verification-evidence.json", "9")
+        # Real reviewer identities: the reviewer-pool request (claim_review_derive.actor).
+        red_actor = demo_report_fixture.reviewer_actor(RUN_ID, "07-red-team-adversarial", SOURCE, COMPONENT_ATTEMPT)
+        blue_actor = demo_report_fixture.reviewer_actor(RUN_ID, "08-blue-team-refutation", SOURCE, COMPONENT_ATTEMPT)
+        verifier = demo_report_fixture.reviewer_actor(RUN_ID, "09-independent-verification", SOURCE,
+                                                      COMPONENT_ATTEMPT)
         inherited = {"claim_id": CLAIM, "route_id": "route-1", "claim_class": "candidate_only",
             "hypothesis": "A bounded fixture hypothesis.", "confidence": "medium",
             "component_ids": ["component-1"], "source_generation": SOURCE,
@@ -232,6 +227,8 @@ class ReportInputAssemblyTests(unittest.TestCase):
                 "permissions": report.CANONICAL_PERMISSIONS[job]}
             lineage = {"schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": RUN_ID,
                 "job_id": job, "source_snapshot_sha256": SOURCE, "build_lineage_sha256": "sha256:" + "e" * 64}
+            if inputs is not None and "pool_binding" in inputs:   # a 07/08/09 stage binds its reviewer pool
+                lineage = demo_report_fixture.stage_lineage(inputs)
             atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
         if inputs is not None: atomic_json(attempt / "inputs.json", inputs)
         atomic_json(attempt / "status.json", {"status": "OK"})
@@ -372,13 +369,15 @@ class ReportInputAssemblyTests(unittest.TestCase):
 
     def test_verified_finding_on_a_structural_record_assembles_and_a_tampered_record_blocks(self):
         """ADR-0035: a tev: verification citation resolves under the run's data/tool-evidence, re-run checked."""
-        citation, path = tool_evidence_fixture.record(self.jobs.parent, "09-independent-verification", "verification-1")
+        verifier = demo_report_fixture.reviewer_actor(RUN_ID, "09-independent-verification", SOURCE,
+                                                      COMPONENT_ATTEMPT)["attempt_id"]
+        citation, path = tool_evidence_fixture.record(self.jobs.parent, "09-independent-verification", verifier)
         loaded = self.load()
         for name, artifact, field in (("verification", "independent-verification.json", "verifications"),
                                       ("scoring", "scoring-prioritization.json", "priorities")):
             loaded[name]["documents"][artifact][field][0]["verification_citations"] = [citation]
         result = report.assemble(RUN_ID, loaded, self.jobs)
-        self.assertIn({"producer_job_id": "09-independent-verification", "producer_attempt_id": "verification-1",
+        self.assertIn({"producer_job_id": "09-independent-verification", "producer_attempt_id": verifier,
                        "artifact_path": citation["artifact_path"], "artifact_sha256": citation["artifact_sha256"]},
                       result["evidence_artifacts"])
         edited = copy.deepcopy(loaded)
