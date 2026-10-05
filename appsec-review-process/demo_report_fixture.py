@@ -36,8 +36,117 @@ def _rehash_entries(entries: list[dict[str, Any]]) -> str:
     return previous
 
 
+POOL_JOB = "deterministic-pool-merge"
+POOL_CLASSES = {"07-red-team-adversarial": "candidate_only", "08-blue-team-refutation": "refutation",
+                "09-independent-verification": "verification_observation"}
+POOL_ACTOR_KEYS = {"07-red-team-adversarial": "reviewer", "08-blue-team-refutation": "reviewer",
+                   "09-independent-verification": "verifier"}
+ROW_ACTOR_FIELDS = {"07-red-team-adversarial": "reviewer", "08-blue-team-refutation": "blue_reviewer",
+                    "09-independent-verification": "verifier"}
+ROLES = {"07-red-team-adversarial": "red-team-adversary", "08-blue-team-refutation": "blue-team-refuter",
+         "09-independent-verification": "independent-verifier"}
+
+
+def _pool_directory(run_id: str, stage: str) -> str:
+    return digest(["fixture-pool", run_id, stage])[:32]
+
+
+def reviewer_request(run_id: str, stage: str, label: str = "0") -> dict[str, Any]:
+    """A reviewer-pool persona request as pool_specification writes it (identity fields only)."""
+    instance = digest(["fixture-instance", run_id, stage, label])[:32]
+    return {"schema": "appsec-review/persona-invocation-request/1.0", "run_id": run_id,
+            "job_id": stage, "attempt_id": instance}
+
+
+def reviewer_actor(run_id: str, stage: str, source_generation: str, component_generation: str,
+                   label: str = "0") -> dict[str, Any]:
+    """The claim-lifecycle actor claim_review_derive.actor builds: the POOL REQUEST's attempt id and
+    digest, never the stage attempt that later publishes the merged decisions."""
+    request = reviewer_request(run_id, stage, label)
+    path, sha = f"requests/{request['attempt_id']}.json", _sha(request)
+    return {"job_id": stage, "attempt_id": request["attempt_id"], "role_id": ROLES[stage],
+            "source_generation": source_generation, "component_generation": component_generation,
+            "artifact_path": path, "artifact_sha256": sha,
+            "permission_receipt_path": path, "permission_receipt_sha256": sha,
+            "reason": "Bounded stage reviewer selected by the accepted reviewer-pool specification."}
+
+
+def publish_reviewer_pool(jobs: Path, run_id: str, stage: str, decisions: list[dict[str, Any]],
+                          attempt_id: str = "pool-1") -> tuple[dict[str, Any], dict[str, Any]]:
+    """Accept one deterministic-pool-merge/<stage> attempt whose merged candidates are ``decisions``,
+    each decided by the pool instance its actor names, with the retained expansion and request
+    files. Returns (merge document, binding) as claim_review_lifecycle._load_pool does."""
+    import bounded_analysis_workers
+    from review_control_loops import deterministic_merge
+    base = Path(jobs) / POOL_JOB / stage
+    attempt = base / "attempts" / attempt_id
+    directory = _pool_directory(run_id, stage)
+    pool_root = attempt / "pools" / directory
+    workers: dict[str, list[dict[str, Any]]] = {}
+    for decision in decisions:
+        actor = decision[POOL_ACTOR_KEYS[stage]]
+        workers.setdefault(actor["attempt_id"], []).append({
+            "candidate_id": f"decision-{decision['claim_id']}", "subject_id": decision["claim_id"],
+            "assertion": json.dumps(decision, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+            "evidence_sha256": "sha256:" + "0" * 64, "claim_class": POOL_CLASSES[stage]})
+    instances = []
+    for instance in sorted(workers):
+        request = {"schema": "appsec-review/persona-invocation-request/1.0", "run_id": run_id,
+                   "job_id": stage, "attempt_id": instance}
+        relative = f"requests/{instance}.json"
+        atomic_json(pool_root / relative, request)
+        instances.append({"instance_id": instance, "run_id": run_id, "job_id": stage,
+                          "attempt_id": instance, "request_file": {"path": relative},
+                          "request_sha256": _sha(request)})
+    atomic_json(pool_root / "expansion.json", {"schema": "appsec-review/pool-expansion/1.0",
+        "run_id": run_id, "job_id": stage, "pool_directory": directory, "instances": instances})
+    expected = [{"worker_id": key, "producer_id": "claim-reviewer", "run_id": run_id} for key in sorted(workers)]
+    merge = deterministic_merge(run_id, expected, [{**item, "status": "OK",
+                                                    "candidates": workers[item["worker_id"]]} for item in expected])
+    atomic_json(attempt / "deterministic-pool-merge.json", merge)
+    atomic_json(attempt / "pool-receipt.json", {"schema": "appsec-review/claim-review-pool-receipt/1.0",
+        "run_id": run_id, "stage": stage, "decision": "APPLICABLE", "pool_directory": directory,
+        "merge_sha256": merge["merge_sha256"]})
+    envelope = terminal_envelope(run_id=run_id, job_id=POOL_JOB, attempt_id=attempt_id,
+        worker_kind="pool_coordinator", execution_status="OK", acceptance_status="CURRENT",
+        input_fingerprint="sha256:" + "b" * 64, output_contract=POOL_JOB, started_at=STAMP,
+        finished_at="2026-01-01T00:00:01Z", summary="DEMO fixture reviewer pool.",
+        artifacts=artifact_records(attempt, ["deterministic-pool-merge.json", "pool-receipt.json"]))
+    atomic_json(attempt / "result.json", envelope)
+    atomic_json(base / "latest.json", {"attempt_id": attempt_id})
+    atomic_json(base / "accepted.json", {"schema": "appsec-review/accepted-worker-result/1.0",
+        "status": "OK", "run_id": run_id, "job": POOL_JOB, "attempt_id": attempt_id,
+        "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
+        "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
+        "accepted_at": "2026-01-01T00:00:02Z"})
+    return bounded_analysis_workers.load_accepted(base / "accepted.json", run_id=run_id, job_id=POOL_JOB,
+        contract=POOL_JOB, artifact="deterministic-pool-merge.json",
+        schema="deterministic-pool-merge.schema.json")
+
+
+def stage_inputs(jobs: Path, run_id: str, stage: str, source_generation: str, rows: list[dict[str, Any]],
+                 upstream_binding: Any) -> dict[str, Any]:
+    """claim_review_lifecycle.current_inputs for a stage whose result ``rows`` its reviewer pool
+    (published here) decided: the record whose digest is the stage attempt's fingerprint."""
+    decisions = [{"claim_id": row["claim_id"], POOL_ACTOR_KEYS[stage]: row[ROW_ACTOR_FIELDS[stage]]}
+                 for row in rows]
+    pool, binding = publish_reviewer_pool(jobs, run_id, stage, decisions)
+    return {"run_id": run_id, "stage": stage, "source_generation": source_generation,
+            "upstream": None, "upstream_binding": upstream_binding, "pool": pool, "pool_binding": binding,
+            "decisions": {"decisions": sorted(decisions, key=lambda row: row["claim_id"])},
+            "applicability": "APPLICABLE", "code": {}}
+
+
+def stage_lineage(inputs: dict[str, Any]) -> dict[str, Any]:
+    """claim_review_lifecycle._receipts lineage for ``inputs``."""
+    return {"schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": inputs["run_id"],
+            "job_id": inputs["stage"], "source_snapshot_sha256": inputs["source_generation"],
+            "build_lineage_sha256": _sha({"upstream": inputs["upstream_binding"],
+                "pool": inputs["pool_binding"], "applicability": inputs["applicability"]})}
+
+
 def _publish(jobs: Path, run_id: str, job: str, contract: str, attempt_id: str,
-             documents: dict[str, dict[str, Any]]) -> Path:
+             documents: dict[str, dict[str, Any]], inputs: dict[str, Any] | None = None) -> Path:
     base, attempt = jobs / job, jobs / job / "attempts" / attempt_id
     attempt.mkdir(parents=True)
     for relative, document in documents.items():
@@ -46,7 +155,9 @@ def _publish(jobs: Path, run_id: str, job: str, contract: str, attempt_id: str,
         "schema": "appsec-review/producer-permission-receipt/1.0", "run_id": run_id,
         "job_id": job, "source_snapshot_sha256": SOURCE,
         "permissions": report.CANONICAL_PERMISSIONS[job]})
-    atomic_json(attempt / "lineage.json", {
+    if inputs is not None:   # a 07/08/09 stage: inputs.json + lineage bind its reviewer pool
+        atomic_json(attempt / "inputs.json", inputs)
+    atomic_json(attempt / "lineage.json", stage_lineage(inputs) if inputs is not None else {
         "schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": run_id,
         "job_id": job, "source_snapshot_sha256": SOURCE,
         "build_lineage_sha256": "sha256:" + "e" * 64})
@@ -54,7 +165,8 @@ def _publish(jobs: Path, run_id: str, job: str, contract: str, attempt_id: str,
     paths = [*documents, "permission.json", "lineage.json", "status.json"]
     envelope = terminal_envelope(run_id=run_id, job_id=job, attempt_id=attempt_id,
         worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
-        input_fingerprint="sha256:" + "f" * 64, output_contract=contract,
+        input_fingerprint=_sha(inputs) if inputs is not None else "sha256:" + "f" * 64,
+        output_contract=contract,
         started_at=STAMP, finished_at="2026-01-01T00:00:01Z",
         summary="DEMO fixture producer; not live target evidence.",
         artifacts=artifact_records(attempt, paths))
@@ -102,14 +214,6 @@ def materialize(run_root: Path, run_id: str) -> dict[str, str]:
             "producer_attempt_id": "evidence-1", "artifact_path": "evidence.json",
             "artifact_sha256": evidence_hash, "locator_json": "/observed",
             "observed_fact": "Bounded DEMO fixture evidence exists."}
-
-    def actor(job: str, attempt: str, role: str, artifact: str, fill: str) -> dict[str, Any]:
-        return {"job_id": job, "attempt_id": attempt, "role_id": role,
-            "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT,
-            "artifact_path": artifact, "artifact_sha256": "sha256:" + fill * 64,
-            "permission_receipt_path": "permission.json",
-            "permission_receipt_sha256": "sha256:" + fill * 64,
-            "reason": f"Authorized {role} DEMO fixture decision."}
 
     component = json.loads((root / "tests/fixtures/component-characterization/hello-autotools.json").read_text())
     component["source_snapshot_sha256"] = SOURCE
@@ -181,10 +285,9 @@ def materialize(run_root: Path, run_id: str) -> dict[str, str]:
         "claim_states": [{"claim_id": claim, "latest_event_id": verified["event_id"], "status": "verified"}],
         "claim_limits": {"candidate_only": True, "finding_created": False,
         "severity_assigned": False, "runtime_claimed": False, "compliance_claimed": False}}
-    red_actor = actor("07-red-team-adversarial", "red-1", "red-team-adversary", "red-assessment.json", "7")
-    blue_actor = actor("08-blue-team-refutation", "blue-1", "blue-team-refuter", "blue-assessment.json", "8")
-    verifier = actor("09-independent-verification", "verification-1", "independent-verifier",
-                     "verification-evidence.json", "9")
+    red_actor = reviewer_actor(run_id, "07-red-team-adversarial", SOURCE, COMPONENT_ATTEMPT)
+    blue_actor = reviewer_actor(run_id, "08-blue-team-refutation", SOURCE, COMPONENT_ATTEMPT)
+    verifier = reviewer_actor(run_id, "09-independent-verification", SOURCE, COMPONENT_ATTEMPT)
     inherited = {"claim_id": claim, "route_id": "route-1", "claim_class": "candidate_only",
         "hypothesis": "A bounded DEMO fixture hypothesis.", "confidence": "medium",
         "component_ids": ["component-1"], "source_generation": SOURCE,
@@ -237,10 +340,12 @@ def materialize(run_root: Path, run_id: str) -> dict[str, str]:
             "ledger_head_id": base["event_id"], "ledger_head_sha256": base["entry_hash"],
             "upstream": upstream, "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
             collection: [row]}
-        stage_pointers[job] = _publish(jobs, run_id, job, job, attempt_id, {artifact: document})
+        stage_pointers[job] = _publish(jobs, run_id, job, job, attempt_id, {artifact: document},
+            stage_inputs(jobs, run_id, job, SOURCE, [row], upstream))
     stage_pointers["09-independent-verification"] = _publish(jobs, run_id,
         "09-independent-verification", "09-independent-verification", "verification-1",
-        {"independent-verification.json": verification})
+        {"independent-verification.json": verification},
+        stage_inputs(jobs, run_id, "09-independent-verification", SOURCE, [verification_record], upstream))
     ledger["entries"][1]["decision_authority"] = _authority(stage_pointers["07-red-team-adversarial"],
         "red-team-adversarial.json", "red-team-adversary")
     ledger["entries"][2]["decision_authority"] = _authority(stage_pointers["08-blue-team-refutation"],

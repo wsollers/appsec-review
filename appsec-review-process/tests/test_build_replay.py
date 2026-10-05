@@ -79,11 +79,62 @@ class BuildReplayTests(unittest.TestCase):
                  "binding": {"run_id": "run", "source_snapshot_sha256": source, "job_id": job},
                  "justification": "happy path", "capabilities": requirement["capabilities"]}
         control = {"requirements": {job: requirement}, "grants": [grant]}
-        self.assertEqual(worker._permission(control, job, "run", source)["decision"]["decision"], "GRANTED")
+        now = worker._utc_now()
+        self.assertEqual(worker._permission(control, job, "run", source, now)["decision"]["decision"], "GRANTED")
         widened = json.loads(json.dumps(control))
         widened["grants"][0]["binding"]["job_id"] = "02-native-build"
         with self.assertRaises(permissions.PermissionDenied):
-            worker._permission(widened, job, "run", source)
+            worker._permission(widened, job, "run", source, now)
+
+    def test_consumer_validation_evaluates_the_grant_when_the_accepted_attempt_ran(self):
+        """Run 20261004T054551Z-357581: 11 validated the accepted native build after the one-day
+        staged grant expired and failed STALE_GRANT although nothing re-executed. validate() now
+        evaluates the staged grant at the accepted attempt's own start; new work still gates on now."""
+        source, job = "sha256:" + "a" * 64, "02-native-build"
+        issued = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(days=3)
+        started = issued + timedelta(hours=1, microseconds=123456)
+        stamp = lambda value: value.strftime("%Y-%m-%dT%H:%M:%SZ")
+        requirement = {"schema": "appsec-review/permission-requirement/1.0", "job_id": job,
+                       "capabilities": [worker._cap(job)]}
+        control = {"requirements": {job: requirement}, "grants": [{
+            "schema": "appsec-review/permission-grant/1.0", "grant_id": "g", "effect": "ALLOW",
+            "authority": {"name": "Owner", "role": "engagement-owner"}, "issued_at": stamp(issued),
+            "expires_at": stamp(issued + timedelta(days=1)),
+            "binding": {"run_id": "run", "source_snapshot_sha256": source, "job_id": job},
+            "justification": "staged at run start", "capabilities": requirement["capabilities"]}]}
+        with self.assertRaisesRegex(permissions.PermissionDenied, "STALE_GRANT"):
+            worker._permission(control, job, "run", source, worker._utc_now())   # new work: refused
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder) / job
+            attempt = base / "attempts" / "a1"
+            state.atomic_json(attempt / "result.json", {"started_at": started.isoformat()})
+            pointer = {"attempt_id": "a1"}
+            control_file = Path(folder) / "control.json"
+            state.atomic_json(control_file, control)
+            seen = {}
+
+            def published(_base, _pointer, fingerprint, **_):
+                seen["fingerprint"] = fingerprint
+                return attempt, {}
+            with mock.patch.object(worker, "root", return_value=base), \
+                 mock.patch.object(worker, "control_path", return_value=control_file), \
+                 mock.patch.object(worker, "validate_document", return_value=[]), \
+                 mock.patch.object(worker, "_source_snapshot", return_value=source), \
+                 mock.patch.object(worker, "_target", return_value=Path(folder)), \
+                 mock.patch.object(worker, "_upstream", return_value=(None, {"locks": [], "source_revision": "r"}, {})), \
+                 mock.patch.object(worker, "source_tree_sha256", return_value="sha256:" + "b" * 64), \
+                 mock.patch.object(worker.ce, "boundary_sha256", return_value="sha256:" + "d" * 64), \
+                 mock.patch.object(worker, "_code_hashes", return_value={}), \
+                 mock.patch.object(worker, "validate_published", side_effect=published), \
+                 mock.patch.object(worker, "_validate_attempt") as checked:
+                self.assertEqual(worker.validate("run", job, pointer), attempt)
+            checked.assert_called_once()
+            inputs = checked.call_args.args[3]
+            self.assertEqual(seen["fingerprint"], "sha256:" + state.digest(inputs))
+            # The same permission fingerprint the attempt recorded when it was granted at execution.
+            self.assertEqual(inputs["permission_fingerprint_sha256"], permissions.input_fingerprint_component(
+                worker._permission(control, job, "run", source, stamp(started))["decision"]))
+            self.assertEqual(worker.build_resolution.accepted_started_at(base, pointer), stamp(started))
 
     def test_compile_database_is_nonempty_fixed_clang_and_scratch_local(self):
         with tempfile.TemporaryDirectory() as folder:

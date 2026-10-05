@@ -302,6 +302,19 @@ class ExplainRunTests(unittest.TestCase):
         line = next(line for line in dr.explain_run(self.run, self.graph, self.process, mode='prod') if ' Z:' in line)
         self.assertTrue(line.startswith('RERUN  Z: legacy fingerprint: code hash of z.py changed'), line)
 
+    def test_lifecycle_name_reads_the_job_it_publishes_under(self):
+        """Run 20261004T054551Z-357581: graph job 04-asvs-masvs publishes T14 under
+        data/jobs/04-owasp-join-report; --explain said "no accepted result" and cascaded RERUN."""
+        import owasp_join_publisher
+        self.assertEqual(dr.data_job('04-asvs-masvs'), owasp_join_publisher.JOB)
+        self.assertEqual(dr.data_job('X'), 'X')
+        graph = {'jobs': {'04-asvs-masvs': {'dependencies': []},
+                          'L': {'dependencies': [{'job': '04-asvs-masvs'}]}}}
+        self._accept('04-owasp-join-report', ['x.py'])
+        self._accept('L', ['y.py'])
+        lines = dr.explain_run(self.run, graph, self.process, mode='prod')[1:]
+        self.assertTrue(all(line.startswith('REUSE') for line in lines), lines)
+
     def test_force_and_missing_results(self):
         (self.run / 'data' / 'jobs' / 'Z' / 'accepted.json').unlink()
         lines = dr.explain_run(self.run, self.graph, self.process, mode='dev', forced=['X'])

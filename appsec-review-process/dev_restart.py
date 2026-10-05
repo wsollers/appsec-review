@@ -359,8 +359,21 @@ def current_code(recorded: Mapping[str, str], process_root: Path) -> dict[str, s
     return values
 
 
+# Graph lifecycle jobs that publish under another job id. `04-asvs-masvs` runs
+# standards_lifecycle.run_owasp_join, which publishes owasp_join_publisher.JOB (T14) under
+# data/jobs/04-owasp-join-report/; there is no data/jobs/04-asvs-masvs/ (run 20261004T054551Z-357581:
+# --explain said "no accepted result" and cascaded RERUN to claim-ledger-routing and 07-14).
+DATA_JOBS = {'04-asvs-masvs': '04-owasp-join-report'}
+
+
+def data_job(job: str) -> str:
+    """The data/jobs/<id> directory a graph job publishes its accepted result under."""
+    return DATA_JOBS.get(job, job)
+
+
 def accepted_attempt(jobs_root: Path, job: str) -> tuple[dict[str, Any] | None, Path | None]:
     """The job's accepted pointer (data/jobs/<job>/ or the phase-1 `whole` scope) and attempt dir."""
+    job = data_job(job)
     for base in (Path(jobs_root) / job, Path(jobs_root) / job / 'whole'):
         path = base / 'accepted.json'
         if path.is_file():
