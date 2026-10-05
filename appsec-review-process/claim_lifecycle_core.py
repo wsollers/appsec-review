@@ -431,6 +431,25 @@ def _citation_ids(values: list[dict[str, Any]]) -> set[str]:
     return set(identities)
 
 
+def _tool_evidence(citation: dict[str, Any]) -> bool:
+    """A Python-recorded structural answer (ADR-0035): ``tev:`` id, record path, query locator."""
+    return (isinstance(citation, dict) and str(citation.get("citation_id") or "").startswith("tev:") and
+            str(citation.get("artifact_path") or "").startswith("tool-evidence/"))
+
+
+def _record_complete(citation: dict[str, Any]) -> bool:
+    try:
+        return json.loads(citation.get("locator_json") or "").get("complete") is True
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _own_records(citations: list[dict[str, Any]], actor: dict[str, Any]) -> set[str]:
+    """Ids of the tool-evidence records this stage's own reviewer produced (its re-run queries)."""
+    return {item["citation_id"] for item in citations if _tool_evidence(item) and
+            (item.get("producer_job_id"), item.get("producer_attempt_id")) == (actor.get("job_id"), actor.get("attempt_id"))}
+
+
 def _merge_ids(existing: list[str], added: list[str]) -> list[str]:
     if len(existing) != len(set(existing)) or len(added) != len(set(added)):
         raise Blocked("claim lifecycle: dissent identity is duplicated")
@@ -511,7 +530,8 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
         _authority(reviewer, candidate, "red-team-adversary")
         if not decision.get("attacker_case") or not decision.get("citations"):
             raise Blocked("red team: attacker case and citations are required")
-        if not _citation_ids(decision["citations"]) <= _citation_ids(candidate["citations"]):
+        if not _citation_ids(decision["citations"]) <= (_citation_ids(candidate["citations"]) |
+                                                        _own_records(decision["citations"], reviewer)):
             raise Blocked("red team: cited evidence does not resolve in the accepted candidate")
         labels = _mitre_refs(decision, mitre, mitre_gap)
         hypotheses.append(_judged({**_preserved(candidate), "status": "HYPOTHESIS",
@@ -543,7 +563,8 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
         if {x["obligation_id"] for x in obligations} != {x["obligation_id"] for x in hypothesis["proof_obligations"]}:
             raise Blocked("blue team: proof obligations are incomplete")
         statuses = {x["status"] for x in obligations}
-        allowed_citations = _citation_ids(hypothesis["citations"]) | _citation_ids(hypothesis["review_citations"])
+        allowed_citations = (_citation_ids(hypothesis["citations"]) | _citation_ids(hypothesis["review_citations"]) |
+                             _own_records(decision["citations"], decision["reviewer"]))
         if not _citation_ids(decision["citations"]) <= allowed_citations:
             raise Blocked("blue team: cited evidence does not resolve in the accepted hypothesis")
         if any(not _citation_ids(item["citations"]) <= _citation_ids(decision["citations"])
@@ -602,8 +623,17 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
         verification_hashes = {item["citation_id"] for item in decision["citations"]}
         if any(not _citation_ids(item["citations"]) <= verification_hashes for item in obligations):
             raise Blocked(f"verification: proof obligation citation is outside the verification evidence (claim {claim_id})")
+        # ADR-0035: an incomplete structural answer (escapes, gaps, caps) can support only UNRESOLVED.
+        incomplete = sorted(item["citation_id"] for item in decision["citations"]
+                            if _tool_evidence(item) and not _record_complete(item))
+        if incomplete and disposition not in {"UNRESOLVED", "BLOCKED"}:
+            raise Blocked(f"verification: {disposition} rests on incomplete structural evidence {incomplete}; an "
+                          f"incomplete answer supports only UNRESOLVED (claim {claim_id})")
         if disposition == "VERIFIED" and not (verification_hashes - prior_hashes):
             raise Blocked(f"verification: verified requires new independent evidence (claim {claim_id})")
+        if disposition == "VERIFIED" and any(not item["citations"] for item in obligations):
+            raise Blocked(f"verification: every satisfied obligation of a verified claim cites its evidence "
+                          f"(claim {claim_id})")
         if disposition == "VERIFIED" and any(
                 (item["producer_job_id"], item["producer_attempt_id"]) !=
                 (decision["verifier"]["job_id"], decision["verifier"]["attempt_id"])

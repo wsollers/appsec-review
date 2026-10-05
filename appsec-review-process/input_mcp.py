@@ -37,6 +37,7 @@ from pathlib import Path
 from execution_state import atomic_json, data_path, now
 import code_query_mcp
 import evidence_mcp
+import tool_evidence
 
 SERVER_NAME = "appsec-inputs"
 READ_LINES_MAX = tunables.shared("input_read_lines_max")
@@ -508,6 +509,8 @@ def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
     try:
         _check(tool["inputSchema"], args)
         result = call(run_id, inputs, tool["name"], args)
+        # ADR-0035: a citable code_* answer is recorded by Python and carries its citation_id.
+        result = tool_evidence.attach(run_id, inputs, CODE.get("ref"), CONTEXT, tool["name"], result)
         text = json.dumps(result)
         atomic_json(audit / "result.json", {"time": now(), "bytes": len(text),
                                             "duration_ms": int((time.monotonic() - started) * 1000),

@@ -8,8 +8,10 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import report_input_assembly as report
+import tool_evidence_fixture
 from execution_state import Blocked, atomic_json, digest, file_hash, tree_hashes
 from schema_validate import validate_document as validate_schema
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
@@ -367,6 +369,27 @@ class ReportInputAssemblyTests(unittest.TestCase):
         row = hostile["verification"]["documents"]["independent-verification.json"]["verifications"][0]
         row["verifier"] = {"job_id": row["producer"]["job_id"], "attempt_id": row["producer"]["attempt_id"]}
         with self.assertRaises(Blocked): report.assemble(RUN_ID, hostile, self.jobs)
+
+    def test_verified_finding_on_a_structural_record_assembles_and_a_tampered_record_blocks(self):
+        """ADR-0035: a tev: verification citation resolves under the run's data/tool-evidence, re-run checked."""
+        citation, path = tool_evidence_fixture.record(self.jobs.parent, "09-independent-verification", "verification-1")
+        loaded = self.load()
+        for name, artifact, field in (("verification", "independent-verification.json", "verifications"),
+                                      ("scoring", "scoring-prioritization.json", "priorities")):
+            loaded[name]["documents"][artifact][field][0]["verification_citations"] = [citation]
+        result = report.assemble(RUN_ID, loaded, self.jobs)
+        self.assertIn({"producer_job_id": "09-independent-verification", "producer_attempt_id": "verification-1",
+                       "artifact_path": citation["artifact_path"], "artifact_sha256": citation["artifact_sha256"]},
+                      result["evidence_artifacts"])
+        edited = copy.deepcopy(loaded)
+        edited["verification"]["documents"]["independent-verification.json"]["verifications"][0][
+            "verification_citations"] = [{**citation, "observed_fact": "main reaches strcpy"}]
+        with self.assertRaisesRegex(Blocked, "tool evidence"):
+            report.assemble(RUN_ID, edited, self.jobs)
+        record = json.loads(path.read_text()); record["answer"]["rows"] = []
+        atomic_json(path, record)
+        with self.assertRaisesRegex(Blocked, "tool evidence"):
+            report.assemble(RUN_ID, loaded, self.jobs)
 
     def test_circular_claims_invalid_upgrade_and_promotion_reject(self):
         loaded = self.load()

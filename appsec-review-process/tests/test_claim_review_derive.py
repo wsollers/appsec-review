@@ -282,13 +282,13 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
         decision = decisions_of(document)[A]
         self.assertEqual(set(decision), lifecycle.DECISION_KEYS[VERIFY])
         self.assertEqual(decision["verifier"]["role_id"], "independent-verifier")
-        # An id list cannot carry the new independent evidence VERIFIED needs: this lane never offers
-        # VERIFIED, and a reply that uses it goes back for repair naming the claim, never faked.
+        # Upstream ids cannot carry the new independent evidence VERIFIED needs (ADR-0035: only the
+        # verifier's own re-run structural records can): the reply goes back for repair naming the claim.
         reply["decisions"][0]["disposition"] = "VERIFIED"
         reply["decisions"][0]["proof_obligations"][0]["status"] = "SATISFIED"
         with self.assertRaises(InvokerOutputError) as caught:
             run(VERIFY, reply)
-        self.assertIn(f"claim {A}: disposition VERIFIED is not allowed at {VERIFY}", " ".join(caught.exception.details))
+        self.assertIn(f"verified requires new independent evidence (claim {A})", " ".join(caught.exception.details))
 
     def test_cross_stage_disposition_goes_back_with_the_fix(self):
         """09 re-run 2026-10-04: the shared persona enum let a verifier answer SURVIVING (the 08 outcome),

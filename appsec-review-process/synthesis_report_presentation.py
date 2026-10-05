@@ -91,6 +91,21 @@ def _compile_pdf(render_root: Path) -> None:
         raise Blocked("10-synthesis-report: renderer did not produce a valid PDF artifact")
 
 
+def _structural(citation: dict[str, Any]) -> bool:
+    """A tool-evidence citation (ADR-0035): a re-run-verified code query, shown by its Python summary."""
+    return (str(citation.get("citation_id") or "").startswith("tev:") and
+            str(citation.get("artifact_path") or "").startswith("tool-evidence/"))
+
+
+def _location(citation: dict[str, Any], fallback: str) -> str:
+    """Where a finding's first citation points: a structural query reads as its summary
+    (``code_callers(f) -> a.c:42 [complete]``), anything else as artifact#locator."""
+    if _structural(citation):
+        return "structural query: " + str(citation.get("observed_fact"))
+    locator = citation.get("locator_json") or ""
+    return (citation.get("artifact_path") or fallback) + (f"#{locator}" if locator else "")
+
+
 def _evidence(trace: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
     records: dict[str, dict[str, Any]] = {}
     identities: dict[str, tuple[Any, ...]] = {}
@@ -111,8 +126,9 @@ def _evidence(trace: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, st
         mapping[citation_id] = evidence_id
         ordered.append({"id": evidence_id, "producer": citation["producer_job_id"],
             "artifact": citation["artifact_path"], "sha256": citation["artifact_sha256"],
-            "kind": "retained verified citation", "citation_id": citation_id,
-            "locator": citation.get("locator_json"), "observed_fact": citation["observed_fact"]})
+            "kind": "structural query record (re-run verified)" if _structural(citation) else "retained verified citation",
+            "citation_id": citation_id, "locator": citation.get("locator_json"),
+            "observed_fact": citation["observed_fact"]})
     return ordered, mapping
 
 
@@ -159,8 +175,7 @@ def _findings(report: dict[str, Any], evidence_ids: dict[str, str],
             if evidence_id not in linked:
                 linked.append(evidence_id)
         first = citations[0]
-        locator = first.get("locator_json") or ""
-        location = first["artifact_path"] + (f"#{locator}" if locator else "")
+        location = _location(first, first["artifact_path"])
         row = {"id": finding["claim_id"], "title": finding["title"],
             "cwe": "Not asserted by retained draft", "location": location,
             "component": ", ".join(finding["component_ids"]) or "Not asserted",
