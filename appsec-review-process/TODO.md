@@ -231,6 +231,27 @@ Slice 1 (branch `adr14-slice1`):
       `orchestrator/retrieval-report.py <run> --summary --feedback --check` (or `run-status.py <run> --tooling`)
       and record here which families went unused, empty/error rates, cap exhaustion, citation backing and
       the models' `tooling_feedback` wants; `--compare <previous run>` for the deltas.
+- Measured 2026-10-05 on hello-autotools `20261004T054551Z-357581` (155 tool-served invocations, ~6,300 calls,
+  21 with `tooling_feedback`): citation backing 100% after the normalization fix except the OWASP validator
+  (fragment ids, fix in progress); code_lsp used in 7% of grants; code_search 45% empty; evidence_read 16% errors
+  (mostly pre-#67 calls). Queued from the measurements and the models' feedback, in order:
+  - [ ] **Citable structural evidence (ADR-0035, branch `structural-evidence`, in progress).** 09 can never reach
+        VERIFIED (no new independent evidence), so every claim ends UNRESOLVED/REFUTED and the report has no
+        verified finding; 08/09 reported that reachability conclusions rest on code_callers results described in
+        prose, never citable. Python-written, hash-bound query records with a citation_id, re-run at validation;
+        09 VERIFIED only on its own complete, new records.
+  - [ ] Paged `code_file_outline` / function-span table: the outline of the 3,143-line cJSON.c exceeded the
+        output limit, and another truncated at 445 rows.
+  - [ ] Pin each shard's direct cross-shard callers (e.g. main.cpp for runner/store functions) in hunter and
+        reviewer briefs, decided in Python from the code index.
+  - [ ] Exclude answer-key files of test targets (e.g. hello-autotools `docs/VULNERABILITIES.md`, multi-vuln
+        guide) from every model input and index; a threat-model cell asked for it to be pinned.
+  - [ ] Existence query across vendored code ("is function X defined anywhere, vendored included"); the CPG
+        skips vendor/.
+  - [ ] input_jq: tolerate mixed value types in batch filters, page large results instead of hitting the
+        response cap (beyond the tooling-fixes-2 shape hints).
+  - [ ] evidence_derived join helper: SBOM component -> SCA advisory outcome in one query.
+  - [ ] Container image metadata lookup (effective USER, exposed ports) for Dockerfile-derived obligations.
 
 ## Relaunch tax
 
