@@ -59,9 +59,9 @@ def upstream(stage):
                        fixture("verification-decisions.json"))
 
 
-def run(stage, reply):
+def run(stage, reply, carry=None):
     return derive.derive(stage, upstream(stage), reply, request=dict(REQUEST, job_id=stage),
-                         request_sha256=REQUEST_SHA, evidence_sha256=EVIDENCE_SHA)
+                         request_sha256=REQUEST_SHA, evidence_sha256=EVIDENCE_SHA, carry=carry)
 
 
 def decisions_of(document):
@@ -217,6 +217,49 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
         with self.assertRaises(InvokerOutputError) as caught:
             run(BLUE, self.blue_reply(status_a="FAILED", disposition_a="SURVIVING"))
         self.assertIn("surviving requires", str(caught.exception))
+
+    def test_repair_rounds_carry_earlier_well_formed_decisions(self):
+        """Run 20261004T054551Z-357581 (09, 41-claim shards): each repair round fixed the claim it was
+        told about and dropped another; the earlier round's well-formed rows now fill the gap."""
+        reply = {"decisions": [
+            {"claim_id": claim, "disposition": "UNRESOLVED", "method": "static review of cited flow",
+             "citation_ids": [cite], "proof_obligations": [{"obligation_id": ob, "status": "UNRESOLVED",
+                                                            "citation_ids": [cite]}]}
+            for claim, cite, ob in ((A, "citation-a", "po-a"), (B, "citation-b", "po-b"))]}
+        round0 = {"decisions": [dict(reply["decisions"][0], rationale="not a 09 field"),
+                                reply["decisions"][1]]}
+        with self.assertRaises(InvokerOutputError) as caught:
+            run(VERIFY, round0)
+        carry = dict(caught.exception.rows)
+        self.assertEqual(set(carry), {B})           # the malformed row is never carried
+        with self.assertRaises(InvokerOutputError) as caught:
+            run(VERIFY, {"decisions": [reply["decisions"][0]]}, carry={})
+        self.assertEqual(set(caught.exception.rows), {A})
+        document, notes = run(VERIFY, {"decisions": [reply["decisions"][0]]}, carry=carry)
+        self.assertEqual(set(decisions_of(document)), {A, B})
+        self.assertTrue(any(B in n and "carried" in n for n in notes))
+        # the current reply wins over a carried row for the same claim
+        changed = dict(reply["decisions"][1], method="re-read after repair")
+        document, _ = run(VERIFY, {"decisions": [reply["decisions"][0], changed]}, carry=carry)
+        self.assertEqual(decisions_of(document)[B]["method"], "re-read after repair")
+
+    def test_reviewer_fill_hook_carries_rows_between_rounds(self):
+        """The pool's fill_result hook keeps one invocation's well-formed rows across repair rounds."""
+        rows = {claim: {"claim_id": claim, "disposition": "UNRESOLVED", "method": "static review",
+                        "citation_ids": [cite], "proof_obligations": [
+                            {"obligation_id": ob, "status": "UNRESOLVED", "citation_ids": [cite]}]}
+                for claim, cite, ob in ((A, "citation-a", "po-a"), (B, "citation-b", "po-b"))}
+        data = json.dumps(upstream(VERIFY)).encode()
+        package = SimpleNamespace(request=dict(REQUEST, job_id=VERIFY), request_sha256=REQUEST_SHA,
+                                  inputs=[SimpleNamespace(data=data, sha256=EVIDENCE_SHA)])
+        fill = reviewer_pool._derive_fill(package)
+        with self.assertRaises(InvokerOutputError):
+            fill({"result": {"decisions": [rows[A]]}}, "result")      # round 0 omits B
+        with self.assertRaises(InvokerOutputError):
+            fill({"result": {"decisions": [dict(rows[A], cwe="bad")]}}, "result")  # A malformed, B absent
+        envelope = {"result": {"decisions": [rows[B]]}}                # round 2 omits A
+        fill(envelope, "result")
+        self.assertEqual({c["subject_id"] for c in envelope["result"]["candidates"]}, {A, B})
 
     def test_missing_decision_names_its_obligations_and_citations(self):
         """Run 20261001T064759Z-4a8586 (08 reviewer-00): one claim was skipped, and the repair, told

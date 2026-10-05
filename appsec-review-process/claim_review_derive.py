@@ -214,8 +214,15 @@ def _decision_requirements(stage: str, claim_id: str, record: dict[str, Any]) ->
 
 def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[str, Any],
            request_sha256: str, evidence_sha256: str,
-           store: SchemaStore | None = None) -> tuple[dict[str, Any], list[str]]:
-    """Return (claim-review-pool-candidates document, limitations) or raise InvokerOutputError."""
+           store: SchemaStore | None = None,
+           carry: dict[str, dict[str, Any]] | None = None) -> tuple[dict[str, Any], list[str]]:
+    """Return (claim-review-pool-candidates document, limitations) or raise InvokerOutputError.
+
+    ``carry`` holds well-formed decisions from this invocation's earlier, rejected rounds; a claim the
+    current reply omits is taken from it, so a repair round that drops a different claim each time
+    still converges. Run 20261004T054551Z-357581 (09, 41-claim shards): every repair round fixed the
+    claim it was told about and omitted another, so the invocation failed after three paid rounds.
+    The rejected reply's well-formed rows are attached to the error as ``rows`` for the next round."""
     if stage not in POOL_CLASSES:
         raise InvokerOutputError(f"claim review derive: unknown stage {stage!r}")
     store = store or SchemaStore()
@@ -253,6 +260,10 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
                 errors.append(f"{where}: claim_id {claim_id!r} has more than one different decision")
             continue
         by_claim[claim_id] = row
+    for claim_id in sorted(set(records) - set(by_claim)):
+        if carry and claim_id in carry:
+            by_claim[claim_id] = carry[claim_id]
+            limitations.append(f"claim {claim_id}: decision carried from an earlier repair round")
     absent = sorted(set(records) - set(by_claim))
     if absent:
         errors.append(f"no decision for upstream claim_id(s) {absent}; every upstream claim needs one")
@@ -263,8 +274,10 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
         for claim_id in absent[:MAX_ABSENT_HINTS]:
             errors.append(_decision_requirements(stage, claim_id, records[claim_id]))
     if errors:
-        raise InvokerOutputError(f"reviewer reply does not cover the upstream claims: {len(errors)} error(s)",
-                                 errors)
+        error = InvokerOutputError(f"reviewer reply does not cover the upstream claims: {len(errors)} error(s)",
+                                   errors)
+        error.rows = dict(by_claim)
+        raise error
 
     decisions: dict[str, dict[str, Any]] = {}
     for claim_id in sorted(by_claim):
