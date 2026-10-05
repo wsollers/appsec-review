@@ -99,6 +99,21 @@ def _verified_package(root: Path) -> tuple[dict[str, Any], dict[str, Any], dict[
     return publication, report, trace
 
 
+def _structural(citation: dict[str, Any]) -> bool:
+    """A tool-evidence citation (ADR-0035): a re-run-verified code query, shown by its Python summary."""
+    return (str(citation.get("citation_id") or "").startswith("tev:") and
+            str(citation.get("artifact_path") or "").startswith("tool-evidence/"))
+
+
+def _location(citation: dict[str, Any], fallback: str) -> str:
+    """Where a finding's first citation points: a structural query reads as its summary
+    (``code_callers(f) -> a.c:42 [complete]``), anything else as artifact#locator."""
+    if _structural(citation):
+        return "structural query: " + str(citation.get("observed_fact"))
+    locator = citation.get("locator_json") or ""
+    return (citation.get("artifact_path") or fallback) + (f"#{locator}" if locator else "")
+
+
 def _evidence(trace: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
     rows, identifiers = [], {}
     citations = trace.get("citations")
@@ -122,8 +137,8 @@ def _evidence(trace: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, st
         identifiers[citation_id] = eid
         rows.append({"id": eid, "producer": producer, "artifact": artifact,
             "sha256": artifact_sha256,
-            "kind": "retained verified citation", "citation_id": citation_id,
-            "locator": citation.get("locator_json"), "observed_fact": observed})
+            "kind": "structural query record (re-run verified)" if _structural(citation) else "retained verified citation",
+            "citation_id": citation_id, "locator": citation.get("locator_json"), "observed_fact": observed})
     return rows, identifiers
 
 
@@ -149,8 +164,7 @@ def _findings(report: dict[str, Any], identifiers: dict[str, str]) -> list[dict[
             if identifiers[citation_id] not in evidence_ids:
                 evidence_ids.append(identifiers[citation_id])
         first = citations[0]
-        locator = first.get("locator_json") or ""
-        location = (first.get("artifact_path") or "retained report") + (f"#{locator}" if locator else "")
+        location = _location(first, "retained report")
         confidence = finding.get("confidence", "not asserted")
         claim_id = finding.get("claim_id")
         title = finding.get("title")

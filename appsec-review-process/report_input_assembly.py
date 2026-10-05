@@ -14,6 +14,7 @@ from execution_state import Blocked, atomic_json, digest, file_hash, read_json, 
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import tool_evidence
 
 JOB = "10-report-input-assembly"
 CONTRACT = "report-synthesis-input"
@@ -482,8 +483,28 @@ def _artifact_identity(citation: dict[str, Any]) -> tuple[str, str, str, str]:
     return fields  # type: ignore[return-value]
 
 
-def _verify_citation(jobs_root: Path, identity: tuple[str, str, str, str]) -> dict[str, str]:
+def _verify_tool_evidence(jobs_root: Path, run_id: str, identity: tuple[str, str, str, str],
+                          citation: dict[str, Any] | None) -> dict[str, str]:
+    """A structural record (ADR-0035) under the run's ``data/tool-evidence/``: the cited object must be the
+    canonical citation of an untampered record whose query still re-runs to the recorded answer."""
+    if citation is None:
+        raise Blocked(f"{JOB}: tool-evidence citation has no citation object")
+    try:
+        canonical = tool_evidence.verify_citation(run_id, citation, data_root=jobs_root.resolve(strict=True).parent)
+    except (ValueError, OSError) as exc:
+        raise Blocked(f"{JOB}: cited tool evidence is invalid ({str(exc)[:300]})") from None
+    if (canonical["producer_job_id"], canonical["producer_attempt_id"], canonical["artifact_path"],
+            canonical["artifact_sha256"]) != identity:
+        raise Blocked(f"{JOB}: cited tool evidence contradicts its producer identity")
+    return {"producer_job_id": identity[0], "producer_attempt_id": identity[1],
+            "artifact_path": identity[2], "artifact_sha256": identity[3]}
+
+
+def _verify_citation(jobs_root: Path, identity: tuple[str, str, str, str], *, run_id: str | None = None,
+                     citation: dict[str, Any] | None = None) -> dict[str, str]:
     job, attempt_id, relative, expected = identity
+    if relative.startswith(tool_evidence.FOLDER + "/"):
+        return _verify_tool_evidence(Path(jobs_root), str(run_id), identity, citation)
     path = PurePosixPath(relative)
     parts = path.parts
     if len(parts) >= 6 and parts[:2] == ("data", "jobs") and parts[3] == "attempts":
@@ -574,10 +595,12 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
             scoring.get("ledger_head_sha256") != origin_head_sha256 or
             set(verifications) != set(priorities) or set(verifications) != set(latest)):
         raise Blocked(f"{JOB}: decision results do not bind the exact ledger head")
-    citations = {}
+    citations, structural = {}, {}   # structural: every distinct tev: citation object -> its identity (ADR-0035)
     for entry in ledger["entries"]:
         for citation in entry.get("citations", []):
             identity = _artifact_identity(citation)
+            if tool_evidence.is_citation(citation):
+                structural[json.dumps(citation, sort_keys=True)] = identity
             prior = citations.setdefault(citation.get("citation_id"), identity)
             if not citation.get("citation_id") or prior != identity:
                 raise Blocked(f"{JOB}: duplicate citation id is contradictory")
@@ -594,6 +617,8 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
             raise Blocked(f"{JOB}: verification status contradicts the ledger")
         for citation in record.get("verification_citations", []):
             identity = _artifact_identity(citation)
+            if tool_evidence.is_citation(citation):
+                structural[json.dumps(citation, sort_keys=True)] = identity
             prior = citations.setdefault(citation.get("citation_id"), identity)
             if not citation.get("citation_id") or prior != identity:
                 raise Blocked(f"{JOB}: verification citation identity is contradictory")
@@ -624,7 +649,11 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
                 raise Blocked(f"{JOB}: scoring result is inflated or non-deterministic")
     _reject_promotions({"component": component, "threat": threat, "owasp": [matrix, gaps, routes],
                         "ledger": ledger})
-    evidence = [_verify_citation(Path(jobs_root), identity) for identity in sorted(set(citations.values()))]
+    for text, identity in sorted(structural.items()):   # each copy of a structural citation, not only the first
+        _verify_tool_evidence(Path(jobs_root), run_id, identity, json.loads(text))
+    by_identity = {identity: json.loads(text) for text, identity in structural.items()}
+    evidence = [_verify_citation(Path(jobs_root), identity, run_id=run_id, citation=by_identity.get(identity))
+                for identity in sorted(set(citations.values()))]
     unresolved = [{"claim_id": claim_id, "status": latest[claim_id]["status"]}
                   for claim_id in sorted(latest) if latest[claim_id]["status"] not in {"verified", "refuted", "superseded"}]
     dissent_ids = sorted({item for entry in ledger["entries"] for item in entry.get("dissent_ids", [])} |

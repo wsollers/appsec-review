@@ -24,6 +24,7 @@ from typing import Any
 
 import bounded_analysis_workers
 import claim_ledger
+import tool_evidence
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 import registry_paths
@@ -42,7 +43,9 @@ SOURCES = {claim_ledger.JOB: (claim_ledger.CONTRACT, LEDGER, "claim-decision-led
            SCORING: (SCORING, "scoring-prioritization.json", "scoring-prioritization.schema.json",
                      "priorities", "verification_status")}
 CODE_FILES = ("claim_ledger_final.py", "claim_ledger.py", registry_paths.template_rel(JOB),
-              registry_paths.contract_rel(CONTRACT))
+              registry_paths.contract_rel(CONTRACT),
+              # cited structural records re-run through these (ADR-0035)
+              "tool_evidence.py", "code_query_mcp.py", "code_index.py", "reachability.py")
 SCHEMA_FILES = ("claim-decision-ledger.schema.json", "claim-ledger-entry.schema.json",
                 "claim-ledger-citation.schema.json", *(SOURCES[job][2] for job in (*STAGES, SCORING)))
 
@@ -135,6 +138,29 @@ def plan(run_id: str, documents: dict[str, dict[str, Any]], bindings: dict[str, 
             "origin_head_id": head[0], "origin_head_hash": head[1]}
 
 
+def verify_structural(run_id: str, jobs_root: Path, documents: dict[str, dict[str, Any]]) -> int:
+    """Every ``tev:`` citation a 07/08/09 decision carries into the ledger is the canonical citation of an
+    untampered tool-evidence record whose query still re-runs to the recorded answer (ADR-0035)."""
+    checked: set[str] = set()
+    for job in STAGES:
+        field = claim_ledger.DECISION_PRODUCERS[job][4]
+        for row in _rows(job, documents[job]).values():
+            items = list(row.get(field) or [])
+            for obligation in row.get("proof_obligations") or []:
+                items += obligation.get("citations") or []
+            for citation in items:
+                key = json.dumps(citation, sort_keys=True)
+                if not tool_evidence.is_citation(citation) or key in checked:
+                    continue
+                try:
+                    tool_evidence.verify_citation(run_id, citation, data_root=Path(jobs_root).resolve().parent)
+                except (ValueError, OSError) as exc:
+                    raise Blocked(f"{JOB}: {job} claim {row['claim_id']} cites invalid tool evidence "
+                                  f"({str(exc)[:300]})") from None
+                checked.add(key)
+    return len(checked)
+
+
 def derive(run_id: str, attempt_id: str, inputs: dict[str, Any],
            jobs_root: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     jobs_root = Path(jobs_root) if jobs_root is not None else data_path(run_id, "jobs")
@@ -144,6 +170,7 @@ def derive(run_id: str, attempt_id: str, inputs: dict[str, Any],
         if binding != inputs["bindings"][job]:
             raise Blocked(f"{JOB}: accepted {job} changed after the inputs were bound")
     steps = plan(run_id, documents, inputs["bindings"])
+    verify_structural(run_id, jobs_root, documents)
     origin = documents[claim_ledger.JOB]
     ledger = claim_ledger.build_ledger(run_id, attempt_id, [], prior=origin, decisions=steps["requests"],
                                        decision_jobs_root=jobs_root)

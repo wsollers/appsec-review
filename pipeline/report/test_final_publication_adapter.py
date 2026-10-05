@@ -74,5 +74,39 @@ class FinalPublicationAdapterTests(unittest.TestCase):
                 adapter.convert(self.root / "final", path)
 
 
+class StructuralCitationTests(unittest.TestCase):
+    """ADR-0035: a tev: citation is shown by its Python summary, not by artifact#locator JSON."""
+
+    def test_structural_citation_renders_its_observed_fact(self):
+        fact = "code_path(copy_field -> strcpy) -> 1 path(s): copy_field -> strcpy (app/parse.c:22) [complete]"
+        citation = {"citation_id": "tev:" + "a" * 32, "producer_job_id": "09-independent-verification",
+                    "producer_attempt_id": "verify-1",
+                    "artifact_path": "tool-evidence/09-independent-verification/verify-1/" + "a" * 32 + ".json",
+                    "artifact_sha256": "sha256:" + "b" * 64,
+                    "locator_json": '{"arguments":{"from":"copy_field","to":"strcpy"},"complete":true,"tool":"code_path"}',
+                    "observed_fact": fact}
+        rows, identifiers = adapter._evidence({"citations": [citation]})
+        self.assertEqual(rows[0]["kind"], "structural query record (re-run verified)")
+        (structural,) = adapter._findings({"verified_findings": [{
+            "claim_id": "claim-structural", "title": "Unbounded copy reachable from copy_field",
+            "component_ids": ["component-1"], "score": 16, "priority": "P0", "severity": "CRITICAL",
+            "verification_citations": [citation]}]}, identifiers)
+        self.assertEqual(structural["location"], "structural query: " + fact)
+        self.assertEqual(structural["summary"], fact)
+        import importlib.util
+        if importlib.util.find_spec("cvss") is None:
+            self.skipTest("render.py needs the cvss package")
+        review = json.loads((HERE / "examples" / "hello-autotools.review.json").read_text())
+        review["evidence"].append({**rows[0], "id": "E-900"})
+        review["findings"][0].update(location=structural["location"], summary=structural["summary"],
+                                     evidence=["E-900"])
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory) / "structural.review.json"
+            data.write_text(json.dumps(review))
+            render.render(data, Path(directory) / "rendered")
+            html = (Path(directory) / "rendered" / "report.html").read_text()
+        self.assertIn("structural query: code_path(copy_field -&gt; strcpy)", html)
+
+
 if __name__ == "__main__":
     unittest.main()

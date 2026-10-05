@@ -18,6 +18,7 @@ import report_input_assembly as report
 from execution_state import Blocked, atomic_json, file_hash, read_json, tree_hashes
 from worker_result import artifact_records, terminal_envelope
 from test_claim_lifecycle_core import RUN_ID, actual_ledger, fixture
+import tool_evidence_fixture
 
 STAGES = (("07-red-team-adversarial", "red-decisions.json", "red-1"),
           ("08-blue-team-refutation", "blue-decisions.json", "blue-1"),
@@ -189,6 +190,24 @@ class FinalLedgerTests(unittest.TestCase):
         self.assert_report_accepts(loaded["documents"][final.LEDGER])
         attempt = self.jobs / final.JOB / "attempts" / pointer["attempt_id"]
         self.assertEqual(read_json(attempt / "status.json")["decisions"], 5)
+
+    def test_structural_citation_enters_the_final_ledger_and_a_tampered_record_blocks(self):
+        """ADR-0035: a 09 VERIFIED row resting on a tev: record re-run-verified before it is appended."""
+        citation, path = tool_evidence_fixture.record(self.jobs.parent, "09-independent-verification", "verify-1")
+        def cite(document):
+            row = next(row for row in document["verifications"] if row["status"] == "VERIFIED")
+            row["verification_citations"] = [citation]
+            for item in row["proof_obligations"]:
+                item["citations"] = [citation]
+        self.republish("09-independent-verification", cite)
+        ledger, _ = self.derive()
+        verified = [entry for entry in ledger["entries"] if entry["status"] == "verified"]
+        self.assertEqual([item["citation_id"] for item in verified[0]["citations"]][-1:], [citation["citation_id"]])
+        self.assert_report_accepts(ledger)
+        record = read_json(path); record["answer"]["rows"] = []
+        atomic_json(path, record)
+        with self.assertRaisesRegex(Blocked, "invalid tool evidence"):
+            self.derive()
 
 
 if __name__ == "__main__":
