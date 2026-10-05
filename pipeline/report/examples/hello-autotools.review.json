@@ -7,7 +7,7 @@
     "engagement": "SAMPLE - hello-autotools fixture (illustrative)",
     "run_id": "sample-hello-autotools",
     "sat_id": "20260927T141440Z",
-    "pipeline_commit": "sample; job-graph.json sha256:4e79091096f3 (90 jobs)",
+    "pipeline_commit": "sample; job-graph.json sha256:184a24ebdd28 (91 jobs)",
     "report_date": "2026-09-29",
     "classification": "Internal - sample",
     "native_tier": "A",
@@ -56,7 +56,7 @@
       "07-red-team-adversarial": 5,
       "08-blue-team-refutation": 1,
       "09-independent-verification": 2,
-      "10-synthesis-report": 4,
+      "10-synthesis-report": 5,
       "11-remediation-proposal": 2,
       "12-scoring-prioritization": 1,
       "12b-poc-and-fix": 1,
@@ -127,7 +127,7 @@
     {
       "id": "10-synthesis-report",
       "name": "Lane 10: synthesis report",
-      "note": "4 job(s) whose job-graph.json lane is 10-synthesis-report."
+      "note": "5 job(s) whose job-graph.json lane is 10-synthesis-report."
     },
     {
       "id": "11-remediation-proposal",
@@ -770,6 +770,13 @@
       "kind": "deterministic_python",
       "status": "OK",
       "tools": "verified-control-lifecycle (evidence_quorum.py:run_verified_attempt)"
+    },
+    {
+      "id": "claim-ledger-final",
+      "family": "10-synthesis-report",
+      "kind": "deterministic_python",
+      "status": "OK",
+      "tools": "hash-linked-claim-ledger (claim_ledger_final.py:run)"
     },
     {
       "id": "10-synthesis-report",

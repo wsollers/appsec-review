@@ -231,6 +231,27 @@ Slice 1 (branch `adr14-slice1`):
       `orchestrator/retrieval-report.py <run> --summary --feedback --check` (or `run-status.py <run> --tooling`)
       and record here which families went unused, empty/error rates, cap exhaustion, citation backing and
       the models' `tooling_feedback` wants; `--compare <previous run>` for the deltas.
+- Measured 2026-10-05 on hello-autotools `20261004T054551Z-357581` (155 tool-served invocations, ~6,300 calls,
+  21 with `tooling_feedback`): citation backing 100% after the normalization fix except the OWASP validator
+  (fragment ids, fix in progress); code_lsp used in 7% of grants; code_search 45% empty; evidence_read 16% errors
+  (mostly pre-#67 calls). Queued from the measurements and the models' feedback, in order:
+  - [ ] **Citable structural evidence (ADR-0035, branch `structural-evidence`, in progress).** 09 can never reach
+        VERIFIED (no new independent evidence), so every claim ends UNRESOLVED/REFUTED and the report has no
+        verified finding; 08/09 reported that reachability conclusions rest on code_callers results described in
+        prose, never citable. Python-written, hash-bound query records with a citation_id, re-run at validation;
+        09 VERIFIED only on its own complete, new records.
+  - [ ] Paged `code_file_outline` / function-span table: the outline of the 3,143-line cJSON.c exceeded the
+        output limit, and another truncated at 445 rows.
+  - [ ] Pin each shard's direct cross-shard callers (e.g. main.cpp for runner/store functions) in hunter and
+        reviewer briefs, decided in Python from the code index.
+  - [ ] Exclude answer-key files of test targets (e.g. hello-autotools `docs/VULNERABILITIES.md`, multi-vuln
+        guide) from every model input and index; a threat-model cell asked for it to be pinned.
+  - [ ] Existence query across vendored code ("is function X defined anywhere, vendored included"); the CPG
+        skips vendor/.
+  - [ ] input_jq: tolerate mixed value types in batch filters, page large results instead of hitting the
+        response cap (beyond the tooling-fixes-2 shape hints).
+  - [ ] evidence_derived join helper: SBOM component -> SCA advisory outcome in one query.
+  - [ ] Container image metadata lookup (effective USER, exposed ports) for Dockerfile-derived obligations.
 
 ## Relaunch tax
 
@@ -742,6 +763,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-10-05 | hello-autotools | `20261004T054551Z-357581` (zarathustra) | 10-synthesis-report (10-report-input-assembly) | FAILED "final ledger has no lifecycle decision chain": the report's ledger input was `claim-ledger-routing`'s L01 admission ledger; `claim_ledger.current_inputs` gathers candidate sources only, so nothing ever appended the 07/08/09 decisions (`build_ledger`/`load_decision` existed unused; design-parity gap `downstream_decision_append_wiring_missing`) | New deterministic `claim-ledger-final` (`claim_ledger_final.py`) after 12, before 10: Python builds `{claim_id, producer_job_id}` requests from the accepted 07/08/09 results (each must review the L01 head and consume the previous stage; 12 must agree with 09 and assigns no status), `build_ledger` appends them stage by stage with `load_decision` authority, L01 entries/head byte-identical; a claim with no stage row is a named gap, a concurring disposition appends nothing, an illegal transition (09 UNRESOLVED/BLOCKED after an 08 refutation) or wrong authority blocks. Report `SPECS["ledger"]` reads it; `_verify_decision_authority` checks citations/dissent by the ledger's append rule (09 evidence merges in); 09 BLOCKED accepted on an `unresolved` claim; 09/12 records may carry reviewer judgment keys (`cwe_judgments`, `mitre_refs`, `cvss_v4`, `remediation_proposal`). Resume: only `claim-ledger-final` and `10-synthesis-report` re-run; 07-12 and claim-ledger-routing fingerprints unchanged (branch final-ledger) |
 | 2026-10-04 | hello-autotools | `20261004T054551Z-357581` (zarathustra) | 10-synthesis-report (10-report-input-assembly) | BLOCKED "required report input or receipt is absent": the report reader wanted a single `owasp-control-status-matrix.json` while 04 publishes a manifest plus pages, and wanted `permission.json`/`lineage.json` from 01, whose `component-map` contract has none | Consumer side only (`report_input_assembly`, `synthesis_report`): the paginated matrix is reassembled from manifest and envelope-bound pages (hash, order, page schema, logical digest) and validated as the matrix, legacy single file still read; `RECEIPTLESS` component binds its generation from the map's `source_snapshot_sha256`/`evidence_manifest_lineage` against its hash-bound `inputs.json`, null receipts in `synthesis-input` and the report carries named gap `component-receipts-absent`; guard test checks SPECS against every producer contract. Only 10 and downstream re-run |
 | 2026-10-04 | hello-autotools | `20261004T054551Z-357581` (zarathustra) | model lookup tools (retrieval-report) | `--summary/--check`: lsp tools used in 8% of granted invocations (half empty, 3 "server failed / not ready"), `evidence_read` failed 93/503, citation backing 0% for 03-threat-model / 04-owasp-validator. Causes found in code: evidence_read accepts only `source/<path>` while the prompt tells models to cite `src/a.c` and lists inputs as `target-repository:src/a.c`; limit over 50 and start past EOF gave generic errors; the index lock is non-blocking for parallel cells. code_* path args took no `source/`/root/`:line` forms, and a path no server lists read as "lsp-not-ready" with no reason. The report counted neither pinned inputs nor `path:line` code cites as backing, and split `target-repository:x` to `target-repository` | `input_mcp`: evidence_read/similar resolve those forms (note in the answer), clamp the window, precise refusals, bounded lock retry; `code_query_mcp.repo_path` for path args; lsp not-ready names server, image and the 02-lsp-xref reason (`lsp-path-unknown` / `lsp-no-server` split out); code_search/code_symbol empty answers name the query form; `retrieval-report --diagnose`; pinned-backed vs tool-backed with one path normalization; tool-grant.json records output_root and input mode; guide `code_lsp` v2 (branch tooling-findings). Host: run `--diagnose` on the run to confirm which causes dominate |
 | 2026-10-04 | hello-autotools | `20261004T054551Z-357581` (zarathustra) | launch_job --explain | Explain reported RERUN for 02-code-property-graph, 02-source-sast, 02-native-sast, 06-reachability-codeql and others ("code hash of data/... / pipeline/... changed") though those files had not changed: `dev_restart.current_code` resolved every recorded key under the process root except `schemas/`, so repository-root files hashed as missing; the false RERUNs then cascaded downstream in the prediction (the jobs themselves fingerprint correctly) | A recorded key resolves under the process root, else under the repository root; test with process-root, data/ and schemas/ keys |

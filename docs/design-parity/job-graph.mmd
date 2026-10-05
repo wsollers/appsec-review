@@ -207,6 +207,14 @@ flowchart TD
   12b_poc_and_fix_pre --> 12b_poc_and_fix["12b-poc-and-fix: work or reuse"]
   12b_poc_and_fix --> 12b_poc_and_fix_post["12b-poc-and-fix: post-validation and publish"]
   12_scoring_prioritization_post -->|required| 12b_poc_and_fix_config
+  claim_ledger_final_config["claim-ledger-final: resolve job configuration"] --> claim_ledger_final_pre["claim-ledger-final: pre-validation"]
+  claim_ledger_final_pre --> claim_ledger_final["claim-ledger-final: work or reuse"]
+  claim_ledger_final --> claim_ledger_final_post["claim-ledger-final: post-validation and publish"]
+  claim_ledger_routing_post -->|required| claim_ledger_final_config
+  07_red_team_adversarial_post -->|required| claim_ledger_final_config
+  08_blue_team_refutation_post -->|required| claim_ledger_final_config
+  09_independent_verification_post -->|required| claim_ledger_final_config
+  12_scoring_prioritization_post -->|required| claim_ledger_final_config
   10_synthesis_report_config["10-synthesis-report: resolve job configuration"] --> 10_synthesis_report_pre["10-synthesis-report: pre-validation"]
   10_synthesis_report_pre --> 10_synthesis_report["10-synthesis-report: work or reuse"]
   10_synthesis_report --> 10_synthesis_report_post["10-synthesis-report: post-validation and publish"]
@@ -218,6 +226,7 @@ flowchart TD
   08_blue_team_refutation_post -->|required| 10_synthesis_report_config
   09_independent_verification_post -->|required| 10_synthesis_report_config
   12_scoring_prioritization_post -->|required| 10_synthesis_report_config
+  claim_ledger_final_post -->|required| 10_synthesis_report_config
   06_cve_reachability_post -->|required| 10_synthesis_report_config
   14_attack_chain_refutation_post -->|optional| 10_synthesis_report_config
   12b_poc_and_fix_post -->|optional| 10_synthesis_report_config
