@@ -31,7 +31,8 @@ SPECS = {
               "owasp-control-status-matrix.schema.json",
               (("owasp-coverage-gaps.json", "owasp-coverage-gaps-report.schema.json"),
                ("owasp-candidate-promotion-routes.json", "owasp-candidate-promotion-routes.schema.json"))),
-    "ledger": ("claim-ledger-routing", "claim-ledger-core", "claim-decision-ledger.json",
+    # The final ledger: L01 admissions plus the accepted 07/08/09 decisions (claim_ledger_final.py).
+    "ledger": ("claim-ledger-final", "claim-ledger-final", "claim-decision-ledger.json",
                "claim-decision-ledger.schema.json", ()),
     "verification": ("09-independent-verification", "09-independent-verification",
                      "independent-verification.json", "09-independent-verification.schema.json", ()),
@@ -59,6 +60,7 @@ CANONICAL_PERMISSIONS = {
     "03-threat-model-dfd-stride": ["read-source", "read-run-data", "write-run-data"],
     "04-owasp-join-report": ["read-run-data", "write-run-data"],
     "claim-ledger-routing": ["read-run-data", "write-run-data"],
+    "claim-ledger-final": ["read-run-data", "write-run-data"],
     "07-red-team-adversarial": ["read-run-data", "write-run-data"],
     "08-blue-team-refutation": ["read-run-data", "write-run-data"],
     "09-independent-verification": ["read-run-data", "write-run-data"],
@@ -73,6 +75,10 @@ DECISION_PRODUCERS = {
     "09-independent-verification": ("09-independent-verification", "independent-verification.json",
         "09-independent-verification.schema.json", "verifications", "verifier", "independent-verifier"),
 }
+# The decision's own citations, which claim_ledger.build_ledger merges into the entry it appends.
+DECISION_CITATIONS = {"07-red-team-adversarial": "review_citations",
+                      "08-blue-team-refutation": "refutation_citations",
+                      "09-independent-verification": "verification_citations"}
 
 DECISION_OUTCOMES = {
     "07-red-team-adversarial": {"HYPOTHESIS": "under_review"},
@@ -354,7 +360,10 @@ def _lifecycle_origin(ledger: dict[str, Any]) -> tuple[str, str]:
 
 
 def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, Any],
-                               source_generation: str, component_generation: str) -> None:
+                               source_generation: str, component_generation: str,
+                               prior: dict[str, Any]) -> None:
+    """Re-derive one appended decision from its producer's exact accepted attempt; ``prior`` is the
+    claim's previous ledger entry."""
     authority = entry.get("decision_authority")
     expected_keys = {"contract_id", "job_id", "attempt_id", "role_id", "source_generation",
         "component_generation", "accepted_pointer_sha256", "envelope_sha256", "artifact_path",
@@ -419,19 +428,37 @@ def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, An
     actor = rows[0].get(actor_field) if len(rows) == 1 else None
     row = rows[0] if len(rows) == 1 else {}
     inherited = ("route_id", "claim_class", "hypothesis", "confidence", "component_ids",
-        "source_generation", "component_generation", "producer", "citations", "dissent_ids",
-        "causal_claim_ids", "supersedes_claim_id")
+        "source_generation", "component_generation", "producer", "causal_claim_ids", "supersedes_claim_id")
     expected_status = DECISION_OUTCOMES[job_id].get(row.get("status"))
+    # claim_ledger.build_ledger appends the claim's prior citations merged with this decision's own
+    # (first occurrence kept, identical ids coalesced) and the sorted union of prior and row dissent.
+    citations, seen = [], {}
+    for citation in [*prior.get("citations", []), *(row.get(DECISION_CITATIONS[job_id]) or [])]:
+        key = citation.get("citation_id") if isinstance(citation, dict) else None
+        if key in seen:
+            if seen[key] != citation: citations = None; break
+            continue
+        seen[key] = citation; citations.append(citation)
+    row_citations = row.get("citations") if isinstance(row.get("citations"), list) else None
+    dissent = row.get("dissent_ids") if isinstance(row.get("dissent_ids"), list) else None
     if (errors or not isinstance(actor, dict) or actor.get("job_id") != job_id or
             actor.get("attempt_id") != pointer["attempt_id"] or actor.get("role_id") != role or
             actor.get("source_generation") != source_generation or
             actor.get("component_generation") != component_generation or
             expected_status != entry.get("status") or
-            any(row.get(field) != entry.get(field) for field in inherited)):
+            any(row.get(field) != entry.get(field) for field in inherited) or
+            citations is None or entry.get("citations") != citations or row_citations is None or
+            entry["citations"][:len(row_citations)] != row_citations or dissent is None or
+            entry.get("dissent_ids") != sorted(set(prior.get("dissent_ids", [])) | set(dissent))):
         raise Blocked(f"{JOB}: lifecycle decision artifact does not support its authority")
 
 
-def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[str]) -> dict[str, dict[str, Any]]:
+# Reviewer judgment carried on 09/12 records (ADR-0020/0026; the closed record schemas allow them).
+JUDGMENT_KEYS = frozenset({"cwe_judgments", "mitre_refs", "cvss_v4", "remediation_proposal"})
+
+
+def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[str],
+             optional: frozenset[str] = frozenset()) -> dict[str, dict[str, Any]]:
     top_keys = {"schema", "run_id", "stage", "ledger_head_id", "ledger_head_sha256",
                 "upstream", "claim_boundary", key}
     if (set(document) != top_keys or document.get("stage") != stage or
@@ -441,7 +468,7 @@ def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[st
     result = {}
     for row in document[key]:
         claim_id = row.get("claim_id") if isinstance(row, dict) else None
-        if not isinstance(claim_id, str) or claim_id in result or set(row) != record_keys:
+        if not isinstance(claim_id, str) or claim_id in result or not record_keys <= set(row) <= record_keys | optional:
             raise Blocked(f"{JOB}: duplicate or invalid downstream claim identity")
         result[claim_id] = row
     return result
@@ -494,9 +521,12 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
     latest = _validate_ledger(ledger)
     source_generation, component_generation = ledger["source_generation"], ledger["component_generation"]
     origin_head_id, origin_head_sha256 = _lifecycle_origin(ledger)
+    previous: dict[str, dict[str, Any]] = {}
     for entry in ledger["entries"]:
         if entry["event_type"] == "status_decision":
-            _verify_decision_authority(Path(jobs_root), run_id, entry, source_generation, component_generation)
+            _verify_decision_authority(Path(jobs_root), run_id, entry, source_generation, component_generation,
+                                       previous[entry["claim_id"]])
+        previous[entry["claim_id"]] = entry
     if (component.get("source_snapshot_sha256") != source_generation or
             loaded["component"]["reference"]["attempt_id"] != component_generation or
             threat.get("source_snapshot") != source_generation or
@@ -535,8 +565,9 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
         "proof_obligations", "dissent_ids", "causal_claim_ids", "supersedes_claim_id",
         "verification_status", "verifier", "verification_citations", "score", "severity",
         "priority", "factors", "scoring_rationale"}
-    verifications = _records(verification, "verifications", "09-independent-verification", verification_keys)
-    priorities = _records(scoring, "priorities", "12-scoring-prioritization", scoring_keys)
+    verifications = _records(verification, "verifications", "09-independent-verification", verification_keys,
+                             JUDGMENT_KEYS & {"cwe_judgments", "mitre_refs"})
+    priorities = _records(scoring, "priorities", "12-scoring-prioritization", scoring_keys, JUDGMENT_KEYS)
     if (verification.get("ledger_head_id") != origin_head_id or
             verification.get("ledger_head_sha256") != origin_head_sha256 or
             scoring.get("ledger_head_id") != origin_head_id or
@@ -555,10 +586,11 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
                 record.get("component_generation") != component_generation):
             raise Blocked(f"{JOB}: verification generation is stale")
         ledger_status = latest[claim_id]["status"]
-        expected_status = {"verified": "VERIFIED", "refuted": "REFUTED",
-                           "unresolved": "UNRESOLVED", "narrowed": "BLOCKED",
-                           "under_review": "BLOCKED", "candidate": "BLOCKED"}.get(ledger_status)
-        if expected_status is None or record.get("status") != expected_status:
+        # 09 BLOCKED appends `unresolved` (DECISION_OUTCOMES), or concurs with an 08 `unresolved`.
+        expected_status = {"verified": {"VERIFIED"}, "refuted": {"REFUTED"},
+                           "unresolved": {"UNRESOLVED", "BLOCKED"}, "narrowed": {"BLOCKED"},
+                           "under_review": {"BLOCKED"}, "candidate": {"BLOCKED"}}.get(ledger_status, set())
+        if record.get("status") not in expected_status:
             raise Blocked(f"{JOB}: verification status contradicts the ledger")
         for citation in record.get("verification_citations", []):
             identity = _artifact_identity(citation)

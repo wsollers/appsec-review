@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 90,
+  "lifecycle_jobs": 91,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -2833,6 +2833,27 @@
        ]
       },
       {
+       "ref": "job:claim-ledger-final",
+       "id": "claim-ledger-final",
+       "name": "Final Claim-Decision Ledger (L01 plus lifecycle decisions)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:claim-ledger-routing",
+        "job:07-red-team-adversarial",
+        "job:08-blue-team-refutation",
+        "job:09-independent-verification",
+        "job:12-scoring-prioritization"
+       ],
+       "produces": [
+        "job:claim-ledger-final"
+       ],
+       "declared_inputs": [
+        "accepted claim-ledger-routing L01 ledger",
+        "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head",
+        "accepted 12-scoring-prioritization result reviewing the same head"
+       ]
+      },
+      {
        "ref": "job:10-synthesis-report",
        "id": "10-synthesis-report",
        "name": "Accepted Evidence-backed Draft Report Publisher",
@@ -2846,6 +2867,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:claim-ledger-final",
         "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
         "job:12b-poc-and-fix",
@@ -2969,6 +2991,7 @@
        "job:12b-poc-and-fix",
        "job:14-attack-chain-composition",
        "job:14-attack-chain-refutation",
+       "job:claim-ledger-final",
        "job:10-synthesis-report",
        "job:completeness-audit",
        "job:synthetic-hypothesis-resynthesis"
@@ -2995,6 +3018,9 @@
        "accepted 09-independent-verification result (and its 08 upstream)",
        "accepted integrated threat model",
        "accepted 14-attack-chain-composition result and seeds",
+       "accepted claim-ledger-routing L01 ledger",
+       "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head",
+       "accepted 12-scoring-prioritization result reviewing the same head",
        "exact accepted synthesis-input manifest",
        "F03 component map",
        "S02 threat model",
@@ -3141,6 +3167,7 @@
      "job:12b-poc-and-fix",
      "job:14-attack-chain-composition",
      "job:14-attack-chain-refutation",
+     "job:claim-ledger-final",
      "job:10-synthesis-report",
      "job:completeness-audit",
      "job:synthetic-hypothesis-resynthesis"
@@ -3292,6 +3319,9 @@
      "accepted 09-independent-verification result (and its 08 upstream)",
      "accepted integrated threat model",
      "accepted 14-attack-chain-composition result and seeds",
+     "accepted claim-ledger-routing L01 ledger",
+     "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head",
+     "accepted 12-scoring-prioritization result reviewing the same head",
      "exact accepted synthesis-input manifest",
      "F03 component map",
      "S02 threat model",
@@ -6201,6 +6231,27 @@
      "name": "10-synthesis-report",
      "entries": [
       {
+       "ref": "job:claim-ledger-final",
+       "id": "claim-ledger-final",
+       "name": "Final Claim-Decision Ledger (L01 plus lifecycle decisions)",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:claim-ledger-routing",
+        "job:07-red-team-adversarial",
+        "job:08-blue-team-refutation",
+        "job:09-independent-verification",
+        "job:12-scoring-prioritization"
+       ],
+       "produces": [
+        "job:claim-ledger-final"
+       ],
+       "declared_inputs": [
+        "accepted claim-ledger-routing L01 ledger",
+        "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head",
+        "accepted 12-scoring-prioritization result reviewing the same head"
+       ]
+      },
+      {
        "ref": "job:10-synthesis-report",
        "id": "10-synthesis-report",
        "name": "Accepted Evidence-backed Draft Report Publisher",
@@ -6214,6 +6265,7 @@
         "job:08-blue-team-refutation",
         "job:09-independent-verification",
         "job:12-scoring-prioritization",
+        "job:claim-ledger-final",
         "job:06-cve-reachability",
         "job:14-attack-chain-refutation",
         "job:12b-poc-and-fix",
@@ -6290,14 +6342,15 @@
      ],
      "rollup": {
       "enters": [
-       "job:01-component-characterization",
-       "job:03-threat-model-dfd-stride",
-       "job:03-threat-model-reconciliation",
-       "job:04-asvs-masvs",
+       "job:claim-ledger-routing",
        "job:07-red-team-adversarial",
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
        "job:12-scoring-prioritization",
+       "job:01-component-characterization",
+       "job:03-threat-model-dfd-stride",
+       "job:03-threat-model-reconciliation",
+       "job:04-asvs-masvs",
        "job:06-cve-reachability",
        "job:14-attack-chain-refutation",
        "job:12b-poc-and-fix",
@@ -6310,11 +6363,15 @@
        "job:final-publication-gate"
       ],
       "passes": [
+       "job:claim-ledger-final",
        "job:10-synthesis-report",
        "job:completeness-audit",
        "job:synthetic-hypothesis-resynthesis"
       ],
       "declared_inputs": [
+       "accepted claim-ledger-routing L01 ledger",
+       "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head",
+       "accepted 12-scoring-prioritization result reviewing the same head",
        "exact accepted synthesis-input manifest",
        "F03 component map",
        "S02 threat model",
@@ -6428,6 +6485,7 @@
      "job:12b-poc-and-fix",
      "job:14-attack-chain-composition",
      "job:14-attack-chain-refutation",
+     "job:claim-ledger-final",
      "job:10-synthesis-report",
      "job:completeness-audit",
      "job:synthetic-hypothesis-resynthesis"
@@ -6583,6 +6641,9 @@
      "accepted 09-independent-verification result (and its 08 upstream)",
      "accepted integrated threat model",
      "accepted 14-attack-chain-composition result and seeds",
+     "accepted claim-ledger-routing L01 ledger",
+     "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head",
+     "accepted 12-scoring-prioritization result reviewing the same head",
      "exact accepted synthesis-input manifest",
      "F03 component map",
      "S02 threat model",
@@ -10393,6 +10454,92 @@
    ]
   },
   {
+   "id": "claim-ledger-final",
+   "lane": "10-synthesis-report",
+   "name": "Final Claim-Decision Ledger (L01 plus lifecycle decisions)",
+   "contract": "claim-ledger-final",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_ledger_final.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "claim-ledger-custodian",
+    "domain_id": "claim-ledger-lifecycle",
+    "tooling_profile_id": "hash-linked-claim-ledger",
+    "output_contract_id": "claim-ledger-final"
+   },
+   "depends_on": [
+    {
+     "job": "claim-ledger-routing",
+     "kind": "required",
+     "contract": "claim-ledger-core"
+    },
+    {
+     "job": "07-red-team-adversarial",
+     "kind": "required",
+     "contract": "07-red-team-adversarial"
+    },
+    {
+     "job": "08-blue-team-refutation",
+     "kind": "required",
+     "contract": "08-blue-team-refutation"
+    },
+    {
+     "job": "09-independent-verification",
+     "kind": "required",
+     "contract": "09-independent-verification"
+    },
+    {
+     "job": "12-scoring-prioritization",
+     "kind": "required",
+     "contract": "12-scoring-prioritization"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted claim-ledger-routing L01 ledger"
+    },
+    {
+     "need": "required",
+     "input": "accepted 07-red-team-adversarial, 08-blue-team-refutation and 09-independent-verification results reviewing its head"
+    },
+    {
+     "need": "required",
+     "input": "accepted 12-scoring-prioritization result reviewing the same head"
+    }
+   ],
+   "inputs_source": "pipeline/job-templates/claim-ledger-final.json",
+   "output_dir": "runs/<run_id>/data/jobs/claim-ledger-final/",
+   "output_files": [
+    "claim-decision-ledger.json",
+    "claim-ledger-final-summary.md",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "pipeline/output-contracts/claim-ledger-final.json",
+   "claim_class": null,
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:claim-ledger-routing",
+    "job:07-red-team-adversarial",
+    "job:08-blue-team-refutation",
+    "job:09-independent-verification",
+    "job:12-scoring-prioritization"
+   ],
+   "produces": [
+    "job:claim-ledger-final"
+   ]
+  },
+  {
    "id": "10-synthesis-report",
    "lane": "10-synthesis-report",
    "name": "Accepted Evidence-backed Draft Report Publisher",
@@ -10453,6 +10600,11 @@
      "job": "12-scoring-prioritization",
      "kind": "required",
      "contract": "12-scoring-prioritization"
+    },
+    {
+     "job": "claim-ledger-final",
+     "kind": "required",
+     "contract": "claim-ledger-final"
     },
     {
      "job": "06-cve-reachability",
@@ -10542,6 +10694,7 @@
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
     "job:12-scoring-prioritization",
+    "job:claim-ledger-final",
     "job:06-cve-reachability",
     "job:14-attack-chain-refutation",
     "job:12b-poc-and-fix",
@@ -15836,7 +15989,8 @@
     "job:claim-ledger-routing"
    ],
    "consumed_by": [
-    "job:07-red-team-adversarial"
+    "job:07-red-team-adversarial",
+    "job:claim-ledger-final"
    ]
   },
   "job:07-red-team-adversarial": {
@@ -15850,6 +16004,7 @@
    "consumed_by": [
     "job:08-blue-team-refutation",
     "job:09-independent-verification",
+    "job:claim-ledger-final",
     "job:10-synthesis-report"
    ]
   },
@@ -15863,6 +16018,7 @@
    ],
    "consumed_by": [
     "job:09-independent-verification",
+    "job:claim-ledger-final",
     "job:10-synthesis-report"
    ]
   },
@@ -15878,6 +16034,7 @@
     "job:11-remediation-proposal",
     "job:12-scoring-prioritization",
     "job:14-attack-chain-composition",
+    "job:claim-ledger-final",
     "job:10-synthesis-report",
     "job:remediation-retest-feedback"
    ]
@@ -15905,6 +16062,7 @@
    ],
    "consumed_by": [
     "job:12b-poc-and-fix",
+    "job:claim-ledger-final",
     "job:10-synthesis-report"
    ]
   },
@@ -15939,6 +16097,18 @@
    "about": "Accepted 12b-poc-and-fix output of 12b-poc-and-fix.",
    "produced_by": [
     "job:12b-poc-and-fix"
+   ],
+   "consumed_by": [
+    "job:10-synthesis-report"
+   ]
+  },
+  "job:claim-ledger-final": {
+   "id": "job:claim-ledger-final",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/claim-ledger-final/",
+   "about": "Accepted claim-ledger-final output of claim-ledger-final.",
+   "produced_by": [
+    "job:claim-ledger-final"
    ],
    "consumed_by": [
     "job:10-synthesis-report"

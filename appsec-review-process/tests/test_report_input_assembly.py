@@ -512,6 +512,33 @@ class ReportInputAssemblyTests(unittest.TestCase):
         with self.assertRaises(Blocked):  # receiptless is per spec: other producers still need receipts
             report.load_accepted(threat / "accepted.json", run_id=RUN_ID, name="threat")
 
+    def test_reviewer_judgment_fields_on_09_and_12_records_are_accepted(self):
+        """ADR-0020/0026: 09 and 12 records may carry cwe_judgments/mitre_refs (and 12 cvss_v4,
+        remediation_proposal); any other extra field still rejects."""
+        judgment = {"stage": "12-scoring-prioritization", "cwe_id": "CWE-787", "cwe_name": "Out-of-bounds Write",
+                    "rationale": "fixture", "cwe_catalog": "committed-curated"}
+        def judged(extra):
+            def mutate(attempt, paths):
+                document = json.loads((attempt / "scoring-prioritization.json").read_text())
+                for row in document["priorities"]: row.update(extra)
+                atomic_json(attempt / "scoring-prioritization.json", document)
+                return paths
+            return mutate
+        self._reseal("12-scoring-prioritization", judged({"cwe_judgments": [judgment], "remediation_proposal": None}))
+        report.assemble(RUN_ID, self.load(), self.jobs)
+        verification = copy.deepcopy(self.documents["verification"]["independent-verification.json"])
+        keys = set(verification["verifications"][0])
+        verification["verifications"][0]["cwe_judgments"] = [judgment]
+        report._records(verification, "verifications", "09-independent-verification", keys,
+                        report.JUDGMENT_KEYS & {"cwe_judgments", "mitre_refs"})
+        verification["verifications"][0]["invented"] = True
+        with self.assertRaises(Blocked):
+            report._records(verification, "verifications", "09-independent-verification", keys,
+                            report.JUDGMENT_KEYS & {"cwe_judgments", "mitre_refs"})
+        self._reseal("12-scoring-prioritization", judged({"invented": True}))
+        with self.assertRaises(Blocked):
+            report.assemble(RUN_ID, self.load(), self.jobs)
+
     def test_specs_match_producer_output_contracts(self):
         """Static guard: every name a spec requires is one its producer's contract promises."""
         import owasp_join_publisher as publisher
