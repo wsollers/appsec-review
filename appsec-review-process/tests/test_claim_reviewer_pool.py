@@ -351,7 +351,8 @@ class ClaimReviewerPoolTests(unittest.TestCase):
             inputs=(SimpleNamespace(sha256="sha256:" + "b" * 64),))
         instructions = reviewer_pool._runtime_instructions(package)
         self.assertIn("independent-verifier", instructions)
-        self.assertIn("never emit VERIFIED", instructions)
+        self.assertIn("VERIFIED needs every obligation SATISFIED", instructions)   # ADR-0035
+        self.assertIn("An incomplete answer supports only UNRESOLVED", instructions)
         # identity, hashes and the candidate wrapper are derived (claim_review_derive), not copied
         self.assertNotIn("persona-attempt", instructions)
         self.assertNotIn("sha256:" + "a" * 64, instructions)

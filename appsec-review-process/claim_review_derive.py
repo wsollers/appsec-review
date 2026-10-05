@@ -10,13 +10,16 @@ copy by hand (model-bookkeeping audit, item 1 / section 3.8):
   request and the upstream claim's generations;
 * citation ids resolved against the upstream claim's own citation set, replaced by the canonical
   upstream objects (a model-typed citation object is never published; only its ``citation_id`` is
-  read), deduplicated and in upstream order;
+  read), deduplicated and in upstream order; at 07/08/09 a ``tev:`` id is resolved against this
+  invocation's own tool-evidence records (``tool_evidence``, ADR-0035: integrity and re-run checked)
+  and follows the upstream ones;
 * proof-obligation statements from the upstream record (the model gives id + status + citation ids);
 * the candidate wrapper (``candidate_id``, ``subject_id``, ``claim_class``, ``evidence_sha256``) and
   the canonical JSON ``assertion`` string.
 
 Nothing is invented.  An unknown claim id, an unknown obligation id, a missing claim or obligation,
-or a decision left with no resolvable citation rejects the reply with repair details (the invoker's
+a ``tev:`` id that does not resolve to a record of this invocation, or a decision left with no
+resolvable citation rejects the reply with repair details (the invoker's
 bounded repair loop re-asks the model).  An unknown citation id next to at least one resolvable one
 is dropped and reported as an invoker limitation.  Before returning, the derived decisions are run
 through the stage's own ``claim_lifecycle_core`` rules so a disposition/obligation inconsistency is
@@ -29,6 +32,7 @@ import json
 from typing import Any
 
 import claim_lifecycle_core as core
+import tool_evidence
 from claude_cli_invoker import InvokerOutputError
 from execution_state import Blocked
 from schema_validate import SchemaStore, validate_document
@@ -69,7 +73,8 @@ ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool sp
 # (09 re-run 2026-10-04 answered SURVIVING, the 08 outcome, and failed only at the closed schema).
 STAGE_DISPOSITIONS = {
     "08-blue-team-refutation": ("REFUTED", "SURVIVING", "UNRESOLVED"),
-    "09-independent-verification": ("REFUTED", "UNRESOLVED", "BLOCKED"),  # no new evidence here: never VERIFIED
+    # VERIFIED only on complete structural records the verifier re-ran itself (ADR-0035, core.verify).
+    "09-independent-verification": ("VERIFIED", "REFUTED", "UNRESOLVED", "BLOCKED"),
 }
 DISPOSITION_HINTS = {
     ("09-independent-verification", "SURVIVING"): (
@@ -214,8 +219,9 @@ def _decision_requirements(stage: str, claim_id: str, record: dict[str, Any]) ->
 
 def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[str, Any],
            request_sha256: str, evidence_sha256: str,
-           store: SchemaStore | None = None) -> tuple[dict[str, Any], list[str]]:
-    """Return (claim-review-pool-candidates document, limitations) or raise InvokerOutputError."""
+           store: SchemaStore | None = None, evidence: Any = None) -> tuple[dict[str, Any], list[str]]:
+    """Return (claim-review-pool-candidates document, limitations) or raise InvokerOutputError.
+    ``evidence`` resolves ``tev:`` ids (default: this request's own tool-evidence records)."""
     if stage not in POOL_CLASSES:
         raise InvokerOutputError(f"claim review derive: unknown stage {stage!r}")
     store = store or SchemaStore()
@@ -266,6 +272,8 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
         raise InvokerOutputError(f"reviewer reply does not cover the upstream claims: {len(errors)} error(s)",
                                  errors)
 
+    if evidence is None:
+        evidence = tool_evidence.Resolver(request.get("run_id"), stage, request.get("attempt_id"))
     decisions: dict[str, dict[str, Any]] = {}
     for claim_id in sorted(by_claim):
         row, record = by_claim[claim_id], records[claim_id]
@@ -288,6 +296,13 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
             for item in _unique(ids):
                 if item in citable:
                     known.append(item)
+                elif tool_evidence.is_id(item):
+                    try:
+                        citable[item] = evidence.resolve(item)
+                        order.append(item)
+                        known.append(item)
+                    except ValueError as exc:
+                        errors.append(f"claim {claim_id}: {where} cites {item!r}: {str(exc)[:300]}")
                 else:
                     limitations.append(f"claim {claim_id}: {where} cites {item!r}, which is not an "
                                        f"upstream citation of this claim; dropped")

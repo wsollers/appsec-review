@@ -89,7 +89,8 @@ every resume post-validation), Python:
 ### 5. Independence rule (09), enforced in `claim_lifecycle_core`
 
 - 07/08 may cite their own `tev:` records (producer = this stage's reviewer) in addition to the
-  upstream citations. 09 may cite prior citations and its own records, and nothing else.
+  upstream citations; core refuses another producer's record. At 09, derive resolves only prior citations and
+  the verifier's own records, so nothing else can be cited.
 - **VERIFIED** at 09 needs all of these:
   - every obligation is SATISFIED and cites at least one citation;
   - every citation was produced by the verifier, which means the verifier re-ran the structural
@@ -124,8 +125,11 @@ locators and names.
 
 - `claim_review_derive.py`, `claim_reviewer_pool.py` and `claim_lifecycle_core.py` are part of the
   pool's `_code_hashes`, and `claim_lifecycle_core.py` is part of the stage's. So the pool and the
-  lifecycle stage of 07, 08, 09 and 12 re-execute on the next resume. `tool_evidence.py` joins the
-  pool's code hashes.
+  lifecycle stage of 07, 08, 09 and 12 re-execute on the next resume. `tool_evidence.py`, `code_query_mcp.py`,
+  `code_index.py` and `reachability.py` join the pool's code hashes: a cited answer re-runs through them, so a
+  change there re-executes the pool instead of blocking its post-validation. `claim_reviewer_pool.py` is also
+  hashed by `persona_tool_pool_lifecycle` and `claim_lifecycle_core.py` by `remediation_proposal`, so those
+  re-execute too (their prompts are unchanged, so their persona cache hits).
 - The persona cache key covers the prompt text, which includes the tool guides, but not the appended
   runtime instructions. Changing `code_graph.md` changes the key of every cell granted
   `code_callers`/`code_callees`/`code_path`, but only for cells that run again. Upstream jobs (05 hunts and

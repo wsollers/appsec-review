@@ -35,6 +35,7 @@ import pool_specification
 import resource_pools
 import review_cli
 import supporting_evidence_menu as evidence_menu
+import tool_evidence
 import tunables
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
@@ -97,11 +98,15 @@ def _runtime_instructions(package: Any) -> str:
                 "and the citation_ids it rests on; REFUTED needs a FAILED obligation, SURVIVING needs "
                 "every obligation SATISFIED, UNRESOLVED keeps an UNRESOLVED obligation")
     elif stage == "09-independent-verification":
-        rule = ("answer every upstream proof obligation by obligation_id; this invocation has no new "
-                "independent target evidence, so never emit VERIFIED. UNRESOLVED or BLOCKED must keep at "
-                "least one obligation UNRESOLVED: when the existing citations seem to satisfy every "
-                "obligation, mark UNRESOLVED the obligation(s) that still need new independent evidence "
-                "to verify, rather than all SATISFIED")
+        rule = ("answer every upstream proof obligation by obligation_id. Your only new independent evidence "
+                "is the code_* answers you run yourself (ADR-0035): VERIFIED needs every obligation SATISFIED, "
+                "each citing the citation_id of a complete answer (complete=true, no escapes) of a query you "
+                "re-ran in this invocation, and then cites only such ids, never red/blue citations or ids "
+                "quoted in their prose. Static structure proves that a definition, a caller or a call path "
+                "exists; it never proves exploitability, attacker control or runtime behaviour: an obligation "
+                "that needs those stays UNRESOLVED. An incomplete answer supports only UNRESOLVED. UNRESOLVED "
+                "or BLOCKED must keep at least one obligation UNRESOLVED: mark UNRESOLVED the obligation(s) "
+                "that still need new independent evidence, rather than all SATISFIED")
     else:
         rule = "factors are null unless the accepted upstream status is VERIFIED; otherwise each factor is 0..4"
     citable = {"07-red-team-adversarial": "the claim's citations",
@@ -131,9 +136,10 @@ def _runtime_instructions(package: Any) -> str:
                             "omit when unsure"),
             "capec_refs": ("optional: up to 8 CAPEC ids ('CAPEC-66') labelling the attack pattern; labels only, "
                            "never evidence; omit when unsure")}.items() if key in optional},
-        "citation_rule": (("cite by citation_id only, using ids from " + citable[stage] +
-                           "; never copy or invent citation objects") if stage in citable else
-                          "no citations for this stage"),
+        "citation_rule": (("cite by citation_id only, using ids from " + citable[stage] + " or the citation_id "
+                           "a code_* answer of this invocation returned (Python recorded that answer and "
+                           "re-checks it); never copy or invent citation objects, paths or hashes")
+                          if stage in citable else "no citations for this stage"),
         "orchestrator_supplies": ("candidate_id, subject_id, claim_class, evidence_sha256, the "
                                   "reviewer/verifier identity, canonical citation objects, proof "
                                   "obligation statements and the assertion string; do not write them"),
@@ -204,6 +210,8 @@ def _code_hashes() -> dict[str, str]:
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")
+    for name in ("tool_evidence.py", "code_query_mcp.py", "code_index.py", "reachability.py"):
+        result[name] = file_hash(ROOT / name)   # cited records re-run through these (ADR-0035)
     for persona_id in sorted({item for ids in _stage_personas().values() for item in ids}):
         path = f"personas/personas/{persona_id}/persona.json"
         result[path] = file_hash(ROOT / path)
@@ -437,6 +445,10 @@ def _validate_merge(inputs: dict[str, Any], merge: dict[str, Any]) -> None:
     if validate_document(merge, "deterministic-pool-merge.schema.json"):
         raise Blocked("claim reviewer pool: deterministic merge fails its closed schema")
     decisions = lifecycle.decisions_from_pool(inputs["stage"], inputs["upstream"], merge)
+    try:   # ADR-0035: every cited structural record still re-runs to the answer it holds
+        tool_evidence.verify_decisions(inputs["run_id"], decisions)
+    except ValueError as exc:
+        raise Blocked(f"claim reviewer pool: {exc}") from None
     # Validate not only JSON shape and population coverage but the stage's evidence, independence,
     # authority, proof-obligation and monotonic-transition rules before the merge is accepted.
     lifecycle.build_result({"stage": inputs["stage"], "upstream": inputs["upstream"],
