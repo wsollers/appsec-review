@@ -705,6 +705,95 @@ def _regular_owned(owner: Path, relative: str) -> Path:
     return cursor
 
 
+# The graph lifecycle 04-asvs-masvs publishes T14 (routes included) as owasp_join_publisher.JOB under
+# data/jobs/04-owasp-join-report; reading data/jobs/04-asvs-masvs found nothing and silently dropped
+# every OWASP route from the ledger.
+OWASP_JOB = "04-owasp-join-report"
+POOL_JOB = "deterministic-pool-merge"
+POOL_CLASSES = {"07-red-team-adversarial": "candidate_only", "08-blue-team-refutation": "refutation",
+                "09-independent-verification": "verification_observation"}
+POOL_ACTOR_KEYS = {"07-red-team-adversarial": "reviewer", "08-blue-team-refutation": "reviewer",
+                   "09-independent-verification": "verifier"}
+_POOL_DIRECTORY = re.compile(r"^[0-9a-f]{32}$")
+
+
+def pool_decision_actor(run_id: str, jobs_root: Path, producer: str, attempt: Path,
+                        fingerprint: str, claim_id: str, *, label: str = JOB) -> dict[str, Any]:
+    """The reviewer identity that the accepted stage attempt's own pool chain says decided ``claim_id``.
+
+    A 07/08/09 reviewer is a persona instance of the stage's reviewer pool: its actor names the pool
+    request (``requests/<instance id>.json``, sha = the request digest), not the stage attempt that
+    later published the pool's merged decisions (claim_review_derive.actor). The row is never trusted
+    for that link; it is re-derived from hashed files only: the stage attempt's ``inputs.json`` (its
+    digest is the accepted fingerprint) and ``lineage.json`` bind one deterministic-pool-merge attempt,
+    which must still be the accepted, tree-hash-verified pool for this stage; the claim's merged pool
+    candidate carries the actor and lists the instance among its workers; the pool expansion and the
+    retained request file of that instance carry the same run, stage, instance id and request digest.
+    """
+    attempt = Path(attempt)
+    inputs_path = _regular_owned(attempt, "inputs.json")
+    inputs = read_json(inputs_path)
+    if (not isinstance(inputs, dict) or "sha256:" + digest(inputs) != fingerprint or
+            inputs.get("run_id") != run_id or inputs.get("stage") != producer or
+            inputs.get("applicability") != "APPLICABLE" or not isinstance(inputs.get("pool_binding"), dict)):
+        raise Blocked(f"{label}: decision attempt does not bind an accepted reviewer pool")
+    lineage = read_json(_regular_owned(attempt, "lineage.json"))
+    expected_lineage = {"schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": run_id,
+        "job_id": producer, "source_snapshot_sha256": inputs.get("source_generation"),
+        "build_lineage_sha256": "sha256:" + digest({"upstream": inputs.get("upstream_binding"),
+            "pool": inputs["pool_binding"], "applicability": inputs["applicability"]})}
+    if lineage != expected_lineage:
+        raise Blocked(f"{label}: decision attempt lineage does not bind its reviewer pool")
+    pool_base = Path(jobs_root) / POOL_JOB / producer
+    try:
+        pool, binding = bounded_analysis_workers.load_accepted(pool_base / "accepted.json", run_id=run_id,
+            job_id=POOL_JOB, contract=POOL_JOB, artifact="deterministic-pool-merge.json",
+            schema="deterministic-pool-merge.schema.json")
+    except Blocked as exc:
+        raise Blocked(f"{label}: decision attempt's reviewer pool is not accepted ({exc})") from exc
+    if binding != inputs["pool_binding"] or pool != inputs.get("pool") or pool.get("run_id") != run_id:
+        raise Blocked(f"{label}: decision attempt's reviewer pool is not the accepted pool")
+    candidates = [item for item in pool.get("candidates", []) if item.get("subject_id") == claim_id]
+    if len(candidates) != 1 or candidates[0].get("claim_class") != POOL_CLASSES[producer]:
+        raise Blocked(f"{label}: reviewer pool has no unique decision for the claim")
+    candidate = candidates[0]
+    try:
+        decision = json.loads(candidate["assertion"])
+    except (TypeError, ValueError) as exc:
+        raise Blocked(f"{label}: reviewer pool decision is not JSON") from exc
+    staged = [row for row in (inputs.get("decisions") or {}).get("decisions", [])
+              if isinstance(row, dict) and row.get("claim_id") == claim_id]
+    actor = decision.get(POOL_ACTOR_KEYS[producer]) if isinstance(decision, dict) else None
+    if (not isinstance(actor, dict) or decision.get("claim_id") != claim_id or staged != [decision] or
+            actor.get("attempt_id") not in candidate.get("worker_ids", [])):
+        raise Blocked(f"{label}: reviewer pool decision does not name one of its own workers")
+    instance = actor["attempt_id"]
+    request_rel = f"requests/{instance}.json"
+    if actor.get("artifact_path") != request_rel or actor.get("permission_receipt_path") != request_rel:
+        raise Blocked(f"{label}: decision actor does not name its pool request")
+    pool_attempt = pool_base / "attempts" / binding["attempt_id"]
+    receipt = read_json(_regular_owned(pool_attempt, "pool-receipt.json"))
+    directory = receipt.get("pool_directory") if isinstance(receipt, dict) else None
+    if (not isinstance(directory, str) or not _POOL_DIRECTORY.match(directory) or
+            receipt.get("stage") != producer or receipt.get("run_id") != run_id or
+            receipt.get("merge_sha256") != pool.get("merge_sha256")):
+        raise Blocked(f"{label}: reviewer pool receipt is invalid")
+    expansion = read_json(_regular_owned(pool_attempt, f"pools/{directory}/expansion.json"))
+    instances = [item for item in (expansion.get("instances") or []) if item.get("instance_id") == instance]
+    request = read_json(_regular_owned(pool_attempt, f"pools/{directory}/{request_rel}"))
+    request_sha = "sha256:" + digest(request)
+    if (expansion.get("run_id") != run_id or expansion.get("job_id") != producer or len(instances) != 1 or
+            instances[0].get("run_id") != run_id or instances[0].get("job_id") != producer or
+            instances[0].get("attempt_id") != instance or
+            (instances[0].get("request_file") or {}).get("path") != request_rel or
+            instances[0].get("request_sha256") != request_sha or
+            request.get("run_id") != run_id or request.get("job_id") != producer or
+            request.get("attempt_id") != instance or
+            actor.get("artifact_sha256") != request_sha or actor.get("permission_receipt_sha256") != request_sha):
+        raise Blocked(f"{label}: decision actor is not a request of the accepted reviewer pool")
+    return actor
+
+
 def load_decision(run_id: str, jobs_root: Path, request: dict[str, Any],
                   source_generation: str, component_generation: str) -> dict[str, Any]:
     """Resolve transition authority from one exact current downstream publication.
@@ -780,12 +869,18 @@ def load_decision(run_id: str, jobs_root: Path, request: dict[str, Any],
             row.get("component_generation") != component_generation):
         raise Blocked(f"{JOB}: decision result has a stale or mixed generation")
     actor = row.get(actor_field)
-    if not isinstance(actor, dict) or actor.get("job_id") != producer or actor.get("attempt_id") != attempt.name:
+    if not isinstance(actor, dict) or actor.get("job_id") != producer:
         raise Blocked(f"{JOB}: decision actor is not the accepted producer attempt")
     if (actor.get("source_generation") != source_generation or
             actor.get("component_generation") != component_generation or
             actor.get("role_id") != AUTHORITY_ROLES[producer]):
         raise Blocked(f"{JOB}: decision actor authority or generation is invalid")
+    # The actor is the pool reviewer instance whose merged decision this accepted attempt published
+    # (claim_review_derive.actor: the pool request's id and digest). That link is re-derived from the
+    # attempt's hashed inputs/lineage and its accepted pool, never taken from the row.
+    if pool_decision_actor(run_id, jobs_root, producer, attempt, pointer["fingerprint"],
+                           request["claim_id"]) != actor:
+        raise Blocked(f"{JOB}: decision actor is not the accepted producer attempt's pool reviewer")
     permission_keys = {"schema", "run_id", "job_id", "source_snapshot_sha256", "permissions"}
     if (set(permission) != permission_keys or permission.get("schema") != "appsec-review/producer-permission-receipt/1.0" or
             permission.get("run_id") != run_id or permission.get("job_id") != producer or
@@ -998,15 +1093,15 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         "source_generation": artifact["source_snapshot"], "component_generation": artifact["component_map_attempt_id"],
         "artifact": artifact}
     sources = [source]
-    owasp_pointer = data_path(run_id, "jobs", "04-asvs-masvs", "accepted.json")
+    owasp_pointer = data_path(run_id, "jobs", OWASP_JOB, "accepted.json")
     if owasp_pointer.is_file():
         routes, binding = bounded_analysis_workers.load_accepted(
-            owasp_pointer, run_id=run_id, job_id="04-asvs-masvs", contract="owasp-join-report",
+            owasp_pointer, run_id=run_id, job_id=OWASP_JOB, contract="owasp-join-report",
             artifact="owasp-candidate-promotion-routes.json",
             schema="owasp-candidate-promotion-routes.schema.json")
         sources.append({"contract_id": "owasp-join-report", "producer_job_id": binding["job_id"],
             "producer_attempt_id": binding["attempt_id"],
-            "artifact_path": f"jobs/04-asvs-masvs/attempts/{binding['attempt_id']}/{binding['artifact_path']}",
+            "artifact_path": f"jobs/{OWASP_JOB}/attempts/{binding['attempt_id']}/{binding['artifact_path']}",
             "artifact_sha256": binding["artifact_sha256"],
             "accepted_pointer_sha256": binding["accepted_pointer_sha256"],
             "source_generation": artifact["source_snapshot"],

@@ -15,7 +15,7 @@ import claim_ledger
 import claim_ledger_final as final
 import demo_report_fixture
 import report_input_assembly as report
-from execution_state import Blocked, atomic_json, file_hash, read_json, tree_hashes
+from execution_state import Blocked, atomic_json, digest, file_hash, read_json, tree_hashes
 from worker_result import artifact_records, terminal_envelope
 from test_claim_lifecycle_core import RUN_ID, actual_ledger, fixture
 import tool_evidence_fixture
@@ -61,16 +61,43 @@ class FinalLedgerTests(unittest.TestCase):
             artifacts=artifact_records(attempt, [claim_ledger.LEDGER])))
         upstream = accept(base, "ledger-1")
         claims = [row["claim_id"] for row in sorted(actual_ledger()["entries"], key=lambda row: row["route_id"])]
+        previous = claim_ledger.JOB
         for index, (job, decisions_name, attempt_id) in enumerate(STAGES):
             decisions = fixture(decisions_name)
-            for decision, claim_id in zip(decisions["decisions"], claims):
+            field = demo_report_fixture.POOL_ACTOR_KEYS.get(job)
+            for index_, (decision, claim_id) in enumerate(zip(decisions["decisions"], claims)):
                 decision["claim_id"] = claim_id
+                if field:   # the real actor: the reviewer-pool request (claim_review_derive.actor),
+                    old = decision[field]   # and the reviewer's own records produced under that id
+                    new = demo_report_fixture.reviewer_actor(RUN_ID, job, old["source_generation"],
+                                                             old["component_generation"])
+                    decision = json.loads(json.dumps(decision).replace(
+                        json.dumps(old["attempt_id"]), json.dumps(new["attempt_id"])))
+                    decision[field] = new
+                    decisions["decisions"][index_] = decision
             atomic_json(Path(self.temp.name) / f"{job}.json", decisions)
             core.run_attempt(job, upstream, Path(self.temp.name) / f"{job}.json",
                              self.jobs / job / "attempts" / attempt_id, RUN_ID, attempt_id,
                              f"2026-01-01T00:00:0{index}Z", f"2026-01-01T00:00:1{index}Z")
+            if job in demo_report_fixture.POOL_ACTOR_KEYS:
+                self.bind_pool(job, attempt_id, binding(self.jobs, previous))
             upstream = accept(self.jobs / job, attempt_id)
+            previous = job
         self.origin = actual_ledger()
+
+    def bind_pool(self, job: str, attempt_id: str, upstream_binding: dict) -> None:
+        """Lay the stage attempt out as claim_review_lifecycle publishes it: inputs.json (its digest is
+        the fingerprint) and lineage.json bind the accepted reviewer pool whose merge decided the rows."""
+        attempt = self.jobs / job / "attempts" / attempt_id
+        rows = read_json(attempt / final.SOURCES[job][1])[final.SOURCES[job][3]]
+        inputs = demo_report_fixture.stage_inputs(self.jobs, RUN_ID, job, rows[0]["source_generation"],
+                                                  rows, upstream_binding)
+        atomic_json(attempt / "inputs.json", inputs)
+        atomic_json(attempt / "lineage.json", demo_report_fixture.stage_lineage(inputs))
+        envelope = read_json(attempt / "result.json")
+        envelope["input_fingerprint"] = "sha256:" + digest(inputs)
+        envelope["artifacts"] = artifact_records(attempt, [item["path"] for item in envelope["artifacts"]])
+        atomic_json(attempt / "result.json", envelope)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -169,6 +196,51 @@ class FinalLedgerTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             self.assert_report_accepts(forged)
 
+    def test_actor_is_the_pool_request_and_that_link_is_rederived_not_trusted(self):
+        """Run 20261004T054551Z-357581: real 07/08/09 actors name the reviewer-pool request, not the
+        stage attempt. The link is re-derived from the stage's hashed inputs/lineage and its pool."""
+        ledger, _ = self.derive()
+        red = [entry for entry in ledger["entries"] if entry["status"] == "under_review"][0]
+        actor = read_json(self.jobs / "07-red-team-adversarial" / "attempts" / "red-1" /
+                          "red-team-adversarial.json")["hypotheses"][0]["reviewer"]
+        self.assertNotEqual(actor["attempt_id"], "red-1")
+        self.assertEqual(actor["artifact_path"], f"requests/{actor['attempt_id']}.json")
+        self.assertEqual(red["decision_authority"]["attempt_id"], "red-1")
+        # A well-formed reviewer identity that is not the pool instance which decided the claim.
+        stranger = demo_report_fixture.reviewer_actor(RUN_ID, "08-blue-team-refutation",
+            actor["source_generation"], actor["component_generation"], label="other")
+        self.republish("08-blue-team-refutation",
+                       lambda document: document["reviews"][0].update(blue_reviewer=stranger))
+        with self.assertRaisesRegex(Blocked, "pool reviewer"):
+            self.derive()
+
+    def test_tampered_pool_request_or_missing_pool_lineage_blocks(self):
+        pool = self.jobs / "deterministic-pool-merge" / "09-independent-verification"
+        attempt = pool / "attempts" / read_json(pool / "accepted.json")["attempt_id"]
+        request = next(attempt.glob("pools/*/requests/*.json"))
+        value = read_json(request); value["job_id"] = "08-blue-team-refutation"
+        atomic_json(request, value)
+        with self.assertRaisesRegex(Blocked, "reviewer pool is not accepted"):
+            self.derive()
+        # Re-accept the tampered pool and re-bind 09 to it: the request's own identity still fails.
+        accept(pool, attempt.name)
+        pointer = read_json(pool / "accepted.json"); pointer["job"] = "deterministic-pool-merge"
+        atomic_json(pool / "accepted.json", pointer)
+        stage = self.jobs / "09-independent-verification" / "attempts" / "verify-1"
+        inputs = read_json(stage / "inputs.json")
+        inputs["pool_binding"]["accepted_pointer_sha256"] = "sha256:" + file_hash(pool / "accepted.json")
+        atomic_json(stage / "inputs.json", inputs)
+        atomic_json(stage / "lineage.json", demo_report_fixture.stage_lineage(inputs))
+        envelope = read_json(stage / "result.json"); envelope["input_fingerprint"] = "sha256:" + digest(inputs)
+        atomic_json(stage / "result.json", envelope)
+        self.republish("09-independent-verification", lambda document: None)
+        with self.assertRaisesRegex(Blocked, "not a request of the accepted reviewer pool"):
+            self.derive()
+        (self.jobs / "08-blue-team-refutation" / "attempts" / "blue-1" / "inputs.json").unlink()
+        self.republish("08-blue-team-refutation", lambda document: None)
+        with self.assertRaisesRegex(Blocked, "decision artifact is missing"):
+            self.derive()
+
     def test_stage_that_reviewed_another_head_or_no_decisions_blocks(self):
         self.republish("07-red-team-adversarial", lambda document: document.update(ledger_head_sha256="sha256:" + "0" * 64))
         with self.assertRaisesRegex(Blocked, "another ledger head"):
@@ -193,7 +265,8 @@ class FinalLedgerTests(unittest.TestCase):
 
     def test_structural_citation_enters_the_final_ledger_and_a_tampered_record_blocks(self):
         """ADR-0035: a 09 VERIFIED row resting on a tev: record re-run-verified before it is appended."""
-        citation, path = tool_evidence_fixture.record(self.jobs.parent, "09-independent-verification", "verify-1")
+        verifier = demo_report_fixture.reviewer_actor(RUN_ID, "09-independent-verification", "", "")["attempt_id"]
+        citation, path = tool_evidence_fixture.record(self.jobs.parent, "09-independent-verification", verifier)
         def cite(document):
             row = next(row for row in document["verifications"] if row["status"] == "VERIFIED")
             row["verification_citations"] = [citation]
