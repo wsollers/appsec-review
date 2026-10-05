@@ -600,7 +600,7 @@ avoids stale all-or-nothing claims.
 | Standalone executable core | evidence assembly, components, L6A, OWASP accounting/worklist, STIG/SRG worklist, deployment, native-memory, CVE reachability, fuzz triage, red/blue/verify/scoring, scanner/dependency families, pools/merge/quorum, feedback controls | trusted lifecycle input assembly, shared Dagster binding, current accepted upstreams, live qualification |
 | Supplied-artifact lifecycle gates with an opt-in automatic implementation path | partition, developer, DevOps, and SRE discovery | generated readiness remains `supplied_artifact_gate`; shared pooled persona lifecycle remains a later integration |
 | Blocked by an input/reference | SCA without a current registered Grype/OSV mirror; build-dependent lanes without a resolved unit; standards work without accepted sources | supply/refresh the exact input and relaunch; retain the gap until accepted |
-| Active/planned | L6B reconciliation; complete claim-ledger append adapters; integrated synthesis/publication path | implement, bind, and qualify before claiming end-to-end completion |
+| Active/planned | L6B reconciliation; claim-ledger append adapters for remediation/retest and supersession (`claim-ledger-final` appends `07`/`08`/`09` only); integrated synthesis/publication path | implement, bind, and qualify before claiming end-to-end completion |
 
 Specific known gaps at this snapshot include:
 
@@ -642,7 +642,7 @@ This is a navigational rollup, not a replacement for the generated
 | Specialist analysis | native-memory, CVE reachability, fuzz triage | components plus native/SCA/threat evidence | candidates and proof obligations → admission/red team |
 | Agent decision chain | persona/tool pool → rendezvous → merge → quorum; claim admission → `07` → `08` → `09` | candidates and exact evidence | verified/refuted/unresolved ledger events → scoring/remediation |
 | Prioritize/remediate | `12-scoring-prioritization`, `11-remediation-proposal`, remediation/retest feedback | independently verified claims | scores, fixes, retest evidence, residual gaps → synthesis |
-| Report/complete | report-input assembly → `10-synthesis-report` → completeness audit → resynthesis → final publication | exact accepted generations, current ledger, completion/signoff | immutable draft or authorized final PDF/HTML/JSON/SARIF package |
+| Report/complete | final ledger (`claim-ledger-final`: the L01 admissions plus the accepted `07`/`08`/`09` decisions, L01 head kept as the lifecycle origin) → report-input assembly → `10-synthesis-report` → completeness audit → resynthesis → final publication | exact accepted generations, current ledger, completion/signoff | immutable draft or authorized final PDF/HTML/JSON/SARIF package |
 
 ## 16. Glossary
 
