@@ -85,6 +85,24 @@ def current_inputs(run_id, job, config):
             'tool':{'python':sys.version, 'executable_sha256':file_hash(sys.executable), 'git':git_tool,'worker':'trusted-read-only-intake-v1'}}
 
 
+def _release(text):
+    """'3.12.3 (main, ...)' or 'git version 2.43.0' -> '3.12' / '2.43'; None when unparseable."""
+    import re
+    found = re.search(r'(\d+)\.(\d+)', str(text or ''))
+    return f'{found.group(1)}.{found.group(2)}' if found else None
+
+
+def tool_staleness(tool):
+    """What of the recorded tool identity makes an accepted intake stale: Python and Git major.minor
+    and the worker id. A patch release or a rebuilt interpreter/git binary (new executable hash) does
+    not change what intake reads or writes, and re-running intake re-runs the whole run (ADR-0013).
+    The full identity stays recorded in the attempt's inputs.json."""
+    tool = tool if isinstance(tool, dict) else {}
+    git_tool = tool.get('git')
+    return {'python': _release(tool.get('python')), 'worker': tool.get('worker'),
+            'git': _release(git_tool.get('version')) if isinstance(git_tool, dict) else None}
+
+
 def accepted(run_id, job=JOB, scope='whole', fresh=True):
     base = job_root(run_id, job, scope)
     if not (base / 'accepted.json').exists():
@@ -118,7 +136,7 @@ def accepted(run_id, job=JOB, scope='whole', fresh=True):
             # every schema and every job template, so any unrelated edit would re-run the whole run.
             if (live['source'] != source or live['config'] != inputs['config'] or
                     live['dependencies'] != inputs.get('dependencies', live['dependencies']) or
-                    live['tool'] != inputs.get('tool', live['tool'])):
+                    tool_staleness(live['tool']) != tool_staleness(inputs.get('tool', live['tool']))):
                 raise Blocked('accepted intake is stale; rerun intake')
     return pointer
 

@@ -43,13 +43,9 @@ CLAIM_FOR_TYPE = {
 }
 UPSTREAM_ROLES = {"owasp-applicability-reviewer", "component-classification-owner",
                   "engagement-selection-owner", "owasp-validator", "dynamic-test-request-author"}
-PROHIBITED = re.compile(
-    r"\b(vulnerab(?:le|ility)|finding|severity|critical|high severity|exploit(?:able|ability)|"
-    r"likelihood|impact is|compliant|compliance|certif(?:ied|ication)|remediat(?:ed|ion)|fixed|"
-    r"deployed behavior|production behavior|live[- ]state|runtime behavior|manual(?:ly)? observed|"
-    r"authorized to execute|permission expanded|scope changed|profile changed|status changed)\b",
-    re.IGNORECASE,
-)
+# Authority, status and claim limits are the message's closed consts and enums (message_type,
+# claim_class, authority_unchanged, ...) checked by the schema and _validate_*; message prose is
+# commentary and is not scanned for wording (ADR-0036).
 SECRET = re.compile(r"(?i)\b(api[_-]?key|access[_-]?token|password|secret)\b\s*[:=]\s*[^\s,;]{8,}")
 PERSONAL_DATA = re.compile(r"\b\d{3}-\d{2}-\d{4}\b|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
                            re.IGNORECASE)
@@ -383,8 +379,6 @@ def _validate_candidate(candidate: dict[str, Any], handoff: dict[str, Any], requ
             raise CandidateRejected("secret-bearing output is prohibited")
         if PERSONAL_DATA.search(text):
             raise CandidateRejected("unnecessary personal data is prohibited")
-        if PROHIBITED.search(text):
-            raise CandidateRejected("message asserts a prohibited finding, authority, compliance, remediation, or runtime claim")
     _validate_roles(candidate, handoff)
     _validate_citations(candidate, handoff)
     _validate_tools(candidate, handoff)

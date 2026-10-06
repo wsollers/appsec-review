@@ -414,7 +414,7 @@ def fingerprint_material(request: Mapping[str, Any], image_record: Mapping[str, 
         "adapter": ADAPTER_ID,
         "boundary_sha256": boundary_sha256(),
         "image_reference": image_reference(image_record),
-        "image_record_sha256": _sha(image_record),
+        "image_identity_sha256": image_identity_sha256(image_record),
         "permission_fingerprint_sha256": pc.input_fingerprint_component(decision),
         "request_without_permission_sha256": _sha(
             {key: value for key, value in request.items() if key != "permission"}),
@@ -454,6 +454,18 @@ def load_image_registry(directory: Path, store: SchemaStore | None = None) -> di
             raise ContainerRequestError(f"{path.name}: duplicate container image id")
         records[record["image_id"]] = record
     return records
+
+
+IMAGE_IDENTITY_FIELDS = ("image_id", "repository", "digest", "digest_kind")
+
+
+def image_identity_sha256(record: Mapping[str, Any]) -> str:
+    """The identity of what docker runs for a B16 record: its id, repository, digest and digest kind.
+    ``build_attempt_id``, ``build_fingerprint_sha256``, ``dockerfile_sha256``, ``purpose`` and
+    ``provenance`` change when an image is re-keyed or rebuilt from cache with the same digest; hashing
+    the whole record re-ran every container job (and its consumers) on such a no-op (ADR-0013)."""
+    return _sha({"identity": "appsec-review/container-image-identity/1",
+                 **{name: record.get(name) for name in IMAGE_IDENTITY_FIELDS}})
 
 
 def image_reference(record: Mapping[str, Any]) -> str:

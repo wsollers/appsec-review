@@ -371,11 +371,19 @@ class OwaspValidatorResultTests(unittest.TestCase):
             owasp_validator_result.publish(self.run_id, self.request_path)
         self.candidate = self.make_candidate()
         cid = self.obligation()["evidence_citations"][0]["citation_id"]
-        self.candidate["reported_claims"] = [{"claim_class": "observed_fact",
-            "summary": "The target is vulnerable and severity is high.", "evidence_citation_ids": [cid]}]
+        # ADR-0036: the conclusion is the enumerated claim_class; a prohibited class is rejected ...
+        self.candidate["reported_claims"] = [{"claim_class": "verified_finding",
+            "summary": "Input reaches the parser.", "evidence_citation_ids": [cid]}]
         self.write_candidate()
-        with self.assertRaisesRegex(owasp_validator_result.CandidateRejected, "prohibited"):
+        with self.assertRaisesRegex(owasp_validator_result.CandidateRejected, "claim_class.*not in enum|prohibited or ungrounded claim class"):
             owasp_validator_result.publish(self.run_id, self.request_path)
+        # ... while summary wording under an allowed class is commentary and publishes.
+        self.candidate = self.make_candidate()
+        self.candidate["reported_claims"] = [{"claim_class": "observed_fact",
+            "summary": "The target is vulnerable and severity is high; whether the buffer is fixed-size is unknown.",
+            "evidence_citation_ids": [cid]}]
+        self.write_candidate()
+        owasp_validator_result.publish(self.run_id, self.request_path)
 
     def test_dynamic_candidate_is_proposed_inert_and_unauthorized(self):
         self.tearDown_fixture_state()

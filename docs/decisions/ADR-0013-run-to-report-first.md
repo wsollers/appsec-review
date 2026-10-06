@@ -47,8 +47,9 @@ front half.
    `remediation_status`), checked against the job's allowed classes, and structured result fields
    (`finding`, `severity`, `cvss`, `runtime_state`, ...). Free text such as summaries, notes,
    limitations and disclaimers is not scanned with phrase rules and cannot fail a job; "not a
-   verified finding" or "the compiler is fixed as clang" is just text. The phrase rules in
-   `persona_invocation.py` and `validate_job_output.py` remain only as diagnostics.
+   verified finding" or "the compiler is fixed as clang" is just text.
+   [ADR-0036](ADR-0036-state-from-enums-prose-is-commentary.md) (2026-10-06) extends this to every
+   job's own text guard and removed the remaining phrase rules.
 8. **Job fingerprints cover a job's own code and inputs, not shared runtime** (William,
    2026-09-27). `execution_state.SHARED_RUNTIME` lists the shared runtime and validator modules
    (container adapter, permission model, publication and validation, persona adapter and CLI

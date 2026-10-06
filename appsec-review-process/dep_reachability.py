@@ -288,16 +288,19 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def open_osv(root: Path, now: Any = None) -> tuple[OsvSource | None, str | None]:
-    """The published OSV snapshot's index, or (None, gap reason). Never raises for an unusable feed."""
+def open_osv(root: Path, now: Any = None, *, resolution: Any = None) -> tuple[OsvSource | None, str | None]:
+    """The published OSV snapshot's index, or (None, gap reason). Never raises for an unusable feed.
+    ``resolution`` is an already verified ``osv_snapshot`` Resolution (a run-bound snapshot); without
+    it the current snapshot is resolved at ``now`` (default: the wall clock)."""
     from datetime import datetime, timezone
     import osv_index
     import osv_snapshot
-    try:
-        resolution = osv_snapshot.resolve_snapshot(root, max_age=osv_snapshot.DEFAULT_MAX_AGE,
-                                                   now=now or datetime.now(timezone.utc))
-    except Exception as exc:  # noqa: BLE001 - an unreadable feed is a gap, never a crash
-        return None, f"osv-unavailable:{type(exc).__name__}"
+    if resolution is None:
+        try:
+            resolution = osv_snapshot.resolve_snapshot(root, max_age=osv_snapshot.DEFAULT_MAX_AGE,
+                                                       now=now or datetime.now(timezone.utc))
+        except Exception as exc:  # noqa: BLE001 - an unreadable feed is a gap, never a crash
+            return None, f"osv-unavailable:{type(exc).__name__}"
     if not resolution.usable:
         return None, f"osv-unusable:{resolution.reason}"
     if resolution.index_path is None:

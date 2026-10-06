@@ -507,35 +507,8 @@ def _validate_boundaries(candidate: dict[str, Any], handoff: dict[str, Any], cit
         _exact_keys(claim, {"claim_class", "summary", "evidence_citation_ids"}, "reported claim")
         if claim["claim_class"] not in ALLOWED_CLAIMS or not set(claim["evidence_citation_ids"]).issubset(citation_ids):
             raise CandidateRejected("candidate asserts a prohibited or ungrounded claim class")
-        text = claim["summary"].lower()
-        prohibited = (
-            r"\b(?:is|are|was|were)\s+(?:a\s+)?vulnerab", r"\bseverity\s*(?:is|=|:)",
-            r"\bexploitable\b", r"\b(?:is|are)\s+(?:fully\s+)?compliant\b", r"\bcertified\b",
-            r"\b(?:is|was|has been)\s+(?:fixed|remediated)\b", r"\bobserved\s+(?:in|on)\s+(?:production|runtime|a live)",
-        )
-        if any(re.search(pattern, text) for pattern in prohibited):
-            raise CandidateRejected("candidate text asserts a prohibited finding/severity/exploitability/compliance/remediation/runtime claim")
-    assertive_patterns = (
-        r"\b(?:finding|vulnerability)\s+(?:exists|confirmed|established|verified)\b",
-        r"\b(?:critical|high|medium|low)\s+severity\b",
-        r"\b(?:severity|exploitability|likelihood|impact)\s*(?:is|=|:)\s*\w+",
-        r"\b(?:is|are)\s+(?:fully\s+)?(?:compliant|certified)\b",
-        r"\b(?:is|was|has been)\s+(?:fixed|remediated)\b",
-        r"\b(?:runtime|deployed|live[- ]state|production|device|manual)\s+behavior\s+(?:is|was|has been)\b",
-        r"\bobserved\s+(?:in|on)\s+(?:production|runtime|a live|a device)\b",
-    )
-
-    def scan_assertions(value: Any) -> None:
-        if isinstance(value, dict):
-            for item in value.values():
-                scan_assertions(item)
-        elif isinstance(value, list):
-            for item in value:
-                scan_assertions(item)
-        elif isinstance(value, str) and any(re.search(pattern, value, re.IGNORECASE) for pattern in assertive_patterns):
-            raise CandidateRejected("candidate encodes a prohibited finding/severity/exploitability/compliance/remediation/runtime claim")
-
-    scan_assertions(candidate)
+    # ADR-0036: a claim's conclusion is its claim_class (ALLOWED_CLAIMS) and each fragment's
+    # assessment_status enum; summaries, rationales and dissent are commentary, never scanned.
     if handoff["handoff_mode"] == "request_authoring_only":
         if any(item["assessment_status"] not in {"dynamic_test_required", "cannot_verify", "not_assessed"}
                for item in candidate["fragment_results"]):

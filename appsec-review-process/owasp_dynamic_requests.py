@@ -50,8 +50,9 @@ PERSONAL_DATA = re.compile(r"\b\d{3}-\d{2}-\d{4}\b|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\
                            re.IGNORECASE)
 INJECTION = re.compile(r"(?i)\b(ignore (?:all |any )?(?:prior|previous) (?:rules|instructions)|"
                        r"override (?:policy|authority)|expand (?:scope|permission)|bypass (?:policy|authorization))\b")
-PROMOTION = re.compile(r"(?i)\b(finding|severity|exploitability|compliance certification|"
-                       r"remediation complete|verified vulnerability|production is (?:safe|unsafe))\b")
+# Promotion limits are the request's closed consts (no_finding_promotion, assessment_unchanged, ...);
+# narrative prose is commentary and is not scanned for wording (ADR-0036). SECRET, PERSONAL_DATA and
+# INJECTION stay: they are data-hygiene and scope-widening guards, not status inference.
 
 
 class CandidateRejected(ValueError):
@@ -375,8 +376,6 @@ def _validate_candidate(candidate: dict[str, Any], envelope: dict[str, Any], cur
             raise CandidateRejected("unnecessary personal data is prohibited")
         if INJECTION.search(text):
             raise CandidateRejected("prompt-injected content cannot widen scope, tools, permissions, or authority")
-        if PROMOTION.search(text):
-            raise CandidateRejected("finding, severity, exploitability, compliance, or remediation promotion is prohibited")
     accepted = copy.deepcopy(candidate)
     accepted["publication"] = probe["publication"]
     return accepted
