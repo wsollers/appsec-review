@@ -44,7 +44,7 @@ SCHEMAS = {"component": "component-purpose-map.schema.json", "threat": "integrat
     "verification": "09-independent-verification.schema.json", "scoring": "scoring-prioritization.schema.json"}
 PROHIBITED_TEXT = tuple(re.compile(value, re.I) for value in (
     r"(?<!not a )\bfinal(?:ized)?\s+report\b", r"\bhuman\s+sign[- ]?off\s+(?:recorded|complete|approved)\b", r"\bcompliance\s+(?:certified|verdict)\b",
-    r"\b(?:is|has been)\s+(?:fixed|remediated)\b", r"\bobserved\s+runtime\b"))
+    r"\b(?:is|has been)\s+(?:fixed|remediated)\b(?!-)", r"\bobserved\s+runtime\b"))
 CODE_FILES = ("synthesis_report.py","10-synthesis-report/task-synthesis-report-core.md",
     registry_paths.template_rel("10-synthesis-report"),registry_paths.contract_rel("synthesis-report-draft"),
     "personas/personas/synthesis-report-drafter/persona.json","personas/roles/synthesis-report-drafter/role.json",
