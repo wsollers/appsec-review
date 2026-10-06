@@ -12,9 +12,12 @@ report keeps the admission head and the later decision head).
 same head and agree with 09. Dispositions map to ledger statuses only through
 ``claim_ledger.DECISION_PRODUCERS`` (09 ``BLOCKED`` is ``unresolved``). A claim a stage has no row for
 keeps its status and is a named gap. A disposition equal to the current status (09 ``REFUTED`` after an
-08 refutation) appends nothing. An illegal transition (09 ``UNRESOLVED`` or ``BLOCKED`` after an 08
-refutation: ``refuted`` is terminal), an authority the producer does not hold, or a stage that reviewed
-another ledger head blocks.
+08 refutation) appends nothing. An 08 refutation that 09 does not confirm (09 ``UNRESOLVED`` or ``BLOCKED``)
+is not appended, because ``refuted`` is terminal in the ledger and 09 is the independent check of it: the
+ledger records 09's ``unresolved`` and names the unconfirmed refutation as a gap, so the claim stays open
+in the report (run 20261006T150309Z-fdd8d6 blocked on "illegal transition refuted -> unresolved"). Any other
+illegal transition, an authority the producer does not hold, or a stage that reviewed another ledger head
+blocks.
 """
 from __future__ import annotations
 
@@ -36,6 +39,7 @@ SUMMARY = "claim-ledger-final-summary.md"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 STAGES = ("07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification")
 SCORING = "12-scoring-prioritization"
+RED, BLUE, VERIFY = STAGES
 # job -> (contract, artifact, schema, collection, status field) of every accepted input.
 SOURCES = {claim_ledger.JOB: (claim_ledger.CONTRACT, LEDGER, "claim-decision-ledger.schema.json", None, None),
            **{job: (spec[0], spec[1], claim_ledger.DECISION_SCHEMAS[job], spec[2], "status")
@@ -119,6 +123,14 @@ def plan(run_id: str, documents: dict[str, dict[str, Any]], bindings: dict[str, 
             target = outcomes.get(row["status"])
             if target is None:
                 raise Blocked(f"{JOB}: {job} disposition {row['status']} of claim {claim_id} maps to no ledger status")
+            if job == BLUE and target == "refuted":
+                check = _rows(VERIFY, documents[VERIFY]).get(claim_id)
+                answered = check and claim_ledger.DECISION_PRODUCERS[VERIFY][5].get(check["status"])
+                if answered and answered != "refuted":
+                    gaps.append(f"LEDGER-GAP {job}-refutation-unconfirmed: claim {claim_id} was refuted at {job}, but "
+                                f"{VERIFY} answered {check['status']}; the ledger records the independent "
+                                f"verification ({answered}), not the refutation.")
+                    continue
             if target == current:
                 concurred[job] += 1
                 continue
