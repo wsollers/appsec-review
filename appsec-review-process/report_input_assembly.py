@@ -545,10 +545,15 @@ def _verify_citation(jobs_root: Path, identity: tuple[str, str, str, str], *, ru
         return _verify_source_file(Path(jobs_root), identity)
     path = PurePosixPath(relative)
     parts = path.parts
-    if len(parts) >= 6 and parts[:2] == ("data", "jobs") and parts[3] == "attempts":
-        if parts[2] != job or parts[4] != attempt_id:
+    if len(parts) >= 6 and parts[:2] == ("data", "jobs") and "attempts" in parts[3:5]:
+        # Run-relative form data/jobs/<job>[/whole]/attempts/<attempt>/<file>; scope-partitioned producers
+        # publish under <job>/whole (run 20261006T220018Z-7e69f0: a 02-iac-config-scan citation was looked up
+        # as data/jobs/... inside its own attempt).
+        index = parts.index("attempts", 3)
+        producer = "/".join(parts[2:index])
+        if (producer not in (job, f"{job}/whole") or len(parts) <= index + 2 or parts[index + 1] != attempt_id):
             raise Blocked(f"{JOB}: citation path contradicts its producer identity")
-        relative = "/".join(parts[5:])
+        relative = "/".join(parts[index + 2:])
     jobs_root = jobs_root.resolve(strict=True)
     producer_root = _plain_directory(jobs_root, jobs_root / job)
     if not (producer_root / "attempts").is_dir() and (producer_root / "whole" / "attempts").is_dir():
