@@ -11,7 +11,7 @@ from pathlib import Path
 import shlex
 from typing import Any
 
-from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json, tree_hashes
+from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 import owasp_dispatch as dispatch
 import owasp_join_report as join
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
@@ -111,10 +111,14 @@ def _code_hashes() -> dict[str,str]:
     return values
 
 
-def _facts_record(facts: dispatch.DispatchFacts) -> dict[str,Any]:
-    try: registry_hashes=tree_hashes(facts.registry_dir)
-    except (OSError,ValueError) as exc: raise Blocked(f"{JOB}: trusted registry tree is unsafe") from exc
-    return {"registry_dir":str(Path(facts.registry_dir).resolve()),"registry_hashes":registry_hashes,
+def _facts_record(facts: dispatch.DispatchFacts, plan: Any) -> dict[str,Any]:
+    """The trusted dispatch facts this join is a function of. Of the registry, only what T10 reads:
+    the configured job template and its composition records, each by the hash ``dispatch.load_plan``
+    re-derived from the registry bytes (``plan.persona``), and the composition hash. Hashing the whole
+    registry tree (all of ``pipeline/``: job graph, host-generated image records, unrelated templates)
+    re-ran this join and everything after it on any unrelated edit (ADR-0013)."""
+    return {"registry_dir":str(Path(facts.registry_dir).resolve()),
+        "composition":dispatch.thaw(plan.persona),"composition_sha256":plan.composition_sha256,
         "allowed_models":deepcopy(list(facts.allowed_models)),"invoker_id":facts.invoker_id,
         "source_snapshot_sha256":facts.source_snapshot_sha256,
         "registry_ceiling":deepcopy(facts.registry_ceiling)}
@@ -135,7 +139,7 @@ def current_inputs(run_id: str, facts: dispatch.DispatchFacts) -> dict[str,Any]:
         "selection_id":verified["applicability"]["selection_id"],
         "input_manifest_sha256":"sha256:"+verified["input_manifest_sha256"].removeprefix("sha256:"),
         "applicability_model_sha256":"sha256:"+verified["applicability_model_sha256"].removeprefix("sha256:"),
-        "facts":_facts_record(facts),"code":_code_hashes()}
+        "facts":_facts_record(facts,verified["plan"]),"code":_code_hashes()}
 
 
 def _receipts(inputs: dict[str,Any], outputs: dict[str,Any], attempt: Path) -> tuple[dict[str,Any],dict[str,Any]]:
@@ -153,8 +157,8 @@ def _receipts(inputs: dict[str,Any], outputs: dict[str,Any], attempt: Path) -> t
     return permission,lineage
 
 
-def _derive(run_id: str, facts: dispatch.DispatchFacts) -> dict[str,Any]:
-    outputs=join.derive(join.load_verified_inputs(run_id,facts=facts))
+def _derive(run_id: str, facts: dispatch.DispatchFacts, verified: dict[str,Any] | None=None) -> dict[str,Any]:
+    outputs=join.derive(verified if verified is not None else join.load_verified_inputs(run_id,facts=facts))
     return {**_partition_matrix(outputs[join.MATRIX]),join.GAPS:outputs[join.GAPS],join.ROUTES:outputs[join.ROUTES]}
 
 
@@ -206,9 +210,10 @@ def _validate_attempt(attempt: Path, inputs: dict[str,Any], facts: dispatch.Disp
 def run(run_id: str, dagster_id: str, facts: dispatch.DispatchFacts, force: bool=False) -> dict[str,Any]:
     base=root(run_id)
     def execute(allocation: dict[str,Any], inputs: dict[str,Any], fingerprint: str) -> dict[str,Any]:
-        if inputs["code"]!=_code_hashes() or inputs["facts"]!=_facts_record(facts):
+        verified=join.load_verified_inputs(run_id,facts=facts)
+        if inputs["code"]!=_code_hashes() or inputs["facts"]!=_facts_record(facts,verified["plan"]):
             raise Blocked(f"{JOB}: implementation or trusted dispatch facts changed before execution")
-        attempt=allocation["attempt"]; outputs=_derive(run_id,facts)
+        attempt=allocation["attempt"]; outputs=_derive(run_id,facts,verified)
         for name in published_names(outputs): atomic_json(attempt/name,outputs[name])
         permission,lineage=_receipts(inputs,outputs,attempt)
         atomic_json(attempt/"permission.json",permission); atomic_json(attempt/"lineage.json",lineage)

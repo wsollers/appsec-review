@@ -1073,8 +1073,14 @@ class PermissionGateTests(ScriptedCase):
         seen = {value}
         for change in changes:
             seen.add(ce.fingerprint_material({**base, **deepcopy(change)}, record)["sha256"])
-        seen.add(ce.fingerprint_material(base, {**record, "purpose": "edited"})["sha256"])
+        seen.add(ce.fingerprint_material(base, {**record, "repository": record["repository"] + "-other"})["sha256"])
         self.assertEqual(len(seen), len(changes) + 2)
+        # A re-keyed or cache-rebuilt record with the same image identity is the same fingerprint; the
+        # whole-record hash used to differ (and re-ran every container job and its consumers).
+        rekeyed = {**record, "purpose": "edited", "provenance": "rebuilt from cache",
+                   "build_attempt_id": "rekeyed-attempt", "build_fingerprint_sha256": "sha256:" + "9" * 64}
+        self.assertNotEqual(ce._sha(rekeyed), ce._sha(record))
+        self.assertEqual(ce.fingerprint_material(base, rekeyed)["sha256"], value)
         denied = deepcopy(base)
         denied["permission"]["decision"] = pc.evaluate(
             support.permission([self.NETWORK])["requirement"], [], support.context())

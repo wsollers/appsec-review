@@ -233,6 +233,58 @@ class DependencyOrchestrationTests(unittest.TestCase):
         # Reused inside the ceiling; past it the job re-executes (and its worker then refuses the stale DB).
         self.assertEqual(calls, [2, 0, 2])
 
+    def register(self, registry, kind, snapshot_id, data_timestamp, content):
+        snapshots = orchestration.snapshots
+        source = Path(self.temp.name) / "mirrors" / snapshot_id
+        source.mkdir(parents=True)
+        (source / "db.bin").write_bytes(content)
+        metadata = source.parent / (snapshot_id + ".meta.json")
+        metadata.write_text(json.dumps({"database_kind": kind, "vendor_build": "v", "schema_version": "1",
+                                        "snapshot_id": snapshot_id, "data_timestamp": data_timestamp}))
+        snapshots.register(kind, source, metadata, registry)
+        resolved = snapshots.resolve(kind, registry, max_age_seconds=86400,
+                                     now=orchestration.datetime.fromisoformat("2026-09-27T12:00:00+00:00"))
+        return {key: resolved[key] for key in orchestration._IDENTITY_KEYS}
+
+    def test_a_registry_advance_reuses_the_bound_snapshots_while_they_verify(self):
+        outputs = self.jobs / "02-sbom-inventory" / "attempts" / "a" / "outputs"
+        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text(json.dumps({
+            "components": [{"component_id": "SC-000001", "purl": "pkg:npm/example@1.0.0"}]}))
+        accepted = self.jobs / "02-sbom-inventory" / "accepted.json"; accepted.write_text("{}")
+        registry = Path(self.temp.name) / "offline-registry"; registry.mkdir()
+        payload = {"sbom": {"attempt_id": "a", "path": str(manifest),
+                            "sha256": "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                            "accepted_path": str(accepted)}}
+        grype = self.register(registry, "grype-db", "grype-one", "2026-09-27T10:00:00Z", b"grype")
+        current = {"grype-db": grype, "osv": self.register(registry, "osv", "osv-one", "2026-09-27T10:00:00Z", b"osv")}
+        def registered(kind, **kwargs):
+            return {"b13_attempt": {"kind": kind}, "database": current["grype-db" if kind == "grype" else "osv"]}
+        def launch(generated_at, suffix):
+            request = self.request("02-sca-vulnerability-match", payload,
+                {"sbom_root": str(outputs), "snapshot_registry": str(registry), "max_database_age_seconds": 86400,
+                 "snapshot_identities": [current["grype-db"], current["osv"]]}, generated_at)
+            with patch.object(orchestration.b13, "execute_registered", side_effect=registered) as execute, \
+                 patch.object(orchestration.workers, "run", side_effect=self.publishing_worker):
+                self.execute("02-sca-vulnerability-match", request, suffix)
+            return execute.call_count, json.loads(request.read_text())
+        self.assertEqual(launch("2026-09-27T11:00:00Z", "one")[0], 2)
+        bound = current["osv"]
+        current["osv"] = self.register(registry, "osv", "osv-two", "2026-09-27T12:00:00Z", b"osv")   # 2-hourly sync
+        job_root = self.jobs / "02-sca-vulnerability-match"
+        record = json.loads((job_root / "reuse.json").read_text())
+        calls, request = launch("2026-09-27T13:00:00Z", "two")
+        self.assertNotEqual(orchestration.producer_reuse.key(orchestration.reuse_inputs(
+            "sca", "02-sca-vulnerability-match", self.run_id, request, self.generation)),
+            record["reuse_key"])                         # the request's identities were the false rerun
+        self.assertEqual(calls, 0)                       # bound snapshots still verify: reused
+        self.assertEqual(orchestration.bound_identities(job_root, request)[1], bound)
+        data = registry / "snapshots" / "osv" / "osv-one" / "data" / "db.bin"
+        data.write_bytes(b"tampered")                    # a real change: the bound bytes differ
+        self.assertIsNone(orchestration.bound_identities(job_root, request))
+        self.assertEqual(launch("2026-09-27T13:10:00Z", "three")[0], 2)
+        record = json.loads((job_root / "reuse.json").read_text())
+        self.assertEqual(record["inputs"]["tool"]["snapshot_identities"][1]["snapshot_id"], "osv-two")
+
     def test_shared_claim_policies_keep_dependency_outputs_bounded(self):
         expected = {
             "sbom-inventory": "dependency_inventory_evidence",

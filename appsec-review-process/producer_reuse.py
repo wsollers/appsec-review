@@ -42,13 +42,15 @@ def code(names: Iterable[str]) -> dict[str, str | None]:
 
 
 def images(image_ids: Iterable[str], images_dir: Path | None = None) -> dict[str, Any]:
-    """The pinned image record identity per image id; an unregistered image is recorded as None."""
+    """The pinned image identity (id, repository, digest) per image id, never the record's build metadata
+    (a re-key or cached rebuild with the same digest is not a change); an unregistered image is None."""
     try:
         registry = ce.load_image_registry(images_dir or ce.IMAGES_DIR)
     except ce.ContainerRequestError:
         registry = {}
     return {image_id: ({"digest": registry[image_id].get("digest"),
-                        "record_sha256": digest(registry[image_id])} if image_id in registry else None)
+                        "identity_sha256": ce.image_identity_sha256(registry[image_id])}
+                       if image_id in registry else None)
             for image_id in sorted(set(image_ids))}
 
 

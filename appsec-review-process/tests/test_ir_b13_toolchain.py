@@ -40,6 +40,26 @@ class IrB13ToolchainTests(unittest.TestCase):
             with self.assertRaisesRegex(state.Blocked, "accepted native-build generation"):
                 _image(inputs, "02-ir-capture")
 
+    def test_capture_accepts_a_rekeyed_record_of_the_same_native_image(self):
+        from ir_b13_toolchain import _image
+
+        accepted = {"image_id": "fixture", "repository": "appsec-review/build", "digest": "sha256:" + "4" * 64,
+                    "digest_kind": "image-id", "build_attempt_id": "build-1", "purpose": "build"}
+        record = {**accepted, "build_attempt_id": "build-2", "purpose": "rebuilt from cache"}
+        inputs = {"upstream_result": {"units": [{"unit_id": "root", "image_id": "fixture",
+                                                   "image_digest": record["digest"]}]},
+                  "toolchain_bindings": [["root", "sha256:" + "a" * 64]],
+                  "toolchain_records": [["fixture", {"sha256": "sha256:" + "a" * 64, "value": accepted}]]}
+        with mock.patch("container_execution.load_image_registry", return_value={"fixture": record}), \
+             mock.patch("ir_b13_toolchain._record_path", return_value=Path("/fixture.json")), \
+             mock.patch("ir_b13_toolchain.read_json", return_value=record):
+            self.assertEqual(_image(inputs, "02-ir-capture")[:3], ("fixture", record["digest"], "sha256:" + "a" * 64))
+            other = {**record, "repository": "elsewhere/build"}
+            with mock.patch("container_execution.load_image_registry", return_value={"fixture": other}), \
+                 mock.patch("ir_b13_toolchain.read_json", return_value=other):
+                with self.assertRaisesRegex(state.Blocked, "accepted native-build generation"):
+                    _image(inputs, "02-ir-capture")
+
     def test_receipt_trial_path_traversal_is_rejected_before_dereference(self):
         from ir_b13_toolchain import validate_receipts
 

@@ -203,7 +203,7 @@ class Phase1Tests(unittest.TestCase):
             def changed(path): return '0'*64 if Path(path).name==marker else original(path)
             with patch('job_graph.file_hash',side_effect=changed):
                 with self.assertRaises(state.Blocked): self.accepted()
-        with patch('phase1.sys.version',sys.version+' tool-change'):
+        with patch('phase1.sys.version','99.0.0 (main) tool-change'):     # a real interpreter change
             with self.assertRaisesRegex(state.Blocked,'stale'): self.accepted()
         original_read=job_graph.read_json
         def changed_validator(path):
@@ -212,6 +212,27 @@ class Phase1Tests(unittest.TestCase):
             return result
         with patch('job_graph.read_json',side_effect=changed_validator):
             with self.assertRaisesRegex(state.Blocked,'stale'): self.accepted()
+
+    def test_A08_tool_patch_release_is_not_stale(self):
+        self.run_job()
+        # A patch release or rebuilt interpreter (new sys.version build text, new executable hash)
+        # used to re-run intake and so the whole run; it is not a change intake can observe.
+        major_minor='.'.join(sys.version.split('.')[:2])
+        patched=major_minor+'.999 (rebuilt) tool-change'
+        live=phase1.current_inputs(self.run_id,state.read_json(registry_paths.template('00-intake')),phase1.config_for(self.run_id))
+        self.assertNotEqual({**live['tool'],'python':patched},live['tool'])   # the raw identity differs
+        original_hash=phase1.file_hash
+        def rebuilt(path): return '1'*64 if str(path)==sys.executable else original_hash(path)
+        with patch('phase1.sys.version',patched), patch('phase1.file_hash',side_effect=rebuilt):
+            self.assertIsNotNone(self.accepted())
+        with patch('phase1.sys.version','99.0.0 (main) tool-change'):     # a real interpreter change
+            with self.assertRaisesRegex(state.Blocked,'stale'): self.accepted()
+        self.assertEqual(phase1.tool_staleness({'python':'3.12.3 (main)','git':{'version':'git version 2.43.0'},
+                                                'worker':'w','executable_sha256':'a'}),
+                         phase1.tool_staleness({'python':'3.12.9 (other)','git':{'version':'git version 2.43.7',
+                                                'executable_sha256':'b'},'worker':'w','executable_sha256':'c'}))
+        self.assertNotEqual(phase1.tool_staleness({'python':'3.12.3','git':{'version':'git version 2.43.0'}}),
+                            phase1.tool_staleness({'python':'3.12.3','git':{'version':'git version 2.44.0'}}))
 
     def test_A08_source_changes_during_work(self):
         with phase1.Session(self.run_id) as session:

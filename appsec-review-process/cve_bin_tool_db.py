@@ -232,10 +232,26 @@ def resolve_db(root: Path, *, nvd_identity: dict, tool: dict[str, str], now: dat
         raise DbUnavailable("DB_MISSING", "no cve-bin-tool database has been published")
     try:
         pointer = json.loads(pointer_path.read_bytes())
-        directory = root / "snapshots" / pointer["snapshot_id"]
+        snapshot_id, manifest_sha256 = pointer["snapshot_id"], pointer.get("manifest_sha256")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise DbUnavailable("DB_INVALID", f"current.json is unreadable: {type(exc).__name__}") from None
+    return resolve_db_snapshot(root, snapshot_id=snapshot_id, manifest_sha256=manifest_sha256,
+                               nvd_identity=nvd_identity, tool=tool, now=now)
+
+
+def resolve_db_snapshot(root: Path, *, snapshot_id: Any, manifest_sha256: Any, nvd_identity: dict,
+                        tool: dict[str, str], now: datetime) -> dict[str, Any]:
+    """One published database by id and manifest hash (current or bound earlier by the run), re-verified
+    from bytes exactly as `resolve_db` verifies the current one, or DbUnavailable."""
+    root = Path(root).absolute()
+    if not isinstance(snapshot_id, str) or not snapshot_id.startswith("sha256-") or "/" in snapshot_id:
+        raise DbUnavailable("DB_INVALID", "database snapshot id is invalid")
+    pointer = {"snapshot_id": snapshot_id, "manifest_sha256": manifest_sha256}
+    try:
+        directory = root / "snapshots" / snapshot_id
         data = (directory / "manifest.json").read_bytes()
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise DbUnavailable("DB_INVALID", f"current.json or its manifest is unreadable: {type(exc).__name__}") from None
+        raise DbUnavailable("DB_INVALID", f"database manifest is unreadable: {type(exc).__name__}") from None
     if hashlib.sha256(data).hexdigest() != pointer.get("manifest_sha256"):
         raise DbUnavailable("DB_INVALID", "manifest hash differs from current.json")
     manifest = json.loads(data)

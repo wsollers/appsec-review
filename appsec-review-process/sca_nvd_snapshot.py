@@ -374,8 +374,14 @@ def _verify_once(root, pointer_bytes):
     except ValueError as exc:
         raise _Stop("POINTER_INVALID", f"current.json: {exc}") from None
 
+    return _verify_chain(root, pointer["snapshot_id"], pointer["manifest_sha256"], pointer_cursor, pointer["cursor"])
+
+
+def _verify_chain(root, snapshot_id, expected_sha, pointer_cursor=None, pointer_text=None):
+    """Verify the snapshot `snapshot_id` (manifest hash `expected_sha`) and its whole parent chain
+    from bytes. `pointer_cursor` is the cursor a current.json pointer recorded, when there is one."""
     chain, blobs, seen = [], {}, set()
-    snapshot_id, expected_sha, child = pointer["snapshot_id"], pointer["manifest_sha256"], None
+    child = None
     head = None
     while snapshot_id is not None:
         if snapshot_id in seen:
@@ -386,8 +392,8 @@ def _verify_once(root, pointer_bytes):
         manifest, sha, times, listed = _load_manifest(root, snapshot_id, current=child is None, expected_sha=expected_sha)
         if child is None:
             head = (manifest, sha, times)
-            if times["cursor"] != pointer_cursor:
-                raise _Stop("POINTER_MANIFEST_MISMATCH", f"current.json cursor {pointer['cursor']} is not the manifest cursor {manifest['cursor']}")
+            if pointer_cursor is not None and times["cursor"] != pointer_cursor:
+                raise _Stop("POINTER_MANIFEST_MISMATCH", f"current.json cursor {pointer_text} is not the manifest cursor {manifest['cursor']}")
         else:
             start = child["coverage"].get("last_modified_start")
             try:
@@ -607,6 +613,38 @@ def resolve_snapshot(data_root, *, max_age, now):
     return Resolution(OK, "VERIFIED_WITHIN_LIMIT",
                       f"snapshot {identity['snapshot_id']} verified offline; data is {identity['age_seconds']} seconds old, "
                       f"within the {identity['max_age_seconds']} second limit this job set", identity, component, (), reads)
+
+
+def resolve_bound_snapshot(data_root, *, snapshot_id, manifest_sha256, max_age, now):
+    """Reopen the snapshot a run bound earlier, by id and manifest hash, whatever current.json says now.
+
+    Published snapshots are immutable, so a run that bound one keeps reading the same bytes on a resume
+    while they still verify: the manifest hash must equal `manifest_sha256`, the whole parent chain and
+    every blob are re-hashed exactly as `resolve_snapshot` does, and the age ceiling is applied at
+    `now`. Anything else is a non-usable Resolution (the caller then binds the current snapshot)."""
+    if not isinstance(snapshot_id, str) or not re.fullmatch(r"sha256-[0-9a-f]{16}", snapshot_id):
+        raise ValueError("snapshot_id must be a published NVD snapshot id")
+    if not isinstance(manifest_sha256, str) or not _SHA256.fullmatch(manifest_sha256):
+        raise ValueError("manifest_sha256 must be a sha256 hex digest")
+    if max_age is not NO_AGE_LIMIT and (not isinstance(max_age, timedelta) or max_age <= timedelta(0)):
+        raise TypeError("max_age must be NO_AGE_LIMIT or a positive datetime.timedelta")
+    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be a timezone-aware datetime")
+    now = now.astimezone(timezone.utc)
+    root = Path(data_root).absolute()
+    try:
+        if not root.is_symlink() and not root.exists():
+            raise _Stop("DATA_ROOT_MISSING", "the NVD publication root does not exist")
+        _contained(root, root)
+        identity = _identity(*_verify_chain(root, snapshot_id, manifest_sha256), max_age, now)
+    except _Stop as stop:
+        return _stopped(stop, 1)
+    errors = validate_document(identity, IDENTITY_SCHEMA_FILE, _STORE)
+    if errors:
+        raise AssertionError(f"resolver built an identity record that violates its schema: {errors[0]}")
+    reason = "VERIFIED_NO_AGE_LIMIT" if identity["age_policy"] == AGE_POLICY_NO_LIMIT else "VERIFIED_WITHIN_LIMIT"
+    return Resolution(OK, reason, f"bound snapshot {snapshot_id} re-verified offline; data is "
+                      f"{identity['age_seconds']} seconds old", identity, fingerprint_component(identity), (), 1)
 
 
 def resolve_snapshot_window(data_root, *, warn_age, max_age, now):

@@ -73,6 +73,21 @@ class OwaspJoinPublisherTests(DispatchCase):
         with self.assertRaises(Exception):
             publisher.current_inputs(self.run_id,self.facts(source_snapshot_sha256="sha256:"+"0"*64))
 
+    def test_an_unrelated_registry_edit_reuses_and_a_composition_edit_does_not(self):
+        pointer=self.publish()
+        before=publisher.current_inputs(self.run_id,self.facts())
+        tree=execution_state.tree_hashes(self.registry)
+        unrelated=self.registry/"container-images"/"host-generated.json"
+        unrelated.parent.mkdir(parents=True,exist_ok=True); unrelated.write_text('{"build_attempt_id": "x"}\n')
+        self.assertNotEqual(execution_state.tree_hashes(self.registry),tree)   # the old whole-tree key moved
+        self.assertEqual(publisher.current_inputs(self.run_id,self.facts()),before)
+        self.assertEqual(publisher.run(self.run_id,"dagster-t14-again",self.facts())["attempt_id"],pointer["attempt_id"])
+        template=self.registry/"job-templates"/(before["facts"]["composition"]["job_template_id"]+".json")
+        value=json.loads(template.read_text()); value["description"]=value.get("description","")+" edited"
+        template.write_text(json.dumps(value))
+        with self.assertRaises(Exception):    # the composition T10 ran under changed: never reused
+            publisher.current_inputs(self.run_id,self.facts())
+
     def test_resealed_permission_or_output_forgery_fails_deterministic_attempt_validation(self):
         pointer=self.publish(); attempt=publisher.root(self.run_id)/"attempts"/pointer["attempt_id"]
         inputs=execution_state.read_json(attempt/"inputs.json")

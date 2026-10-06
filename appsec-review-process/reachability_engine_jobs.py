@@ -185,7 +185,7 @@ def _upstream(run_id: str, job: str) -> dict[str, Any]:
     sbom = read_json(Path(sbom_binding["path"]))
     supplied = _supplied(run_id)
     reviewed, entries = _read_supplied(run_id, supplied)
-    osv, osv_identity, osv_gap = bindings._osv(generated)
+    osv, osv_identity, osv_gap = bindings._osv(run_id)
     try:
         prepared = prepare(sca=sca, sbom=sbom, reviewed=reviewed, osv=osv, osv_gap=osv_gap, tree=tree)
     finally:

@@ -739,9 +739,27 @@ def _tree_path(rel: Any) -> str:
     return pure.as_posix()
 
 
+def fingerprint_view(inputs: dict[str, Any]) -> dict[str, Any]:
+    """The inputs as the fingerprint sees them: each B16 image record by its image identity (id,
+    repository, digest), not its file bytes. A re-key or cached rebuild with the same image digest
+    rewrites build_attempt_id/build_fingerprint_sha256 and must not re-run the native build and every
+    consumer (ADR-0013). The full record stays in inputs.json and is what the replay mounts."""
+    records = inputs.get("image_records")
+    if not isinstance(records, dict):
+        return inputs
+    return {**inputs, "image_records": {image_id: {"identity_sha256": ce.image_identity_sha256(entry["value"])}
+                                        for image_id, entry in sorted(records.items())}}
+
+
+def fingerprint(inputs: dict[str, Any]) -> str:
+    return "sha256:" + digest(fingerprint_view(inputs))
+
+
 def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, Any]) -> None:
-    if read_json(attempt / "inputs.json") != inputs:
+    stored = read_json(attempt / "inputs.json")
+    if fingerprint_view(stored) != fingerprint_view(inputs):
         raise Blocked(f"{job}: immutable attempt inputs changed")
+    inputs = stored          # the attempt is verified against exactly what it ran with
     result = read_json(attempt / spec(job)["result"])
     if validate_document(result, spec(job)["schema"]):
         raise Blocked(f"{job}: result schema validation failed")
@@ -895,7 +913,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
         worker_kind="pinned_container", output_contract=cfg["contract"], resume_command=resume,
         derive_inputs=lambda: build_resolution.lifecycle_inputs(base, lambda at: current_inputs(run_id, job, at)),
-        fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
+        fingerprint_inputs=fingerprint, execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(job)}, force=force,
         post_validate=lambda attempt, _envelope, record: _validate_attempt(run_id, job, attempt, record),
@@ -907,7 +925,7 @@ def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None) -> Pa
     base = root(run_id, job); pointer = pointer or read_json(base / "accepted.json")
     at = build_resolution.accepted_started_at(base, pointer)
     inputs = current_inputs(run_id, job, at)
-    attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
+    attempt, _ = validate_published(base, pointer, fingerprint(inputs),
                                     expected_run_id=run_id, expected_job_id=job)
     if build_resolution.accepted_started_at(base, {"attempt_id": attempt.name}) != at:
         raise Blocked(f"{job}: accepted attempt start time changed during validation")
