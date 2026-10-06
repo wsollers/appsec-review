@@ -171,13 +171,26 @@ class FinalLedgerTests(unittest.TestCase):
         self.assertEqual({item["claim_id"]: item["status"] for item in ledger["claim_states"]}[claims[1]], "unresolved")
         self.assert_report_accepts(ledger)
 
-    def test_illegal_transition_blocks(self):
+    def test_refutation_09_does_not_confirm_is_a_gap_and_the_claim_stays_open(self):
+        """Run 20261006T150309Z-fdd8d6: 08 REFUTED, 09 UNRESOLVED blocked on refuted -> unresolved."""
+        refuted = []
         def refute(document):
             row = next(row for row in document["reviews"] if row["status"] == "UNRESOLVED")
-            row["status"] = "REFUTED"  # 09 then answers UNRESOLVED: refuted is terminal
+            row["status"] = "REFUTED"
+            refuted.append(row["claim_id"])
         self.republish("08-blue-team-refutation", refute)
-        with self.assertRaisesRegex(Blocked, "illegal transition refuted -> unresolved"):
-            self.derive()
+        ledger, steps = self.derive()
+        claim = refuted[0]
+        self.assertEqual(len(steps["gaps"]), 1)
+        self.assertIn("08-blue-team-refutation-refutation-unconfirmed", steps["gaps"][0])
+        self.assertIn(claim, steps["gaps"][0])
+        count = len(self.origin["entries"])
+        chain = [(entry["decision_authority"]["job_id"], entry["from_status"], entry["status"])
+                 for entry in ledger["entries"][count:] if entry["claim_id"] == claim]
+        self.assertEqual(chain, [("07-red-team-adversarial", "candidate", "under_review"),
+                                 ("09-independent-verification", "under_review", "unresolved")])
+        self.assertEqual(claim_ledger.validate_ledger(ledger), [])
+        self.assert_report_accepts(ledger)
 
     def test_wrong_authority_blocks_the_job_and_the_report(self):
         def impersonate(document):
