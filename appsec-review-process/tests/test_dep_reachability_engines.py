@@ -5,6 +5,7 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,3 +199,22 @@ class EntryPointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PackHashStabilityTest(unittest.TestCase):
+    """A file CodeQL writes into the mounted pack folder must not change the pack fingerprint
+    (06-reachability-codeql re-ran on every resume of runs 20261004T054551Z-357581 and 20261006T150309Z-fdd8d6)."""
+
+    def test_generated_lock_file_does_not_change_the_pack_hash(self):
+        import dep_reachability_codeql as drc
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "python"
+            folder.mkdir()
+            (folder / "qlpack.yml").write_text("name: appsec/python-reachability\n")
+            (folder / "Reachability.ql").write_text("select 1\n")
+            with unittest.mock.patch.object(drc, "PACK_ROOT", Path(temp)):
+                before = drc.pack_sha256("python")
+                (folder / "codeql-pack.lock.yml").write_text("lockVersion: 1.0.0\n")
+                self.assertEqual(drc.pack_sha256("python"), before)
+                (folder / "Reachability.ql").write_text("select 2\n")
+                self.assertNotEqual(drc.pack_sha256("python"), before)

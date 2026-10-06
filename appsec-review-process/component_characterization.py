@@ -706,6 +706,29 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
     return errors
 
 
+# Fields Python binds after the reply (``_dispatch_persona``). The model is told to leave them out and
+# ``_orchestrator_fill`` sets them before the schema check: run 20261006T150309Z-fdd8d6 failed three
+# rounds because the model refused to invent 11 of the 16 lineage hashes it could not read.
+ORCHESTRATOR_FIELDS = ("target", "source_revision", "source_snapshot_sha256", "evidence_manifest_lineage")
+ORCHESTRATOR_INSTRUCTIONS = (
+    "\n\nRuntime note from the orchestrator: the fields " + ", ".join(ORCHESTRATOR_FIELDS) +
+    " of component-purpose-map.json are bound by the orchestrator from hash-checked inputs after your "
+    "reply. Omit them (or set them to null); never reconstruct or invent their values. Return the single "
+    "JSON object with every other required field.")
+
+
+def _orchestrator_fill(record: dict[str, Any]):
+    """fill_result hook: set the Python-owned fields before the reply is validated."""
+    def fill(envelope: dict[str, Any], result_field: str) -> list[str]:
+        value = envelope.get(result_field)
+        if isinstance(value, dict):
+            value.update(target=record["target_name"], source_revision=record["source_revision"],
+                         source_snapshot_sha256=record["source_snapshot_sha256"],
+                         evidence_manifest_lineage=_manifest_lineage(record))
+        return []
+    return fill
+
+
 def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str, Any]) -> tuple[dict[str, Any], str, dict[str, Any]]:
     attempt, attempt_id = allocation["attempt"], allocation["attempt_id"]
     target_root, evidence_root = Path(record["target_root"]), Path(record["evidence_root"])
@@ -727,9 +750,12 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
     def extra_validate(result: dict[str, Any]) -> list[str]:
         return category_coverage_errors(result) + security_tag_errors(result)
 
+    def dispatch(argv: list[str], prompt: str, timeout: int, transcript: Path) -> dict[str, Any]:
+        return rc._dispatch_streaming(argv, prompt + ORCHESTRATOR_INSTRUCTIONS, timeout, transcript)
+
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=model["effort"], budget_usd=budget_usd,
-                                 extra_validate=extra_validate),
+        invoker=ClaudeCliInvoker(effort=model["effort"], budget_usd=budget_usd, dispatch_fn=dispatch,
+                                 fill_result=_orchestrator_fill(record), extra_validate=extra_validate),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots=roots,
         allowed_models=(model_identity,), source_snapshot_sha256=record["source_snapshot_sha256"],

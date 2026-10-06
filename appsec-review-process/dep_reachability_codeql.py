@@ -40,9 +40,17 @@ EXTRACTOR = {"go": ("go", "autobuild"), "java": ("java", "none"), "csharp": ("cs
 CODEQL = "/opt/codeql/codeql"
 
 
+def _pack_source(path: Path) -> bool:
+    """The committed pack sources. Files CodeQL writes into the mounted folder during a run (for example
+    ``codeql-pack.lock.yml``) are not pack identity: hashing them changed 06's fingerprint on every resume
+    (runs 20261004T054551Z-357581 and 20261006T150309Z-fdd8d6 re-ran 06-reachability-codeql each time)."""
+    return path.name == "qlpack.yml" or path.suffix in (".ql", ".qll")
+
+
 def pack_files(language: str) -> dict[str, bytes]:
     folder = PACK_ROOT / language
-    return {path.name: path.read_bytes() for path in sorted(folder.iterdir()) if path.is_file() and not path.is_symlink()}
+    return {path.name: path.read_bytes() for path in sorted(folder.iterdir())
+            if path.is_file() and not path.is_symlink() and _pack_source(path)}
 
 
 def pack_sha256(language: str) -> str:
