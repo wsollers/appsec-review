@@ -164,15 +164,33 @@ def resolve_snapshot(data_root, *, max_age=DEFAULT_MAX_AGE, now):
         return Resolution(REASONS[stop.reason], stop.reason, stop.detail, None, None, ())
 
 
-def _resolve(root, max_age, now):
+def resolve_bound_snapshot(data_root, *, snapshot_id, manifest_sha256, max_age=DEFAULT_MAX_AGE, now):
+    """Reopen a snapshot a run bound earlier, by id and manifest hash, whatever current.json says now.
+    Every archive and the index are re-hashed against the manifest and the age ceiling is applied at
+    `now`, exactly as for the current snapshot; a pruned or changed snapshot is not usable."""
+    if not isinstance(max_age, timedelta) or max_age <= timedelta(0):
+        raise ValueError("max_age must be a positive datetime.timedelta")
+    if not isinstance(now, datetime) or now.tzinfo is None:
+        raise ValueError("now must be a timezone-aware datetime")
+    pinned = {"schema": POINTER_SCHEMA, "snapshot_id": snapshot_id, "manifest_sha256": manifest_sha256}
+    try:
+        return _resolve(Path(data_root).absolute(), max_age, now.astimezone(timezone.utc), pinned=pinned)
+    except _Stop as stop:
+        return Resolution(REASONS[stop.reason], stop.reason, stop.detail, None, None, ())
+
+
+def _resolve(root, max_age, now, pinned=None):
     if _absent(root):
         raise _Stop("DATA_ROOT_MISSING", "the OSV publication root does not exist; the publisher has not run here")
     _contained(root, root)
-    pointer_path = root / "current.json"
-    if _absent(pointer_path):
-        raise _Stop("POINTER_MISSING", "current.json does not exist; no OSV snapshot has been published")
-    _contained(root, pointer_path)
-    pointer, _ = _read_json(pointer_path, "current.json")
+    if pinned is not None:
+        pointer = pinned
+    else:
+        pointer_path = root / "current.json"
+        if _absent(pointer_path):
+            raise _Stop("POINTER_MISSING", "current.json does not exist; no OSV snapshot has been published")
+        _contained(root, pointer_path)
+        pointer, _ = _read_json(pointer_path, "current.json")
     if (not isinstance(pointer, dict) or pointer.get("schema") != POINTER_SCHEMA or
             not isinstance(pointer.get("snapshot_id"), str) or not _SNAPSHOT_ID.fullmatch(pointer["snapshot_id"]) or
             not isinstance(pointer.get("manifest_sha256"), str) or not _SHA256.fullmatch(pointer["manifest_sha256"])):

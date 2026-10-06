@@ -326,22 +326,65 @@ CODE_FILES = ("binary_component_cve_match.py", "cve_bin_tool_db.py", "sca_nvd_sn
               registry_paths.contract_rel(CONTRACT), registry_paths.template_rel(JOB))
 
 
+DATABASE_KEYS = ("snapshot_id", "manifest_sha256", "nvd_snapshot_id", "nvd_manifest_sha256", "nvd_cursor",
+                 "image_digest", "tool_version", "built_at", "cve_count")
+
+
+def bound_database(base: Path) -> dict[str, Any] | None:
+    """The database identity the accepted attempt was produced from, as its reuse record names it.
+    Never trusted alone: ``reuse_inputs`` reopens it by id and re-verifies every byte."""
+    try:
+        record = read_json(Path(base) / producer_reuse.RECORD)
+    except (OSError, ValueError):
+        return None
+    database = (record.get("inputs") or {}).get("database") if isinstance(record, dict) else None
+    if (not isinstance(record, dict) or record.get("schema") != producer_reuse.SCHEMA or
+            not isinstance(database, dict) or set(database) != set(DATABASE_KEYS)):
+        return None
+    return database
+
+
+def _database(nvd_root: Path, db_root: Path, tool: dict[str, str], now: datetime,
+              bound: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The database this attempt is a function of. A database the run bound earlier is kept while its
+    NVD snapshot chain and its files still verify by hash and the snapshot is within the age ceiling
+    at ``now``: the NVD sync publishes a new snapshot and database every two hours, so binding the
+    current one would re-run this job (and 02-evidence-assembly and every model job after it) on
+    every resume (ADR-0013). Otherwise the current database; None when none resolves."""
+    ceiling = timedelta(seconds=tunables.shared("reference_snapshot_max_age_seconds"))
+    if bound is not None:
+        try:
+            resolved = nvd.resolve_bound_snapshot(nvd_root, snapshot_id=bound["nvd_snapshot_id"],
+                                                  manifest_sha256=bound["nvd_manifest_sha256"],
+                                                  max_age=ceiling, now=now)
+            if resolved.usable:
+                found = cvedb.resolve_db_snapshot(db_root, snapshot_id=bound["snapshot_id"],
+                                                  manifest_sha256=bound["manifest_sha256"],
+                                                  nvd_identity=resolved.identity, tool=tool, now=now)
+                return {key: found[key] for key in DATABASE_KEYS}
+        except (cvedb.DbUnavailable, ValueError, TypeError, KeyError):
+            pass
+    resolved = nvd.resolve_snapshot(nvd_root, max_age=ceiling, now=now)
+    if not resolved.usable:
+        return None
+    found = cvedb.resolve_db(db_root, nvd_identity=resolved.identity, tool=tool, now=now)
+    return {key: found[key] for key in DATABASE_KEYS}
+
+
 def reuse_inputs(run_id: str, source: Path, generation: str, now: datetime, *, nvd_data_root: Path | None = None,
-                 db_root: Path | None = None, tool: dict[str, str] | None = None, **_options: Any) -> dict[str, Any] | None:
-    """What one attempt's evidence is a function of: the scanned binaries by content, the database the
-    preflight resolves now, the pinned image, the scan launcher and the code. None when the preflight
-    would not resolve a database (nothing to reuse; ``build`` records that failure)."""
+                 db_root: Path | None = None, tool: dict[str, str] | None = None,
+                 bound: dict[str, Any] | None = None, **_options: Any) -> dict[str, Any] | None:
+    """What one attempt's evidence is a function of: the scanned binaries by content, the database
+    (``bound`` while it still verifies, else the one the preflight resolves now), the pinned image,
+    the scan launcher and the code. None when no database resolves (nothing to reuse; ``build``
+    records that failure)."""
     binaries, database = scanned_binaries(source), None
     try:
         tool = tool or cvedb.pinned_tool()
         if binaries:
-            ceiling = timedelta(seconds=tunables.shared("reference_snapshot_max_age_seconds"))
-            resolved = nvd.resolve_snapshot(nvd_data_root or cvedb.nvd_root(), max_age=ceiling, now=now)
-            if not resolved.usable:
+            database = _database(nvd_data_root or cvedb.nvd_root(), db_root or cvedb.feed_root(), tool, now, bound)
+            if database is None:
                 return None
-            found = cvedb.resolve_db(db_root or cvedb.feed_root(), nvd_identity=resolved.identity, tool=tool, now=now)
-            database = {key: found[key] for key in ("manifest_sha256", "nvd_manifest_sha256", "nvd_cursor",
-                                                     "image_digest", "tool_version", "built_at", "cve_count")}
     except cvedb.DbUnavailable:
         return None
     launcher = {path.relative_to(LAUNCHER).as_posix(): file_hash(path) for path in sorted(LAUNCHER.rglob("*"))
@@ -358,7 +401,8 @@ def execute(*, run_id: str, dagster_run_id: str, now: datetime | None = None, **
     source = binary_hardening_input.stage(run_id, job=JOB)
     generation = "sha256:" + file_hash(run_path(run_id) / "inputs" / "artifact-manifest.json")
     base = data_path(run_id, "jobs", JOB, "whole").absolute()
-    content = reuse_inputs(run_id, source, generation, moment, **options)
+    bound = bound_database(base)
+    content = reuse_inputs(run_id, source, generation, moment, bound=bound, **options)
     if content is not None:
         reused = producer_reuse.admit(base, content, run_id=run_id, job_id=JOB,
             verify=lambda _attempt, pointer, _record: validate_published(
@@ -366,6 +410,8 @@ def execute(*, run_id: str, dagster_run_id: str, now: datetime | None = None, **
                 consumer_job_id="02-evidence-assembly", reuse=True))
         if reused is not None:
             return reused
+    if bound is not None:   # new work scans the current database; remember exactly that one
+        content = reuse_inputs(run_id, source, generation, moment, **options)
     attempt_id = "native-" + str(uuid.uuid4())     # the native-<uuid> shape evidence_redaction exempts
     attempt, execution = base / "attempts" / attempt_id, base / "executions" / attempt_id
     if attempt.exists() or execution.exists():

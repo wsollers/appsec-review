@@ -655,7 +655,7 @@ def _tool_instance(request: dict, *, ids: Mapping[str, str], granted: list, regi
         if not _chain(Path(mount["host_path"])) & mount_roots:
             raise PoolSpecError(f"{label}: target_mounts[{index}] is outside every declared mount root")
     identity = {"worker_kind": PINNED_CONTAINER, "image_reference": ce.image_reference(record),
-                "image_record_sha256": _sha(record)}
+                "image_identity_sha256": ce.image_identity_sha256(record)}
     return ce.fingerprint_material(request, record), identity, request["limits"]["timeout_seconds"]
 
 

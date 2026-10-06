@@ -539,6 +539,38 @@ class HappyPathTests(Base):
         self.assertEqual(self.resolve(now=T0 + timedelta(hours=30)).outcome, "OK")
 
 
+class BoundSnapshotTests(Base):
+    """A run-bound snapshot is reopened by id after current.json moved on, and still fully verified."""
+
+    def test_a_bound_snapshot_reverifies_after_the_pointer_advances(self):
+        first = self.publisher.sync(T0)
+        bound = binding.resolve_bound_snapshot(self.root, snapshot_id=first["snapshot_id"],
+                                               manifest_sha256=first["manifest_sha256"], max_age=MAX_AGE, now=NOW)
+        later = self.publisher.sync(T0 + timedelta(hours=2), "2026-09-19T14:00:05+00:00")
+        self.assertNotEqual(later["snapshot_id"], first["snapshot_id"])
+        self.assertNotEqual(self.resolve().identity["snapshot_id"], first["snapshot_id"])   # "current" moved
+        again = binding.resolve_bound_snapshot(self.root, snapshot_id=first["snapshot_id"],
+                                               manifest_sha256=first["manifest_sha256"], max_age=MAX_AGE, now=NOW)
+        self.assertTrue(again.usable)
+        self.assertEqual(again.fingerprint_component, bound.fingerprint_component)
+
+    def test_a_bound_snapshot_with_another_manifest_hash_or_changed_bytes_or_over_age_is_refused(self):
+        first = self.publisher.sync(T0)
+        wrong = binding.resolve_bound_snapshot(self.root, snapshot_id=first["snapshot_id"],
+                                               manifest_sha256="0" * 64, max_age=MAX_AGE, now=NOW)
+        self.assertEqual(wrong.reason, "MANIFEST_HASH_MISMATCH")
+        old = binding.resolve_bound_snapshot(self.root, snapshot_id=first["snapshot_id"],
+                                             manifest_sha256=first["manifest_sha256"], max_age=MAX_AGE,
+                                             now=NOW + timedelta(days=2))
+        self.assertEqual(old.reason, "SNAPSHOT_TOO_OLD")
+        blob = next((self.root / "blobs").glob("*.json.gz"))
+        blob.chmod(0o644)
+        blob.write_bytes(blob.read_bytes() + b"x")
+        changed = binding.resolve_bound_snapshot(self.root, snapshot_id=first["snapshot_id"],
+                                                 manifest_sha256=first["manifest_sha256"], max_age=MAX_AGE, now=NOW)
+        self.assertFalse(changed.usable)
+
+
 class RequiredInputTests(Base):
     def test_every_safety_input_is_required(self):
         parameters = inspect.signature(binding.resolve_snapshot).parameters

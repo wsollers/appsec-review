@@ -194,6 +194,61 @@ class BinaryComponentCveMatchTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 2)          # a changed binary re-executes
         self.assertNotEqual(third["attempt_id"], first["attempt_id"])
 
+    def _resync(self, hours):
+        """The two-hourly reference sync: a new NVD snapshot and a database derived from it."""
+        Publisher(self.nvd_root).sync(T0 + timedelta(hours=hours))
+        db.build(self.db_root, self.nvd_root, clock=lambda: T0 + timedelta(hours=hours, minutes=30),
+                 runner=fake_runner([]), tool=TOOL)
+
+    def test_a_reference_resync_reuses_the_bound_database_while_it_verifies(self):
+        (self.run_root / "inputs").mkdir(parents=True)
+        (self.run_root / "inputs" / "artifact-manifest.json").write_text('{"run_id": "run-1"}\n')
+        first = self.launch("dagster-1")
+        bound = json.loads((self.db_root / "current.json").read_text())
+        self._resync(5)                                  # nothing in the run changed
+        self.assertNotEqual(json.loads((self.db_root / "current.json").read_text()), bound)
+        later = NOW + timedelta(hours=3)
+        source = self.source
+        unbound = job.reuse_inputs("run-1", source, "sha256:x", later, nvd_data_root=self.nvd_root,
+                                   db_root=self.db_root, tool=TOOL)
+        record = json.loads((self.run_root / "data" / "jobs" / job.JOB / "whole" / "reuse.json").read_text())
+        self.assertNotEqual(unbound["database"], record["inputs"]["database"])   # the old false rerun
+        second = self.launch("dagster-2", later)
+        self.assertEqual(len(self.calls), 1)             # bound database still verifies: reused
+        self.assertEqual(second, first)
+        self.assertEqual(job.bound_database(self.run_root / "data" / "jobs" / job.JOB / "whole")["snapshot_id"],
+                         bound["snapshot_id"])
+
+    def test_a_bound_database_that_no_longer_verifies_rebinds_and_reruns(self):
+        (self.run_root / "inputs").mkdir(parents=True)
+        (self.run_root / "inputs" / "artifact-manifest.json").write_text('{"run_id": "run-1"}\n')
+        self.launch("dagster-1")
+        bound = json.loads((self.db_root / "current.json").read_text())
+        self._resync(5)
+        cve = self.db_root / "snapshots" / bound["snapshot_id"] / "cve.db"
+        cve.chmod(0o644)
+        cve.write_bytes(cve.read_bytes() + b"tampered")
+        self.launch("dagster-2", NOW + timedelta(hours=3))
+        self.assertEqual(len(self.calls), 2)             # a real change (bytes) re-executes
+        current = json.loads((self.db_root / "current.json").read_text())
+        rebound = job.bound_database(self.run_root / "data" / "jobs" / job.JOB / "whole")
+        self.assertEqual(rebound["snapshot_id"], current["snapshot_id"])   # and binds the current one
+
+    def test_a_bound_database_past_the_age_ceiling_is_not_reused(self):
+        (self.run_root / "inputs").mkdir(parents=True)
+        (self.run_root / "inputs" / "artifact-manifest.json").write_text('{"run_id": "run-1"}\n')
+        self.launch("dagster-1")
+        self._resync(5)
+        bound = job.bound_database(self.run_root / "data" / "jobs" / job.JOB / "whole")
+        ceiling = job.tunables.shared("reference_snapshot_max_age_seconds")
+        late = T0 + timedelta(hours=2, seconds=ceiling + 60)
+        current = json.loads((self.db_root / "current.json").read_text())["snapshot_id"]
+        with patch.object(db, "VERSION_MAP_REFRESH", timedelta(days=3650)):
+            kept = job._database(self.nvd_root, self.db_root, TOOL, T0 + timedelta(hours=6), bound)
+            aged = job._database(self.nvd_root, self.db_root, TOOL, late, bound)
+        self.assertEqual(kept["snapshot_id"], bound["snapshot_id"])
+        self.assertEqual(aged["snapshot_id"], current)   # bound is over age: the current one is bound
+
     def test_the_container_request_is_offline_and_mounts_the_database_read_only(self):
         database = json.loads((self.db_root / "current.json").read_text())["snapshot_id"]
         try:

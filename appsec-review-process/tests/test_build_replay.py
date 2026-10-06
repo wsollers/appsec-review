@@ -30,6 +30,20 @@ class BuildReplayTests(unittest.TestCase):
                              "compiler_allowlist": ["/opt/llvm/bin/clang"]},
     }
 
+    def test_a_rekeyed_image_record_keeps_the_fingerprint_and_a_new_digest_changes_it(self):
+        record = {"schema": "appsec-review/container-image/1.0", "image_id": "image_build_123456789abc",
+                  "repository": "appsec-review/build", "digest": "sha256:" + "b" * 64, "digest_kind": "image-id",
+                  "dockerfile_sha256": None, "build_fingerprint_sha256": "sha256:" + "1" * 64,
+                  "build_attempt_id": "attempt-1", "purpose": "build", "provenance": "stage 13"}
+        def inputs(value):
+            return {"run_id": "r", "image_records": {value["image_id"]: {
+                "value": value, "sha256": "sha256:" + state.digest(value)}}, "code": {}}
+        rekeyed = {**record, "build_attempt_id": "attempt-2", "build_fingerprint_sha256": "sha256:" + "2" * 64}
+        self.assertNotEqual(state.digest(inputs(rekeyed)), state.digest(inputs(record)))   # the old false rerun
+        self.assertEqual(worker.fingerprint(inputs(rekeyed)), worker.fingerprint(inputs(record)))
+        rebuilt = {**record, "digest": "sha256:" + "c" * 64}
+        self.assertNotEqual(worker.fingerprint(inputs(rebuilt)), worker.fingerprint(inputs(record)))
+
     def test_specs_are_two_distinct_jobs_and_profiles(self):
         self.assertEqual(set(worker.SPECS), {"02-build-configure", "02-native-build"})
         self.assertEqual(worker.spec("02-build-configure")["phases"], ("configure",))

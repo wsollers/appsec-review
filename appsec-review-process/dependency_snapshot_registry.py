@@ -173,7 +173,9 @@ def register_osv_feed(feed_root: Path, registry_root: Path, *, max_age_seconds: 
 
 
 def resolve(kind: str, registry_root: Path, *, max_age_seconds: int, now: datetime,
-            warn_age_seconds: int | None = None) -> dict[str, Any]:
+            warn_age_seconds: int | None = None, snapshot_id: str | None = None) -> dict[str, Any]:
+    """The current snapshot of ``kind`` (or, with ``snapshot_id``, that registered snapshot, which a
+    run bound earlier), every byte re-hashed against its manifest and the age ceiling applied at ``now``."""
     if kind not in KINDS: raise SnapshotInvalid("unknown database kind")
     if isinstance(max_age_seconds, bool) or not isinstance(max_age_seconds, int) or max_age_seconds < 0:
         raise SnapshotInvalid("an explicit non-negative age ceiling is required")
@@ -182,17 +184,24 @@ def resolve(kind: str, registry_root: Path, *, max_age_seconds: int, now: dateti
             warn_age_seconds > max_age_seconds)):
         raise SnapshotInvalid("warning age must be non-negative and no greater than the age ceiling")
     pointer_path = Path(registry_root).resolve() / "current" / (kind + ".json")
-    if not pointer_path.is_file() or pointer_path.is_symlink(): raise SnapshotBlocked(f"{kind} snapshot is absent")
-    try: pointer = json.loads(pointer_path.read_text())
-    except (OSError, ValueError) as exc: raise SnapshotInvalid(f"{kind} pointer is unreadable") from exc
-    if set(pointer) != {"schema", "database_kind", "snapshot_id", "manifest_sha256"} or pointer.get("schema") != POINTER_SCHEMA or pointer.get("database_kind") != kind:
-        raise SnapshotInvalid(f"{kind} pointer is invalid")
+    if snapshot_id is not None:
+        if not isinstance(snapshot_id, str) or not IDENT.fullmatch(snapshot_id):
+            raise SnapshotInvalid(f"{kind} bound snapshot id is invalid")
+        pointer = {"snapshot_id": snapshot_id, "manifest_sha256": None}
+    else:
+        if not pointer_path.is_file() or pointer_path.is_symlink(): raise SnapshotBlocked(f"{kind} snapshot is absent")
+        try: pointer = json.loads(pointer_path.read_text())
+        except (OSError, ValueError) as exc: raise SnapshotInvalid(f"{kind} pointer is unreadable") from exc
+        if set(pointer) != {"schema", "database_kind", "snapshot_id", "manifest_sha256"} or pointer.get("schema") != POINTER_SCHEMA or pointer.get("database_kind") != kind:
+            raise SnapshotInvalid(f"{kind} pointer is invalid")
     snapshot = pointer_path.parents[1] / "snapshots" / kind / pointer["snapshot_id"]
     manifest_path = snapshot / "manifest.json"
     if not manifest_path.is_file() or manifest_path.is_symlink(): raise SnapshotBlocked(f"{kind} snapshot is absent")
     try: manifest = json.loads(manifest_path.read_text())
     except (OSError, ValueError) as exc: raise SnapshotInvalid(f"{kind} manifest is unreadable") from exc
-    if _sha(_canonical(manifest)) != pointer["manifest_sha256"] or manifest.get("schema") != SCHEMA or manifest.get("database_kind") != kind:
+    if ((pointer["manifest_sha256"] is not None and _sha(_canonical(manifest)) != pointer["manifest_sha256"]) or
+            manifest.get("schema") != SCHEMA or manifest.get("database_kind") != kind or
+            manifest.get("snapshot_id") != pointer["snapshot_id"]):
         raise SnapshotInvalid(f"{kind} pointer and manifest differ")
     data = snapshot / "data"; actual = inventory(data)
     if actual != manifest.get("files") or _sha(_canonical(actual)) != manifest.get("sha256"):

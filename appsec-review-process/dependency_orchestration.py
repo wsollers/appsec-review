@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import dependency_b13_adapters as b13
+import dependency_snapshot_registry as snapshots
 import dependency_workers as workers
 import automatic_evidence_inputs as automatic_inputs
 from execution_state import Blocked, atomic_json, beneath, data_path, file_hash, identifier, read_json, run_path
@@ -67,15 +68,54 @@ def _content(value: Any) -> Any:
     return value
 
 
-def reuse_inputs(kind: str, job_id: str, run_id: str, request: dict[str, Any], generation: str) -> dict[str, Any]:
+_IDENTITY_KEYS = ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")
+
+
+def bound_identities(job_root: Path, request: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """The offline Grype/OSV snapshot identities the accepted SCA attempt was produced from, when every
+    one is still registered, re-hashes to its manifest and is within the age ceiling at this launch's
+    clock; else None. The request carries the identities current at launch, and the registry advances
+    with every two-hourly OSV sync, so keying reuse on them re-ran SCA (and everything after
+    02-evidence-assembly) on each resume. The reuse record is never trusted alone: each identity is
+    re-resolved from bytes by id and must equal it field for field."""
+    try:
+        record = read_json(Path(job_root) / producer_reuse.RECORD)
+        identities = record["inputs"]["tool"]["snapshot_identities"]
+        tool = request["tool"]
+        current = tool["snapshot_identities"]
+        if (record.get("schema") != producer_reuse.SCHEMA or not isinstance(identities, list) or
+                sorted(item["database_kind"] for item in identities) !=
+                sorted(item["database_kind"] for item in current)):
+            return None
+        registry = _offline_registry(tool["snapshot_registry"])
+        now = datetime.fromisoformat(request["generated_at"].replace("Z", "+00:00"))
+        for identity in identities:
+            resolved = snapshots.resolve(identity["database_kind"], registry,
+                                         max_age_seconds=tool["max_database_age_seconds"], now=now,
+                                         snapshot_id=identity["snapshot_id"])
+            if {key: resolved[key] for key in _IDENTITY_KEYS} != identity:
+                return None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, Blocked,
+            snapshots.SnapshotBlocked, snapshots.SnapshotInvalid, snapshots.SnapshotStale):
+        return None
+    return identities
+
+
+def reuse_inputs(kind: str, job_id: str, run_id: str, request: dict[str, Any], generation: str,
+                 identities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """What the job's evidence is a function of: request content, upstream content by hash, the pinned
-    image records, its own code and contracts. Never ``generated_at``, an attempt id or a path."""
+    image records, its own code and contracts. Never ``generated_at``, an attempt id or a path.
+    ``identities`` replaces the request's offline snapshot identities by the run-bound ones
+    (``bound_identities``) for the reuse check."""
     binding = request.get("source_binding") if isinstance(request.get("source_binding"), dict) else {}
     contract = workers.JOBS[kind][1]
+    tool = {key: value for key, value in request["tool"].items() if key not in _PATH_KEYS}
+    if identities is not None:
+        tool["snapshot_identities"] = identities
     return {"job_id": job_id, "run_id": run_id, "source_generation": generation, "schema": request.get("schema"),
         "source": {"fingerprint": binding.get("source_fingerprint"), "revision": binding.get("source_revision")},
         "payload": {key: _content(value) for key, value in request["payload"].items() if key not in _PATH_KEYS},
-        "tool": {key: value for key, value in request["tool"].items() if key not in _PATH_KEYS},
+        "tool": tool,
         "images": producer_reuse.images(spec["image"] for spec in b13.SPECS.values() if spec["job"] == job_id),
         "code": producer_reuse.code(CODE_FILES + (registry_paths.contract_rel(contract),
                                                   registry_paths.template_rel(job_id)))}
@@ -244,12 +284,16 @@ def execute(*, job_id: str, run_id: str, input_path: str, output_root: str,
     _binding_paths(payload, owner, kind)
 
     job_root = selected_output / job_id
-    content = reuse_inputs(kind, job_id, run_id, request, generation) if kind in REUSABLE and not legacy else None
-    if content is not None:
+    content = None
+    if kind in REUSABLE and not legacy:
+        bound = bound_identities(job_root, request) if kind == "sca" else None
+        content = reuse_inputs(kind, job_id, run_id, request, generation, identities=bound)
         reused = producer_reuse.admit(job_root, content, run_id=run_id, job_id=job_id,
                                       verify=lambda _attempt, _pointer, _record: _still_current(kind, request))
         if reused is not None:
             return read_json(job_root / "attempts" / reused["attempt_id"] / "result.json")
+        if bound is not None:   # new work scans the request's (current) snapshots; remember those
+            content = reuse_inputs(kind, job_id, run_id, request, generation)
 
     def remember(envelope: dict[str, Any]) -> dict[str, Any]:
         pointer_path = job_root / "accepted.json"

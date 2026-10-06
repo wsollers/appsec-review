@@ -3,7 +3,7 @@
 ``bindings`` names every source 06 reads, by hash: the accepted engine tables of
 ``06-reachability-codeql`` and ``06-reachability-ir`` (verified against their accepted pointer and
 attempt tree hashes, same source generation and the same SCA attempt as the match set), the OSV
-snapshot identity judged at the SCA completion time, and the run-supplied files under
+snapshot the run is bound to (``_osv``), and the run-supplied files under
 ``<run>/inputs/`` (reviewed map, entry points, language-server and tree-sitter hint documents).
 ``derive`` re-reads exactly those bindings (re-verifying each hash) and runs
 ``dep_reachability_correlator.correlate``. Both are deterministic, so ``validate`` re-derives
@@ -14,7 +14,7 @@ byte-for-byte. A source that is absent, stale or fails verification is not used 
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -126,11 +126,47 @@ def _table(run_id: str, engine: str, source: str, sca_attempt: str) -> tuple[dic
     return {**binding, "status": document["status"]}, None
 
 
-def _osv(generated_at: str) -> tuple[Any, dict[str, Any] | None, str | None]:
-    """The OSV snapshot judged at the SCA completion time (deterministic across validate)."""
+OSV_BINDING_SCHEMA = "appsec-review/osv-run-binding/1"
+
+
+def osv_binding_path(run_id: str) -> Path:
+    """The run's OSV snapshot binding, shared by 06-reachability-codeql/-ir and 06-cve-reachability."""
+    return data_path(run_id, "reference-bindings", "osv.json")
+
+
+def _osv(run_id: str, now: datetime | None = None) -> tuple[Any, dict[str, Any] | None, str | None]:
+    """The OSV snapshot this run is bound to, reopened by id and re-verified, or (first launch, or the
+    bound snapshot no longer verifies or is over the age ceiling) the current one, which is then bound.
+
+    The OSV sync publishes a new snapshot id every two hours even when nothing changed upstream, so
+    binding "current" re-ran every 06 job (and 07-14 after them) on each resume. Age is judged at the
+    wall clock (``now``), never at the SCA completion time: a snapshot published after the SCA
+    finished is not "in the future" (it was ``TIMESTAMP_IN_FUTURE`` and dropped OSV enrichment).
+    An unusable feed is returned as a named gap, never silently."""
     import osv_lookup
-    now = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
-    source, gap = dep_reachability.open_osv(osv_lookup.default_root(), now=now)
+    import osv_snapshot
+    from execution_state import atomic_json
+    moment = now or datetime.now(timezone.utc)
+    root = osv_lookup.default_root()
+    path = osv_binding_path(run_id)
+    resolution = None
+    try:
+        bound = read_json(path) if _regular(path) else None
+        if isinstance(bound, dict) and bound.get("schema") == OSV_BINDING_SCHEMA:
+            candidate = osv_snapshot.resolve_bound_snapshot(root, snapshot_id=bound.get("snapshot_id"),
+                                                            manifest_sha256=bound.get("manifest_sha256"), now=moment)
+            resolution = candidate if candidate.usable else None
+    except (OSError, ValueError, TypeError):
+        resolution = None
+    if resolution is None:
+        try:
+            resolution = osv_snapshot.resolve_snapshot(root, max_age=osv_snapshot.DEFAULT_MAX_AGE, now=moment)
+        except Exception as exc:  # noqa: BLE001 - an unreadable feed is a gap, never a crash
+            return None, None, f"osv-unavailable:{type(exc).__name__}"
+        if resolution.usable:
+            atomic_json(path, {"schema": OSV_BINDING_SCHEMA, "snapshot_id": resolution.identity["snapshot_id"],
+                               "manifest_sha256": resolution.identity["manifest_sha256"]})
+    source, gap = dep_reachability.open_osv(root, resolution=resolution)
     return source, (source.identity if source else None), gap
 
 
@@ -140,9 +176,11 @@ def bindings(run_id: str, source: str, generated_at: str, sca_attempt: str) -> d
         tables[engine], gap = _table(run_id, engine, source, sca_attempt)
         if gap:
             gaps.append(gap)
-    osv, osv_identity, osv_gap = _osv(generated_at)
+    osv, osv_identity, osv_gap = _osv(run_id)
     if osv is not None:
         osv.connection.close()
+    if osv_gap:
+        gaps.append(osv_gap)          # named in the document's coverage gaps, never silently dropped
     supplied = _supplied(run_id)
     if supplied["treesitter"] is None:      # a manually supplied document wins; else the accepted job output
         supplied["treesitter_job"] = _treesitter_job(run_id, source)

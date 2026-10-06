@@ -94,12 +94,17 @@ def _image(inputs: dict[str, Any], job: str, image_id: str | None = None) -> tup
     if record is None or record.get("digest") != image_digest:
         raise Blocked("IR evidence image is absent or differs from the accepted build generation")
     record_path = _record_path(image_id)
-    if (read_json(record_path) != record or "sha256:" + file_hash(record_path) != toolchain_sha):
+    # The accepted build generation is bound by image identity (id, repository, digest), not by the
+    # record file's bytes: a re-key or cached rebuild with the same digest rewrites build_attempt_id and
+    # build_fingerprint_sha256 and leaves the accepted native build reusable (build_replay.fingerprint).
+    # toolchain_sha stays the accepted generation's binding in every IR record.
+    if read_json(record_path) != record or not str(toolchain_sha).startswith("sha256:"):
         raise Blocked("IR evidence image record hash differs from the accepted build generation")
     if job == "02-ir-capture":
         binding = accepted_records.get(image_id)
-        if (not isinstance(binding, dict) or binding.get("value") != record or
-                binding.get("sha256") != toolchain_sha or not toolchain_sha.startswith("sha256:")):
+        if (not isinstance(binding, dict) or not isinstance(binding.get("value"), dict) or
+                ce.image_identity_sha256(binding["value"]) != ce.image_identity_sha256(record) or
+                binding.get("sha256") != toolchain_sha):
             raise Blocked("IR capture image record differs from the accepted native-build generation")
     return image_id, image_digest, toolchain_sha, record
 

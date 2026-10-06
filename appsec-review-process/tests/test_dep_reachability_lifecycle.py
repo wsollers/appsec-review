@@ -72,8 +72,8 @@ class LifecycleBindingTests(unittest.TestCase):
         bound = lc.bindings("run", SOURCE, GENERATED, "sca-1")
         self.assertEqual(bound["tables"], {"codeql": None, "ir": None})
         self.assertEqual(bound["gaps"], ["engine-input-absent:06-reachability-codeql",
-                                         "engine-input-absent:06-reachability-ir"])
-        self.assertTrue(bound["osv_gap"].startswith("osv-"))
+                                         "engine-input-absent:06-reachability-ir", bound["osv_gap"]])
+        self.assertTrue(bound["osv_gap"].startswith("osv-"))   # an unusable feed is a named gap
         derived = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
         self.assertEqual(derived["assessments"], [])
         self.assertIn("ENGINE_INPUT:engine-input-absent:06-reachability-codeql", derived["document"]["coverage_gaps"])
@@ -84,7 +84,7 @@ class LifecycleBindingTests(unittest.TestCase):
         self.publish("06-reachability-codeql", lc.ENGINE_RESULT, table("codeql"))
         self.publish("06-reachability-ir", lc.ENGINE_RESULT, table("ir", "unknown"))
         bound = lc.bindings("run", SOURCE, GENERATED, "sca-1")
-        self.assertEqual(bound["gaps"], [])
+        self.assertEqual(bound["gaps"], [bound["osv_gap"]])     # only the (absent) OSV feed
         first = lc.derive("run", bound, sca=SCA, sbom=SBOM, files=FILES, generated_at=GENERATED)
         second = lc.derive("run", lc.bindings("run", SOURCE, GENERATED, "sca-1"), sca=SCA, sbom=SBOM, files=FILES,
                            generated_at=GENERATED)
@@ -120,6 +120,77 @@ class LifecycleBindingTests(unittest.TestCase):
         self.assertEqual(lc._cpg("run", "sha256:" + "6" * 64)[1], ["engine-input-mixed-lineage:02-code-property-graph"])
         (attempt / "extra.txt").write_text("tamper")
         self.assertEqual(lc._cpg("run", SOURCE)[1], ["engine-input-not-current:02-code-property-graph"])
+
+
+class OsvRunBindingTests(unittest.TestCase):
+    """The OSV snapshot is bound once per run and reopened by id (ADR-0013 resume stability)."""
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        import osv_feed
+        from test_osv_feed import FakeDownloader, T0, make_zip
+        self.osv_feed, self.T0 = osv_feed, T0
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.run = Path(self.folder.name) / "run"
+        self.root = Path(self.folder.name) / "osv"
+        self.payloads = {e: make_zip([f"GHSA-{e[:2]}-0001"]) for e in osv_feed.ECOSYSTEMS}
+        self.downloader = FakeDownloader(self.payloads)
+        self.sync(T0)
+        for patch in (mock.patch.object(lc, "data_path", lambda _run, *parts: self.run.joinpath("data", *parts)),
+                      mock.patch("osv_lookup.default_root", lambda: self.root)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def sync(self, instant):
+        self.osv_feed.sync(self.root, "r", clock=lambda: instant, fetch_file=self.downloader)
+        return json.loads((self.root / "current.json").read_text())["snapshot_id"]
+
+    def osv(self, at, run="run"):
+        source, identity, gap = lc._osv(run, now=at)
+        if source is not None:
+            source.connection.close()
+        return identity, gap
+
+    def test_a_resync_keeps_the_bound_snapshot(self):
+        from datetime import timedelta
+        import dep_reachability
+        first, gap = self.osv(self.T0 + timedelta(hours=1))
+        self.assertIsNone(gap)
+        later = self.sync(self.T0 + timedelta(hours=2))           # the two-hourly sync, nothing changed
+        self.assertNotEqual(later, first["snapshot_id"])
+        source, _gap = dep_reachability.open_osv(self.root, now=self.T0 + timedelta(hours=3))
+        self.assertEqual(source.identity["snapshot_id"], later)  # binding "current" was the false rerun
+        source.connection.close()
+        again, gap = self.osv(self.T0 + timedelta(hours=3))
+        self.assertEqual((again, gap), (first, None))
+
+    def test_a_snapshot_newer_than_the_sca_is_not_in_the_future(self):
+        from datetime import timedelta
+        import dep_reachability
+        current = self.sync(self.T0 + timedelta(hours=2))
+        sca_finished = self.T0 + timedelta(hours=1)
+        self.assertEqual(dep_reachability.open_osv(self.root, now=sca_finished)[1],
+                         "osv-unusable:TIMESTAMP_IN_FUTURE")     # the old judge-at-SCA-time drop
+        identity, gap = self.osv(self.T0 + timedelta(hours=3), run="run-2")
+        self.assertEqual((identity["snapshot_id"], gap), (current, None))
+
+    def test_a_bound_snapshot_that_changed_or_aged_out_is_rebound(self):
+        from datetime import timedelta
+        import osv_snapshot
+        first, _gap = self.osv(self.T0 + timedelta(hours=1))
+        later = self.sync(self.T0 + timedelta(hours=2))
+        archive = next((self.root / "snapshots" / first["snapshot_id"] / "db").rglob("all.zip"))
+        archive.chmod(0o644)
+        archive.write_bytes(archive.read_bytes() + b"x")
+        identity, gap = self.osv(self.T0 + timedelta(hours=3))
+        self.assertEqual((identity["snapshot_id"], gap), (later, None))   # bytes changed: rebound
+        bound = json.loads(lc.osv_binding_path("run").read_text())
+        self.assertEqual(bound["snapshot_id"], later)
+        aged = self.T0 + timedelta(hours=2) + osv_snapshot.DEFAULT_MAX_AGE + timedelta(minutes=1)
+        identity, gap = self.osv(aged)
+        self.assertIsNone(identity)
+        self.assertEqual(gap, "osv-unusable:SNAPSHOT_TOO_OLD")           # over age: a named gap
 
 
 if __name__ == "__main__":
