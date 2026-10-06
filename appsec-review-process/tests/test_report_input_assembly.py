@@ -26,6 +26,39 @@ CLAIM = "claim-" + digest({"route_id": "route-1", "producer": "03-threat-model-d
     "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT})[:24]
 
 
+class SourceSnapshotCitationTests(unittest.TestCase):
+    """Run 20261006T150309Z-fdd8d6: 03 cites target files as producer 00-intake, attempt source-snapshot."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        base = Path(self.temp.name)
+        self.jobs = base / "run" / "data" / "jobs"
+        (self.jobs / "00-intake" / "whole" / "attempts" / "intake-1").mkdir(parents=True)
+        self.target = base / "target"
+        (self.target / "src").mkdir(parents=True)
+        (self.target / "src" / "store.h").write_text("char buf[8];\n")
+        (base / "run" / "inputs").mkdir(parents=True)
+        atomic_json(base / "run" / "inputs" / "artifact-manifest.json", {"target": {"repo_path": str(self.target)}})
+        self.sha = "sha256:" + file_hash(self.target / "src" / "store.h")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def verify(self, path, sha=None):
+        return report._verify_citation(self.jobs, ("00-intake", "source-snapshot", path, sha or self.sha))
+
+    def test_target_file_citation_resolves_against_the_staged_checkout(self):
+        self.assertEqual(self.verify("src/store.h"), {"producer_job_id": "00-intake",
+            "producer_attempt_id": "source-snapshot", "artifact_path": "src/store.h", "artifact_sha256": self.sha})
+
+    def test_changed_missing_or_escaping_target_file_blocks(self):
+        with self.assertRaisesRegex(Blocked, "bytes changed"):
+            self.verify("src/store.h", "sha256:" + "0" * 64)
+        for path in ("src/absent.h", "../run/inputs/artifact-manifest.json", "/etc/passwd", ".git/config"):
+            with self.assertRaises(Blocked):
+                self.verify(path)
+
+
 class ReportInputAssemblyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

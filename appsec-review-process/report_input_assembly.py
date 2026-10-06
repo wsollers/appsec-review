@@ -510,11 +510,39 @@ def _verify_tool_evidence(jobs_root: Path, run_id: str, identity: tuple[str, str
             "artifact_path": identity[2], "artifact_sha256": identity[3]}
 
 
+# A target repository file at the bound source snapshot (threat_workbench cites these as producer
+# 00-intake, attempt "source-snapshot"; run 20261006T150309Z-fdd8d6 blocked looking for that attempt).
+SOURCE_SNAPSHOT = ("00-intake", "source-snapshot")
+
+
+def _verify_source_file(jobs_root: Path, identity: tuple[str, str, str, str]) -> dict[str, str]:
+    """The cited target file, read from the run's staged checkout (``inputs/artifact-manifest.json``
+    ``target.repo_path``), still has the cited bytes."""
+    _job, _attempt, relative, expected = identity
+    manifest_path = Path(jobs_root).resolve(strict=True).parent.parent / "inputs" / "artifact-manifest.json"
+    if not manifest_path.is_file() or manifest_path.is_symlink():
+        raise Blocked(f"{JOB}: source-snapshot citation needs the staged artifact-manifest.json")
+    target = (read_json(manifest_path).get("target") or {}).get("repo_path")
+    root = Path(target) if isinstance(target, str) else Path()
+    if not target or not root.is_absolute() or not root.is_dir() or root.is_symlink():
+        raise Blocked(f"{JOB}: source-snapshot citation needs target.repo_path as a real checkout directory")
+    path = PurePosixPath(relative)
+    if path.is_absolute() or ".." in path.parts or not path.parts or path.parts[0] == ".git":
+        raise Blocked(f"{JOB}: source-snapshot citation path escapes the target checkout")
+    actual = "sha256:" + file_hash(_owned(root.resolve(strict=True), relative))
+    if actual.removeprefix("sha256:") != expected.removeprefix("sha256:"):
+        raise Blocked(f"{JOB}: cited target file bytes changed since the source snapshot")
+    return {"producer_job_id": SOURCE_SNAPSHOT[0], "producer_attempt_id": SOURCE_SNAPSHOT[1],
+            "artifact_path": relative, "artifact_sha256": actual}
+
+
 def _verify_citation(jobs_root: Path, identity: tuple[str, str, str, str], *, run_id: str | None = None,
                      citation: dict[str, Any] | None = None) -> dict[str, str]:
     job, attempt_id, relative, expected = identity
     if relative.startswith(tool_evidence.FOLDER + "/"):
         return _verify_tool_evidence(Path(jobs_root), str(run_id), identity, citation)
+    if (job, attempt_id) == SOURCE_SNAPSHOT:
+        return _verify_source_file(Path(jobs_root), identity)
     path = PurePosixPath(relative)
     parts = path.parts
     if len(parts) >= 6 and parts[:2] == ("data", "jobs") and parts[3] == "attempts":
