@@ -700,3 +700,33 @@ class EvidencePathResolutionTests(unittest.TestCase):
                              "evidence/02-dev-project-discovery/c5d29a91da674a1c855b884a506673e1/project-discovery-summary.md")
             self.assertTrue(first["content_hash"])
             self.assertEqual(second["path"], "outputs/02-devops-project-discovery/project-discovery-summary.md")
+
+
+class OrchestratorFillTest(unittest.TestCase):
+    """Run 20261006T150309Z-fdd8d6: the model refused to invent 11 of 16 lineage hashes it could not read,
+    so the reply failed the schema three rounds running. Python now binds those fields before the check."""
+
+    def test_python_owned_fields_are_set_before_validation_and_the_model_is_told_to_omit_them(self):
+        evidence = {key: "1" * 64 for key in ("manifest_sha256", "envelope_sha256", "pointer_sha256",
+                                              "producers_sha256", "artifact_set_sha256")}
+        evidence.update(attempt_id="intel-1", manifest_self_sha256="sha256:" + "2" * 64,
+                        input_fingerprint="3" * 64, generation_sha256="sha256:" + "4" * 64,
+                        graph_sha256="sha256:" + "5" * 64, terminal_manifest_sha256="sha256:" + "6" * 64,
+                        terminal_instances_path="pools/x/terminal-instances.json",
+                        terminal_instances_sha256="sha256:" + "7" * 64,
+                        terminal_instances_manifest_sha256="sha256:" + "8" * 64)
+        record = {"target_name": "hello", "source_revision": "abc", "source_snapshot_sha256": "sha256:" + "9" * 64,
+                  "evidence": evidence}
+        envelope = {"result": {"components": [], "evidence_manifest_lineage": {"invented": True}}}
+        self.assertEqual(cc._orchestrator_fill(record)(envelope, "result"), [])
+        value = envelope["result"]
+        self.assertEqual(value["evidence_manifest_lineage"], cc._manifest_lineage(record))
+        self.assertEqual((value["target"], value["source_revision"], value["source_snapshot_sha256"]),
+                         ("hello", "abc", "sha256:" + "9" * 64))
+        self.assertEqual(value["components"], [])
+        # a reply with no JSON object is left for the normal schema rejection
+        prose = {"result": "I could not produce the map"}
+        cc._orchestrator_fill(record)(prose, "result")
+        self.assertEqual(prose["result"], "I could not produce the map")
+        for field in cc.ORCHESTRATOR_FIELDS:
+            self.assertIn(field, cc.ORCHESTRATOR_INSTRUCTIONS)
