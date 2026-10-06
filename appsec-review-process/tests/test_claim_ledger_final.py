@@ -209,6 +209,29 @@ class FinalLedgerTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             self.assert_report_accepts(forged)
 
+    def test_rationale_prose_is_commentary_and_a_structured_promotion_blocks(self):
+        # Run 20261006T150309Z-fdd8d6: an 08 rationale "whether the buffer is fixed-size" blocked the
+        # final ledger as an "is fixed" promotion. State comes from the status enum (ADR-0036).
+        baseline, _ = self.derive()
+
+        def prose(document):
+            for row in document["reviews"]:
+                row["refutation_rationale"] = ("Whether the buffer is fixed-size was not checked; upstream says "
+                                               "the overflow is fixed and the module is compliant.")
+        self.republish("08-blue-team-refutation", prose)
+        ledger, steps = self.derive()
+        self.assertEqual([entry["status"] for entry in ledger["entries"]],
+                         [entry["status"] for entry in baseline["entries"]])
+        self.assertEqual(steps["gaps"], [])
+
+        def promote(document):
+            document["reviews"][0]["remediation_status"] = "fixed"
+        self.republish("08-blue-team-refutation", promote)
+        with self.assertRaises(Blocked):
+            self.derive()
+        with self.assertRaisesRegex(Blocked, "prohibited promoted claim"):
+            claim_ledger._reject_promotions({"reviews": [{"remediation_status": "fixed"}]})
+
     def test_actor_is_the_pool_request_and_that_link_is_rederived_not_trusted(self):
         """Run 20261004T054551Z-357581: real 07/08/09 actors name the reviewer-pool request, not the
         stage attempt. The link is re-derived from the stage's hashed inputs/lineage and its pool."""

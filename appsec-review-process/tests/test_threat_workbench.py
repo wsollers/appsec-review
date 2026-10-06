@@ -151,23 +151,35 @@ class JoinTests(unittest.TestCase):
     def test_privacy_cell_linddun_and_regulatory_notes_are_candidates_only(self):
         model = tw.join(self.base, self.record, self.replies)
         privacy = model["privacy_threats"]
-        self.assertEqual([item["linddun_category"] for item in privacy], ["identifying"])
+        self.assertEqual([item["linddun_category"] for item in privacy], ["identifying", "non_compliance"])
         self.assertEqual(privacy[0]["regulatory_candidate_notes"], ["GDPR Art. 17 erasure may apply"])
         self.assertEqual(privacy[0]["data_class_ids"], ["data-user-email"])
         self.assertTrue(privacy[0]["proof_obligations"])
-        # the compliance verdict was dropped, as a gap
-        self.assertTrue(any("prohibited conclusion" in gap["statement"] for gap in model["gaps"]))
+        # ADR-0036: "The service is compliant with GDPR." is the model's commentary on a non_compliance
+        # candidate; its state is the LINDDUN enum and Python's evidence grading, never a verdict.
+        self.assertEqual(privacy[1]["statement"], "The service is compliant with GDPR.")
+        self.assertIn(privacy[1]["evidence_class"], {"WEAK_INFERENCE", "STRONG_INFERENCE", "FOLLOW_ON_REQUIRED"})
+        self.assertFalse(any("prohibited conclusion" in gap["statement"] for gap in model["gaps"]))
 
-    def test_text_any_downstream_guard_refuses_is_dropped_so_the_ledger_and_report_still_run(self):
+    def test_overlay_prose_is_kept_as_commentary_and_the_ledger_still_runs(self):
+        # ADR-0036: no downstream job scans wording, so the join keeps these records as written.
         import claim_ledger
+        import threat_model_core as tmc
+        from execution_state import Blocked
         replies_ = deepcopy(self.replies)
         replies_["abuse-scenario-analyst"]["abuse_scenarios"].append(
-            {"attacker_objective": "x", "actor": "y", "harm": "this is not a verified finding yet"})
+            {"attacker_objective": "x", "actor": "y", "harm": "the buffer is fixed-size; this is not a verified finding yet"})
         replies_["pii-user-data-mapper"]["gaps"].append({"statement": "see the final report"})
         model = tw.join(self.base, self.record, replies_)
-        self.assertEqual(len(model["abuse_scenarios"]), 1)
-        claim_ledger._reject_promotions(model)          # would raise Blocked on prohibited text
-        self.assertFalse(any("final report" in gap["statement"] for gap in model["gaps"]))
+        self.assertEqual(len(model["abuse_scenarios"]), 2)
+        claim_ledger._reject_promotions(model)
+        self.assertEqual(tmc._walk_keys(model), [])
+        self.assertTrue(any(gap["statement"] == "see the final report" for gap in model["gaps"]))
+        # A promotion is a structured field, and that still fails both guards.
+        model["abuse_scenarios"][0]["severity"] = "high"
+        self.assertTrue(tmc._walk_keys(model))
+        with self.assertRaisesRegex(Blocked, "prohibited promoted claim"):
+            claim_ledger._reject_promotions(model)
 
     def test_unresolved_refs_become_gaps_and_sensitive_data_without_store_is_a_rescope_trigger(self):
         model = tw.join(self.base, self.record, self.replies)
@@ -250,7 +262,9 @@ class JoinTests(unittest.TestCase):
         self.assertTrue(any("cycle" in e for e in tw.validate_overlays(bad)))
         bad = deepcopy(model); bad["flows"][0]["data_class_ids"] = ["data-missing"]
         self.assertTrue(any("data class reference" in e for e in tw.validate_overlays(bad)))
-        bad = deepcopy(model); bad["abuse_scenarios"][0]["harm"] = "severity: high"
+        prose = deepcopy(model); prose["abuse_scenarios"][0]["harm"] = "severity: high"   # commentary (ADR-0036)
+        self.assertEqual(tm.validate_model(prose, self.inputs), tm.validate_model(model, self.inputs))
+        bad = deepcopy(model); bad["abuse_scenarios"][0]["severity"] = "high"            # a structured promotion
         self.assertTrue(tm.validate_model(bad, self.inputs))
 
     def test_projections_are_deterministic_views_of_the_model(self):
@@ -452,10 +466,10 @@ class WaveRunnerTests(unittest.TestCase):
                         and model["attack_trees"])
         status = state.read_json(attempt / "status.json")
         self.assertEqual(status["status"], "OK_WITH_GAPS")
-        self.assertEqual(status["workbench"]["privacy_threats"], 1)
+        self.assertEqual(status["workbench"]["privacy_threats"], 2)
         for name in ("attack-trees.mmd", "dfd.mmd", "ranked-threat-scenarios.json", "intercom-transcript.jsonl"):
             self.assertTrue((attempt / name).is_file(), name)
-        self.assertIn("privacy threats (LINDDUN): 1", (attempt / tm.SUMMARY).read_text())
+        self.assertIn("privacy threats (LINDDUN): 2", (attempt / tm.SUMMARY).read_text())
 
     def test_workbench_inputs_read_the_staged_target_and_the_exact_f02_manifest(self):
         run_root = self.owner / "runs/run1"

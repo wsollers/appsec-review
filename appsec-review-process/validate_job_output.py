@@ -283,21 +283,6 @@ PROMOTION_FIELDS = {
         "live_scan_result", "production_state",
     },
 }
-PROMOTION_TEXT = {
-    "finding": (
-        re.compile(r"(?i)(?<!not a )(?<!no )\bverified[- ]finding\b"),
-        re.compile(r"(?i)(?<!not a )(?<!no )\bconfirmed[- ]vulnerabilit(?:y|ies)\b"),
-    ),
-    "severity": (
-        re.compile(r"(?i)\bseverity\s*[:=]\s*(?:critical|high|medium|low)\b"),
-        re.compile(r"(?i)\bcvss\s*[:=]\s*[0-9]"),
-    ),
-    "runtime-state": (
-        re.compile(r"(?i)\bruntime[- ]verified\b"),
-        re.compile(r"(?i)\blive[- ]scan\s+(?:found|detected|confirmed|verified)\b"),
-        re.compile(r"(?i)(?<!not )(?<!no )\bobserved[- ]runtime\s+(?:state|behavior|exposure)\b"),
-    ),
-}
 
 
 def _relative_artifact_path(value: Any) -> tuple[Path | None, str | None]:
@@ -501,22 +486,8 @@ def _claim_promotion_errors(value: Any, forbidden: set[str], path: str = "$") ->
     elif isinstance(value, list):
         for index, item in enumerate(value):
             errors.extend(_claim_promotion_errors(item, forbidden, f"{path}[{index}]"))
-    # Free text is not parsed for grammar (ADR-0013): only structured promotion fields above fail.
-    # PROMOTION_TEXT / _asserted remain for diagnostics.
+    # Free text is not parsed for grammar (ADR-0013, ADR-0036): only structured promotion fields fail.
     return errors
-
-
-PROMOTION_NEGATION = re.compile(r"(?i)\b(?:not|no|never|without|nor)\b")
-
-
-def _asserted(pattern: re.Pattern[str], value: str) -> bool:
-    """True when a promotion phrase appears without a negation shortly before it.
-
-    Persona text routinely disclaims ("not asserted as a verified finding"); only an unnegated
-    phrase is a promotion. The window is the 40 characters before the match.
-    """
-    return any(not PROMOTION_NEGATION.search(value[max(0, match.start() - 40):match.start()])
-               for match in pattern.finditer(value))
 
 
 def _claim_class_errors(contract: dict[str, Any], value: Any) -> list[str]:

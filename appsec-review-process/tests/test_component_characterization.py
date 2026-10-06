@@ -171,34 +171,22 @@ class ComponentCharacterizationTests(unittest.TestCase):
         self.assertTrue(cc.validate_payload(missing, target_root=self.target,
                                             evidence_root=self.evidence))
 
-    def test_prohibited_conclusion_text_is_negation_aware_per_sentence(self):
-        """2026-10-01, run 20261001T064759Z-4a8586: a real response wrote '...for routing to the
-        secrets/crypto review lane, without asserting exploitability or a compliance verdict' --
-        exactly the required behavior (route, do not conclude), rejected anyway because the old
-        check had no negation exception for this phrase group and a fixed-width lookbehind could
-        not see 'without asserting' several words before 'compliance verdict' regardless."""
-        live_bug_text = (
-            "This job's own evidence_search for secrets-category markers did not independently "
-            "re-run a secrets scan (that is 02-secrets-inventory's job); it is noted here only that "
-            "support/local.key is a PEM-headed private key for routing to the secrets/crypto review "
-            "lane, without asserting exploitability or a compliance verdict.")
-        self.assertFalse(cc._promotes_prohibited_conclusion({"x": live_bug_text}))
-
-        # A genuine assertion, not a disclaimer, is still caught.
-        self.assertTrue(cc._promotes_prohibited_conclusion(
-            {"x": "This is a verified finding of critical severity."}))
-        self.assertTrue(cc._promotes_prohibited_conclusion(
-            {"x": "severity: critical"}))
-        self.assertTrue(cc._promotes_prohibited_conclusion(
-            {"x": "Routes to the review lane. This is a compliance verdict."}))  # different sentence
-        self.assertFalse(cc._promotes_prohibited_conclusion(
-            {"x": "This is not a verified finding, just routing evidence."}))
-
-        violation = deepcopy(self.value)
-        violation["functional_components"][0]["observed_purpose"] = (
-            "A confirmed vulnerability exists here.")
-        self.assertTrue(any("prohibited conclusion" in e for e in cc.validate_payload(
-            violation, target_root=self.target, evidence_root=self.evidence)))
+    def test_conclusion_prose_is_commentary_and_structured_promotion_fails(self):
+        """2026-10-01, run 20261001T064759Z-4a8586: a real response wrote '...without asserting
+        exploitability or a compliance verdict' and was rejected by a phrase rule. ADR-0036: text is
+        commentary; only a structured promotion field fails."""
+        baseline = cc.validate_payload(self.value, target_root=self.target, evidence_root=self.evidence)
+        for text in ("for routing to the secrets/crypto review lane, without asserting exploitability or a "
+                     "compliance verdict.", "A confirmed vulnerability exists here; severity: critical.",
+                     "The parser's buffer is fixed-size."):
+            prose = deepcopy(self.value)
+            prose["functional_components"][0]["observed_purpose"] = text
+            self.assertEqual(cc.validate_payload(prose, target_root=self.target, evidence_root=self.evidence),
+                             baseline, text)
+        promoted = deepcopy(self.value)
+        promoted["functional_components"][0]["severity"] = "critical"
+        self.assertTrue(cc.validate_payload(promoted, target_root=self.target, evidence_root=self.evidence))
+        self.assertTrue(any("prohibited conclusion field" in e for e in cc._walk_keys(promoted)))
 
     def test_overlapping_and_unassigned_physical_paths_fail_closed(self):
         overlapping = deepcopy(self.value)

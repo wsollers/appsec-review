@@ -234,7 +234,7 @@ output root. `KeyboardInterrupt` and `SystemExit` are recorded as `CANCELED` and
 | `IDENTITY_MISMATCH` | `FAILED` | the manifest names another request, invoker, persona, persona hash or model |
 | `BUDGET_EXCEEDED` | `FAILED` | more files or bytes than the budget, or reported units or tool calls over their limits |
 | `UNDECLARED_TOOL` | `FAILED` | a reported tool id the request did not allow |
-| `PROHIBITED_CLAIM` | `FAILED` | a claim class outside `allowed_claim_classes`, or text matching a lexical rule of a prohibited class or naming its id |
+| `PROHIBITED_CLAIM` | `FAILED` | a claim class outside `allowed_claim_classes` |
 | `UNDECLARED_CITATION` | `FAILED` | a citation that is not a declared readable input at its pinned hash, or a verified invocation that is not a declared producer |
 | `SELF_VERIFICATION` | `FAILED` | see the independence section |
 
@@ -254,23 +254,15 @@ as it is read (detail below).
 The first failing rule, in the fixed order of `derive_output`, names the cause. A non-`OK` result
 lists no outputs, no usage and no claim classes.
 
-Every published file is a claim surface. The scanned texts are: every claim statement, limitation
-and locator in the manifest; the full text of every output file; in a JSON output every string, and
-every scalar member read together with its nearest key, its outermost key and its whole key path
-(`{"outer": {"level": "x"}}` is read as `level: x`, `outer: x` and `outer level: x`, also
-through arrays); every published output path. JSON keys, claim ids and path segments are scanned as
-identifiers. A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
-value while a reader of the bytes sees both, so the first would be published unchecked.
+A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last value
+while a reader of the bytes sees both, so the first would be published unchecked.
 
-One normalisation (`scan_forms`) applies to every scanned text, whatever surface it came from. The
-lexical rules (`CLAIM_TEXT_RULES`) read two forms: the NFKC text as written, and that text with
-combining marks dropped and `-`, `_`, `.`, `/`, camelCase boundaries and letter/digit boundaries read
-as spaces, so snake_case, camelCase and dotted spellings meet the same rules as prose. In addition,
-a text whose normalised form **equals** a prohibited class id (the id normalised the same way), or
-an identifier that **contains** one, is `PROHIBITED_CLAIM`. Prose that merely mentions a class id
-inside a longer sentence is not refused by that rule.
+Output text is never scanned for conclusion wording (ADR-0013 item 7,
+[ADR-0036](../decisions/ADR-0036-state-from-enums-prose-is-commentary.md)): a conclusion is carried only
+by a claim's enumerated `claim_class`, checked against `allowed_claim_classes`. Prose that names a
+prohibited class, a severity word or a fix is commentary.
 
-Text that cannot be scanned as it is read is `MALFORMED_RESULT` (`text_form_ok`), in file bodies,
+Text that cannot be read as written is `MALFORMED_RESULT` (`text_form_ok`), in file bodies,
 parsed JSON keys and strings, and manifest text alike: a control character other than newline,
 carriage return and tab (NUL, the other C0 and C1 controls, U+007F); any format character (category
 Cf: zero-width space and joiners, soft hyphen U+00AD, direction overrides, and the byte-order mark,
@@ -348,10 +340,6 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
 - Requiring a different model family for every reviewer is stricter than the panel-level minimum
   in `../architecture/design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
-- The lexical rules are a backstop, not a classifier. They fail closed on phrasing such as a
-  quoted severity word in a summary, and they do not recognise a paraphrase, a synonym, a claim
-  split between sibling members or files, or a confusable spelling inside one script
-  family (the mixed-script rule covers LATIN with CYRILLIC or GREEK only).
 - Whoever can rewrite every file of an attempt consistently can produce another valid attempt;
   nothing here is signed. The verifier guarantees agreement between the projections and with the
   expected request, registry and inputs.

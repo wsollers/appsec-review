@@ -284,10 +284,13 @@ class ClaimLedgerTests(unittest.TestCase):
             with self.assertRaisesRegex(execution_state.Blocked, "exact accepted"):
                 ledger.build_ledger("run1", "attempt-x", [], reviewed, [verify])
 
-    def test_promotion_text_fields_and_owasp_promotion_flags_fail_closed(self):
+    def test_promotion_fields_and_owasp_promotion_flags_fail_closed(self):
+        # ADR-0036: hypothesis prose is commentary; only a structured promotion field fails.
         candidate = self.candidates()[0]; candidate["hypothesis"] = "Verified finding with severity: high"
+        self.assertEqual(len(ledger.build_ledger("run1", "attempt-1", [candidate])["entries"]), 1)
+        source = deepcopy(self.threat_source); source["artifact"]["stride_hypotheses"][0]["severity"] = "high"
         with self.assertRaisesRegex(execution_state.Blocked, "promoted claim"):
-            ledger.build_ledger("run1", "attempt-1", [candidate])
+            ledger.threat_candidates(source)
         source = deepcopy(self.owasp_source); source["artifact"]["routes"][0]["finding_created"] = True
         with self.assertRaisesRegex(execution_state.Blocked, "promotes|invalid OWASP route source"):
             ledger.owasp_candidates(source)
@@ -533,21 +536,29 @@ class ClaimLedgerTests(unittest.TestCase):
                                  "not_authorized")
 
 
-if __name__ == "__main__": unittest.main()
 
-
-class PromotionTextPatternTest(unittest.TestCase):
+class PromotionStateIsStructuralTest(unittest.TestCase):
     """Run 20261006T150309Z-fdd8d6: an 08 rationale saying 'whether the buffer is fixed-size' was rejected as a
-    promoted 'is fixed' claim (\\b matches before a hyphen)."""
+    promoted 'is fixed' claim. Claim state comes from enum fields; prose is never scanned (ADR-0036)."""
 
-    def test_hyphenated_compounds_are_not_promotions_but_real_claims_still_are(self):
+    def test_rationale_prose_is_commentary_and_structured_promotions_still_fail(self):
         import claim_ledger
-        import synthesis_report
-        for patterns in (claim_ledger.PROHIBITED_TEXT, synthesis_report.PROHIBITED_TEXT):
-            def hit(text):
-                return any(p.search(text) for p in patterns)
-            self.assertFalse(hit("Whether the buffer is fixed-size was not checked"))
-            self.assertTrue(hit("The overflow is fixed in release 1.2"))
-            self.assertTrue(hit("The flaw has been remediated."))
-        self.assertFalse(any(p.search("the module is certified-safe? no") for p in claim_ledger.PROHIBITED_TEXT))
-        self.assertTrue(any(p.search("the service is compliant") for p in claim_ledger.PROHIBITED_TEXT))
+        self.assertFalse(hasattr(claim_ledger, "PROHIBITED_TEXT"))
+        for text in ("Whether the buffer is fixed-size was not checked", "The overflow is fixed in release 1.2",
+                     "The service is compliant", "Verified finding; severity: critical"):
+            claim_ledger._reject_promotions({"reviews": [{"status": "REFUTED", "refutation_rationale": text}]})
+        for key, value in (("severity", "high"), ("remediation_status", "fixed"), ("compliance", True),
+                           ("observed_runtime", "crash"), ("findings", [{"id": 1}])):
+            with self.assertRaisesRegex(execution_state.Blocked, "prohibited promoted claim"):
+                claim_ledger._reject_promotions({"reviews": [{"status": "REFUTED", key: value}]})
+        # Absent/false/empty values are not promotions (the schemas carry *_claimed: false limits).
+        claim_ledger._reject_promotions({"claim_limits": {"compliance": False, "severity": None, "findings": []}})
+
+    def test_disposition_outside_the_stage_enum_is_not_a_decision(self):
+        import claim_ledger
+        self.assertEqual(set(claim_ledger.DECISION_PRODUCERS["08-blue-team-refutation"][5]),
+                         {"SURVIVING", "REFUTED", "UNRESOLVED"})
+        self.assertNotIn("FIXED", claim_ledger.DECISION_PRODUCERS["09-independent-verification"][5])
+
+
+if __name__ == "__main__": unittest.main()

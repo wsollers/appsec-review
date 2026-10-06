@@ -358,46 +358,9 @@ def _walk_keys(value: Any, path: str = "$") -> list[str]:
     return errors
 
 
-def _walk_text(value: Any):
-    if isinstance(value, dict):
-        for item in value.values():
-            yield from _walk_text(item)
-    elif isinstance(value, list):
-        for item in value:
-            yield from _walk_text(item)
-    elif isinstance(value, str):
-        yield value
-
-
-# A bare noun phrase (verified finding, confirmed vulnerability, compliance verdict, remediation
-# status, runtime-verified) can appear in a legitimate sentence that explicitly declines to assert
-# it -- this job may route evidence but must not conclude on it (2026-10-01: a real run wrote
-# "...for routing to the secrets/crypto review lane, without asserting exploitability or a
-# compliance verdict", which is exactly the required behavior, not a violation of it). A fixed-width
-# regex lookbehind right before the phrase cannot see a negation several words earlier ("without
-# asserting ... a compliance verdict"), so each of these is checked per sentence: a hit is only a
-# violation if its own sentence carries no negation cue anywhere in it.
-_CONCLUSION_PHRASES = (
-    re.compile(r"(?i)\bverified[- ]finding\b"),
-    re.compile(r"(?i)\bconfirmed[- ]vulnerabilit(?:y|ies)\b"),
-    re.compile(r"(?i)\b(?:runtime[- ]verified|compliance verdict|remediation status)\b"),
-)
-# severity: <level> is an assertion syntax, not natural prose a negation could legitimately modify
-# ("without severity: critical" is not how anyone disclaims a severity) -- always a violation.
-_SEVERITY_ASSERTION = re.compile(r"(?i)\bseverity\s*[:=]\s*(?:critical|high|medium|low)\b")
-_NEGATION_CUE = re.compile(r"(?i)\b(?:not|no|never|without|cannot|can't|doesn't|does not|declin\w*)\b")
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
-
-
-def _promotes_prohibited_conclusion(value: dict[str, Any]) -> bool:
-    for text in _walk_text(value):
-        if _SEVERITY_ASSERTION.search(text):
-            return True
-        for sentence in _SENTENCE_SPLIT.split(text):
-            if (any(pattern.search(sentence) for pattern in _CONCLUSION_PHRASES) and
-                    not _NEGATION_CUE.search(sentence)):
-                return True
-    return False
+# Component purposes, rationales and notes are commentary: they are not scanned for conclusion
+# wording (ADR-0036). A conclusion could only be carried by a PROHIBITED_KEYS field (_walk_keys);
+# classifications are the closed schema's enums.
 
 
 def _citations(value: Any):
@@ -576,8 +539,6 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
     if errors:
         return errors
     errors.extend(_walk_keys(value))
-    if _promotes_prohibited_conclusion(value):
-        errors.append("component map text promotes routing evidence to a prohibited conclusion")
 
     def unique(items: list[dict[str, Any]], key: str, label: str) -> set[str]:
         ids = [item[key] for item in items]

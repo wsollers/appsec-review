@@ -1153,17 +1153,10 @@ class OutcomeTests(Case):
         request = self.ws.request()
         self.check(request, self.ws.run(request, self.ws.runtime(invoker=Rewriting(honest))), None, "OK")
 
-    def test_every_scanned_text_gets_the_same_normalisation(self):
-        prohibited = set(pi.BASELINE_PROHIBITED)
-        for text in ("cvss_score", "cvssScore", "CVSS-Score", "is_exploitable", "isExploitable",
-                     "critical.severity", "criticalSeverity", "HIGHSeverity", "severity: critical",
-                     "verified_finding", "Verified Finding", "verifiedFinding", "compliance-score"):
-            with self.subTest(text=text):
-                self.assertTrue(pi._asserts_prohibited([text], prohibited, []))
-                self.assertTrue(pi._asserts_prohibited([], prohibited, [text]))
-        self.assertFalse(pi._asserts_prohibited(["no verified finding is claimed"], prohibited, []))
-        self.assertTrue(pi._asserts_prohibited([], prohibited, ["no_verified_finding_claimed"]))
-        self.assertFalse(pi._asserts_prohibited(["verified_finding"], {"final_severity"}, ["verified_finding"]))
+    def test_scannable_text_forms_are_accepted_and_no_lexical_claim_rules_remain(self):
+        # ADR-0036: a conclusion is the enumerated claim_class; wording is never a claim.
+        for name in ("CLAIM_TEXT_RULES", "_asserts_prohibited", "scan_forms"):
+            self.assertFalse(hasattr(pi, name), name)
         for text in SCANNABLE_BODY.splitlines():
             self.assertTrue(pi.text_form_ok(text))
 
@@ -1842,8 +1835,6 @@ class DocumentationTests(unittest.TestCase):
         for line in text.splitlines():
             self.assertLessEqual(len(line), 240, "free-text line is unbounded")
             self.assertNotRegex(line, r"[\x00-\x08\x0b-\x1f]")
-        self.assertFalse(pi._asserts_prohibited([text], set(pi.BASELINE_PROHIBITED)),
-                         "the document itself asserts a prohibited claim")
 
 
 if __name__ == "__main__":

@@ -262,7 +262,7 @@ class OwaspJoinReportTests(DispatchCase):
         self.assertEqual(len(promoted["crosswalk_aliases"]), 2)
         self.assertEqual(outputs[join.MATRIX]["rows"][0]["candidate_route_ids"], [promoted["route_id"]])
 
-    def test_promotion_language_is_rejected_even_inside_allowed_fields(self):
+    def test_promotion_language_is_commentary_and_structured_promotion_is_rejected(self):
         inputs = self.mutable(self.honest_inputs())
         result = next(iter(inputs["results"].values())); fragment = result["fragment_results"][0]
         obligation = fragment["proof_obligation_results"][0]; citation = obligation["evidence_citations"][0]
@@ -275,8 +275,16 @@ class OwaspJoinReportTests(DispatchCase):
             "evidence_citation_ids": [citation["citation_id"]], "recommended_role": "independent-verifier",
             "next_step": "Verify independently.", "promotion_state": "candidate_only", "finding_created": False,
             "severity_assigned": False, "execution_authorized": False}]
-        with self.assertRaises(execution_state.Blocked):
-            join.derive(inputs)
+        # ADR-0036: the hypothesis wording is commentary; the route stays a candidate by its consts.
+        route = join.derive(deepcopy(inputs))[join.ROUTES]["routes"][0]
+        self.assertEqual(route["mechanism_or_impact_hypothesis"], "This is a verified finding with severity: high.")
+        self.assertEqual((route["candidate_only"], route["finding_created"], route["severity_assigned"]),
+                         (True, False, False))
+        for key, value in (("finding_created", True), ("severity", "high")):
+            promoted = deepcopy(inputs)
+            next(iter(promoted["results"].values()))["candidate_verification_routes"][0][key] = value
+            with self.assertRaises(execution_state.Blocked, msg=key):
+                join.derive(promoted)
 
     def test_closed_schemas_reject_forbidden_promotion_mutations(self):
         outputs = join.derive(self.honest_inputs()); matrix = outputs[join.MATRIX]

@@ -423,7 +423,9 @@ class LedgerIntakeTests(unittest.TestCase):
         eval_claim = hunters[0]
         self.assertTrue(eval_claim["route_id"].startswith("hunter:P2:"))
         self.assertTrue(eval_claim["hypothesis"].startswith("Code-reading hypothesis (P2, CWE-95 code injection)"))
-        self.assertNotIn("verified finding", eval_claim["hypothesis"])      # model words kept out of ledger text
+        # ADR-0036: the model's mechanism is commentary inside a candidate-only, unreviewed claim.
+        self.assertIn("Mechanism: eval of a verified finding source", eval_claim["hypothesis"])
+        self.assertTrue(eval_claim["hypothesis"].endswith("unreviewed until adversarial review and independent verification."))
         self.assertEqual(eval_claim["component_ids"], ["js"])
         value = ledger.build_ledger("r", "attempt-1", candidates)
         self.assertEqual(ledger.validate_ledger(value), [])

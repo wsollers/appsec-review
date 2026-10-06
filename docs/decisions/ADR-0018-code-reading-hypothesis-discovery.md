@@ -77,8 +77,8 @@ prompts `general-red-team.md` and `known-list-red-team.md` existed but no job lo
      obligations and one citation that carries path, lines and file sha256, and is ordered with the
      tool leads by tier. Routing reports `source_kind: hunter`.
    - The draft report lists hunter claims next to the tool leads (`source` column).
-   - If model words would trip the ledger's promotion guard, they stay out of the ledger text and
-     remain in the hunter artifact.
+   - The model's class and clipped mechanism are carried in the ledger text as commentary
+     (ADR-0036 removed the ledger's promotion text guard).
 7. **Budgets.** Tunables live in `registry/job-templates/07-hypothesis-discovery.json`. Each instance
    is one `claude -p` call capped at `budget_max_usd_per_call` for the cell's budget tier (standard,
    2.0 USD today; the cap includes repair). The default pool is 3 instances, so a run spends at most
