@@ -31,11 +31,10 @@ ASSESSMENTS = frozenset(owasp_validator_result.ASSESSMENTS)
 APPLICABLE = frozenset({"applicable", "conditional"})
 PROHIBITED_KEYS = frozenset({"finding", "findings", "severity", "cvss", "exploitability",
     "runtime_state", "observed_runtime", "compliance", "certification", "remediation_status"})
-PROHIBITED_TEXT = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
-    r"\bverified\s+finding\b", r"\bconfirmed\s+(?:finding|vulnerability)\b",
-    r"\bseverity\s*(?::|is)\s*(?:critical|high|medium|low)\b",
-    r"\bobserved\s+runtime\b", r"\b(?:is|are)\s+(?:compliant|certified)\b",
-    r"\b(?:is|has been)\s+(?:fixed|remediated)\b"))
+# Control status is the validator's assessment_status enum and the matrix's closed consts
+# (finding_created, severity_assigned, compliance_certified, ...); gap, dissent and hypothesis prose is
+# commentary and is not scanned for wording (ADR-0036). PROHIBITED_KEYS still rejects a promotion
+# carried as a structured field.
 
 
 def _load_t07(run_id: str, cell: Any, accounting_cell: Mapping[str, Any]) -> dict[str, Any]:
@@ -208,7 +207,7 @@ def _gap(gaps: dict, kind: str, row_index: int, statement: str, *, citations=(),
 
 
 def _reject_promoted_claims(value: Any, path: str = "$") -> None:
-    """Reject semantic promotion even when hidden in an otherwise allowed string or key."""
+    """Reject a promotion carried as a structured field; strings are commentary (ADR-0036)."""
     if isinstance(value, Mapping):
         for key, item in value.items():
             normalized = key.lower().replace("-", "_")
@@ -218,8 +217,6 @@ def _reject_promoted_claims(value: Any, path: str = "$") -> None:
     elif isinstance(value, list):
         for index, item in enumerate(value):
             _reject_promoted_claims(item, f"{path}[{index}]")
-    elif isinstance(value, str) and any(pattern.search(value) for pattern in PROHIBITED_TEXT):
-        raise Blocked(f"{JOB_ID}: prohibited promoted claim text at {path}")
 
 
 def derive(inputs: dict[str, Any]) -> dict[str, Any]:

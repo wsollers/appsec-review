@@ -688,21 +688,12 @@ def load_outputs(attempt: Path, record: dict[str, Any]) -> dict[str, dict[str, A
 
 
 # ---- join (T07): pure, replayable ------------------------------------------------------------------
-
-def prohibited_text() -> tuple:
-    """Every downstream text guard the overlays must pass: this job's validator, the claim ledger
-    (which scans the whole model) and the synthesis report (which renders gap statements and ledger
-    hypotheses). A record that trips any of them is dropped by the join as a gap, so model wording
-    can never block a downstream job (ADR-0013)."""
-    import claim_ledger
-    import synthesis_report
-    import threat_model_core as tmc
-    return (*tmc.PROHIBITED_TEXT, *claim_ledger.PROHIBITED_TEXT, *synthesis_report.PROHIBITED_TEXT)
+# Overlay prose (statements, harms, notes) is commentary carried into the model as written: no
+# downstream job scans it for wording (ADR-0036), so nothing is dropped or withheld for its words.
 
 
 class _Join:
     def __init__(self, base: dict[str, Any], record: dict[str, Any], outputs: dict[str, dict[str, Any]]) -> None:
-        self.prohibited = prohibited_text()
         self.model = deepcopy(base)
         self.record, self.outputs = record, outputs
         self.limit = record.get("record_limit", 60)
@@ -741,18 +732,11 @@ class _Join:
         return candidate
 
     def gap(self, cell: str, kind: str, statement: str, affected: Iterable[str] = (), intercom_id: str | None = None) -> None:
-        if not self.clean(statement):
-            statement = f"A {kind.replace('_', ' ')} note from {cell} was withheld: its text states a prohibited conclusion."
         gap_id = self._unique("gap-wb-" + _slug(cell, 32) + "-" + digest({"s": statement, "a": sorted(affected)})[:10])
         self.gaps.append({"gap_id": gap_id, "kind": kind, "statement": statement,
                           "affected_record_ids": sorted(set(affected)), "originating_workcell_id": cell,
                           "intercom_record_id": intercom_id, "evidence_class": "FOLLOW_ON_REQUIRED",
                           "confidence": "low", "citations": deepcopy(self.base_citations)})
-
-    def clean(self, value: Any) -> bool:
-        """False when any text would promote a candidate (the core validator would refuse it)."""
-        texts = [value] if isinstance(value, str) else list(intercom._strings(value))
-        return not any(pattern.search(text) for text in texts for pattern in self.prohibited)
 
     def resolve(self, refs: Any) -> tuple[list[dict[str, Any]], list[str]]:
         citations, unresolved = [], []
@@ -846,18 +830,9 @@ class _Join:
                      f"{self.limit} (workbench_records_per_cell_max)")
         return items[:self.limit]
 
-    def keep(self, cell: str, family: str, item: dict[str, Any]) -> bool:
-        if self.clean(item):
-            return True
-        self.gap(cell, "missing_evidence", f"a {family} record from {cell} was dropped: its text states a "
-                 "prohibited conclusion (finding, severity, runtime, compliance or remediation)")
-        return False
-
     # -- families
     def add_data_classes(self, cell: str, values: Any) -> None:
         for item in self.limited(cell, "data_classes", values):
-            if not self.keep(cell, "data_classes", item):
-                continue
             data_id = self._unique("data-" + _slug(item.get("key") or item.get("name")))
             self.data_keys.setdefault(str(item.get("key", "")), data_id)
             self.data_keys.setdefault(_slug(item.get("key") or item.get("name")), data_id)
@@ -878,8 +853,6 @@ class _Join:
 
     def add_privacy(self, cell: str, values: Any) -> None:
         for item in self.limited(cell, "privacy_threats", values):
-            if not self.keep(cell, "privacy_threats", item):
-                continue
             category = item.get("linddun_category")
             if category not in LINDDUN_SHORT:
                 continue
@@ -899,8 +872,6 @@ class _Join:
 
     def add_zones(self, cell: str, values: Any) -> None:
         for item in self.limited(cell, "deployment_zones", values):
-            if not self.keep(cell, "deployment_zones", item):
-                continue
             zone_id = self._unique("zone-" + _slug(item.get("key") or item.get("name")))
             citations, evidence_class, confidence = self.grade(cell, zone_id, item.get("evidence"), item.get("confidence"))
             kind = item.get("kind") if item.get("kind") in (
@@ -915,8 +886,6 @@ class _Join:
         kinds = ("network", "process", "privilege", "tenant", "organization", "device", "build_release",
                  "third_party", "model_tool")
         for item in self.limited(cell, "trust_boundaries", values):
-            if not self.keep(cell, "trust_boundaries", item):
-                continue
             boundary_id = self._unique("boundary-wb-" + _slug(item.get("key") or item.get("reason")))
             citations, evidence_class, confidence = self.grade(cell, boundary_id, item.get("evidence"), item.get("confidence"))
             _elements, flows, _classes = self.targets(cell, boundary_id, item.get("flow_ids"))
@@ -927,8 +896,6 @@ class _Join:
 
     def add_abuse(self, cell: str, values: Any) -> None:
         for item in self.limited(cell, "abuse_scenarios", values):
-            if not self.keep(cell, "abuse_scenarios", item):
-                continue
             record_id = self._unique("abuse-" + _slug(item.get("attacker_objective"), 40) + "-" + digest(
                 {"cell": cell, "objective": item.get("attacker_objective"), "targets": item.get("target_ids")})[:8])
             citations, evidence_class, confidence = self.grade(cell, record_id, item.get("evidence"), item.get("confidence"))
@@ -947,8 +914,6 @@ class _Join:
 
     def add_trees(self, cell: str, values: Any) -> None:
         for item in self.limited(cell, "attack_trees", values):
-            if not self.keep(cell, "attack_trees", item):
-                continue
             tree_id = self._unique("tree-" + _slug(item.get("objective"), 40) + "-" + digest(
                 {"cell": cell, "objective": item.get("objective"), "targets": item.get("target_ids")})[:8])
             self._tree(cell, tree_id, item)
@@ -1066,8 +1031,7 @@ class _Join:
                     self.gap(cid, "missing_evidence", f"{cid} returned families outside its brief, not joined: "
                              f"{', '.join(ignored)}")
                 for note in (reply.get("gaps") or [])[: self.limit]:
-                    if self.clean(note):
-                        self.gap(cid, "missing_evidence", str(note.get("statement"))[:2000])
+                    self.gap(cid, "missing_evidence", str(note.get("statement"))[:2000])
         self._intercom(rows)
         self._apply_overlays()
         self._coverage(rows)
@@ -1208,7 +1172,7 @@ def intercom_records(joiner: _Join, rows: dict[str, dict[str, Any]]) -> list[dic
                           "resolution": {"text": None, "resolves_record_id": None},
                           "payload": {"statement": str(note.get("statement"))[:4000]},
                           "injection_suspected": False, "previous_hash": previous}
-                if intercom.suspect_injection(record) or not joiner.clean(record["payload"]):
+                if intercom.suspect_injection(record):
                     record["injection_suspected"] = True
                 record["content_hash"] = intercom.content_hash(record)
                 previous = record["content_hash"]

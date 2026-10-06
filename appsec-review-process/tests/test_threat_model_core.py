@@ -175,16 +175,24 @@ class ThreatModelCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(tm.Blocked, "receipt differs"):
             tm._validate_attempt(attempt, self.inputs)
 
-    def test_prohibited_conclusion_text_and_generic_contract_policy_fail_closed(self):
+    def test_conclusion_prose_is_commentary_structured_promotions_and_contract_policy_fail_closed(self):
         contract = json.loads((registry_paths.contract("threat-model-core")).read_text())
         policy = output_validator.CLAIM_CLASS_POLICIES["threat-model-core"]
         self.assertEqual(policy["claim_class_id"], contract["claim_class"]["claim_class_id"])
         self.assertEqual(policy["allowed_assertions"], set(contract["claim_class"]["allowed_assertions"]))
+        baseline = tm.validate_model(tm.build_model(self.inputs, "attempt-1"), self.inputs)
+        # ADR-0036: statement wording is commentary, never parsed for a conclusion.
         for text in ("Verified finding: auth bypass", "severity: high", "observed runtime exposure",
-                     "the target is compliant", "the issue has been remediated"):
+                     "the target is compliant", "the issue has been remediated",
+                     "whether the buffer is fixed-size was not checked"):
             model = tm.build_model(self.inputs, "attempt-1")
             model["stride_hypotheses"][0]["statement"] = text
-            self.assertTrue(any("prohibited conclusion" in error for error in tm.validate_model(model, self.inputs)), text)
+            self.assertEqual(tm.validate_model(model, self.inputs), baseline, text)
+        for key in ("severity", "verification_status", "remediation_status", "compliance_status"):
+            model = tm.build_model(self.inputs, "attempt-1")
+            model["stride_hypotheses"][0][key] = "high"
+            self.assertTrue(any("prohibited claim promotion" in error for error in tm._walk_keys(model)), key)
+            self.assertNotEqual(tm.validate_model(model, self.inputs), [], key)
         attempt = self.owner / "contract"; attempt.mkdir()
         model = tm.build_model(self.inputs, "attempt-1")
         state.atomic_json(attempt / tm.RESULT, model)

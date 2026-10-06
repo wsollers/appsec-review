@@ -53,10 +53,10 @@ DECISION_SCHEMAS = {job: job + ".schema.json" for job in DECISION_PRODUCERS}
 DECISION_PERMISSIONS = ["read-run-data", "write-run-data"]
 PROHIBITED_KEYS = frozenset({"finding", "findings", "severity", "cvss", "runtime_state",
     "observed_runtime", "compliance", "certification", "remediation_status"})
-PROHIBITED_TEXT = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
-    r"\bverified\s+finding\b", r"\bconfirmed\s+(?:finding|vulnerability)\b",
-    r"\bseverity\s*(?::|is)\s*(?:critical|high|medium|low)\b", r"\bobserved\s+runtime\b",
-    r"\b(?:is|are)\s+(?:compliant|certified)\b(?!-)", r"\b(?:is|has been)\s+(?:fixed|remediated)\b(?!-)"))
+# Claim state changes only through closed enum fields (stage dispositions in DECISION_PRODUCERS,
+# obligation status, ledger status and TRANSITIONS) and the closed contract schemas; PROHIBITED_KEYS
+# rejects a promotion smuggled in as a structured field. Free text (hypotheses, rationales, observed
+# facts) is commentary and is never scanned for wording (ADR-0036).
 CODE_FILES = (
     "claim_ledger.py", "threat_model_core.py", "publish_job_output.py", "validate_job_output.py",
     registry_paths.template_rel("claim-ledger-routing"), "personas/roles/claim-ledger-custodian/role.json",
@@ -511,8 +511,6 @@ def _hunter_citation(source: dict[str, Any], row: dict[str, Any]) -> dict[str, A
     where = f"{row['path']}:{row['start_line']}" + (f"-{row['end_line']}" if row["end_line"] != row["start_line"] else "")
     fact = (f"code-reading hunter(s) {', '.join(locator['hunters'])} proposed {_hunter_label(row)} at {where} "
             f"({row['confidence']} confidence)")
-    if any(pattern.search(fact) for pattern in PROHIBITED_TEXT):   # model words stay in the artifact
-        fact = f"code-reading hunter(s) {', '.join(locator['hunters'])} proposed a hypothesis at {where}"
     identity = {"job": source["producer_job_id"], "attempt": source["producer_attempt_id"], "hypothesis": locator}
     # Attempt-relative artifact path, like tool-lead citations: report assembly re-verifies the bytes
     # under data/jobs/<producer>/attempts/<attempt>/<artifact_path>.
@@ -528,8 +526,7 @@ def hunter_candidates(source: dict[str, Any], locations: dict[tuple[str, int], s
     A hypothesis whose line range covers a P1/P2 tool-lead location (same path) is attached to that
     lead claim as corroboration (its citation and class), not admitted twice. Everything else is a
     ``hunter:`` candidate ordered with the tool leads by tier. Text is deterministic; the only
-    model words are the class and a clipped mechanism, and those are dropped from the text (never
-    the claim) if they would trip the ledger's promotion guard.
+    model words are the class and a clipped mechanism, carried as commentary (ADR-0036).
     """
     value = source["artifact"]
     if validate_document(value, HUNTER_SCHEMA):
@@ -539,8 +536,6 @@ def hunter_candidates(source: dict[str, Any], locations: dict[tuple[str, int], s
     for row in value["hypotheses"]:
         citation = _hunter_citation(source, row)
         label = _hunter_label(row)
-        if any(pattern.search(label) for pattern in PROHIBITED_TEXT):
-            label = "code-reading"
         hits = sorted((path, line) for (path, line) in locations
                       if path == row["path"] and row["start_line"] <= line <= row["end_line"])
         if hits:
@@ -557,8 +552,6 @@ def hunter_candidates(source: dict[str, Any], locations: dict[tuple[str, int], s
                 "unreviewed until adversarial review and independent verification.")
         body = f" Mechanism: {_clean(row['mechanism'], 400)} Preconditions: {_clean('; '.join(row['attacker_preconditions']), 300)}."
         hypothesis = head + body + tail
-        if any(pattern.search(hypothesis) for pattern in PROHIBITED_TEXT):
-            hypothesis = head + tail   # the model's mechanism stays in the hunter artifact
         obligations = [{"obligation_id": "obligation-" + digest({"route": route_id, "text": text})[:24],
                         "statement": text} for text in (template.format(where=where, label=label)
                                                           for template in HUNTER_OBLIGATIONS)]
@@ -670,6 +663,8 @@ def _merge_citations(existing: Iterable[dict[str, Any]], added: Iterable[dict[st
 
 
 def _reject_promotions(value: Any, path: str = "$") -> None:
+    """Reject a promotion carried as a structured field (a PROHIBITED_KEYS key with a value). Strings
+    are commentary and are not inspected (ADR-0036)."""
     if isinstance(value, dict):
         for key, item in value.items():
             normalized = key.lower().replace("-", "_")
@@ -678,8 +673,6 @@ def _reject_promotions(value: Any, path: str = "$") -> None:
             _reject_promotions(item, f"{path}.{key}")
     elif isinstance(value, list):
         for index, item in enumerate(value): _reject_promotions(item, f"{path}[{index}]")
-    elif isinstance(value, str) and any(pattern.search(value) for pattern in PROHIBITED_TEXT):
-        raise Blocked(f"{JOB}: prohibited promoted claim text at {path}")
 
 
 def _regular_owned(owner: Path, relative: str) -> Path:

@@ -161,6 +161,22 @@ class SynthesisReportTests(unittest.TestCase):
                 ("02-secrets-inventory", "a1", "x.json", "sha256:" + execution_state.file_hash(jobs / "x.json")))
             self.assertEqual(row["artifact_path"], "x.json")
 
+    def test_hypothesis_prose_renders_and_draft_limits_are_structural(self):
+        # ADR-0036: a hypothesis saying "is fixed" is commentary; finality, sign-off, compliance,
+        # remediation and runtime are claim_limits consts the closed schema enforces.
+        inputs = self.inputs(); report, _ = synthesis.build_report(inputs)
+        report = deepcopy(report)
+        text = ("Whether the buffer is fixed-size was not checked; upstream says the overflow has been fixed, "
+                "observed runtime unknown.")
+        report["unresolved_candidates"][0]["hypothesis"] = text
+        _, appendix = synthesis.render_markdown(report)
+        self.assertIn(text, appendix)
+        for key in ("final", "human_signoff", "compliance_claimed", "remediation_claimed", "runtime_claimed"):
+            promoted = deepcopy(report); promoted["claim_limits"][key] = True
+            self.assertTrue(validate_document(promoted, "synthesis-report.schema.json"), key)
+        promoted = deepcopy(report); promoted["decision"]["recommendation"] = "SHIP"
+        self.assertTrue(validate_document(promoted, "synthesis-report.schema.json"))
+
     def test_render_and_publication_are_draft_only_and_hash_bound(self):
         inputs = self.inputs(); report, trace = synthesis.build_report(inputs)
         report_md, appendix = synthesis.render_markdown(report)

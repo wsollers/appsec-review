@@ -110,30 +110,8 @@ BASELINE_PROHIBITED: tuple[str, ...] = (
     "malicious_intent", "observed_runtime_state", "remediation_status", "verified_finding",
     "verified_security_finding",
 )
-# Lexical rules per claim class. Retained for diagnostics only (`_asserts_prohibited`); since
-# ADR-0013 they never fail a job: conclusions are carried by the enumerated claim_class.
-CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
-    "verified_finding": (r"\b(?:finding|vulnerability)\s+(?:is\s+)?(?:exists|confirmed|established|verified)\b",
-                         r"\b(?:is|are|was|were)\s+(?:a\s+)?vulnerab"),
-    "final_severity": (r"\b(?:critical|high|medium|low)\s+severity\b", r"\bseverity\s*(?:is|=|:)",
-                       r"\bcvss"),
-    "exploitability_verdict": (r"\bexploitable\b", r"\bexploitability\s*(?:is|=|:)"),
-    "compliance_verdict": (r"\b(?:is|are)\s+(?:fully\s+)?(?:compliant|certified)\b", r"\bcertified\b"),
-    # "fixed" alone is ordinary English ("the compiler is fixed as clang"); it only counts with a
-    # security subject. "remediated"/"patched" count on their own.
-    "remediation_status": (r"\b(?:is|was|has\s+been|have\s+been|are|were)\s+(?:now\s+)?(?:remediated|patched)\b",
-                           r"\b(?:vulnerabilit(?:y|ies)|issues?|bugs?|defects?|findings?|flaws?|weakness(?:es)?|cve[-\w]*)"
-                           r"\s+(?:is|was|has\s+been|have\s+been|are|were)\s+(?:now\s+)?fixed\b"),
-    "observed_runtime_state": (r"\bobserved\s+(?:in|on)\s+(?:production|runtime|a\s+live|a\s+device)\b",),
-    "malicious_intent": (r"\b(?:malicious|hostile)\s+intent\s+(?:is\s+)?(?:confirmed|established|proven)\b",),
-})
-_TEXT_RULES = {name: tuple(re.compile(p, re.IGNORECASE) for p in patterns)
-               for name, patterns in CLAIM_TEXT_RULES.items()}
-# One normalisation for every scanned text (paths, JSON keys and values, file bodies, claim fields):
-# identifier separators and camelCase boundaries are read as spaces, so ``cvss_score``,
-# ``isExploitable`` and ``critical-severity`` meet the same rules as prose does.
-_SEPARATORS = re.compile(r"[-_./]+")
-_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=[0-9])|(?<=[0-9])(?=[A-Za-z])")
+# Conclusions are carried only by the enumerated claim_class (ADR-0013 item 7, ADR-0036): output
+# prose is never scanned for wording, so no lexical claim rules are kept here.
 _LETTER_RUN = re.compile(r"[^\W\d_]{3,}")
 _ASCII_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _CONFUSABLE_SCRIPTS = ("CYRILLIC", "GREEK")
@@ -165,8 +143,7 @@ SUMMARIES: Mapping[str | None, str] = MappingProxyType({
     "IDENTITY_MISMATCH": "the invoker manifest names a different request, invoker, persona or model",
     "BUDGET_EXCEEDED": "the output or the reported usage exceeds the required budget",
     "UNDECLARED_TOOL": "the invoker manifest reports a tool that the request did not allow",
-    "PROHIBITED_CLAIM": ("the output carries a claim class that is not allowed, or text that asserts or names a "
-                         "prohibited claim class"),
+    "PROHIBITED_CLAIM": "the output carries a claim class that is not allowed",
     "UNDECLARED_CITATION": "a citation or a verified invocation is not a declared readable input or producer",
     "SELF_VERIFICATION": "the output claims to verify its own invocation, or a producing invocation claims a verification",
 })
@@ -1046,20 +1023,6 @@ def text_form_ok(text: str) -> bool:
     return True
 
 
-def scan_forms(text: str) -> tuple[str, ...]:
-    """The forms the lexical rules read: the NFKC text as written, and the same text with combining
-    marks dropped and ``- _ . /`` and camelCase or letter/digit boundaries read as spaces."""
-    if text.isascii():
-        return text, _SEPARATORS.sub(" ", _CAMEL.sub(" ", text))
-    written = unicodedata.normalize("NFKC", text)
-    bare = "".join(c for c in unicodedata.normalize("NFKD", written) if unicodedata.category(c) != "Mn")
-    return written, _SEPARATORS.sub(" ", _CAMEL.sub(" ", bare))
-
-
-def _words(text: str) -> str:
-    return " ".join(scan_forms(text)[1].lower().split())
-
-
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """A JSON object that repeats a key has two readings: the parser keeps the last value, a reader
     of the bytes sees both. Text that the claim check never saw must not be published."""
@@ -1067,22 +1030,6 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     if len(keys) != len(set(keys)):
         raise ValueError("duplicate key")
     return dict(pairs)
-
-
-def _asserts_prohibited(texts, prohibited: set[str], identifiers=()) -> bool:
-    """True when a text matches a lexical rule of a prohibited class in either scan form, when a
-    text IS a prohibited class id, or when an identifier (a JSON key, a claim id, a path segment)
-    contains one. Class ids are compared after the same normalisation as the text."""
-    rules = [rule for name in sorted(prohibited) for rule in _TEXT_RULES.get(name, ())]
-    names = {_words(name) for name in prohibited}
-    for position, group in enumerate((texts, identifiers)):
-        for text in group:
-            if any(rule.search(form) for form in scan_forms(text) for rule in rules):
-                return True
-            words = _words(text)
-            if words in names or (position == 1 and any(f" {name} " in f" {words} " for name in names)):
-                return True
-    return False
 
 
 def no_facts() -> dict[str, Any]:

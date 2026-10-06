@@ -34,14 +34,9 @@ PROHIBITED_KEYS = {
     "runtime_state", "observed_runtime", "exploitability", "compliance_status",
     "remediation_status", "malicious_intent",
 }
-PROHIBITED_TEXT = (
-    re.compile(r"(?i)(?<!not a )(?<!no )\bverified[- ]finding\b"),
-    re.compile(r"(?i)(?<!not a )(?<!no )\bconfirmed[- ]vulnerabilit(?:y|ies)\b"),
-    re.compile(r"(?i)\bseverity\s*(?:is|=|:)\s*(?:critical|high|medium|low)\b"),
-    re.compile(r"(?i)\bobserved[- ]runtime\b|\bruntime[- ]verified\b"),
-    re.compile(r"(?i)\b(?:is|are)\s+(?:fully\s+)?(?:compliant|certified)\b|\bcompliance verdict\b"),
-    re.compile(r"(?i)\bremediation status\b|\b(?:is|was|has been)\s+(?:fixed|remediated)\b"),
-)
+# Threat-model prose (hypotheses, gap statements, rationales) is commentary and is not scanned for
+# wording (ADR-0036): a conclusion can only be carried by a PROHIBITED_KEYS field, and the closed
+# integrated-threat-model schema has none; record states are its enums.
 CODE_FILES = (
     "threat_model_core.py", "component_characterization.py", "publish_job_output.py",
     "validate_job_output.py", registry_paths.template_rel("03-threat-model-dfd-stride"),
@@ -260,8 +255,6 @@ def _walk_keys(value: Any, path: str = "$") -> list[str]:
     elif isinstance(value, list):
         for index, item in enumerate(value):
             errors.extend(_walk_keys(item, f"{path}[{index}]"))
-    elif isinstance(value, str) and any(pattern.search(value) for pattern in PROHIBITED_TEXT):
-        errors.append(f"{path}: text promotes a threat hypothesis to a prohibited conclusion")
     return errors
 
 
