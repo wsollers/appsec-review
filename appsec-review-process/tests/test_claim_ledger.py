@@ -534,3 +534,20 @@ class ClaimLedgerTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class PromotionTextPatternTest(unittest.TestCase):
+    """Run 20261006T150309Z-fdd8d6: an 08 rationale saying 'whether the buffer is fixed-size' was rejected as a
+    promoted 'is fixed' claim (\\b matches before a hyphen)."""
+
+    def test_hyphenated_compounds_are_not_promotions_but_real_claims_still_are(self):
+        import claim_ledger
+        import synthesis_report
+        for patterns in (claim_ledger.PROHIBITED_TEXT, synthesis_report.PROHIBITED_TEXT):
+            def hit(text):
+                return any(p.search(text) for p in patterns)
+            self.assertFalse(hit("Whether the buffer is fixed-size was not checked"))
+            self.assertTrue(hit("The overflow is fixed in release 1.2"))
+            self.assertTrue(hit("The flaw has been remediated."))
+        self.assertFalse(any(p.search("the module is certified-safe? no") for p in claim_ledger.PROHIBITED_TEXT))
+        self.assertTrue(any(p.search("the service is compliant") for p in claim_ledger.PROHIBITED_TEXT))

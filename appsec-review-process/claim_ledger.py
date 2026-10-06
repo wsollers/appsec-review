@@ -56,7 +56,7 @@ PROHIBITED_KEYS = frozenset({"finding", "findings", "severity", "cvss", "runtime
 PROHIBITED_TEXT = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\bverified\s+finding\b", r"\bconfirmed\s+(?:finding|vulnerability)\b",
     r"\bseverity\s*(?::|is)\s*(?:critical|high|medium|low)\b", r"\bobserved\s+runtime\b",
-    r"\b(?:is|are)\s+(?:compliant|certified)\b", r"\b(?:is|has been)\s+(?:fixed|remediated)\b"))
+    r"\b(?:is|are)\s+(?:compliant|certified)\b(?!-)", r"\b(?:is|has been)\s+(?:fixed|remediated)\b(?!-)"))
 CODE_FILES = (
     "claim_ledger.py", "threat_model_core.py", "publish_job_output.py", "validate_job_output.py",
     registry_paths.template_rel("claim-ledger-routing"), "personas/roles/claim-ledger-custodian/role.json",
