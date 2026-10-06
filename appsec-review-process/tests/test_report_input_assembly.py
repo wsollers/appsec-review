@@ -59,6 +59,36 @@ class SourceSnapshotCitationTests(unittest.TestCase):
                 self.verify(path)
 
 
+class PartitionedProducerCitationTests(unittest.TestCase):
+    """Run 20261006T220018Z-7e69f0: a citation to 02-iac-config-scan carried the run-relative path
+    data/jobs/02-iac-config-scan/whole/attempts/<id>/<file>, which was looked up inside the attempt."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.jobs = Path(self.temp.name) / "data" / "jobs"
+        attempt = self.jobs / "02-iac-config-scan" / "whole" / "attempts" / "auto-1"
+        attempt.mkdir(parents=True)
+        atomic_json(attempt / "result.json", {"ok": True})
+        self.sha = "sha256:" + file_hash(attempt / "result.json")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def verify(self, job, path, attempt="auto-1"):
+        return report._verify_citation(self.jobs, (job, attempt, path, self.sha))
+
+    def test_run_relative_path_through_whole_resolves(self):
+        for job in ("02-iac-config-scan", "02-iac-config-scan/whole"):
+            for path in ("result.json", "data/jobs/02-iac-config-scan/whole/attempts/auto-1/result.json"):
+                self.assertEqual(self.verify(job, path)["artifact_path"], "result.json")
+
+    def test_path_naming_another_producer_or_attempt_blocks(self):
+        with self.assertRaisesRegex(Blocked, "contradicts"):
+            self.verify("02-iac-config-scan", "data/jobs/02-secrets-inventory/whole/attempts/auto-1/result.json")
+        with self.assertRaisesRegex(Blocked, "contradicts"):
+            self.verify("02-iac-config-scan", "data/jobs/02-iac-config-scan/whole/attempts/auto-2/result.json")
+
+
 class ReportInputAssemblyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
