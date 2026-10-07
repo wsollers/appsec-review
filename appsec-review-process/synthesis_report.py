@@ -267,9 +267,19 @@ def _latest_ledger(ledger: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _citation_key(value: dict[str, Any]) -> tuple[str, str, str, str]:
-    return (value.get("producer_job_id", value.get("job_id")),
-            value.get("producer_attempt_id", value.get("attempt_id")),
-            value["artifact_path"], value["artifact_sha256"])
+    """One identity for a cited artifact, whichever form carries it: report assembly stores the path
+    relative to its attempt, ledger citations may keep the run-relative data/jobs/<job>[/whole]/attempts/
+    <attempt>/ form, and hashes may or may not carry the sha256: prefix (run 20261006T220018Z-7e69f0
+    blocked with "claim citation does not resolve" on the same verified file)."""
+    job = value.get("producer_job_id", value.get("job_id"))
+    attempt = value.get("producer_attempt_id", value.get("attempt_id"))
+    parts = PurePosixPath(value["artifact_path"]).parts
+    if len(parts) >= 6 and parts[:2] == ("data", "jobs") and "attempts" in parts[3:5]:
+        index = parts.index("attempts", 3)
+        if "/".join(parts[2:index]) in (job, f"{job}/whole") and parts[index + 1] == attempt:
+            parts = parts[index + 2:]
+    sha = "sha256:" + str(value["artifact_sha256"]).removeprefix("sha256:")
+    return job, attempt, PurePosixPath(*parts).as_posix(), sha
 
 
 def _limitations(documents: dict[str, Any], explicit: list[str]) -> list[str]:
@@ -349,13 +359,15 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
             raise Blocked(f"{JOB}: mixed claim generation")
         for citation in entry["citations"]:
             if _citation_key(citation) not in allowed_citations:
-                raise Blocked(f"{JOB}: claim citation does not resolve to a hash-verified input artifact")
+                raise Blocked(f"{JOB}: claim citation does not resolve to a hash-verified input artifact "
+                                  f"(claim {claim_id}: {_citation_key(citation)[:3]})")
             trace_rows.append({"claim_id": claim_id, **citation})
         l08_row = l08.get(claim_id)
         if l08_row is not None:
             for citation in l08_row.get("verification_citations", []):
                 if _citation_key(citation) not in allowed_citations:
-                    raise Blocked(f"{JOB}: verification citation does not resolve to a hash-verified input artifact")
+                    raise Blocked(f"{JOB}: verification citation does not resolve to a hash-verified input artifact "
+                                  f"(claim {claim_id}: {_citation_key(citation)[:3]})")
                 trace_rows.append({"claim_id": claim_id, **citation})
         is_verified = entry["status"] == "verified" and l08_row is not None and l08_row["verification_status"] == "VERIFIED"
         if is_verified:
