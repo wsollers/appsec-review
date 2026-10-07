@@ -273,3 +273,26 @@ class SpecialEvidenceTests(unittest.TestCase):
                 synthesis._verify_special_evidence(run, "r", ("07-red", "a1", rel, "sha256:" + "f" * 64))
             with self.assertRaises(synthesis.Blocked):
                 synthesis._verify_special_evidence(run, "r", ("00-intake", "source-snapshot", "src/a.c", "sha256:" + "f" * 64))
+
+
+class CitationKeyTests(unittest.TestCase):
+    """Run 20261006T220018Z-7e69f0: a ledger citation carried the run-relative path and was not matched to
+    the same artifact report assembly had verified under its attempt-relative path."""
+
+    def test_run_relative_and_attempt_relative_forms_match(self):
+        hexsha = "a" * 64
+        assembled = {"job_id": "02-iac-config-scan", "attempt_id": "auto-1", "artifact_path": "result.json",
+                     "artifact_sha256": "sha256:" + hexsha}
+        for path in ("data/jobs/02-iac-config-scan/whole/attempts/auto-1/result.json",
+                     "data/jobs/02-iac-config-scan/attempts/auto-1/result.json", "result.json"):
+            for sha in (hexsha, "sha256:" + hexsha):
+                cited = {"producer_job_id": "02-iac-config-scan", "producer_attempt_id": "auto-1",
+                         "artifact_path": path, "artifact_sha256": sha}
+                self.assertEqual(synthesis._citation_key(cited), synthesis._citation_key(assembled))
+
+    def test_another_attempt_or_bytes_do_not_match(self):
+        base = {"producer_job_id": "j", "producer_attempt_id": "a1", "artifact_path": "x.json",
+                "artifact_sha256": "sha256:" + "a" * 64}
+        for change in ({"producer_attempt_id": "a2"}, {"artifact_sha256": "b" * 64},
+                       {"artifact_path": "data/jobs/j/attempts/a2/x.json"}):
+            self.assertNotEqual(synthesis._citation_key({**base, **change}), synthesis._citation_key(base))
