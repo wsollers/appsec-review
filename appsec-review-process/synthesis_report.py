@@ -16,6 +16,8 @@ from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, digest, fi
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import report_input_assembly as assembly
+import tool_evidence
 import registry_paths
 import report_input_assembly as assembly
 
@@ -148,6 +150,18 @@ def load_reference(run_root: Path, run_id: str, ref: dict[str, Any],
     return value, {**binding, "envelope_sha256": "sha256:" + file_hash(envelope_path)}
 
 
+def _verify_special_evidence(run_root: Path, run_id: str, identity: tuple[str, str, str, str]) -> None:
+    """A tool-evidence record or a target file: its bytes still match the cited sha."""
+    jobs_root = run_root / "data" / "jobs"
+    if identity[:2] == assembly.SOURCE_SNAPSHOT:
+        assembly._verify_source_file(jobs_root, identity)
+        return
+    data_root = (run_root / "data").resolve(strict=True)
+    path = assembly._owned(data_root, identity[2])
+    if "sha256:" + file_hash(path) != "sha256:" + identity[3].removeprefix("sha256:"):
+        raise Blocked(f"{JOB}: cited tool evidence changed after assembly")
+
+
 def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
     manifest = read_json(manifest_path)
     errors = validate_document(manifest, "synthesis-input.schema.json")
@@ -193,6 +207,16 @@ def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
     for ref in manifest["evidence_artifacts"]:
         normalized = {"job_id": ref["producer_job_id"], "attempt_id": ref["producer_attempt_id"],
                       "artifact_path": ref["artifact_path"], "artifact_sha256": ref["artifact_sha256"]}
+        identity = (normalized["job_id"], normalized["attempt_id"], normalized["artifact_path"],
+                    normalized["artifact_sha256"])
+        if (normalized["artifact_path"].startswith(tool_evidence.FOLDER + "/") or
+                identity[:2] == assembly.SOURCE_SNAPSHOT):
+            # Structural query records (ADR-0035) and target files at the source snapshot are not job
+            # attempts; assembly verified them, and the same checks run here (run 20261006T220018Z-7e69f0
+            # blocked with "cited evidence attempt is unsafe" on a source-snapshot citation).
+            _verify_special_evidence(Path(run_root), manifest["run_id"], identity)
+            evidence.append(normalized)
+            continue
         producer = Path(run_root) / "data" / "jobs" / normalized["job_id"]
         if not (producer / "attempts").is_dir() and (producer / "whole" / "attempts").is_dir():
             producer = producer / "whole"  # scope-partitioned tool-lead producer

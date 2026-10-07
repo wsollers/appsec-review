@@ -354,6 +354,11 @@ def current_code(recorded: Mapping[str, str], process_root: Path) -> dict[str, s
         if ':' in key:
             file_part, function = key.rsplit(':', 1)
             values[key] = function_source_hash(base / file_part, function)
+        elif (base / key).is_dir() and key.startswith('data/codeql-reachability/'):
+            # A pack is recorded as dep_reachability_codeql.pack_sha256, a folder digest; hashing the folder
+            # as a file reported every 06 attempt as changed (run 20261006T220018Z-7e69f0 --explain).
+            import dep_reachability_codeql
+            values[key] = dep_reachability_codeql.pack_sha256(key.rsplit('/', 1)[1])
         else:
             values[key] = _file_hash(base / key)
     return values

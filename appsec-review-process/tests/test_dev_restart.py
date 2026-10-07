@@ -484,3 +484,13 @@ class CurrentCodeRepositoryPaths(unittest.TestCase):
             (repo / "data" / "rules" / "r.yml").write_text("rule: 2\n")
             self.assertEqual(dr._changed(first, dr.current_code(first, process)),
                              ["data/rules/r.yml changed"])
+
+
+class CodeqlPackKeyTest(unittest.TestCase):
+    """A recorded data/codeql-reachability/<lang> key is a pack_sha256 folder digest, not a file hash."""
+
+    def test_pack_key_rehashes_with_pack_sha256(self):
+        import dep_reachability_codeql
+        key = "data/codeql-reachability/python"
+        recorded = {key: dep_reachability_codeql.pack_sha256("python")}
+        self.assertEqual(dr.current_code(recorded, Path(dr.__file__).resolve().parent), recorded)
