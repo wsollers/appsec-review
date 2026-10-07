@@ -305,17 +305,24 @@ class JoinTests(unittest.TestCase):
         fake = mock.Mock()
         fake.build.return_value = {"schema": "appsec-review/supporting-evidence-menu/1.0", "root_id": "supporting-evidence",
             "profiles": {"code": ["02-source-sast", "03-threat-model-dfd-stride", "15-deployment-hardening"]},
-            "items": [{"item_id": "02-source-sast", "attempt_id": "s-1", "status": "AVAILABLE",
-                       "files": [{"path": "02-source-sast/attempts/s-1/source-sast.json", "sha256": "sha256:" + "e" * 64,
+            "items": [{"item_id": "02-source-sast", "status": "AVAILABLE",
+                       "files": [{"path": "02-source-sast/accepted/source-sast.json", "sha256": "sha256:" + "e" * 64,
                                   "bytes": 5, "pinned": True, "ref": "x"}]},
-                      {"item_id": "03-threat-model-dfd-stride", "attempt_id": "t", "status": "AVAILABLE", "files": []},
-                      {"item_id": "15-deployment-hardening", "attempt_id": "d", "status": "AVAILABLE", "files": []}]}
+                      {"item_id": "03-threat-model-dfd-stride", "status": "AVAILABLE", "files": []},
+                      {"item_id": "15-deployment-hardening", "status": "AVAILABLE", "files": []}]}
         config = {"menu_pin_max_bytes": 10, "menu_file_pin_max_bytes": 10}
         with mock.patch.dict(sys.modules, {"supporting_evidence_menu": fake}):
             value, root = tw.build_menu("run1", Path("unused"), "e-1", "data/x", config, jobs_root=Path("/jobs"))
         self.assertEqual([item["item_id"] for item in value["items"]], ["02-source-sast"])
         self.assertEqual(value["profiles"]["code"], ["02-source-sast"])
-        self.assertEqual(value["items"][0]["files"][0]["run_path"], "data/jobs/02-source-sast/attempts/s-1/source-sast.json")
+        entry = value["items"][0]["files"][0]   # attempt id and run path are lineage, not menu bytes
+        self.assertEqual(entry["producer"], "02-source-sast")
+        self.assertFalse({"attempt_id", "run_path"} & set(entry))
+        index = tw._readable_index(value, [], {entry["path"]: {
+            "producer": "02-source-sast", "attempt_id": "s-1", "path": "02-source-sast/attempts/s-1/source-sast.json"}})
+        self.assertEqual((index["supporting-evidence:" + entry["path"]]["attempt_id"],
+                          index["supporting-evidence:" + entry["path"]]["run_path"]),
+                         ("s-1", "data/jobs/02-source-sast/attempts/s-1/source-sast.json"))
         self.assertEqual(Path(root), Path("/jobs").absolute())
 
 

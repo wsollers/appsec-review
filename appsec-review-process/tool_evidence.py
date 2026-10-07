@@ -22,7 +22,8 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from execution_state import atomic_json, data_path, digest, file_hash, now
+from execution_state import (ACCEPTED_ALIAS, atomic_json, data_path, digest, file_hash, identifier, now,
+                             resolve_accepted_alias)
 
 SCHEMA = "appsec-review/tool-evidence/1.0"
 PREFIX = "tev:"   # ':' keeps the id a bare digest-length hex run for the V06 redactor
@@ -208,6 +209,13 @@ def _summary(run_id: str, index: dict[str, Any], root: Path | None = None) -> tu
         raise ValueError("tool evidence names no pinned index summary")
     relative = ref.split(":", 1)[1]
     jobs = _data(run_id, root, "jobs")
+    # A ref pinned by the attempt-free alias: re-read the attempt the record was bound to (its lineage),
+    # so the record still verifies after the producer publishes a later attempt.
+    alias, attempt = f"{index.get('producer_job')}/{ACCEPTED_ALIAS}/", index.get("producer_attempt")
+    if relative.startswith(alias) and isinstance(attempt, str):
+        relative = f"{index['producer_job']}/attempts/{identifier(attempt)}/{relative[len(alias):]}"
+    else:
+        relative = resolve_accepted_alias(jobs, relative)
     path = jobs.joinpath(*PurePosixPath(relative).parts)
     if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != index.get("summary_sha256"):
         raise ValueError(f"the index summary {relative} the record was bound to is missing or changed")

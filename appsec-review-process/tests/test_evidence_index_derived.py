@@ -188,7 +188,7 @@ class DerivedIndexTests(unittest.TestCase):
         self.native_build()
         menu = menu_module.build(RUN_ID, "02-evidence-assembly", [], self.jobs)
         item = next(row for row in menu["items"] if row["item_id"] == "02-native-build")
-        paths = {entry["path"].split("/attempts/build-1/")[1] for entry in item["files"] if entry["pinned"]}
+        paths = {entry["path"].split("/accepted/")[1] for entry in item["files"] if entry["pinned"]}
         self.assertIn("outputs/u1/build-dependencies.json", paths)
         self.assertIn("outputs/u1/generated-headers/config.h", paths)
 

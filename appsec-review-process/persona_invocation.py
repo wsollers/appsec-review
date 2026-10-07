@@ -41,7 +41,7 @@ import registry_paths
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from execution_state import atomic_bytes, beneath  # noqa: E402
+from execution_state import atomic_bytes, beneath, resolve_accepted_alias  # noqa: E402
 import size_log
 import permission_capabilities as pc  # noqa: E402
 import persona_registry  # noqa: E402
@@ -796,7 +796,13 @@ def resolve_request(request: Any, *, run_id: str, job_id: str, attempt_id: str, 
         label = f"readable_inputs[{index}]"
         if entry["root"] not in roots:
             raise PersonaRequestError(f"{label}: root is not a declared readable root")
-        data, identity = _read_pinned(roots[entry["root"]], entry["path"], sha256=entry["sha256"],
+        # ``<owner>/accepted/<artifact>`` names the owner's accepted publication without its attempt id;
+        # the input keeps that path (prompt, citations, cache key) and the bytes are still pinned.
+        try:
+            real = resolve_accepted_alias(roots[entry["root"]], entry["path"])
+        except (OSError, ValueError):
+            raise PersonaRequestError(f"{label}: accepted alias does not resolve") from None
+        data, identity = _read_pinned(roots[entry["root"]], real, sha256=entry["sha256"],
                                       size=entry["bytes"], attempt=attempt, label=label)
         if identity in seen:
             raise PersonaRequestError(f"{label}: is the same file as the prompt or an earlier input")

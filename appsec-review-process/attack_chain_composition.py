@@ -34,7 +34,8 @@ import pool_specification
 import review_cli
 import supporting_evidence_menu as evidence_menu
 import tunables
-from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
+from execution_state import (ACCEPTED_ALIAS, Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash,
+                             read_json, resolve_accepted_alias)
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
 import registry_paths
@@ -129,7 +130,7 @@ def native_facts(run_id: str, menu: dict[str, Any]) -> tuple[list[dict[str, Any]
             wanted = ("code-property-graph.records.jsonl" if item["item_id"] == seeds_core.CPG_ITEM else "ir-facts.json")
             if name != wanted:
                 continue
-            path = jobs.joinpath(*entry["path"].split("/"))
+            path = jobs.joinpath(*resolve_accepted_alias(jobs, entry["path"]).split("/"))
             if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != entry["sha256"]:
                 raise Blocked(f"{JOB}: pinned {item['item_id']} evidence changed")
             artifacts[item["item_id"]] = {"path": entry["path"], "sha256": entry["sha256"]}
@@ -146,7 +147,7 @@ def plan(run_id: str, upstreams: dict[str, Any], menu: dict[str, Any], cpg_recor
     """Seeds and the budget cut (pure)."""
     for key, value in (("threat_model", upstreams["threat_model"]), ("component_map", upstreams["component_map"])):
         artifacts.setdefault({"threat_model": seeds_core.TM_ITEM, "component_map": seeds_core.CM_ITEM}[key],
-            {"path": f"{upstreams['bindings'][key]['job_id']}/attempts/{upstreams['bindings'][key]['attempt_id']}/"
+            {"path": f"{upstreams['bindings'][key]['job_id']}/{ACCEPTED_ALIAS}/"
                      f"{upstreams['bindings'][key]['artifact_path']}",
              "sha256": upstreams["bindings"][key]["artifact_sha256"]})
     seeds = seeds_core.build(run_id, upstreams["verification"],

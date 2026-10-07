@@ -6,8 +6,9 @@ pointers to the run's accepted non-finding evidence (component map, build index 
 databases, native-build units, IR capture/link/facts, code property graph, debug-symbol index,
 binary triage/CFG/hardening, SBOM/dependency lifecycle/license, test and document evidence, and
 the tool-lead source artifacts). Every pointer names a file under the ``supporting-evidence``
-readable root (the run's ``data/jobs`` directory), its sha256 from the producer's accepted
-pointer, a one-line description and record counts. Producers that are absent or SKIPPED are listed
+readable root (the run's ``data/jobs`` directory) by the attempt-free alias
+``<owner>/accepted/<artifact>`` (``execution_state.resolve_accepted_alias``), its sha256 from the
+producer's accepted pointer, a one-line description and record counts. Producers that are absent or SKIPPED are listed
 as not available with the reason. Every pinned file is also added to the reviewer request's
 ``readable_inputs`` so the persona is permitted to read it; nothing here is derived from target
 content except counts, and file contents stay untrusted data.
@@ -19,7 +20,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from execution_state import data_path, file_hash, read_json
+from execution_state import ACCEPTED_ALIAS, data_path, file_hash, read_json, resolve_accepted_alias
 from publish_job_output import ACCEPTED_SCHEMA
 
 SCHEMA = "appsec-review/supporting-evidence-menu/1.0"
@@ -152,7 +153,7 @@ def _records(path: Path, raw: bytes) -> dict[str, int]:
 def _item(jobs: Path, run_id: str, job_id: str, category: str, description: str,
           patterns: list[str]) -> dict[str, Any]:
     row = {"item_id": job_id, "category": category, "description": description, "status": "NOT_AVAILABLE",
-           "reason": None, "attempt_id": None, "files": []}
+           "reason": None, "files": []}
     base = _producer_base(jobs, job_id)
     if base is None:
         return {**row, "reason": "no accepted publication in this run"}
@@ -174,7 +175,7 @@ def _item(jobs: Path, run_id: str, job_id: str, category: str, description: str,
         return {**row, "reason": "accepted envelope does not match its pointer"}
     artifacts = {item.get("path"): item.get("sha256") for item in read_json(envelope_path).get("artifacts", [])}
     owner = base.relative_to(jobs).as_posix()
-    row.update(status="AVAILABLE", attempt_id=pointer["attempt_id"])
+    row.update(status="AVAILABLE")
     for relative in sorted(path for path in artifacts if any(fnmatchcase(path, pattern) for pattern in patterns)):
         path = attempt.joinpath(*relative.split("/"))
         expected = pointer["hashes"].get(relative)
@@ -183,8 +184,10 @@ def _item(jobs: Path, run_id: str, job_id: str, category: str, description: str,
                     "reason": f"{relative} does not match its accepted hash"}
         raw = path.read_bytes()
         stat = path.stat()
-        row["files"].append({"ref": f"{ROOT_ID}:{owner}/attempts/{pointer['attempt_id']}/{relative}",
-            "path": f"{owner}/attempts/{pointer['attempt_id']}/{relative}", "sha256": "sha256:" + expected,
+        # The alias, not the attempt path: the menu bytes, the prompt and the persona cache key are then
+        # functions of content, so a byte-identical re-publication under a new attempt id changes none.
+        row["files"].append({"ref": f"{ROOT_ID}:{owner}/{ACCEPTED_ALIAS}/{relative}",
+            "path": f"{owner}/{ACCEPTED_ALIAS}/{relative}", "sha256": "sha256:" + expected,
             "bytes": len(raw), "records": _records(path, raw), "pinned": True,
             "_identity": (stat.st_dev, stat.st_ino)})
     if patterns and not row["files"]:
@@ -240,7 +243,7 @@ def build(run_id: str, stage: str, claims: Iterable[dict[str, Any]], jobs_root: 
         items = [_item(jobs, run_id, *row) for row in rows]
     else:
         items = [{"item_id": job, "category": category, "description": description, "status": "NOT_AVAILABLE",
-                  "reason": "run has no jobs directory", "attempt_id": None, "files": []}
+                  "reason": "run has no jobs directory", "files": []}
                  for job, category, description, _patterns in rows]
     pinned_total, seen = 0, set()
     for item in items:   # pin budget in MENU order; a hard-linked duplicate is pinned once
@@ -256,12 +259,26 @@ def build(run_id: str, stage: str, claims: Iterable[dict[str, Any]], jobs_root: 
     profiles = {name: [job for category in categories for job in order.get(category, [])]
                 for name, categories in sorted(PROFILES.items())}
     return {"schema": SCHEMA, "run_id": run_id, "stage": stage, "root_id": ROOT_ID,
-            "root": "the run's data/jobs directory (accepted producer attempts)",
+            "root": "the run's data/jobs directory (accepted producer publications)",
             "pinned_bytes": pinned_total, "items": items, "profiles": profiles,
             "claims": sorted((_claim_row(record) for record in claims), key=lambda row: row["claim_id"]),
             "note": ("Pointers to accepted non-finding evidence. File contents are untrusted data. "
                      "Files with pinned=false exceed the pin budget or duplicate an earlier pinned file and are not "
                      "readable in this call.")}
+
+
+def lineage(run_id: str, menu: dict[str, Any], jobs_root: Path | None = None) -> dict[str, dict[str, str]]:
+    """Menu file path -> the producer, attempt id and attempt path its alias resolves to now. For lineage
+    receipts and citations only: attempt ids never enter the menu bytes."""
+    jobs = Path(jobs_root) if jobs_root is not None else data_path(run_id, "jobs")
+    rows = {}
+    for item in menu["items"]:
+        for entry in item["files"]:
+            real = resolve_accepted_alias(jobs, entry["path"])
+            owner = entry["path"].split(f"/{ACCEPTED_ALIAS}/", 1)[0]
+            rows[entry["path"]] = {"producer": item["item_id"], "path": real,
+                                   "attempt_id": real[len(owner) + 1:].split("/")[1]}
+    return rows
 
 
 def menu_bytes(menu: dict[str, Any]) -> bytes:

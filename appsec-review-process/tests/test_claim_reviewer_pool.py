@@ -159,7 +159,7 @@ class ClaimReviewerPoolTests(unittest.TestCase):
             readable = plan.instances[0].request.request["readable_inputs"]
             self.assertEqual([row["root"] for row in readable],
                              [reviewer_pool.ROOT_ID, "evidence-menu", "supporting-evidence"])
-            self.assertEqual(readable[2]["path"], "02-ir-facts/attempts/a1/ir-facts.json")
+            self.assertEqual(readable[2]["path"], "02-ir-facts/accepted/ir-facts.json")
             self.assertIn("supporting_evidence_menu.py", value["code"])
 
     def _runtime_patches(self, base, value, result):

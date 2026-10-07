@@ -276,8 +276,7 @@ def build_menu(run_id: str, evidence_attempt: Path, evidence_attempt_id: str, ev
         menu["claims"] = []
         for item in menu["items"]:
             for entry in item["files"]:
-                entry["producer"], entry["attempt_id"] = item["item_id"], item["attempt_id"]
-                entry["run_path"] = "data/jobs/" + entry["path"]
+                entry["producer"] = item["item_id"]   # attempt id and run path: sem.lineage, at citation time
         _pin(menu["items"], config["menu_pin_max_bytes"], config["menu_file_pin_max_bytes"])
         menu["source"] = "supporting_evidence_menu"
         return menu, str(jobs.absolute())
@@ -455,15 +454,22 @@ def _brief(cell: Workcell, base: dict[str, Any], wave1: dict[str, Any] | None, t
     return brief
 
 
-def _readable_index(menu: dict[str, Any], target_entries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _readable_index(menu: dict[str, Any], target_entries: list[dict[str, Any]],
+                    lineage: dict[str, dict[str, str]] | None = None) -> dict[str, dict[str, Any]]:
+    """``lineage`` (``supporting_evidence_menu.lineage``) supplies the attempt id and run path of a menu
+    entry pinned by its attempt-free alias; the F02 fallback menu carries both in the entry."""
     index: dict[str, dict[str, Any]] = {}
+    lineage = lineage or {}
     for item in menu["items"]:
         for entry in item["files"]:
             if entry["pinned"]:
                 job = entry["producer"]
                 index[f"{menu['root_id']}:{entry['path']}"] = {
                     "sha256": entry["sha256"].removeprefix("sha256:"), "producer": job,
-                    "attempt_id": entry["attempt_id"], "run_path": entry["run_path"],
+                    "attempt_id": lineage[entry["path"]]["attempt_id"] if entry["path"] in lineage
+                    else entry["attempt_id"],
+                    "run_path": "data/jobs/" + lineage[entry["path"]]["path"] if entry["path"] in lineage
+                    else entry["run_path"],
                     "source_class": "accepted_lane" if job.startswith("01-") else "derived"}
     for entry in target_entries:
         index[f"{TARGET_ROOT}:{entry['path']}"] = {"sha256": entry["sha256"].removeprefix("sha256:")}
@@ -636,7 +642,11 @@ def execute(run_id: str, core: dict[str, Any], attempt: Path, attempt_id: str, b
         runtime = runtime or default_runtime(run_id)
         if config["pin_target_source"]:
             target_entries = pd._walk_target(Path(wb["target_root"]), TARGET_ROOT)
-        index = _readable_index(wb["menu"], target_entries)
+        lineage = None
+        if wb["menu"].get("source") == "supporting_evidence_menu":
+            import supporting_evidence_menu as sem
+            lineage = sem.lineage(run_id, wb["menu"], Path(wb["menu_dir"]))
+        index = _readable_index(wb["menu"], target_entries, lineage)
         for wave in (1, 2):
             cells = [cell for cell in WORKCELLS if cell.wave == wave and cell.workcell_id in selected]
             if not cells:
