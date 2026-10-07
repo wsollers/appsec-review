@@ -61,7 +61,8 @@ def _empty(report: dict[str, Any], status: str, reason: str, gaps: list[str]) ->
             "chains": [], "appendix": [], "refuted_count": 0, "coverage": {}, "gaps": gaps, "note": NOTE}
 
 
-def build(report: dict[str, Any], run_root: Path, *, reported_max: int | None = None) -> dict[str, Any]:
+def build(report: dict[str, Any], run_root: Path, *, reported_max: int | None = None,
+          origin_head_sha256: str | None = None) -> dict[str, Any]:
     """The report's attack-chain section (pure function of the report and the accepted ledger)."""
     binding = input_binding(run_root)
     if binding is None:
@@ -75,7 +76,9 @@ def build(report: dict[str, Any], run_root: Path, *, reported_max: int | None = 
     ledger, loaded = bounded_analysis_workers.load_accepted(_pointer(run_root), run_id=report["run_id"], job_id=JOB,
         contract=CONTRACT, artifact=ARTIFACT, schema=refute.LEDGER_SCHEMA)
     refute.verify_ledger(ledger)
-    if ledger["claim_ledger_head_sha256"] not in {None, report["ledger_head_sha256"]}:
+    # Lane 14 runs before claim-ledger-final, so it binds the lifecycle-origin (L01) head that the final
+    # ledger extends byte-identically; the report's own head is the final one (run 20261006T220018Z-7e69f0).
+    if ledger["claim_ledger_head_sha256"] not in {None, report["ledger_head_sha256"], origin_head_sha256}:
         raise Blocked("10-synthesis-report: the attack-chain ledger is bound to a different claim-ledger head")
     findings = {row["claim_id"]: row for row in report["verified_findings"]}
     open_claims = {row["claim_id"]: row for row in report["unresolved_candidates"]}
