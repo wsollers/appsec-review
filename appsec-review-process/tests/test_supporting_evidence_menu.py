@@ -73,14 +73,14 @@ class SupportingEvidenceMenuTests(unittest.TestCase):
                          ("NOT_AVAILABLE", "accepted status SKIPPED"))
         self.assertEqual(items["02-build-index"]["reason"], "no accepted publication in this run")
         facts = items["02-ir-facts"]["files"]
-        self.assertEqual([entry["path"] for entry in facts], ["02-ir-facts/attempts/a1/ir-facts.json"])
+        self.assertEqual([entry["path"] for entry in facts], ["02-ir-facts/accepted/ir-facts.json"])
         self.assertEqual(facts[0]["records"], {"debug_locations": 1, "facts": 3})
         self.assertEqual(items["02-code-property-graph"]["files"][1]["records"], {"lines": 2})
         native = [entry["path"] for entry in items["02-native-build"]["files"]]
-        self.assertEqual(native, ["02-native-build/attempts/a1/native-build.json",
-                                  "02-native-build/attempts/a1/outputs/u1/compile_commands.json"])  # no binaries
+        self.assertEqual(native, ["02-native-build/accepted/native-build.json",
+                                  "02-native-build/accepted/outputs/u1/compile_commands.json"])  # no binaries
         self.assertEqual(items["02-secrets-inventory"]["files"][0]["path"],
-                         "02-secrets-inventory/whole/attempts/a1/outputs/secrets-inventory.redacted.json")
+                         "02-secrets-inventory/whole/accepted/outputs/secrets-inventory.redacted.json")
         self.assertEqual(first["profiles"]["code"][:3], ["02-ir-facts", "02-code-property-graph", "02-native-build"])
         self.assertEqual([(row["claim_id"], row["profile"], row["locations"]) for row in first["claims"]],
                          [("claim-a", "architecture", []), ("claim-b", "code", ["src/a.c:7"]),
@@ -101,7 +101,8 @@ class SupportingEvidenceMenuTests(unittest.TestCase):
                       if entry["pinned"]}
             self.assertEqual({(row["path"], row["sha256"]) for row in rows[1:]}, pinned)
             for row in rows:
-                path = roots[row["root"]].joinpath(*row["path"].split("/"))
+                real = execution_state.resolve_accepted_alias(roots[row["root"]], row["path"])
+                path = roots[row["root"]].joinpath(*real.split("/"))
                 self.assertEqual("sha256:" + execution_state.file_hash(path), row["sha256"])
                 self.assertEqual(path.stat().st_size, row["bytes"])
 
@@ -128,6 +129,60 @@ class SupportingEvidenceMenuTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "NOT_AVAILABLE" for item in menu["items"]))
         self.assertEqual(len(menu_module.readable_inputs(menu)), 1)
         self.assertEqual(set(roots), {menu_module.MENU_ROOT_ID})
+
+
+def _persona_cache_key(jobs: Path, menu: dict) -> str:
+    """The key an invocation over this menu gets: inputs read as persona_invocation reads them (alias
+    resolved through the accepted pointer), prompt rendered by the invoker's own input renderer."""
+    from types import SimpleNamespace
+    import claude_cli_invoker as cli
+    inputs = [SimpleNamespace(root=menu_module.MENU_ROOT_ID, path=menu_module.MENU_FILE,
+                              data=menu_module.menu_bytes(menu))]
+    for row in menu_module.readable_inputs(menu)[1:]:
+        real = execution_state.resolve_accepted_alias(jobs, row["path"])
+        data = jobs.joinpath(*real.split("/")).read_bytes()
+        assert "sha256:" + __import__("hashlib").sha256(data).hexdigest() == row["sha256"]
+        inputs.append(SimpleNamespace(root=row["root"], path=row["path"], data=data))
+    package = SimpleNamespace(request={"job_id": "07-red-team-adversarial", "persona": {}}, inputs=tuple(inputs))
+    return cli.persona_cache_key(package, cli._render_readable_inputs(package.inputs), "model", "low")
+
+
+class AttemptFreeAliasTests(unittest.TestCase):
+    """A producer that re-runs and publishes the same bytes under a new attempt id must not change the
+    menu bytes or the persona cache key (before the alias both held ``<owner>/attempts/<id>/``)."""
+
+    def observe(self, jobs: Path, attempt_id: str, raw: bytes) -> tuple[bytes, str, dict]:
+        publish(jobs, "02-ir-facts", {"ir-facts.json": raw}, attempt_id=attempt_id)
+        menu = menu_module.build(RUN, "07-red-team-adversarial", [])
+        return menu_module.menu_bytes(menu), _persona_cache_key(jobs, menu), menu
+
+    def test_identical_reattempt_keeps_menu_bytes_and_cache_key_and_changed_bytes_change_both(self):
+        with tempfile.TemporaryDirectory() as directory,                 mock.patch.object(execution_state, "RUNS", Path(directory)):
+            jobs = Path(directory) / RUN / "data" / "jobs"
+            first = self.observe(jobs, "a1", b'{"facts": [1]}')
+            second = self.observe(jobs, "a2", b'{"facts": [1]}')
+            changed = self.observe(jobs, "a3", b'{"facts": [2]}')
+            lineage = menu_module.lineage(RUN, changed[2])
+        self.assertEqual(first[:2], second[:2])
+        self.assertNotIn(b"a1", first[0].replace(b"sha256", b""))
+        self.assertNotIn(b"attempt", first[0])
+        self.assertNotEqual(second[0], changed[0])
+        self.assertNotEqual(second[1], changed[1])
+        self.assertEqual(lineage["02-ir-facts/accepted/ir-facts.json"],
+                         {"producer": "02-ir-facts", "attempt_id": "a3", "path": "02-ir-facts/attempts/a3/ir-facts.json"})
+
+    def test_alias_resolves_only_through_the_accepted_pointer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            publish(jobs, "02-ir-facts", {"ir-facts.json": b"{}", "other.json": b"{}"}, attempt_id="a1")
+            publish(jobs, "02-ir-facts", {"ir-facts.json": b"{}"}, attempt_id="a2")
+            resolve = execution_state.resolve_accepted_alias
+            self.assertEqual(resolve(jobs, "02-ir-facts/accepted/ir-facts.json"), "02-ir-facts/attempts/a2/ir-facts.json")
+            self.assertEqual(resolve(jobs, "02-ir-facts/attempts/a1/ir-facts.json"),
+                             "02-ir-facts/attempts/a1/ir-facts.json")   # a literal path is left alone
+            with self.assertRaises(ValueError):   # in an old attempt, not in the accepted publication
+                resolve(jobs, "02-ir-facts/accepted/other.json")
+            self.assertEqual(resolve(jobs, "no-such-job/accepted/x.json"), "no-such-job/accepted/x.json")
 
 
 if __name__ == "__main__":

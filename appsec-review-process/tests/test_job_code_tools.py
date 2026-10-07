@@ -195,7 +195,7 @@ class CodeIndexPinTests(unittest.TestCase):
             row, gap = invoker.code_index_pin("r")
         self.assertIsNone(gap)
         self.assertEqual((row["root"], row["path"], row["role"]),
-                         ("supporting-evidence", REF, "evidence"))
+                         ("supporting-evidence", "02-code-index/accepted/code-index.json", "evidence"))
         pinned = SimpleNamespace(root=row["root"], path=row["path"], data=summary, sha256=row["sha256"])
         pkg = SimpleNamespace(composition={"tooling_profile": profile("component-evidence-router")}, inputs=(pinned,))
         with mock.patch.object(query, "family_enabled", return_value=True):

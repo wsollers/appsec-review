@@ -412,6 +412,43 @@ class RequestPinTests(Case):
         lying["readable_inputs"][0]["bytes"] = 1
         self.rejected(lying, r"readable_inputs\[0\]: bytes on disk")
 
+    def test_an_accepted_alias_reads_the_accepted_attempt_and_stays_pinned(self):
+        """``<owner>/accepted/<artifact>`` (the supporting-evidence menu's attempt-free path) resolves through
+        the owner's accepted pointer; the package keeps the alias; moved bytes are refused."""
+        import hashlib
+        owner = self.ws.data / "producer"
+
+        def publish(attempt_id: str, raw: bytes) -> None:
+            (owner / "attempts" / attempt_id).mkdir(parents=True)
+            (owner / "attempts" / attempt_id / "out.json").write_bytes(raw)
+            (owner / "accepted.json").write_text(json.dumps(
+                {"attempt_id": attempt_id, "hashes": {"out.json": hashlib.sha256(raw).hexdigest()}}), encoding="utf-8")
+
+        publish("a1", b'{"n": 1}')
+        row = {**self.ws.input("producer/attempts/a1/out.json"), "path": "producer/accepted/out.json"}
+        request = self.ws.request(readable_inputs=[row])
+        seen = []
+
+        class Seeing(pi.FixtureInvoker):
+            def invoke(inner, package, *, output_root, cancel):
+                seen.append([(item.path, item.data) for item in package.inputs])
+                return super().invoke(package, output_root=output_root, cancel=cancel)
+        for attempt_id in ("a1", "a2"):   # a byte-identical re-publication reads the same input
+            if attempt_id == "a2":
+                publish("a2", b'{"n": 1}')
+                shutil.rmtree(self.ws.attempt)
+                self.ws.attempt.mkdir()
+            self.assertIsNone(self.ws.run(request, self.ws.runtime(invoker=Seeing()))["cause"])
+        self.assertEqual(seen, [[("producer/accepted/out.json", b'{"n": 1}')]] * 2)
+        shutil.rmtree(self.ws.attempt)
+        self.ws.attempt.mkdir()
+        publish("a3", b'{"n": 2}')
+        self.rejected(request, r"readable_inputs\[0\]: bytes on disk")
+        shutil.rmtree(self.ws.attempt)
+        self.ws.attempt.mkdir()
+        (owner / "accepted.json").write_text(json.dumps({"attempt_id": "a1", "hashes": {}}), encoding="utf-8")
+        self.rejected(request, r"readable_inputs\[0\]: accepted alias does not resolve")
+
     def test_readable_inputs_are_pinned_to_bytes_on_disk(self):
         for field, value, pattern in (("sha256", OTHER_SHA, "bytes on disk"), ("bytes", 3, "bytes on disk"),
                                       ("path", "evidence/absent.json", "does not exist"),

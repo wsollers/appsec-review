@@ -72,6 +72,32 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8-sig'))
 
 
+ACCEPTED_ALIAS = 'accepted'
+
+
+def resolve_accepted_alias(root, relative):
+    """Real root-relative path of ``<owner>/accepted/<artifact>``: that artifact inside the attempt the
+    owner's ``accepted.json`` names. Any other path is returned unchanged.
+
+    The alias carries no attempt id, so a producer that re-runs and publishes the same bytes keeps the
+    same path. The pointer must list the artifact in ``hashes``; the caller still checks the bytes it
+    reads against its own pinned sha256, so a pointer that moved to different bytes fails closed."""
+    parts = relative.split('/')
+    for index in range(1, len(parts) - 1):
+        owner = Path(root).joinpath(*parts[:index])
+        pointer_path = owner / 'accepted.json'
+        if parts[index] != ACCEPTED_ALIAS or (owner / ACCEPTED_ALIAS).exists() or not pointer_path.is_file():
+            continue
+        if pointer_path.is_symlink():
+            raise ValueError(f'accepted pointer is a link: {relative}')
+        pointer = read_json(pointer_path)
+        artifact = '/'.join(parts[index + 1:])
+        if not isinstance(pointer, dict) or artifact not in (pointer.get('hashes') or {}):
+            raise ValueError(f'accepted publication does not list {relative}')
+        return '/'.join([*parts[:index], 'attempts', identifier(pointer.get('attempt_id')), artifact])
+    return relative
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
