@@ -245,3 +245,31 @@ class SynthesisReportTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class SpecialEvidenceTests(unittest.TestCase):
+    """Run 20261006T220018Z-7e69f0: load_inputs only knew job attempts and blocked on a source-snapshot
+    citation that assembly had already verified."""
+
+    def test_source_snapshot_and_tool_evidence_files_are_checked_by_bytes(self):
+        import tempfile
+        from execution_state import atomic_json, file_hash
+        with tempfile.TemporaryDirectory() as temp:
+            run = Path(temp) / "run"
+            (run / "data" / "jobs").mkdir(parents=True)
+            target = Path(temp) / "target"
+            (target / "src").mkdir(parents=True)
+            (target / "src" / "a.c").write_text("int x;\n")
+            (run / "inputs").mkdir()
+            atomic_json(run / "inputs" / "artifact-manifest.json", {"target": {"repo_path": str(target)}})
+            record = run / "data" / "tool-evidence" / "07-red" / "a1" / ("0" * 32 + ".json")
+            record.parent.mkdir(parents=True)
+            record.write_text("{}")
+            sha_src, sha_rec = file_hash(target / "src" / "a.c"), file_hash(record)
+            synthesis._verify_special_evidence(run, "r", ("00-intake", "source-snapshot", "src/a.c", "sha256:" + sha_src))
+            rel = "tool-evidence/07-red/a1/" + "0" * 32 + ".json"
+            synthesis._verify_special_evidence(run, "r", ("07-red", "a1", rel, "sha256:" + sha_rec))
+            with self.assertRaises(synthesis.Blocked):
+                synthesis._verify_special_evidence(run, "r", ("07-red", "a1", rel, "sha256:" + "f" * 64))
+            with self.assertRaises(synthesis.Blocked):
+                synthesis._verify_special_evidence(run, "r", ("00-intake", "source-snapshot", "src/a.c", "sha256:" + "f" * 64))
