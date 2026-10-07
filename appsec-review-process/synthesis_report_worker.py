@@ -109,7 +109,8 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any], jobs_root: Path) ->
     expected_enrichment = enrichment_core.build(report, Path(jobs_root).parents[1])
     if read_json(attempt / enrichment_core.RESULT) != expected_enrichment:
         raise Blocked(f"{JOB}: retained finding enrichment differs from deterministic enrichment")
-    expected_chains = chain_report.build(report, Path(jobs_root).parents[1])
+    expected_chains = chain_report.build(report, Path(jobs_root).parents[1],
+        origin_head_sha256=read_json(attempt / assembly.RESULT).get("lifecycle_origin_head_sha256"))
     if read_json(attempt / chain_report.RESULT) != expected_chains:
         raise Blocked(f"{JOB}: retained attack-chain section differs from the accepted lane-14 ledger")
     expected_poc = poc_report.build(report, expected_enrichment, Path(jobs_root).parents[1])
@@ -164,7 +165,8 @@ def run(run_root: Path, run_id: str, dagster_run_id: str, force: bool = False,
         report, trace = read_json(attempt / synthesis.REPORT_JSON), read_json(attempt / synthesis.TRACE)
         enrichment = enrichment_core.build(report, run_root)
         atomic_json(attempt / enrichment_core.RESULT, enrichment)
-        chains = chain_report.build(report, run_root)
+        chains = chain_report.build(report, run_root,
+            origin_head_sha256=read_json(attempt / assembly.RESULT).get("lifecycle_origin_head_sha256"))
         atomic_json(attempt / chain_report.RESULT, chains)
         poc = poc_report.build(report, enrichment, run_root)
         atomic_json(attempt / poc_report.RESULT, poc)

@@ -103,6 +103,17 @@ class ReportTests(Harness):
             chain_report.build(report(ledger_head_sha256="sha256:" + "0" * 64), self.run_root())
 
 
+    def test_lifecycle_origin_head_is_accepted_beside_the_final_head(self):
+        """Run 20261006T220018Z-7e69f0: lane 14 binds the L01 (lifecycle-origin) head because it runs before
+        claim-ledger-final; the report's own head is the final one, so only the origin head matches."""
+        self.publish()
+        origin = FIXTURE["verification"]["ledger_head_sha256"]
+        final = report(ledger_head_sha256="sha256:" + "0" * 64)
+        section = chain_report.build(final, self.run_root(), origin_head_sha256=origin)
+        self.assertEqual(section["status"], "PUBLISHED")
+        with self.assertRaisesRegex(Blocked, "different claim-ledger head"):
+            chain_report.build(final, self.run_root(), origin_head_sha256="sha256:" + "1" * 64)
+
 class PresentationTests(unittest.TestCase):
     def test_renderer_section_projection(self):
         import synthesis_report_presentation as presentation
