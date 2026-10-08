@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/guidance-registry/1",
+  "version": "1.0.0",
+  "roles": {
+    "component_classifier": {"responsibility": "Classify bounded component purpose and trust roles from cited evidence."},
+    "applicability_router": {"responsibility": "Resolve one bounded control-component applicability question."},
+    "control_assessor": {"responsibility": "Assess assigned proof obligations and return observations with citations."},
+    "evidence_verifier": {"responsibility": "Resolve cited observations to accepted source or run artifacts."},
+    "independent_reviewer": {"responsibility": "Independently review elevated or ship-blocking proposed claims."},
+    "result_adjudicator": {"responsibility": "Apply deterministic acceptance rules while preserving disagreement."}
+  },
+  "personas": {
+    "authentication_session": {"viewpoint": "Authentication, session, and identity boundaries."},
+    "authorization_access_control": {"viewpoint": "Authorization and access-control boundaries."},
+    "cryptography_data_protection": {"viewpoint": "Cryptography, key handling, and data protection."},
+    "api_web": {"viewpoint": "Web and API attack surfaces and protocol boundaries."},
+    "mobile_platform": {"viewpoint": "Android and iOS platform security behavior."},
+    "build_supply_chain": {"viewpoint": "Build provenance, dependency, and supply-chain integrity."},
+    "deployment_operations": {"viewpoint": "Deployment, configuration, and operational controls."}
+  },
+  "assignment": {
+    "domain_persona": {
+      "authentication_session": "authentication_session",
+      "authorization_access_control": "authorization_access_control",
+      "cryptography_data_protection": "cryptography_data_protection",
+      "api_web": "api_web",
+      "mobile_platform": "mobile_platform",
+      "build_supply_chain": "build_supply_chain",
+      "deployment_operations": "deployment_operations"
+    }
+  }
+}

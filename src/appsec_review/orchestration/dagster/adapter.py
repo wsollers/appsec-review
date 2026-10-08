@@ -102,6 +102,11 @@ def _node_name(job: Job, suffix: str, namespace: str = "") -> str:
 
 
 def _pool_for(unit_id: str) -> str:
+    step = unit_id.split(".", 1)[0]
+    if step == "validation":
+        return "owasp_validator"
+    if step in {"verification", "join"}:
+        return "owasp_verification"
     task = unit_id.rsplit(".", 1)[-1]
     if task.endswith("_scan"):
         return "scanner"
@@ -131,7 +136,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 )).resolve()
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-                    "job_evidence_collection",
+                    "job_evidence_collection", "job_owasp_control_assessment",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -325,5 +330,7 @@ def build_definitions(
                      registry.build("job_target_analysis_plan")]
         if "job_evidence_collection" in registered:
             wave_jobs.append(registry.build("job_evidence_collection"))
+        if "job_owasp_control_assessment" in registered:
+            wave_jobs.append(registry.build("job_owasp_control_assessment"))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory))
     return Definitions(jobs=jobs, schedules=schedules)

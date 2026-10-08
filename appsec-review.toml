@@ -11,6 +11,8 @@ max_concurrent = 8
 scanner = 6
 index = 4
 lifecycle = 1
+owasp_validator = 4
+owasp_verification = 2
 
 [jobs.job_third_party_data_sync]
 name = "third_party_data_sync"
@@ -308,3 +310,115 @@ workers = 1
 workers = 1
 [jobs.job_evidence_collection.steps.evidence_publication.tasks.assemble_manifest]
 [jobs.job_evidence_collection.steps.evidence_publication.tasks.publish_handoff]
+
+[jobs.job_owasp_control_assessment]
+name = "owasp_control_assessment"
+workers = 8
+
+[jobs.job_owasp_control_assessment.settings]
+asvs_level = 2
+masvs_profile = "L2"
+max_batch_size = 12
+max_components_per_batch = 5
+max_components = 128
+dynamic_authorized = false
+
+[jobs.job_owasp_control_assessment.settings.model]
+enabled = false
+provider = "openai"
+model = "gpt-5"
+reasoning = "medium"
+max_input_tokens = 24000
+max_output_tokens = 6000
+timeout_seconds = 120
+retries = 1
+
+[jobs.job_owasp_control_assessment.settings.parser_versions]
+component_rules = "1"
+applicability_rules = "1"
+batching_rules = "1"
+result_validator = "1"
+
+[jobs.job_owasp_control_assessment.settings.standards.ASVS]
+catalog_path = "data/reference/owasp/fixtures/asvs-5.0.0.json"
+catalog_sha256 = "81e598b97836a8195bdd9ad890c2ae607530452f5c9cf5da6e32c1740d6d0450"
+version = "5.0.0"
+repository = "https://github.com/OWASP/ASVS"
+ref = "v5.0.0_release"
+commit = "5cf9b032440be53ce345ab3c130fda46ba1ce7a2"
+license = "CC-BY-SA-4.0"
+
+[jobs.job_owasp_control_assessment.settings.standards.MASVS]
+catalog_path = "data/reference/owasp/fixtures/masvs-2.1.0.json"
+catalog_sha256 = "845f6e57f5f61094d059cdcc8882c3fb9a1808c025bb5cf3b0b536969dd416d4"
+version = "2.1.0"
+repository = "https://github.com/OWASP/owasp-masvs"
+ref = "v2.1.0"
+commit = "8e133d09f4140518ed04cc254b18be9ff4990ffc"
+license = "CC-BY-SA-4.0"
+
+[jobs.job_owasp_control_assessment.settings.standards.MASTG]
+catalog_path = "data/reference/owasp/fixtures/mastg-2.0.0.json"
+catalog_sha256 = "664e962d762cbdaa34e486f6dfa48a94663d44c080db596d241325ec344a08f6"
+version = "2.0.0"
+repository = "https://github.com/OWASP/owasp-mastg"
+ref = "v2.0.0"
+commit = "990472dbcffe126f5556045d60270c4ffdfdde72"
+license = "CC-BY-SA-4.0"
+
+[jobs.job_owasp_control_assessment.settings.standards.OWASP_API_TOP_10]
+catalog_path = "data/reference/owasp/fixtures/api-top10-2023.json"
+catalog_sha256 = "58291b235d5238272b406ed7779918cbeaf82333110d3d9bd8733585b814ef4c"
+version = "2023"
+repository = "https://github.com/OWASP/API-Security"
+ref = "2023"
+commit = "e85ddfa5a936d4656840ac250c039c7057e66b0d"
+license = "CC-BY-SA-4.0"
+
+[jobs.job_owasp_control_assessment.settings.standards.OWASP_TOP_10]
+catalog_path = "data/reference/owasp/fixtures/top10-2025.json"
+catalog_sha256 = "10760a8e21296f94b07a8b14a081b19574ad964b680b6429771ac7a34c7c735c"
+version = "2025"
+repository = "https://github.com/OWASP/Top10"
+ref = "2025"
+commit = "66ebc4798d2ca72973967a20264bdeb70dcf0a13"
+license = "CC-BY-SA-4.0"
+
+[jobs.job_owasp_control_assessment.steps.standards_selection]
+workers = 1
+[jobs.job_owasp_control_assessment.steps.standards_selection.tasks.ingest_catalogs]
+[jobs.job_owasp_control_assessment.steps.standards_selection.tasks.select_profiles]
+
+[jobs.job_owasp_control_assessment.steps.characterization]
+workers = 2
+[jobs.job_owasp_control_assessment.steps.characterization.tasks.load_inputs]
+[jobs.job_owasp_control_assessment.steps.characterization.tasks.classify_components]
+
+[jobs.job_owasp_control_assessment.steps.applicability]
+workers = 2
+[jobs.job_owasp_control_assessment.steps.applicability.tasks.build_matrix]
+
+[jobs.job_owasp_control_assessment.steps.batching]
+workers = 2
+[jobs.job_owasp_control_assessment.steps.batching.tasks.partition_work]
+[jobs.job_owasp_control_assessment.steps.batching.tasks.build_packages]
+
+[jobs.job_owasp_control_assessment.steps.validation]
+workers = 4
+[jobs.job_owasp_control_assessment.steps.validation.tasks.cell_01]
+[jobs.job_owasp_control_assessment.steps.validation.tasks.cell_02]
+[jobs.job_owasp_control_assessment.steps.validation.tasks.cell_03]
+[jobs.job_owasp_control_assessment.steps.validation.tasks.cell_04]
+
+[jobs.job_owasp_control_assessment.steps.verification]
+workers = 2
+[jobs.job_owasp_control_assessment.steps.verification.tasks.independent_review]
+
+[jobs.job_owasp_control_assessment.steps.join]
+workers = 1
+[jobs.job_owasp_control_assessment.steps.join.tasks.deterministic_join]
+
+[jobs.job_owasp_control_assessment.steps.publication]
+workers = 1
+[jobs.job_owasp_control_assessment.steps.publication.tasks.publish_indexes]
+[jobs.job_owasp_control_assessment.steps.publication.tasks.publish_handoff]

@@ -1,5 +1,12 @@
 {
   "schema": "appsec-review/migration-ledger/1",
+  "owasp_control_workbench": {
+    "disposition": "replace",
+    "destination": "job_owasp_control_assessment",
+    "replaced_concepts": ["standards-source-ingest", "component-routing", "applicability", "bounded-batching", "validator-cells", "pool-rendezvous", "deterministic-join", "persona-role-composition"],
+    "verification": "offline_fixture_verified_live_catalog_and_model_pending",
+    "gap": "Checked OWASP catalogs are abridged deterministic fixtures; live full-catalog refresh and live inference remain unverified."
+  },
   "note": "Migration documentation only; this file is not a runtime job registry. Wave 1 JSON retrieval has been replaced by the accepted immutable SQLite/FTS index contract; later compiled, IR, CodeQL, binary, coverage and finding-package producers remain acceptance-pending where listed below.",
   "categories": {
     "graph_jobs": {

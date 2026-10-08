@@ -6,7 +6,8 @@
     {"name":"read_excerpt","required":["identity"],"properties":["identity","context_lines"]},
     {"name":"trace","required":["identity"],"properties":["identity","relations","depth","limit"]},
     {"name":"resolve_evidence","required":["identity"],"properties":["identity","limit"]},
-    {"name":"coverage","required":[],"properties":["indexes"]}
+    {"name":"coverage","required":[],"properties":["indexes"]},
+    {"name":"query_owasp_workbench","required":[],"properties":["family","standard","version","profile","control","component","project","evidence_mode","validator","batch","disposition","shard","limit","cursor"]}
   ],
   "runtime_source": "appsec_review.mcp.schema:TOOLS"
 }

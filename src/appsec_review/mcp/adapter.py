@@ -7,6 +7,7 @@ import time
 from typing import Any, Mapping
 
 from appsec_review.mcp.schema import TOOLS
+from appsec_review.mcp.owasp import query_owasp_workbench
 from appsec_review.retrieval import RetrievalCore
 
 
@@ -24,7 +25,9 @@ class RetrievalMcpAdapter:
         unknown = set(arguments) - allowed
         if unknown:
             raise ValueError(f"unknown tool arguments: {sorted(unknown)}")
-        method = getattr(self.core, name)
+        method = (lambda **values: query_owasp_workbench(
+            self.core.run_root.parent, self.core.run_id, values
+        )) if name == "query_owasp_workbench" else getattr(self.core, name)
         started = time.monotonic()
         token, invocation = self.core.begin_mcp_invocation(name, arguments)
         try:

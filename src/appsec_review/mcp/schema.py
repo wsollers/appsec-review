@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .owasp import QUERY_TOOL_SCHEMA
+
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
 INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "compiled", "analysis", "evidence"]}
@@ -40,4 +42,5 @@ TOOLS: tuple[dict[str, Any], ...] = (
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "indexes": {"type": "array", "items": INDEX, "uniqueItems": True},
      }}},
+    QUERY_TOOL_SCHEMA,
 )

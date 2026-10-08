@@ -1,0 +1,17 @@
+{
+  "schema": "appsec-review/owasp-catalog/1",
+  "family": "OWASP_API_TOP_10",
+  "version": "2023",
+  "authority": "routing_context",
+  "fixture": true,
+  "upstream": {
+    "repository": "https://github.com/OWASP/API-Security",
+    "ref": "2023",
+    "commit": "e85ddfa5a936d4656840ac250c039c7057e66b0d",
+    "license": "CC-BY-SA-4.0"
+  },
+  "records": [
+    {"id": "API1:2023", "title": "Object-level authorization", "text": "Fixture risk-routing context.", "domain": "authorization_access_control"},
+    {"id": "API8:2023", "title": "Security configuration", "text": "Fixture risk-routing context.", "domain": "deployment_operations"}
+  ]
+}

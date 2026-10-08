@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/owasp-workbench.schema.json",
+  "title": "OWASP control-assessment workbench artifacts",
+  "oneOf": [
+    {"$ref": "#/$defs/input"},
+    {"$ref": "#/$defs/applicability"},
+    {"$ref": "#/$defs/resultSet"}
+  ],
+  "$defs": {
+    "citation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source_identity", "artifact_sha256", "lines"],
+      "properties": {
+        "source_identity": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "lines": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 1}], "items": false}
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "components", "evidence", "retrieval_manifest"],
+      "properties": {
+        "schema": {"const": "appsec-review/owasp-workbench-input/1"},
+        "components": {"type": "array", "maxItems": 128, "items": {"type": "object"}},
+        "evidence": {"type": "array", "maxItems": 10000, "items": {"type": "object"}},
+        "retrieval_manifest": {"type": "object"}
+      }
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema", "row_id", "control_identity", "component_id", "outcome", "reason", "evidence"],
+      "properties": {
+        "schema": {"const": "appsec-review/control-applicability/1"},
+        "row_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "control_identity": {"type": "string"},
+        "component_id": {"type": "string"},
+        "outcome": {"enum": ["applicable", "not_applicable", "conditional", "cannot_determine", "unsupported_missing_evidence"]},
+        "reason": {"type": "string", "minLength": 1},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/citation"}}
+      }
+    },
+    "resultSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "result_set_id", "results", "accounting"],
+      "properties": {
+        "schema": {"const": "appsec-review/control-result-set/1"},
+        "result_set_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "results": {"type": "array", "items": {"type": "object"}},
+        "accounting": {
+          "type": "object",
+          "required": ["selected", "joined", "exactly_once"],
+          "properties": {"selected": {"type": "integer"}, "joined": {"type": "integer"}, "exactly_once": {"const": true}}
+        }
+      }
+    }
+  }
+}

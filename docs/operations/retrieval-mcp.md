@@ -25,7 +25,13 @@ The server implements JSON-RPC MCP initialization, tool listing, calls, and ping
 are in `docs/schemas/retrieval-mcp-tools.json`. Application code should instantiate
 `RetrievalCore` instead of calling the MCP process.
 
-The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes all six tools.
+The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes all seven tools.
 Top-level tool-call spans and nested retrieval spans appear in `data/logs/pipeline.jsonl` under the
 run. One transport call produces one `MCP_TOOL_COMPLETED` metric event even when it invokes several
 internal retrieval operations.
+
+`query_owasp_workbench` is pinned to the MCP session's run and reads only that run's accepted OWASP
+shard manifest. It scopes by standard/version/profile, control, component, project, evidence mode,
+validator, batch, disposition, or shard and returns explicit pagination, truncation, ambiguity, and
+coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
+empty-coverage claim.

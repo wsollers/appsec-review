@@ -227,7 +227,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     core = RetrievalCore(runs, RUN_ID)
     adapter = RetrievalMcpAdapter(core)
     assert {item["name"] for item in TOOLS} == {
-        "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage"}
+        "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
+        "query_owasp_workbench"}
     via_mcp = adapter.call("find", {"identity": ids["symbol"]})
     direct = core.find(identity=ids["symbol"])
     assert {key: value for key, value in via_mcp.items() if key != "duration_ms"} == {
@@ -236,6 +237,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         ("search", {"query": "authenticate"}), ("find", {"identity": ids["symbol"]}),
         ("read_excerpt", {"identity": ids["symbol"]}), ("trace", {"identity": ids["observation"]}),
         ("resolve_evidence", {"identity": ids["observation"]}), ("coverage", {}),
+        ("query_owasp_workbench", {}),
     ]
     process = subprocess.Popen(
         [sys.executable, "-m", "appsec_review.mcp.stdio", "--runs-dir", str(runs), "--run-id", RUN_ID],
@@ -248,12 +250,12 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     stdout, stderr = process.communicate(payload, timeout=20)
     assert process.returncode == 0, stderr
     responses = [json.loads(line) for line in stdout.splitlines()]
-    assert len(responses) == 6
+    assert len(responses) == 7
     assert all(item["result"]["structuredContent"]["run_id"] == RUN_ID for item in responses)
     records = [json.loads(line) for line in (
         runs / RUN_ID / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()]
     completed = [item for item in records if item["event_type"] == "MCP_TOOL_COMPLETED"]
-    assert len(completed) == 7  # one direct adapter call above plus six transport calls
-    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 7
+    assert len(completed) == 8  # one direct adapter call above plus seven transport calls
+    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 8
     children = [item for item in records if item["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
     assert children and all(item["details"]["parent_invocation_id"] for item in children)
