@@ -15,6 +15,7 @@ class RuntimeConfig:
     repository_root: Path
     runs_dir: Path
     data_dir: Path
+    metadata_dir: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +126,14 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         repository_root=repository_root,
         runs_dir=_path(repository_root, runtime_value.get("runs_dir"), "runtime.runs_dir"),
         data_dir=_path(repository_root, runtime_value.get("data_dir"), "runtime.data_dir"),
+        metadata_dir=_path(
+            repository_root,
+            runtime_value.get("metadata_dir", "runs/metadata"),
+            "runtime.metadata_dir",
+        ),
     )
+    if runtime.metadata_dir != runtime.runs_dir / "metadata":
+        raise ValueError("runtime.metadata_dir must be the runs/metadata host metadata area")
 
     jobs_value = document.get("jobs")
     if not isinstance(jobs_value, dict) or not jobs_value:

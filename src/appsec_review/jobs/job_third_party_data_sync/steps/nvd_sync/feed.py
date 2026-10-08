@@ -58,9 +58,13 @@ class NvdClient(Protocol):
 
 
 class HttpNvdClient:
-    def __init__(self, *, request_timeout: float = 120, download_timeout: float = 300):
+    def __init__(self, *, request_timeout: float = 120, download_timeout: float = 300,
+                 max_download_bytes: int = 512 * 1024 * 1024,
+                 max_api_response_bytes: int = 64 * 1024 * 1024):
         self.request_timeout = request_timeout
         self.download_timeout = download_timeout
+        self.max_download_bytes = max_download_bytes
+        self.max_api_response_bytes = max_api_response_bytes
 
     @staticmethod
     def _headers(api_key: str | None) -> dict[str, str]:
@@ -74,7 +78,13 @@ class HttpNvdClient:
         with urllib.request.urlopen(request, timeout=self.request_timeout) as response:
             if getattr(response, "status", 200) != 200:
                 raise RuntimeError(f"NVD request returned HTTP {response.status}")
-            return response.read()
+            declared = response.headers.get("Content-Length")
+            if declared is not None and int(declared) > self.max_api_response_bytes:
+                raise ValueError("NVD response exceeds configured byte bound")
+            payload = response.read(self.max_api_response_bytes + 1)
+            if len(payload) > self.max_api_response_bytes:
+                raise ValueError("NVD response exceeded configured byte bound")
+            return payload
 
     def download(self, url: str, destination: Path, api_key: str | None = None) -> int:
         request = urllib.request.Request(url, headers=self._headers(api_key))
@@ -85,6 +95,8 @@ class HttpNvdClient:
             for chunk in iter(lambda: response.read(1024 * 1024), b""):
                 output.write(chunk)
                 size += len(chunk)
+                if size > self.max_download_bytes:
+                    raise ValueError("NVD download exceeded configured byte bound")
             output.flush()
             os.fsync(output.fileno())
         return size
@@ -228,7 +240,8 @@ class NvdPublisher:
         pause: Callable[[float], None] = time.sleep,
     ):
         self.settings = settings
-        self.client = client or HttpNvdClient()
+        self.client = client or HttpNvdClient(max_download_bytes=settings.max_download_bytes,
+                                               max_api_response_bytes=settings.max_api_response_bytes)
         self.clock = clock
         self.pause = pause
 
@@ -282,6 +295,8 @@ class NvdPublisher:
             raw_path = staging / f"{name}.json.gz"
             if self.client.download(source_url, raw_path, api_key) != source_metadata["gzSize"]:
                 raise ValueError(f"NVD {year} transport length mismatch")
+            if raw_path.stat().st_size > self.settings.max_download_bytes:
+                raise ValueError(f"NVD {year} download exceeded configured byte bound")
             size, digest = _gzip_properties(raw_path)
             if size != source_metadata["size"] or digest.lower() != source_metadata["sha256"].lower():
                 raise ValueError(f"NVD {year} uncompressed hash or size mismatch")

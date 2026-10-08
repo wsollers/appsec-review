@@ -9,10 +9,8 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.jobs.job_third_party_data_sync import build_job
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher, timestamp
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
-from appsec_review.runtime import JobRunner
 
 
 def vulnerability(identifier: str, modified: str = "2026-01-01T00:00:00.000") -> dict:
@@ -116,8 +114,9 @@ def test_bootstrap_then_incremental_job_publish_metadata_and_receipts(tmp_path: 
     client = FakeClient(raw)
     instant = datetime(2026, 10, 8, tzinfo=timezone.utc)
     config = load_config(write_config(tmp_path))
-
-    first = JobRunner(config).run(build_job(client=client, clock=lambda: instant, pause=lambda _: None), now=instant)
+    settings = NvdSettings.from_mapping(tmp_path, config.job("job_third_party_data_sync").step("nvd_sync").settings)
+    publisher = NvdPublisher(settings, client=client, clock=lambda: instant, pause=lambda _: None)
+    first = publisher.sync("first")
     feed_root = tmp_path / "data" / "feeds" / "nvd"
     current = json.loads((feed_root / "current.json").read_text(encoding="utf-8"))
     first_snapshot = current["snapshot_id"]
@@ -126,15 +125,16 @@ def test_bootstrap_then_incremental_job_publish_metadata_and_receipts(tmp_path: 
     with gzip.open(metadata_blob, "rt", encoding="utf-8") as stream:
         metadata = json.loads(stream.readline())
 
-    assert first["status"]["status"] == "SUCCEEDED"
+    assert first["snapshot_id"] == first_snapshot
     assert metadata["id"] == "CVE-2026-1000"
     assert metadata["weaknesses"] == ["CWE-79"]
     assert metadata["metrics"][0]["base_score"] == 7.5
 
     later = instant + timedelta(hours=2)
-    second = JobRunner(config).run(build_job(client=client, clock=lambda: later, pause=lambda _: None), now=later)
+    publisher.clock = lambda: later
+    publisher.sync("second")
     current = json.loads((feed_root / "current.json").read_text(encoding="utf-8"))
-    receipt = second["result"]["verification"]
+    receipt = publisher.verify()
     assert current["snapshot_id"] != first_snapshot
     assert receipt["chain_length"] == 2
     assert receipt["cursor"] == timestamp(later)

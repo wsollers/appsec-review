@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.runtime import Job, JobRunner
+from appsec_review.runtime import Job, JobRunner, Unit, UnitExecutor
 
 
 def write_config(root: Path) -> Path:
@@ -69,3 +69,33 @@ def test_failed_job_has_a_terminal_receipt(tmp_path: Path) -> None:
     status = json.loads(status_path.read_text(encoding="utf-8"))
     assert status["status"] == "FAILED"
     assert status["error"]["type"] == "RuntimeError"
+
+
+def test_unit_executor_attempts_independent_branch_and_skips_only_dependents(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def fail(context):
+        calls.append(context.unit_id)
+        raise RuntimeError("branch failure")
+
+    def succeed(context):
+        calls.append(context.unit_id)
+        return {"ok": True}
+
+    executor = UnitExecutor((
+        Unit("first.fetch", fail),
+        Unit("second.fetch", succeed),
+        Unit("first.publish", succeed, ("first.fetch",)),
+        Unit("second.publish", succeed, ("second.fetch",)),
+    ))
+    runner = JobRunner(load_config(write_config(tmp_path)))
+    with pytest.raises(RuntimeError, match="partial failure"):
+        runner.run(Job("job_fixture", "fixture", executor.execute),
+                   now=datetime(2026, 10, 8, tzinfo=timezone.utc))
+
+    result_path = next((tmp_path / "runs").glob("*/data/jobs/job_fixture/attempts/*/result.json"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert calls == ["first.fetch", "second.fetch", "second.publish"]
+    assert result["units"]["first.fetch"]["status"] == "FAILED"
+    assert result["units"]["first.publish"]["status"] == "SKIPPED"
+    assert result["units"]["second.publish"]["status"] == "SUCCEEDED"

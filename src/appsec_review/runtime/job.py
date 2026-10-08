@@ -16,6 +16,7 @@ class JobContext:
     repository_root: Path
     run_root: Path
     attempt_root: Path
+    metadata_root: Path
     config: JobConfig
     events: EventLog
 

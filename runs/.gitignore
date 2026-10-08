@@ -1,3 +1,5 @@
 # Run configuration, evidence, logs, and outputs are local and never committed.
 /*
 !/.gitignore
+!/metadata/
+!/metadata/.gitignore

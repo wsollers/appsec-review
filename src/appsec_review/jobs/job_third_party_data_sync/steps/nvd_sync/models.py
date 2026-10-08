@@ -14,6 +14,8 @@ class NvdSettings:
     max_window_days: int
     request_delay_with_key_seconds: float
     request_delay_without_key_seconds: float
+    max_download_bytes: int
+    max_api_response_bytes: int
 
     @classmethod
     def from_mapping(cls, root: Path, value: Mapping[str, Any]) -> "NvdSettings":
@@ -29,6 +31,8 @@ class NvdSettings:
             max_window_days=int(value.get("max_window_days", 119)),
             request_delay_with_key_seconds=float(value.get("request_delay_with_key_seconds", 0.6)),
             request_delay_without_key_seconds=float(value.get("request_delay_without_key_seconds", 6.0)),
+            max_download_bytes=int(value.get("max_download_bytes", 512 * 1024 * 1024)),
+            max_api_response_bytes=int(value.get("max_api_response_bytes", 64 * 1024 * 1024)),
         )
         if settings.first_year < 1999:
             raise ValueError("first_year cannot precede CVE year 1999")
@@ -40,4 +44,6 @@ class NvdSettings:
             raise ValueError("api_key_env is invalid")
         if settings.request_delay_with_key_seconds < 0 or settings.request_delay_without_key_seconds < 0:
             raise ValueError("request delays cannot be negative")
+        if settings.max_download_bytes < 1 or settings.max_api_response_bytes < 1:
+            raise ValueError("NVD download bounds must be positive")
         return settings

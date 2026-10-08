@@ -1,0 +1,3 @@
+# Host-level mutable metadata is local state. Keep only this policy file.
+/*
+!/.gitignore

@@ -1,10 +1,11 @@
 [runtime]
 runs_dir = "runs"
 data_dir = "data"
+metadata_dir = "runs/metadata"
 
 [jobs.job_third_party_data_sync]
 name = "third_party_data_sync"
-workers = 1
+workers = 3
 
 [jobs.job_third_party_data_sync.schedule]
 enabled = true
@@ -22,6 +23,8 @@ page_size = 2000
 max_window_days = 119
 request_delay_with_key_seconds = 0.6
 request_delay_without_key_seconds = 6.0
+max_download_bytes = 536870912
+max_api_response_bytes = 67108864
 
 [jobs.job_third_party_data_sync.steps.nvd_sync.tasks.fetch]
 workers = 1
@@ -29,5 +32,96 @@ workers = 1
 [jobs.job_third_party_data_sync.steps.nvd_sync.tasks.process]
 workers = 1
 
-[jobs.job_third_party_data_sync.steps.nvd_sync.tasks.build]
+[jobs.job_third_party_data_sync.steps.nvd_sync.tasks.publish]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.osv_sync]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.osv_sync.settings]
+feed_root = "data/feeds/osv"
+ecosystems = ["PyPI"]
+max_archive_bytes = 536870912
+max_uncompressed_bytes = 2147483648
+max_records = 500000
+max_lookup_results = 500
+timeout_seconds = 300
+
+[jobs.job_third_party_data_sync.steps.osv_sync.tasks.fetch]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.osv_sync.tasks.index]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.osv_sync.tasks.publish]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.mitre_sync]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.settings]
+feed_root = "data/feeds/mitre"
+source_selections = ["enterprise_attack", "capec", "cwe"]
+max_source_bytes = 268435456
+max_uncompressed_bytes = 536870912
+max_records = 250000
+max_lookup_results = 500
+timeout_seconds = 300
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.settings.sources.enterprise_attack]
+kind = "attack"
+url = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/v19.2/enterprise-attack/enterprise-attack-19.2.json"
+version = "19.2"
+sha256 = "dc1639caa5501d720e280cf1cbd8fbe009884a0c9b3e6e9ed9d0c25166c3d8f4"
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.settings.sources.mobile_attack]
+kind = "attack"
+url = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/v19.2/mobile-attack/mobile-attack-19.2.json"
+version = "19.2"
+sha256 = "acfa5ca2d93484476f79bf38590e2b55bb675fc0ce85e76bffa0af2c82dada64"
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.settings.sources.ics_attack]
+kind = "attack"
+url = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/v19.2/ics-attack/ics-attack-19.2.json"
+version = "19.2"
+sha256 = "08b83d2cea6b6d6752468ef0e62e2ab2a53c9443ef72c439ecccb07ab9e89da9"
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.settings.sources.capec]
+kind = "capec"
+url = "https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v19.2/capec/2.1/stix-capec.json"
+version = "3.9"
+sha256 = "ee6244f48259c1963d0507535e1843d67ba08fe58b4dfe351c1b74f9e376fa69"
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.settings.sources.cwe]
+kind = "cwe"
+url = "https://cwe.mitre.org/data/xml/cwec_v4.20.xml.zip"
+version = "4.20"
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.tasks.fetch]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.tasks.normalize]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.mitre_sync.tasks.publish]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.settings]
+feed_root = "data/feeds/cve-bin-tool"
+image = "appsec-review/cve-bin-tool:3.4"
+tool_version = "3.4"
+build_context = "tools/cve-bin-tool"
+build_timeout_seconds = 1800
+run_timeout_seconds = 3600
+
+[jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.resolve_nvd_snapshot]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.build]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.publish]
 workers = 1

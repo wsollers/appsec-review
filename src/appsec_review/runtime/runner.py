@@ -73,6 +73,7 @@ class JobRunner:
             repository_root=self.config.runtime.repository_root,
             run_root=run_root,
             attempt_root=attempt_root,
+            metadata_root=self.config.runtime.metadata_dir,
             config=job_config,
             events=events,
         )
@@ -89,6 +90,9 @@ class JobRunner:
         try:
             result = dict(job.execute(context))
             atomic_json(attempt_root / "result.json", result)
+            if result.get("status") == "FAILED":
+                failed = ", ".join(result.get("failed_units", ())) or "one or more units"
+                raise RuntimeError(f"job reported partial failure: {failed}")
             completed = datetime.now(timezone.utc).isoformat()
             status = {
                 "job_id": job.job_id,
