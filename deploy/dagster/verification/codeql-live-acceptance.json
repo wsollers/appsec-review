@@ -1,0 +1,636 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "completion_status": "COMPLETED_WITH_GAPS",
+      "jobs": {
+        "job_cpp_compiled_analysis": {
+          "attempt_id": "attempt_0001",
+          "cpp_wave": {
+            "all_cpp_shards_preserved": true,
+            "all_physical_shards_preserved": true,
+            "branch_count": 7,
+            "codeql": {
+              "all_run_owned_artifacts_resolved": true,
+              "database_reused_count": 0,
+              "observation_count": 3,
+              "project_count": 1,
+              "query_reused_count": 0,
+              "resolved_artifact_count": 3,
+              "sarif_result_count": 3,
+              "successful_project_count": 1
+            },
+            "cpp_shard_count": 7,
+            "disposition_counts": {
+              "COMPLETED_WITH_GAPS": 5,
+              "SUCCEEDED": 2
+            },
+            "manifest_index_count": 133,
+            "manifest_sha256": "cff2322c4aae0839f1f683614d97c342e08925feb103dfc16b7fccc533e24ce5",
+            "physical_shard_count": 133,
+            "project_count": 1,
+            "terminal_branch_count": 7
+          },
+          "gap_count": 7,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "b587a6afbc47df7458746d93ab9496a219fc0b4cb84c2e8fee7c4fb75e8a527f",
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 11,
+          "unit_status_counts": {
+            "SUCCEEDED": 11
+          }
+        },
+        "job_evidence_collection": {
+          "attempt_id": "attempt_0001",
+          "concurrency_proof": {
+            "latest_producer_index_completed_at": "2026-10-08T22:36:06.633982+00:00",
+            "manifest_started_at": "2026-10-08T22:36:10.209750+00:00",
+            "manifest_waited_for_all_producer_indexes": true,
+            "observed_peak_overlapping_scanners": 6,
+            "scanner_interval_count": 19
+          },
+          "gap_count": 18,
+          "gaps": [
+            "git history is not scanned; coverage is the cataloged worktree",
+            "worktree only; git history is excluded",
+            "dependency/build context may be incomplete in offline mode",
+            "project-specific coding standard is not inferred",
+            "Composer dependencies are not installed by the scanner",
+            "project config and installed dependency stubs may be required",
+            "not selected by accepted target analysis plan",
+            "build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete",
+            "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+            "dependency classpath was not constructed or downloaded; rules requiring complete external type resolution may be incomplete",
+            "PMD source analysis is not JVM bytecode coverage; SpotBugs requires accepted JVM bytecode",
+            "security-focused ruleset only; general PMD code-quality rules are excluded",
+            "directory coverage only; no cataloged OCI/archive artifact",
+            "directory coverage is distinct from built artifact or OCI/archive coverage",
+            "the synchronized OSV snapshot currently covers PyPI only",
+            "6 YAML file(s) lacked supported IaC/workflow structural evidence",
+            "Kubernetes, Helm, Bicep, ARM, Serverless, and other Checkov frameworks are not enabled by this bounded adapter",
+            "framework selection is restricted to typed Terraform, Dockerfile, GitHub Actions, and CloudFormation inputs"
+          ],
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_evidence_collection/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "a4cd3d7e8a731f99590b77fa11ead3673633c1a013ea8c1ce19397f8abae0419",
+          "index_manifest": {
+            "path": "data/indices/manifests/evidence-attempt_0001.json",
+            "sha256": "f01a1c4bb210b20984dc180508486ff230b0a852ecc8e05a46c8d64c33e9a081",
+            "size_bytes": 52240
+          },
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_evidence_collection/attempts/attempt_0001/result.json",
+          "reuse_summary": {
+            "checkpoint_reused": 0,
+            "index_reused": 0
+          },
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_evidence_collection/attempts/attempt_0001/status.json",
+          "tool_dispositions": [
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 1,
+              "shard_id": "gitleaks",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-gitleaks"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 23,
+              "shard_id": "semgrep",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-semgrep"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "gosec",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-gosec"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 17,
+              "shard_id": "mobsfscan",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-mobsfscan"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 113,
+              "shard_id": "shellcheck",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-shellcheck"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 13,
+              "shard_id": "phpcs",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-phpcs"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "phpstan",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-phpstan"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "psalm",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-psalm"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "spotbugs",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-spotbugs"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 6,
+              "shard_id": "cppcheck",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-cppcheck"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 2,
+              "shard_id": "pmd",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-pmd"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 19,
+              "shard_id": "syft",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-syft"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 3,
+              "shard_id": "osv_scanner",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-osv-scanner"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 6,
+              "shard_id": "grype",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-grype"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 8,
+              "shard_id": "hadolint",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-hadolint"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 14,
+              "shard_id": "checkov",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-checkov"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 15,
+              "shard_id": "trivy",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-trivy"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 1,
+              "shard_id": "zizmor",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-zizmor"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "blint",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-blint"
+            }
+          ],
+          "unit_count": 59,
+          "unit_status_counts": {
+            "SUCCEEDED": 59
+          }
+        },
+        "job_language_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 50,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_language_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "c6b05330e2f561e0620e47685995e42a972830c0cd6ddd826a936ab991f4a770",
+          "language_build": {
+            "artifact_count": 19,
+            "checkpoint_reused": 0,
+            "families": {
+              "dotnet": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {
+                  "BLOCKED": 9
+                },
+                "gap_count": 36,
+                "receipt_count": 9
+              },
+              "go": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "java": {
+                "artifact_count": 15,
+                "command_count": 14,
+                "disposition_counts": {
+                  "SUCCEEDED": 7
+                },
+                "gap_count": 7,
+                "receipt_count": 7
+              },
+              "native": {
+                "artifact_count": 19,
+                "command_count": 2,
+                "disposition_counts": {
+                  "SUCCEEDED": 1
+                },
+                "gap_count": 7,
+                "receipt_count": 1
+              },
+              "node": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "php": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "python": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "rust": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "wasm": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              }
+            },
+            "gaps": [
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_C.bin: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CompilerIdC/a.out: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CompilerIdCXX/a.out: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/libcoordination.so: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/observer_a: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/observer_b: static loader dependencies were not observable without a pinned parser",
+              "build-unit-67e047f9b0e8d61ed8ce: dotnet restore must use a locked dependency graph",
+              "build-unit-67e047f9b0e8d61ed8ce: dotnet build must enable diagnostic build provenance",
+              "build-unit-67e047f9b0e8d61ed8ce: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-67e047f9b0e8d61ed8ce: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-705f24c7965d130fe686: dotnet restore must use a locked dependency graph",
+              "build-unit-705f24c7965d130fe686: dotnet build must enable diagnostic build provenance",
+              "build-unit-705f24c7965d130fe686: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-705f24c7965d130fe686: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-7476efb967a18e31efb2: dotnet restore must use a locked dependency graph",
+              "build-unit-7476efb967a18e31efb2: dotnet build must enable diagnostic build provenance",
+              "build-unit-7476efb967a18e31efb2: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-7476efb967a18e31efb2: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-7b9e378591dc973f5dec: dotnet restore must use a locked dependency graph",
+              "build-unit-7b9e378591dc973f5dec: dotnet build must enable diagnostic build provenance",
+              "build-unit-7b9e378591dc973f5dec: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-7b9e378591dc973f5dec: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-80180d0ff68da194eaf5: dotnet restore must use a locked dependency graph",
+              "build-unit-80180d0ff68da194eaf5: dotnet build must enable diagnostic build provenance",
+              "build-unit-80180d0ff68da194eaf5: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-80180d0ff68da194eaf5: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-94412a1d6ffbf166eaed: dotnet restore must use a locked dependency graph",
+              "build-unit-94412a1d6ffbf166eaed: dotnet build must enable diagnostic build provenance",
+              "build-unit-94412a1d6ffbf166eaed: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-94412a1d6ffbf166eaed: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-b44e8a45ceb1598062f6: dotnet restore must use a locked dependency graph",
+              "build-unit-b44e8a45ceb1598062f6: dotnet build must enable diagnostic build provenance",
+              "build-unit-b44e8a45ceb1598062f6: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-b44e8a45ceb1598062f6: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-cd8e83d3ce82c2e8e44e: dotnet restore must use a locked dependency graph",
+              "build-unit-cd8e83d3ce82c2e8e44e: dotnet build must enable diagnostic build provenance",
+              "build-unit-cd8e83d3ce82c2e8e44e: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-cd8e83d3ce82c2e8e44e: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-e74991f26a3c94214bdc: dotnet restore must use a locked dependency graph",
+              "build-unit-e74991f26a3c94214bdc: dotnet build must enable diagnostic build provenance",
+              "build-unit-e74991f26a3c94214bdc: locked restore requires packages.lock.json in accepted dependency inputs",
+              "build-unit-e74991f26a3c94214bdc: accepted packages.lock.json is absent from the build workspace",
+              "build-unit-0b0e21fbf90f2dde1437: nested JVM tool provenance was not emitted by the build",
+              "build-unit-3706425f5fad37227c24: nested JVM tool provenance was not emitted by the build",
+              "build-unit-4db99ff3cf9e5f070b9e: nested JVM tool provenance was not emitted by the build",
+              "build-unit-85ed003b5e79e13da49e: nested JVM tool provenance was not emitted by the build",
+              "build-unit-89f334cc31147dac7d2c: nested JVM tool provenance was not emitted by the build",
+              "build-unit-ba0768d09e23ae151369: nested JVM tool provenance was not emitted by the build",
+              "build-unit-c5f65d38abd03ace509b: nested JVM tool provenance was not emitted by the build"
+            ],
+            "jvm_artifact_count": 15,
+            "jvm_checkpoint_reused": 0,
+            "jvm_command_count": 14,
+            "jvm_protected_provenance_count": 7,
+            "jvm_receipt_count": 7,
+            "jvm_tool_invocation_count": 0,
+            "native_receipt_count": 1,
+            "protected_command_set_count": 1,
+            "receipt_count": 17,
+            "successful_jvm_count": 7,
+            "successful_native_count": 1,
+            "successful_wasm_count": 0,
+            "wasm_artifact_count": 0,
+            "wasm_checkpoint_reused": 0,
+            "wasm_producer_counts": {},
+            "wasm_receipt_count": 0
+          },
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_language_build/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_language_build/attempts/attempt_0001/status.json",
+          "unit_count": 19,
+          "unit_status_counts": {
+            "SUCCEEDED": 19
+          }
+        },
+        "job_post_build_security_assessment": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 32,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "89a542af93abf657fa75c7e3132ed52c56ca12eddc6dc2d8faf7e73d4797e682",
+          "post_build_security": {
+            "all_build_security_shards_preserved": true,
+            "case_count": 1,
+            "gap_count": 32,
+            "index_reused": 0,
+            "manifest_shard_count": 1,
+            "normalizer_version": "build-security-command-normalizer/1",
+            "parser_version": "build-security-binary-parser/1",
+            "rule_version": "build-security-rules/1",
+            "shard_count": 1
+          },
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_project_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 31,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_project_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "252775f3cd16f055353d43e2174c2ce547152617b012dda0c39bf03b2479778c",
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_project_build/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_project_build/attempts/attempt_0001/status.json",
+          "unit_count": 39,
+          "unit_status_counts": {
+            "SUCCEEDED": 39
+          }
+        },
+        "job_review_intake": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 1,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "7208c70c0e62b6b82cdf98f139526a60517969a04f439c502e0779fbbf979473",
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_target_analysis_plan": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 7,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_target_analysis_plan/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "fec8836326f9c321ec3d58bb6e80577494c70a658258b499288b1d28d69ac8e9",
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_target_analysis_plan/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_target_analysis_plan/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_target_catalog": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 1,
+          "handoff_receipt": "runs/2026-10-08-0090/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "014de45262ff347d6f9ffc4a912b4710e6574e1eefe1aa1c03373986ee6b0895",
+          "result_receipt": "runs/2026-10-08-0090/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0090/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
+          "unit_count": 13,
+          "unit_status_counts": {
+            "SUCCEEDED": 13
+          }
+        }
+      },
+      "orchestration_receipt": "runs/2026-10-08-0090/data/orchestration/dagster/300b7227-7033-4b1a-a1a1-560f5e7e0f11.json",
+      "resume_decisions": [
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_cpp_compiled_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_post_build_security_assessment"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_evidence_collection"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_indexing"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_security_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_tree_sitter_ast"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_owasp_control_assessment"
+        }
+      ],
+      "run_id": "2026-10-08-0090"
+    },
+    "dagster_run": {
+      "job": "wave1_review",
+      "run_id": "300b7227-7033-4b1a-a1a1-560f5e7e0f11",
+      "status": "SUCCESS",
+      "step_count": 276,
+      "step_status_counts": {
+        "SUCCESS": 276
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "artifact_indexing",
+      "artifact_security_analysis",
+      "ci_configuration_analysis",
+      "ci_configuration_review",
+      "cpp_compiled_analysis",
+      "evidence_collection",
+      "language_build",
+      "owasp_control_assessment",
+      "post_build_security_assessment",
+      "project_build",
+      "project_build_review",
+      "review_intake",
+      "target_analysis_plan",
+      "target_catalog",
+      "third_party_data_sync",
+      "tree_sitter_ast",
+      "wave1_review"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}

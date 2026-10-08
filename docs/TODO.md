@@ -183,13 +183,14 @@ extraction bounds, hash every published file, validate the database with the pin
 publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
 The step must fail truthfully when provenance, validation, or freshness cannot be established.
 
-## Supply a pinned CodeQL closure
+## Extend the enabled CodeQL closure beyond C/C++
 
-The C++ job now publishes a producer-local CodeQL shard and precise blocked disposition. Enabling
-database creation and queries still requires a configured runtime capability plus a hash-pinned
-offline CLI, extractor, query-pack, and license-notice closure. Include both traced compiled builds
-and no-build interpreted-language databases. Preserve the current selective invalidation boundary:
-query-pack changes must not rebuild Clang AST, LLVM IR, or an otherwise reusable CodeQL database.
+The C++ job now has an enabled, hash-pinned offline CodeQL CLI, extractor, query-pack, license
+notice, traced database replay, bounded SARIF normalization, and independent database/query
+checkpoints. Future work may add no-build interpreted-language databases and equivalent typed
+normalizers without widening the C++ runtime or coupling their invalidation domains. Preserve the
+current selective invalidation boundary: query-pack changes must not rebuild Clang AST, LLVM IR,
+or an otherwise reusable CodeQL database.
 
 ## Supply a pinned Joern/c2cpg closure
 

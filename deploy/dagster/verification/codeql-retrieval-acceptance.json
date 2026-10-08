@@ -1,0 +1,58 @@
+{
+  "application_run_id": "2026-10-08-0091",
+  "codeql": {
+    "database_identity": "daeec449e5370d52de4eae0797bc684c58df34a15d74e27a5190479ed39d6865",
+    "database_manifest": {
+      "path": "runs/2026-10-08-0091/data/cpp/projects/build-unit-c2796659e86145dddfaf/analysis/codeql/database-manifest.json",
+      "sha256": "5ef8d7fa05cff3c41d3253064ea8d0f0133deba865f18ed8fd5f6bb809883a5d"
+    },
+    "database_reused": false,
+    "gaps": [],
+    "observation_count": 3,
+    "observation_index": {
+      "path": "runs/2026-10-08-0091/data/indices/observations/11ea644f595289d0fa41c5ce4f47e0801db12f5ac3f11c20c2d4cb93b00bf87f-e1faf963fcba282c.sqlite",
+      "sha256": "b718339dd34d45cb9c69fb2b07bd093493aa5fc4a059d7b385f3140c9e5c6836"
+    },
+    "query_identity": "1975ca81755fc2a0531150819b289731f6e301da430d9ea8bb9d4f31e3f20fd8",
+    "query_reused": false,
+    "sarif": {
+      "path": "runs/2026-10-08-0091/data/cpp/projects/build-unit-c2796659e86145dddfaf/analysis/codeql/sarif/results.sarif",
+      "result_count": 3,
+      "sha256": "9bc8d74e877e526dd3f9c05969e117ad4ccf911b392de1d1e36b620e191de953"
+    },
+    "terminal_status": "SUCCEEDED"
+  },
+  "dagster_run_id": "a36271d5-8a3c-4f58-bb46-f8e58df1cf13",
+  "dagster_status": "SUCCESS",
+  "retrieval": {
+    "accepted_handoff_sha256": "6330d0655ddda360a6cb3ec75ee9580ba77410bc3c55beaaf10e207a426154ad",
+    "accepted_manifest_sha256": "6977441e4b7e31f91f81838189f46607f19f8a7367cc8aaad15652676d48beb1",
+    "accepted_producer": "job_cpp_compiled_analysis",
+    "codeql_coverage_shards": [
+      "cpp-build-unit-c2796659e86145dddfaf-codeql"
+    ],
+    "evidence_result_count": 1,
+    "excerpt_gaps": [],
+    "excerpt_result_count": 1,
+    "finding_identity": "asr:tool_observation:4fd0083f3ab887f718aaa22580bbe46824c1ab82fe5873eb96cef0ef18e458e5",
+    "finding_line": 213,
+    "finding_path": "projects/native/linux-calibration/src/coordination.cpp",
+    "find_result_count": 2,
+    "index_names": [
+      "analysis",
+      "build",
+      "compiled",
+      "components",
+      "observations",
+      "source"
+    ],
+    "search_result_count": 2,
+    "trace_relation_kinds": [
+      "OBSERVED_AT"
+    ],
+    "trace_result_count": 3
+  },
+  "schema": "appsec-review/codeql-retrieval-acceptance/1",
+  "selected_terminal_step": "cpp_compiled_analysis__finalize",
+  "selected_step_count": 161
+}

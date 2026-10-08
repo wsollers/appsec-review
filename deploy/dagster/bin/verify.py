@@ -367,6 +367,31 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                               if str(item.get("shard_id", "")).startswith("cpp-")]
                 branches = [value for key, value in result["units"].items()
                             if key.split(".", 1)[0] in {"compiled", "ast", "ir", "infer", "codeql", "joern", "binary"}]
+                codeql_projects = result.get("outputs", {}).get("codeql.projects", {}).get("projects", {})
+                successful_codeql = [value for value in codeql_projects.values()
+                                      if value.get("terminal_status") == "SUCCEEDED"]
+                if run.get("pipelineName") == "wave1_review" and not successful_codeql:
+                    raise SystemExit("live Wave 1 acceptance did not complete a CodeQL C++ project")
+                codeql_observations = 0
+                codeql_sarif_results = 0
+                codeql_artifacts = 0
+                for codeql in successful_codeql:
+                    if not codeql.get("database_identity") or not codeql.get("query_identity"):
+                        raise SystemExit("CodeQL success is missing database or query identity")
+                    for artifact_name in ("database_manifest", "sarif", "image"):
+                        artifact = codeql.get(artifact_name)
+                        if not isinstance(artifact, Mapping):
+                            raise SystemExit(f"CodeQL success is missing {artifact_name} artifact")
+                        artifact_path = (run_root / str(artifact.get("path", ""))).resolve()
+                        if (run_root.resolve() not in artifact_path.parents or not artifact_path.is_file() or
+                                hashlib.sha256(artifact_path.read_bytes()).hexdigest() != artifact.get("sha256")):
+                            raise SystemExit(f"CodeQL {artifact_name} artifact does not resolve")
+                        codeql_artifacts += 1
+                    sarif = json.loads((run_root / codeql["sarif"]["path"]).read_text(encoding="utf-8"))
+                    codeql_sarif_results += sum(len(item.get("results", ())) for item in sarif.get("runs", ()))
+                    codeql_observations += int(codeql.get("observation_count", 0))
+                if run.get("pipelineName") == "wave1_review" and codeql_observations < 1:
+                    raise SystemExit("live Wave 1 CodeQL acceptance produced no indexed observations")
                 job_report["cpp_wave"] = {
                     "project_count": summary["project_count"],
                     "branch_count": summary["branch_count"],
@@ -383,6 +408,18 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "all_physical_shards_preserved": (
                         len(manifest["indexes"]) == summary["physical_shard_count"]
                     ),
+                    "codeql": {
+                        "project_count": len(codeql_projects),
+                        "successful_project_count": len(successful_codeql),
+                        "observation_count": codeql_observations,
+                        "sarif_result_count": codeql_sarif_results,
+                        "resolved_artifact_count": codeql_artifacts,
+                        "database_reused_count": sum(bool(value.get("database_reused"))
+                                                     for value in successful_codeql),
+                        "query_reused_count": sum(bool(value.get("query_reused"))
+                                                  for value in successful_codeql),
+                        "all_run_owned_artifacts_resolved": True,
+                    },
                 }
             if job_id == "job_post_build_security_assessment":
                 summary_path = run_root / publication["artifact"]["path"]

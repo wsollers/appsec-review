@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.runtime import Job, JobRunner, Unit, UnitExecutor
+from appsec_review.runtime.runner import _accepted_retrieval_manifest
 
 
 def write_config(root: Path) -> Path:
@@ -54,6 +56,25 @@ def test_job_composes_validators_around_handler(tmp_path: Path) -> None:
     configuration = tmp_path / "runs" / "2026-10-08-0001" / "data" / "configuration"
     assert (configuration / "appsec-review.toml").read_bytes() == (tmp_path / "appsec-review.toml").read_bytes()
     assert json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))["source_sha256"]
+
+
+def test_specialized_manifest_does_not_replace_global_retrieval_manifest(tmp_path: Path) -> None:
+    standard = tmp_path / "data" / "indices" / "standard.json"
+    specialized = tmp_path / "data" / "indexes" / "owasp" / "specialized.json"
+    for path, schema in ((standard, "appsec-review/index-manifest/1"),
+                         (specialized, "appsec-review/owasp-index-manifest/1")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": schema}), encoding="utf-8")
+    artifacts = [{
+        "path": path.relative_to(tmp_path).as_posix(),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    } for path in (standard, specialized)]
+
+    selected = _accepted_retrieval_manifest(tmp_path, artifacts)
+
+    assert selected is not None
+    assert selected[1] == standard.resolve()
+    assert _accepted_retrieval_manifest(tmp_path, artifacts[1:]) is None
 
 
 def test_failed_job_has_a_terminal_receipt(tmp_path: Path) -> None:

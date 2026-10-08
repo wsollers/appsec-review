@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import tomllib
 from types import MappingProxyType
@@ -220,6 +220,72 @@ class LanguageBuildSettings:
     def __post_init__(self) -> None:
         if min(self.command_timeout_seconds, self.output_bytes, self.artifact_count_limit) < 1:
             raise ValueError("language-build limits must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class CodeQLSettings:
+    enabled: bool
+    source_image_tag: str
+    source_image_id: str
+    version: str
+    cli_sha256: str
+    extractor_sha256: str
+    license_sha256: str
+    query_pack: str
+    query_pack_version: str
+    query_suite: str
+    query_suite_sha256: str
+    query_pack_sha256: str
+    query_lock_sha256: str
+    database_timeout_seconds: int
+    query_timeout_seconds: int
+    output_bytes: int
+    database_file_limit: int
+    database_bytes_limit: int
+    sarif_bytes_limit: int
+    result_limit: int
+    threads: int
+    ram_mb: int
+    max_paths: int
+
+    def __post_init__(self) -> None:
+        if not self.enabled:
+            raise ValueError("CodeQL must be enabled for the C++ compiled-analysis lane")
+        if not self.source_image_tag or any(char.isspace() for char in self.source_image_tag):
+            raise ValueError("CodeQL source image tag is invalid")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.source_image_id):
+            raise ValueError("CodeQL source image id is invalid")
+        for name, value in (
+            ("cli", self.cli_sha256), ("extractor", self.extractor_sha256),
+            ("license", self.license_sha256), ("query pack", self.query_pack_sha256),
+            ("query lock", self.query_lock_sha256), ("query suite", self.query_suite_sha256),
+        ):
+            if not re.fullmatch(r"[0-9a-f]{64}", value):
+                raise ValueError(f"CodeQL {name} sha256 is invalid")
+        if not re.fullmatch(r"[A-Za-z0-9_.+/-]+", self.query_pack):
+            raise ValueError("CodeQL query pack is invalid")
+        if not re.fullmatch(r"[A-Za-z0-9_.+-]+", self.query_pack_version):
+            raise ValueError("CodeQL query pack version is invalid")
+        suite = PurePosixPath(self.query_suite)
+        if suite.is_absolute() or ".." in suite.parts or suite.suffix != ".qls":
+            raise ValueError("CodeQL query suite is invalid")
+        limits = (
+            self.database_timeout_seconds, self.query_timeout_seconds, self.output_bytes,
+            self.database_file_limit, self.database_bytes_limit, self.sarif_bytes_limit,
+            self.result_limit, self.threads, self.ram_mb, self.max_paths,
+        )
+        if min(limits) < 1 or self.threads > 32 or self.ram_mb < 2048 or self.max_paths > 64:
+            raise ValueError("CodeQL resource or output limits are invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class CppCompiledAnalysisSettings:
+    lane: str
+    codeql: CodeQLSettings
+
+    def __post_init__(self) -> None:
+        if self.lane != "cpp":
+            raise ValueError("C++ compiled-analysis lane must be cpp")
 
 
 @dataclass(frozen=True, slots=True)
@@ -498,6 +564,38 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                     artifact_count_limit=int(settings.get("artifact_count_limit", 0)),
                     workspace_file_limit=int(wasm_value.get("workspace_file_limit", 0)),
                     producers=MappingProxyType(producers),
+                ),
+            )
+        elif job_id == "job_cpp_compiled_analysis":
+            codeql_value = settings.get("codeql")
+            if not isinstance(codeql_value, dict):
+                raise ValueError("jobs.job_cpp_compiled_analysis.settings.codeql must be a table")
+            typed_settings = CppCompiledAnalysisSettings(
+                lane=str(settings.get("lane", "")),
+                codeql=CodeQLSettings(
+                    enabled=codeql_value.get("enabled") is True,
+                    source_image_tag=str(codeql_value.get("source_image_tag", "")),
+                    source_image_id=str(codeql_value.get("source_image_id", "")),
+                    version=str(codeql_value.get("version", "")),
+                    cli_sha256=str(codeql_value.get("cli_sha256", "")),
+                    extractor_sha256=str(codeql_value.get("extractor_sha256", "")),
+                    license_sha256=str(codeql_value.get("license_sha256", "")),
+                    query_pack=str(codeql_value.get("query_pack", "")),
+                    query_pack_version=str(codeql_value.get("query_pack_version", "")),
+                    query_suite=str(codeql_value.get("query_suite", "")),
+                    query_suite_sha256=str(codeql_value.get("query_suite_sha256", "")),
+                    query_pack_sha256=str(codeql_value.get("query_pack_sha256", "")),
+                    query_lock_sha256=str(codeql_value.get("query_lock_sha256", "")),
+                    database_timeout_seconds=int(codeql_value.get("database_timeout_seconds", 0)),
+                    query_timeout_seconds=int(codeql_value.get("query_timeout_seconds", 0)),
+                    output_bytes=int(codeql_value.get("output_bytes", 0)),
+                    database_file_limit=int(codeql_value.get("database_file_limit", 0)),
+                    database_bytes_limit=int(codeql_value.get("database_bytes_limit", 0)),
+                    sarif_bytes_limit=int(codeql_value.get("sarif_bytes_limit", 0)),
+                    result_limit=int(codeql_value.get("result_limit", 0)),
+                    threads=int(codeql_value.get("threads", 0)),
+                    ram_mb=int(codeql_value.get("ram_mb", 0)),
+                    max_paths=int(codeql_value.get("max_paths", 0)),
                 ),
             )
         jobs[job_id] = JobConfig(

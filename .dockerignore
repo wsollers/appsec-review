@@ -15,4 +15,5 @@ containers/**
 !containers/tools/*/
 containers/tools/*/**
 !containers/tools/*/tool.toml
+!containers/tools/codeql-cpp/**
 !containers/tools/tree-sitter/assets.lock.json

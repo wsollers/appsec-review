@@ -11,10 +11,25 @@ from typing import Any, Mapping
 
 from appsec_review.config import AppConfig
 from appsec_review.observability import EventLog, PipelineLog
+from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.runtime.units import UnitContext, UnitExecutor
 from appsec_review.storage import RunStore, FileLock, LockUnavailable, atomic_bytes, atomic_json, file_sha256
+
+
+def _accepted_retrieval_manifest(run_root: Path, manifests: list[Mapping[str, Any]]):
+    selected = None
+    for manifest in manifests:
+        manifest_path = (run_root / str(manifest.get("path", ""))).resolve()
+        if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file():
+            raise ValueError("index manifest path escapes run or is unavailable")
+        if file_sha256(manifest_path) != manifest.get("sha256"):
+            raise ValueError("index manifest artifact hash mismatch")
+        document = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if document.get("schema") == RETRIEVAL_MANIFEST_SCHEMA:
+            selected = manifest, manifest_path
+    return selected
 
 
 class JobRunner:
@@ -427,13 +442,9 @@ class JobRunner:
         handoff_hash = file_sha256(handoff_path)
         manifests = [output["index_manifest"] for output in result.get("outputs", {}).values()
                      if isinstance(output, Mapping) and isinstance(output.get("index_manifest"), Mapping)]
-        if manifests:
-            manifest = manifests[-1]
-            manifest_path = (context.run_root / str(manifest.get("path", ""))).resolve()
-            if context.run_root.resolve() not in manifest_path.parents or not manifest_path.is_file():
-                raise ValueError("index manifest path escapes run or is unavailable")
-            if file_sha256(manifest_path) != manifest.get("sha256"):
-                raise ValueError("index manifest artifact hash mismatch")
+        accepted_manifest = _accepted_retrieval_manifest(context.run_root, manifests)
+        if accepted_manifest is not None:
+            manifest, manifest_path = accepted_manifest
             atomic_json(context.run_root / "data" / "indices" / "accepted.json", {
                 "schema": "appsec-review/accepted-index-set/1", "run_id": context.run_id,
                 "handoff_path": handoff_path.relative_to(context.run_root).as_posix(),
@@ -621,13 +632,9 @@ class JobRunner:
             handoff_hash = file_sha256(handoff_path)
             manifests = [output["index_manifest"] for output in result.get("outputs", {}).values()
                          if isinstance(output, Mapping) and isinstance(output.get("index_manifest"), Mapping)]
-            if manifests:
-                manifest = manifests[-1]
-                manifest_path = (run_root / str(manifest.get("path", ""))).resolve()
-                if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file():
-                    raise ValueError("index manifest path escapes run or is unavailable")
-                if file_sha256(manifest_path) != manifest.get("sha256"):
-                    raise ValueError("index manifest artifact hash mismatch")
+            accepted_manifest = _accepted_retrieval_manifest(run_root, manifests)
+            if accepted_manifest is not None:
+                manifest, manifest_path = accepted_manifest
                 atomic_json(run_root / "data" / "indices" / "accepted.json", {
                     "schema": "appsec-review/accepted-index-set/1",
                     "run_id": run_id,

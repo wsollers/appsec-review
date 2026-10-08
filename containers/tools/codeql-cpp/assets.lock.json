@@ -1,0 +1,23 @@
+{
+  "schema": "appsec-review/codeql-assets-lock/1",
+  "source_image": {
+    "tag": "audit-codeql:local",
+    "image_id": "sha256:13b904d24be951043e641cd6125d4c1eb1f750040a61d005c00a94a0dee4f1b3"
+  },
+  "codeql": {
+    "version": "2.27.0",
+    "commit": "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9",
+    "cli_sha256": "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a",
+    "cpp_extractor_sha256": "ee39289ecb90ea1f2b8032d754e550fdd0f3aa2b138b445f84976a7d55ac93e6",
+    "license_sha256": "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
+  },
+  "query_pack": {
+    "name": "codeql/cpp-queries",
+    "version": "1.8.3",
+    "suite": "codeql-suites/cpp-security-and-quality.qls",
+    "suite_sha256": "d4efa116f3c14d801ead8a079a0a45e3c8804a0457962c8825b161815adc34c5",
+    "qlpack_sha256": "9d2e02cd1c0bac83663f0699eb390c06fc4b30fc817c076b53d76552a021cb6d",
+    "lock_sha256": "7b14e41b5c986e17294b058e3ce604fc1ac70c51de2871452bb762819bf35343"
+  },
+  "acquisition": "operator-provided licensed local image; no payload is committed"
+}

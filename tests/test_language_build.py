@@ -282,9 +282,14 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
         executor_factory=lambda unit, profile: NativeExecutor([]))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     outcome = GraphRunner(config, [build_cpp(
-        executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # CodeQL and Joern stay truthfully blocked.
+        executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root),
+        codeql_runner=lambda unit, case_id, catalog: {
+            "terminal_status": "COMPLETED_WITH_GAPS",
+            "gaps": ["fixture does not execute CodeQL"],
+            "database_identity": "fixture", "observation_count": 0,
+        })]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # Joern and the injected CodeQL fixture are gaps.
     result_path = Path(outcome["jobs"]["job_cpp_compiled_analysis"]["attempt_root"]) / "result.json"
     outputs = json.loads(result_path.read_text(encoding="utf-8"))["outputs"]
     assert outputs["catalog.projects"]["project_count"] == 1

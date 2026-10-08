@@ -17,11 +17,13 @@ accepted generic language-build handoff
   -> verified composite manifest and accepted handoff
 ```
 
-The job never reruns CMake, Make, Autotools, a compiler, or a linker. Those actions belong to the
-generic native executor described in [`language-build.md`](language-build.md). This job verifies the
-generic workspace file set and hashes, then uses `tool-native-cpp` only for bounded AST, IR, and
-binary/symbol extraction. The pipeline never runs target executables or tests. The run-owned source
-copy is hashed back to the accepted target source before use.
+The generic native executor described in [`language-build.md`](language-build.md) owns the accepted
+build. The compiled-analysis job does not rerun that build for AST, IR, Infer, Joern, or binary
+analysis. CodeQL is the intentional exception: its database step traces the exact accepted
+configure/build argv, working directories, and environment in a fresh run-owned workspace. It
+layers the pinned CodeQL payload onto the accepted project build image, preserving that image's
+toolchain and dependency closure. The pipeline never runs target executables or tests. Every
+run-owned source copy is hashed back to the accepted target source before use.
 
 CMake supplies `compile_commands.json` directly. Other native systems must supply an accepted
 compile database or an equivalent future generic capture adapter; missing capture is a named gap.
@@ -65,15 +67,33 @@ weakness labels, or local defect map is present in the scan root.
 
 ## CodeQL decision
 
-As checked on 2026-10-08, the [GitHub CodeQL terms](https://github.com/github/codeql-cli-binaries/blob/main/LICENSE.md)
-license the CLI per user and restrict use outside the expressly listed open-source, research,
-demonstration, and query-testing cases; commercial GitHub Code Security licensing changes some of
-those restrictions. The [official CLI documentation](https://docs.github.com/en/code-security/concepts/code-scanning/codeql/codeql-cli)
-also states that private organization repositories require the applicable GitHub Code Security
-entitlement. This environment exposes no CodeQL CLI/bundle, pinned query pack, or relevant
-entitlement signal. The producer therefore emits a precise `BLOCKED` coverage shard and does not
-download, install, execute, or imply authorization. Supplying an approved entitlement and a
-hash-pinned offline bundle/query closure is required to enable it.
+CodeQL C/C++ is enabled from a separately supplied licensed local image. No proprietary payload is
+committed. `containers/tools/codeql-cpp/assets.lock.json` pins the source image ID, CodeQL CLI and
+C/C++ extractor hashes, shipped license hash, query-pack metadata, and suite. Runtime validation
+fails closed if any configured identity differs from that lock or if the local image has changed.
+
+For each accepted native project, the runtime creates a minimal derived image from two immutable
+inputs: the project's accepted build image and the pinned CodeQL source image. The build is
+offline, adds only `/opt/codeql` and the bounded replay driver, preserves the accepted numeric
+non-root user, and records the resulting image identity. Database creation uses `database init`,
+one `trace-command` per protected accepted command, and `database finalize`; protected argv never
+appears in Docker command metadata. The database fingerprint binds the target snapshot, source
+mapping, recipe, dependency hashes, derived build image/toolchain, protected command hashes, CLI,
+extractor, and resource bounds.
+
+Query execution uses `codeql/cpp-queries@1.8.3` and
+`codeql-suites/cpp-security-and-quality.qls` from the pinned offline bundle. It runs against a
+disposable database copy so query evaluation cannot mutate the retained database checkpoint. The
+query fingerprint separately binds the retained database tree, query pack, suite, SARIF limits,
+and evaluator bounds. Changing the suite or pack reruns queries without recompiling the database.
+
+Bounded SARIF is normalized into the ordinary `observations` retrieval shard. Rule metadata,
+producer level, exact source locations, partial fingerprints, and data/control-flow steps are
+preserved where present. Flow steps support their observation through explicit `SUPPORTS`
+relations; observations and steps resolve to accepted source entities through `OBSERVED_AT`.
+Producer levels remain producer metadata, not final severity. Unmapped or ambiguous locations,
+timeouts, OOMs, invalid SARIF, and truncated or over-bound output are named coverage gaps. A
+successful suite with zero observations is also a gap, never a clean-target classification.
 
 ## Joern decision
 
@@ -95,6 +115,8 @@ observations are evidence, not adjudicated findings.
 
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
 reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
-executor, capture, and handoff identities. A CodeQL query-pack change affects CodeQL fingerprints
-only; an Infer image or adapter change affects Infer fingerprints only; a compile identity invalidates the dependent
-compiled, AST, IR, Infer, CodeQL, Joern, and binary branches.
+executor, capture, and handoff identities. CodeQL database and query checkpoints are independent:
+a query-pack or suite change invalidates only the query and observation shard, while a source,
+recipe, dependency, protected-command, build-image, CLI, or extractor change invalidates the
+database and query. An Infer image or adapter change affects Infer fingerprints only; a compile
+identity invalidates the dependent compiled, AST, IR, Infer, CodeQL, Joern, and binary branches.

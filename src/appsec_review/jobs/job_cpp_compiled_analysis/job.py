@@ -10,30 +10,33 @@ import re
 import shlex
 import shutil
 from typing import Any
+from urllib.parse import unquote, urlparse
 
+from appsec_review.config import CppCompiledAnalysisSettings
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
-    RelationRecord, SourceLocation, index_fingerprint, write_manifest,
+    RelationRecord, SourceLocation, index_fingerprint, sanitize_producer_data, write_manifest,
 )
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
+from .codeql import (
+    CodeQLExecutor, CodeQLImageResolver, database_identity as codeql_database_identity,
+    load_sarif, query_identity as codeql_query_identity, tree_manifest, validate_assets,
+)
+
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
 BRANCHES = ("compiled", "ast", "ir", "infer", "codeql", "joern", "binary")
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
-                   "ir": "llvm-ir/2", "codeql": "codeql-cpp-adapter/2",
+                   "ir": "llvm-ir/2", "codeql": "codeql-cpp-adapter/3",
                    "infer": "infer-cpp-adapter/1", "joern": "joern-c2cpg-adapter/2",
                    "binary": "elf-symbols/2"}
-CODEQL_GAP = (
-    "BLOCKED: CodeQL C/C++ assets and an applicable user/environment entitlement were not supplied; "
-    "no database or query suite was executed and no CodeQL coverage is claimed."
-)
 JOERN_GAP = (
     "BLOCKED: a hash-pinned Joern/c2cpg distribution with reviewed license provenance is not "
     "available in the tool catalog; no CPG coverage is claimed."
@@ -181,6 +184,229 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     if report_path.is_file() and not report_path.is_symlink():
         value["report"] = _artifact(unit.job.run_root, report_path)
     return value
+
+
+def _codeql_settings(unit: UnitContext):
+    typed = unit.job.config.typed_settings
+    if not isinstance(typed, CppCompiledAnalysisSettings):
+        raise ValueError("typed C++ compiled-analysis settings are required")
+    validate_assets(unit.job.repository_root, typed.codeql)
+    return typed.codeql
+
+
+def _accepted_codeql_replay(unit: UnitContext, catalog: Mapping[str, Any]) -> Mapping[str, Any]:
+    receipt = catalog["build_receipt"]
+    recipe = receipt.get("recipe")
+    image = receipt.get("image")
+    if not isinstance(recipe, Mapping) or not isinstance(image, Mapping):
+        raise ValueError("accepted CodeQL build recipe or image is unavailable")
+    expected_count = len(recipe.get("configure_commands", ())) + len(recipe.get("build_commands", ()))
+    commands = []
+    protected_identities = []
+    accepted = [command for command in receipt.get("commands", ())
+                if command.get("role") in {"configure", "build"}]
+    if len(accepted) != expected_count or not accepted:
+        raise ValueError("accepted CodeQL build command set is incomplete")
+    for ordinal, command in enumerate(accepted, 1):
+        identity = command.get("protected_argv")
+        if not isinstance(identity, Mapping):
+            raise ValueError("accepted CodeQL build command lacks protected argv")
+        path = (unit.job.run_root / str(identity.get("path", ""))).resolve()
+        if (unit.job.run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink() or
+                file_sha256(path) != identity.get("sha256")):
+            raise ValueError("accepted CodeQL protected build command changed")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        argv, environment = document.get("argv"), document.get("environment")
+        if (document.get("schema") != "appsec-review/protected-build-command/2" or
+                not isinstance(argv, list) or not argv or not isinstance(environment, Mapping)):
+            raise ValueError("accepted CodeQL protected build command is invalid")
+        argv_sha = hashlib.sha256(canonical_json(argv)).hexdigest()
+        if (argv_sha != command.get("argv_sha256") or
+                document.get("working_directory") != command.get("working_directory") or
+                command.get("image_id") != image.get("image_id")):
+            raise ValueError("accepted CodeQL build command identity mismatch")
+        commands.append({"ordinal": ordinal, "argv": argv, "argv_sha256": argv_sha,
+                         "working_directory": document["working_directory"],
+                         "environment": dict(environment), "role": command["role"]})
+        protected_identities.append({"path": identity["path"], "sha256": identity["sha256"],
+                                     "argv_sha256": argv_sha})
+    return {"schema": "appsec-review/codeql-build-replay/1", "commands": commands,
+            "recipe_identity": receipt["recipe_identity"], "build_image_id": image["image_id"],
+            "dependency_hashes": dict(image.get("dependency_hashes", {})),
+            "protected_commands": protected_identities}
+
+
+def _stage_codeql_workspace(unit: UnitContext, catalog: Mapping[str, Any], root: Path) -> None:
+    workspace = root / "workspace"
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    workspace.mkdir(parents=True)
+    target = (unit.job.target_root or Path()).resolve(strict=True)
+    for record in catalog["mapping"]["files"]:
+        logical = PurePosixPath(str(record["target_path"]))
+        if logical.is_absolute() or ".." in logical.parts:
+            raise ValueError("CodeQL source mapping is invalid")
+        source = (target / Path(*logical.parts)).resolve(strict=True)
+        if target not in source.parents or not source.is_file() or source.is_symlink():
+            raise ValueError("CodeQL accepted source escaped the target")
+        if file_sha256(source) != record["sha256"]:
+            raise ValueError("CodeQL accepted source identity changed")
+        destination = workspace / Path(*logical.parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    _make_codeql_directories_writable(workspace)
+
+
+def _make_codeql_directories_writable(root: Path, *, writable_files: bool = False) -> None:
+    # The staging process and the hardened analysis container intentionally use
+    # different users.  Every copied directory must permit the isolated
+    # container user to create outputs.  The staged source tree keeps files
+    # non-writable; the disposable database copy permits file mutation because
+    # CodeQL maintains cache locks there while the retained database stays intact.
+    for directory in [root, *(path for path in root.rglob("*") if path.is_dir())]:
+        directory.chmod(0o777)
+    if writable_files:
+        for path in root.rglob("*"):
+            if path.is_file() and not path.is_symlink():
+                path.chmod(0o666)
+
+
+def _codeql_internal_checkpoint(path: Path, identity: str) -> Mapping[str, Any] | None:
+    if not path.is_file() or path.is_symlink():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    return value if value.get("identity") == identity and value.get("terminal_status") == "SUCCEEDED" else None
+
+
+def _codeql_execution_artifact(unit: UnitContext, root: Path, action: str) -> Mapping[str, Any]:
+    path = root / "executions" / action / "receipt.json"
+    return _artifact(unit.job.run_root, path)
+
+
+def _run_codeql(unit: UnitContext, case_id: str, catalog: Mapping[str, Any]) -> Mapping[str, Any]:
+    settings = _codeql_settings(unit)
+    case_root = _case_root(unit, case_id)
+    root = case_root / "analysis" / "codeql"
+    root.mkdir(parents=True, exist_ok=True)
+    replay = _accepted_codeql_replay(unit, catalog)
+    asset_lock = validate_assets(unit.job.repository_root, settings)
+    image_value = catalog["build_receipt"]["image"]
+    resolver = CodeQLImageResolver(
+        repository_root=unit.job.repository_root, metadata_root=unit.job.metadata_root,
+        settings=settings, timeout_seconds=settings.database_timeout_seconds,
+        output_bytes=settings.output_bytes,
+    )
+    image, image_stdout, image_stderr = resolver.resolve(
+        build_image_tag=str(image_value["image_tag"]), build_image_id=str(image_value["image_id"]),
+        runtime_user=str(image_value["user"]),
+    )
+    image_log = unit.unit_root / f"{case_id}-codeql-image"
+    image_log.mkdir(parents=True, exist_ok=True)
+    (image_log / "stdout.bin").write_bytes(image_stdout)
+    (image_log / "stderr.bin").write_bytes(image_stderr)
+    image_manifest = _json_artifact(unit, image_log / "identity.json", asdict(image))
+    executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
+
+    database_identity = codeql_database_identity(
+        settings, target_snapshot=unit.job.source_fingerprint,
+        case_snapshot=catalog["mapping"]["case_snapshot"], replay=replay,
+        image_identity=image.identity,
+    )
+    database_checkpoint_path = case_root / "checkpoints" / "codeql-database.json"
+    database_checkpoint = _codeql_internal_checkpoint(database_checkpoint_path, database_identity)
+    database_manifest_path = root / "database-manifest.json"
+    database_path = root / "database"
+    database_reused = False
+    if database_checkpoint is not None and database_manifest_path.is_file() and database_path.is_dir():
+        retained_manifest = json.loads(database_manifest_path.read_text(encoding="utf-8"))
+        actual_manifest = tree_manifest(database_path, file_limit=settings.database_file_limit,
+                                        bytes_limit=settings.database_bytes_limit)
+        database_reused = retained_manifest == actual_manifest
+    if not database_reused:
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir(parents=True)
+        _stage_codeql_workspace(unit, catalog, root)
+        atomic_json(root / "protected-replay.json", replay)
+        try:
+            # The Dagster process and the hardened CodeQL container deliberately run as
+            # different users.  The replay contains no secrets; make it immutable but
+            # readable to the non-root container user that must validate and execute it.
+            (root / "protected-replay.json").chmod(0o444)
+        except OSError:
+            pass
+        result = executor.execute("database", (
+            "--replay", "protected-replay.json", "--workspace", "workspace",
+            "--database", "database", "--threads", str(settings.threads),
+            "--ram", str(settings.ram_mb),
+        ), scratch_root=root)
+        database_execution = _codeql_execution_artifact(unit, root, "database")
+        if result.timed_out or result.exit_code != 0:
+            return {"terminal_status": "COMPLETED_WITH_GAPS", "gaps": [
+                "CodeQL database creation timed out" if result.timed_out else
+                f"CodeQL database creation exited {result.exit_code}"
+            ], "database_identity": database_identity, "database_reused": False,
+                "database_execution": database_execution, "image": image_manifest,
+                "observation_count": 0}
+        manifest = tree_manifest(database_path, file_limit=settings.database_file_limit,
+                                 bytes_limit=settings.database_bytes_limit)
+        atomic_json(database_manifest_path, manifest)
+        database_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(database_checkpoint_path, {"identity": database_identity,
+                    "terminal_status": "SUCCEEDED", "manifest_sha256": file_sha256(database_manifest_path)})
+    database_manifest = json.loads(database_manifest_path.read_text(encoding="utf-8"))
+    database_manifest_artifact = _artifact(unit.job.run_root, database_manifest_path)
+
+    query_identity = codeql_query_identity(
+        settings, database_tree_sha256=database_manifest["tree_sha256"], image_id=image.image_id)
+    query_checkpoint_path = case_root / "checkpoints" / "codeql-query.json"
+    sarif_path = root / "sarif" / "results.sarif"
+    query_checkpoint = _codeql_internal_checkpoint(query_checkpoint_path, query_identity)
+    query_reused = False
+    if query_checkpoint is not None and sarif_path.is_file() and not sarif_path.is_symlink():
+        query_reused = file_sha256(sarif_path) == query_checkpoint.get("sarif_sha256")
+    query_execution = None
+    if not query_reused:
+        if sarif_path.parent.exists():
+            shutil.rmtree(sarif_path.parent)
+        query_database = root / "query-database"
+        if query_database.exists():
+            shutil.rmtree(query_database)
+        shutil.copytree(database_path, query_database)
+        _make_codeql_directories_writable(query_database, writable_files=True)
+        result = executor.execute("query", (
+            "--database", "query-database", "--output", "sarif/results.sarif",
+            "--pack", settings.query_pack, "--pack-version", settings.query_pack_version,
+            "--suite", settings.query_suite, "--threads", str(settings.threads),
+            "--ram", str(settings.ram_mb), "--max-paths", str(settings.max_paths),
+        ), scratch_root=root)
+        query_execution = _codeql_execution_artifact(unit, root, "query")
+        if result.timed_out or result.exit_code != 0:
+            return {"terminal_status": "COMPLETED_WITH_GAPS", "gaps": [
+                "CodeQL query execution timed out" if result.timed_out else
+                f"CodeQL query execution exited {result.exit_code}"
+            ], "database_identity": database_identity, "database_reused": database_reused,
+                "database_manifest": database_manifest_artifact, "query_identity": query_identity,
+                "query_reused": False, "query_execution": query_execution,
+                "image": image_manifest, "observation_count": 0}
+        load_sarif(sarif_path, bytes_limit=settings.sarif_bytes_limit,
+                   result_limit=settings.result_limit)
+        shutil.rmtree(query_database)
+        query_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(query_checkpoint_path, {"identity": query_identity, "terminal_status": "SUCCEEDED",
+                    "sarif_sha256": file_sha256(sarif_path)})
+    sarif = load_sarif(sarif_path, bytes_limit=settings.sarif_bytes_limit,
+                       result_limit=settings.result_limit)
+    return {"terminal_status": "SUCCEEDED", "gaps": [], "database_identity": database_identity,
+            "database_reused": database_reused, "database_manifest": database_manifest_artifact,
+            "database_manifest_value": database_manifest, "query_identity": query_identity,
+            "query_reused": query_reused, "query_execution": query_execution,
+            "sarif": _artifact(unit.job.run_root, sarif_path), "sarif_value": sarif,
+            "image": image_manifest, "image_value": asdict(image),
+            "asset_lock_sha256": asset_lock["sha256"]}
 
 
 def _source_files(root: Path) -> list[Path]:
@@ -361,7 +587,8 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
         producer_artifacts=artifacts, tool_identity=tool, parser_identity=f"cpp-{branch}-parser/2",
         normalizer_identity=f"cpp-{branch}-normalizer/3", mapping_identity="cpp-source-mapping/2")
     shard = f"cpp-{case_id}-{branch}"
-    path = unit.job.run_root / "data" / "indices" / name / f"{fingerprint}-{shard}.sqlite"
+    physical_shard = hashlib.sha256(shard.encode()).hexdigest()[:16]
+    path = unit.job.run_root / "data" / "indices" / name / f"{fingerprint}-{physical_shard}.sqlite"
     return IndexBuilder(path, name=name, fingerprint=fingerprint,
                         target_snapshot=unit.job.source_fingerprint, shard_id=shard), path, fingerprint, shard
 
@@ -614,6 +841,205 @@ def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execu
     return result
 
 
+def _sarif_target_path(uri: str, mapping: Mapping[str, Any]) -> str | None:
+    raw = unquote(urlparse(uri).path if uri.startswith("file:") else uri).replace("\\", "/")
+    for prefix in ("/scratch/workspace/", "scratch/workspace/"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    raw = raw[2:] if raw.startswith("./") else raw
+    logical = PurePosixPath(raw)
+    if not logical.parts or logical.is_absolute() or ".." in logical.parts:
+        return None
+    raw = logical.as_posix()
+    exact = {str(item["target_path"]): str(item["target_path"]) for item in mapping["files"]}
+    if raw in exact:
+        return raw
+    root = str(mapping["root"]).rstrip("/")
+    candidate = f"{root}/{raw}" if not raw.startswith(root + "/") else raw
+    if candidate in exact:
+        return candidate
+    suffix_matches = [path for path in exact if raw and path.endswith("/" + raw)]
+    return suffix_matches[0] if len(suffix_matches) == 1 else None
+
+
+def _sarif_source_location(unit: UnitContext, mapping: Mapping[str, Any], physical: Mapping[str, Any]) -> tuple[str, SourceLocation] | None:
+    artifact = physical.get("artifactLocation")
+    if not isinstance(artifact, Mapping) or not isinstance(artifact.get("uri"), str):
+        return None
+    target_path = _sarif_target_path(str(artifact["uri"]), mapping)
+    record = next((item for item in mapping["files"] if item["target_path"] == target_path), None)
+    if record is None:
+        return None
+    region = physical.get("region") if isinstance(physical.get("region"), Mapping) else {}
+    try:
+        start_line = max(1, int(region.get("startLine", 1)))
+        end_line = max(start_line, int(region.get("endLine", start_line)))
+        start_column = max(1, int(region.get("startColumn", 1)))
+        end_column = max(1, int(region.get("endColumn", start_column)))
+    except (TypeError, ValueError):
+        return None
+    source = (unit.job.target_root or Path()) / Path(*PurePosixPath(target_path).parts)
+    data = source.read_bytes()
+    return target_path, SourceLocation(
+        unit.job.source_fingerprint, target_path, str(record["sha256"]), 0, len(data),
+        start_line, end_line, start_column, end_column,
+        sanitize_producer_data({"artifactLocation": artifact, "region": region}),
+        "codeql-sarif-exact-path", 1.0,
+    )
+
+
+def _sarif_rule_map(run: Mapping[str, Any]) -> Mapping[str, Mapping[str, Any]]:
+    tool = run.get("tool") if isinstance(run.get("tool"), Mapping) else {}
+    drivers = []
+    if isinstance(tool.get("driver"), Mapping):
+        drivers.append(tool["driver"])
+    drivers.extend(item for item in tool.get("extensions", ()) if isinstance(item, Mapping))
+    result = {}
+    for driver in drivers:
+        for rule in driver.get("rules", ()):
+            if isinstance(rule, Mapping) and isinstance(rule.get("id"), str):
+                result[str(rule["id"])] = rule
+    return result
+
+
+def _codeql_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
+                  execution: Mapping[str, Any]) -> Mapping[str, Any]:
+    gaps = list(execution.get("gaps", ()))
+    artifacts = [value for key, value in execution.items()
+                 if key in {"database_manifest", "sarif", "image", "database_execution", "query_execution"}
+                 and isinstance(value, Mapping) and isinstance(value.get("path"), str)]
+    tool_identity = {
+        "tool": "codeql", "database_identity": execution.get("database_identity"),
+        "query_identity": execution.get("query_identity"),
+        "image": execution.get("image_value", {}).get("image_id"),
+    }
+    builder, path, fingerprint, shard = _new_builder(
+        unit, "observations", case_id, "codeql", artifacts, gaps, tool_identity,
+        catalog["mapping"]["case_snapshot"],
+    )
+    if execution.get("terminal_status") != "SUCCEEDED":
+        evidence = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT,
+            catalog["mapping"]["case_snapshot"],
+            {"case": case_id, "producer": "codeql", "database": execution.get("database_identity"),
+             "query": execution.get("query_identity")})
+        builder.add_entity(EntityRecord(evidence, f"codeql:{case_id}", "CodeQL execution",
+            "; ".join(gaps), {"status": "PRODUCER_FAILED", "observation_count": 0,
+                              "project_id": catalog["mapping"]["project_id"], "shard_id": shard}))
+        builder.add_coverage("codeql", "unavailable", "; ".join(gaps[:10]))
+        result = dict(_finish_index(unit, builder, path, fingerprint, shard,
+                                    "observations", "codeql", gaps))
+        result.update(execution)
+        result["observation_count"] = 0
+        return result
+
+    mapping = catalog["mapping"]
+    sarif = execution["sarif_value"]
+    source_entities: dict[str, str] = {}
+    observation_count = support_count = 0
+    for run_index, run in enumerate(sarif["runs"]):
+        rules = _sarif_rule_map(run)
+        for result_index, record in enumerate(run.get("results", ())):
+            if not isinstance(record, Mapping):
+                gaps.append(f"CodeQL SARIF result {run_index}:{result_index} was not an object")
+                continue
+            physical_locations = []
+            for item in record.get("locations", ()):
+                if isinstance(item, Mapping) and isinstance(item.get("physicalLocation"), Mapping):
+                    physical_locations.append(item["physicalLocation"])
+            resolved = [_sarif_source_location(unit, mapping, item) for item in physical_locations]
+            resolved = [item for item in resolved if item is not None]
+            if not resolved:
+                gaps.append(f"CodeQL result {run_index}:{result_index} had no uniquely mapped source location")
+                continue
+            target_path, location = resolved[0]
+            if target_path not in source_entities:
+                source_record = next(item for item in mapping["files"] if item["target_path"] == target_path)
+                source = LogicalIdentity.derive(EntityKind.SOURCE_FILE, mapping["case_snapshot"],
+                    {"project_id": mapping["project_id"], "path": target_path,
+                     "sha256": source_record["sha256"]})
+                source_entities[target_path] = source.value
+                builder.add_entity(EntityRecord(source, target_path, PurePosixPath(target_path).name,
+                    target_path, {**source_record, "project_id": mapping["project_id"], "shard_id": shard},
+                    _location(unit.job.source_fingerprint, unit.job.target_root or Path(), target_path)))
+            rule_id = str(record.get("ruleId") or "codeql/unknown")
+            message_value = record.get("message") if isinstance(record.get("message"), Mapping) else {}
+            message = str(message_value.get("text") or message_value.get("markdown") or rule_id)[:8192]
+            rule = rules.get(rule_id, {})
+            observation = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, mapping["case_snapshot"], {
+                "producer": "codeql", "query_identity": execution["query_identity"],
+                "rule_id": rule_id, "path": target_path, "line": location.start_line,
+                "column": location.start_column, "partial_fingerprints": record.get("partialFingerprints", {}),
+                "ordinal": result_index,
+            })
+            payload = sanitize_producer_data({
+                "producer": "codeql", "rule_id": rule_id, "producer_level": record.get("level"),
+                "message": message, "rule": rule, "properties": record.get("properties", {}),
+                "partial_fingerprints": record.get("partialFingerprints", {}),
+                "project_id": mapping["project_id"], "query_identity": execution["query_identity"],
+                "database_identity": execution["database_identity"], "shard_id": shard,
+            })
+            builder.add_entity(EntityRecord(observation, f"{run_index}:{result_index}", rule_id,
+                                             message, payload, location))
+            builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation.value,
+                                                source_entities[target_path], True, 1.0))
+            observation_count += 1
+            flow_ordinal = 0
+            for code_flow in record.get("codeFlows", ()):
+                if not isinstance(code_flow, Mapping):
+                    continue
+                for thread_flow in code_flow.get("threadFlows", ()):
+                    if not isinstance(thread_flow, Mapping):
+                        continue
+                    for step in thread_flow.get("locations", ()):
+                        step_location = step.get("location", {}) if isinstance(step, Mapping) else {}
+                        physical = step_location.get("physicalLocation") if isinstance(step_location, Mapping) else None
+                        resolved_step = (_sarif_source_location(unit, mapping, physical)
+                                         if isinstance(physical, Mapping) else None)
+                        if resolved_step is None:
+                            gaps.append(f"CodeQL flow step for result {run_index}:{result_index} was unmapped")
+                            continue
+                        step_path, step_source_location = resolved_step
+                        if step_path not in source_entities:
+                            source_record = next(item for item in mapping["files"] if item["target_path"] == step_path)
+                            source = LogicalIdentity.derive(EntityKind.SOURCE_FILE, mapping["case_snapshot"],
+                                {"project_id": mapping["project_id"], "path": step_path,
+                                 "sha256": source_record["sha256"]})
+                            source_entities[step_path] = source.value
+                            builder.add_entity(EntityRecord(source, step_path, PurePosixPath(step_path).name,
+                                step_path, {**source_record, "project_id": mapping["project_id"],
+                                            "shard_id": shard},
+                                _location(unit.job.source_fingerprint, unit.job.target_root or Path(), step_path)))
+                        flow_ordinal += 1
+                        span = LogicalIdentity.derive(EntityKind.SOURCE_SPAN, mapping["case_snapshot"], {
+                            "producer": "codeql", "observation": observation.value,
+                            "flow_ordinal": flow_ordinal, "path": step_path,
+                            "line": step_source_location.start_line,
+                            "column": step_source_location.start_column,
+                        })
+                        builder.add_entity(EntityRecord(span, f"{run_index}:{result_index}:{flow_ordinal}",
+                            f"CodeQL flow step {flow_ordinal}",
+                            str(step_location.get("message", {}).get("text", "flow step"))[:8192],
+                            {"producer": "codeql", "project_id": mapping["project_id"],
+                             "shard_id": shard}, step_source_location))
+                        builder.add_relation(RelationRecord(RelationKind.SUPPORTS, span.value,
+                                                            observation.value, True, 1.0))
+                        builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, span.value,
+                                                            source_entities[step_path], True, 1.0))
+                        support_count += 1
+    if observation_count == 0:
+        gaps.append("CodeQL query suite completed with zero observations; this is not a clean classification")
+    builder.add_coverage("codeql-database", "complete",
+                         f"replayed {len(_accepted_codeql_replay(unit, catalog)['commands'])} accepted build commands")
+    builder.add_coverage("codeql-query-suite", "partial" if gaps else "complete",
+                         "; ".join(gaps[:10]) or None)
+    result = dict(_finish_index(unit, builder, path, fingerprint, shard,
+                                "observations", "codeql", list(dict.fromkeys(gaps))))
+    result.update({key: value for key, value in execution.items() if key not in {"sarif_value"}})
+    result.update(observation_count=observation_count, support_count=support_count)
+    return result
+
+
 def _blocked_index(unit: UnitContext, case_id: str, branch: str, catalog: Mapping[str, Any], gap: str) -> Mapping[str, Any]:
     builder, path, fingerprint, shard = _new_builder(unit, "observations", case_id, branch,
         [catalog["compile_database"]], [gap], {"tool": branch, "availability": "blocked"},
@@ -789,7 +1215,7 @@ def _validate_config(context, _result) -> None:
         raise ValueError("C++ acceptance task configuration is invalid")
 
 
-def build_job(*, executor_factory=None) -> Job:
+def build_job(*, executor_factory=None, codeql_runner=None) -> Job:
 
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_language_build(unit.job.run_root)
@@ -987,6 +1413,19 @@ def build_job(*, executor_factory=None) -> Job:
                     "compile_database": cataloged["compile_database"]["sha256"],
                     "branch_identity": BRANCH_IDENTITY[name],
                 }
+                if name == "codeql":
+                    if codeql_runner is None:
+                        settings = _codeql_settings(unit)
+                        replay = _accepted_codeql_replay(unit, cataloged)
+                        identity_values.update({
+                            "codeql_settings": asdict(settings),
+                            "recipe_identity": replay["recipe_identity"],
+                            "build_image_id": replay["build_image_id"],
+                            "dependency_hashes": replay["dependency_hashes"],
+                            "protected_commands": replay["protected_commands"],
+                        })
+                    else:
+                        identity_values["codeql_runner"] = "injected-test-runner"
                 if name != "infer":
                     identity_values.update({
                         "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
@@ -995,7 +1434,10 @@ def build_job(*, executor_factory=None) -> Job:
                 identity = _checkpoint_identity(
                     unit, case_id, f"branch-{name}", identity_values,
                     tool_id="tool-infer" if name == "infer" else "tool-native-cpp")
-                reused = _load_checkpoint(unit, case_id, f"branch-{name}", identity)
+                # CodeQL owns independent database/query checkpoints and must validate the retained
+                # database tree before a branch result can be reused.
+                reused = (None if name == "codeql" else
+                          _load_checkpoint(unit, case_id, f"branch-{name}", identity))
                 if reused is not None:
                     projects[case_id] = reused
                     continue
@@ -1005,7 +1447,9 @@ def build_job(*, executor_factory=None) -> Job:
                     execution = _run_infer(unit, case_id, cataloged, executor_factory)
                     result = _infer_index(unit, case_id, cataloged, execution)
                 elif name == "codeql":
-                    result = _blocked_index(unit, case_id, name, cataloged, CODEQL_GAP)
+                    execution = (codeql_runner(unit, case_id, cataloged) if codeql_runner is not None else
+                                 _run_codeql(unit, case_id, cataloged))
+                    result = _codeql_index(unit, case_id, cataloged, execution)
                 elif name == "joern":
                     result = _blocked_index(unit, case_id, name, cataloged, JOERN_GAP)
                 else:
