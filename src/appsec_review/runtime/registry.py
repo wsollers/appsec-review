@@ -25,6 +25,11 @@ class JobRegistry:
             raise ValueError(f"registered job id mismatch: {job.job_id} != {job_id}")
         return job
 
+    def job_ids(self) -> tuple[str, ...]:
+        """Return registered semantic job ids in deterministic order."""
+
+        return tuple(sorted(self._factories))
+
 
 def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_third_party_data_sync import build_job

@@ -1,0 +1,10 @@
+.git
+old
+runs
+data
+targets
+scratch
+**/__pycache__
+*.pyc
+.venv
+deploy/dagster/.env

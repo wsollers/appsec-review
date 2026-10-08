@@ -84,3 +84,6 @@ images/audit-buildenv-java/jdtls.tar.gz
 # Local archive of the pre-refactor repository. Git history and the
 # pre-simplification tag are the durable recovery points.
 /old/
+
+# Dagster's generated local secret; the tracked example documents its shape.
+/deploy/dagster/.env

@@ -46,14 +46,22 @@ NVD CVE 2.0 yearly feeds and then consumes bounded CVE API last-modified windows
 and a compact CVE metadata JSONL projection are stored as content-addressed gzip blobs. An immutable
 manifest links each snapshot to its parent; `current.json` advances only after complete validation.
 
-The schedule declaration is midnight UTC. A host scheduler invokes the same
-manual entry point with a different trigger:
+The schedule declaration is midnight UTC. Direct CLI invocations enter `JobRunner` with an explicit
+trigger:
 
 ```powershell
 python -m appsec_review run job_third_party_data_sync --trigger manual
 python -m appsec_review run job_third_party_data_sync --trigger schedule
 ```
 
-The repository records the schedule and command but does not install an operating-system service.
-Deployment will bind that declaration to the selected scheduler. The job uses a kernel lock, so a
-manual invocation and scheduled invocation cannot publish concurrently.
+The Dagster adapter under `src/appsec_review/orchestration/dagster/` enumerates `JobRegistry` and
+generates one single-op Dagster job for every registered semantic job. It also generates schedule
+definitions from the TOML declarations; cron expressions, time zones, and enabled state are never
+duplicated in Python. Both console launches and daemon schedule ticks call the generated dispatch op,
+which builds the registered job and hands it to `JobRunner`. The runner therefore retains run
+allocation, immutable configuration binding, validation, locking, events, evidence paths, and status
+publication. Dagster owns only scheduling, launch visibility, and its own orchestration history.
+
+Deployment layout and exact operator commands are documented in
+[`deploy/dagster/README.md`](../../deploy/dagster/README.md). The job uses a kernel lock, so a manual
+invocation and scheduled invocation cannot publish concurrently.

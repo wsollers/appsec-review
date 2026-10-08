@@ -1,0 +1,100 @@
+name: appsec-review-dagster
+
+x-dagster-service: &dagster-service
+  image: appsec-review-dagster:local
+  user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
+  environment:
+    DAGSTER_HOME: /opt/dagster/home
+    DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
+    APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
+  volumes:
+    - dagster-storage:/var/dagster
+    - ../../runs:/opt/app/runs
+    - ../../data:/opt/app/data
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+    environment:
+      POSTGRES_USER: appsec
+      POSTGRES_DB: appsec_dagster
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appsec -d appsec_dagster"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  code-location:
+    <<: *dagster-service
+    build:
+      context: ../..
+      dockerfile: deploy/dagster/Dockerfile
+      target: runtime
+    command:
+      - dagster
+      - code-server
+      - start
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4000"
+      - --module-name
+      - appsec_review.orchestration.dagster.definitions
+      - --location-name
+      - appsec_review
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "127.0.0.1", "-p", "4000"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  webserver:
+    <<: *dagster-service
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      code-location:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/server_info', timeout=5).read()"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  daemon:
+    <<: *dagster-service
+    command: ["dagster-daemon", "run", "-w", "/opt/dagster/home/workspace.yaml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      code-location:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "dagster-daemon", "liveness-check"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  dagster-storage:
