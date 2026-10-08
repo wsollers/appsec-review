@@ -468,6 +468,32 @@ workers = 4
 workers = 1
 [jobs.job_language_build.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_artifact_indexing]
+name = "artifact_indexing"
+workers = 8
+
+[jobs.job_artifact_indexing.settings]
+catalog_parser_identity = "appsec-review/produced-artifact-catalog/1"
+member_extractor_identity = "appsec-review/accepted-archive-member-manifest/1"
+member_parser_identity = "appsec-review/archive-member-normalizer/1"
+relationship_parser_identity = "appsec-review/produced-artifact-relations/1"
+normalizer_identity = "appsec-review/produced-artifact-normalizer/1"
+mapping_identity = "appsec-review/receipt-workspace-mapping/1"
+
+[jobs.job_artifact_indexing.steps.load]
+workers = 1
+[jobs.job_artifact_indexing.steps.load.tasks.accepted_builds]
+
+[jobs.job_artifact_indexing.steps.index]
+workers = 8
+[jobs.job_artifact_indexing.steps.index.tasks.catalogs]
+[jobs.job_artifact_indexing.steps.index.tasks.members]
+[jobs.job_artifact_indexing.steps.index.tasks.relationships]
+
+[jobs.job_artifact_indexing.steps.acceptance]
+workers = 1
+[jobs.job_artifact_indexing.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_cpp_compiled_analysis]
 name = "cpp_compiled_analysis"
 workers = 8

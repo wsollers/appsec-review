@@ -204,7 +204,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         builder.add_coverage("target-files", "complete" if not gaps else "partial",
                              None if not gaps else "; ".join(gaps[:10]))
         sha256 = builder.build()
-        index = IndexIdentity("source", "appsec-review/retrieval-index/1", sha256, fingerprint,
+        index = IndexIdentity("source", "appsec-review/retrieval-index/2", sha256, fingerprint,
                               path.relative_to(unit.job.run_root).as_posix(),
                               {"job": "job_target_catalog", "unit": unit.unit_id}, tuple(gaps))
         return {"artifact": _run_artifact(unit, path), "index_identity": asdict(index),
@@ -257,7 +257,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
                              None if not gaps else "; ".join(gaps[:10]))
         index_path = builder.path
         sha256 = builder.build()
-        index = {"name": "analysis", "schema": "appsec-review/retrieval-index/1", "sha256": sha256,
+        index = {"name": "analysis", "schema": "appsec-review/retrieval-index/2", "sha256": sha256,
                  "fingerprint": fingerprint, "relative_path": index_path.relative_to(unit.job.run_root).as_posix(),
                  "producer": {"job": "job_target_catalog", "unit": unit.unit_id}, "gaps": gaps}
         return {"artifact": _run_artifact(unit, index_path), "index_identity": index,
@@ -278,7 +278,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
                                              " ".join(str(value) for value in item.values() if value), item))
         builder.add_coverage("components", "complete")
         sha256 = builder.build()
-        index = {"name": "components", "schema": "appsec-review/retrieval-index/1", "sha256": sha256,
+        index = {"name": "components", "schema": "appsec-review/retrieval-index/2", "sha256": sha256,
                  "fingerprint": fingerprint, "relative_path": path.relative_to(unit.job.run_root).as_posix(),
                  "producer": {"job": "job_target_catalog", "unit": unit.unit_id}, "gaps": []}
         return {"artifact": _run_artifact(unit, path), "index_identity": index,
@@ -331,7 +331,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         build_index.add_coverage("compile-units", "complete" if compile_files else "unavailable",
                                  None if compile_files else "compile_commands.json not present")
         build_sha = build_index.build()
-        build_identity = {"name": "build", "schema": "appsec-review/retrieval-index/1", "sha256": build_sha,
+        build_identity = {"name": "build", "schema": "appsec-review/retrieval-index/2", "sha256": build_sha,
                           "fingerprint": build_fingerprint,
                           "relative_path": build_path.relative_to(unit.job.run_root).as_posix(),
                           "producer": {"job": "job_target_catalog", "unit": unit.unit_id},

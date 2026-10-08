@@ -178,7 +178,7 @@ def _retrieval_fixture(tmp_path: Path) -> RetrievalCore:
          "producer": {"job": "compile-job"}, "shard": shard}))
     builder.add_coverage("post-build-security", "partial", "exact link timing unavailable")
     sha = builder.build()
-    index = IndexIdentity("build_security", "appsec-review/retrieval-index/1", sha, fingerprint,
+    index = IndexIdentity("build_security", "appsec-review/retrieval-index/2", sha, fingerprint,
                           path.relative_to(run_root).as_posix(), {"job": "post"},
                           ("exact link timing unavailable",), shard)
     manifest_path = run_root / "data" / "indices" / "manifest.json"

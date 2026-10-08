@@ -370,7 +370,7 @@ def _finish_index(unit: UnitContext, builder: IndexBuilder, path: Path, fingerpr
                   shard: str, name: str, branch: str, gaps: list[str]) -> Mapping[str, Any]:
     reused = path.exists()
     sha = file_sha256(path) if reused else builder.build()
-    identity = IndexIdentity(name, "appsec-review/retrieval-index/1", sha, fingerprint,
+    identity = IndexIdentity(name, "appsec-review/retrieval-index/2", sha, fingerprint,
                              path.relative_to(unit.job.run_root).as_posix(),
                              {"job": "job_cpp_compiled_analysis", "unit": unit.unit_id,
                               "branch": branch}, tuple(gaps), shard)

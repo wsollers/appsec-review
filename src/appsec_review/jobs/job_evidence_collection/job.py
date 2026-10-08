@@ -596,7 +596,7 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
     status = "complete" if output["terminal_status"] == "SUCCEEDED" else "partial"
     builder.add_coverage(producer, status, None if status == "complete" else "; ".join(output.get("gaps", [])[:10]))
     sha256 = builder.build()
-    identity = IndexIdentity("observations", "appsec-review/retrieval-index/1", sha256, fingerprint,
+    identity = IndexIdentity("observations", "appsec-review/retrieval-index/2", sha256, fingerprint,
                              index_path.relative_to(unit.job.run_root).as_posix(),
                              {"job": "job_evidence_collection", "producer": producer},
                              tuple(dict.fromkeys(output.get("gaps", ()))), shard_id)

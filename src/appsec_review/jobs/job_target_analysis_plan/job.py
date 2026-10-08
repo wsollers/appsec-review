@@ -429,7 +429,7 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
             sha256 = builder.build()
         else:
             sha256 = file_sha256(path)
-        identity = IndexIdentity("analysis", "appsec-review/retrieval-index/1", sha256, fingerprint,
+        identity = IndexIdentity("analysis", "appsec-review/retrieval-index/2", sha256, fingerprint,
             path.relative_to(unit.job.run_root).as_posix(),
             {"job": "job_target_analysis_plan", "unit": unit.unit_id}, tuple(plan["coverage_gaps"]),
             "target-analysis-plan")

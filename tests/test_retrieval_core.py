@@ -65,7 +65,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             builder.add_relation(relation)
         builder.add_coverage(name, "partial" if gap else "complete", gap)
         sha = builder.build()
-        index_values.append(IndexIdentity(name, "appsec-review/retrieval-index/1", sha, fingerprint,
+        index_values.append(IndexIdentity(name, "appsec-review/retrieval-index/2", sha, fingerprint,
                                           path.relative_to(run_root).as_posix(), {"fixture": name},
                                           (gap,) if gap else (), shard_id))
 

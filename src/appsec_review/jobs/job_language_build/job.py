@@ -1189,7 +1189,7 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
     gaps = [gap for receipt in receipts for gap in receipt.get("gaps", ())]
     builder.add_coverage("language-build", "partial" if gaps else "complete", gaps[0] if gaps else None)
     sha = builder.build()
-    identity = IndexIdentity("build", "appsec-review/retrieval-index/1", sha, fingerprint,
+    identity = IndexIdentity("build", "appsec-review/retrieval-index/2", sha, fingerprint,
                              path.relative_to(unit.job.run_root).as_posix(),
                              {"job": "job_language_build", "unit": unit.unit_id}, tuple(gaps), "language-build")
     indexes = [IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}) for raw in prior["indexes"]]

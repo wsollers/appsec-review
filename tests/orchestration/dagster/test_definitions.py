@@ -111,6 +111,45 @@ def test_definitions_reject_registry_config_drift(tmp_path: Path) -> None:
         build_definitions(_config(tmp_path, configured_job="job_other"), registry=_registry())
 
 
+def test_artifact_indexing_receives_target_snapshot(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
+    begun: list[dict[str, object]] = []
+    registry = JobRegistry()
+
+    def build_artifact_job():
+        units = (Unit("work.execute", lambda context: {"terminal_status": "SUCCEEDED"}),)
+        return Job("job_artifact_indexing", "artifact job", UnitExecutor(units).execute, units=units)
+    registry.register("job_artifact_indexing", build_artifact_job)
+
+    class Runner:
+        def __init__(self, config):
+            pass
+
+        def begin_attempt(self, job, **kwargs):
+            begun.append(kwargs)
+            return {"run_id": "test-run", "attempt_id": "attempt_0001", "trigger": "manual",
+                    "orchestration": kwargs["orchestration"], "attempt_path": "attempt",
+                    "source_fingerprint": kwargs["source_fingerprint"], "upstream_handoffs": {},
+                    "started_at": "2026-10-08T00:00:00+00:00"}
+
+        def execute_or_reuse_unit(self, job, claim, unit_id):
+            return {"terminal_status": "SUCCEEDED"}
+
+        def finalize_attempt(self, job, claim):
+            return {"status": {"status": "SUCCEEDED"}, "handoff_sha256": "a" * 64,
+                    "handoff": {}, "attempt_root": str(tmp_path / "attempt"),
+                    "result": {"steps": {}, "units": {}, "outputs": {},
+                               "failed_units": [], "skipped_units": []}}
+
+    definitions = build_definitions(_config(tmp_path, configured_job="job_artifact_indexing"),
+                                    registry=registry, runner_factory=Runner)
+    assert definitions.get_job_def("artifact_job").execute_in_process().success
+    assert begun[0]["target_root"] == target.resolve()
+    assert begun[0]["source_fingerprint"] != "none"
+
+
 def test_application_failure_fails_dagster_run(tmp_path: Path) -> None:
     class Runner:
         def __init__(self, config):
@@ -193,6 +232,7 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
     assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
     assert definitions.get_job_def("project_build").name == "project_build"
+    assert definitions.get_job_def("artifact_indexing").name == "artifact_indexing"
     assert definitions.get_job_def("cpp_compiled_analysis").name == "cpp_compiled_analysis"
     assert definitions.get_job_def("post_build_security_assessment").name == "post_build_security_assessment"
     assert definitions.get_job_def("ci_configuration_analysis").name == "ci_configuration_analysis"
@@ -229,6 +269,11 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "language_build__execute__rust",
         "language_build__execute__wasm",
         "language_build__acceptance__publish_handoff",
+        "artifact_indexing__load__accepted_builds",
+        "artifact_indexing__index__catalogs",
+        "artifact_indexing__index__members",
+        "artifact_indexing__index__relationships",
+        "artifact_indexing__acceptance__publish_handoff",
         "cpp_compiled_analysis__plan__accepted_cpp_plan",
         "cpp_compiled_analysis__catalog__projects",
         "cpp_compiled_analysis__ast__projects",
@@ -273,6 +318,10 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert upstream("language_build__execute__wasm") == {
         "language_build__begin", "language_build__load__wasm"}
     assert "language_build__finalize" in upstream("cpp_compiled_analysis__begin")
+    assert "language_build__finalize" in upstream("artifact_indexing__begin")
+    assert upstream("artifact_indexing__acceptance__publish_handoff") == {
+        "artifact_indexing__begin", "artifact_indexing__index__catalogs",
+        "artifact_indexing__index__members", "artifact_indexing__index__relationships"}
     assert len(upstream("project_build__acceptance__publish_handoff")) == 20
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")

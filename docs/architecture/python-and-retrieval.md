@@ -6,7 +6,7 @@ fingerprinted SQLite/FTS shards; application jobs call `appsec_review.retrieval`
 
 ## Accepted index sets
 
-One run may contain source, observations, components, build, build-security, compiled, analysis, and evidence
+One run may contain source, observations, components, build, artifacts, build-security, compiled, analysis, and evidence
 shards. A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
 target snapshot, producer artifacts, tool/image/rule identity, parser and normalizer identities,
 mapping implementation, schema, and upstream manifests. Thus an observation change does not
@@ -28,6 +28,12 @@ identities, and validated but non-executable inferred build recipes. The shard k
 manifest as an explicit upstream and is queryable by
 the existing bounded `search`, `find`, `trace`, and `coverage` MCP filters; no filesystem search or
 new write-capable interface is exposed.
+
+The produced-artifact indexer consumes only the accepted language-build handoff and verified
+workspace manifests. It publishes `artifacts` catalog shards per build unit and artifact family,
+member shards per package/extractor identity, and artifact-specific relationship shards. Artifact
+catalog fingerprints exclude scanners and MCP transport, so scanner changes cannot rebuild catalogs
+and transport changes rebuild nothing.
 
 The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard,
 CodeQL-observation shard, Joern-observation shard, and binary/symbol shard per accepted case. A
@@ -53,8 +59,9 @@ clean.
 
 Logical identities are versioned hashes of entity kind, target snapshot, and producer-native
 identity. Supported kinds are source files and spans, symbols, components, projects, build actions,
-compile units, objects, libraries, executables, AST nodes, IR entities, tool observations, evidence
-artifacts, and finding packages. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
+compile units, objects, libraries, executables, generic build artifacts, packages, archive members,
+bytecode modules, managed assemblies, WebAssembly modules, AST nodes, IR entities, tool observations,
+evidence artifacts, and finding packages. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
 `REFERENCES`, `CALLS`, `CONTAINS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `DEPENDS_ON`,
 `OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, and `CONTRADICTS`.
 

@@ -309,7 +309,7 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
         sha = builder.build()
     else:
         sha = file_sha256(path)
-    identity = IndexIdentity("build", "appsec-review/retrieval-index/1", sha, fingerprint,
+    identity = IndexIdentity("build", "appsec-review/retrieval-index/2", sha, fingerprint,
         path.relative_to(unit.job.run_root).as_posix(),
         {"job": "job_language_build", "unit": unit.unit_id, "family": "java"},
         tuple(receipt["gaps"]), shard)

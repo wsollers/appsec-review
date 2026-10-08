@@ -355,7 +355,7 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
     gap = "; ".join(output.get("gaps", [])[:10]) or None
     builder.add_coverage(f"{spec.provider}:{spec.name}", status, gap)
     sha256 = builder.build()
-    identity = IndexIdentity("observations", "appsec-review/retrieval-index/1", sha256, fingerprint,
+    identity = IndexIdentity("observations", "appsec-review/retrieval-index/2", sha256, fingerprint,
                              _rel(unit.job.run_root, path), {"job": "job_ci_configuration_analysis",
                              "provider": spec.provider, "tool_id": spec.tool_id},
                              tuple(output.get("gaps", ())), shard_id)
@@ -401,7 +401,7 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
                                          _source_location(unit, {**finding, "tool_id": "ci-correlator"})))
     builder.add_coverage("ci-correlation", "complete")
     sha256 = builder.build()
-    identity = IndexIdentity("evidence", "appsec-review/retrieval-index/1", sha256, fingerprint,
+    identity = IndexIdentity("evidence", "appsec-review/retrieval-index/2", sha256, fingerprint,
                              _rel(unit.job.run_root, path), {"job": "job_ci_configuration_analysis",
                              "producer": "ci-exact-correlator"}, (), "ci_findings")
     return {"artifact": artifact, "index_artifact": _artifact(unit.job.run_root, path),

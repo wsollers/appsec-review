@@ -128,7 +128,9 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         raise SystemExit(f"Dagster run is not successful: {run}")
     tags = {item["key"]: item["value"] for item in run.get("tags", [])}
     application_run_id = tags.get("appsec/application_run_id")
-    if run.get("pipelineName") in {"wave1_review", "ci_configuration_review", "project_build_review"}:
+    if run.get("pipelineName") in {
+        "wave1_review", "ci_configuration_review", "project_build_review", "artifact_indexing"
+    }:
         if not application_run_id:
             raise SystemExit("Dagster Wave 1 run does not contain the application run id")
         runs_dir = repository / document["runtime"]["runs_dir"]
@@ -140,7 +142,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         }:
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
-        job_ids = (
+        job_ids = (("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else (
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
@@ -153,8 +155,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
             "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
-            "job_language_build",
-        ))
+            "job_language_build", "job_artifact_indexing",
+        )))
         for job_id in job_ids:
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
             pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
@@ -180,6 +182,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",
                 "job_project_build": "acceptance.publish_handoff",
                 "job_language_build": "acceptance.publish_handoff",
+                "job_artifact_indexing": "acceptance.publish_handoff",
                 "job_cpp_compiled_analysis": "acceptance.publish_handoff",
                 "job_post_build_security_assessment": "publication.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
@@ -295,6 +298,22 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "wasm_artifact_count": sum(len(item.get("artifacts", ())) for item in wasm),
                     "wasm_checkpoint_reused": sum(bool(item.get("checkpoint_reused")) for item in successful_wasm),
                     "gaps": receipt_set.get("gaps", []),
+                }
+            if job_id == "job_artifact_indexing":
+                summary_path = run_root / publication["artifact"]["path"]
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                manifest_path = run_root / publication["index_manifest"]["path"]
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                artifact_shards = [item for item in manifest["indexes"]
+                                   if item.get("name") == "artifacts"]
+                job_report["artifact_indexing"] = {
+                    "artifact_shard_count": summary["artifact_shard_count"],
+                    "manifest_artifact_shard_count": len(artifact_shards),
+                    "reused_shard_count": summary["reused_shard_count"],
+                    "manifest_sha256": publication["index_manifest"]["sha256"],
+                    "all_artifact_shards_preserved": (
+                        len(artifact_shards) == summary["artifact_shard_count"]
+                    ),
                 }
             if job_id == "job_cpp_compiled_analysis":
                 summary_path = run_root / publication["artifact"]["path"]

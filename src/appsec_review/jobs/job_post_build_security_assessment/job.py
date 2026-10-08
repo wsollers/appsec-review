@@ -702,7 +702,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                 sha = file_sha256(path)
                 gaps = list(dict.fromkeys([*provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
                                           *deterministic_value.get("gaps", ()), *inference_value.get("gaps", ())]))
-            identity = IndexIdentity("build_security", "appsec-review/retrieval-index/1", sha, fingerprint,
+            identity = IndexIdentity("build_security", "appsec-review/retrieval-index/2", sha, fingerprint,
                 path.relative_to(unit.job.run_root).as_posix(),
                 {"job": "job_post_build_security_assessment", "unit": unit.unit_id,
                  "rule_version": RULE_VERSION, "parser_version": PARSER_VERSION,
