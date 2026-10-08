@@ -1,0 +1,316 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "completion_status": "COMPLETED_WITH_GAPS",
+      "jobs": {
+        "job_artifact_indexing": {
+          "artifact_indexing": {
+            "all_artifact_shards_preserved": true,
+            "artifact_shard_count": 59,
+            "manifest_artifact_shard_count": 59,
+            "manifest_sha256": "283194d023c67fa4c9d7ac1927cc28a56fdabb769630d268b91eceb733a43673",
+            "reused_shard_count": 0
+          },
+          "attempt_id": "attempt_0001",
+          "gap_count": 64,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_artifact_indexing/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "d430c8522e18e03bbbda6eeefb4796a9406f5e88a36dcaed89e9f72d199b150e",
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_artifact_indexing/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_artifact_indexing/attempts/attempt_0001/status.json",
+          "unit_count": 5,
+          "unit_status_counts": {
+            "SUCCEEDED": 5
+          }
+        },
+        "job_artifact_security_analysis": {
+          "artifact_security_analysis": {
+            "all_raw_evidence_resolved": true,
+            "artifact_count": 34,
+            "capability_statuses": {
+              "blint": "COMPLETED_WITH_GAPS",
+              "grype": "COMPLETED_WITH_GAPS",
+              "inventory": "COMPLETED_WITH_GAPS",
+              "jvm": "COMPLETED_WITH_GAPS",
+              "native": "COMPLETED_WITH_GAPS",
+              "osv": "COMPLETED_WITH_GAPS",
+              "packages": "COMPLETED_WITH_GAPS",
+              "spotbugs": "SUCCEEDED",
+              "syft": "COMPLETED_WITH_GAPS",
+              "wasm": "NOT_APPLICABLE"
+            },
+            "gap_count": 118,
+            "manifest_sha256": "c6f53a86164ca6300a266bc32f72217eba167ef6f7259347f7a27502833c9227",
+            "observation_count": 219,
+            "raw_evidence_identity_count": 438
+          },
+          "attempt_id": "attempt_0001",
+          "gap_count": 118,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_artifact_security_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "047e859f712d3832350624a41dd587d46297f97961a55bf5d3e8ca8b1f219392",
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_artifact_security_analysis/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_artifact_security_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 13,
+          "unit_status_counts": {
+            "SUCCEEDED": 13
+          }
+        },
+        "job_language_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 23,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_language_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "9256baa50295aa8421278f8abcacf77ea29e4ff1a96ea2936ae0e732beaa56a0",
+          "language_build": {
+            "artifact_count": 19,
+            "checkpoint_reused": 0,
+            "families": {
+              "dotnet": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {
+                  "BLOCKED": 9
+                },
+                "gap_count": 9,
+                "receipt_count": 9
+              },
+              "go": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "java": {
+                "artifact_count": 15,
+                "command_count": 14,
+                "disposition_counts": {
+                  "SUCCEEDED": 7
+                },
+                "gap_count": 7,
+                "receipt_count": 7
+              },
+              "native": {
+                "artifact_count": 19,
+                "command_count": 2,
+                "disposition_counts": {
+                  "SUCCEEDED": 1
+                },
+                "gap_count": 7,
+                "receipt_count": 1
+              },
+              "node": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "php": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "python": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "rust": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "wasm": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              }
+            },
+            "gaps": [
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_C.bin: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CompilerIdC/a.out: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CompilerIdCXX/a.out: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/libcoordination.so: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/observer_a: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/observer_b: static loader dependencies were not observable without a pinned parser",
+              "build-unit-67e047f9b0e8d61ed8ce: validated inference build recipe is unavailable",
+              "build-unit-705f24c7965d130fe686: validated inference build recipe is unavailable",
+              "build-unit-7476efb967a18e31efb2: validated inference build recipe is unavailable",
+              "build-unit-7b9e378591dc973f5dec: validated inference build recipe is unavailable",
+              "build-unit-80180d0ff68da194eaf5: validated inference build recipe is unavailable",
+              "build-unit-94412a1d6ffbf166eaed: validated inference build recipe is unavailable",
+              "build-unit-b44e8a45ceb1598062f6: validated inference build recipe is unavailable",
+              "build-unit-cd8e83d3ce82c2e8e44e: validated inference build recipe is unavailable",
+              "build-unit-e74991f26a3c94214bdc: validated inference build recipe is unavailable",
+              "build-unit-0b0e21fbf90f2dde1437: nested JVM tool provenance was not emitted by the build",
+              "build-unit-3706425f5fad37227c24: nested JVM tool provenance was not emitted by the build",
+              "build-unit-4db99ff3cf9e5f070b9e: nested JVM tool provenance was not emitted by the build",
+              "build-unit-85ed003b5e79e13da49e: nested JVM tool provenance was not emitted by the build",
+              "build-unit-89f334cc31147dac7d2c: nested JVM tool provenance was not emitted by the build",
+              "build-unit-ba0768d09e23ae151369: nested JVM tool provenance was not emitted by the build",
+              "build-unit-c5f65d38abd03ace509b: nested JVM tool provenance was not emitted by the build"
+            ],
+            "jvm_artifact_count": 15,
+            "jvm_checkpoint_reused": 0,
+            "jvm_command_count": 14,
+            "jvm_protected_provenance_count": 7,
+            "jvm_receipt_count": 7,
+            "jvm_tool_invocation_count": 0,
+            "native_receipt_count": 1,
+            "protected_command_set_count": 1,
+            "receipt_count": 17,
+            "successful_jvm_count": 7,
+            "successful_native_count": 1,
+            "successful_wasm_count": 0,
+            "wasm_artifact_count": 0,
+            "wasm_checkpoint_reused": 0,
+            "wasm_producer_counts": {},
+            "wasm_receipt_count": 0
+          },
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_language_build/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_language_build/attempts/attempt_0001/status.json",
+          "unit_count": 19,
+          "unit_status_counts": {
+            "SUCCEEDED": 19
+          }
+        },
+        "job_project_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 41,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_project_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "4f7c9e8002570748b1b598f9cd21fec473cd8479298546a82ba943bed6f571eb",
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_project_build/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_project_build/attempts/attempt_0001/status.json",
+          "unit_count": 39,
+          "unit_status_counts": {
+            "SUCCEEDED": 39
+          }
+        },
+        "job_review_intake": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 1,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "33a366e3f7c60b206547ccf979925135503397c007e352513b14232eeb2baa3f",
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_target_analysis_plan": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 8,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_target_analysis_plan/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "341ce1849dcb5cc9f0d6a91a89c8b279f9ae8c70e1f7e6265fc64f5eac2d88a7",
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_target_analysis_plan/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_target_analysis_plan/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_target_catalog": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 1,
+          "handoff_receipt": "runs/2026-10-08-0084/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "1f6ffe87f41d6f2a870df47bb83f7693ec5c9d7a82f0e1dbccc573287492b2aa",
+          "result_receipt": "runs/2026-10-08-0084/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0084/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
+          "unit_count": 13,
+          "unit_status_counts": {
+            "SUCCEEDED": 13
+          }
+        }
+      },
+      "orchestration_receipt": "runs/2026-10-08-0084/data/orchestration/dagster/4280d496-0c2a-4225-b23e-886660d27841.json",
+      "resume_decisions": [
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_indexing"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_security_analysis"
+        }
+      ],
+      "run_id": "2026-10-08-0084"
+    },
+    "dagster_run": {
+      "job": "project_build_review",
+      "run_id": "4280d496-0c2a-4225-b23e-886660d27841",
+      "status": "SUCCESS",
+      "step_count": 117,
+      "step_status_counts": {
+        "SUCCESS": 117
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "artifact_indexing",
+      "artifact_security_analysis",
+      "ci_configuration_analysis",
+      "ci_configuration_review",
+      "cpp_compiled_analysis",
+      "evidence_collection",
+      "language_build",
+      "owasp_control_assessment",
+      "post_build_security_assessment",
+      "project_build",
+      "project_build_review",
+      "review_intake",
+      "target_analysis_plan",
+      "target_catalog",
+      "third_party_data_sync",
+      "wave1_review"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}
