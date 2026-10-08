@@ -131,11 +131,26 @@ def _binary(path: Path) -> bool:
         return False
 
 
+def _container_archive(name: str) -> bool:
+    return name.endswith((".tar", ".oci.tar"))
+
+
+def _job_files(job_id: str, source_root: Path) -> list[tuple[str, Path]]:
+    """The files a job reads. 02-container-image-inventory's root is the run's inputs/ folder, which later
+    jobs write request files into (04 lane-in/intercom/dynamic requests, reachability, b13), so it counts
+    and hashes only image archives: the whole folder re-ran it, and everything after 01, on each resume
+    (run 20261006T220018Z-7e69f0)."""
+    files = _files(source_root)
+    if job_id == "02-container-image-inventory":
+        files = [(name, path) for name, path in files if _container_archive(name)]
+    return files
+
+
 def probe(job_id: str, source_root: Path) -> dict[str, Any]:
     """Deterministically enumerate candidate inputs.  Bare Java/Kotlin/Swift files are not mobile markers."""
     if job_id not in SPECS:
         raise ValueError(f"unknown vendor evidence job {job_id!r}")
-    files = _files(source_root)
+    files = _job_files(job_id, source_root)
     paths = [name for name, _ in files]
     if job_id == "02-secrets-inventory":
         candidates = {"gitleaks": paths,
@@ -149,7 +164,7 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
                       "kube-linter": yaml, "hadolint": docker, "zizmor": actions,
                       "dockerfile-base-image-inventory": docker}
     elif job_id == "02-container-image-inventory":
-        archives = [n for n in paths if n.endswith((".tar", ".oci.tar"))]
+        archives = [n for n in paths if _container_archive(n)]
         candidates = {tool: archives for tool in SPECS[job_id][1]}
     elif job_id == "02-binary-hardening":
         binaries = [n for n, p in files if _binary(p)]
@@ -162,7 +177,7 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
 
 
 def fingerprint(job_id: str, source_root: Path, source_snapshot_sha256: str) -> str:
-    listing = [(name, HASH(path.read_bytes())) for name, path in _files(source_root)]
+    listing = [(name, HASH(path.read_bytes())) for name, path in _job_files(job_id, source_root)]
     images = ({"cache": bic.identity(bic.cache_root()), "eol_table": bic.load_eol_table()[1]}
               if job_id == "02-iac-config-scan" else None)   # P41: a re-published cache is new input
     return HASH(_dump({"implementation": IMPLEMENTATION, "job_id": job_id,

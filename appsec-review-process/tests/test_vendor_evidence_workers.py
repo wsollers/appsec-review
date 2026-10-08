@@ -593,3 +593,24 @@ class GitHubActionsScanTests(unittest.TestCase):
                 declared_tool_ids=workers.SPECS[job][1], permitted_node_statuses=sic.CAN_SKIP, on_unhandled="refuse",
                 limits=evidence_redaction.DEFAULT_LIMITS, expected_dagster_run_id="dagster-1")
             self.assertEqual(errors, [])
+
+
+class ContainerInventoryInputsTest(unittest.TestCase):
+    """Run 20261006T220018Z-7e69f0: later jobs write request files into the run's inputs/ folder, and the
+    container inventory hashed the whole folder, so it re-ran (and 01 onward) on every resume."""
+
+    def test_only_image_archives_count_for_probe_and_fingerprint(self):
+        import tempfile
+        import vendor_evidence_workers as workers
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "artifact-manifest.json").write_text("{}")
+            (root / "image.tar").write_bytes(b"layer")
+            job = "02-container-image-inventory"
+            probe, key = workers.probe(job, root), workers.fingerprint(job, root, "sha256:" + "0" * 64)
+            (root / "owasp-lane-in-request.json").write_text('{"x": 1}')
+            self.assertEqual(workers.probe(job, root), probe)
+            self.assertEqual(workers.fingerprint(job, root, "sha256:" + "0" * 64), key)
+            (root / "image.tar").write_bytes(b"other layer")
+            self.assertNotEqual(workers.fingerprint(job, root, "sha256:" + "0" * 64), key)
+            self.assertEqual(workers.probe(job, root)["files_examined"], 1)
