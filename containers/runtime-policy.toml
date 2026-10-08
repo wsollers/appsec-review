@@ -1,0 +1,14 @@
+schema = "appsec-review/container-runtime-policy/1"
+network = "none"
+user = "10001:10001"
+read_only = true
+target_mount = "read-only"
+scratch_mount = "read-write"
+cap_drop = ["ALL"]
+security_opt = ["no-new-privileges"]
+pids_limit = 256
+memory = "1g"
+cpus = "2"
+timeout_seconds = 600
+output_bytes = 16777216
+tmpfs = ["/tmp:rw,nosuid,nodev,noexec,size=128m"]

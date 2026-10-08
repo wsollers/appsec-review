@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-shellcheck",
+  "tool_version": "0.11.0.1",
+  "project": "https://github.com/koalaman/shellcheck",
+  "license": "GPL-3.0-or-later",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "shellcheck_py-0.11.0.1-py2.py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/96/55/250e0e3367613a5c22bd82e33b16b889287d81ab0f7dda67e6514a4cccf4/shellcheck_py-0.11.0.1-py2.py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl",
+      "path": "downloads/wheels/shellcheck_py-0.11.0.1-py2.py3-none-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "1b274df81de5b000ff78db433e7328b87e52e3c38481c60f8e488c3095beef05",
+      "bytes": 3800600,
+      "verification": {
+        "kind": "pypi-sha256",
+        "sha256": "1b274df81de5b000ff78db433e7328b87e52e3c38481c60f8e488c3095beef05"
+      },
+      "version": "0.11.0.1",
+      "license": "MIT",
+      "license_source": "wheel METADATA",
+      "provenance": "PyPI immutable file URL and repository SHA-256",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

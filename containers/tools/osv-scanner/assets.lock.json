@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-osv-scanner",
+  "tool_version": "1.9.2",
+  "project": "https://github.com/google/osv-scanner",
+  "license": "Apache-2.0",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "osv-scanner",
+      "url": "https://github.com/google/osv-scanner/releases/download/v1.9.2/osv-scanner_linux_amd64",
+      "path": "downloads/osv-scanner",
+      "sha256": "d6af4b67fa5de658598bd2d445efb99e90d1734b3146962418719c4350ecb74b",
+      "bytes": 32116888,
+      "verification": {
+        "kind": "vendor-checksums",
+        "checksums_url": "https://github.com/google/osv-scanner/releases/download/v1.9.2/osv-scanner_SHA256SUMS",
+        "checksums_sha256": "64bd69d7b8eab7835ec5ad54b0bb4172d2c6043f1065f50a874deff46655594b",
+        "entry": "osv-scanner_linux_amd64"
+      },
+      "version": "1.9.2",
+      "license": "Apache-2.0",
+      "license_source": "authoritative upstream project license",
+      "provenance": "fixed upstream release asset",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

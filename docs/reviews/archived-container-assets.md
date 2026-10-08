@@ -257,3 +257,10 @@ interpretation, or orchestration logic.
 This order avoids at least the three cached legacy omnibus images' 23.51 GiB of reported virtual
 image footprint and defers the 43.10 GiB heavy-analysis set until the basic evidence path is sound.
 Those are practical scheduling and transfer estimates, not guaranteed unique-disk savings.
+
+## Follow-up migration
+
+The accepted implementation and its build, startup, functional, security, provenance, and archive
+recovery evidence are recorded in [container-migration.md](container-migration.md). The catalog keeps
+all 42 audited decisions explicit; enabled images are rebuilt from `containers/`, while deferred,
+replaced, and retired entries remain visible with concrete reasons and destinations.

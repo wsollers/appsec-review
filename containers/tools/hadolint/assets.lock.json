@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-hadolint",
+  "tool_version": "2.15.1",
+  "project": "https://github.com/hadolint/hadolint",
+  "license": "GPL-3.0-only",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "hadolint",
+      "url": "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64",
+      "path": "downloads/hadolint",
+      "sha256": "c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507",
+      "bytes": 55661096,
+      "verification": {
+        "kind": "vendor-checksums",
+        "checksums_url": "https://github.com/hadolint/hadolint/releases/download/v2.15.1/checksums.sha256",
+        "checksums_sha256": "4d09c27d4f8151c586b83a9390eaa5843b1e2af2a67df61a53b18b2df4c769d4",
+        "entry": "hadolint-linux-x86_64"
+      },
+      "version": "2.15.1",
+      "license": "GPL-3.0-only",
+      "license_source": "authoritative upstream project license",
+      "provenance": "fixed upstream release asset",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

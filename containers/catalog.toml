@@ -1,0 +1,602 @@
+schema = "appsec-review/container-catalog/1"
+architecture = "linux/amd64"
+runtime_policy = "containers/runtime-policy.toml"
+
+[[images]]
+id = "base-ubuntu"
+state = "enabled"
+kind = "base"
+version = "24.04"
+tag = "appsec-review/base-ubuntu:24.04"
+context = "containers/bases/ubuntu"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+upstream = "ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+upstream_manifest_bytes = 6688
+upstream_manifest_sha256 = "008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+license = "mixed Ubuntu distribution packages"
+license_source = "Ubuntu image package metadata"
+provenance = "Docker Hub official image, OCI manifest pinned by digest"
+signature_verification = "not-performed; manifest size and SHA-256 verified"
+
+[[images]]
+id = "base-python"
+state = "enabled"
+kind = "base"
+version = "3.12-bookworm"
+tag = "appsec-review/base-python:3.12-bookworm"
+context = "containers/bases/python"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+upstream = "python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e"
+upstream_manifest_bytes = 6546
+upstream_manifest_sha256 = "392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e"
+license = "Python-2.0 plus mixed Debian distribution packages"
+license_source = "Python and Debian image package metadata"
+provenance = "Docker Hub official image, OCI manifest pinned by digest"
+signature_verification = "not-performed; manifest size and SHA-256 verified"
+
+[[images]]
+id = "base-php"
+state = "enabled"
+kind = "base"
+version = "8.4-bookworm"
+tag = "appsec-review/base-php:8.4-bookworm"
+context = "containers/bases/php"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+upstream = "php:8.4-cli-bookworm@sha256:f1d32fb402fffba0b3dd8ba8c0aca474c9e9f04395fa846eedea77c503257dee"
+upstream_manifest_bytes = 6501
+upstream_manifest_sha256 = "f1d32fb402fffba0b3dd8ba8c0aca474c9e9f04395fa846eedea77c503257dee"
+license = "PHP-3.01 plus mixed Debian distribution packages"
+license_source = "PHP and Debian image package metadata"
+provenance = "Docker Hub official image, OCI manifest pinned by digest"
+signature_verification = "not-performed; manifest size and SHA-256 verified"
+
+[[images]]
+id = "base-jre"
+state = "enabled"
+kind = "base"
+version = "21-noble"
+tag = "appsec-review/base-jre:21-noble"
+context = "containers/bases/jre"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+upstream = "eclipse-temurin:21-jre-noble@sha256:7edbe8532195c8222735caca437e56780e1fc7db08a4b4b4af77fe188cccc15f"
+upstream_manifest_bytes = 6547
+upstream_manifest_sha256 = "7edbe8532195c8222735caca437e56780e1fc7db08a4b4b4af77fe188cccc15f"
+license = "GPL-2.0-only WITH Classpath-exception-2.0 plus mixed Ubuntu distribution packages"
+license_source = "Eclipse Temurin and Ubuntu image package metadata"
+provenance = "Docker Hub official image, OCI manifest pinned by digest"
+signature_verification = "not-performed; manifest size and SHA-256 verified"
+
+[[images]]
+id = "audit-binary-analysis"
+state = "replaced"
+kind = "replacement"
+legacy_class = 3
+architectures = ["linux/amd64"]
+purpose = "Large binary triage and reverse-engineering toolbox."
+reason = "Split by bounded capability; replace latest/unpinned bases; prefetch and authenticate every release asset; remove curl-to-shell installers and duplicate Syft/Grype/Trivy; define per-tool output and failure contracts"
+recommended_destination = "containers/analysis/binary/<tool>/ after decomposition"
+replaced_by = ["tool-blint", "tool-syft", "tool-grype", "tool-trivy"]
+
+[[images]]
+id = "audit-buildenv-cpp"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "C/C++ build, trace, debugging, tree-sitter, and language-server environment."
+reason = "Decouple build environment from 12.6 GiB analysis base; replace NodeSource curl-to-shell; re-resolve apt pins; remove duplicated MCP/LSP payloads; retain explicit networked-build versus offline-analysis profiles"
+recommended_destination = "containers/buildenv/cpp/"
+
+[[images]]
+id = "audit-buildenv-cpp-resolute"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Newer Ubuntu C/C++ dependency resolver profile."
+reason = "Prove target-independent need; fold into typed C/C++ profile; pin apt package closure; test shared-library copying across base distributions"
+recommended_destination = "containers/buildenv/cpp/profiles/resolute.Dockerfile"
+
+[[images]]
+id = "audit-buildenv-dotnet"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = ".NET build/debug and C# language-server environment."
+reason = "Replace NodeSource curl-to-shell; authenticate csharp-ls acquisition; refresh SDK support decision; share common LSP layers"
+recommended_destination = "containers/buildenv/dotnet/"
+
+[[images]]
+id = "audit-buildenv-go"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Go build/debug and language-server environment."
+reason = "Replace NodeSource curl-to-shell; refresh Go/gopls/delve support decision; preserve module-checksum verification; share common LSP layers"
+recommended_destination = "containers/buildenv/go/"
+
+[[images]]
+id = "audit-buildenv-java"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Java build/debug and JDT language-server environment."
+reason = "Prefetch and verify apt keys/repository metadata; replace NodeSource curl-to-shell; refresh JDK/JDTLS support decision; share common LSP layers"
+recommended_destination = "containers/buildenv/java/"
+
+[[images]]
+id = "audit-buildenv-php"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "PHP/Composer build and language-server environment."
+reason = "Replace NodeSource curl-to-shell; authenticate PHPactor acquisition; refresh PHP/Composer support decision; share common LSP layers"
+recommended_destination = "containers/buildenv/php/"
+
+[[images]]
+id = "audit-buildenv-python"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Python build/debug and language-server environment."
+reason = "Replace NodeSource curl-to-shell; refresh Python support decision; retain hash-locked LSP requirements; share common LSP layers"
+recommended_destination = "containers/buildenv/python/"
+
+[[images]]
+id = "audit-buildenv-rust"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Rust build/debug and rust-analyzer environment."
+reason = "Replace NodeSource curl-to-shell; make rustup component artifacts reproducible; refresh Rust support decision; share common LSP layers"
+recommended_destination = "containers/buildenv/rust/"
+
+[[images]]
+id = "audit-buildenv-typescript"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Node/TypeScript build and language-server environment."
+reason = "Refresh Node support decision; retain npm lock integrity; separate target dependency installation from language server; share common LSP layers"
+recommended_destination = "containers/buildenv/typescript/"
+
+[[images]]
+id = "audit-codeql"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Offline CodeQL bundle and query packs for per-language SAST/reachability."
+reason = "Reconfirm CodeQL license/entitlement and permitted use; refresh bundle and language support; remove unnecessary language toolchains; keep queries and adapters outside the image; validate every language's exit/output contract"
+recommended_destination = "containers/tools/codeql/"
+
+[[images]]
+id = "audit-codeql-native"
+state = "replaced"
+kind = "replacement"
+legacy_class = 3
+architectures = ["linux/amd64"]
+purpose = "CodeQL C/C++ traced replay layered on the full native-analysis image."
+reason = "Replace full audit-native inheritance with a narrow compiler/tracer base; reconfirm CodeQL entitlement; preserve compile-command replay validation; prove output lineage and timeouts"
+recommended_destination = "containers/tools/codeql/traced-cpp.Dockerfile"
+replaced_by = ["audit-codeql", "audit-buildenv-cpp"]
+
+[[images]]
+id = "audit-container"
+state = "retired"
+kind = "retired"
+legacy_class = 4
+architectures = ["linux/amd64"]
+purpose = "Legacy Dockerfile lint/base inventory plus unwired Trivy."
+reason = "Replace with tool-hadolint and tool-trivy; implement base-image inventory in application code."
+recommended_destination = ""
+
+[[images]]
+id = "audit-doc-convert"
+state = "deferred"
+kind = "build-asset"
+legacy_class = 1
+architectures = ["linux/amd64"]
+purpose = "Offline PDF/DOCX text conversion with pdftotext and pandoc."
+reason = "A hash-complete offline .deb closure for pandoc and poppler is required before enablement."
+recommended_destination = "containers/tools/doc-convert/"
+
+[[images]]
+id = "audit-iac"
+state = "retired"
+kind = "retired"
+legacy_class = 4
+architectures = ["linux/amd64"]
+purpose = "Legacy omnibus IaC scanner."
+reason = "Use tool-checkov and tool-trivy; add a narrow kube-linter image only if measured coverage justifies it; tfsec is already described as deprecated."
+recommended_destination = ""
+
+[[images]]
+id = "audit-lsp-vendor"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Build-only tree-sitter CLI, grammar wheels, and clangd wheel cache."
+reason = "Move network downloads to authenticated prefetch; emit license/provenance manifest for every wheel and grammar; decide whether a build artifact is better than an OCI runtime image; add arm64 strategy or explicit refusal"
+recommended_destination = "containers/build-assets/lsp-vendor/ or data/tool-bundles/lsp/"
+
+[[images]]
+id = "audit-native"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Native C/C++ build, IR, SAST, CPG, and reverse-analysis toolbox."
+reason = "Digest-pin base and prefetch every artifact/repository; split build/IR/SAST/CPG/reverse capabilities; remove git clone and online apt repositories from final build; license-review Joern/SVF/Ghidra/CodeChecker/tool bundles; retain no-target-execution rule; right-size resources per tool"
+recommended_destination = "containers/analysis/native/<capability>/"
+
+[[images]]
+id = "audit-report"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "LaTeX/Pandoc/PDF final-report renderer."
+reason = "Choose the report format first; replace latest label with dated upstream identity; pin apt package closure; add non-root USER; measure whether a smaller TeX profile or Tectonic satisfies requirements; make deterministic PDF metadata explicit"
+recommended_destination = "containers/report/latex/"
+
+[[images]]
+id = "audit-static"
+state = "retired"
+kind = "retired"
+legacy_class = 4
+architectures = ["linux/amd64"]
+purpose = "Legacy all-in-one static-analysis toolbox."
+reason = "Use narrow tool images and application adapters. The cached image reports 18.7 GB and duplicates most of the approved tool set."
+recommended_destination = ""
+
+[[images]]
+id = "audit-static-opengrep"
+state = "retired"
+kind = "retired"
+legacy_class = 4
+architectures = ["linux/amd64"]
+purpose = "Unfinished Opengrep fork of the legacy all-in-one static image."
+reason = "If Opengrep is later selected, create a narrow authenticated image and separately resolve rule licensing/provenance."
+recommended_destination = ""
+
+[[images]]
+id = "scancode-toolkit"
+state = "replaced"
+kind = "replacement"
+legacy_class = 3
+architectures = ["linux/amd64"]
+purpose = "License and package inventory with ScanCode Toolkit."
+reason = "Use an upstream release archive or official image pinned by digest and hash; record source commit and license/data notices; remove clone-of-branch build; bound worker count/time and preserve partial-scan gaps; add arm64 decision"
+recommended_destination = "containers/tools/scancode/ only if the official artifact path is unsuitable"
+replaced_by = ["tool-syft"]
+
+[[images]]
+id = "tool-blint"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "3.4.0"
+tag = "appsec-review/tool-blint:3.4.0"
+context = "containers/tools/blint"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/blint/tool.toml"
+assets_lock = "containers/tools/blint/assets.lock.json"
+build_args = { TOOL_VERSION = "3.4.0" }
+purpose = "Offline binary hardening metadata."
+
+[[images]]
+id = "tool-checkov"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "3.3.19"
+tag = "appsec-review/tool-checkov:3.3.19"
+context = "containers/tools/checkov"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/checkov/tool.toml"
+assets_lock = "containers/tools/checkov/assets.lock.json"
+build_args = { TOOL_VERSION = "3.3.19" }
+purpose = "Offline IaC policy scanning."
+
+[[images]]
+id = "tool-cve-bin-tool"
+state = "deferred"
+kind = "redesign"
+legacy_class = 2
+architectures = ["linux/amd64"]
+purpose = "Offline binary component vulnerability matching against a derived NVD database."
+reason = "Reconfirm GPL policy decision; port and independently test database lineage/ceiling logic; keep builder/scan scripts read-only and outside image; prove all network-prone data sources are disabled; validate false-positive disposition"
+recommended_destination = "containers/tools/cve-bin-tool/ plus src/appsec_review/jobs/.../adapters/"
+
+[[images]]
+id = "tool-gitleaks"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "8.30.1"
+tag = "appsec-review/tool-gitleaks:8.30.1"
+context = "containers/tools/gitleaks"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/gitleaks/tool.toml"
+assets_lock = "containers/tools/gitleaks/assets.lock.json"
+build_args = { TOOL_VERSION = "8.30.1" }
+purpose = "Offline source secret scanning with redacted output."
+
+[[images]]
+id = "tool-gosec"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "2.29.0"
+tag = "appsec-review/tool-gosec:2.29.0"
+context = "containers/tools/gosec"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/gosec/tool.toml"
+assets_lock = "containers/tools/gosec/assets.lock.json"
+build_args = { TOOL_VERSION = "2.29.0" }
+purpose = "Go source SAST."
+
+[[images]]
+id = "tool-grype"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "0.119.0"
+tag = "appsec-review/tool-grype:0.119.0"
+context = "containers/tools/grype"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/grype/tool.toml"
+assets_lock = "containers/tools/grype/assets.lock.json"
+build_args = { TOOL_VERSION = "0.119.0" }
+purpose = "Offline SBOM vulnerability matching against a mounted database snapshot."
+
+[[images]]
+id = "tool-hadolint"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "2.15.1"
+tag = "appsec-review/tool-hadolint:2.15.1"
+context = "containers/tools/hadolint"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/hadolint/tool.toml"
+assets_lock = "containers/tools/hadolint/assets.lock.json"
+build_args = { TOOL_VERSION = "2.15.1" }
+purpose = "Dockerfile linting."
+
+[[images]]
+id = "tool-microsoft-sbom-tool"
+state = "replaced"
+kind = "replacement"
+legacy_class = 3
+architectures = ["linux/amd64"]
+purpose = "Microsoft SPDX SBOM generation, validation, redaction, and aggregation."
+reason = "First define a distinct output contract not already satisfied by Syft; validate deterministic output and tmpfs needs; review license/provenance semantics of vendor SPDX verification; add end-to-end worker tests"
+recommended_destination = "containers/tools/microsoft-sbom-tool/ only after a job contract exists"
+replaced_by = ["tool-syft"]
+
+[[images]]
+id = "tool-mobsfscan"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "1.0.1"
+tag = "appsec-review/tool-mobsfscan:1.0.1"
+context = "containers/tools/mobsfscan"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/mobsfscan/tool.toml"
+assets_lock = "containers/tools/mobsfscan/assets.lock.json"
+build_args = { TOOL_VERSION = "1.0.1" }
+purpose = "Mobile source SAST."
+
+[[images]]
+id = "tool-osv-scanner"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "1.9.2"
+tag = "appsec-review/tool-osv-scanner:1.9.2"
+context = "containers/tools/osv-scanner"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/osv-scanner/tool.toml"
+assets_lock = "containers/tools/osv-scanner/assets.lock.json"
+build_args = { TOOL_VERSION = "1.9.2" }
+purpose = "Offline OSV matching against an immutable local database."
+
+[[images]]
+id = "tool-phpcs"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "4.0.4"
+tag = "appsec-review/tool-phpcs:4.0.4"
+context = "containers/tools/phpcs"
+dockerfile = "Dockerfile"
+dependencies = ["base-php"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/phpcs/tool.toml"
+assets_lock = "containers/tools/phpcs/assets.lock.json"
+build_args = { TOOL_VERSION = "4.0.4" }
+purpose = "PHP coding-standard/security sniff output."
+
+[[images]]
+id = "tool-phpstan"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "2.2.16"
+tag = "appsec-review/tool-phpstan:2.2.16"
+context = "containers/tools/phpstan"
+dockerfile = "Dockerfile"
+dependencies = ["base-php"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/phpstan/tool.toml"
+assets_lock = "containers/tools/phpstan/assets.lock.json"
+build_args = { TOOL_VERSION = "2.2.16" }
+purpose = "PHP static analysis."
+
+[[images]]
+id = "tool-psalm"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "6.18.1"
+tag = "appsec-review/tool-psalm:6.18.1"
+context = "containers/tools/psalm"
+dockerfile = "Dockerfile"
+dependencies = ["base-php"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/psalm/tool.toml"
+assets_lock = "containers/tools/psalm/assets.lock.json"
+build_args = { TOOL_VERSION = "6.18.1" }
+purpose = "PHP static and taint analysis."
+
+[[images]]
+id = "tool-sbomasm"
+state = "replaced"
+kind = "replacement"
+legacy_class = 3
+architectures = ["linux/amd64"]
+purpose = "SBOM assembly/edit/removal transformations."
+reason = "Define a transformation job/output contract; add referential-integrity validation; normalize timestamps/serials for reproducibility; exclude network-backed commands; prove a need beyond Syft"
+recommended_destination = "containers/tools/sbomasm/ only after a job contract exists"
+replaced_by = ["tool-syft"]
+
+[[images]]
+id = "tool-semgrep"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "1.178.0"
+tag = "appsec-review/tool-semgrep:1.178.0"
+context = "containers/tools/semgrep"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/semgrep/tool.toml"
+assets_lock = "containers/tools/semgrep/assets.lock.json"
+build_args = { TOOL_VERSION = "1.178.0" }
+purpose = "Semgrep CE source SAST with rules supplied per run."
+
+[[images]]
+id = "tool-shellcheck"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "0.11.0.1"
+tag = "appsec-review/tool-shellcheck:0.11.0.1"
+context = "containers/tools/shellcheck"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/shellcheck/tool.toml"
+assets_lock = "containers/tools/shellcheck/assets.lock.json"
+build_args = { TOOL_VERSION = "0.11.0.1" }
+purpose = "Offline shell static analysis."
+
+[[images]]
+id = "tool-spotbugs"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "4.10.4"
+tag = "appsec-review/tool-spotbugs:4.10.4"
+context = "containers/tools/spotbugs"
+dockerfile = "Dockerfile"
+dependencies = ["base-jre"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/spotbugs/tool.toml"
+assets_lock = "containers/tools/spotbugs/assets.lock.json"
+build_args = { TOOL_VERSION = "4.10.4" }
+purpose = "JVM bytecode SAST with Find Security Bugs."
+
+[[images]]
+id = "tool-syft"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "1.52.0"
+tag = "appsec-review/tool-syft:1.52.0"
+context = "containers/tools/syft"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/syft/tool.toml"
+assets_lock = "containers/tools/syft/assets.lock.json"
+build_args = { TOOL_VERSION = "1.52.0" }
+purpose = "SBOM and OCI archive inventory."
+
+[[images]]
+id = "tool-trivy"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "0.74.0"
+tag = "appsec-review/tool-trivy:0.74.0"
+context = "containers/tools/trivy"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/trivy/tool.toml"
+assets_lock = "containers/tools/trivy/assets.lock.json"
+build_args = { TOOL_VERSION = "0.74.0" }
+purpose = "Offline IaC/Dockerfile configuration scanning."
+
+[[images]]
+id = "tool-zizmor"
+state = "enabled"
+kind = "tool"
+legacy_class = 1
+version = "1.30.1"
+tag = "appsec-review/tool-zizmor:1.30.1"
+context = "containers/tools/zizmor"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/zizmor/tool.toml"
+assets_lock = "containers/tools/zizmor/assets.lock.json"
+build_args = { TOOL_VERSION = "1.30.1" }
+purpose = "Offline GitHub Actions workflow/action security analysis."
+
+[[images]]
+id = "mythos-orchestrator-dagster"
+state = "replaced"
+kind = "replacement"
+legacy_class = 3
+architectures = ["linux/amd64"]
+purpose = "Dagster webserver/daemon orchestration image; code-location workers run on the host."
+reason = "Do not port because Dagster is being rebuilt separately; new deployment must run non-root on every host; replace world-writable directories; pin/hash dependencies and Postgres image; keep database/UI loopback-only; do not mount Docker socket"
+recommended_destination = "deploy/dagster/ from the independent rebuild"

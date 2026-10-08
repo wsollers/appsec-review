@@ -1,0 +1,37 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-trivy",
+  "tool_version": "0.74.0",
+  "project": "https://github.com/aquasecurity/trivy",
+  "license": "Apache-2.0",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "trivy.tar.gz",
+      "url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz",
+      "path": "downloads/trivy.tar.gz",
+      "sha256": "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+      "bytes": 50419107,
+      "verification": {
+        "kind": "sigstore-checksums",
+        "checksums_url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_checksums.txt",
+        "checksums_sha256": "bc701c3c3ee8b9acbea2c23257e41381e3854888f51281616a6ba5dc96963821",
+        "entry": "trivy_0.74.0_Linux-64bit.tar.gz",
+        "bundle_url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_checksums.txt.sigstore.json",
+        "bundle_sha256": "6343bc877380ea2c91e81041313eff188452f68c37cfa5c913e6f1629aadced0",
+        "certificate_identity_regexp": "^https://github\\.com/aquasecurity/trivy/",
+        "certificate_oidc_issuer": "https://token.actions.githubusercontent.com",
+        "cosign_output": "Verified OK"
+      },
+      "version": "0.74.0",
+      "license": "Apache-2.0",
+      "license_source": "authoritative upstream project license",
+      "provenance": "fixed upstream release asset",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

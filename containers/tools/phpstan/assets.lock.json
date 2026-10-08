@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-phpstan",
+  "tool_version": "2.2.16",
+  "project": "https://github.com/phpstan/phpstan",
+  "license": "MIT",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "phpstan.phar",
+      "url": "https://github.com/phpstan/phpstan/releases/download/2.2.16/phpstan.phar",
+      "path": "downloads/phpstan.phar",
+      "sha256": "1a2fb5460c142502d3cd06272529c18b19fda004ada974bd2581cb9fd6c0a53b",
+      "bytes": 29969107,
+      "verification": {
+        "kind": "pgp",
+        "signature_url": "https://github.com/phpstan/phpstan/releases/download/2.2.16/phpstan.phar.asc",
+        "signature_sha256": "f2a6c4e1e3c3052abdf98640a4fc9fba7a373e1148fee6e7b474a6494074e6da",
+        "fingerprint": "CA7C2C7A30C8E8E1274A847651C67305FFC2E5C0"
+      },
+      "version": "2.2.16",
+      "license": "MIT",
+      "license_source": "authoritative upstream project license",
+      "provenance": "fixed upstream release asset",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

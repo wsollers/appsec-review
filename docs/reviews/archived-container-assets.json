@@ -14,6 +14,42 @@
     "4_retire": 4,
     "5_insufficient_evidence": 0
   },
+  "follow_up_migration": {
+    "implemented_at": "2026-10-07",
+    "catalog": "containers/catalog.toml",
+    "acceptance_record": "docs/reviews/container-migration.md",
+    "audited_state_counts": {
+      "enabled": 17,
+      "deferred": 15,
+      "replaced": 6,
+      "retired": 4
+    },
+    "additional_shared_bases_enabled": 4,
+    "final_build": {
+      "summary": "runs/container-builds/20261008T021952Z-54472/summary.json",
+      "passed": 21,
+      "failed": 0
+    },
+    "acceptance": {
+      "production_dockerfile_lint": "passed: 21 files, zero findings",
+      "startup": "passed: 21/21",
+      "functional_first_wave": "passed: 7/7",
+      "security_boundary": "passed: 21/21",
+      "repository_tests": "15 passed, 2 skipped",
+      "bash_powershell_selection_parity": "passed using Linux container Bash and native PowerShell"
+    },
+    "archive_recovery": {
+      "tag": "pre-simplification-2026-10-07",
+      "commit": "8e2a184daabea94dc359294a2f635cca7c408d15",
+      "tracked_image_files": 272,
+      "byte_identical": 269,
+      "line_ending_only_differences": 3,
+      "verified_cached_downloads": 254,
+      "scancode_source_commit": "5e8448ecf2397c6eb7e7eb50326c8c880d9b598b",
+      "old_images_deleted": true,
+      "ported_or_retired_scripts_deleted": 4
+    }
+  },
   "decision_values": {
     "1": "reuse with minimal changes",
     "2": "revise before use",

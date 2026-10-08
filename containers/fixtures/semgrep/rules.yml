@@ -1,0 +1,6 @@
+rules:
+  - id: appsec-review.fixture.python-eval
+    languages: [python]
+    message: Avoid dynamic eval.
+    severity: ERROR
+    pattern: eval(...)

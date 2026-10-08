@@ -1,0 +1,7 @@
+{
+  "schema": "appsec-review/rule-bundle-lock/1",
+  "bundle": "rules.yml",
+  "sha256": "9c51f41bb93d976ef470e7caadf9d702d0158a667b24257c950772a9888d37de",
+  "license": "repository-fixture-only",
+  "source": "containers/fixtures/semgrep/rules.yml"
+}

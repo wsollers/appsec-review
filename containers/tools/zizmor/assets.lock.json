@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-zizmor",
+  "tool_version": "1.30.1",
+  "project": "https://github.com/woodruffw/zizmor",
+  "license": "MIT",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "zizmor-1.30.1-py3-none-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/63/55/1900b53d34dcebc207cf3ceb7957b3748e8bb40958f062e3853ab72f2395/zizmor-1.30.1-py3-none-manylinux_2_28_x86_64.whl",
+      "path": "downloads/wheels/zizmor-1.30.1-py3-none-manylinux_2_28_x86_64.whl",
+      "sha256": "eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e",
+      "bytes": 9467893,
+      "verification": {
+        "kind": "pypi-sha256",
+        "sha256": "eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e"
+      },
+      "version": "1.30.1",
+      "license": "MIT",
+      "license_source": "wheel METADATA",
+      "provenance": "PyPI immutable file URL and repository SHA-256",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

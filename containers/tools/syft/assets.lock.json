@@ -1,0 +1,39 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-syft",
+  "tool_version": "1.52.0",
+  "project": "https://github.com/anchore/syft",
+  "license": "Apache-2.0",
+  "architecture": "linux/amd64",
+  "generated_from": "pre-simplification-2026-10-07",
+  "artifacts": [
+    {
+      "name": "syft.tar.gz",
+      "url": "https://github.com/anchore/syft/releases/download/v1.52.0/syft_1.52.0_linux_amd64.tar.gz",
+      "path": "downloads/syft.tar.gz",
+      "sha256": "caeedb81fb0491615f1ebd1761e4145d41ee86dd2cc7bf80669f9f5ad9d6133d",
+      "bytes": 29289629,
+      "verification": {
+        "kind": "sigstore-cert-checksums",
+        "checksums_url": "https://github.com/anchore/syft/releases/download/v1.52.0/syft_1.52.0_checksums.txt",
+        "checksums_sha256": "21d9ee36c7c6fb43d6493718a387ecca021321791d1815c716e56c99b9c8d6b9",
+        "entry": "syft_1.52.0_linux_amd64.tar.gz",
+        "signature_url": "https://github.com/anchore/syft/releases/download/v1.52.0/syft_1.52.0_checksums.txt.sig",
+        "signature_sha256": "6594bda7093512a7c5395a3c0ea79bf4d55406076497a108472809596f469de8",
+        "certificate_url": "https://github.com/anchore/syft/releases/download/v1.52.0/syft_1.52.0_checksums.txt.pem",
+        "certificate_sha256": "dace9bb8829dc8346da1df2a4995deae6d480ed85ba13dc14834ab3d03aad819",
+        "certificate_identity_regexp": "^https://github\\.com/anchore/syft/\\.github/workflows/",
+        "certificate_oidc_issuer": "https://token.actions.githubusercontent.com",
+        "cosign_output": "Verified OK"
+      },
+      "version": "1.52.0",
+      "license": "Apache-2.0",
+      "license_source": "authoritative upstream project license",
+      "provenance": "fixed upstream release asset",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}
