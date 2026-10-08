@@ -38,8 +38,13 @@ def validate_ledger(path: Path) -> dict[str, Any]:
                 explicit |= names
         if fallback is None and explicit != set(sources):
             raise ValueError(f"unmapped sources in {category}")
-        summary[category] = {"count": len(sources), "wave1_verified": len(explicit),
-                             "deferred": len(sources) - len(explicit)}
+        verified = {
+            source for rule in value.get("rules", [])
+            if str(rule.get("verification", "")).endswith("_verified")
+            for source in rule.get("sources", []) if source != "*"
+        }
+        summary[category] = {"count": len(sources), "wave1_verified": len(verified),
+                             "deferred": len(sources) - len(verified)}
     if set(summary) != {"graph_jobs", "templates"}:
         raise ValueError("ledger must account for graph jobs and templates")
     return summary

@@ -13,6 +13,7 @@ x-dagster-service: &dagster-service
     - ../../runs:/opt/app/runs
     - ../../data:/opt/app/data
     - ../../targets:/opt/app/targets:ro
+    - ../../rules:/opt/app/rules:ro
   init: true
   restart: unless-stopped
   logging:
@@ -64,6 +65,7 @@ services:
       - ../../runs:/opt/app/runs
       - ../../data:/opt/app/data
       - ../../targets:/opt/app/targets:ro
+      - ../../rules:/opt/app/rules:ro
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "127.0.0.1", "-p", "4000"]

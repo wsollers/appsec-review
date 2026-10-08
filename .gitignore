@@ -75,6 +75,8 @@ images/audit-buildenv-java/jdtls.tar.gz
 /Claude outputs/
 # Mutable OSV feed state (see docs/osv-feed.md); never committed.
 /data/feeds/osv/
+# Mutable Grype feed state; immutable manifests and blobs are run inputs, not source.
+/data/feeds/grype/
 # Mutable MITRE ATT&CK/CAPEC feed state (see docs/mitre-feed.md); never committed.
 /data/feeds/mitre/
 

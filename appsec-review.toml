@@ -177,3 +177,47 @@ workers = 1
 workers = 1
 [jobs.job_target_catalog.steps.publish_catalog.tasks.validate_catalog]
 [jobs.job_target_catalog.steps.publish_catalog.tasks.publish_handoff]
+
+[jobs.job_evidence_collection]
+name = "evidence_collection"
+workers = 1
+
+[jobs.job_evidence_collection.steps.secrets]
+workers = 1
+[jobs.job_evidence_collection.steps.secrets.tasks.gitleaks]
+
+[jobs.job_evidence_collection.steps.source_sast]
+workers = 4
+[jobs.job_evidence_collection.steps.source_sast.tasks.semgrep]
+[jobs.job_evidence_collection.steps.source_sast.tasks.gosec]
+[jobs.job_evidence_collection.steps.source_sast.tasks.mobsfscan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.shellcheck]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpcs]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpstan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.psalm]
+[jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs]
+
+[jobs.job_evidence_collection.steps.software_inventory]
+workers = 1
+[jobs.job_evidence_collection.steps.software_inventory.tasks.syft]
+
+[jobs.job_evidence_collection.steps.vulnerability_matching]
+workers = 2
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.osv_scanner]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.grype]
+
+[jobs.job_evidence_collection.steps.configuration]
+workers = 4
+[jobs.job_evidence_collection.steps.configuration.tasks.hadolint]
+[jobs.job_evidence_collection.steps.configuration.tasks.checkov]
+[jobs.job_evidence_collection.steps.configuration.tasks.trivy]
+[jobs.job_evidence_collection.steps.configuration.tasks.zizmor]
+
+[jobs.job_evidence_collection.steps.binary_hardening]
+workers = 1
+[jobs.job_evidence_collection.steps.binary_hardening.tasks.blint]
+
+[jobs.job_evidence_collection.steps.evidence_publication]
+workers = 1
+[jobs.job_evidence_collection.steps.evidence_publication.tasks.build_indexes]
+[jobs.job_evidence_collection.steps.evidence_publication.tasks.publish_handoff]

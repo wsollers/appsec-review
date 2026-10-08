@@ -8,3 +8,10 @@ scratch
 *.pyc
 .venv
 deploy/dagster/.env
+containers/**
+!containers/catalog.toml
+!containers/runtime-policy.toml
+!containers/tools/
+!containers/tools/*/
+containers/tools/*/**
+!containers/tools/*/tool.toml

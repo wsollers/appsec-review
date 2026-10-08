@@ -24,18 +24,21 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--run-id")
     run.add_argument("--trigger", choices=("manual", "schedule"), default="manual")
 
-    start = commands.add_parser("start", help="start the Wave 1 review graph")
+    start = commands.add_parser("start", help="start the deterministic review graph")
     start.add_argument("--target", type=Path, required=True)
 
-    plan = commands.add_parser("plan-resume", help="explain Wave 1 resume decisions")
+    plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--target", type=Path, required=True)
-    plan.add_argument("--force-from", choices=("job_review_intake", "job_target_catalog"))
+    plan.add_argument("--force-from", choices=("job_review_intake", "job_target_catalog", "job_evidence_collection"))
 
-    resume = commands.add_parser("resume", help="resume the Wave 1 review graph")
+    resume = commands.add_parser("resume", help="resume the deterministic review graph")
     resume.add_argument("--run-id", required=True)
     resume.add_argument("--target", type=Path, required=True)
-    resume.add_argument("--force-from", choices=("job_review_intake", "job_target_catalog"))
+    resume.add_argument("--force-from", choices=("job_review_intake", "job_target_catalog", "job_evidence_collection"))
+
+    tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
+    tools.add_argument("--run-id", required=True)
 
     logs = commands.add_parser("logs", help="read or follow the run-wide structured log")
     logs.add_argument("--run-id", required=True)
@@ -87,9 +90,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             time.sleep(0.5)
 
+    if args.command == "plan-tools":
+        from appsec_review.jobs.job_evidence_collection import plan_applicability
+        run_root = config.runtime.runs_dir / args.run_id
+        print(json.dumps(plan_applicability(run_root), sort_keys=True, indent=2))
+        return 0
+
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
-        jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
+        jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+                registry.build("job_evidence_collection")]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":

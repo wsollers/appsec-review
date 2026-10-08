@@ -1,0 +1,22 @@
+{
+  "schema": "appsec-review/static-tool-fixtures/1",
+  "cases": {
+    "tool-blint": {"positive": "blint/vulnerable.c", "preparation": "compile-outside-scanner"},
+    "tool-checkov": {"positive": "checkov/main.tf"},
+    "tool-gitleaks": {"positive": "gitleaks/leak.txt"},
+    "tool-gosec": {"positive": "gosec/vulnerable.go", "clean": "gosec/clean.go"},
+    "tool-grype": {"positive": "grype/sbom.cdx.json"},
+    "tool-hadolint": {"positive": "hadolint/Dockerfile"},
+    "tool-mobsfscan": {"positive": "mobsfscan/VulnerableActivity.java", "clean": "mobsfscan/CleanActivity.java"},
+    "tool-osv-scanner": {"positive": "osv/sbom.cdx.json"},
+    "tool-phpcs": {"positive": "php/app.php", "clean": "php/clean.php"},
+    "tool-phpstan": {"positive": "php/app.php", "clean": "php/clean.php"},
+    "tool-psalm": {"positive": "php/app.php", "clean": "php/clean.php"},
+    "tool-semgrep": {"positive": "semgrep/vulnerable.py", "rules": "semgrep/rules.yml"},
+    "tool-shellcheck": {"positive": "shellcheck/vulnerable.sh", "clean": "shellcheck/clean.sh"},
+    "tool-spotbugs": {"positive": "spotbugs/Vulnerable.java", "clean": "spotbugs/Clean.java", "preparation": "compile-outside-scanner"},
+    "tool-syft": {"positive": "syft/package-lock.json"},
+    "tool-trivy": {"positive": "trivy/Dockerfile"},
+    "tool-zizmor": {"positive": "zizmor/ci.yml", "clean": "zizmor/clean.yml"}
+  }
+}

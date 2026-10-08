@@ -56,8 +56,9 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exe
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/live-acceptance.json
 ```
 
-Launch Wave 1 through the same live instance. Its target mount is read-only, while application
-receipts and handoffs remain in the ignored `runs/` mount:
+Launch the deterministic review graph (intake, target catalog, and evidence collection) through the
+same live instance. Its target mount is read-only, while application receipts and handoffs remain in
+the ignored `runs/` mount. The retained Dagster job name is `wave1_review` for deployment continuity:
 
 ```powershell
 $dagsterRunId = [guid]::NewGuid().ToString()

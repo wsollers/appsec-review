@@ -132,7 +132,11 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         }:
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
-        for job_id in ("job_review_intake", "job_target_catalog"):
+        for job_id in (
+            "job_review_intake",
+            "job_target_catalog",
+            "job_evidence_collection",
+        ):
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
             pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
             handoff_path = run_root / pointer["handoff_path"]
@@ -149,15 +153,30 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 raise SystemExit(f"{job_id} application receipts are not accepted")
             if status.get("orchestration", {}).get("system") != "dagster":
                 raise SystemExit(f"{job_id} accepted attempt lacks its originating Dagster link")
-            jobs[job_id] = {
+            publication = result.get("outputs", {}).get(
+                "evidence_publication.publish_handoff",
+                result.get("outputs", {}).get("publish_catalog.publish_handoff", {}),
+            )
+            job_report = {
                 "attempt_id": handoff["attempt_id"],
                 "handoff_sha256": actual_hash,
                 "status_receipt": _relative(repository, status_path),
                 "result_receipt": _relative(repository, result_path),
                 "handoff_receipt": _relative(repository, handoff_path),
                 "unit_statuses": {key: value["status"] for key, value in result["units"].items()},
-                "gaps": result.get("outputs", {}).get("publish_catalog.publish_handoff", {}).get("gaps", []),
+                "gaps": publication.get("gaps", []),
             }
+            if "dispositions" in publication:
+                job_report["tool_dispositions"] = [
+                    {
+                        "tool_id": item["tool_id"],
+                        "terminal_status": item["terminal_status"],
+                        "record_count": item["record_count"],
+                        "checkpoint_reused": item["checkpoint_reused"],
+                    }
+                    for item in publication["dispositions"]
+                ]
+            jobs[job_id] = job_report
         return {
             "dagster_run": {"run_id": run_id, "status": run["status"], "job": run["pipelineName"],
                             "step_statuses": {item["stepKey"]: item["status"] for item in run.get("stepStats", [])}},

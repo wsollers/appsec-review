@@ -1,0 +1,375 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "jobs": {
+        "job_evidence_collection": {
+          "attempt_id": "attempt_0004",
+          "gaps": [
+            "git history is not scanned; coverage is the cataloged worktree",
+            "worktree only; git history is excluded",
+            "dependency/build context may be incomplete in offline mode",
+            "project-specific coding standard is not inferred",
+            "Composer dependencies are not installed by the scanner",
+            "project config and installed dependency stubs may be required",
+            "JVM source-only coverage is unavailable",
+            "no accepted JVM bytecode artifact is present; target code is not compiled by the scanner",
+            "directory coverage only; no cataloged OCI/archive artifact",
+            "directory coverage is distinct from built artifact or OCI/archive coverage",
+            "the synchronized OSV snapshot currently covers PyPI only",
+            "target catalog contains no supported IaC files",
+            "source files are not treated as built binaries",
+            "no accepted binary artifact is present"
+          ],
+          "handoff_receipt": "runs/2026-10-08-0016/data/jobs/job_evidence_collection/attempts/attempt_0004/handoff.json",
+          "handoff_sha256": "f57127cfc47cd32af8e7231a52fe7563b1335ebf343c09b75de45778138664e2",
+          "result_receipt": "runs/2026-10-08-0016/data/jobs/job_evidence_collection/attempts/attempt_0004/result.json",
+          "status_receipt": "runs/2026-10-08-0016/data/jobs/job_evidence_collection/attempts/attempt_0004/status.json",
+          "tool_dispositions": [
+            {
+              "checkpoint_reused": true,
+              "record_count": 1,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-gitleaks"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 30,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-semgrep"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 0,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-gosec"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 17,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-mobsfscan"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 113,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-shellcheck"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 13,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-phpcs"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 0,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-phpstan"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 0,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-psalm"
+            },
+            {
+              "checkpoint_reused": false,
+              "record_count": 0,
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-spotbugs"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 18,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-syft"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 3,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-osv-scanner"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 6,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-grype"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 8,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-hadolint"
+            },
+            {
+              "checkpoint_reused": false,
+              "record_count": 0,
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-checkov"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 15,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-trivy"
+            },
+            {
+              "checkpoint_reused": true,
+              "record_count": 16,
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-zizmor"
+            },
+            {
+              "checkpoint_reused": false,
+              "record_count": 0,
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-blint"
+            }
+          ],
+          "unit_statuses": {
+            "binary_hardening.blint": "SUCCEEDED",
+            "configuration.checkov": "SUCCEEDED",
+            "configuration.hadolint": "SUCCEEDED",
+            "configuration.trivy": "SUCCEEDED",
+            "configuration.zizmor": "SUCCEEDED",
+            "evidence_publication.build_indexes": "SUCCEEDED",
+            "evidence_publication.publish_handoff": "SUCCEEDED",
+            "secrets.gitleaks": "SUCCEEDED",
+            "software_inventory.syft": "SUCCEEDED",
+            "source_sast.gosec": "SUCCEEDED",
+            "source_sast.mobsfscan": "SUCCEEDED",
+            "source_sast.phpcs": "SUCCEEDED",
+            "source_sast.phpstan": "SUCCEEDED",
+            "source_sast.psalm": "SUCCEEDED",
+            "source_sast.semgrep": "SUCCEEDED",
+            "source_sast.shellcheck": "SUCCEEDED",
+            "source_sast.spotbugs": "SUCCEEDED",
+            "vulnerability_matching.grype": "SUCCEEDED",
+            "vulnerability_matching.osv_scanner": "SUCCEEDED"
+          }
+        },
+        "job_review_intake": {
+          "attempt_id": "attempt_0001",
+          "gaps": [],
+          "handoff_receipt": "runs/2026-10-08-0016/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "b453726de6ad1cae553b0672304edbc1087203bb01ab30ecee4beb2530f3c402",
+          "result_receipt": "runs/2026-10-08-0016/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
+          "status_receipt": "runs/2026-10-08-0016/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
+          "unit_statuses": {
+            "prepare_target.fingerprint_target": "SUCCEEDED",
+            "prepare_target.resolve_target": "SUCCEEDED",
+            "prepare_target.validate_target": "SUCCEEDED",
+            "publish_intake.publish_handoff": "SUCCEEDED",
+            "resolve_configuration.fetch_config": "SUCCEEDED",
+            "resolve_configuration.freeze_config": "SUCCEEDED",
+            "resolve_configuration.resolve_layers": "SUCCEEDED"
+          }
+        },
+        "job_target_catalog": {
+          "attempt_id": "attempt_0001",
+          "gaps": [
+            {
+              "path": ".git",
+              "reason": "excluded_directory"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/adler32.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/compress.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/crc32.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/crc32.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/deflate.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/deflate.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/gzclose.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/gzguts.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/gzlib.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/gzread.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/gzwrite.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/infback.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inffast.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inffast.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inffixed.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inflate.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inflate.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inftrees.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/inftrees.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/trees.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/trees.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/uncompr.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/zconf.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/zconf.h.in",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/zlib.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/zlib.map",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/zutil.c",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-030/third_party/vendor-001/zutil.h",
+              "reason": "generated_file_excluded"
+            },
+            {
+              "path": "projects/cpp/case-045/third_party/httplib.h",
+              "reason": "generated_file_excluded"
+            }
+          ],
+          "handoff_receipt": "runs/2026-10-08-0016/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "80603279d8fcf8245f143e955df0db4e85ad3d2f244790bc6e5a741f2e71656f",
+          "result_receipt": "runs/2026-10-08-0016/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
+          "status_receipt": "runs/2026-10-08-0016/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
+          "unit_statuses": {
+            "build_discovery.catalog_build_targets": "SUCCEEDED",
+            "build_discovery.discover_build_systems": "SUCCEEDED",
+            "build_discovery.discover_compile_commands": "SUCCEEDED",
+            "component_discovery.catalog_components": "SUCCEEDED",
+            "component_discovery.catalog_dependencies": "SUCCEEDED",
+            "publish_catalog.publish_handoff": "SUCCEEDED",
+            "publish_catalog.validate_catalog": "SUCCEEDED",
+            "repository_discovery.census_languages": "SUCCEEDED",
+            "repository_discovery.discover_projects": "SUCCEEDED",
+            "repository_discovery.partition_repository": "SUCCEEDED",
+            "retrieval_indexes.build_component_index": "SUCCEEDED",
+            "retrieval_indexes.build_path_index": "SUCCEEDED",
+            "retrieval_indexes.build_symbol_index": "SUCCEEDED"
+          }
+        }
+      },
+      "orchestration_receipt": "runs/2026-10-08-0016/data/orchestration/dagster/617a9848-b7d9-404e-9098-f88d1819e7d6.json",
+      "resume_decisions": [
+        {
+          "action": "REUSE",
+          "handoff_sha256": "b453726de6ad1cae553b0672304edbc1087203bb01ab30ecee4beb2530f3c402",
+          "job_id": "job_review_intake",
+          "reasons": [
+            "all declared identities and artifacts match"
+          ]
+        },
+        {
+          "action": "REUSE",
+          "handoff_sha256": "80603279d8fcf8245f143e955df0db4e85ad3d2f244790bc6e5a741f2e71656f",
+          "job_id": "job_target_catalog",
+          "reasons": [
+            "all declared identities and artifacts match"
+          ]
+        },
+        {
+          "action": "RUN",
+          "handoff_sha256": null,
+          "job_id": "job_evidence_collection",
+          "reasons": [
+            "implementation identity changed",
+            "validator identity changed"
+          ]
+        }
+      ],
+      "run_id": "2026-10-08-0016"
+    },
+    "dagster_run": {
+      "job": "wave1_review",
+      "run_id": "617a9848-b7d9-404e-9098-f88d1819e7d6",
+      "status": "SUCCESS",
+      "step_statuses": {
+        "dispatch_wave1_review": "SUCCESS"
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "evidence_collection",
+      "review_intake",
+      "target_catalog",
+      "third_party_data_sync",
+      "wave1_review"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}

@@ -136,6 +136,8 @@ def _wave1_dagster_job(config: AppConfig, registry: JobRegistry):
         trigger = _trigger_for_run(dict(context.dagster_run.tags))
         requested_run_id = dict(context.dagster_run.tags).get("appsec/application_run_id")
         jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
+        if "job_evidence_collection" in registry.job_ids():
+            jobs.append(registry.build("job_evidence_collection"))
         outcome = GraphRunner(config, jobs).run(
             target_root=target,
             source_fingerprint=source_fingerprint(target),

@@ -1,0 +1,11 @@
+{
+  "schema": "appsec-review/rule-bundle-lock/1",
+  "bundle": "semgrep-security-baseline",
+  "license": "MIT",
+  "provenance": "repository-authored for appsec-review",
+  "files": {
+    "security.yml": {
+      "sha256": "0d13b76a90a3d79b169206b850156aef23826b963cb4b9a900d39ae0b9a17336"
+    }
+  }
+}

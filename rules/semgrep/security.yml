@@ -1,0 +1,19 @@
+rules:
+  - id: appsec-review.python-dangerous-eval
+    languages: [python]
+    message: User-controlled input must not be evaluated as Python code.
+    severity: ERROR
+    patterns:
+      - pattern: eval(...)
+  - id: appsec-review.javascript-dangerous-eval
+    languages: [javascript, typescript]
+    message: Avoid dynamic code evaluation.
+    severity: ERROR
+    patterns:
+      - pattern: eval(...)
+  - id: appsec-review.shell-unquoted-expansion
+    languages: [bash]
+    message: Quote shell variable expansions used as command arguments.
+    severity: WARNING
+    patterns:
+      - pattern: $CMD $ARG

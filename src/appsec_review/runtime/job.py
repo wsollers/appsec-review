@@ -46,6 +46,7 @@ class Job:
     schema_identity: str = "appsec-review/job-result/1"
     implementation_identity: str | None = None
     validation_identity: str | None = None
+    runtime_identity: Callable[[], str] | None = None
 
     def identities(self) -> Mapping[str, str]:
         def identity(values: tuple[object, ...], explicit: str | None = None) -> str:
@@ -61,7 +62,11 @@ class Job:
                 digest.update(payload)
             return digest.hexdigest()
         return {
-            "implementation": identity((self.handler, Job.execute), self.implementation_identity),
+            "implementation": identity(
+                (self.handler, Job.execute,
+                 self.runtime_identity() if self.runtime_identity is not None else ""),
+                self.implementation_identity,
+            ),
             "schema": self.schema_identity,
             "validation": identity((*self.input_validators, *self.output_validators), self.validation_identity),
         }
