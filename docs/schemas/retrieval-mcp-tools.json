@@ -1,0 +1,12 @@
+{
+  "schema": "appsec-review/mcp-tool-catalog/1",
+  "tools": [
+    {"name":"search","required":["query"],"properties":["query","indexes","kinds","limit","cursor"]},
+    {"name":"find","required":[],"properties":["identity","kind","name","path","indexes","limit","cursor"]},
+    {"name":"read_excerpt","required":["identity"],"properties":["identity","context_lines"]},
+    {"name":"trace","required":["identity"],"properties":["identity","relations","depth","limit"]},
+    {"name":"resolve_evidence","required":["identity"],"properties":["identity","limit"]},
+    {"name":"coverage","required":[],"properties":["indexes"]}
+  ],
+  "runtime_source": "appsec_review.mcp.schema:TOOLS"
+}

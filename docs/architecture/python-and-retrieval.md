@@ -1,56 +1,60 @@
-# Python and retrieval layout
+# Python and retrieval architecture
 
-Wave 1 publishes bounded path, symbol, and component JSON indices under the accepted catalog
-attempt. `RunIndexBackend` implements the existing transport-independent search contract over
-those immutable files. It verifies the accepted artifact hash before serving a bounded page and
-never falls back to a recursive target scan. Results retain source hashes, relative paths, line
-locations where available, and explicit index coverage gaps.
+Retrieval is a core application capability. Producers publish immutable, independently
+fingerprinted SQLite/FTS shards; application jobs call `appsec_review.retrieval` directly; the
+`appsec_review.mcp` package is only a read-only transport and authorization adapter.
 
-Python source lives under `src/appsec_review/`; tests mirror it under `tests/`. The package owns
-domain behavior. Protocols and deployment mechanisms remain adapters around that behavior.
+## Accepted index sets
 
-## Retrieval decision
+One run may contain source, observations, components, build, compiled, analysis, and evidence
+shards. A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
+target snapshot, producer artifacts, tool/image/rule identity, parser and normalizer identities,
+mapping implementation, schema, and upstream manifests. Thus an observation change does not
+invalidate an unrelated compile or AST shard, while a composed evidence index or finding package
+can include the observation manifest as an upstream dependency.
 
-Retrieval is a core application capability with a thin MCP interface. It is not a skill.
+The current catalog job produces source, component, build, and bounded declaration-analysis
+shards. Static evidence collection adds an observations shard and composes it with the previously
+accepted catalog manifest. Later compiled, CodeQL, IR, binary, coverage, and finding-package jobs
+use the same physical schema and add their own shards; they do not widen the MCP interface.
 
-- `appsec_review.retrieval` owns typed queries, index readers, ranking, pagination, source identity,
-  and coverage-gap behavior. It has no dependency on MCP.
-- `appsec_review.mcp` translates model tool calls into core requests and serializes results. It does
-  not scan repositories, build indices, rank results, or validate evidence.
-- Index-building jobs create immutable run-scoped indices under
-  `runs/<run-id>/data/indices/<index-name>/`. Inference reads those indices; it does not recursively
-  grep the target checkout.
-- Start with one read-only retrieval gateway. Split it into a top-level deployable service only when
-  it needs a separate process, dependency set, security boundary, or release lifecycle.
-- A skill may later teach repository agents how to operate or diagnose the gateway. It must not be
-  the implementation or the authority that grants review workers access.
+`runs/<run-id>/data/indices/accepted.json` binds one manifest to an accepted job handoff. Before
+opening a database, retrieval verifies the pointer, handoff status and hash, manifest membership in
+the handoff artifact list, manifest content hash, each shard hash, and each shard's embedded schema,
+name, and fingerprint. SQLite is opened read-only with immutable mode. Missing, corrupt, stale, or
+incomplete inputs are gaps or integrity failures, never an empty-result proof that the target is
+clean.
 
-## I/O boundary
+## Identity and location contract
 
-Do not expose general filesystem or shell access through MCP. Tools accept run ids, logical index
-names, typed query fields, bounded limits, and opaque cursors. The trusted service resolves those
-values to run-owned paths.
+Logical identities are versioned hashes of entity kind, target snapshot, and producer-native
+identity. Supported kinds are source files and spans, symbols, components, projects, build actions,
+compile units, objects, libraries, executables, AST nodes, IR entities, tool observations, evidence
+artifacts, and finding packages. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
+`REFERENCES`, `CALLS`, `CONTAINS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `DEPENDS_ON`,
+`OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, and `CONTRADICTS`.
 
-Initial tool families should remain narrow:
+A resolving source location binds the target snapshot, normalized relative path, file hash,
+byte/line/column span, producer-native location, mapping method, confidence, and ambiguity.
+Heuristic relationships must be marked non-exact and carry an ambiguity explanation. Excerpt reads
+re-hash the current target file and fail with an explicit gap when it changed after indexing.
 
-- evidence search and cited excerpt reads;
-- code symbol, definition, reference, caller, and callee lookup;
-- component and dependency lookup;
-- artifact metadata and coverage-gap lookup.
+## Query boundary
 
-Every result carries a stable source identity and resolving path/line or artifact reference. Empty
-or incomplete indices return explicit gaps. Model-facing tools are read-only; jobs publish new
-evidence through validated job outputs rather than arbitrary MCP writes.
+The public surface is six bounded tools: `search`, `find`, `read_excerpt`, `trace`,
+`resolve_evidence`, and `coverage`. The MCP process is pinned at startup to one run and optionally
+one exact manifest hash. It has no shell, write, glob, grep, arbitrary SQL, arbitrary regular
+expression, or caller-supplied filesystem-path operation.
 
-## When to split the service
+All responses include the run and manifest identity, physical index identities, resolving source
+or artifact identity, pagination, coverage gaps, truncation, and duration. Cursors are opaque and
+authenticated. Limits cover result count, response bytes, traversal depth, excerpt bytes, and
+execution time. Compile/link arguments and environment-like producer payloads are bounded and
+redacted before indexing.
 
-Keep the MCP adapter in the main package until at least one of these is true:
+Every query records a bounded `RETRIEVAL_QUERY` event in the single pipeline log. The event stores
+the tool, manifest, query hash, structured filters, result count, gaps, truncation, and duration; it
+never stores search text verbatim.
 
-1. it must run with different privileges from the orchestrator;
-2. its native or language-server dependencies conflict with the main environment;
-3. it must scale or restart independently;
-4. another repository consumes its versioned API.
-
-At that point, move the adapter entry point to `services/retrieval-mcp/` while retaining the domain
-contracts in `appsec_review.retrieval`. The transport remains replaceable and the tests continue to
-exercise the same core behavior without starting an MCP server.
+Keep the adapter in the main package until a distinct privilege boundary, dependency conflict,
+independent scaling/restart need, or external versioned consumer is demonstrated.

@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/migration-ledger/1",
-  "note": "Migration documentation only; this file is not a runtime job registry.",
+  "note": "Migration documentation only; this file is not a runtime job registry. Wave 1 JSON retrieval has been replaced by the accepted immutable SQLite/FTS index contract; later compiled, IR, CodeQL, binary, coverage and finding-package producers remain acceptance-pending where listed below.",
   "categories": {
     "graph_jobs": {
       "expected_count": 91,

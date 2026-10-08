@@ -7,7 +7,6 @@ MCP translate requests into these types; they do not own search semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Protocol
 
@@ -70,51 +69,28 @@ class SearchBackend(Protocol):
 
 
 class RunIndexBackend:
-    """Search immutable Wave 1 JSON indices without rescanning the target tree."""
+    """Compatibility facade over the accepted SQLite retrieval core."""
 
-    _UNITS = {
-        "path": "retrieval_indexes.build_path_index",
-        "symbol": "retrieval_indexes.build_symbol_index",
-        "component": "retrieval_indexes.build_component_index",
-    }
+    _INDEXES = {"path": "source", "symbol": "analysis", "component": "components"}
 
     def __init__(self, runs_dir: Path):
         self.runs_dir = Path(runs_dir).resolve()
 
     def search(self, request: SearchRequest) -> SearchPage:
         try:
-            unit_id = self._UNITS[request.index]
+            index_name = self._INDEXES[request.index]
         except KeyError as exc:
             raise ValueError(f"unknown retrieval index: {request.index}") from exc
-        run_root = (self.runs_dir / request.run_id).resolve()
-        if run_root.parent != self.runs_dir or not run_root.is_dir():
-            raise FileNotFoundError(f"run does not exist: {request.run_id}")
-        pointer = json.loads((run_root / "data/jobs/job_target_catalog/latest.json").read_text(encoding="utf-8"))
-        handoff = json.loads((run_root / pointer["handoff_path"]).read_text(encoding="utf-8"))
-        artifact = handoff["outputs"][unit_id]["artifact"]
-        index_path = (run_root / artifact["path"]).resolve()
-        if run_root not in index_path.parents:
-            raise ValueError("retrieval index path escapes run")
-        from appsec_review.storage import file_sha256
-        if file_sha256(index_path) != artifact["sha256"]:
-            raise ValueError("retrieval index integrity mismatch")
-        document = json.loads(index_path.read_text(encoding="utf-8"))
-        query = request.query.casefold()
-        matched = [item for item in document.get("items", [])
-                   if query in json.dumps(item, sort_keys=True).casefold()]
-        try:
-            offset = int(request.cursor or "0")
-        except ValueError as exc:
-            raise ValueError("invalid retrieval cursor") from exc
-        page = matched[offset:offset + request.limit]
+        from appsec_review.retrieval.core import RetrievalCore
+        response = RetrievalCore(self.runs_dir, request.run_id).search(
+            query=request.query, indexes=(index_name,), limit=request.limit, cursor=request.cursor)
         hits = []
-        for item in page:
-            path = item.get("path") or item.get("manifest") or item.get("root") or "."
-            source_id = item.get("source_id") or item.get("manifest_sha256") or handoff["source_fingerprint"]
-            hits.append(SearchHit(source_id=source_id, path=path,
-                                  start_line=int(item.get("start_line", 1)),
-                                  end_line=int(item.get("end_line", item.get("start_line", 1))),
-                                  excerpt=json.dumps(item, sort_keys=True)[:2048]))
-        next_cursor = str(offset + len(page)) if offset + len(page) < len(matched) else None
-        gaps = tuple(str(item) for item in document.get("gaps", [])[:100])
-        return SearchPage(tuple(hits), next_cursor, gaps)
+        for item in response["results"]:
+            location = item.get("location") or {}
+            hits.append(SearchHit(
+                source_id=item["identity"], path=location.get("path", "."),
+                start_line=int(location.get("start_line", 1)), end_line=int(location.get("end_line", 1)),
+                excerpt=str(item.get("name", "")), score=None,
+            ))
+        return SearchPage(tuple(hits), response["pagination"]["next_cursor"],
+                          tuple(response["coverage_gaps"]))

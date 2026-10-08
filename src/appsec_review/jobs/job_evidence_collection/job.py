@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Callable, Mapping
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from typing import Any
@@ -18,6 +18,12 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     adapter_registry,
 )
 from appsec_review.jobs.job_evidence_collection.evidence import build_envelope
+from appsec_review.retrieval import (
+    EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
+    RelationRecord, SourceLocation, index_fingerprint, write_manifest,
+)
+from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
@@ -314,11 +320,28 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
 
 
 def _build_indexes(unit: UnitContext, tool_units: tuple[str, ...]) -> Mapping[str, Any]:
-    indexes: dict[str, dict[str, list[str]]] = {
-        key: defaultdict(list) for key in ("path", "rule", "component", "package", "advisory", "language", "evidence_id")
-    }
     gaps: list[str] = []
     dispositions: list[dict[str, Any]] = []
+    manifest_path, manifest_sha = resolve_accepted_manifest(unit.job.run_root)
+    upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
+    if any(item["name"] == "observations" for item in upstream["indexes"]):
+        base_candidates = upstream.get("upstream_manifests", [])
+        if not base_candidates:
+            raise ValueError("observation manifest has no stable upstream index set")
+        base = base_candidates[0]
+        manifest_path = (unit.job.run_root / base["path"]).resolve()
+        manifest_sha = base["sha256"]
+        upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
+    artifacts = [unit.output(unit_id)["artifact"] for unit_id in tool_units]
+    fingerprint = index_fingerprint(
+        name="observations", target_snapshot=unit.job.source_fingerprint, producer_artifacts=artifacts,
+        tool_identity={"tools": sorted(unit.output(item)["tool_id"] for item in tool_units)},
+        parser_identity="static-adapters/1", normalizer_identity="static-evidence/1",
+        mapping_identity="native-location/1", upstream_manifests=(manifest_sha,),
+    )
+    index_path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}.sqlite"
+    builder = IndexBuilder(index_path, name="observations", fingerprint=fingerprint,
+                           target_snapshot=unit.job.source_fingerprint)
     for unit_id in tool_units:
         output = unit.output(unit_id)
         dispositions.append({"tool_id": output["tool_id"], "terminal_status": output["terminal_status"],
@@ -326,27 +349,73 @@ def _build_indexes(unit: UnitContext, tool_units: tuple[str, ...]) -> Mapping[st
                              "gaps": output.get("gaps", [])})
         evidence = _read_artifact(unit.job.run_root, output["artifact"])
         gaps.extend(str(item) for item in evidence.get("exclusions_and_gaps", []))
+        artifact_id = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,
+                                             {"path": output["artifact"]["path"],
+                                              "sha256": output["artifact"]["sha256"]})
+        builder.add_entity(EntityRecord(artifact_id, output["artifact"]["sha256"],
+                                        output["tool_id"] + " evidence", output["tool_id"],
+                                        {"artifact": output["artifact"], "tool_id": output["tool_id"]}))
         for record in evidence.get("records", []):
-            pairs = {
-                "path": (record.get("location") or {}).get("path"), "rule": record.get("native_rule_id"),
-                "component": record.get("component"), "package": record.get("package"),
-                "advisory": record.get("advisory"), "language": record.get("language"),
-                "evidence_id": record.get("evidence_id"),
-            }
-            for kind, value in pairs.items():
-                if value is not None and len(indexes[kind][str(value)]) < 500:
-                    indexes[kind][str(value)].append(record["evidence_id"])
-    document = {
-        "schema": "appsec-review/static-evidence-index/1",
-        "indexes": {kind: dict(sorted(values.items())) for kind, values in indexes.items()},
-        "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps)),
-    }
-    path = unit.unit_root / "index.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_json(path, document)
-    return {"artifact": _artifact(unit.job.run_root, path), "item_count": sum(
-        len(values) for values in document["indexes"].values()), "dispositions": dispositions,
-        "gaps": document["gaps"]}
+            observation_id = LogicalIdentity.derive(
+                EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
+                {"tool_id": output["tool_id"], "evidence_id": record["evidence_id"]},
+            )
+            location_value = record.get("location")
+            location = None
+            source_id = None
+            if location_value:
+                target_path = (unit.job.target_root or Path()) / location_value["path"]
+                if target_path.is_file():
+                    source_sha = file_sha256(target_path)
+                    data = target_path.read_bytes()
+                    line_offsets = [0]
+                    for match in re.finditer(b"\n", data):
+                        line_offsets.append(match.end())
+                    start_line = int(location_value["start_line"])
+                    end_line = int(location_value["end_line"])
+                    start_byte = line_offsets[min(start_line - 1, len(line_offsets) - 1)]
+                    end_byte = line_offsets[min(end_line, len(line_offsets) - 1)] if end_line < len(line_offsets) else len(data)
+                    location = SourceLocation(
+                        target_snapshot=unit.job.source_fingerprint, path=location_value["path"],
+                        file_sha256=source_sha, start_byte=start_byte, end_byte=end_byte,
+                        start_line=start_line, end_line=end_line, start_column=1, end_column=1,
+                        producer_location={"tool": output["tool_id"], **location_value},
+                        mapping_method="producer-line-location", confidence=1.0,
+                    )
+                    source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                                       {"path": location_value["path"], "sha256": source_sha})
+            builder.add_entity(EntityRecord(
+                observation_id, record["evidence_id"], str(record.get("native_rule_id", "observation")),
+                " ".join(str(record.get(key) or "") for key in (
+                    "native_rule_id", "message", "category", "component", "package", "advisory", "language")),
+                {"tool_id": output["tool_id"], **record}, location,
+            ))
+            builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, observation_id.value,
+                                                artifact_id.value, True, 1.0))
+            if source_id is not None:
+                builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
+                                                    source_id.value, True, 1.0))
+    for disposition in dispositions:
+        status = "complete" if disposition["terminal_status"] == "SUCCEEDED" else "partial"
+        builder.add_coverage(disposition["tool_id"], status,
+                             None if status == "complete" else "; ".join(disposition["gaps"][:10]))
+    observation_sha = builder.build()
+    observation_identity = IndexIdentity(
+        "observations", "appsec-review/retrieval-index/1", observation_sha, fingerprint,
+        index_path.relative_to(unit.job.run_root).as_posix(),
+        {"job": "job_evidence_collection", "unit": unit.unit_id}, tuple(dict.fromkeys(gaps)),
+    )
+    existing = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]]
+    combined = existing + [observation_identity]
+    combined_manifest = unit.job.run_root / "data" / "indices" / "manifests" / f"evidence-{unit.job.attempt_id}.json"
+    write_manifest(combined_manifest, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=unit.job.target_root or Path(), indexes=combined,
+                   upstream_manifests=({"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
+                                        "sha256": manifest_sha},))
+    return {"artifact": _artifact(unit.job.run_root, index_path),
+            "index_manifest": _artifact(unit.job.run_root, combined_manifest),
+            "item_count": sum(item["record_count"] for item in dispositions),
+            "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps))}
 
 
 def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str | None = None) -> Job:
@@ -404,6 +473,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_json(path, document)
         return {"schema": document["schema"], "artifact": _artifact(unit.job.run_root, path),
+                "index_manifest": index["index_manifest"],
                 "item_count": index["item_count"], "gaps": document["gaps"],
                 "dispositions": document["dispositions"]}
 

@@ -160,7 +160,7 @@ class JobRunner:
                     handoff_outputs[unit_id] = {
                         key: output[key] for key in (
                             "schema", "artifact", "identity", "pointer", "metadata_path",
-                            "item_count", "gaps",
+                            "item_count", "gaps", "index_manifest",
                         ) if key in output
                     }
             handoff = {
@@ -186,6 +186,23 @@ class JobRunner:
             handoff_path = attempt_root / "handoff.json"
             atomic_json(handoff_path, handoff)
             handoff_hash = file_sha256(handoff_path)
+            manifests = [output["index_manifest"] for output in result.get("outputs", {}).values()
+                         if isinstance(output, Mapping) and isinstance(output.get("index_manifest"), Mapping)]
+            if manifests:
+                manifest = manifests[-1]
+                manifest_path = (run_root / str(manifest.get("path", ""))).resolve()
+                if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file():
+                    raise ValueError("index manifest path escapes run or is unavailable")
+                if file_sha256(manifest_path) != manifest.get("sha256"):
+                    raise ValueError("index manifest artifact hash mismatch")
+                atomic_json(run_root / "data" / "indices" / "accepted.json", {
+                    "schema": "appsec-review/accepted-index-set/1",
+                    "run_id": run_id,
+                    "handoff_path": handoff_path.relative_to(run_root).as_posix(),
+                    "handoff_sha256": handoff_hash,
+                    "manifest_path": manifest_path.relative_to(run_root).as_posix(),
+                    "manifest_sha256": manifest["sha256"],
+                })
             events.write("HANDOFF_ACCEPTED", handoff_sha256=handoff_hash,
                          handoff_path=handoff_path.relative_to(run_root).as_posix())
             latest = attempt_root.parent.parent / "latest.json"
