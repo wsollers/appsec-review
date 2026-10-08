@@ -117,12 +117,18 @@ summary groups large trees by prefix and component while preserving exact target
 hash identities for every accepted scope.
 
 Deterministic rules select mandatory baseline coverage, language-specific scanners, dependency
-managers, configuration scanners, and recognized build systems first. A centrally configured model
-may be injected only when the summary identifies bounded ambiguity. Model proposals are untrusted,
-versioned data: scanners, build systems, components, dependencies, and paths must resolve against
-fixed allowlists and the accepted catalog. Commands, images, plugins, arbitrary paths, and
-target-supplied guidance are not representable. Disabled, unavailable, failed, invalid, or
-contradictory model assistance publishes the deterministic safe plan with a named gap.
+managers, and generic build units first. Units come from accepted project descriptors or a bounded
+source-only fallback for directly compiled languages; their stable identities never include fixture
+names or fixed repository layouts. A centrally configured model resolves how each unit should be
+built from a bounded descriptor package. It returns one typed recipe per unit, including the
+throwaway-image profile, declared dependencies, environment, argv arrays, and expected outputs.
+
+Model proposals are untrusted, versioned data. Every identity and path must resolve against the
+accepted catalog. Validators reject unknown executables, shell syntax, secret environment keys,
+absolute or escaping paths, package/tool installers, tests, and target execution. The model cannot
+invent a build unit or authorize execution; a later build job may execute only an accepted recipe
+inside its matching image profile. Disabled, unavailable, failed, invalid, or contradictory model
+assistance publishes an explicit build-planning gap and leaves recipes absent.
 
 The accepted plan is an immutable run artifact and an `analysis/target-analysis-plan` retrieval
 shard. Its manifest composes the catalog shards rather than replacing them. Evidence producers read

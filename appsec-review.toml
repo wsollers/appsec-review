@@ -202,14 +202,14 @@ summary_max_bytes = 524288
 summary_sample_per_prefix = 20
 
 [jobs.job_target_analysis_plan.settings.model]
-enabled = false
-provider = "openai"
-model = "gpt-5"
+enabled = true
+provider = "claude-cli"
+model = "haiku"
 reasoning = "medium"
 max_input_tokens = 32000
 max_output_tokens = 8000
 timeout_seconds = 120
-retries = 1
+retries = 2
 
 [jobs.job_target_analysis_plan.steps.catalog_summary]
 workers = 1

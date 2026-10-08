@@ -23,8 +23,9 @@ bound to an accepted handoff. Later CodeQL/IR branches use the same contract and
 unrelated scanners and indexers.
 
 The target analysis planner adds a separately fingerprinted `analysis` shard with shard id
-`target-analysis-plan`. It indexes accepted component routing, scanner reasons, and non-executable
-build topology. The shard keeps the catalog manifest as an explicit upstream and is queryable by
+`target-analysis-plan`. It indexes accepted component routing, scanner reasons, generic build-unit
+identities, and validated but non-executable inferred build recipes. The shard keeps the catalog
+manifest as an explicit upstream and is queryable by
 the existing bounded `search`, `find`, `trace`, and `coverage` MCP filters; no filesystem search or
 new write-capable interface is exposed.
 

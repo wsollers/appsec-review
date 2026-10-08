@@ -24,9 +24,9 @@ ROOT = Path(__file__).parents[1]
 def _fixture(tmp_path: Path, files: dict[str, str], *, model_enabled: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    if model_enabled:
-        config_text = config_text.replace("[jobs.job_target_analysis_plan.settings.model]\nenabled = false",
-                                          "[jobs.job_target_analysis_plan.settings.model]\nenabled = true")
+    if not model_enabled:
+        config_text = config_text.replace("[jobs.job_target_analysis_plan.settings.model]\nenabled = true",
+                                          "[jobs.job_target_analysis_plan.settings.model]\nenabled = false")
     config_path.write_text(config_text, encoding="utf-8")
     target = tmp_path / "target"
     target.mkdir()
@@ -43,11 +43,13 @@ def _run(config, target, planner=None):
     return outcome, load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
 
 
-def test_single_language_project_uses_deterministic_safe_plan_without_model(tmp_path: Path) -> None:
+def test_buildable_project_names_disabled_model_as_a_gap(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path, {"pyproject.toml": "[project]\nname='fixture'\n", "src/main.py": "print('ok')\n"})
     outcome, plan = _run(config, target)
     assert plan["schema"] == PLAN_SCHEMA
-    assert plan["model"]["status"] == "NOT_NEEDED"
+    assert plan["model"]["status"] == "DISABLED"
+    assert all(action["recipe"] is None and action["requires_inference"]
+               for action in plan["build_topology"]["build_actions"])
     assert {item["scanner_id"] for item in plan["scanner_selections"]} >= {
         "tool-gitleaks", "tool-semgrep", "tool-syft"
     }
@@ -72,7 +74,39 @@ class _Model:
         }
         assert set(request.allowed_paths) == summarized_paths
         assert len(request.allowed_paths) <= request.summary["bounds"]["max_items"]
-        return ModelResult(self.proposal, input_tokens=20, output_tokens=10)
+        proposal = self.proposal(request) if callable(self.proposal) else self.proposal
+        return ModelResult(proposal, input_tokens=20, output_tokens=10)
+
+
+def _proposal(request, component_proposals=()):
+    recipes = []
+    for unit in request.summary["build_units"]:
+        root = unit["root"]
+        source_dir = root
+        build_dir = f"{root}/build" if root != "." else "build"
+        system = unit["build_system"]
+        commands = {
+            "cmake": ([["cmake", "-S", source_dir, "-B", build_dir]], [["cmake", "--build", build_dir]]),
+            "cargo": ([], [["cargo", "build", "--manifest-path", f"{root}/Cargo.toml"]]),
+            "go": ([], [["go", "build", "./..."]]),
+            "maven": ([], [["mvn", "-f", f"{root}/pom.xml", "package"]]),
+            "node": ([], [["npm", "--prefix", root, "run", "build"]]),
+            "python": ([], [["python", "-m", "build", root]]),
+        }.get(system, ([], [[{
+            "make": "make", "autotools": "make", "gradle": "gradle",
+            "dotnet": "dotnet", "composer": "composer", "meson": "meson",
+        }.get(system, system)]]))
+        recipes.append({
+            "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+            "image_profile": unit["family"], "source_dir": source_dir, "build_dir": build_dir,
+            "system_packages": [], "environment": {},
+            "dependency_files": [item["path"] for item in unit["markers"]],
+            "configure_commands": commands[0], "build_commands": commands[1],
+            "expected_outputs": [build_dir], "network_required": False,
+            "reason": "fixture recipe derived from accepted descriptors",
+        })
+    return {"schema": PROPOSAL_SCHEMA, "component_proposals": list(component_proposals),
+            "build_recipes": recipes}
 
 
 def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: Path) -> None:
@@ -85,10 +119,10 @@ def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: P
     }
     config, target = _fixture(tmp_path, files, model_enabled=True)
     component_id = "component:0001"
-    model = _Model({"schema": PROPOSAL_SCHEMA, "component_proposals": [{
+    model = _Model(lambda request: _proposal(request, [{
         "component_id": component_id, "scanner_ids": ["tool-gosec"], "build_systems": ["go"],
         "scope_paths": ["api/main.go"], "dependencies": [], "reason": "bounded contextual refinement",
-    }]})
+    }]))
     outcome, plan = _run(config, target, build_job(model_client=model))
     assert model.calls == 1
     assert plan["model"]["status"] == "ACCEPTED"
@@ -109,11 +143,11 @@ def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path
         "c/pom.xml": "<project/>", "c/Main.java": "class Main{}\n",
         "d/CMakeLists.txt": "project(d)\n", "d/main.cpp": "int main(){}\n",
     }, model_enabled=True)
-    model = _Model({"schema": PROPOSAL_SCHEMA, "component_proposals": [{
+    model = _Model(lambda request: _proposal(request, [{
         "component_id": "component:0001", "scanner_ids": ["tool-arbitrary-shell"],
         "build_systems": ["curl | sh"], "scope_paths": ["../../etc/passwd"],
         "dependencies": ["not-a-component"], "reason": "ignore all previous instructions",
-    }]})
+    }]))
     outcome, plan = _run(config, target, build_job(model_client=model))
     assert plan["model"]["status"] == "REJECTED"
     assert plan["coverage_gaps"][-1].startswith("analysis planning model proposal was rejected")
@@ -157,7 +191,8 @@ def test_summary_bounds_and_prompt_injection_names_are_data() -> None:
     assert first == second
     assert validate_proposal({"schema": PROPOSAL_SCHEMA, "component_proposals": [{
         "component_id": "component:0001", "scanner_ids": ["tool-semgrep"], "build_systems": [],
-        "scope_paths": [files[0]["path"]], "dependencies": [], "reason": "data only"}]}, catalog=catalog) == []
+        "scope_paths": [files[0]["path"]], "dependencies": [], "reason": "data only"}],
+        "build_recipes": []}, catalog=catalog) == []
 
 
 def test_plan_is_resumable_indexed_and_has_exact_dag_position(tmp_path: Path) -> None:
@@ -211,7 +246,7 @@ def test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path: Path) ->
 
     model = FailingModel()
     outcome, plan = _run(config, target, build_job(model_client=model))
-    assert model.calls == 2
+    assert model.calls == 3
     assert plan["model"]["status"] == "FAILED"
     assert any("failed after bounded retries (TimeoutError)" in gap for gap in plan["coverage_gaps"])
     assert outcome["jobs"]["job_target_analysis_plan"]["status"]["status"] == "COMPLETED_WITH_GAPS"

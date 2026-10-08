@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from dataclasses import asdict
 import hashlib
 import json
@@ -88,6 +89,7 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
         "files": files, "projects": tuple(projects.get("projects", ())),
         "components": tuple(components.get("components", ())),
         "build_files": tuple(by_path[key] for key in sorted(by_path)),
+        "build_units": tuple(targets.get("targets", ())),
         "compile_databases": tuple(compile_databases.get("files", ())),
         "accepted_artifacts": tuple(item for item in targets.get("targets", ()) if item.get("artifact_kind") == "built"),
         "gaps": tuple(gaps),
@@ -233,14 +235,21 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
             for key in ("recognized_build_files", "compile_databases", "accepted_artifacts")
             for item in summary[key]
         })
-        request = ModelRequest(PROPOSAL_SCHEMA, guidance, summary, SCANNERS, tuple(sorted(BUILD_SYSTEMS)),
-                               tuple(str(item["component_id"]) for item in summary["components"]),
-                               tuple(bounded_paths),
-                               int(model["max_input_tokens"]), int(model["max_output_tokens"]))
+        request = ModelRequest(
+            schema=PROPOSAL_SCHEMA, guidance=guidance, summary=summary,
+            allowed_scanners=SCANNERS, allowed_build_systems=tuple(sorted(BUILD_SYSTEMS)),
+            allowed_components=tuple(str(item["component_id"]) for item in summary["components"]),
+            allowed_paths=tuple(bounded_paths),
+            allowed_build_units=tuple(str(item["build_unit_id"]) for item in summary.get("build_units", ())),
+            provider=str(model["provider"]), model=str(model["model"]), reasoning=str(model["reasoning"]),
+            max_input_tokens=int(model["max_input_tokens"]), max_output_tokens=int(model["max_output_tokens"]),
+        )
         request_identity = {
             "schema": request.schema, "summary": request.summary,
             "allowed_scanners": request.allowed_scanners, "allowed_build_systems": request.allowed_build_systems,
             "allowed_components": request.allowed_components, "allowed_paths": request.allowed_paths,
+            "allowed_build_units": request.allowed_build_units,
+            "provider": request.provider, "model": request.model, "reasoning": request.reasoning,
             "max_input_tokens": request.max_input_tokens, "max_output_tokens": request.max_output_tokens,
             "guidance_sha256": guidance_sha,
         }
@@ -266,6 +275,9 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
             started = time.monotonic()
             try:
                 result = model_client.complete(request, timeout_seconds=int(model["timeout_seconds"]))
+                if result.raw_response is not None:
+                    raw = result.raw_response.encode("utf-8")[:2 * 1024 * 1024]
+                    atomic_bytes(unit.unit_root / f"model-response-{retry}.txt", raw)
                 duration = int((time.monotonic() - started) * 1000)
                 errors = validate_proposal(result.proposal, catalog=catalog,
                                            allowed_components=request.allowed_components,
@@ -280,7 +292,11 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
                 if errors:
                     unit.job.events.write("ANALYSIS_PLAN_VALIDATION_REJECTED", rejection_count=len(errors),
                                           proposal_sha256=hashlib.sha256(canonical_json(result.proposal)).hexdigest())
-                    gap = "analysis planning model proposal was rejected; deterministic safe plan published"
+                    if retry < int(model["retries"]):
+                        request = replace(request, repair_errors=tuple(errors[:20]),
+                                          prior_response=(result.raw_response or canonical_json(result.proposal).decode("utf-8"))[:131072])
+                        continue
+                    gap = "analysis planning model proposal was rejected after bounded repair; deterministic safe plan published"
                     plan["coverage_gaps"] = [*plan["coverage_gaps"], gap]
                     plan["contradictions"] = errors[:20]
                     plan["model"] = {"status": "REJECTED", "proposal_sha256": hashlib.sha256(canonical_json(result.proposal)).hexdigest()}

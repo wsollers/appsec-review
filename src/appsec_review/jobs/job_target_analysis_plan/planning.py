@@ -5,14 +5,14 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 import hashlib
 from pathlib import PurePosixPath
-import re
 from typing import Any, Protocol
 
 from appsec_review.storage import canonical_json
+from appsec_review.jobs.build_discovery import BUILD_RECIPE_SCHEMA, validate_build_recipe
 
 
 PLAN_SCHEMA = "appsec-review/target-analysis-plan/1"
-PROPOSAL_SCHEMA = "appsec-review/target-analysis-proposal/1"
+PROPOSAL_SCHEMA = "appsec-review/target-analysis-proposal/2"
 SUMMARY_SCHEMA = "appsec-review/target-analysis-summary/1"
 
 SCANNERS = (
@@ -23,18 +23,11 @@ SCANNERS = (
 )
 MANDATORY_BASELINE = frozenset({"tool-gitleaks", "tool-semgrep", "tool-syft"})
 BUILD_SYSTEMS = frozenset({
-    "autotools", "bazel", "cargo", "cmake", "container", "dotnet", "go", "msbuild",
-    "gradle", "make", "maven", "meson", "node", "python", "typescript",
+    "autotools", "bazel", "cargo", "cmake", "composer", "container", "direct-native",
+    "dotnet", "go", "gradle", "javac", "make", "maven", "meson", "msbuild", "node",
+    "python", "rustc", "typescript", "wasm",
 })
 
-BUILD_MARKERS = {
-    "CMakeLists.txt": "cmake", "Makefile": "make", "configure.ac": "autotools",
-    "configure.in": "autotools", "Makefile.am": "autotools", "meson.build": "meson",
-    "BUILD": "bazel", "WORKSPACE": "bazel", "MODULE.bazel": "bazel",
-    "pom.xml": "maven", "build.gradle": "gradle", "build.gradle.kts": "gradle",
-    "package.json": "node", "tsconfig.json": "typescript", "Cargo.toml": "cargo",
-    "go.mod": "go", "pyproject.toml": "python", "Dockerfile": "container",
-}
 SOURCE_SUFFIXES = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs",
     ".c", ".h", ".cc", ".cpp", ".cs", ".rb", ".php", ".swift", ".sh",
@@ -50,8 +43,14 @@ class ModelRequest:
     allowed_build_systems: tuple[str, ...]
     allowed_components: tuple[str, ...]
     allowed_paths: tuple[str, ...]
+    allowed_build_units: tuple[str, ...]
+    provider: str
+    model: str
+    reasoning: str
     max_input_tokens: int
     max_output_tokens: int
+    repair_errors: tuple[str, ...] = ()
+    prior_response: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,15 +59,11 @@ class ModelResult:
     input_tokens: int | None = None
     output_tokens: int | None = None
     cache_tokens: int | None = None
+    raw_response: str | None = None
 
 
 class ModelClient(Protocol):
     def complete(self, request: ModelRequest, *, timeout_seconds: int) -> ModelResult: ...
-
-
-def _root(path: str) -> str:
-    parent = PurePosixPath(path).parent.as_posix()
-    return "." if parent == "." else parent
 
 
 def _under(path: str, root: str) -> bool:
@@ -130,6 +125,7 @@ def summarize_catalog(catalog: Mapping[str, Any], *, max_items: int, max_bytes: 
         "recognized_build_files": list(catalog["build_files"]),
         "compile_databases": list(catalog["compile_databases"]),
         "accepted_artifacts": list(catalog.get("accepted_artifacts", ())),
+        "build_units": list(catalog.get("build_units", ())),
         "catalog_gaps": list(catalog.get("gaps", ())),
     }
     summary["summary_sha256"] = "0" * 64
@@ -138,9 +134,14 @@ def summarize_catalog(catalog: Mapping[str, Any], *, max_items: int, max_bytes: 
                 sum(len(item["sample"]) for item in summary["prefixes"]) +
                 len(summary["components"]) + len(summary["recognized_build_files"]) +
                 len(summary["compile_databases"]) + len(summary["accepted_artifacts"]) +
-                len(summary["catalog_gaps"]))
+                len(summary["build_units"]) + len(summary["catalog_gaps"]))
 
     def trim_one() -> bool:
+        for unit in reversed(summary["build_units"]):
+            documents = unit.get("descriptor_package", {}).get("documents", [])
+            if documents:
+                documents.pop()
+                return True
         for key in ("catalog_gaps", "accepted_artifacts", "recognized_build_files",
                     "compile_databases", "components"):
             if summary[key]:
@@ -189,6 +190,8 @@ def ambiguity_reasons(summary: Mapping[str, Any]) -> list[str]:
         reasons.append("mixed-language multi-component ownership may require contextual refinement")
     if any(str(gap).find("generated") >= 0 or str(gap).find("vendor") >= 0 for gap in summary["catalog_gaps"]):
         reasons.append("generated or vendored ownership is incomplete in the accepted catalog")
+    if summary.get("build_units"):
+        reasons.append("buildable units require inference-derived build recipes")
     return reasons
 
 
@@ -253,33 +256,11 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
         else:
             skipped.append({"scanner_id": tool_id, "reason": "no accepted catalog input satisfies deterministic applicability",
                             "mandatory": tool_id in MANDATORY_BASELINE})
-    build_files = tuple(catalog["build_files"])
-    systems_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
-    marker_priority = {"configure.ac": 0, "configure.in": 1, "CMakeLists.txt": 0,
-                       "Makefile": 0, "Makefile.am": 2}
-    for item in build_files:
-        name = PurePosixPath(str(item["path"])).name
-        suffix = PurePosixPath(name).suffix.lower()
-        kind = "msbuild" if suffix == ".vcxproj" else (
-            "dotnet" if suffix in {".csproj", ".sln"} else BUILD_MARKERS.get(name))
-        if kind is None:
-            continue
-        root = _root(str(item["path"]))
-        if kind == "msbuild":
-            parts = PurePosixPath(root).parts
-            case_index = next((index for index, part in enumerate(parts)
-                               if re.fullmatch(r"case-\d{3}", part)), None)
-            if case_index is not None:
-                root = PurePosixPath(*parts[:case_index + 1]).as_posix()
-        candidate = {"build_system": kind, "root": root,
-                     "manifest": {"path": item["path"], "sha256": item["sha256"]},
-                     "provenance": "deterministic", "confidence": "high"}
-        identity = (kind, root)
-        current = systems_by_identity.get(identity)
-        current_name = PurePosixPath(str(current["manifest"]["path"])).name if current else ""
-        if current is None or marker_priority.get(name, 10) < marker_priority.get(current_name, 10):
-            systems_by_identity[identity] = candidate
-    systems = [systems_by_identity[key] for key in sorted(systems_by_identity)]
+    systems = [{"build_system": unit["build_system"], "root": unit["root"],
+                "manifest": unit["markers"][0] if unit.get("markers") else None,
+                "build_unit_id": unit["build_unit_id"],
+                "provenance": unit.get("provenance", "deterministic-marker"), "confidence": "high"}
+               for unit in catalog.get("build_units", ())]
     compile_databases = [{"path": item["path"], "sha256": item["sha256"], "status": "cataloged"}
                          for item in catalog["compile_databases"]]
     component_values = []
@@ -311,8 +292,9 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
         "build_topology": {
             "projects": list(catalog.get("projects", ())), "build_systems": systems,
             "build_actions": [{"action": "configure-and-build", "root": item["root"],
-                               "build_system": item["build_system"], "executable": False}
-                              for item in systems],
+                               "build_system": item["build_system"], "build_unit_id": item["build_unit_id"],
+                               "recipe": None, "requires_inference": True, "executable": False}
+                              for item in catalog.get("build_units", ())],
             "compile_databases": compile_databases,
             "compile_units": [{"compile_database": item["path"], "status": "cataloged-unexpanded"}
                               for item in compile_databases],
@@ -333,8 +315,8 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
                       allowed_components: Collection[str] | None = None,
                       allowed_paths: Collection[str] | None = None) -> list[str]:
     errors: list[str] = []
-    if set(proposal) != {"schema", "component_proposals"} or proposal.get("schema") != PROPOSAL_SCHEMA:
-        return ["proposal must contain only the supported versioned schema and component_proposals"]
+    if set(proposal) != {"schema", "component_proposals", "build_recipes"} or proposal.get("schema") != PROPOSAL_SCHEMA:
+        return ["proposal must contain only the supported versioned schema, component_proposals, and build_recipes"]
     values = proposal.get("component_proposals")
     if not isinstance(values, list) or len(values) > 256:
         return ["component_proposals must be a bounded list"]
@@ -404,6 +386,27 @@ def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any]
     visited: set[str] = set()
     if any(cyclic(node, set(), visited) for node in edges):
         errors.append("component proposal dependencies contain a cycle")
+    recipes = proposal.get("build_recipes")
+    units = {str(item["build_unit_id"]): item for item in catalog.get("build_units", ())}
+    if not isinstance(recipes, list) or len(recipes) > 256:
+        errors.append("build_recipes must be a bounded list")
+    else:
+        seen_recipes: set[str] = set()
+        for index, recipe in enumerate(recipes):
+            if not isinstance(recipe, Mapping):
+                errors.append(f"build_recipes[{index}] must be an object")
+                continue
+            unit_id = str(recipe.get("build_unit_id", ""))
+            if unit_id not in units:
+                errors.append(f"build_recipes[{index}] does not reference an accepted build unit")
+                continue
+            if unit_id in seen_recipes:
+                errors.append(f"build_recipes[{index}] duplicates a build unit")
+            seen_recipes.add(unit_id)
+            errors.extend(f"build_recipes[{index}]: {error}" for error in validate_build_recipe(recipe, units[unit_id]))
+        missing = sorted(set(units) - seen_recipes)
+        if missing:
+            errors.append("build_recipes omitted accepted build units: " + ", ".join(missing[:8]))
     return errors
 
 
@@ -425,19 +428,16 @@ def merge_proposal(plan: Mapping[str, Any], proposal: Mapping[str, Any], catalog
                 "scope": [{"path": path, "sha256": path_hashes[path]} for path in sorted(scopes)],
                 "provenance": "model-assisted", "reason": str(item["reason"]),
                 "expected_index_family": "observations"}
-        for build_system in item["build_systems"]:
-            candidate = {"build_system": build_system, "root": component["root"], "manifest": None,
-                         "provenance": "model-assisted", "confidence": "medium"}
-            if candidate not in result["build_topology"]["build_systems"]:
-                result["build_topology"]["build_systems"].append(candidate)
-                result["build_topology"]["build_actions"].append({
-                    "action": "configure-and-build", "root": component["root"],
-                    "build_system": build_system, "executable": False,
-                })
         for dependency in item["dependencies"]:
             relation = {"kind": "depends_on", "component_id": item["component_id"], "dependency_component_id": dependency}
             if relation not in result["build_topology"]["relationships"]:
                 result["build_topology"]["relationships"].append(relation)
+    recipes = {item["build_unit_id"]: item for item in proposal["build_recipes"]}
+    for action in result["build_topology"]["build_actions"]:
+        recipe = recipes.get(action.get("build_unit_id"))
+        if recipe is not None:
+            action["recipe"] = recipe
+            action["requires_inference"] = False
     result["scanner_selections"] = [selected[key] for key in sorted(selected)]
     chosen = set(selected)
     result["scanner_non_selections"] = [item for item in result["scanner_non_selections"] if item["scanner_id"] not in chosen]
@@ -473,3 +473,13 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
         raise ValueError("analysis plan contains an unregistered build system")
     if any(item.get("executable") is not False for item in plan.get("build_topology", {}).get("build_actions", [])):
         raise ValueError("analysis planning may not authorize executable build actions")
+    units = {str(item["build_unit_id"]): item for item in catalog.get("build_units", ())}
+    for action in plan.get("build_topology", {}).get("build_actions", []):
+        unit_id = str(action.get("build_unit_id", ""))
+        if unit_id not in units:
+            raise ValueError("analysis plan build action is not an accepted build unit")
+        recipe = action.get("recipe")
+        if recipe is not None:
+            errors = validate_build_recipe(recipe, units[unit_id])
+            if errors:
+                raise ValueError("analysis plan build recipe is invalid: " + "; ".join(errors))

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "appsec-review/target-analysis-proposal/1",
-  "title": "Untrusted target analysis proposal",
+  "$id": "appsec-review/target-analysis-proposal/2",
+  "title": "Untrusted target analysis and build-recipe proposal",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "component_proposals"],
+  "required": ["schema", "component_proposals", "build_recipes"],
   "properties": {
-    "schema": {"const": "appsec-review/target-analysis-proposal/1"},
+    "schema": {"const": "appsec-review/target-analysis-proposal/2"},
     "component_proposals": {
       "type": "array", "maxItems": 256,
       "items": {
@@ -15,12 +15,13 @@
         "properties": {
           "component_id": {"type": "string", "maxLength": 128},
           "scanner_ids": {"type": "array", "uniqueItems": true, "maxItems": 19, "items": {"type": "string"}},
-          "build_systems": {"type": "array", "uniqueItems": true, "maxItems": 14, "items": {"type": "string"}},
+          "build_systems": {"type": "array", "uniqueItems": true, "maxItems": 24, "items": {"type": "string"}},
           "scope_paths": {"type": "array", "uniqueItems": true, "maxItems": 10000, "items": {"type": "string", "maxLength": 512}},
           "dependencies": {"type": "array", "uniqueItems": true, "maxItems": 128, "items": {"type": "string", "maxLength": 128}},
           "reason": {"type": "string", "minLength": 1, "maxLength": 2048}
         }
       }
-    }
+    },
+    "build_recipes": {"type": "array", "maxItems": 256, "items": {"$ref": "build-recipe.schema.json"}}
   }
 }

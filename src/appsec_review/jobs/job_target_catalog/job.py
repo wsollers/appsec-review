@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
+from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -113,8 +114,9 @@ def build_job(*, fail_task: str | None = None) -> Job:
             name = Path(item["path"]).name
             if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix in {".csproj", ".sln", ".vcxproj"}:
                 systems.append({"path": item["path"], "kind": name, "sha256": item["sha256"]})
-        doc = {"schema": "appsec-review/build-systems/1", "systems": systems,
-               "gaps": [] if systems else ["no recognized build system"]}
+        units = discover_build_units(unit.output("repository_discovery.partition_repository")["files"])
+        doc = {"schema": "appsec-review/build-systems/2", "systems": systems, "build_units": units,
+               "gaps": [] if units else ["no recognized build system"]}
         return {"artifact": _artifact(unit, "build-systems.json", doc), **doc}
 
     def compile_commands(unit: UnitContext) -> Mapping[str, Any]:
@@ -127,9 +129,11 @@ def build_job(*, fail_task: str | None = None) -> Job:
 
     def build_targets(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        targets = [{"id": f"build:{index:04d}", **item} for index, item in enumerate(
-            unit.output("build_discovery.discover_build_systems")["systems"], 1)]
-        doc = {"schema": "appsec-review/build-targets/1", "targets": targets,
+        build_units = unit.output("build_discovery.discover_build_systems")["build_units"]
+        files = unit.output("repository_discovery.partition_repository")["files"]
+        targets = [{**item, "descriptor_package": descriptor_package(_target(unit), item, files)}
+                   for item in build_units]
+        doc = {"schema": "appsec-review/build-targets/2", "targets": targets,
                "gaps": unit.output("build_discovery.discover_build_systems")["gaps"]}
         return {"artifact": _artifact(unit, "build-targets.json", doc), **doc}
 
@@ -312,8 +316,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
         targets = unit.output("build_discovery.catalog_build_targets")["targets"]
         for target in targets:
             identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
-                                              {"id": target["id"], "path": target.get("path")})
-            build_index.add_entity(EntityRecord(identity, target["id"], target.get("kind", target["id"]),
+                                              {"id": target["build_unit_id"], "root": target.get("root")})
+            build_index.add_entity(EntityRecord(identity, target["build_unit_id"], target.get("build_system", target["build_unit_id"]),
                                                 " ".join(str(value) for value in target.values()), target))
         build_gaps = list(unit.output("build_discovery.catalog_build_targets")["gaps"])
         compile_files = unit.output("build_discovery.discover_compile_commands")["files"]
@@ -354,7 +358,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         u("repository_discovery.discover_projects", projects, ("repository_discovery.partition_repository",)),
         u("build_discovery.discover_build_systems", build_systems, ("repository_discovery.partition_repository",)),
         u("build_discovery.discover_compile_commands", compile_commands, ("repository_discovery.partition_repository",)),
-        u("build_discovery.catalog_build_targets", build_targets, ("build_discovery.discover_build_systems", "build_discovery.discover_compile_commands")),
+        u("build_discovery.catalog_build_targets", build_targets, ("build_discovery.discover_build_systems", "build_discovery.discover_compile_commands", "repository_discovery.partition_repository")),
         u("component_discovery.catalog_components", components, ("repository_discovery.discover_projects",)),
         u("component_discovery.catalog_dependencies", dependencies, ("component_discovery.catalog_components",)),
         u("retrieval_indexes.build_path_index", path_index, ("repository_discovery.partition_repository",)),
@@ -364,7 +368,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
         u("publish_catalog.publish_handoff", publish, ("publish_catalog.validate_catalog", "build_discovery.catalog_build_targets", "component_discovery.catalog_dependencies")),
     )
     implementation = hashlib.sha256(Path(__file__).read_bytes() +
-        Path(__file__).parents[1].joinpath("cataloging.py").read_bytes() + str(fail_task).encode()).hexdigest()
+        Path(__file__).parents[1].joinpath("cataloging.py").read_bytes() +
+        Path(__file__).parents[1].joinpath("build_discovery.py").read_bytes() + str(fail_task).encode()).hexdigest()
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_target_catalog", "target_catalog", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity="appsec-review/target-catalog-job/1",
