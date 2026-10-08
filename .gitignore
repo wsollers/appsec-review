@@ -1,7 +1,6 @@
 # evidence and run outputs never enter the repo
 /evidence/
 /scratch/
-/targets/
 /runs/
 # Mutable NVD feed state is published locally and never committed. The feed
 # contract and operator README remain tracked under data/feeds/nvd/.
@@ -39,7 +38,6 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 images/audit-buildenv-java/jdtls.tar.gz
 # per-target scratch outputs (databases, bitcode, logs) — never committed
 /scratch*/
-/targets*/
 /fixtures/targets/
 /runs/
 

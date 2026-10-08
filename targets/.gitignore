@@ -1,0 +1,3 @@
+# Target repositories are local working data and must never enter this repository.
+/*
+!/.gitignore
