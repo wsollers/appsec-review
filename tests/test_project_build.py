@@ -190,6 +190,11 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
                for item in accepted["probe_receipts"])
     assert all((config.runtime.runs_dir / upstream["run_id"] / artifact["path"]).is_file()
                for build in accepted["probe_receipts"] for artifact in build["artifacts"])
+    for family in ("native", "rust"):
+        image_entry = accepted["images"][family]["entries"][0]
+        assert image_entry["attempt_identity"] and image_entry["command_identity"]
+        assert all(stream["sha256"] and stream["capture_limit"]
+                   for stream in image_entry["streams"].values())
     assert calls == [
         ("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
          "-DCMAKE_BUILD_TYPE=RelWithDebInfo"),
@@ -336,6 +341,10 @@ def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_pa
     assert native_receipt["repair_attempt_count"] == 2
     assert [value["terminal_status"] for value in native_receipt["attempts"]] == [
         "FAILED", "FAILED", "SUCCEEDED"]
+    for attempt in native_receipt["attempts"][1:]:
+        assert attempt["attempt_identity"] and attempt["command_identity"]
+        assert all(stream["sha256"] and "truncated" in stream
+                   for stream in attempt["streams"].values())
     assert native_dispatch["recipe"]["system_packages"] == ["libtwo-dev"]
     assert native_dispatch["recipe_provenance"] == "inference-image-repair"
     definition = resolver.root / native_dispatch["image"]["dockerfile_path"]

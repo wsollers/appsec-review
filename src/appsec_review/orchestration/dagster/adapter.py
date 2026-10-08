@@ -411,11 +411,18 @@ def build_definitions(
         ))
     if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan",
         "job_project_build", "job_language_build"} <= registered:
+        project_dependencies = {
+            "job_review_intake": (), "job_target_catalog": ("job_review_intake",),
+            "job_target_analysis_plan": ("job_target_catalog",),
+            "job_project_build": ("job_target_analysis_plan",),
+            "job_language_build": ("job_project_build",),
+        }
         jobs.append(_build_dagster_graph(
             "project_build_review",
-            (registry.build("job_review_intake"), registry.build("job_target_catalog"),
+             (registry.build("job_review_intake"), registry.build("job_target_catalog"),
              registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
              registry.build("job_language_build")),
             config, runner_factory, node_namespace="project_build_review",
+            job_dependencies=project_dependencies,
         ))
     return Definitions(jobs=jobs, schedules=schedules)

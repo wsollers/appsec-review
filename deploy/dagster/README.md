@@ -60,7 +60,7 @@ python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dag
 
 Launch the deterministic review graph through the same live instance. After target planning, static
 evidence collection runs independently from project-image resolution, buildability probes, generic
-language-build execution, C++ compiled analysis, and post-build security assessment. The two branches join before OWASP assessment, so a
+language-build execution (including its WebAssembly output-family lane), C++ compiled analysis, and post-build security assessment. The branches join before OWASP assessment, so a
 slow or failed compiled tool cannot erase completed static evidence. Build-command provenance,
 binary inspection, deterministic checks, and immutable `build_security` shards remain covered by
 the retained `wave1_review` job. Its target mount is read-only, while application receipts and
@@ -87,7 +87,7 @@ command validates both directions rather than inferring success from one system 
 
 `wave1_review` shows intake and catalog units followed by the planned analysis jobs. Static evidence
 collection and project-build processing both start from the accepted target-analysis plan. Generic
-language-build execution waits for accepted project-build probes; C++ analysis waits for its native
+language-build execution waits for accepted project-build probes while its source and WebAssembly lanes remain independent; C++ analysis waits for its native
 receipts; and post-build security waits for the accepted C++ analysis handoff. Each evidence
 branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
 truthful terminal disposition from every static branch, verifies every immutable shard, and then

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import time
 from typing import Any
@@ -21,7 +22,7 @@ from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.job_target_analysis_plan import ModelClient, ModelRequest, load_accepted_plan
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
 
 from .repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
 
@@ -34,6 +35,7 @@ STATIC_LANES = ("global", *BUILD_FAMILIES)
 _IGNORED = {".git", ".hg", ".svn", "build", "target", "node_modules", "bin", "obj", ".gradle"}
 _ARTIFACT_SUFFIXES = {".o", ".obj", ".a", ".lib", ".so", ".dll", ".dylib", ".exe", ".wasm",
                       ".class", ".jar", ".war", ".ear", ".rlib", ".rmeta", ".pdb"}
+_SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _BUILD_CAPABILITIES = {
     "native": ("build", "ast", "ir", "infer", "codeql", "joern", "binary"),
     "rust": ("build", "ast", "ir", "codeql", "binary"), "go": ("build", "codeql", "binary"),
@@ -122,7 +124,9 @@ def _outputs(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
 
 
 def _normalized_argv(recipe: Mapping[str, Any], argv: list[str]) -> tuple[str, ...]:
-    source_dir, result = str(recipe["source_dir"]), [str(argv[0])]
+    source_dir = str(recipe["source_dir"])
+    executable = {"mvnw": "mvn", "gradlew": "gradle"}.get(str(argv[0]), str(argv[0]))
+    result = [executable]
     for argument in argv[1:]:
         value = str(argument)
         if value == source_dir:
@@ -145,6 +149,55 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         else:
             environment[key] = protected
     return environment
+
+
+def _probe_stream(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
+    data = bytes(getattr(result, name))
+    path.write_bytes(data)
+    try: path.chmod(0o600)
+    except OSError: pass
+    try: path.chmod(0o600)
+    except OSError: pass
+    raw_count = getattr(result, f"{name}_bytes", None)
+    count = len(data) if raw_count is None else int(raw_count)
+    truncated = bool(getattr(result, f"{name}_truncated", count > len(data)))
+    identity: dict[str, Any] = {
+        "path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
+        "byte_count": count, "retained_byte_count": len(data), "capture_limit": limit,
+        "truncated": truncated,
+    }
+    tail = bytes(getattr(result, f"{name}_tail", b""))
+    if truncated and tail:
+        tail_path = path.with_name(path.name + ".tail")
+        tail_path.write_bytes(tail)
+        try: tail_path.chmod(0o600)
+        except OSError: pass
+        try: tail_path.chmod(0o600)
+        except OSError: pass
+        identity["diagnostic_tail"] = {
+            "path": tail_path.relative_to(run_root).as_posix(), "sha256": file_sha256(tail_path),
+            "byte_count": len(tail),
+        }
+    return identity
+
+
+def _retained_stream(run_root: Path, path: Path, data: bytes, limit: int) -> dict[str, Any]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    try: path.chmod(0o600)
+    except OSError: pass
+    truncated = len(data) >= limit
+    value: dict[str, Any] = {"path": path.relative_to(run_root).as_posix(),
+        "sha256": file_sha256(path), "byte_count": len(data), "retained_byte_count": len(data),
+        "capture_limit": limit, "truncated": truncated}
+    if truncated and data:
+        tail = path.with_name(path.name + ".tail")
+        tail.write_bytes(data[-min(32768, len(data)):])
+        try: tail.chmod(0o600)
+        except OSError: pass
+        value["diagnostic_tail"] = {"path": tail.relative_to(run_root).as_posix(),
+            "sha256": file_sha256(tail), "byte_count": tail.stat().st_size}
+    return value
 
 
 def _probe_cache(unit: UnitContext, recipe_identity: str) -> Path:
@@ -204,18 +257,37 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
         logs = root / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         stdout, stderr = logs / f"command-{ordinal:03d}.stdout", logs / f"command-{ordinal:03d}.stderr"
-        stdout.write_bytes(result.stdout)
-        stderr.write_bytes(result.stderr)
+        limit = int(unit.job.config.settings["output_bytes"])
+        stdout_identity = _probe_stream(unit.job.run_root, stdout, result, "stdout", limit)
+        stderr_identity = _probe_stream(unit.job.run_root, stderr, result, "stderr", limit)
+        protected = root / "protected-commands" / f"{invocation[:24]}.json"
+        protected.parent.mkdir(parents=True, exist_ok=True)
+        protected_json(protected, {"schema": "appsec-review/protected-build-command/2",
+            "argv": list(result.argv), "working_directory": str(recipe["source_dir"]),
+            "environment": _probe_environment({**recipe, "build_system": action["build_system"]}),
+            "access": "run-owned-protected"})
+        try: protected.chmod(0o600)
+        except OSError: pass
         command_receipts.append({"ordinal": ordinal,
+            "attempt_identity": f"{unit.job.attempt_id}:{build_unit_id}:{attempt_number}",
+            "command_identity": invocation,
             "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
             "exit_code": result.exit_code, "timed_out": result.timed_out,
-            "stdout": stdout.relative_to(unit.job.run_root).as_posix(), "stderr": stderr.relative_to(unit.job.run_root).as_posix()})
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "image_id": image["image_id"], "capture_limit": limit,
+            "working_directory": str(recipe["source_dir"]),
+            "environment_facts": {key: "set" for key in sorted(recipe.get("environment", {}))
+                                  if not _SECRET_KEY.search(str(key))},
+            "stdout": stdout_identity, "stderr": stderr_identity,
+            "protected_argv": {"path": protected.relative_to(unit.job.run_root).as_posix(),
+                               "sha256": file_sha256(protected), "size_bytes": protected.stat().st_size}})
         failed = result.timed_out or result.exit_code != 0
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_invocation_id=invocation,
             tool_id="build-probe", retry_count=attempt_number - 1,
             tool_identity={"family": action["family"], "image_id": image["image_id"]},
             disposition="FAILED" if failed else "SUCCEEDED", result_count=0, gap_count=1 if failed else 0,
-            truncated=False, duration_ms=int((time.monotonic() - started) * 1000))
+            truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
+            duration_ms=int((time.monotonic() - started) * 1000))
         if failed:
             gaps.append(f"build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
             break
@@ -255,7 +327,8 @@ def _probe_diagnostics(unit: UnitContext, receipt: Mapping[str, Any]) -> dict[st
         "command": {key: command.get(key) for key in ("ordinal", "argv_sha256", "exit_code", "timed_out")},
     }
     for key in ("stdout", "stderr"):
-        relative = command.get(key)
+        stream = command.get(key)
+        relative = stream.get("path") if isinstance(stream, Mapping) else stream
         if not isinstance(relative, str):
             result[f"{key}_tail"] = ""
             continue
@@ -394,6 +467,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
     last_probe = first
     for repair_number in range(1, repair_limit + 1):
         repair_root = unit.unit_root / str(action["build_unit_id"]) / f"repair-{repair_number:03d}"
+        attempt_started = time.monotonic()
         try:
             _identity, dockerfile = resolver.definition(
                 {**current_recipe, "build_system": action["build_system"]}, profile)
@@ -406,10 +480,14 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
             if errors:
                 raise ValueError("repaired build recipe is invalid: " + "; ".join(errors))
             current_recipe = candidate
+            image_started = time.monotonic()
             repaired_image, stdout, stderr = resolver.resolve(
                 {**candidate, "build_system": action["build_system"]}, profile)
-            atomic_bytes(repair_root / "image-build.stdout", stdout)
-            atomic_bytes(repair_root / "image-build.stderr", stderr)
+            stream_limit = int(unit.job.config.settings["output_bytes"])
+            image_streams = {
+                "stdout": _retained_stream(unit.job.run_root, repair_root / "image-build.stdout", stdout, stream_limit),
+                "stderr": _retained_stream(unit.job.run_root, repair_root / "image-build.stderr", stderr, stream_limit),
+            }
             image_value = _image_dict(repaired_image, profile.user)
             candidate_action = {**action, "recipe": candidate,
                                 "recipe_provenance": "inference-image-repair"}
@@ -424,6 +502,11 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                              "dockerfile_sha256": repaired_image.dockerfile_sha256,
                              "dockerfile_path": repaired_image.dockerfile_path,
                              "system_packages": list(candidate["system_packages"]),
+                             "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:repair:{repair_number}",
+                             "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
+                                 "recipe_identity": repaired_image.recipe_identity})).hexdigest(),
+                             "duration_ms": int((time.monotonic() - image_started) * 1000),
+                             "streams": image_streams,
                              "terminal_status": last_probe["terminal_status"],
                              "gaps": list(last_probe.get("gaps", ()))})
             if last_probe["terminal_status"] == "SUCCEEDED":
@@ -449,14 +532,22 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
         except Exception as exc:
             stdout = exc.stdout if isinstance(exc, ProjectImageBuildError) else b""
             stderr = exc.stderr if isinstance(exc, ProjectImageBuildError) else str(exc).encode("utf-8")
-            atomic_bytes(repair_root / "image-build.stdout", stdout)
-            atomic_bytes(repair_root / "image-build.stderr", stderr)
+            stream_limit = int(unit.job.config.settings["output_bytes"])
+            image_streams = {
+                "stdout": _retained_stream(unit.job.run_root, repair_root / "image-build.stdout", stdout, stream_limit),
+                "stderr": _retained_stream(unit.job.run_root, repair_root / "image-build.stderr", stderr, stream_limit),
+            }
             diagnostics = {"terminal_status": "FAILED", "error_class": type(exc).__name__,
                            "stdout_tail": stdout[-32768:].decode("utf-8", "replace"),
                            "stderr_tail": stderr[-32768:].decode("utf-8", "replace")}
             attempts.append({"attempt_number": repair_number + 1, "kind": "inference-repair",
                              "repair_number": repair_number, "terminal_status": "FAILED",
                              "error_class": type(exc).__name__, "gaps": [str(exc)[:4096]],
+                             "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:repair:{repair_number}",
+                             "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
+                                 "repair_number": repair_number, "family": action["family"]})).hexdigest(),
+                             "duration_ms": int((time.monotonic() - attempt_started) * 1000),
+                             "streams": image_streams,
                              "system_packages": list(current_recipe.get("system_packages", ()))})
             unit.job.events.write("PROJECT_IMAGE_REPAIR_FAILED", unit_id=unit.unit_id,
                 build_unit_id=action["build_unit_id"], family=action["family"],
@@ -582,6 +673,53 @@ def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -
     return recipe
 
 
+def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    if action.get("family") != "java" or action.get("build_system") != "javac":
+        return None
+    root = str(action["root"])
+    source = _safe_root(unit.job.target_root or Path(), root)
+    target = (unit.job.target_root or Path()).resolve(strict=True)
+    sources = sorted(path for path in source.rglob("*")
+                     if path.is_file() and not path.is_symlink() and path.suffix.lower() in {".java", ".kt"})
+    if not sources or len(sources) > 60:
+        return None
+
+    target_paths = [path.relative_to(target).as_posix() for path in sources]
+    local_paths = [path.relative_to(source).as_posix() for path in sources]
+    java_sources = [path for path in local_paths if path.endswith(".java")]
+    kotlin_sources = [path for path in local_paths if path.endswith(".kt")]
+    build_dir = "build" if root == "." else f"{root}/build"
+    classes_dir = "build/classes" if root == "." else f"{root}/build/classes"
+    jar_path = "build/appsec-review.jar" if root == "." else f"{root}/build/appsec-review.jar"
+
+    commands: list[list[str]] = []
+    if kotlin_sources:
+        commands.append(["kotlinc", *kotlin_sources, *java_sources, "-d", "build/classes"])
+    if java_sources:
+        javac = ["javac"]
+        if kotlin_sources:
+            javac.extend(["-classpath", "build/classes"])
+        commands.append([*javac, "-d", "build/classes", *java_sources])
+    commands.append(["jar", "--create", "--file", "build/appsec-review.jar", "-C", "build/classes", "."])
+    recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
+        "image_profile": "java", "source_dir": root, "build_dir": build_dir,
+        "system_packages": [], "environment": {}, "dependency_files": target_paths,
+        "configure_commands": [], "build_commands": commands,
+        "expected_outputs": [classes_dir, jar_path], "network_required": False,
+        "reason": "Deterministic offline JVM compilation derived from bounded Java/Kotlin source markers.",
+    }
+    pseudo_unit = {
+        "build_unit_id": action["build_unit_id"], "family": "java", "root": root,
+        "build_system": "javac", "markers": [{"path": path} for path in target_paths],
+        "descriptor_package": {"documents": [{"path": path} for path in target_paths]},
+    }
+    errors = validate_build_recipe(recipe, pseudo_unit)
+    if errors:
+        raise ValueError("deterministic JVM recipe is invalid: " + "; ".join(errors))
+    return recipe
+
+
 def build_job(*, executor_factory=None, image_resolver_factory=None,
               model_client: ModelClient | None = None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
@@ -606,7 +744,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                 dependencies[owner].add(dependency)
         resolved_actions = []
         for item in actions:
-            deterministic = _deterministic_native_recipe(unit, item)
+            deterministic = _deterministic_native_recipe(unit, item) or _deterministic_jvm_recipe(unit, item)
             selected = deterministic if deterministic is not None else item.get("recipe")
             recipe_fields: dict[str, Any] = {}
             if isinstance(selected, Mapping):
@@ -614,8 +752,10 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     "recipe": {**dict(selected), "system_packages": []},
                     "package_hints": list(selected.get("system_packages", ())),
                     "requires_inference": False,
-                    "recipe_provenance": ("deterministic-cmake-marker" if deterministic is not None
-                                          else "accepted-inference-default-image"),
+                    "recipe_provenance": (
+                        "deterministic-cmake-marker" if deterministic is not None and item.get("family") == "native"
+                        else "deterministic-jvm-source-set" if deterministic is not None
+                        else "accepted-inference-default-image"),
                 }
             resolved_actions.append({**dict(item), **recipe_fields,
                 "build_dependencies": sorted(dependencies[str(item["build_unit_id"])])})
@@ -640,6 +780,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     gaps.append(gap)
                     continue
                 try:
+                    image_started = time.monotonic()
                     unit.job.events.write("PROJECT_IMAGE_BUILD_STARTED", unit_id=unit.unit_id,
                                           build_unit_id=action["build_unit_id"], family=family)
                     image, stdout, stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profiles[family])
@@ -656,8 +797,11 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                         value = _image_dict(image, profiles[family].user)
                     logs = unit.unit_root / str(action["build_unit_id"])
                     logs.mkdir(parents=True, exist_ok=True)
-                    (logs / "image-build.stdout").write_bytes(stdout)
-                    (logs / "image-build.stderr").write_bytes(stderr)
+                    stream_limit = int(unit.job.config.settings["output_bytes"])
+                    streams = {
+                        "stdout": _retained_stream(unit.job.run_root, logs / "image-build.stdout", stdout, stream_limit),
+                        "stderr": _retained_stream(unit.job.run_root, logs / "image-build.stderr", stderr, stream_limit),
+                    }
                     if image is not None:
                         unit.job.events.write("PROJECT_IMAGE_REUSED" if image.reused else "PROJECT_IMAGE_BUILT",
                             unit_id=unit.unit_id, build_unit_id=action["build_unit_id"], family=family,
@@ -665,17 +809,31 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                             disposition="REUSED" if image.reused else "BUILT")
                     entries.append({"action": action, "image": value,
                                     "base_recipe_identity": base_recipe_identity,
+                                    "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:image",
+                                    "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
+                                        "recipe_identity": base_recipe_identity})).hexdigest(),
+                                    "duration_ms": int((time.monotonic() - image_started) * 1000),
+                                    "streams": streams,
                                     "terminal_status": "SUCCEEDED", "gaps": []})
                 except (RuntimeError, ValueError, OSError) as exc:
                     logs = unit.unit_root / str(action["build_unit_id"])
                     logs.mkdir(parents=True, exist_ok=True)
-                    if isinstance(exc, ProjectImageBuildError):
-                        (logs / "image-build.stdout").write_bytes(exc.stdout)
-                        (logs / "image-build.stderr").write_bytes(exc.stderr)
+                    stdout = exc.stdout if isinstance(exc, ProjectImageBuildError) else b""
+                    stderr = exc.stderr if isinstance(exc, ProjectImageBuildError) else str(exc).encode("utf-8")
+                    stream_limit = int(unit.job.config.settings["output_bytes"])
+                    streams = {
+                        "stdout": _retained_stream(unit.job.run_root, logs / "image-build.stdout", stdout, stream_limit),
+                        "stderr": _retained_stream(unit.job.run_root, logs / "image-build.stderr", stderr, stream_limit),
+                    }
                     gap = f"{action['build_unit_id']}: project image resolution failed ({type(exc).__name__}: {exc})"
                     unit.job.events.write("PROJECT_IMAGE_BUILD_FAILED", unit_id=unit.unit_id,
                         build_unit_id=action["build_unit_id"], family=family, error_class=type(exc).__name__)
-                    entries.append({"action": action, "image": None, "terminal_status": "FAILED", "gaps": [gap]})
+                    entries.append({"action": action, "image": None,
+                        "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:image",
+                        "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
+                            "family": family, "build_unit_id": action["build_unit_id"]})).hexdigest(),
+                        "duration_ms": int((time.monotonic() - image_started) * 1000), "streams": streams,
+                        "terminal_status": "FAILED", "gaps": [gap]})
                     gaps.append(gap)
             return {"family": family, "entries": entries, "image_count": sum(value["image"] is not None for value in entries),
                     "terminal_status": "NOT_APPLICABLE" if not entries else "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED",

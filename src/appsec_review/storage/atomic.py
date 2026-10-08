@@ -15,7 +15,9 @@ def canonical_json(value: Any) -> bytes:
 def atomic_bytes(path: Path, payload: bytes) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    # Keep the temporary leaf short: run-owned directories and hash-addressed final names can
+    # already approach the legacy Windows path limit.
+    descriptor, temporary = tempfile.mkstemp(prefix=".tmp-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
@@ -32,6 +34,20 @@ def atomic_bytes(path: Path, payload: bytes) -> None:
 
 def atomic_json(path: Path, value: Any) -> None:
     atomic_bytes(path, canonical_json(value))
+
+
+def protected_json(path: Path, value: Any) -> None:
+    """Create an immutable attempt-owned JSON artifact without a long temporary path."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as stream:
+        stream.write(canonical_json(value))
+        stream.flush()
+        os.fsync(stream.fileno())
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def file_sha256(path: Path) -> str:

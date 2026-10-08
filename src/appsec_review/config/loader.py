@@ -85,6 +85,176 @@ class StepConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class RustBuildSettings:
+    toolchain: str
+    target: str | None
+    profile: str
+    features: tuple[str, ...]
+    locked: bool
+    offline: bool
+    capture_linker: bool
+    diagnostic_tail_bytes: int
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", self.toolchain):
+            raise ValueError("Rust toolchain selection is invalid")
+        if self.target is not None and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", self.target):
+            raise ValueError("Rust target selection is invalid")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", self.profile):
+            raise ValueError("Rust profile selection is invalid")
+        if len(self.features) > 64 or len(self.features) != len(set(self.features)) or any(
+            not re.fullmatch(r"[A-Za-z0-9_.+/-]{1,128}", value) for value in self.features
+        ):
+            raise ValueError("Rust feature selection is invalid")
+        if not 0 <= self.diagnostic_tail_bytes <= 1024 * 1024:
+            raise ValueError("Rust diagnostic tail bound is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class PhpBuildSettings:
+    composer_plugins: str
+    composer_scripts: str
+    require_lockfile: bool
+    diagnostic_tail_bytes: int
+
+    def __post_init__(self) -> None:
+        if self.composer_plugins not in {"disabled", "sandboxed"}:
+            raise ValueError("Composer plugin policy is invalid")
+        if self.composer_scripts not in {"disabled", "sandboxed"}:
+            raise ValueError("Composer script policy is invalid")
+        if not 0 <= self.diagnostic_tail_bytes <= 1024 * 1024:
+            raise ValueError("PHP diagnostic tail bound is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class JvmBuildSettings:
+    trace_bytes: int
+    provenance_count_limit: int
+    diagnostic_tail_bytes: int
+    system_path: str
+    tool_paths: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        if min(self.trace_bytes, self.provenance_count_limit, self.diagnostic_tail_bytes) < 1:
+            raise ValueError("JVM capture limits must be positive")
+        if not self.system_path.startswith("/"):
+            raise ValueError("JVM system path must be absolute")
+        expected = {"javac", "kotlinc", "kapt", "ksp", "java", "jar", "javadoc", "protoc"}
+        if set(self.tool_paths) != expected or any(not value.startswith("/") for value in self.tool_paths.values()):
+            raise ValueError("JVM tool path selection is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class GoBuildSettings:
+    offline: bool
+    capture_trace: bool
+    package_catalog: bool
+    diagnostic_tail_bytes: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.diagnostic_tail_bytes <= 1024 * 1024:
+            raise ValueError("Go diagnostic tail bound is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class PythonBuildSettings:
+    frontend: str
+    require_locked_dependencies: bool
+    offline: bool
+    capture_native_tools: bool
+    diagnostic_tail_bytes: int
+
+    def __post_init__(self) -> None:
+        if self.frontend not in {"build", "pip", "setuptools"}:
+            raise ValueError("Python package frontend selection is invalid")
+        if not 0 <= self.diagnostic_tail_bytes <= 1024 * 1024:
+            raise ValueError("Python diagnostic tail bound is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class NodeBuildSettings:
+    package_managers: tuple[str, ...]
+    require_lockfile: bool
+    network: str
+    lifecycle_scripts: str
+    capture_source_maps: bool
+    diagnostic_tail_bytes: int
+
+    def __post_init__(self) -> None:
+        if self.package_managers != ("npm", "pnpm", "yarn"):
+            raise ValueError("Node package-manager selection is invalid")
+        if not self.require_lockfile or self.network != "denied" or self.lifecycle_scripts != "sandboxed":
+            raise ValueError("Node build isolation policy is invalid")
+        if not self.capture_source_maps or not 0 <= self.diagnostic_tail_bytes <= 1024 * 1024:
+            raise ValueError("Node capture settings are invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class DotnetBuildSettings:
+    require_locked_restore: bool
+    capture_msbuild_diagnostics: bool
+    generated_sources: bool
+    allow_publish: bool
+    allow_pack: bool
+    allow_aot: bool
+
+    def __post_init__(self) -> None:
+        if not self.require_locked_restore or not self.capture_msbuild_diagnostics or not self.generated_sources:
+            raise ValueError(".NET restore and capture policy is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class LanguageBuildSettings:
+    command_timeout_seconds: int
+    output_bytes: int
+    artifact_count_limit: int
+    dotnet: DotnetBuildSettings
+    go: GoBuildSettings
+    node: NodeBuildSettings
+    python: PythonBuildSettings
+    rust: RustBuildSettings
+    php: PhpBuildSettings
+    jvm: JvmBuildSettings
+    wasm: WasmBuildSettings
+
+    def __post_init__(self) -> None:
+        if min(self.command_timeout_seconds, self.output_bytes, self.artifact_count_limit) < 1:
+            raise ValueError("language-build limits must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class WasmProducerSettings:
+    families: tuple[str, ...]
+    tools: tuple[str, ...]
+    indicators: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.families or any(value not in {"native", "rust", "node", "wasm"}
+                                    for value in self.families):
+            raise ValueError("WebAssembly producer families are invalid")
+        if not self.tools or any(not re.fullmatch(r"[A-Za-z0-9_.+\-]+", value) for value in self.tools):
+            raise ValueError("WebAssembly producer tools are invalid")
+        if any(not value or len(value) > 256 for value in self.indicators):
+            raise ValueError("WebAssembly producer indicators are invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class WasmBuildSettings:
+    command_timeout_seconds: int
+    stream_limit_bytes: int
+    artifact_count_limit: int
+    workspace_file_limit: int
+    producers: Mapping[str, WasmProducerSettings]
+
+    def __post_init__(self) -> None:
+        if min(self.command_timeout_seconds, self.stream_limit_bytes,
+               self.artifact_count_limit, self.workspace_file_limit) < 1:
+            raise ValueError("WebAssembly build limits must be positive")
+        if not self.producers:
+            raise ValueError("WebAssembly producers are required")
+
+
+@dataclass(frozen=True, slots=True)
 class JobConfig:
     job_id: str
     name: str
@@ -92,6 +262,7 @@ class JobConfig:
     schedule: ScheduleConfig | None
     settings: Mapping[str, Any]
     steps: Mapping[str, StepConfig]
+    typed_settings: object | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"job_[a-z][a-z0-9_]*", self.job_id):
@@ -216,6 +387,119 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                 settings=MappingProxyType(dict(step_settings)),
                 tasks=MappingProxyType(tasks),
             )
+        typed_settings: object | None = None
+        if job_id == "job_language_build":
+            go_value = settings.get("go")
+            if not isinstance(go_value, dict):
+                raise ValueError("jobs.job_language_build.settings.go must be a table")
+            python_value = settings.get("python")
+            if not isinstance(python_value, dict):
+                raise ValueError("jobs.job_language_build.settings.python must be a table")
+            node_value = settings.get("node")
+            if not isinstance(node_value, dict) or not isinstance(node_value.get("package_managers"), list):
+                raise ValueError("jobs.job_language_build.settings.node/package_managers must be tables/arrays")
+            rust_value = settings.get("rust")
+            if not isinstance(rust_value, dict):
+                raise ValueError("jobs.job_language_build.settings.rust must be a table")
+            features = rust_value.get("features", [])
+            if not isinstance(features, list) or any(not isinstance(value, str) for value in features):
+                raise ValueError("Rust features must be a string array")
+            target_value = rust_value.get("target")
+            if target_value is not None and not isinstance(target_value, str):
+                raise ValueError("Rust target must be a string when configured")
+            php_value = settings.get("php")
+            if not isinstance(php_value, dict):
+                raise ValueError("jobs.job_language_build.settings.php must be a table")
+            jvm_value = settings.get("jvm")
+            if not isinstance(jvm_value, dict) or not isinstance(jvm_value.get("tool_paths"), dict):
+                raise ValueError("jobs.job_language_build.settings.jvm/tool_paths must be tables")
+            dotnet_value = settings.get("dotnet")
+            if not isinstance(dotnet_value, dict):
+                raise ValueError("jobs.job_language_build.settings.dotnet must be a table")
+            wasm_value = settings.get("wasm")
+            if not isinstance(wasm_value, dict):
+                raise ValueError("jobs.job_language_build.settings.wasm must be a table")
+            producer_values = wasm_value.get("producers")
+            if not isinstance(producer_values, dict) or not producer_values:
+                raise ValueError("jobs.job_language_build.settings.wasm.producers must be a non-empty table")
+            producers: dict[str, WasmProducerSettings] = {}
+            for producer_name, producer_value in producer_values.items():
+                if not isinstance(producer_value, dict):
+                    raise ValueError(f"WebAssembly producer must be a table: {producer_name}")
+                families = producer_value.get("families")
+                tools = producer_value.get("tools")
+                indicators = producer_value.get("indicators")
+                if (not isinstance(families, list) or not isinstance(tools, list) or
+                        not isinstance(indicators, list) or
+                        any(not isinstance(item, str) for item in [*families, *tools, *indicators])):
+                    raise ValueError(f"WebAssembly producer arrays are invalid: {producer_name}")
+                producers[str(producer_name)] = WasmProducerSettings(
+                    tuple(families), tuple(tools), tuple(indicators))
+            typed_settings = LanguageBuildSettings(
+                command_timeout_seconds=int(settings.get("command_timeout_seconds", 0)),
+                output_bytes=int(settings.get("output_bytes", 0)),
+                artifact_count_limit=int(settings.get("artifact_count_limit", 0)),
+                dotnet=DotnetBuildSettings(
+                    require_locked_restore=dotnet_value.get("require_locked_restore") is True,
+                    capture_msbuild_diagnostics=dotnet_value.get("capture_msbuild_diagnostics") is True,
+                    generated_sources=dotnet_value.get("generated_sources") is True,
+                    allow_publish=dotnet_value.get("allow_publish") is True,
+                    allow_pack=dotnet_value.get("allow_pack") is True,
+                    allow_aot=dotnet_value.get("allow_aot") is True,
+                ),
+                go=GoBuildSettings(
+                    offline=go_value.get("offline") is True,
+                    capture_trace=go_value.get("capture_trace") is True,
+                    package_catalog=go_value.get("package_catalog") is True,
+                    diagnostic_tail_bytes=int(go_value.get("diagnostic_tail_bytes", -1)),
+                ),
+                node=NodeBuildSettings(
+                    package_managers=tuple(str(value) for value in node_value["package_managers"]),
+                    require_lockfile=node_value.get("require_lockfile") is True,
+                    network=str(node_value.get("network", "")),
+                    lifecycle_scripts=str(node_value.get("lifecycle_scripts", "")),
+                    capture_source_maps=node_value.get("capture_source_maps") is True,
+                    diagnostic_tail_bytes=int(node_value.get("diagnostic_tail_bytes", -1)),
+                ),
+                python=PythonBuildSettings(
+                    frontend=str(python_value.get("frontend", "")),
+                    require_locked_dependencies=python_value.get("require_locked_dependencies") is True,
+                    offline=python_value.get("offline") is True,
+                    capture_native_tools=python_value.get("capture_native_tools") is True,
+                    diagnostic_tail_bytes=int(python_value.get("diagnostic_tail_bytes", -1)),
+                ),
+                rust=RustBuildSettings(
+                    toolchain=str(rust_value.get("toolchain", "")),
+                    target=target_value,
+                    profile=str(rust_value.get("profile", "")),
+                    features=tuple(features),
+                    locked=rust_value.get("locked") is True,
+                    offline=rust_value.get("offline") is True,
+                    capture_linker=rust_value.get("capture_linker") is True,
+                    diagnostic_tail_bytes=int(rust_value.get("diagnostic_tail_bytes", -1)),
+                ),
+                php=PhpBuildSettings(
+                    composer_plugins=str(php_value.get("composer_plugins", "")),
+                    composer_scripts=str(php_value.get("composer_scripts", "")),
+                    require_lockfile=php_value.get("require_lockfile") is True,
+                    diagnostic_tail_bytes=int(php_value.get("diagnostic_tail_bytes", -1)),
+                ),
+                jvm=JvmBuildSettings(
+                    trace_bytes=int(jvm_value.get("trace_bytes", 0)),
+                    provenance_count_limit=int(jvm_value.get("provenance_count_limit", 0)),
+                    diagnostic_tail_bytes=int(jvm_value.get("diagnostic_tail_bytes", 0)),
+                    system_path=str(jvm_value.get("system_path", "")),
+                    tool_paths=MappingProxyType({str(key): str(value)
+                                                  for key, value in jvm_value["tool_paths"].items()}),
+                ),
+                wasm=WasmBuildSettings(
+                    command_timeout_seconds=int(settings.get("command_timeout_seconds", 0)),
+                    stream_limit_bytes=int(settings.get("output_bytes", 0)),
+                    artifact_count_limit=int(settings.get("artifact_count_limit", 0)),
+                    workspace_file_limit=int(wasm_value.get("workspace_file_limit", 0)),
+                    producers=MappingProxyType(producers),
+                ),
+            )
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -223,6 +507,7 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
             schedule=schedule,
             settings=MappingProxyType(dict(settings)),
             steps=MappingProxyType(steps),
+            typed_settings=typed_settings,
         )
     orchestration = document.get("orchestration", {})
     if not isinstance(orchestration, dict):

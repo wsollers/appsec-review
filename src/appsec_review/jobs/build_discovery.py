@@ -27,10 +27,12 @@ _MARKERS: dict[str, tuple[str, str]] = {
     "package.json": ("node", "node"),
     "pyproject.toml": ("python", "python"),
     "setup.py": ("python", "python"),
+    "setup.cfg": ("python", "python"),
     "composer.json": ("php", "composer"),
 }
 _SUFFIX_MARKERS: dict[str, tuple[str, str]] = {
     ".csproj": ("dotnet", "dotnet"),
+    ".vbproj": ("dotnet", "dotnet"),
     ".fsproj": ("dotnet", "dotnet"),
     ".sln": ("dotnet", "dotnet"),
     ".vcxproj": ("native", "msbuild"),
@@ -40,37 +42,44 @@ _SUFFIX_MARKERS: dict[str, tuple[str, str]] = {
 _SOURCE_MARKERS: dict[str, tuple[str, str]] = {
     ".c": ("native", "direct-native"), ".cc": ("native", "direct-native"),
     ".cpp": ("native", "direct-native"), ".cxx": ("native", "direct-native"),
-    ".java": ("java", "javac"), ".rs": ("rust", "rustc"),
+    ".java": ("java", "javac"), ".kt": ("java", "javac"), ".kts": ("java", "javac"),
+    ".rs": ("rust", "rustc"),
     ".go": ("go", "go"), ".wat": ("wasm", "wasm"),
 }
 _CONTEXT_NAMES = {
     "README", "README.md", "README.rst", "Dockerfile", "build.sh", "build.ps1",
-    "gradle.properties", "settings.gradle", "settings.gradle.kts", "Cargo.lock",
-    "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "requirements.txt",
+    "gradle.properties", "settings.gradle", "settings.gradle.kts", "gradle.lockfile",
+    "maven-wrapper.properties", "gradle-wrapper.properties", "Cargo.lock",
+    "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "composer.lock", "requirements.txt",
+    "poetry.lock", "Pipfile.lock", "pylock.toml", "setup.cfg",
     "rust-toolchain", "rust-toolchain.toml", "Directory.Build.props", "global.json",
+    "packages.lock.json", "Directory.Packages.props", "NuGet.Config",
 }
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++", "gcc", "g++",
+                         "emcc", "em++", "emar", "wasm-ld", "llvm-ar", "wasm-opt", "wasm-tools",
                          "autoreconf", "autoconf",
                          "automake", "libtoolize", "meson", "bear", "pkg-config"}),
-    "rust": frozenset({"cargo", "rustc"}),
+    "rust": frozenset({"cargo", "rustc", "wasm-pack", "wasm-bindgen", "wasm-opt", "wasm-tools"}),
     "go": frozenset({"go"}),
-    "java": frozenset({"mvn", "mvnw", "gradle", "gradlew", "javac", "jar"}),
-    "node": frozenset({"npm", "npx", "pnpm", "yarn", "node", "tsc"}),
+    "java": frozenset({"mvn", "mvnw", "gradle", "gradlew", "javac", "kotlinc", "kapt", "jar", "protoc"}),
+    "node": frozenset({"npm", "npx", "pnpm", "yarn", "node", "tsc", "asc", "wasm-opt", "wasm-tools"}),
     "dotnet": frozenset({"dotnet", "msbuild"}),
     "python": frozenset({"python", "python3", "pip", "pip3"}),
     "php": frozenset({"php", "composer"}),
-    "wasm": frozenset({"cargo", "rustc", "clang", "clang++", "cmake", "wasm-tools"}),
+    "wasm": frozenset({"cargo", "rustc", "clang", "clang++", "cmake", "wasm-tools", "wasm-opt",
+                        "wasm-ld", "emcc", "em++", "emar", "asc"}),
 }
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _ENV_KEY = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 _PACKAGE = re.compile(r"[a-z0-9][a-z0-9+.-]{0,127}")
 _FORBIDDEN_SUBCOMMANDS = {
     "cargo": {"install", "run", "test"}, "go": {"get", "install", "run", "test"},
-    "dotnet": {"run", "test", "tool"}, "npm": {"exec", "install", "test"},
-    "npx": {"--yes", "-y"}, "pnpm": {"dlx", "exec", "test"},
-    "yarn": {"dlx", "exec", "test"}, "mvn": {"exec:java", "test"},
+    "dotnet": {"run", "test", "tool"}, "npm": {"exec", "install", "test", "start", "publish"},
+    "npx": {"--yes", "-y"}, "pnpm": {"add", "dlx", "exec", "install", "test", "start", "publish"},
+    "yarn": {"add", "dlx", "exec", "install", "test", "start", "publish"}, "mvn": {"exec:java", "test"},
     "gradle": {"run", "test"}, "gradlew": {"run", "test"},
+    "composer": {"exec", "run-script", "test"}, "php": {"-r", "--interactive"},
 }
 
 
@@ -229,6 +238,11 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
         errors.append("dependency_files must include every accepted build marker")
     elif not set(dependencies) <= accepted_paths:
         errors.append("dependency_files contains a path outside the accepted descriptor package")
+    if profile == "node" and isinstance(dependencies, list):
+        names = {PurePosixPath(item).name for item in dependencies if isinstance(item, str)}
+        locks = names & {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
+        if "package.json" not in names or len(locks) != 1:
+            errors.append("Node recipes require package.json and exactly one supported lockfile")
     allowed = _PROFILE_COMMANDS.get(str(profile), frozenset())
     for field in ("configure_commands", "build_commands"):
         commands = recipe.get(field)
@@ -249,6 +263,27 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
             words = {arg.lower() for arg in argv[1:] if not arg.startswith("-")}
             if words & _FORBIDDEN_SUBCOMMANDS.get(executable, set()):
                 errors.append(f"{field}[{index}] requests execution, tests, or tool installation")
+            lowered = [str(arg).lower() for arg in argv[1:]]
+            if executable in {"mvn", "mvnw"}:
+                goals = [value for value in lowered if not value.startswith("-")]
+                allowed_goals = {"clean", "compile", "package", "process-resources", "generate-sources",
+                                 "generate-resources", "jar:jar", "war:war"}
+                if any(value not in allowed_goals for value in goals):
+                    errors.append(f"{field}[{index}] Maven goal is not build-only")
+                if not any(value == "-dskiptests" or value.startswith("-dmaven.test.skip=true")
+                           for value in lowered):
+                    errors.append(f"{field}[{index}] Maven build must explicitly disable tests")
+            if executable in {"gradle", "gradlew"}:
+                tasks = [value for value in lowered if not value.startswith("-")]
+                allowed_tasks = {"assemble", "classes", "jar", "war", "clean", "build"}
+                if any(value.rsplit(":", 1)[-1] not in allowed_tasks for value in tasks):
+                    errors.append(f"{field}[{index}] Gradle task is not build-only")
+                if any(value.rsplit(":", 1)[-1] == "build" for value in tasks) and not any(
+                        lowered[offset:offset + 2] == ["-x", "test"]
+                        for offset in range(max(0, len(lowered) - 1))):
+                    errors.append(f"{field}[{index}] Gradle build must exclude tests")
+            if profile == "node" and executable == "node" and "--check" not in argv[1:]:
+                errors.append(f"{field}[{index}] may execute a target application")
     if isinstance(recipe.get("build_commands"), list) and not recipe["build_commands"]:
         errors.append("build_commands must contain at least one build command")
     outputs = recipe.get("expected_outputs")

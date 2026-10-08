@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from appsec_review.config import load_config
+from appsec_review.config import LanguageBuildSettings, load_config
 
 
 def test_default_config_declares_midnight_nvd_schedule() -> None:
@@ -26,3 +26,13 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
 def test_configuration_accepts_a_file_uri() -> None:
     path = Path(__file__).parents[1] / "appsec-review.toml"
     assert load_config(path.as_uri()).source_sha256 == load_config(path).source_sha256
+
+
+def test_language_build_has_typed_rust_limits_and_policy() -> None:
+    config = load_config(Path(__file__).parents[1] / "appsec-review.toml")
+    settings = config.job("job_language_build").typed_settings
+    assert isinstance(settings, LanguageBuildSettings)
+    assert settings.rust.toolchain == "stable"
+    assert settings.rust.offline is True
+    assert settings.rust.locked is False
+    assert settings.rust.diagnostic_tail_bytes == 32768

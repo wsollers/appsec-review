@@ -151,13 +151,50 @@ reused.
 
 `job_language_build` is the execution boundary after project-build probing. It hash-verifies the
 accepted dispatch, probe receipt, recipe, dependency files, source snapshot, and exact derived
-image before executing accepted argv in a fresh run-owned workspace. Native builds are currently
-implemented; every other accepted family publishes a named unsupported gap until its executor is
-added. Build dependencies form topological layers, while unrelated units share the configured
+image before executing accepted argv in a fresh run-owned workspace. Native builds, Rust/Cargo, JVM Java/Kotlin
+projects, Go modules and
+workspaces, lockfile-bound Node/JavaScript/TypeScript projects, and Linux-capable .NET SDK projects
+are implemented; Windows-only and .NET Framework units publish
+explicit platform gaps. Families without an executor publish a named unsupported gap. Build dependencies form topological layers, while unrelated units share the configured
 worker pool. Receipts bind command, compile-database, link, artifact, workspace-manifest, image,
-and checkpoint identities. Exact argv remains in protected run-owned artifacts; central logs and
+and checkpoint identities. The Go capture derives actual compiler/assembler/linker/cgo/package
+invocations from the toolchain trace and catalogs offline package relationships and build IDs.
+The Rust capture binds Cargo metadata and accepted workspace/package/target/profile/feature choices
+to protected rustc/linker/archiver/build-script provenance, Rust artifact identities, and exact
+package dependency relationships without executing examples, benchmarks, tests, or binaries.
+The Node capture binds npm, pnpm, or Yarn to its accepted lockfile identity, executes lifecycle
+scripts as untrusted no-network build code, catalogs generated/bundled/package/native outputs and
+source maps, and records only actually observed or successful package-script tool provenance.
+Exact argv remains in protected run-owned artifacts; central logs and
 retrieval-visible records contain hashes and sanitized facts only. See
 [`../operations/language-build.md`](../operations/language-build.md).
+
+The JVM family is an independent DAG branch. Maven and Gradle wrapper recipe names resolve to the
+pinned system tools without trusting target wrapper payloads. Mixed Java/Kotlin units share their
+accepted topology and dependency layers. The adapter catalogs generated sources/resources,
+classes, JVM metadata, and JAR/WAR/EAR packages, and publishes sanitized command/artifact entities
+to the composable `build` index while exact argv and streams remain protected.
+
+Python is a first-class parallel family node rather than a repository-specific lane. It consumes
+the same accepted dispatch/probe contract, binds checkpoints to locked dependency inputs and typed
+offline policy, executes packaging hooks only inside the generic sandbox, and publishes wheel,
+sdist, metadata, generated-source, bytecode, native-extension, invocation, and package-relationship
+evidence through the shared receipt and retrieval contracts.
+
+## WebAssembly output-family execution
+
+The `job_language_build` WebAssembly lane is an output-family adapter alongside its generic
+source-family lanes. It selects accepted source-family recipes by typed producer rules rather than treating WebAssembly as
+one source language. Rust wasm targets, Emscripten, WASI SDK/Clang, AssemblyScript, WAT tooling, and
+additional explicit producers therefore reuse catalog discovery, recipe validation, derived images,
+probe receipts, dependency topology, execution isolation, and immutable handoffs.
+
+The adapter adds bounded diagnostic verbosity where supported, retains protected command streams
+and argv, catalogs WebAssembly modules/components plus bindings and interface/debug/package
+artifacts, and publishes sanitized command/artifact entities into the shared composable `build` shard. It
+never instantiates produced modules. Producer failures are receipt gaps; accepted-input, path,
+configuration, hash, checkpoint, and manifest failures stop publication. See
+[`../operations/wasm-build.md`](../operations/wasm-build.md).
 
 ## C/C++ compiled-analysis lane
 

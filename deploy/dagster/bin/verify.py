@@ -153,6 +153,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
             "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
+            "job_language_build",
         ))
         for job_id in job_ids:
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
@@ -240,18 +241,59 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             if job_id == "job_language_build":
                 receipt_path = run_root / publication["artifact"]["path"]
                 receipt_set = json.loads(receipt_path.read_text(encoding="utf-8"))
-                native = [item for item in receipt_set.get("receipts", ()) if item.get("family") == "native"]
+                receipts = list(receipt_set.get("receipts", ()))
+                native = [item for item in receipts if item.get("family") == "native"]
                 successful = [item for item in native if item.get("terminal_status") == "SUCCEEDED"]
+                jvm = [item for item in receipts if item.get("family") == "java"]
+                successful_jvm = [item for item in jvm if item.get("terminal_status") == "SUCCEEDED"]
+                wasm = [item for item in receipts if item.get("producer")]
+                successful_wasm = [item for item in wasm if item.get("terminal_status") == "SUCCEEDED"]
                 if run.get("pipelineName") == "wave1_review" and not successful:
                     raise SystemExit("live Wave 1 acceptance did not produce a successful native build receipt")
+                if run.get("pipelineName") == "wave1_review" and not successful_jvm:
+                    raise SystemExit("live Wave 1 acceptance did not produce a successful JVM build receipt")
+                family_status = {}
+                for family in ("native", "rust", "go", "java", "node", "dotnet", "python", "php"):
+                    values = [item for item in receipts if item.get("family") == family]
+                    family_status[family] = {
+                        "receipt_count": len(values),
+                        "disposition_counts": dict(sorted(Counter(
+                            str(item.get("terminal_status", "UNKNOWN")) for item in values).items())),
+                        "artifact_count": sum(len(item.get("artifacts", ())) for item in values),
+                        "command_count": sum(len(item.get("commands", ())) for item in values),
+                        "gap_count": sum(len(item.get("gaps", ())) for item in values),
+                    }
+                family_status["wasm"] = {
+                    "receipt_count": len(wasm),
+                    "disposition_counts": dict(sorted(Counter(
+                        str(item.get("terminal_status", "UNKNOWN")) for item in wasm).items())),
+                    "artifact_count": sum(len(item.get("artifacts", ())) for item in wasm),
+                    "command_count": sum(len(item.get("commands", ())) for item in wasm),
+                    "gap_count": sum(len(item.get("gaps", ())) for item in wasm),
+                }
                 job_report["language_build"] = {
-                    "receipt_count": len(receipt_set.get("receipts", ())),
+                    "receipt_count": len(receipts),
+                    "families": family_status,
                     "native_receipt_count": len(native),
                     "successful_native_count": len(successful),
                     "artifact_count": sum(len(item.get("artifacts", ())) for item in native),
                     "protected_command_set_count": sum(
                         isinstance(item.get("protected_compile_commands"), Mapping) for item in successful),
                     "checkpoint_reused": sum(bool(item.get("checkpoint_reused")) for item in successful),
+                    "jvm_receipt_count": len(jvm),
+                    "successful_jvm_count": len(successful_jvm),
+                    "jvm_artifact_count": sum(len(item.get("artifacts", ())) for item in jvm),
+                    "jvm_command_count": sum(len(item.get("commands", ())) for item in jvm),
+                    "jvm_tool_invocation_count": sum(len(item.get("tool_invocations", ())) for item in jvm),
+                    "jvm_protected_provenance_count": sum(
+                        isinstance(item.get("protected_tool_invocations"), Mapping) for item in successful_jvm),
+                    "jvm_checkpoint_reused": sum(bool(item.get("checkpoint_reused")) for item in successful_jvm),
+                    "wasm_receipt_count": len(wasm),
+                    "successful_wasm_count": len(successful_wasm),
+                    "wasm_producer_counts": dict(sorted(Counter(
+                        str(item.get("producer", "unknown")) for item in wasm).items())),
+                    "wasm_artifact_count": sum(len(item.get("artifacts", ())) for item in wasm),
+                    "wasm_checkpoint_reused": sum(bool(item.get("checkpoint_reused")) for item in successful_wasm),
                     "gaps": receipt_set.get("gaps", []),
                 }
             if job_id == "job_cpp_compiled_analysis":

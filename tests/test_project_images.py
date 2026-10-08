@@ -60,7 +60,7 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert first.dockerfile_path == second.dockerfile_path
     dockerfile = next((tmp_path / "metadata" / "project-images").glob("*/context/Dockerfile")).read_text()
     assert "FROM node-base:local" in dockerfile
-    assert '["npm","ci","--ignore-scripts"]' in dockerfile
+    assert '["npm","ci","--ignore-scripts","--no-audit","--no-fund"]' in dockerfile
     assert "ENV NPM_CONFIG_CACHE=/opt/project-deps/npm-cache" in dockerfile
     assert "ENV NODE_PATH=/opt/project/web/node_modules" in dockerfile
     assert "ENV PATH=/opt/project/web/node_modules/.bin:$PATH" in dockerfile

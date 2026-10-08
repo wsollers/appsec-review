@@ -83,12 +83,24 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
     if system == "dotnet":
         return ("dotnet", "restore")
     if system == "node":
-        return ("npm", "ci", "--ignore-scripts") if "package-lock.json" in files else ("npm", "install", "--ignore-scripts")
+        locks = files & {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
+        if len(locks) != 1:
+            raise ValueError("Node dependency restore requires exactly one supported lockfile")
+        if "package-lock.json" in locks:
+            return ("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund")
+        if "pnpm-lock.yaml" in locks:
+            return ("pnpm", "install", "--frozen-lockfile", "--ignore-scripts")
+        return ("yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive")
     if system == "composer":
-        return ("composer", "install", "--no-interaction", "--no-scripts", "--prefer-dist")
+        files = {PurePosixPath(str(value)).name for value in recipe.get("dependency_files", ())}
+        if "composer.lock" not in files:
+            raise ValueError("Composer dependency restore requires composer.lock")
+        return ("composer", "install", "--no-interaction", "--no-scripts", "--no-plugins",
+                "--prefer-dist", "--no-progress")
     requirements = sorted(name for name in files if name.startswith("requirements") and name.endswith(".txt"))
     if system == "python" and requirements:
-        return ("python", "-m", "pip", "install", "--target", "/opt/project-deps", "-r", requirements[0])
+        return ("python", "-m", "pip", "install", "--require-hashes", "--target",
+                "/opt/project-deps", "-r", requirements[0])
     return None
 
 
@@ -103,6 +115,8 @@ def project_dependency_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         "gradle": {"GRADLE_USER_HOME": "/opt/project-deps/gradle"},
         "dotnet": {"NUGET_PACKAGES": "/opt/project-deps/nuget"},
         "node": {"NPM_CONFIG_CACHE": "/opt/project-deps/npm-cache",
+                 "PNPM_STORE_DIR": "/opt/project-deps/pnpm-store",
+                 "YARN_CACHE_FOLDER": "/opt/project-deps/yarn-cache",
                  "NODE_PATH": f"{source}/node_modules",
                  "PATH": f"{source}/node_modules/.bin:$PATH"},
         "composer": {"COMPOSER_HOME": "/opt/project-deps/composer-home",

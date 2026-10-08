@@ -33,6 +33,12 @@ class BuildCommandResult:
     stdout: bytes
     stderr: bytes
     timed_out: bool
+    stdout_bytes: int | None = None
+    stderr_bytes: int | None = None
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    stdout_tail: bytes = b""
+    stderr_tail: bytes = b""
 
 
 Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
@@ -114,8 +120,15 @@ class BuildContainerExecutor:
             command.extend(("--env", f"{key}={value}"))
         command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
         code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-        return BuildCommandResult(tuple(argv), code, stdout[:self.output_bytes],
-                                  stderr[:self.output_bytes], timed_out)
+        stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
+        tail_bytes = min(32768, self.output_bytes)
+        return BuildCommandResult(
+            tuple(argv), code, stdout[:self.output_bytes], stderr[:self.output_bytes], timed_out,
+            stdout_bytes=len(stdout), stderr_bytes=len(stderr),
+            stdout_truncated=stdout_truncated, stderr_truncated=stderr_truncated,
+            stdout_tail=stdout[-tail_bytes:] if stdout_truncated else b"",
+            stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
+        )
 
 
 def profiles_from_settings(value: Any) -> dict[str, BuildProfile]:

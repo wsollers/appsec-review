@@ -45,6 +45,16 @@ def test_source_only_compiled_tree_becomes_one_direct_build_unit() -> None:
     }
 
 
+def test_dotnet_project_suffixes_cover_csharp_visual_basic_and_fsharp() -> None:
+    units = discover_build_units([
+        _file("csharp/App.csproj"), _file("visual-basic/App.vbproj"), _file("fsharp/App.fsproj"),
+    ])
+    assert [(item["root"], item["family"], item["build_system"]) for item in units] == [
+        ("csharp", "dotnet", "dotnet"), ("fsharp", "dotnet", "dotnet"),
+        ("visual-basic", "dotnet", "dotnet"),
+    ]
+
+
 def test_descriptor_package_is_bounded_and_hash_identified(tmp_path: Path) -> None:
     target = tmp_path / "target"
     (target / "native").mkdir(parents=True)

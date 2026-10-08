@@ -352,13 +352,117 @@ command_timeout_seconds = 600
 output_bytes = 8388608
 artifact_count_limit = 10000
 
+[jobs.job_language_build.settings.go]
+offline = true
+capture_trace = true
+package_catalog = true
+diagnostic_tail_bytes = 32768
+
+[jobs.job_language_build.settings.python]
+frontend = "build"
+require_locked_dependencies = true
+offline = true
+capture_native_tools = true
+diagnostic_tail_bytes = 32768
+
+[jobs.job_language_build.settings.dotnet]
+require_locked_restore = true
+capture_msbuild_diagnostics = true
+generated_sources = true
+allow_publish = true
+allow_pack = true
+allow_aot = true
+
+[jobs.job_language_build.settings.rust]
+toolchain = "stable"
+profile = "dev"
+features = []
+locked = false
+offline = true
+capture_linker = true
+diagnostic_tail_bytes = 32768
+
+[jobs.job_language_build.settings.php]
+composer_plugins = "disabled"
+composer_scripts = "sandboxed"
+require_lockfile = true
+diagnostic_tail_bytes = 32768
+
+[jobs.job_language_build.settings.node]
+package_managers = ["npm", "pnpm", "yarn"]
+require_lockfile = true
+network = "denied"
+lifecycle_scripts = "sandboxed"
+capture_source_maps = true
+diagnostic_tail_bytes = 32768
+
+[jobs.job_language_build.settings.jvm]
+trace_bytes = 8388608
+provenance_count_limit = 20000
+diagnostic_tail_bytes = 32768
+system_path = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[jobs.job_language_build.settings.jvm.tool_paths]
+javac = "/usr/bin/javac"
+kotlinc = "/usr/bin/kotlinc"
+kapt = "/usr/bin/kapt"
+ksp = "/usr/bin/ksp"
+java = "/usr/bin/java"
+jar = "/usr/bin/jar"
+javadoc = "/usr/bin/javadoc"
+protoc = "/usr/bin/protoc"
+
+[jobs.job_language_build.settings.wasm]
+workspace_file_limit = 100000
+
+[jobs.job_language_build.settings.wasm.producers.rust]
+families = ["rust"]
+tools = ["cargo", "rustc", "wasm-pack", "wasm-bindgen"]
+indicators = ["wasm32", ".wasm", "wasm-pack", "wasm-bindgen"]
+
+[jobs.job_language_build.settings.wasm.producers.emscripten]
+families = ["native"]
+tools = ["emcc", "em++", "emar"]
+indicators = []
+
+[jobs.job_language_build.settings.wasm.producers.wasi_sdk]
+families = ["native"]
+tools = ["clang", "clang++", "cmake", "make", "ninja", "wasm-ld"]
+indicators = ["wasm32-wasi", "wasi-sdk", ".wasm"]
+
+[jobs.job_language_build.settings.wasm.producers.assemblyscript]
+families = ["node"]
+tools = ["asc", "npm", "pnpm", "yarn", "npx"]
+indicators = ["asc", "assemblyscript", ".wasm"]
+
+[jobs.job_language_build.settings.wasm.producers.wat]
+families = ["wasm"]
+tools = ["wasm-tools"]
+indicators = [".wat", ".wasm"]
+
 [jobs.job_language_build.steps.load]
 workers = 1
-[jobs.job_language_build.steps.load.tasks.accepted_dispatch]
+[jobs.job_language_build.steps.load.tasks.native]
+[jobs.job_language_build.steps.load.tasks.go]
+[jobs.job_language_build.steps.load.tasks.dotnet]
+[jobs.job_language_build.steps.load.tasks.node]
+[jobs.job_language_build.steps.load.tasks.python]
+[jobs.job_language_build.steps.load.tasks.rust]
+[jobs.job_language_build.steps.load.tasks.php]
+[jobs.job_language_build.steps.load.tasks.java]
+[jobs.job_language_build.steps.load.tasks.wasm]
 
 [jobs.job_language_build.steps.execute]
 workers = 4
 [jobs.job_language_build.steps.execute.tasks.native]
+[jobs.job_language_build.steps.execute.tasks.go]
+[jobs.job_language_build.steps.execute.tasks.dotnet]
+[jobs.job_language_build.steps.execute.tasks.node]
+[jobs.job_language_build.steps.execute.tasks.python]
+[jobs.job_language_build.steps.execute.tasks.rust]
+[jobs.job_language_build.steps.execute.tasks.php]
+[jobs.job_language_build.steps.execute.tasks.java]
+[jobs.job_language_build.steps.execute.tasks.wasm]
 
 [jobs.job_language_build.steps.acceptance]
 workers = 1

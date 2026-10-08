@@ -30,15 +30,44 @@ The Linux vertical is complete only when:
 - unit tests, failure/resume tests, MCP integration tests, and a live Dagster acceptance run prove
   dispatch, execution, provenance capture, indexing, gaps, and selective reuse end to end.
 
-Current status: the generic Linux native/CMake slice now covers accepted dispatch validation, real
-build execution, protected compiler/link provenance, artifact catalogs, dependency ordering,
+Current status: the generic Linux native/CMake, Rust/Cargo, JVM Java/Kotlin (Maven, Gradle, and direct compiler), Go, lockfile-bound Node/JavaScript/TypeScript, lockfile-bound PHP/Composer, Linux-capable .NET SDK, and WebAssembly output-family adapters now cover
+accepted dispatch validation, real build execution, protected compiler/link provenance, artifact catalogs, dependency ordering,
 failure isolation, checkpoint reuse, default-image-first probing, three bounded inference-guided
 dependency-image repairs, successful Dockerfile/image reuse, and dynamic C++/post-build
-consumption. The full Linux
-vertical remains open: static dispatch execution, the other language-family executors, entitled
-CodeQL, pinned loader-dependency parsing, broader MCP integration, and cross-language live
-acceptance are still required. The retained Dagster verification record is the authority for the
-latest native live result.
+consumption. The Go adapter supports accepted modules/workspaces, vendor mode, package targets,
+build tags, and cgo; retains bounded `go -x` provenance and stream artifacts; and catalogs modules,
+packages, generated sources, binaries, build IDs, and sanitized retrieval records. The .NET adapter
+additionally enforces locked restore, catalogs MSBuild/Roslyn and
+managed/native outputs, and reports Windows-only/.NET Framework units as explicit platform gaps.
+The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/features/locked/offline
+choices; retains rustc, linker, archiver, build-script, and proc-macro provenance; catalogs Cargo
+metadata and resolve edges plus generated sources, rlib/rmeta, native libraries, binaries, and debug
+metadata; and publishes sanitized build evidence without executing tests or produced programs.
+The Node adapter accepts npm, pnpm, and Yarn identities; denies network and application/test
+execution; treats lifecycle scripts as sandboxed target code; and catalogs generated code, bundles,
+maps, packages, and native addons with protected command/stream evidence and sanitized retrieval.
+The PHP adapter requires `composer.lock`, prepares dependencies in the pinned derived image with
+plugins/scripts disabled, applies explicit sandbox policy to real Composer build work, catalogs
+package and dependency metadata, generated autoload/code, archives, and native extensions, and
+keeps exact argv and streams out of retrieval-visible evidence.
+The WebAssembly adapter consumes accepted Rust, native/Emscripten/WASI, Node/AssemblyScript, WAT,
+and explicitly configured producer recipes without duplicating source discovery; catalogs modules,
+components, bindings, interface/debug metadata, side modules, packages, and dependency evidence;
+and never instantiates produced modules. Focused host tests cover protected stream truncation,
+sanitized MCP retrieval, checkpoint reuse, tamper rejection, and sibling failure isolation. The
+prior standalone WebAssembly deployment receipt predates integration into `job_language_build`
+and is not acceptance evidence for the current tree. A fresh integrated Dagster run
+(`d51d396c-4f0f-4386-a503-859b399f1449`, application run `2026-10-08-0081`) completed all 248
+orchestration steps and accepted the shared language-build handoff with one native and seven JVM
+successes, nine explicit .NET recipe gaps, and truthful non-selection for Go, Node, Python, PHP,
+Rust, and WebAssembly. The composed retrieval manifest and an MCP query resolved sanitized JVM
+class evidence while retaining the unrelated catalog build shard. Producer-positive live coverage
+for Rust, Go, Node, .NET, Python, PHP, and WASM remains required before the Linux vertical can be
+closed; focused executor tests cover those family contracts in this revision.
+The full Linux vertical remains open: static dispatch execution, entitled CodeQL, pinned
+loader-dependency parsing, broader MCP integration, and cross-language live acceptance are still
+required. Retained Dagster records describe only the revisions and selected target recipes they
+captured.
 
 Probe policy must be centrally configurable per build unit as `configure`, `selected-target`, or
 `full-build`. This keeps the default test target rigorous without forcing future large repositories

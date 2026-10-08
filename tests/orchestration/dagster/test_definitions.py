@@ -220,8 +220,14 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "project_build__probe__native",
         "project_build__build_dispatch__native",
         "project_build__acceptance__publish_handoff",
-        "language_build__load__accepted_dispatch",
+        "language_build__load__native",
+        "language_build__load__dotnet",
+        "language_build__load__rust",
+        "language_build__load__wasm",
         "language_build__execute__native",
+        "language_build__execute__dotnet",
+        "language_build__execute__rust",
+        "language_build__execute__wasm",
         "language_build__acceptance__publish_handoff",
         "cpp_compiled_analysis__plan__accepted_cpp_plan",
         "cpp_compiled_analysis__catalog__projects",
@@ -261,6 +267,11 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
     assert "target_analysis_plan__finalize" in upstream("project_build__begin")
     assert "project_build__finalize" in upstream("language_build__begin")
+    assert upstream("language_build__execute__rust") == {
+        "language_build__begin", "language_build__load__rust"}
+    assert "language_build__execute__native" not in upstream("language_build__execute__rust")
+    assert upstream("language_build__execute__wasm") == {
+        "language_build__begin", "language_build__load__wasm"}
     assert "language_build__finalize" in upstream("cpp_compiled_analysis__begin")
     assert len(upstream("project_build__acceptance__publish_handoff")) == 20
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")

@@ -93,18 +93,22 @@ def _proposal(request, component_proposals=()):
             "cmake": ([["cmake", "-S", source_dir, "-B", build_dir]], [["cmake", "--build", build_dir]]),
             "cargo": ([], [["cargo", "build", "--manifest-path", f"{root}/Cargo.toml"]]),
             "go": ([], [["go", "build", "./..."]]),
-            "maven": ([], [["mvn", "-f", f"{root}/pom.xml", "package"]]),
+            "maven": ([], [["mvn", f"--file={root}/pom.xml", "-DskipTests", "package"]]),
             "node": ([], [["npm", "--prefix", root, "run", "build"]]),
             "python": ([], [["python", "-m", "build", root]]),
         }.get(system, ([], [[{
             "make": "make", "autotools": "make", "gradle": "gradle",
             "dotnet": "dotnet", "composer": "composer", "meson": "meson",
         }.get(system, system)]]))
+        dependencies = [item["path"] for item in unit["markers"]]
+        if system == "node":
+            dependencies.extend(item["path"] for item in unit.get("descriptor_package", {}).get("documents", ())
+                                if Path(item["path"]).name in {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"})
         recipes.append({
             "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
             "image_profile": unit["family"], "source_dir": source_dir, "build_dir": build_dir,
             "system_packages": [], "environment": {},
-            "dependency_files": [item["path"] for item in unit["markers"]],
+            "dependency_files": list(dict.fromkeys(dependencies)),
             "configure_commands": commands[0], "build_commands": commands[1],
             "expected_outputs": [build_dir], "network_required": system in {
                 "cargo", "go", "maven", "gradle", "dotnet", "node", "composer", "python"},
@@ -116,7 +120,8 @@ def _proposal(request, component_proposals=()):
 
 def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: Path) -> None:
     files = {
-        "web/package.json": "{}", "web/tsconfig.json": "{}", "web/src/app.ts": "export const x=1;\n",
+        "web/package.json": "{}", "web/package-lock.json": '{"lockfileVersion":3}',
+        "web/tsconfig.json": "{}", "web/src/app.ts": "export const x=1;\n",
         "api/go.mod": "module fixture\n", "api/main.go": "package main\n",
         "native/CMakeLists.txt": "project(fixture)\n", "native/main.cpp": "int main(){}\n",
         "jvm/pom.xml": "<project/>", "jvm/Main.java": "class Main {}\n",
