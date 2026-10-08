@@ -469,3 +469,66 @@ class RetrievalCore:
                     gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             return results, gaps, False, 0
         return self._execute("coverage", parameters, operation)
+
+    def query_ci_configuration(
+        self, *, provider: str | None = None, pipeline: str | None = None,
+        workflow: str | None = None, stage: str | None = None, job: str | None = None,
+        step: str | None = None, tool: str | None = None, rule: str | None = None,
+        category: str | None = None, canonical_finding: str | None = None,
+        shard: str | None = None, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Query accepted CI observation/finding shards by exact normalized facets."""
+        filters = {key: value for key, value in {
+            "provider": provider, "pipeline": pipeline, "workflow": workflow, "stage": stage,
+            "job": job, "step": step, "tool_id": tool, "native_rule_id": rule,
+            "category": category, "finding_id": canonical_finding,
+        }.items() if value is not None}
+        if any(not value or len(value) > 4096 for value in filters.values()):
+            raise ValueError("invalid CI query facet")
+        if shard is not None and (not shard or len(shard) > 128):
+            raise ValueError("invalid CI shard")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"provider": provider, "pipeline": pipeline, "workflow": workflow,
+                      "stage": stage, "job": job, "step": step, "tool": tool, "rule": rule,
+                      "category": category, "canonical_finding": canonical_finding,
+                      "shard": shard, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_ci_configuration", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = [
+                (name, item) for name in ("observations", "evidence")
+                for item in self.indexes.get(name, ())
+                if str(item.get("shard_id", "")).startswith("ci_")
+                and (shard is None or str(item.get("shard_id")) == shard)
+            ]
+            if not candidates:
+                gaps.append("accepted CI configuration indexes are unavailable")
+            for index_name, identity in candidates:
+                self._check_deadline(deadline)
+                clauses = []
+                values: list[Any] = []
+                for key, value in filters.items():
+                    clauses.append("json_extract(e.payload_json, ?) = ?")
+                    values.extend((f"$.{key}", value))
+                sql = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity"
+                if clauses:
+                    sql += " WHERE " + " AND ".join(clauses)
+                sql += " ORDER BY e.identity LIMIT ?"
+                values.append(offset + limit + 1)
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, index_name)
+                        item["shard_id"] = identity.get("shard_id", "default")
+                        found.append(item)
+                    gaps.extend(f"{index_name}/{identity.get('shard_id')}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"{index_name}/{identity.get('shard_id')}: {gap}"
+                            for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["identity"], item["index"], item["shard_id"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_ci_configuration", parameters, operation)

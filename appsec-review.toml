@@ -11,6 +11,7 @@ max_concurrent = 8
 scanner = 6
 index = 4
 lifecycle = 1
+ci_linter = 8
 owasp_validator = 4
 owasp_verification = 2
 
@@ -223,6 +224,111 @@ workers = 1
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.validate_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.index_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.publish_handoff]
+
+[jobs.job_ci_configuration_analysis]
+name = "ci_configuration_analysis"
+workers = 8
+
+[jobs.job_ci_configuration_analysis.settings]
+max_files = 128
+max_file_bytes = 1048576
+max_observations_per_tool = 5000
+correlation = "exact-only/1"
+ruleset = "ci-static-reviewed-rules/1"
+
+[jobs.job_ci_configuration_analysis.settings.providers.github]
+tools = ["zizmor", "checkov", "actionlint", "schema"]
+framework = "github_actions"
+[jobs.job_ci_configuration_analysis.settings.providers.azure]
+tools = ["checkov", "schema"]
+framework = "azure_pipelines"
+[jobs.job_ci_configuration_analysis.settings.providers.gitlab]
+tools = ["checkov", "schema"]
+framework = "gitlab_ci"
+[jobs.job_ci_configuration_analysis.settings.providers.circleci]
+tools = ["checkov", "schema"]
+framework = "circleci_pipelines"
+[jobs.job_ci_configuration_analysis.settings.providers.bitbucket]
+tools = ["checkov", "schema"]
+framework = "bitbucket_pipelines"
+[jobs.job_ci_configuration_analysis.settings.providers.jenkins]
+tools = ["structural"]
+[jobs.job_ci_configuration_analysis.settings.providers.teamcity]
+tools = ["structural"]
+[jobs.job_ci_configuration_analysis.settings.providers.other]
+tools = ["supported_discovery_without_linter"]
+
+[jobs.job_ci_configuration_analysis.steps.ci_discovery]
+workers = 1
+[jobs.job_ci_configuration_analysis.steps.ci_discovery.tasks.discover_definitions]
+[jobs.job_ci_configuration_analysis.steps.ci_discovery.tasks.classify_providers]
+
+[jobs.job_ci_configuration_analysis.steps.ci_analysis]
+workers = 8
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.github_zizmor_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.github_checkov_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.github_actionlint_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.github_schema_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.azure_checkov_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.azure_schema_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.gitlab_checkov_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.gitlab_schema_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.circleci_checkov_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.circleci_schema_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.bitbucket_checkov_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.bitbucket_schema_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.jenkins_structural_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.teamcity_structural_scan]
+[jobs.job_ci_configuration_analysis.steps.ci_analysis.tasks.other_discovery_scan]
+
+[jobs.job_ci_configuration_analysis.steps.ci_normalization]
+workers = 8
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.github_zizmor_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.github_checkov_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.github_actionlint_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.github_schema_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.azure_checkov_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.azure_schema_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.gitlab_checkov_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.gitlab_schema_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.circleci_checkov_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.circleci_schema_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.bitbucket_checkov_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.bitbucket_schema_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.jenkins_structural_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.teamcity_structural_normalize]
+[jobs.job_ci_configuration_analysis.steps.ci_normalization.tasks.other_discovery_normalize]
+
+[jobs.job_ci_configuration_analysis.steps.ci_enrichment]
+workers = 1
+[jobs.job_ci_configuration_analysis.steps.ci_enrichment.tasks.build_hierarchy]
+
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication]
+workers = 8
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.github_zizmor_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.github_checkov_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.github_actionlint_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.github_schema_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.azure_checkov_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.azure_schema_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.gitlab_checkov_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.gitlab_schema_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.circleci_checkov_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.circleci_schema_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.bitbucket_checkov_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.bitbucket_schema_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.jenkins_structural_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.teamcity_structural_index]
+[jobs.job_ci_configuration_analysis.steps.ci_observation_publication.tasks.other_discovery_index]
+
+[jobs.job_ci_configuration_analysis.steps.ci_correlation]
+workers = 1
+[jobs.job_ci_configuration_analysis.steps.ci_correlation.tasks.correlate_findings]
+
+[jobs.job_ci_configuration_analysis.steps.ci_coverage]
+workers = 1
+[jobs.job_ci_configuration_analysis.steps.ci_coverage.tasks.join_coverage]
+[jobs.job_ci_configuration_analysis.steps.ci_coverage.tasks.publish_handoff]
 
 [jobs.job_evidence_collection]
 name = "evidence_collection"

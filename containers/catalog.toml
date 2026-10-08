@@ -304,6 +304,21 @@ build_args = { TOOL_VERSION = "3.4.0" }
 purpose = "Offline binary hardening metadata."
 
 [[images]]
+id = "tool-actionlint"
+state = "enabled"
+kind = "tool"
+version = "1.7.12"
+tag = "appsec-review/tool-actionlint:1.7.12"
+context = "containers/tools/actionlint"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/actionlint/tool.toml"
+assets_lock = "containers/tools/actionlint/assets.lock.json"
+build_args = { TOOL_VERSION = "1.7.12" }
+purpose = "Offline static syntax and semantic checks for bounded GitHub Actions files."
+
+[[images]]
 id = "tool-checkov"
 state = "enabled"
 kind = "tool"

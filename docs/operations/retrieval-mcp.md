@@ -25,7 +25,7 @@ The server implements JSON-RPC MCP initialization, tool listing, calls, and ping
 are in `docs/schemas/retrieval-mcp-tools.json`. Application code should instantiate
 `RetrievalCore` instead of calling the MCP process.
 
-The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes all seven tools.
+The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes all eight tools.
 Top-level tool-call spans and nested retrieval spans appear in `data/logs/pipeline.jsonl` under the
 run. One transport call produces one `MCP_TOOL_COMPLETED` metric event even when it invokes several
 internal retrieval operations.
@@ -35,3 +35,8 @@ shard manifest. It scopes by standard/version/profile, control, component, proje
 validator, batch, disposition, or shard and returns explicit pagination, truncation, ambiguity, and
 coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
 empty-coverage claim.
+
+`query_ci_configuration` reads only accepted `ci_*` observation shards and the canonical
+`ci_findings` evidence shard. Exact filters cover provider, pipeline, workflow, stage, job, step,
+tool, rule, category, canonical finding, and shard. Unavailable linter branches are returned as
+coverage gaps; the tool never scans the target tree or reads an evaluator guide.

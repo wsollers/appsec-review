@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -13,7 +14,7 @@ LANGUAGES = {
     ".php": "PHP", ".swift": "Swift", ".sh": "Shell", ".ps1": "PowerShell",
 }
 PROJECT_FILES = {"pyproject.toml", "package.json", "pom.xml", "build.gradle", "build.gradle.kts",
-                 "go.mod", "Cargo.toml", "Gemfile", "composer.json", "*.csproj", "*.sln"}
+                 "go.mod", "Cargo.toml", "Gemfile", "composer.json"}
 BUILD_FILES = {"Makefile", "CMakeLists.txt", "meson.build", "BUILD", "WORKSPACE", "Dockerfile"}
 
 
@@ -39,7 +40,25 @@ def inventory(root: Path, bounds: Bounds = Bounds()) -> dict[str, Any]:
     gaps: list[dict[str, str]] = []
     excluded: set[str] = set()
     total = 0
-    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+    candidates: list[Path] = []
+    for directory, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        base = Path(directory)
+        dirnames.sort()
+        filenames.sort()
+        kept = []
+        for name in dirnames:
+            candidate = base / name
+            if candidate.is_symlink():
+                candidates.append(candidate)
+            elif name in {".git", ".hg", ".svn", "node_modules", ".venv", "dist", "build"}:
+                relative = candidate.relative_to(root).as_posix()
+                gaps.append({"path": relative, "reason": "excluded_directory"})
+                excluded.add(relative)
+            else:
+                kept.append(name)
+        dirnames[:] = kept
+        candidates.extend(base / name for name in filenames)
+    for path in candidates:
         relative = path.relative_to(root).as_posix()
         parts = path.relative_to(root).parts
         excluded_part = next((part for part in parts if part in {
@@ -78,17 +97,51 @@ def inventory(root: Path, bounds: Bounds = Bounds()) -> dict[str, Any]:
                       "language": LANGUAGES.get(path.suffix.lower()),
                       "generated": False})
         total += size
-    return {"files": files, "gaps": gaps, "file_count": len(files), "total_bytes": total}
+    snapshot = raw_snapshot(root)
+    return {"files": files, "gaps": gaps, "file_count": len(files), "total_bytes": total,
+            "snapshot": snapshot}
+
+
+def raw_snapshot(root: Path) -> dict[str, Any]:
+    """Identify all target-owned regular bytes, including excluded/generated content."""
+    root = root.resolve(strict=True)
+    digest = hashlib.sha256()
+    count = total = 0
+    candidates: list[Path] = []
+    for directory, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        base = Path(directory)
+        kept = []
+        for name in sorted(dirnames):
+            candidate = base / name
+            if candidate.is_symlink():
+                candidates.append(candidate)
+            elif name not in {".git", ".hg", ".svn"}:
+                kept.append(name)
+        dirnames[:] = kept
+        candidates.extend(base / name for name in sorted(filenames))
+    for path in candidates:
+        relative_path = path.relative_to(root)
+        if any(part in {".git", ".hg", ".svn"} for part in relative_path.parts):
+            continue
+        relative = relative_path.as_posix()
+        if path.is_symlink():
+            digest.update(f"SYMLINK\0{relative}\0{path.readlink()}\n".encode())
+            continue
+        if not path.is_file():
+            continue
+        size = path.stat().st_size
+        file_digest = sha256_file(path)
+        digest.update(f"FILE\0{relative}\0{size}\0{file_digest}\n".encode())
+        count += 1
+        total += size
+    return {"schema": "appsec-review/raw-target-snapshot/1", "sha256": digest.hexdigest(),
+            "file_count": count, "total_bytes": total,
+            "coverage": "all regular target bytes including catalog-excluded directories and files"}
 
 
 def source_fingerprint(root: Path, bounds: Bounds = Bounds()) -> str:
-    snapshot = inventory(root, bounds)
-    digest = hashlib.sha256()
-    for item in snapshot["files"]:
-        digest.update(f"{item['path']}\0{item['size_bytes']}\0{item['sha256']}\n".encode())
-    for gap in snapshot["gaps"]:
-        digest.update(f"GAP\0{gap['path']}\0{gap['reason']}\n".encode())
-    return digest.hexdigest()
+    del bounds
+    return str(raw_snapshot(root)["sha256"])
 
 
 def write_json(path: Path, value: Mapping[str, Any]) -> dict[str, Any]:

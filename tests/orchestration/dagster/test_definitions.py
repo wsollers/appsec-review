@@ -192,6 +192,8 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("review_intake").name == "review_intake"
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
     assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
+    assert definitions.get_job_def("ci_configuration_analysis").name == "ci_configuration_analysis"
+    assert definitions.get_job_def("ci_configuration_review").name == "ci_configuration_review"
     assert definitions.get_job_def("wave1_review").name == "wave1_review"
 
 
@@ -202,6 +204,11 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "dispatch_wave1_review" not in names
     expected = {
         "review_intake__begin", "target_catalog__begin", "target_analysis_plan__begin",
+        "ci_configuration_analysis__ci_discovery__discover_definitions",
+        "ci_configuration_analysis__ci_analysis__github_zizmor_scan",
+        "ci_configuration_analysis__ci_observation_publication__github_zizmor_index",
+        "ci_configuration_analysis__ci_correlation__correlate_findings",
+        "ci_configuration_analysis__ci_coverage__join_coverage",
         "target_analysis_plan__analysis_decisions__apply_deterministic_rules",
         "target_analysis_plan__plan_acceptance__index_plan",
         "evidence_collection__secrets__gitleaks_scan",
@@ -225,7 +232,8 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "evidence_collection__secrets__gitleaks_index")
     assert "evidence_collection__software_inventory__syft_scan" in upstream(
         "evidence_collection__vulnerability_matching__grype_scan")
-    assert "target_catalog__finalize" in upstream("target_analysis_plan__begin")
+    assert "target_catalog__finalize" in upstream("ci_configuration_analysis__begin")
+    assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
     assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
     assert "evidence_collection__secrets__gitleaks_index" in barrier

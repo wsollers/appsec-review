@@ -42,5 +42,21 @@ TOOLS: tuple[dict[str, Any], ...] = (
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "indexes": {"type": "array", "items": INDEX, "uniqueItems": True},
      }}},
+    {"name": "query_ci_configuration", "description": "Query accepted CI observations and canonical findings by exact provider and hierarchy facets.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "provider": {"type": "string", "maxLength": 4096},
+         "pipeline": {"type": "string", "maxLength": 4096},
+         "workflow": {"type": "string", "maxLength": 4096},
+         "stage": {"type": "string", "maxLength": 4096},
+         "job": {"type": "string", "maxLength": 4096},
+         "step": {"type": "string", "maxLength": 4096},
+         "tool": {"type": "string", "maxLength": 4096},
+         "rule": {"type": "string", "maxLength": 4096},
+         "category": {"type": "string", "maxLength": 4096},
+         "canonical_finding": {"type": "string", "maxLength": 4096},
+         "shard": {"type": "string", "maxLength": 128},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
     QUERY_TOOL_SCHEMA,
 )

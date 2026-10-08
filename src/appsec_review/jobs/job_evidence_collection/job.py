@@ -669,9 +669,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
             if tuple(context.config.step(step).tasks) != tasks:
                 raise ValueError(f"evidence collection task order mismatch: {step}")
         catalog = load_catalog(context.repository_root)
-        if set(catalog.tools) != set(adapters):
-            missing = sorted(set(catalog.tools) - set(adapters))
-            extra = sorted(set(adapters) - set(catalog.tools))
+        static_tools = {tool_id for tool_id, tool in catalog.tools.items()
+                        if tool.metadata.get("static_adapter", True) is not False}
+        if static_tools != set(adapters):
+            missing = sorted(static_tools - set(adapters))
+            extra = sorted(set(adapters) - static_tools)
             raise ValueError(f"enabled tool/adapter mismatch: missing={missing}, extra={extra}")
         target_catalog = load_target_catalog(context.run_root)
         if context.source_fingerprint != target_catalog.source_fingerprint:
@@ -743,18 +745,20 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     def runtime_identity() -> str:
         root = Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent
         catalog = load_catalog(root)
+        static_tools = {tool_id: tool for tool_id, tool in catalog.tools.items()
+                        if tool.metadata.get("static_adapter", True) is not False}
         paths = [root / "containers" / "catalog.toml", root / "containers" / "runtime-policy.toml",
                  root / "rules" / "semgrep" / "security.yml", root / "rules" / "semgrep" / "rules.lock.json",
                  root / "data" / "feeds" / "osv" / "current.json",
                  root / "data" / "feeds" / "grype" / "current.json",
-                 *(tool.manifest_path for tool in catalog.tools.values())]
+                 *(tool.manifest_path for tool in static_tools.values())]
         digest = hashlib.sha256()
         for path in paths:
             digest.update(path.relative_to(root).as_posix().encode())
             digest.update(path.read_bytes() if path.is_file() else b"MISSING")
         if executor_factory is None:
-            for tool_id in sorted(catalog.tools):
-                tool = catalog.tool(tool_id)
+            for tool_id in sorted(static_tools):
+                tool = static_tools[tool_id]
                 inspected = subprocess.run(
                     ["docker", "image", "inspect", tool.tag, "--format", "{{.Id}}"],
                     capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,

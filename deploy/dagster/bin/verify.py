@@ -79,7 +79,10 @@ def _workspace(url: str, document: dict) -> dict:
         raise SystemExit("Dagster code location appsec_review is not connected")
     jobs = sorted(item["name"] for item in location["pipelines"])
     schedules = sorted(location["schedules"], key=lambda item: item["name"])
-    expected_jobs = sorted([*(value["name"] for value in document["jobs"].values()), "wave1_review"])
+    composed = ["wave1_review"]
+    if "job_ci_configuration_analysis" in document["jobs"]:
+        composed.append("ci_configuration_review")
+    expected_jobs = sorted([*(value["name"] for value in document["jobs"].values()), *composed])
     expected_schedules = sorted(
         ({
             "name": f"{value['name']}_schedule",
@@ -122,7 +125,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         raise SystemExit(f"Dagster run is not successful: {run}")
     tags = {item["key"]: item["value"] for item in run.get("tags", [])}
     application_run_id = tags.get("appsec/application_run_id")
-    if run.get("pipelineName") == "wave1_review":
+    if run.get("pipelineName") in {"wave1_review", "ci_configuration_review"}:
         if not application_run_id:
             raise SystemExit("Dagster Wave 1 run does not contain the application run id")
         runs_dir = repository / document["runtime"]["runs_dir"]
@@ -134,12 +137,15 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         }:
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
-        for job_id in (
+        job_ids = (
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
             "job_evidence_collection",
-        ):
+        ) if run.get("pipelineName") == "wave1_review" else (
+            "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
+        )
+        for job_id in job_ids:
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
             pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
             handoff_path = run_root / pointer["handoff_path"]
@@ -163,6 +169,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
+                "job_ci_configuration_analysis": "ci_coverage.publish_handoff",
             }
             publication = result.get("outputs", {}).get(publication_units[job_id], {})
             job_report = {
@@ -216,6 +223,21 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "latest_producer_index_completed_at": latest_index.isoformat(),
                     "manifest_started_at": barrier_start.isoformat(),
                     "manifest_waited_for_all_producer_indexes": barrier_start >= latest_index,
+                }
+            if job_id == "job_ci_configuration_analysis":
+                manifest_path = run_root / publication["index_manifest"]["path"]
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                ci_shards = [item for item in manifest["indexes"]
+                             if str(item.get("shard_id", "")).startswith("ci_")]
+                coverage = json.loads((run_root / publication["coverage"]["path"]).read_text(encoding="utf-8"))
+                job_report["ci_configuration"] = {
+                    "finding_count": publication["finding_count"],
+                    "ci_shard_count": len(ci_shards),
+                    "definitions_by_provider": coverage["definitions_by_provider"],
+                    "coverage_status": coverage["coverage_status"],
+                    "tool_count": len(coverage["tools"]),
+                    "manifest_sha256": publication["index_manifest"]["sha256"],
+                    "all_provider_tools_joined": len(coverage["tools"]) == 15,
                 }
             jobs[job_id] = job_report
         step_statuses = [item["status"] for item in run.get("stepStats", [])]

@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-actionlint",
+  "tool_version": "1.7.12",
+  "project": "https://github.com/rhysd/actionlint",
+  "license": "MIT",
+  "architecture": "linux/amd64",
+  "generated_from": "upstream-release-v1.7.12",
+  "artifacts": [
+    {
+      "name": "actionlint_1.7.12_linux_amd64.tar.gz",
+      "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz",
+      "path": "downloads/actionlint_1.7.12_linux_amd64.tar.gz",
+      "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+      "bytes": 2353908,
+      "verification": {
+        "kind": "upstream-release-sha256",
+        "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+      },
+      "version": "1.7.12",
+      "license": "MIT",
+      "license_source": "upstream repository LICENSE.txt",
+      "provenance": "GitHub release asset and published upstream checksum",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "The deterministic builder enforces the upstream-published SHA-256; GitHub artifact attestation can be verified during pin refresh."
+      }
+    }
+  ]
+}

@@ -105,7 +105,7 @@ def test_checkov_typed_multi_vuln_scope_includes_supported_families_not_arbitrar
     assert "projects/python/case-078/config.yaml" not in selected.files
     assert any(path.endswith("Dockerfile") for path in selected.families["dockerfile"])
     assert set(selected.families["github_actions"]) == {
-        ".github/workflows/ci.yml", ".github/workflows/codeql.yml"}
+        ".github/workflows/ci.yml", ".github/workflows/codeql.yml", ".github/workflows/verify.yml"}
     argv = adapter.argv("/opt/tool/bin/checkov", selected)
     assert "--framework" in argv and "dockerfile" in argv and "github_actions" in argv
     assert any("structural evidence" in gap for gap in selected.gaps)

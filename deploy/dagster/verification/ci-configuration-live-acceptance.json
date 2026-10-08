@@ -1,0 +1,118 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "completion_status": "COMPLETED_WITH_GAPS",
+      "jobs": {
+        "job_ci_configuration_analysis": {
+          "attempt_id": "attempt_0001",
+          "ci_configuration": {
+            "all_provider_tools_joined": true,
+            "ci_shard_count": 16,
+            "coverage_status": "partial",
+            "definitions_by_provider": {
+              "azure": 1,
+              "bitbucket": 1,
+              "circleci": 1,
+              "github": 3,
+              "gitlab": 1,
+              "jenkins": 1,
+              "other": 0,
+              "teamcity": 1
+            },
+            "finding_count": 38,
+            "manifest_sha256": "ed0b6a05abcf7aa133ab6f8eb687dc89cf8da3466e60746cdef055c64547bd8a",
+            "tool_count": 15
+          },
+          "gap_count": 2,
+          "handoff_receipt": "runs/2026-10-08-0036/data/jobs/job_ci_configuration_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "9916ec0cfb2096cfbbb9d42dff430bdf9bbdce4553e3ea746bab2335f5b038c4",
+          "result_receipt": "runs/2026-10-08-0036/data/jobs/job_ci_configuration_analysis/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0036/data/jobs/job_ci_configuration_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 51,
+          "unit_status_counts": {
+            "SUCCEEDED": 51
+          }
+        },
+        "job_review_intake": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 30,
+          "handoff_receipt": "runs/2026-10-08-0036/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "dfdec3613b388f98bd1dd826a5b4863890005caa46a40e494866b00245583211",
+          "result_receipt": "runs/2026-10-08-0036/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0036/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_target_catalog": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 30,
+          "handoff_receipt": "runs/2026-10-08-0036/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "65e45b42c4d499bdd8de6517de08d4f82a5bced4267dfcb295bd4fdd46093ee6",
+          "result_receipt": "runs/2026-10-08-0036/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-08-0036/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
+          "unit_count": 13,
+          "unit_status_counts": {
+            "SUCCEEDED": 13
+          }
+        }
+      },
+      "orchestration_receipt": "runs/2026-10-08-0036/data/orchestration/dagster/e975066a-01da-4eeb-98bf-b19e581d1caf.json",
+      "resume_decisions": [
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        }
+      ],
+      "run_id": "2026-10-08-0036"
+    },
+    "dagster_run": {
+      "job": "ci_configuration_review",
+      "run_id": "e975066a-01da-4eeb-98bf-b19e581d1caf",
+      "status": "SUCCESS",
+      "step_count": 77,
+      "step_status_counts": {
+        "SUCCESS": 77
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "ci_configuration_analysis",
+      "ci_configuration_review",
+      "cpp_compiled_analysis",
+      "evidence_collection",
+      "owasp_control_assessment",
+      "post_build_security_assessment",
+      "review_intake",
+      "target_analysis_plan",
+      "target_catalog",
+      "third_party_data_sync",
+      "wave1_review"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}

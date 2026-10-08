@@ -109,7 +109,7 @@ def _pool_for(unit_id: str) -> str:
         return "owasp_verification"
     task = unit_id.rsplit(".", 1)[-1]
     if task.endswith("_scan"):
-        return "scanner"
+        return "ci_linter" if unit_id.startswith("ci_analysis.") else "scanner"
     if task.endswith("_index"):
         return "index"
     return "lifecycle" if unit_id.startswith("__") else "application"
@@ -137,6 +137,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
                     "job_evidence_collection", "job_owasp_control_assessment",
+                    "job_ci_configuration_analysis",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -326,11 +327,20 @@ def build_definitions(
                 )
             )
     if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan"} <= registered:
-        wave_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
-                     registry.build("job_target_analysis_plan")]
+        wave_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
+        if "job_ci_configuration_analysis" in registered:
+            wave_jobs.append(registry.build("job_ci_configuration_analysis"))
+        wave_jobs.append(registry.build("job_target_analysis_plan"))
         if "job_evidence_collection" in registered:
             wave_jobs.append(registry.build("job_evidence_collection"))
         if "job_owasp_control_assessment" in registered:
             wave_jobs.append(registry.build("job_owasp_control_assessment"))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory))
+    if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:
+        jobs.append(_build_dagster_graph(
+            "ci_configuration_review",
+            (registry.build("job_review_intake"), registry.build("job_target_catalog"),
+             registry.build("job_ci_configuration_analysis")),
+            config, runner_factory, node_namespace="ci_review",
+        ))
     return Definitions(jobs=jobs, schedules=schedules)
