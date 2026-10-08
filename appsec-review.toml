@@ -494,6 +494,52 @@ workers = 8
 workers = 1
 [jobs.job_artifact_indexing.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_artifact_security_analysis]
+name = "artifact_security_analysis"
+workers = 8
+
+[jobs.job_artifact_security_analysis.settings]
+timeout_seconds = 600
+stream_limit_bytes = 8388608
+diagnostic_tail_bytes = 32768
+archive_member_limit = 10000
+archive_expanded_bytes = 536870912
+archive_member_bytes = 134217728
+archive_ratio_limit = 1000
+archive_depth_limit = 4
+
+[jobs.job_artifact_security_analysis.settings.scanner_identities]
+blint = "tool-blint:3.4.0:adapter-1"
+syft = "tool-syft:1.52.0:adapter-1"
+grype = "tool-grype:0.119.0:adapter-1"
+osv = "tool-osv-scanner:1.9.2:adapter-1"
+spotbugs = "tool-spotbugs:4.10.4:adapter-1"
+
+[jobs.job_artifact_security_analysis.steps.load]
+workers = 1
+[jobs.job_artifact_security_analysis.steps.load.tasks.accepted_artifacts]
+
+[jobs.job_artifact_security_analysis.steps.analyze]
+workers = 8
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.inventory]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.native]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.jvm]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.packages]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.wasm]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.spotbugs]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.blint]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.syft]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.grype]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.osv]
+
+[jobs.job_artifact_security_analysis.steps.index]
+workers = 1
+[jobs.job_artifact_security_analysis.steps.index.tasks.observations]
+
+[jobs.job_artifact_security_analysis.steps.acceptance]
+workers = 1
+[jobs.job_artifact_security_analysis.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_cpp_compiled_analysis]
 name = "cpp_compiled_analysis"
 workers = 8

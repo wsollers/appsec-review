@@ -39,6 +39,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_project_build import build_job as build_project_build
     from appsec_review.jobs.job_language_build import build_job as build_language_build
     from appsec_review.jobs.job_artifact_indexing import build_job as build_artifact_indexing
+    from appsec_review.jobs.job_artifact_security_analysis import build_job as build_artifact_security_analysis
     from appsec_review.jobs.job_third_party_data_sync import build_job as build_sync
     from appsec_review.jobs.job_evidence_collection import build_job as build_evidence
     from appsec_review.jobs.job_ci_configuration_analysis import build_job as build_ci_configuration_analysis
@@ -55,6 +56,7 @@ def builtin_registry() -> JobRegistry:
                       lambda: build_project_build(model_client=ConfiguredClaudeModelClient()))
     registry.register("job_language_build", build_language_build)
     registry.register("job_artifact_indexing", build_artifact_indexing)
+    registry.register("job_artifact_security_analysis", build_artifact_security_analysis)
     registry.register("job_third_party_data_sync", build_sync)
     registry.register("job_evidence_collection", build_evidence)
     registry.register("job_ci_configuration_analysis", build_ci_configuration_analysis)

@@ -111,17 +111,18 @@ def test_definitions_reject_registry_config_drift(tmp_path: Path) -> None:
         build_definitions(_config(tmp_path, configured_job="job_other"), registry=_registry())
 
 
-def test_artifact_indexing_receives_target_snapshot(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("job_id", ["job_artifact_indexing", "job_artifact_security_analysis"])
+def test_artifact_jobs_receive_target_snapshot(tmp_path: Path, monkeypatch, job_id: str) -> None:
     target = tmp_path / "target"
     target.mkdir()
     monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
     begun: list[dict[str, object]] = []
-    registry = JobRegistry()
 
+    registry = JobRegistry()
     def build_artifact_job():
         units = (Unit("work.execute", lambda context: {"terminal_status": "SUCCEEDED"}),)
-        return Job("job_artifact_indexing", "artifact job", UnitExecutor(units).execute, units=units)
-    registry.register("job_artifact_indexing", build_artifact_job)
+        return Job(job_id, "artifact job", UnitExecutor(units).execute, units=units)
+    registry.register(job_id, build_artifact_job)
 
     class Runner:
         def __init__(self, config):
@@ -143,7 +144,7 @@ def test_artifact_indexing_receives_target_snapshot(tmp_path: Path, monkeypatch)
                     "result": {"steps": {}, "units": {}, "outputs": {},
                                "failed_units": [], "skipped_units": []}}
 
-    definitions = build_definitions(_config(tmp_path, configured_job="job_artifact_indexing"),
+    definitions = build_definitions(_config(tmp_path, configured_job=job_id),
                                     registry=registry, runner_factory=Runner)
     assert definitions.get_job_def("artifact_job").execute_in_process().success
     assert begun[0]["target_root"] == target.resolve()
@@ -322,6 +323,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert upstream("artifact_indexing__acceptance__publish_handoff") == {
         "artifact_indexing__begin", "artifact_indexing__index__catalogs",
         "artifact_indexing__index__members", "artifact_indexing__index__relationships"}
+    assert "artifact_indexing__finalize" in upstream("artifact_security_analysis__begin")
     assert len(upstream("project_build__acceptance__publish_handoff")) == 20
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")

@@ -165,7 +165,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
                     "job_project_build", "job_language_build", "job_artifact_indexing",
-                    "job_evidence_collection", "job_cpp_compiled_analysis",
+                    "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis",
                 }
@@ -382,6 +382,10 @@ def build_definitions(
             wave_jobs.append(registry.build("job_artifact_indexing"))
             wave_dependencies["job_artifact_indexing"] = (("job_language_build",)
                 if "job_language_build" in registered else ("job_project_build",))
+        if "job_artifact_security_analysis" in registered:
+            wave_jobs.append(registry.build("job_artifact_security_analysis"))
+            wave_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
+                if "job_artifact_indexing" in registered else ("job_language_build",))
         if "job_cpp_compiled_analysis" in registered:
             wave_jobs.append(registry.build("job_cpp_compiled_analysis"))
             wave_dependencies["job_cpp_compiled_analysis"] = (("job_language_build",)
@@ -404,6 +408,8 @@ def build_definitions(
             owasp_dependencies = [build_terminal]
             if "job_evidence_collection" in registered:
                 owasp_dependencies.append("job_evidence_collection")
+            if "job_artifact_security_analysis" in registered:
+                owasp_dependencies.append("job_artifact_security_analysis")
             wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys(owasp_dependencies))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))
@@ -421,13 +427,20 @@ def build_definitions(
             "job_target_analysis_plan": ("job_target_catalog",),
             "job_project_build": ("job_target_analysis_plan",),
             "job_language_build": ("job_project_build",),
-            "job_artifact_indexing": ("job_language_build",),
         }
+        project_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+                        registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
+                        registry.build("job_language_build")]
+        if "job_artifact_indexing" in registered:
+            project_jobs.append(registry.build("job_artifact_indexing"))
+            project_dependencies["job_artifact_indexing"] = ("job_language_build",)
+        if "job_artifact_security_analysis" in registered:
+            project_jobs.append(registry.build("job_artifact_security_analysis"))
+            project_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
+                if "job_artifact_indexing" in registered else ("job_language_build",))
         jobs.append(_build_dagster_graph(
             "project_build_review",
-             (registry.build("job_review_intake"), registry.build("job_target_catalog"),
-             registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
-             registry.build("job_language_build"), registry.build("job_artifact_indexing")),
+             tuple(project_jobs),
             config, runner_factory, node_namespace="project_build_review",
             job_dependencies=project_dependencies,
         ))
