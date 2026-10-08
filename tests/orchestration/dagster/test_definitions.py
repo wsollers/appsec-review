@@ -193,6 +193,7 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
     assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
     assert definitions.get_job_def("cpp_compiled_analysis").name == "cpp_compiled_analysis"
+    assert definitions.get_job_def("post_build_security_assessment").name == "post_build_security_assessment"
     assert definitions.get_job_def("ci_configuration_analysis").name == "ci_configuration_analysis"
     assert definitions.get_job_def("ci_configuration_review").name == "ci_configuration_review"
     assert definitions.get_job_def("wave1_review").name == "wave1_review"
@@ -217,6 +218,13 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "cpp_compiled_analysis__ast__case001",
         "cpp_compiled_analysis__ir__case001",
         "cpp_compiled_analysis__acceptance__publish_handoff",
+        "post_build_security_assessment__load__accepted_cpp_build",
+        "post_build_security_assessment__provenance__case001",
+        "post_build_security_assessment__inspection__case001",
+        "post_build_security_assessment__deterministic__case001",
+        "post_build_security_assessment__inference__case001",
+        "post_build_security_assessment__index__case001",
+        "post_build_security_assessment__publication__publish_handoff",
         "evidence_collection__secrets__gitleaks_scan",
         "evidence_collection__secrets__gitleaks_normalize",
         "evidence_collection__secrets__gitleaks_index",
@@ -241,13 +249,16 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "target_catalog__finalize" in upstream("ci_configuration_analysis__begin")
     assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
     assert "target_analysis_plan__finalize" in upstream("cpp_compiled_analysis__begin")
-    assert "cpp_compiled_analysis__finalize" in upstream("evidence_collection__begin")
+    assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
+    assert "post_build_security_assessment__finalize" in upstream("evidence_collection__begin")
     assert upstream("cpp_compiled_analysis__ast__case001") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__case001"}
     assert upstream("cpp_compiled_analysis__ir__case001") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__case001"}
     cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
     assert len(cpp_barrier) == 79  # claim plus six terminal branches for each of thirteen cases
+    post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
+    assert len(post_build_barrier) == 14  # claim plus one shard per accepted case
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
     assert "evidence_collection__secrets__gitleaks_index" in barrier
     assert "evidence_collection__source_sast__semgrep_index" in barrier

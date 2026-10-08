@@ -6,7 +6,7 @@ fingerprinted SQLite/FTS shards; application jobs call `appsec_review.retrieval`
 
 ## Accepted index sets
 
-One run may contain source, observations, components, build, compiled, analysis, and evidence
+One run may contain source, observations, components, build, build-security, compiled, analysis, and evidence
 shards. A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
 target snapshot, producer artifacts, tool/image/rule identity, parser and normalizer identities,
 mapping implementation, schema, and upstream manifests. Thus an observation change does not
@@ -34,6 +34,13 @@ blocked producer still publishes an unavailable-coverage shard with zero observa
 cannot be mistaken for clean coverage. Compile and linker relationships that lack an exact output
 map are explicitly non-exact and carry their ambiguity reason.
 
+The post-build assessment adds one `build_security` shard per accepted C++ case. These shards hold
+redacted build-action provenance, compile-unit and linked-artifact identities, exact relationships
+where the accepted build emitted them, deterministic hardening results, and evidence-validated
+model observations. The dedicated `query_build_security` read tool accepts exact scopes for
+project, build root/action, configuration, compile unit, linked artifact, producer, and shard.
+It opens only accepted immutable SQLite shards and never exposes protected argv artifacts.
+
 `runs/<run-id>/data/indices/accepted.json` binds one manifest to an accepted job handoff. Before
 opening a database, retrieval verifies the pointer, handoff status and hash, manifest membership in
 the handoff artifact list, manifest content hash, each shard hash, and each shard's embedded schema,
@@ -57,8 +64,8 @@ re-hash the current target file and fail with an explicit gap when it changed af
 
 ## Query boundary
 
-The public surface is six bounded tools: `search`, `find`, `read_excerpt`, `trace`,
-`resolve_evidence`, and `coverage`. The MCP process is pinned at startup to one run and optionally
+The public surface is seven bounded tools: `search`, `find`, `read_excerpt`, `trace`,
+`resolve_evidence`, `coverage`, and `query_build_security`. The MCP process is pinned at startup to one run and optionally
 one exact manifest hash. It has no shell, write, glob, grep, arbitrary SQL, arbitrary regular
 expression, or caller-supplied filesystem-path operation.
 

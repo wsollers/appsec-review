@@ -532,3 +532,77 @@ class RetrievalCore:
             found.sort(key=lambda item: (item["identity"], item["index"], item["shard_id"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_ci_configuration", parameters, operation)
+
+    def query_build_security(
+        self, *, project: str | None = None, build_root: str | None = None,
+        build_action: str | None = None, configuration: str | None = None,
+        compile_unit: str | None = None, linked_artifact: str | None = None,
+        producer: str | None = None, shard: str | None = None,
+        limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Query the immutable build-security family without scanning target or run trees."""
+        filters = {key: value for key, value in {
+            "project": project, "build_root": build_root, "build_action": build_action,
+            "configuration": configuration, "compile_unit": compile_unit,
+            "linked_artifact": linked_artifact, "producer": producer, "shard": shard,
+        }.items() if value is not None}
+        if any(not isinstance(value, str) or not value or len(value) > 4096 for value in filters.values()):
+            raise ValueError("build-security scope values must be bounded non-empty strings")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {**filters, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_build_security", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def matches(payload: Mapping[str, Any], shard_id: str) -> bool:
+            aliases = {
+                "project": payload.get("project"), "build_root": payload.get("build_root"),
+                "build_action": payload.get("build_action_id"),
+                "configuration": payload.get("configuration"),
+                "compile_unit": payload.get("compile_unit_id") or payload.get("compile_unit"),
+                "linked_artifact": (payload.get("linked_artifact") or payload.get("artifact_id") or
+                                    payload.get("linked_artifact_ids")),
+                "shard": shard_id,
+            }
+            raw_producer = payload.get("producer")
+            if isinstance(raw_producer, Mapping):
+                aliases["producer"] = raw_producer.get("job") or raw_producer.get("tool")
+            else:
+                aliases["producer"] = raw_producer
+            for key, expected in filters.items():
+                actual = aliases.get(key)
+                if isinstance(actual, (list, tuple, set)):
+                    if expected not in {str(item) for item in actual}:
+                        return False
+                elif str(actual) != expected:
+                    return False
+            return True
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            if "build_security" not in self.indexes:
+                return [], ["build_security index is unavailable"], False, offset
+            for identity in self.indexes["build_security"]:
+                self._check_deadline(deadline)
+                shard_id = str(identity.get("shard_id", "default"))
+                if shard is not None and shard_id != shard:
+                    continue
+                with self._database(identity, deadline) as database:
+                    rows = database.execute(
+                        "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
+                        "ORDER BY e.identity"
+                    )
+                    for row in rows:
+                        payload = json.loads(row["payload_json"])
+                        if matches(payload, shard_id):
+                            item = self._entity(row, "build_security")
+                            item["shard_id"] = shard_id
+                            found.append(item)
+                    gaps.extend(f"build_security/{shard_id}: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"build_security/{shard_id}: {gap}" for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["shard_id"], item["identity"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+
+        return self._execute("query_build_security", parameters, operation)

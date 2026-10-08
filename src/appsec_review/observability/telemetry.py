@@ -82,6 +82,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     finding_states = Counter()
     durations_ms = Counter()
     tokens = Counter()
+    domain_counts = Counter()
     for record in records:
         details = record.get("details", {})
         disposition = details.get("disposition") or details.get("terminal_status") or details.get("completion_status")
@@ -96,13 +97,19 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         for key in ("input_tokens", "output_tokens", "cache_tokens"):
             if isinstance(details.get(key), int):
                 tokens[key] += details[key]
+        for key in ("inspected_count", "check_count", "observation_count", "confirmed_count",
+                    "refuted_count", "unvalidated_count", "gap_count", "truncated_count",
+                    "resumption_count"):
+            if isinstance(details.get(key), int):
+                domain_counts[key] += details[key]
     return {"schema": "appsec-review/run-metrics/1", "run_id": Path(run_root).name,
             "event_count": len(records), "event_counts": dict(sorted(event_counts.items())),
             "dispositions": dict(sorted(dispositions.items())),
             "tool_calls": dict(sorted(tool_calls.items())),
             "finding_states": dict(sorted(finding_states.items())),
             "duration_ms_by_event": dict(sorted(durations_ms.items())),
-            "model_tokens": dict(sorted(tokens.items())), "torn_tail_ignored": torn}
+            "model_tokens": dict(sorted(tokens.items())),
+            "domain_counts": dict(sorted(domain_counts.items())), "torn_tail_ignored": torn}
 
 
 def emit_model_event(log: PipelineLog, *, event_type: str, run_id: str, invocation_id: str,

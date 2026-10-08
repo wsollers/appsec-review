@@ -15,7 +15,9 @@ from appsec_review.storage import atomic_json, file_sha256
 
 INDEX_SCHEMA = "appsec-review/retrieval-index/1"
 MANIFEST_SCHEMA = "appsec-review/index-manifest/1"
-INDEX_NAMES = ("source", "observations", "components", "build", "compiled", "analysis", "evidence")
+INDEX_NAMES = (
+    "source", "observations", "components", "build", "build_security", "compiled", "analysis", "evidence"
+)
 
 
 @dataclass(frozen=True, slots=True)

@@ -228,7 +228,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     adapter = RetrievalMcpAdapter(core)
     assert {item["name"] for item in TOOLS} == {
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
-        "query_ci_configuration", "query_owasp_workbench"}
+        "query_build_security", "query_ci_configuration", "query_owasp_workbench"}
     via_mcp = adapter.call("find", {"identity": ids["symbol"]})
     direct = core.find(identity=ids["symbol"])
     assert {key: value for key, value in via_mcp.items() if key != "duration_ms"} == {
@@ -237,7 +237,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         ("search", {"query": "authenticate"}), ("find", {"identity": ids["symbol"]}),
         ("read_excerpt", {"identity": ids["symbol"]}), ("trace", {"identity": ids["observation"]}),
         ("resolve_evidence", {"identity": ids["observation"]}), ("coverage", {}),
-        ("query_ci_configuration", {}), ("query_owasp_workbench", {}),
+        ("query_build_security", {}), ("query_owasp_workbench", {}),
     ]
     process = subprocess.Popen(
         [sys.executable, "-m", "appsec_review.mcp.stdio", "--runs-dir", str(runs), "--run-id", RUN_ID],

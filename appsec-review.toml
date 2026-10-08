@@ -404,6 +404,108 @@ workers = 1
 [jobs.job_cpp_compiled_analysis.steps.acceptance.tasks.publish_handoff]
 
 
+[jobs.job_post_build_security_assessment]
+name = "post_build_security_assessment"
+workers = 8
+
+[jobs.job_post_build_security_assessment.settings.model]
+enabled = false
+provider = "openai"
+model = "gpt-5"
+reasoning = "medium"
+max_input_tokens = 32000
+max_output_tokens = 8000
+timeout_seconds = 120
+retries = 1
+
+[jobs.job_post_build_security_assessment.steps.load]
+workers = 1
+[jobs.job_post_build_security_assessment.steps.load.tasks.accepted_cpp_build]
+
+[jobs.job_post_build_security_assessment.steps.provenance]
+workers = 6
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case001]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case002]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case003]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case026]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case027]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case028]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case029]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case030]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case036]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case037]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case038]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case045]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.case063]
+
+[jobs.job_post_build_security_assessment.steps.inspection]
+workers = 6
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case001]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case002]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case003]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case026]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case027]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case028]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case029]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case030]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case036]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case037]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case038]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case045]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.case063]
+
+[jobs.job_post_build_security_assessment.steps.deterministic]
+workers = 6
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case001]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case002]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case003]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case026]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case027]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case028]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case029]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case030]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case036]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case037]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case038]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case045]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case063]
+
+[jobs.job_post_build_security_assessment.steps.inference]
+workers = 2
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case001]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case002]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case003]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case026]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case027]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case028]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case029]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case030]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case036]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case037]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case038]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case045]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.case063]
+
+[jobs.job_post_build_security_assessment.steps.index]
+workers = 2
+[jobs.job_post_build_security_assessment.steps.index.tasks.case001]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case002]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case003]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case026]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case027]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case028]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case029]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case030]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case036]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case037]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case038]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case045]
+[jobs.job_post_build_security_assessment.steps.index.tasks.case063]
+
+[jobs.job_post_build_security_assessment.steps.publication]
+workers = 1
+[jobs.job_post_build_security_assessment.steps.publication.tasks.publish_handoff]
+
 [jobs.job_ci_configuration_analysis]
 name = "ci_configuration_analysis"
 workers = 8

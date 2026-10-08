@@ -142,6 +142,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_target_catalog",
             "job_target_analysis_plan",
             "job_cpp_compiled_analysis",
+            "job_post_build_security_assessment",
             "job_evidence_collection",
         ) if run.get("pipelineName") == "wave1_review" else (
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
@@ -170,6 +171,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",
                 "job_cpp_compiled_analysis": "acceptance.publish_handoff",
+                "job_post_build_security_assessment": "publication.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
                 "job_ci_configuration_analysis": "ci_coverage.publish_handoff",
             }
@@ -250,6 +252,32 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     },
                     "terminal_branch_count": len(branches),
                     "all_cpp_shards_preserved": len(cpp_shards) == summary["case_count"] * summary["branch_count"],
+                }
+            if job_id == "job_post_build_security_assessment":
+                summary_path = run_root / publication["artifact"]["path"]
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                manifest_path = run_root / publication["index_manifest"]["path"]
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                build_security_shards = [
+                    item for item in manifest["indexes"]
+                    if item.get("name") == "build_security"
+                ]
+                indexes = [
+                    value for key, value in result["outputs"].items()
+                    if key.startswith("index.")
+                ]
+                job_report["post_build_security"] = {
+                    "case_count": summary["case_count"],
+                    "shard_count": summary["shard_count"],
+                    "manifest_shard_count": len(build_security_shards),
+                    "rule_version": summary["rule_version"],
+                    "parser_version": summary["parser_version"],
+                    "normalizer_version": summary["normalizer_version"],
+                    "gap_count": len(summary.get("gaps", [])),
+                    "index_reused": sum(bool(value.get("index_reused")) for value in indexes),
+                    "all_build_security_shards_preserved": (
+                        len(build_security_shards) == summary["case_count"] == summary["shard_count"]
+                    ),
                 }
             if job_id == "job_ci_configuration_analysis":
                 manifest_path = run_root / publication["index_manifest"]["path"]

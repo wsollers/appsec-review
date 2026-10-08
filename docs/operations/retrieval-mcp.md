@@ -30,6 +30,11 @@ Top-level tool-call spans and nested retrieval spans appear in `data/logs/pipeli
 run. One transport call produces one `MCP_TOOL_COMPLETED` metric event even when it invokes several
 internal retrieval operations.
 
+`query_build_security` reads only accepted immutable `build_security` shards. It supports exact
+project, build-root/action, configuration, compile-unit, linked-artifact, producer, and shard
+scopes. Results include only redacted normalized command facts; protected exact argv artifacts are
+never returned through MCP.
+
 `query_owasp_workbench` is pinned to the MCP session's run and reads only that run's accepted OWASP
 shard manifest. It scopes by standard/version/profile, control, component, project, evidence mode,
 validator, batch, disposition, or shard and returns explicit pagination, truncation, ambiguity, and

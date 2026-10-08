@@ -8,7 +8,7 @@ from .owasp import QUERY_TOOL_SCHEMA
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
-INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "compiled", "analysis", "evidence"]}
+INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "build_security", "compiled", "analysis", "evidence"]}
 
 TOOLS: tuple[dict[str, Any], ...] = (
     {"name": "search", "description": "Full-text search accepted immutable evidence indexes.",
@@ -41,6 +41,19 @@ TOOLS: tuple[dict[str, Any], ...] = (
     {"name": "coverage", "description": "Report explicit accepted-index coverage and gaps.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "indexes": {"type": "array", "items": INDEX, "uniqueItems": True},
+     }}},
+    {"name": "query_build_security", "description": "Query accepted post-build security shards by exact scope.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "project": {"type": "string", "maxLength": 4096},
+         "build_root": {"type": "string", "maxLength": 4096},
+         "build_action": {"type": "string", "maxLength": 4096},
+         "configuration": {"type": "string", "maxLength": 4096},
+         "compile_unit": {"type": "string", "maxLength": 4096},
+         "linked_artifact": {"type": "string", "maxLength": 4096},
+         "producer": {"type": "string", "maxLength": 4096},
+         "shard": {"type": "string", "maxLength": 128},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
      }}},
     {"name": "query_ci_configuration", "description": "Query accepted CI observations and canonical findings by exact provider and hierarchy facets.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {

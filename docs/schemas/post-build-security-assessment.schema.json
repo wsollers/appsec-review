@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/post-build-security-assessment/1",
+  "title": "Post-build security assessment summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "case_count", "shard_count", "gaps", "rule_version", "parser_version", "normalizer_version"],
+  "properties": {
+    "schema": {"const": "appsec-review/post-build-security-assessment/1"},
+    "case_count": {"type": "integer", "minimum": 0},
+    "shard_count": {"type": "integer", "minimum": 0},
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "rule_version": {"type": "string"},
+    "parser_version": {"type": "string"},
+    "normalizer_version": {"type": "string"}
+  }
+}

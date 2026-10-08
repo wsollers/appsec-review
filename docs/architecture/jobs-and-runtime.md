@@ -143,3 +143,21 @@ The native container executes untrusted build logic but never target binaries or
 code validates compile commands and artifacts, converts tool failures to explicit gaps, and retains
 framework integrity failures as hard failures. See
 [`../operations/cpp-compiled-analysis.md`](../operations/cpp-compiled-analysis.md).
+
+## Post-build security assessment
+
+`job_post_build_security_assessment` runs after the accepted C/C++ compiled-analysis handoff and
+before evidence-package assembly. It reads the accepted handoff and manifest rather than walking
+the target. Thirteen independent case paths capture protected exact argv artifacts plus redacted
+indexed command summaries across thirteen accepted cases, inspect produced files as bytes without executing them, apply
+platform-aware deterministic hardening rules, validate bounded model observations against exact
+command or artifact identities, and publish independently fingerprinted `build_security` shards.
+
+The fingerprint for each shard binds its protected command artifacts, produced-binary hashes,
+tool/image identity, rule version, parser and normalizer versions, model/guidance identity, and
+upstream manifest. A changed translation unit therefore invalidates its case and dependent linked
+artifacts without invalidating unrelated case shards. Missing action timing, link maps, loader
+metadata, unsupported formats, unavailable model/tooling, truncation, and parser limitations are
+coverage gaps rather than clean results. Exact command text is never written to the central log or
+retrieval databases. Operational details are in
+[`../operations/post-build-security-assessment.md`](../operations/post-build-security-assessment.md).
