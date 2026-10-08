@@ -292,7 +292,8 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
         "build_topology": {
             "projects": list(catalog.get("projects", ())), "build_systems": systems,
             "build_actions": [{"action": "configure-and-build", "root": item["root"],
-                               "build_system": item["build_system"], "build_unit_id": item["build_unit_id"],
+                               "family": item["family"], "build_system": item["build_system"],
+                               "build_unit_id": item["build_unit_id"],
                                "recipe": None, "requires_inference": True, "executable": False}
                               for item in catalog.get("build_units", ())],
             "compile_databases": compile_databases,

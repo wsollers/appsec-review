@@ -192,6 +192,7 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("review_intake").name == "review_intake"
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
     assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
+    assert definitions.get_job_def("project_build").name == "project_build"
     assert definitions.get_job_def("cpp_compiled_analysis").name == "cpp_compiled_analysis"
     assert definitions.get_job_def("post_build_security_assessment").name == "post_build_security_assessment"
     assert definitions.get_job_def("ci_configuration_analysis").name == "ci_configuration_analysis"
@@ -213,6 +214,11 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "ci_configuration_analysis__ci_coverage__join_coverage",
         "target_analysis_plan__analysis_decisions__apply_deterministic_rules",
         "target_analysis_plan__plan_acceptance__index_plan",
+        "project_build__plan__load_recipes",
+        "project_build__build__native",
+        "project_build__build__rust",
+        "project_build__build__go",
+        "project_build__acceptance__publish_handoff",
         "cpp_compiled_analysis__plan__accepted_cpp_plan",
         "cpp_compiled_analysis__compile__projects",
         "cpp_compiled_analysis__ast__projects",
@@ -249,7 +255,9 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "evidence_collection__vulnerability_matching__grype_scan")
     assert "target_catalog__finalize" in upstream("ci_configuration_analysis__begin")
     assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
-    assert "target_analysis_plan__finalize" in upstream("cpp_compiled_analysis__begin")
+    assert "target_analysis_plan__finalize" in upstream("project_build__begin")
+    assert "project_build__finalize" in upstream("cpp_compiled_analysis__begin")
+    assert len(upstream("project_build__acceptance__publish_handoff")) == 10
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "post_build_security_assessment__finalize" in upstream("evidence_collection__begin")
     assert upstream("cpp_compiled_analysis__ast__projects") == {

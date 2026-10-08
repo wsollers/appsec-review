@@ -64,7 +64,7 @@ class _Model:
 
     def complete(self, request, *, timeout_seconds):
         self.calls += 1
-        assert request.guidance and timeout_seconds == 120
+        assert request.guidance and timeout_seconds > 0
         summarized_paths = {
             item["path"] for prefix in request.summary["prefixes"] for item in prefix["sample"]
         } | {
@@ -241,12 +241,12 @@ def test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path: Path) ->
 
         def complete(self, request, *, timeout_seconds):
             self.calls += 1
-            assert timeout_seconds == 120
+            assert timeout_seconds > 0
             raise TimeoutError("bounded fixture failure")
 
     model = FailingModel()
     outcome, plan = _run(config, target, build_job(model_client=model))
-    assert model.calls == 3
+    assert model.calls == 2
     assert plan["model"]["status"] == "FAILED"
     assert any("failed after bounded retries (TimeoutError)" in gap for gap in plan["coverage_gaps"])
     assert outcome["jobs"]["job_target_analysis_plan"]["status"]["status"] == "COMPLETED_WITH_GAPS"

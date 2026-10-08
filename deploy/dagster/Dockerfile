@@ -19,6 +19,7 @@ COPY pyproject.toml appsec-review.toml ./
 COPY src ./src
 COPY containers ./containers
 COPY rules ./rules
+COPY skills ./skills
 COPY tools/cve-bin-tool ./tools/cve-bin-tool
 RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
     && mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /opt/app/runs /opt/app/data \

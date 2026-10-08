@@ -11,8 +11,8 @@ Mandatory baseline scanners remain selected whenever they have applicable catalo
 otherwise their non-selection is explicit.
 
 Model settings are centralized under `[jobs.job_target_analysis_plan.settings.model]` in
-`appsec-review.toml`. The shipped configuration disables model assistance. When enabled, the runtime
-requires an injected provider client, stores exact guidance and model identity beneath
+`appsec-review.toml`. The shipped configuration uses the bounded Anthropic Messages adapter and
+requires `ANTHROPIC_API_KEY` at execution time. The runtime stores exact guidance and model identity beneath
 `runs/<run-id>/data/guidance/<sha256>/`, and logs only hashes, identity, counts, duration, retries,
 status, and token counts. It does not log prompts, source content, or model output.
 
@@ -24,3 +24,16 @@ catalog and plan identities allow unaffected jobs and shards to be reused.
 
 The accepted plan is directly retrievable from the `analysis` index through the bounded MCP tools.
 No new glob, regex, SQL, shell, or filesystem endpoint is needed.
+
+## Isolated project builds
+
+`job_project_build` consumes only the accepted, hash-verified plan. Each language family is an
+independent Dagster branch, so a slow or failed family does not block retained artifacts from the
+others. Every recipe runs as direct argv in its pinned build image with no network, a read-only
+container root, a non-root user, dropped capabilities, and bounded resources. The accepted handoff
+and build artifacts are stored beneath the run's `data/build/` tree.
+
+Resume is per build unit. A checkpoint is reused only when the target snapshot, validated recipe,
+pinned image, executor contract, and artifact hashes still match. Missing dependencies, build
+failures, and recipes that require network are explicit coverage gaps; they do not erase successful
+siblings and are never reported as clean coverage.

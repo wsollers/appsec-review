@@ -82,6 +82,8 @@ def _workspace(url: str, document: dict) -> dict:
     composed = ["wave1_review"]
     if "job_ci_configuration_analysis" in document["jobs"]:
         composed.append("ci_configuration_review")
+    if "job_project_build" in document["jobs"]:
+        composed.append("project_build_review")
     expected_jobs = sorted([*(value["name"] for value in document["jobs"].values()), *composed])
     expected_schedules = sorted(
         ({
@@ -125,7 +127,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         raise SystemExit(f"Dagster run is not successful: {run}")
     tags = {item["key"]: item["value"] for item in run.get("tags", [])}
     application_run_id = tags.get("appsec/application_run_id")
-    if run.get("pipelineName") in {"wave1_review", "ci_configuration_review"}:
+    if run.get("pipelineName") in {"wave1_review", "ci_configuration_review", "project_build_review"}:
         if not application_run_id:
             raise SystemExit("Dagster Wave 1 run does not contain the application run id")
         runs_dir = repository / document["runtime"]["runs_dir"]
@@ -141,12 +143,15 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
+            "job_project_build",
             "job_cpp_compiled_analysis",
             "job_post_build_security_assessment",
             "job_evidence_collection",
-        ) if run.get("pipelineName") == "wave1_review" else (
+        ) if run.get("pipelineName") == "wave1_review" else ((
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
-        )
+        ) if run.get("pipelineName") == "ci_configuration_review" else (
+            "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
+        ))
         for job_id in job_ids:
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
             pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
@@ -170,6 +175,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_review_intake": "publish_intake.publish_handoff",
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",
+                "job_project_build": "acceptance.publish_handoff",
                 "job_cpp_compiled_analysis": "acceptance.publish_handoff",
                 "job_post_build_security_assessment": "publication.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",

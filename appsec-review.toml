@@ -203,13 +203,13 @@ summary_sample_per_prefix = 20
 
 [jobs.job_target_analysis_plan.settings.model]
 enabled = true
-provider = "claude-cli"
-model = "haiku"
+provider = "anthropic-api"
+model = "claude-haiku-4-5-20251001"
 reasoning = "medium"
 max_input_tokens = 32000
-max_output_tokens = 8000
-timeout_seconds = 120
-retries = 2
+max_output_tokens = 32000
+timeout_seconds = 300
+retries = 1
 
 [jobs.job_target_analysis_plan.steps.catalog_summary]
 workers = 1
@@ -226,6 +226,72 @@ workers = 1
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.validate_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.index_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.publish_handoff]
+
+[jobs.job_project_build]
+name = "project_build"
+workers = 8
+
+[jobs.job_project_build.settings]
+command_timeout_seconds = 600
+output_bytes = 8388608
+artifact_count_limit = 10000
+
+[jobs.job_project_build.settings.profiles.native]
+tag = "audit-buildenv-cpp:local"
+image_id = "sha256:33ecfc897153d56383c125c02817327a77f30a741fe7c88c546dbc62a74fcea3"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.rust]
+tag = "audit-buildenv-rust:local"
+image_id = "sha256:c8ce7e10708cc0b43cb15196abb289fff633da852ab2d7ac1144c0310bf0a5ed"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.go]
+tag = "audit-buildenv-go:local"
+image_id = "sha256:476cb4dd1622175a5dd8782856fa549ba32dc3834a89c4a8caf5ce6a1cabca66"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.java]
+tag = "audit-buildenv-java:local"
+image_id = "sha256:ef678af17b8ba67ed1f5ee0815ce6c47fce9f61f75a2dd4646dbe28c9c57e36b"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.node]
+tag = "audit-buildenv-typescript:local"
+image_id = "sha256:67d1625340c935c54f966af7a08a689448c3cdacc111b0dc0ac317a6a89e5cd2"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.dotnet]
+tag = "audit-buildenv-dotnet:local"
+image_id = "sha256:e54e18aaf202e36446e511ce4727fe8549b9177aafca44bf6577904addd9c423"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.python]
+tag = "audit-buildenv-python:local"
+image_id = "sha256:fd8bb9d2e86224bb9aa80aa1e42c907acfa3d5143f5df47639ce1e582bfcbf66"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.php]
+tag = "audit-buildenv-php:local"
+image_id = "sha256:e1e66dac01ef50a03f036a7983e432fca6c2957064f09926b20fff56c7041e30"
+user = "10001:10001"
+[jobs.job_project_build.settings.profiles.wasm]
+tag = "audit-buildenv-rust:local"
+image_id = "sha256:c8ce7e10708cc0b43cb15196abb289fff633da852ab2d7ac1144c0310bf0a5ed"
+user = "10001:10001"
+
+[jobs.job_project_build.steps.plan]
+workers = 1
+[jobs.job_project_build.steps.plan.tasks.load_recipes]
+
+[jobs.job_project_build.steps.build]
+workers = 8
+[jobs.job_project_build.steps.build.tasks.native]
+[jobs.job_project_build.steps.build.tasks.rust]
+[jobs.job_project_build.steps.build.tasks.go]
+[jobs.job_project_build.steps.build.tasks.java]
+[jobs.job_project_build.steps.build.tasks.node]
+[jobs.job_project_build.steps.build.tasks.dotnet]
+[jobs.job_project_build.steps.build.tasks.python]
+[jobs.job_project_build.steps.build.tasks.php]
+[jobs.job_project_build.steps.build.tasks.wasm]
+
+[jobs.job_project_build.steps.acceptance]
+workers = 1
+[jobs.job_project_build.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_cpp_compiled_analysis]
 name = "cpp_compiled_analysis"

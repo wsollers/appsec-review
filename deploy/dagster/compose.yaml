@@ -1,13 +1,15 @@
 name: appsec-review-dagster
 
+x-dagster-environment: &dagster-environment
+  DAGSTER_HOME: /opt/dagster/home
+  DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
+  APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
+  APPSEC_REVIEW_TARGET: /opt/app/targets/appsec-multi-vuln
+
 x-dagster-service: &dagster-service
   image: appsec-review-dagster:local
   user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
-  environment:
-    DAGSTER_HOME: /opt/dagster/home
-    DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
-    APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
-    APPSEC_REVIEW_TARGET: /opt/app/targets/appsec-multi-vuln
+  environment: *dagster-environment
   volumes:
     - dagster-storage:/var/dagster
     - ../../runs:/opt/app/runs
@@ -57,6 +59,9 @@ services:
       - appsec_review.orchestration.dagster.definitions
       - --location-name
       - appsec_review
+    environment:
+      <<: *dagster-environment
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
