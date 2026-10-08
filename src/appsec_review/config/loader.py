@@ -8,6 +8,7 @@ import tomllib
 from types import MappingProxyType
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from urllib.parse import unquote, urlparse
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +115,20 @@ def _path(root: Path, value: object, field: str) -> Path:
 
 
 def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
-    source = Path(path).resolve(strict=True)
+    raw = str(path)
+    parsed = urlparse(raw)
+    windows_path = bool(re.match(r"^[A-Za-z]:[\\/]", raw))
+    if parsed.scheme and parsed.scheme != "file" and not windows_path:
+        raise ValueError(f"unsupported configuration URI scheme: {parsed.scheme}")
+    if parsed.scheme == "file" and not windows_path:
+        file_path = unquote(parsed.path)
+        if parsed.netloc:
+            file_path = f"//{parsed.netloc}{file_path}"
+        if len(file_path) >= 3 and file_path[0] == "/" and file_path[2] == ":":
+            file_path = file_path[1:]
+        source = Path(file_path).resolve(strict=True)
+    else:
+        source = Path(path).resolve(strict=True)
     repository_root = source.parent
     source_bytes = source.read_bytes()
     document = tomllib.loads(source_bytes.decode("utf-8"))

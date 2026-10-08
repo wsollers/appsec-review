@@ -1,5 +1,11 @@
 # Python and retrieval layout
 
+Wave 1 publishes bounded path, symbol, and component JSON indices under the accepted catalog
+attempt. `RunIndexBackend` implements the existing transport-independent search contract over
+those immutable files. It verifies the accepted artifact hash before serving a bounded page and
+never falls back to a recursive target scan. Results retain source hashes, relative paths, line
+locations where available, and explicit index coverage gaps.
+
 Python source lives under `src/appsec_review/`; tests mirror it under `tests/`. The package owns
 domain behavior. Protocols and deployment mechanisms remain adapters around that behavior.
 

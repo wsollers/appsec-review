@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+import os
+from pathlib import Path
 import traceback
 from types import MappingProxyType
 from typing import Any, Mapping
 
 from appsec_review.config import AppConfig
-from appsec_review.observability import EventLog
+from appsec_review.observability import EventLog, PipelineLog
+from appsec_review.runtime.resume import job_config_sha256
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.storage import RunStore, atomic_bytes, atomic_json, file_sha256
 
@@ -33,6 +37,7 @@ class JobRunner:
         atomic_json(manifest_path, {
             "schema": "appsec-review/run-configuration/1",
             "source_sha256": self.config.source_sha256,
+            "sources": [{"path": str(self.config.source_path), "sha256": self.config.source_sha256}],
         })
 
     def run(
@@ -43,6 +48,9 @@ class JobRunner:
         trigger: str = "manual",
         orchestration: Mapping[str, str] | None = None,
         now: datetime | None = None,
+        target_root: Path | None = None,
+        source_fingerprint: str = "none",
+        upstream_handoffs: Mapping[str, str] | None = None,
     ) -> Mapping[str, Any]:
         instant = now or datetime.now(timezone.utc)
         if run_id is None:
@@ -67,11 +75,15 @@ class JobRunner:
         else:
             raise RuntimeError(f"attempt id space exhausted for {run_id}/{job.job_id}")
 
-        events = EventLog(attempt_root / "logs" / "events.jsonl")
         orchestration = dict(orchestration or {})
         if any(not isinstance(key, str) or not isinstance(value, str)
                for key, value in orchestration.items()):
             raise ValueError("orchestration correlation must contain string keys and values")
+        pipeline = PipelineLog(run_root)
+        events = EventLog(attempt_root / "logs" / "events.jsonl", pipeline, {
+            "run_id": run_id, "job_id": job.job_id, "attempt_id": attempt_id,
+            "trigger": trigger, "orchestrator": orchestration.get("system", "application"),
+        })
         context = JobContext(
             run_id=run_id,
             attempt_id=attempt_id,
@@ -83,6 +95,8 @@ class JobRunner:
             orchestration=MappingProxyType(orchestration),
             config=job_config,
             events=events,
+            target_root=target_root.resolve() if target_root else None,
+            source_fingerprint=source_fingerprint,
         )
         started = instant.isoformat()
         atomic_json(attempt_root / "status.json", {
@@ -115,7 +129,74 @@ class JobRunner:
             }
             atomic_json(attempt_root / "status.json", status)
             events.write("JOB_SUCCEEDED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id)
-            return {"status": status, "result": result, "attempt_root": str(attempt_root)}
+            result_path = attempt_root / "result.json"
+            identities = job.identities()
+            artifacts = [{
+                "path": result_path.relative_to(run_root).as_posix(),
+                "sha256": file_sha256(result_path),
+                "size_bytes": result_path.stat().st_size,
+            }]
+            def collect(value: Any) -> None:
+                if isinstance(value, Mapping):
+                    if isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
+                        candidate = (run_root / value["path"]).resolve()
+                        if run_root.resolve() in candidate.parents and candidate.is_file():
+                            actual_sha256 = file_sha256(candidate)
+                            if actual_sha256 != value["sha256"]:
+                                raise ValueError(f"result artifact hash mismatch: {value['path']}")
+                            entry = {"path": candidate.relative_to(run_root).as_posix(),
+                                     "sha256": actual_sha256, "size_bytes": candidate.stat().st_size}
+                            if entry["path"] not in {item["path"] for item in artifacts}:
+                                artifacts.append(entry)
+                    for child in value.values():
+                        collect(child)
+                elif isinstance(value, (list, tuple)):
+                    for child in value:
+                        collect(child)
+            collect(result)
+            handoff_outputs = {}
+            for unit_id, output in result.get("outputs", {}).items():
+                if isinstance(output, Mapping):
+                    handoff_outputs[unit_id] = {
+                        key: output[key] for key in (
+                            "schema", "artifact", "identity", "pointer", "metadata_path",
+                            "item_count", "gaps",
+                        ) if key in output
+                    }
+            handoff = {
+                "schema": "appsec-review/job-handoff/1",
+                "job_id": job.job_id,
+                "attempt_id": attempt_id,
+                "status": "ACCEPTED",
+                "outputs": handoff_outputs,
+                "artifacts": artifacts,
+                "upstream_handoff_sha256": dict(upstream_handoffs or {}),
+                "resolved_config_sha256": self.config.source_sha256,
+                "job_config_sha256": job_config_sha256(self.config, job.job_id),
+                "source_fingerprint": source_fingerprint,
+                "implementation_identity": identities["implementation"],
+                "schema_identity": identities["schema"],
+                "validation_identity": identities["validation"],
+                "started_at": started,
+                "completed_at": completed,
+                "resolving_paths": {"attempt": attempt_root.relative_to(run_root).as_posix(),
+                                    "result": result_path.relative_to(run_root).as_posix()},
+                "tool_identity": {"python": os.sys.version.split()[0]},
+            }
+            handoff_path = attempt_root / "handoff.json"
+            atomic_json(handoff_path, handoff)
+            handoff_hash = file_sha256(handoff_path)
+            events.write("HANDOFF_ACCEPTED", handoff_sha256=handoff_hash,
+                         handoff_path=handoff_path.relative_to(run_root).as_posix())
+            latest = attempt_root.parent.parent / "latest.json"
+            atomic_json(latest, {
+                "schema": "appsec-review/latest-handoff/1",
+                "attempt_id": attempt_id,
+                "handoff_path": handoff_path.relative_to(run_root).as_posix(),
+                "handoff_sha256": handoff_hash,
+            })
+            return {"status": status, "result": result, "attempt_root": str(attempt_root),
+                    "handoff": handoff, "handoff_sha256": handoff_hash}
         except BaseException as exc:
             failed = datetime.now(timezone.utc).isoformat()
             status = {

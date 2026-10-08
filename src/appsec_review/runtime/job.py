@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import inspect
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -20,6 +22,8 @@ class JobContext:
     orchestration: Mapping[str, str]
     config: JobConfig
     events: EventLog
+    target_root: Path | None = None
+    source_fingerprint: str = "none"
 
 
 class JobHandler(Protocol):
@@ -39,6 +43,28 @@ class Job:
     handler: JobHandler
     input_validators: tuple[JobValidator, ...] = ()
     output_validators: tuple[JobValidator, ...] = ()
+    schema_identity: str = "appsec-review/job-result/1"
+    implementation_identity: str | None = None
+    validation_identity: str | None = None
+
+    def identities(self) -> Mapping[str, str]:
+        def identity(values: tuple[object, ...], explicit: str | None = None) -> str:
+            digest = hashlib.sha256()
+            if explicit is not None:
+                digest.update(explicit.encode())
+            for value in values:
+                value = getattr(value, "__func__", value)
+                try:
+                    payload = inspect.getsource(value).encode()
+                except (OSError, TypeError):
+                    payload = repr(value).encode()
+                digest.update(payload)
+            return digest.hexdigest()
+        return {
+            "implementation": identity((self.handler, Job.execute), self.implementation_identity),
+            "schema": self.schema_identity,
+            "validation": identity((*self.input_validators, *self.output_validators), self.validation_identity),
+        }
 
     def execute(self, context: JobContext) -> Mapping[str, Any]:
         for validator in self.input_validators:

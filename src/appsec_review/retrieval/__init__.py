@@ -1,5 +1,5 @@
 """Run-scoped indexing and bounded retrieval contracts."""
 
-from .interfaces import SearchBackend, SearchHit, SearchPage, SearchRequest
+from .interfaces import RunIndexBackend, SearchBackend, SearchHit, SearchPage, SearchRequest
 
-__all__ = ["SearchBackend", "SearchHit", "SearchPage", "SearchRequest"]
+__all__ = ["RunIndexBackend", "SearchBackend", "SearchHit", "SearchPage", "SearchRequest"]

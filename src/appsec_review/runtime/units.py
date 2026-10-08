@@ -10,6 +10,7 @@ from typing import Any, Callable, Protocol
 
 from appsec_review.runtime.job import JobContext
 from appsec_review.storage import atomic_json
+from appsec_review.observability import EventLog
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +86,7 @@ class UnitExecutor:
             step_id, task_id = unit.unit_id.split(".")
             unit_root = context.attempt_root / "steps" / step_id / "tasks" / task_id
             unit_root.mkdir(parents=True, exist_ok=True)
+            unit_events = EventLog(unit_root / "logs" / "events.jsonl")
             blocked_by = [dep for dep in unit.dependencies if receipts[dep]["status"] != "SUCCEEDED"]
             started = _stamp()
             if blocked_by:
@@ -101,6 +103,7 @@ class UnitExecutor:
                 atomic_json(unit_root / "status.json", receipt)
                 receipts[unit.unit_id] = receipt
                 context.events.write("TASK_SKIPPED", unit_id=unit.unit_id, blocked_by=blocked_by)
+                unit_events.write("TASK_SKIPPED", unit_id=unit.unit_id, blocked_by=blocked_by)
                 continue
             unit_context = UnitContext(
                 job=context,
@@ -120,6 +123,7 @@ class UnitExecutor:
             }
             atomic_json(unit_root / "status.json", running)
             context.events.write("TASK_STARTED", unit_id=unit.unit_id)
+            unit_events.write("TASK_STARTED", unit_id=unit.unit_id)
             try:
                 for validator in unit.input_validators:
                     validator(unit_context, None)
@@ -132,6 +136,7 @@ class UnitExecutor:
                 atomic_json(unit_root / "status.json", receipt)
                 receipts[unit.unit_id] = receipt
                 context.events.write("TASK_SUCCEEDED", unit_id=unit.unit_id)
+                unit_events.write("TASK_SUCCEEDED", unit_id=unit.unit_id)
             except Exception as exc:
                 (unit_root / "traceback.txt").write_text(traceback.format_exc(), encoding="utf-8")
                 receipt = {
@@ -143,6 +148,7 @@ class UnitExecutor:
                 atomic_json(unit_root / "status.json", receipt)
                 receipts[unit.unit_id] = receipt
                 context.events.write("TASK_FAILED", unit_id=unit.unit_id, error_type=type(exc).__name__)
+                unit_events.write("TASK_FAILED", unit_id=unit.unit_id, error_type=type(exc).__name__)
 
         failed = [unit_id for unit_id, receipt in receipts.items() if receipt["status"] == "FAILED"]
         skipped = [unit_id for unit_id, receipt in receipts.items() if receipt["status"] == "SKIPPED"]

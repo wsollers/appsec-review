@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -76,7 +77,7 @@ def _workspace(url: str, document: dict) -> dict:
         raise SystemExit("Dagster code location appsec_review is not connected")
     jobs = sorted(item["name"] for item in location["pipelines"])
     schedules = sorted(location["schedules"], key=lambda item: item["name"])
-    expected_jobs = sorted(value["name"] for value in document["jobs"].values())
+    expected_jobs = sorted([*(value["name"] for value in document["jobs"].values()), "wave1_review"])
     expected_schedules = sorted(
         ({
             "name": f"{value['name']}_schedule",
@@ -115,10 +116,57 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
     run = payload.get("data", {}).get("runOrError", {})
     if run.get("__typename") != "Run":
         raise SystemExit(f"Dagster run query failed: {run}")
-    if run.get("status") != "SUCCESS" or run.get("pipelineName") != "third_party_data_sync":
-        raise SystemExit(f"Dagster run is not a successful third_party_data_sync run: {run}")
+    if run.get("status") != "SUCCESS":
+        raise SystemExit(f"Dagster run is not successful: {run}")
     tags = {item["key"]: item["value"] for item in run.get("tags", [])}
     application_run_id = tags.get("appsec/application_run_id")
+    if run.get("pipelineName") == "wave1_review":
+        if not application_run_id:
+            raise SystemExit("Dagster Wave 1 run does not contain the application run id")
+        runs_dir = repository / document["runtime"]["runs_dir"]
+        run_root = runs_dir / application_run_id
+        orchestration_path = run_root / "data" / "orchestration" / "dagster" / f"{run_id}.json"
+        orchestration_receipt = json.loads(orchestration_path.read_text(encoding="utf-8"))
+        if orchestration_receipt.get("status") != "SUCCEEDED" or orchestration_receipt.get("orchestrator") != {
+            "system": "dagster", "run_id": run_id
+        }:
+            raise SystemExit("application orchestration receipt does not link to the Dagster run")
+        jobs = {}
+        for job_id in ("job_review_intake", "job_target_catalog"):
+            pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
+            pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+            handoff_path = run_root / pointer["handoff_path"]
+            actual_hash = hashlib.sha256(handoff_path.read_bytes()).hexdigest()
+            if actual_hash != pointer["handoff_sha256"]:
+                raise SystemExit(f"{job_id} handoff pointer does not resolve")
+            handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+            attempt = handoff_path.parent
+            status_path = attempt / "status.json"
+            result_path = attempt / "result.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            if status.get("status") != "SUCCEEDED" or result.get("status") != "SUCCEEDED" or handoff.get("status") != "ACCEPTED":
+                raise SystemExit(f"{job_id} application receipts are not accepted")
+            if status.get("orchestration", {}).get("system") != "dagster":
+                raise SystemExit(f"{job_id} accepted attempt lacks its originating Dagster link")
+            jobs[job_id] = {
+                "attempt_id": handoff["attempt_id"],
+                "handoff_sha256": actual_hash,
+                "status_receipt": _relative(repository, status_path),
+                "result_receipt": _relative(repository, result_path),
+                "handoff_receipt": _relative(repository, handoff_path),
+                "unit_statuses": {key: value["status"] for key, value in result["units"].items()},
+                "gaps": result.get("outputs", {}).get("publish_catalog.publish_handoff", {}).get("gaps", []),
+            }
+        return {
+            "dagster_run": {"run_id": run_id, "status": run["status"], "job": run["pipelineName"],
+                            "step_statuses": {item["stepKey"]: item["status"] for item in run.get("stepStats", [])}},
+            "application_run": {"run_id": application_run_id, "jobs": jobs,
+                                "orchestration_receipt": _relative(repository, orchestration_path),
+                                "resume_decisions": orchestration_receipt["decisions"]},
+        }
+    if run.get("pipelineName") != "third_party_data_sync":
+        raise SystemExit(f"unsupported Dagster acceptance job: {run.get('pipelineName')}")
     attempt_id = tags.get("appsec/application_attempt_id")
     if not application_run_id or not attempt_id:
         raise SystemExit("Dagster run does not contain application correlation tags")

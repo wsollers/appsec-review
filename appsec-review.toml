@@ -125,3 +125,55 @@ workers = 1
 
 [jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.publish]
 workers = 1
+
+[jobs.job_review_intake]
+name = "review_intake"
+workers = 1
+
+[jobs.job_review_intake.steps.resolve_configuration]
+workers = 1
+[jobs.job_review_intake.steps.resolve_configuration.tasks.fetch_config]
+[jobs.job_review_intake.steps.resolve_configuration.tasks.resolve_layers]
+[jobs.job_review_intake.steps.resolve_configuration.tasks.freeze_config]
+
+[jobs.job_review_intake.steps.prepare_target]
+workers = 1
+[jobs.job_review_intake.steps.prepare_target.tasks.resolve_target]
+[jobs.job_review_intake.steps.prepare_target.tasks.validate_target]
+[jobs.job_review_intake.steps.prepare_target.tasks.fingerprint_target]
+
+[jobs.job_review_intake.steps.publish_intake]
+workers = 1
+[jobs.job_review_intake.steps.publish_intake.tasks.publish_handoff]
+
+[jobs.job_target_catalog]
+name = "target_catalog"
+workers = 1
+
+[jobs.job_target_catalog.steps.repository_discovery]
+workers = 1
+[jobs.job_target_catalog.steps.repository_discovery.tasks.partition_repository]
+[jobs.job_target_catalog.steps.repository_discovery.tasks.census_languages]
+[jobs.job_target_catalog.steps.repository_discovery.tasks.discover_projects]
+
+[jobs.job_target_catalog.steps.build_discovery]
+workers = 1
+[jobs.job_target_catalog.steps.build_discovery.tasks.discover_build_systems]
+[jobs.job_target_catalog.steps.build_discovery.tasks.discover_compile_commands]
+[jobs.job_target_catalog.steps.build_discovery.tasks.catalog_build_targets]
+
+[jobs.job_target_catalog.steps.component_discovery]
+workers = 1
+[jobs.job_target_catalog.steps.component_discovery.tasks.catalog_components]
+[jobs.job_target_catalog.steps.component_discovery.tasks.catalog_dependencies]
+
+[jobs.job_target_catalog.steps.retrieval_indexes]
+workers = 1
+[jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_path_index]
+[jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_symbol_index]
+[jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_component_index]
+
+[jobs.job_target_catalog.steps.publish_catalog]
+workers = 1
+[jobs.job_target_catalog.steps.publish_catalog.tasks.validate_catalog]
+[jobs.job_target_catalog.steps.publish_catalog.tasks.publish_handoff]

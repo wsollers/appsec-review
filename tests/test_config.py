@@ -21,3 +21,8 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert tuple(job.step("cve_bin_tool_db_build").tasks) == ("resolve_nvd_snapshot", "build", "publish")
     assert job.step("osv_sync").settings["ecosystems"] == ["PyPI"]
     assert job.step("mitre_sync").settings["source_selections"] == ["enterprise_attack", "capec", "cwe"]
+
+
+def test_configuration_accepts_a_file_uri() -> None:
+    path = Path(__file__).parents[1] / "appsec-review.toml"
+    assert load_config(path.as_uri()).source_sha256 == load_config(path).source_sha256

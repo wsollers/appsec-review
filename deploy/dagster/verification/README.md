@@ -15,3 +15,8 @@ repeatable regression test.
 Bulk feeds, generated run contents, database files, logs, volumes, and secrets are deliberately not
 copied here. Receipt and snapshot paths resolve against the repository's ignored `runs/` and
 `data/` state on the accepting host.
+
+`wave1-live-acceptance.json` records the successful manual `wave1_review` launch, its Dagster and
+application run identities, both accepted handoff hashes, every Wave 1 unit state, gaps, and
+resolving receipt paths. It contains no target contents, bulk indexes, logs, secrets, or database
+state.

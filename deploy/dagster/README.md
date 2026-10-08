@@ -7,7 +7,8 @@ attempt directories, validate job output, or publish application status.
 
 The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
 the web console is published, on `127.0.0.1:3000`. The repository's `runs/` and `data/` directories
-are mounted into the code-location container; PostgreSQL and Dagster compute logs use named volumes.
+are mounted into the code-location container, and `targets/` is mounted read-only for review jobs;
+PostgreSQL and Dagster compute logs use named volumes.
 The code location alone receives the Docker socket and client needed to execute the pinned,
 network-disabled cve-bin-tool database builder. Do not expose the code location to untrusted code.
 
@@ -53,6 +54,15 @@ through the live Dagster instance and retains the Dagster id for terminal verifi
 $dagsterRunId = [guid]::NewGuid().ToString()
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j third_party_data_sync --run-id $dagsterRunId
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/live-acceptance.json
+```
+
+Launch Wave 1 through the same live instance. Its target mount is read-only, while application
+receipts and handoffs remain in the ignored `runs/` mount:
+
+```powershell
+$dagsterRunId = [guid]::NewGuid().ToString()
+docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review --run-id $dagsterRunId
+python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/wave1-live-acceptance.json
 ```
 
 The configured schedule and a manual launch enter the same generated dispatch op and `JobRunner`

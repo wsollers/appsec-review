@@ -1,5 +1,34 @@
 # Jobs and runtime
 
+## Wave 1 resumability
+
+An ordered application graph sits above the existing semantic `JobRunner`. Each successful attempt
+publishes `handoff.json` inside its immutable attempt directory and updates the job's small
+`latest.json` pointer only after output validation. The handoff binds result artifacts, upstream
+handoff hashes, resolved and job-local configuration hashes, target fingerprint, implementation,
+schema, validator, tool identity, timestamps, and resolving paths.
+
+The generic resume planner walks jobs in graph order. Once a job cannot be reused, it schedules that
+job and invalidates the transitive downstream closure. It never treats time as proof of freshness.
+The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
+processes cannot claim the same run concurrently.
+
+Wave 1 exercises this mechanism with `job_review_intake` followed by `job_target_catalog`. Both are
+registered through the same semantic registry used by the generic Dagster adapter. Later review jobs
+extend the ordered graph without changing the accepted-handoff format.
+
+Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
+keeps the current Dagster run linked to the application run even when every job is reused and the
+accepted job receipts correctly remain linked to their original launch.
+
+## Global events
+
+Every job and unit event is mirrored through one process-safe writer to
+`runs/<run-id>/data/logs/pipeline.jsonl`, while attempt-local event logs remain available. Sequence
+allocation and append occur under the same kernel lock. Records have bounded/redacted details, and a
+torn final line is truncated under that lock before the next append, preserving a readable total
+order after a writer crash.
+
 The runtime composes each job from one handler and explicit input/output validator lists. Specific
 jobs do not subclass the runtime and cannot replace its attempt, status, logging, or publication
 lifecycle.

@@ -7,10 +7,12 @@ x-dagster-service: &dagster-service
     DAGSTER_HOME: /opt/dagster/home
     DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
     APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
+    APPSEC_REVIEW_TARGET: /opt/app/targets/appsec-multi-vuln
   volumes:
     - dagster-storage:/var/dagster
     - ../../runs:/opt/app/runs
     - ../../data:/opt/app/data
+    - ../../targets:/opt/app/targets:ro
   init: true
   restart: unless-stopped
   logging:
@@ -61,6 +63,7 @@ services:
       - dagster-storage:/var/dagster
       - ../../runs:/opt/app/runs
       - ../../data:/opt/app/data
+      - ../../targets:/opt/app/targets:ro
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "127.0.0.1", "-p", "4000"]

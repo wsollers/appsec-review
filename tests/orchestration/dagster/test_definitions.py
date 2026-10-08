@@ -159,3 +159,17 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert schedule.execution_timezone == "UTC"
     assert schedule.default_status is dagster.DefaultScheduleStatus.RUNNING
     assert definitions.get_job_def("third_party_data_sync").name == "third_party_data_sync"
+    assert definitions.get_job_def("review_intake").name == "review_intake"
+    assert definitions.get_job_def("target_catalog").name == "target_catalog"
+    assert definitions.get_job_def("wave1_review").name == "wave1_review"
+
+
+def test_wave1_dagster_path_runs_application_graph(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+    monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
+    config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
+    result = build_definitions(config).get_job_def("wave1_review").execute_in_process()
+    assert result.success
+    assert result.output_for_node("dispatch_wave1_review") is None

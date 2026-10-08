@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,8 @@ from dagster import (
 from appsec_review.config import AppConfig, load_config
 from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
+from appsec_review.runtime import GraphRunner
+from appsec_review.jobs.cataloging import source_fingerprint
 
 RunnerFactory = Callable[[AppConfig], JobRunner]
 
@@ -123,6 +126,57 @@ def _dagster_job(job_id: str, name: str, config: AppConfig, registry: JobRegistr
     )
 
 
+def _wave1_dagster_job(config: AppConfig, registry: JobRegistry):
+    @op(name="dispatch_wave1_review", ins={}, out=Out(Nothing),
+        description="Run the Wave 1 application graph with application-owned resume checkpoints.")
+    def dispatch(context) -> None:
+        target = Path(os.environ.get(
+            "APPSEC_REVIEW_TARGET", config.runtime.repository_root / "targets" / "appsec-multi-vuln"
+        )).resolve()
+        trigger = _trigger_for_run(dict(context.dagster_run.tags))
+        requested_run_id = dict(context.dagster_run.tags).get("appsec/application_run_id")
+        jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
+        outcome = GraphRunner(config, jobs).run(
+            target_root=target,
+            source_fingerprint=source_fingerprint(target),
+            run_id=requested_run_id,
+            trigger=trigger,
+            orchestration={"system": "dagster", "run_id": context.run_id},
+        )
+        context.instance.add_run_tags(context.run_id, {
+            "appsec/application_run_id": outcome["run_id"],
+            "appsec/trigger": trigger,
+        })
+        handoffs = {}
+        attempts = {}
+        receipts = {}
+        application_root = config.runtime.runs_dir / outcome["run_id"]
+        for job_id in outcome["jobs"]:
+            pointer = json.loads((application_root / "data/jobs" / job_id / "latest.json").read_text())
+            handoff = json.loads((application_root / pointer["handoff_path"]).read_text())
+            handoffs[job_id] = pointer["handoff_sha256"]
+            attempts[job_id] = handoff["attempt_id"]
+            receipts[job_id] = str((application_root / pointer["handoff_path"]).parent)
+        gaps = {job_id: value.get("result", {}).get("outputs", {}).get(
+            "publish_catalog.publish_handoff", {}).get("gaps", [])
+            for job_id, value in outcome["jobs"].items()}
+        context.add_output_metadata({
+            "dagster_run_id": context.run_id,
+            "application_run_id": outcome["run_id"],
+            "resume_decisions": MetadataValue.json(outcome["decisions"]),
+            "handoff_identities": MetadataValue.json(handoffs),
+            "attempt_identities": MetadataValue.json(attempts),
+            "receipt_paths": MetadataValue.json(receipts),
+            "orchestration_receipt": MetadataValue.path(outcome["orchestration_receipt"]),
+            "gaps": MetadataValue.json(gaps),
+        })
+
+    return GraphDefinition(name="wave1_review", node_defs=[dispatch]).to_job(
+        description="Intake then catalog through the generic application resume path.",
+        executor_def=in_process_executor,
+    )
+
+
 def build_definitions(
     config_path: str | Path | None = None,
     *,
@@ -167,4 +221,6 @@ def build_definitions(
                     ),
                 )
             )
+    if {"job_review_intake", "job_target_catalog"} <= registered:
+        jobs.append(_wave1_dagster_job(config, registry))
     return Definitions(jobs=jobs, schedules=schedules)
