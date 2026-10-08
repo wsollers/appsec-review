@@ -13,6 +13,7 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     ScanCatalog,
     adapter_registry,
 )
+from appsec_review.jobs.job_evidence_collection.job import _separate_parser_diagnostics
 
 
 ROOT = Path(__file__).parents[1]
@@ -89,8 +90,20 @@ def test_pmd_scope_parser_and_configuration_error_contract() -> None:
     records = adapter.parse(payload)
     assert records[0]["rule_id"] == "RuntimeCommandExecution"
     assert records[0]["path"] == "/target/src/Main.java" and records[0]["start_line"] == 4
+    assert records[0]["severity"] == "HIGH"
     with pytest.raises(ValueError, match="tool-pmd output parser failed"):
         adapter.parse(json.dumps({"files": [], "configurationErrors": [{"msg": "bad rules"}]}).encode())
+
+
+def test_parser_diagnostics_become_gaps_instead_of_observations() -> None:
+    records = [
+        {"rule_id": "real-finding", "message": "review this"},
+        {"rule_id": "missingIncludeSystem", "coverage_gap": "include context missing",
+         "gap_only": True},
+    ]
+    observations, gaps = _separate_parser_diagnostics(records)
+    assert [item["rule_id"] for item in observations] == ["real-finding"]
+    assert gaps == ["include context missing"]
 
 
 def test_negative_applicability_is_language_specific() -> None:

@@ -250,7 +250,7 @@ def _checkpoint_identity(unit: UnitContext, adapter: ToolAdapter, catalog: ScanC
         "tool_id": adapter.tool_id, "target_fingerprint": catalog.source_fingerprint,
         "catalog_handoff": catalog.handoff_sha256, "scope": _scope_identity(catalog, selection),
         "image_id": image_id, "adapter": adapter.adapter_identity, "parser": adapter.parser_identity,
-        "normalizer": NORMALIZER_IDENTITY, "validator": "static-tool-evidence/1",
+        "normalizer": NORMALIZER_IDENTITY, "validator": "static-tool-evidence/2",
         "inputs": _extra_identity(mounts),
         "job_settings": dict(unit.job.config.settings),
         "task_settings": dict(unit.job.config.step(unit.step_id).task(unit.task_id).settings),
@@ -270,6 +270,21 @@ def _valid_checkpoint(run_root: Path, path: Path) -> dict[str, Any] | None:
         return value
     except (OSError, KeyError, ValueError, json.JSONDecodeError):
         return None
+
+
+def _separate_parser_diagnostics(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Keep scanner diagnostics out of observations while preserving them as coverage gaps."""
+    observations: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    for record in records:
+        gap = record.get("coverage_gap")
+        if gap:
+            gaps.append(str(gap))
+        if not record.get("gap_only"):
+            observations.append(record)
+    return observations, list(dict.fromkeys(gaps))
 
 
 def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
@@ -329,8 +344,10 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                               tool_identity={"name": tool.name, "version": tool.version}, retry_count=0)
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
                               tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                              tool_identity={"name": tool.name, "version": tool.version},
                               disposition="FAILED", retry_count=0, error_class=type(exc).__name__,
-                              result_count=0, gap_count=1, truncated=False, duration_ms=0)
+                              result_count=0, gap_count=1, gaps=[str(exc)],
+                              checkpoint_reused=False, truncated=False, duration_ms=0)
         envelope, evidence_path = _write_evidence(
             unit, adapter, catalog, selection,
             tool_identity={"id": adapter.tool_id, "name": tool.name, "version": tool.version,
@@ -352,6 +369,15 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             retry_required = bool(marker.get("retry_required")) and marker.get("checkpoint_identity") == identity
         checkpoint = None if retry_required else _valid_checkpoint(unit.job.run_root, checkpoint_path)
         if checkpoint is not None:
+            prior = checkpoint["output"]
+            unit.job.events.write(
+                "TOOL_CHECKPOINT_REUSED", unit_id=unit.unit_id, tool_id=adapter.tool_id,
+                tool_identity={"name": tool.name, "version": tool.version, "image_id": image_id},
+                checkpoint_identity=identity, disposition=prior.get("terminal_status"),
+                result_count=prior.get("record_count", 0), gap_count=len(prior.get("gaps", ())),
+                gaps=list(prior.get("gaps", ()))[:50], retry_count=prior.get("retry_count", 0),
+                checkpoint_reused=True, truncated=False, duration_ms=0,
+            )
             return {**checkpoint["output"], "checkpoint_reused": True,
                     "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
         configured_retries = int(unit.job.config.settings.get("tool_retries", 1))
@@ -371,7 +397,8 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id,
                                   tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
                                   tool_identity={"name": tool.name, "version": tool.version,
-                                                 "image_id": image_id}, retry_count=attempt)
+                                                 "image_id": image_id},
+                                  input_identities=_extra_identity(mounts), retry_count=attempt)
             if adapter.tool_id == "tool-trivy":
                 staged = scratch / "inputs"
                 for relative in selection.files:
@@ -409,14 +436,20 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 if output not in raw_paths:
                     raw_paths = (*raw_paths, output)
                 try:
-                    observations = adapter.parse(output.read_bytes())
+                    parsed = adapter.parse(output.read_bytes())
+                    observations, parser_gaps = _separate_parser_diagnostics(parsed)
+                    gaps.extend(parser_gaps)
                 except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
                     raise RuntimeError(f"{adapter.tool_id} parser incompatibility ({type(exc).__name__})") from exc
                 error_class = None
+                effective_gaps = list(dict.fromkeys((*selection.gaps, *adapter.limitations, *gaps)))
                 unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
                                       tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                      tool_identity={"name": tool.name, "version": tool.version,
+                                                     "image_id": image_id},
                                       disposition="SUCCEEDED", retry_count=attempt,
-                                      result_count=len(observations), gap_count=len(gaps),
+                                      result_count=len(observations), gap_count=len(effective_gaps),
+                                      gaps=effective_gaps[:50], checkpoint_reused=False,
                                       truncated=result.stdout_truncated or result.stderr_truncated,
                                       duration_ms=max(0, int((time.monotonic() - invoked) * 1000)))
                 break
@@ -425,8 +458,11 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 gaps.append(str(exc))
                 unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
                                       tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                      tool_identity={"name": tool.name, "version": tool.version,
+                                                     "image_id": image_id},
                                       disposition="FAILED", retry_count=attempt, error_class=error_class,
-                                      result_count=0, gap_count=1, truncated=False,
+                                      result_count=0, gap_count=len(gaps), gaps=gaps[-50:],
+                                      checkpoint_reused=False, truncated=False,
                                       duration_ms=max(0, int((time.monotonic() - invoked) * 1000)))
                 if attempt < configured_retries:
                     continue
@@ -505,8 +541,16 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
                                     "gaps": tuple(value["index_identity"].get("gaps", ()))})
         candidate = unit.job.run_root / identity.relative_path
         if candidate.is_file() and file_sha256(candidate) == identity.sha256:
-            return {**value, "checkpoint_reused": output.get("checkpoint_reused", False),
-                    "index_reused": True}
+            reused = {**value, "checkpoint_reused": output.get("checkpoint_reused", False),
+                      "index_reused": True}
+            unit.job.events.write(
+                "PRODUCER_SHARD_COMPLETED", unit_id=unit.unit_id, producer=producer,
+                shard_identity=reused["index_identity"], disposition=reused["terminal_status"],
+                result_count=reused.get("record_count", 0), gap_count=len(reused.get("gaps", ())),
+                gaps=list(reused.get("gaps", ()))[:50],
+                checkpoint_reused=bool(reused.get("checkpoint_reused")), index_reused=True,
+            )
+            return reused
     builder = IndexBuilder(index_path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
     artifact_id = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,
@@ -563,6 +607,13 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
              "record_count": output.get("record_count", 0), "gaps": output.get("gaps", [])}
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     atomic_json(checkpoint, value)
+    unit.job.events.write(
+        "PRODUCER_SHARD_COMPLETED", unit_id=unit.unit_id, producer=producer,
+        shard_identity=value["index_identity"], disposition=value["terminal_status"],
+        result_count=value.get("record_count", 0), gap_count=len(value.get("gaps", ())),
+        gaps=list(value.get("gaps", ()))[:50],
+        checkpoint_reused=bool(value.get("checkpoint_reused")), index_reused=False,
+    )
     return value
 
 

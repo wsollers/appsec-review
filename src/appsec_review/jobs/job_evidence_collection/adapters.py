@@ -461,9 +461,14 @@ def _pmd_parser(payload: bytes) -> list[dict[str, Any]]:
     for document in value.get("files", []):
         path = document.get("filename")
         for item in document.get("violations", []):
+            priority = item.get("priority")
+            pmd_severity = {
+                1: "CRITICAL", 2: "HIGH", 3: "MEDIUM", 4: "LOW", 5: "LOW",
+                "1": "CRITICAL", "2": "HIGH", "3": "MEDIUM", "4": "LOW", "5": "LOW",
+            }.get(priority, "UNKNOWN")
             records.append({
                 "rule_id": item.get("rule", "pmd"), "message": item.get("description", ""),
-                "severity": item.get("priority", "UNKNOWN"), "category": "source_sast",
+                "severity": pmd_severity, "category": "source_sast",
                 "path": path, "start_line": item.get("beginline", 1), "end_line": item.get("endline", 1),
                 "language": "Java",
             })

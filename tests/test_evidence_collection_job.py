@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 
@@ -67,6 +68,7 @@ def fixture(tmp_path: Path):
     (target / ".github" / "workflows").mkdir(parents=True)
     (target / "main.py").write_text("print('fixture')\n", encoding="utf-8")
     (target / "main.go").write_text("package main\nfunc main(){}\n", encoding="utf-8")
+    (target / "main.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
     (target / "app.php").write_text("<?php echo 'fixture';\n", encoding="utf-8")
     (target / "run.sh").write_text("#!/bin/sh\necho fixture\n", encoding="utf-8")
     (target / "MainActivity.java").write_text("class MainActivity {}\n", encoding="utf-8")
@@ -102,6 +104,18 @@ def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoin
     output = resumed["jobs"]["job_evidence_collection"]["result"]["outputs"]["evidence_publication.publish_handoff"]
     assert len(output["dispositions"]) == len(planned)
     assert {item["terminal_status"] for item in output["dispositions"]} <= {"SUCCEEDED", "PARTIAL", "NOT_APPLICABLE", "BLOCKED"}
+    telemetry = [json.loads(line) for line in (
+        config.runtime.runs_dir / run_id / "data" / "logs" / "pipeline.jsonl"
+    ).read_text(encoding="utf-8").splitlines()]
+    reused_tools = [item["details"] for item in telemetry
+                    if item["event_type"] == "TOOL_CHECKPOINT_REUSED"]
+    assert {item["tool_id"] for item in reused_tools} >= {"tool-cppcheck", "tool-pmd"}
+    assert all(item["checkpoint_reused"] and item["tool_identity"]["image_id"] == DIGEST
+               for item in reused_tools)
+    shard_events = [item["details"] for item in telemetry
+                    if item["event_type"] == "PRODUCER_SHARD_COMPLETED"]
+    assert {item["producer"] for item in shard_events} >= {"tool-cppcheck", "tool-pmd"}
+    assert all("shard_identity" in item and "result_count" in item for item in shard_events)
 
     calls_after = list(calls)
     reused = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
