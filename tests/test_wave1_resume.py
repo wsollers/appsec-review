@@ -88,6 +88,24 @@ def test_catalog_indices_are_queried_without_target_scan(tmp_path: Path) -> None
     assert page.hits[0].source_id
 
 
+def test_catalog_path_index_accepts_structured_inventory_gaps(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    excluded = target / "node_modules" / "fixture"
+    excluded.mkdir(parents=True)
+    (excluded / "index.js").write_text("module.exports = 1;\n", encoding="utf-8")
+
+    outcome = GraphRunner(config, [build_intake(), build_catalog()]).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+
+    run_root = config.runtime.runs_dir / outcome["run_id"]
+    attempt_id = outcome["jobs"]["job_target_catalog"]["status"]["attempt_id"]
+    result_path = (run_root / "data/jobs/job_target_catalog/attempts" / attempt_id /
+                   "steps/retrieval_indexes/tasks/build_path_index/result.json")
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert result["gaps"] == ["node_modules: excluded_directory"]
+    assert result["index_identity"]["gaps"] == result["gaps"]
+
+
 def test_graph_publishes_bidirectional_orchestration_receipt(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     outcome = GraphRunner(config, [build_intake(), build_catalog()]).run(

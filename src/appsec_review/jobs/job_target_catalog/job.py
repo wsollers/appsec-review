@@ -53,6 +53,18 @@ def _fingerprint(unit: UnitContext, name: str, artifacts: list[Mapping[str, Any]
     )
 
 
+def _gap_text(value: Any) -> str:
+    """Render producer-owned gap data for retrieval metadata deterministically."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        path = value.get("path")
+        reason = value.get("reason")
+        if path is not None and reason is not None:
+            return f"{path}: {reason}"
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
 def _validate_config(context, result) -> None:
     if tuple(context.config.steps) != tuple(TOPOLOGY):
         raise ValueError("target catalog topology does not match configuration")
@@ -164,7 +176,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         path = unit.job.run_root / "data" / "indices" / "source" / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="source", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
-        gaps = list(partition["gaps"])
+        gaps = [_gap_text(gap) for gap in partition["gaps"]]
         for item in partition["files"]:
             identity = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
                                               {"path": item["path"], "sha256": item["sha256"]})
