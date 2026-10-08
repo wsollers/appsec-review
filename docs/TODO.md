@@ -34,6 +34,29 @@ Probe policy must be centrally configurable per build unit as `configure`, `sele
 `full-build`. This keeps the default test target rigorous without forcing future large repositories
 through an unnecessary full probe before every instrumented or traced build.
 
+## Scale native acceptance from fixtures to a game-sized build
+
+Advance native testing through explicit gates rather than moving directly from the synthetic
+multi-language target to a full game project:
+
+1. `appsec-multi-vuln` remains the functional acceptance target for dispatch, failure isolation,
+   provenance, indexing, MCP retrieval, and selective resume across supported languages.
+2. EASTL is the next native target. Use it to validate template- and header-heavy C++, custom
+   allocators and containers, cross-translation-unit relationships, compile-database fidelity,
+   static-library outputs, AST/IR scale, compiler-specific flags, and deduplication of findings
+   emitted through many template instantiations.
+3. The Unreal Engine Lyra sample project is the later game-scale target, after the required Windows
+   and Unreal build capabilities are available. Use it to validate project/plugin/module/target
+   discovery, UBT/UAT orchestration, generated headers and sources, C# build tooling, shader and
+   asset-build provenance, native compiler/linker capture, selective configurations, traced
+   CodeQL, large-index retrieval, and bounded resumption.
+
+Externally obtained target and engine source remains under ignored `targets/` storage and is never
+committed or copied wholesale into documentation, fixtures, prompts, or indexes. Retain only the
+bounded derived evidence permitted by the index contract plus the source revision, acquisition
+provenance, applicable capability state, and accepted run-owned artifact identities needed to
+reproduce and verify a test.
+
 ## Add Windows and large native-build coverage after the Linux acceptance gate
 
 Once the Linux vertical above passes against `appsec-multi-vuln`, add a first-class disposable
