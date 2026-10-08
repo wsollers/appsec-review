@@ -141,6 +141,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
+            "job_cpp_compiled_analysis",
             "job_evidence_collection",
         ) if run.get("pipelineName") == "wave1_review" else (
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
@@ -168,6 +169,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_review_intake": "publish_intake.publish_handoff",
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",
+                "job_cpp_compiled_analysis": "acceptance.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
                 "job_ci_configuration_analysis": "ci_coverage.publish_handoff",
             }
@@ -223,6 +225,31 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "latest_producer_index_completed_at": latest_index.isoformat(),
                     "manifest_started_at": barrier_start.isoformat(),
                     "manifest_waited_for_all_producer_indexes": barrier_start >= latest_index,
+                }
+            if job_id == "job_cpp_compiled_analysis":
+                summary_path = run_root / publication["artifact"]["path"]
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                manifest_path = run_root / publication["index_manifest"]["path"]
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                cpp_shards = [item for item in manifest["indexes"]
+                              if str(item.get("shard_id", "")).startswith("cpp-case-")]
+                branches = [value for key, value in result["units"].items()
+                            if key.split(".", 1)[0] in {"compiled", "ast", "ir", "codeql", "joern", "binary"}]
+                job_report["cpp_wave"] = {
+                    "case_count": summary["case_count"],
+                    "branch_count": summary["branch_count"],
+                    "cpp_shard_count": len(cpp_shards),
+                    "manifest_index_count": len(manifest["indexes"]),
+                    "manifest_sha256": publication["index_manifest"]["sha256"],
+                    "disposition_counts": dict(sorted(Counter(
+                        publication.get("dispositions", {}).values()).items())),
+                    "msbuild": {
+                        key: publication.get("dispositions", {}).get(key)
+                        for key in sorted(publication.get("dispositions", {}))
+                        if key.startswith("case-038:")
+                    },
+                    "terminal_branch_count": len(branches),
+                    "all_cpp_shards_preserved": len(cpp_shards) == summary["case_count"] * summary["branch_count"],
                 }
             if job_id == "job_ci_configuration_analysis":
                 manifest_path = run_root / publication["index_manifest"]["path"]

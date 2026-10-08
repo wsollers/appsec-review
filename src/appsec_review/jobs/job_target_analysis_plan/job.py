@@ -78,7 +78,7 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
     }
     files = tuple(partition.get("files", ()))
     extra_builds = [item for item in files if Path(str(item["path"])).name in recognized_names or
-                    Path(str(item["path"])).suffix.lower() in {".csproj", ".sln"}]
+                    Path(str(item["path"])).suffix.lower() in {".csproj", ".sln", ".vcxproj"}]
     by_path = {str(item["path"]): item for item in (*builds.get("systems", ()), *extra_builds)}
     gaps = [*partition.get("gaps", ()), *projects.get("gaps", ()), *components.get("gaps", ()),
             *builds.get("gaps", ()), *compile_databases.get("gaps", ()), *targets.get("gaps", ())]

@@ -5,6 +5,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 import hashlib
 from pathlib import PurePosixPath
+import re
 from typing import Any, Protocol
 
 from appsec_review.storage import canonical_json
@@ -22,7 +23,7 @@ SCANNERS = (
 )
 MANDATORY_BASELINE = frozenset({"tool-gitleaks", "tool-semgrep", "tool-syft"})
 BUILD_SYSTEMS = frozenset({
-    "autotools", "bazel", "cargo", "cmake", "container", "dotnet", "go",
+    "autotools", "bazel", "cargo", "cmake", "container", "dotnet", "go", "msbuild",
     "gradle", "make", "maven", "meson", "node", "python", "typescript",
 })
 
@@ -253,15 +254,32 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
             skipped.append({"scanner_id": tool_id, "reason": "no accepted catalog input satisfies deterministic applicability",
                             "mandatory": tool_id in MANDATORY_BASELINE})
     build_files = tuple(catalog["build_files"])
-    systems = []
+    systems_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
+    marker_priority = {"configure.ac": 0, "configure.in": 1, "CMakeLists.txt": 0,
+                       "Makefile": 0, "Makefile.am": 2}
     for item in build_files:
         name = PurePosixPath(str(item["path"])).name
-        kind = "dotnet" if name.endswith((".csproj", ".sln")) else BUILD_MARKERS.get(name)
+        suffix = PurePosixPath(name).suffix.lower()
+        kind = "msbuild" if suffix == ".vcxproj" else (
+            "dotnet" if suffix in {".csproj", ".sln"} else BUILD_MARKERS.get(name))
         if kind is None:
             continue
-        systems.append({"build_system": kind, "root": _root(str(item["path"])),
-                        "manifest": {"path": item["path"], "sha256": item["sha256"]},
-                        "provenance": "deterministic", "confidence": "high"})
+        root = _root(str(item["path"]))
+        if kind == "msbuild":
+            parts = PurePosixPath(root).parts
+            case_index = next((index for index, part in enumerate(parts)
+                               if re.fullmatch(r"case-\d{3}", part)), None)
+            if case_index is not None:
+                root = PurePosixPath(*parts[:case_index + 1]).as_posix()
+        candidate = {"build_system": kind, "root": root,
+                     "manifest": {"path": item["path"], "sha256": item["sha256"]},
+                     "provenance": "deterministic", "confidence": "high"}
+        identity = (kind, root)
+        current = systems_by_identity.get(identity)
+        current_name = PurePosixPath(str(current["manifest"]["path"])).name if current else ""
+        if current is None or marker_priority.get(name, 10) < marker_priority.get(current_name, 10):
+            systems_by_identity[identity] = candidate
+    systems = [systems_by_identity[key] for key in sorted(systems_by_identity)]
     compile_databases = [{"path": item["path"], "sha256": item["sha256"], "status": "cataloged"}
                          for item in catalog["compile_databases"]]
     component_values = []

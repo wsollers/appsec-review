@@ -30,12 +30,14 @@ def parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--target", type=Path, required=True)
-    plan.add_argument("--force-from", choices=("job_review_intake", "job_target_catalog", "job_evidence_collection"))
+    graph_job_ids = ("job_review_intake", "job_target_catalog", "job_target_analysis_plan",
+                     "job_cpp_compiled_analysis", "job_evidence_collection")
+    plan.add_argument("--force-from", choices=graph_job_ids)
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
     resume.add_argument("--run-id", required=True)
     resume.add_argument("--target", type=Path, required=True)
-    resume.add_argument("--force-from", choices=("job_review_intake", "job_target_catalog", "job_evidence_collection"))
+    resume.add_argument("--force-from", choices=graph_job_ids)
 
     tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
     tools.add_argument("--run-id", required=True)
@@ -107,6 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
         jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+                registry.build("job_target_analysis_plan"), registry.build("job_cpp_compiled_analysis"),
                 registry.build("job_evidence_collection")]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)

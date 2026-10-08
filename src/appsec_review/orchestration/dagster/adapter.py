@@ -107,6 +107,10 @@ def _pool_for(unit_id: str) -> str:
         return "owasp_validator"
     if step in {"verification", "join"}:
         return "owasp_verification"
+    if step in {"prepare", "configure", "compile", "catalog"}:
+        return "cpp_build"
+    if step in {"compiled", "ast", "ir", "codeql", "joern", "binary"}:
+        return "cpp_analysis"
     task = unit_id.rsplit(".", 1)[-1]
     if task.endswith("_scan"):
         return "ci_linter" if unit_id.startswith("ci_analysis.") else "scanner"
@@ -136,7 +140,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 )).resolve()
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-                    "job_evidence_collection", "job_owasp_control_assessment",
+                    "job_evidence_collection", "job_cpp_compiled_analysis",
+                    "job_owasp_control_assessment",
                     "job_ci_configuration_analysis",
                 }
                 uses_target = selected.job_id in target_jobs
@@ -331,6 +336,8 @@ def build_definitions(
         if "job_ci_configuration_analysis" in registered:
             wave_jobs.append(registry.build("job_ci_configuration_analysis"))
         wave_jobs.append(registry.build("job_target_analysis_plan"))
+        if "job_cpp_compiled_analysis" in registered:
+            wave_jobs.append(registry.build("job_cpp_compiled_analysis"))
         if "job_evidence_collection" in registered:
             wave_jobs.append(registry.build("job_evidence_collection"))
         if "job_owasp_control_assessment" in registered:

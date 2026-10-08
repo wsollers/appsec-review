@@ -100,7 +100,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         found = []
         for item in unit.output("repository_discovery.partition_repository")["files"]:
             path = Path(item["path"])
-            if path.name in PROJECT_FILES or path.suffix in {".csproj", ".sln"}:
+            if path.name in PROJECT_FILES or path.suffix in {".csproj", ".sln", ".vcxproj"}:
                 found.append({"manifest": item["path"], "root": path.parent.as_posix(), "sha256": item["sha256"]})
         doc = {"schema": "appsec-review/project-catalog/1", "projects": found,
                "gaps": [] if found else ["no recognized project manifests"]}
@@ -111,7 +111,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         systems = []
         for item in unit.output("repository_discovery.partition_repository")["files"]:
             name = Path(item["path"]).name
-            if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix in {".csproj", ".sln"}:
+            if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix in {".csproj", ".sln", ".vcxproj"}:
                 systems.append({"path": item["path"], "kind": name, "sha256": item["sha256"]})
         doc = {"schema": "appsec-review/build-systems/1", "systems": systems,
                "gaps": [] if systems else ["no recognized build system"]}

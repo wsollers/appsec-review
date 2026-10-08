@@ -38,6 +38,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_third_party_data_sync import build_job as build_sync
     from appsec_review.jobs.job_evidence_collection import build_job as build_evidence
     from appsec_review.jobs.job_ci_configuration_analysis import build_job as build_ci_configuration_analysis
+    from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp_compiled
     from appsec_review.jobs.job_owasp_control_assessment import build_job as build_owasp_control_assessment
 
     registry = JobRegistry()
@@ -47,5 +48,6 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_third_party_data_sync", build_sync)
     registry.register("job_evidence_collection", build_evidence)
     registry.register("job_ci_configuration_analysis", build_ci_configuration_analysis)
+    registry.register("job_cpp_compiled_analysis", build_cpp_compiled)
     registry.register("job_owasp_control_assessment", build_owasp_control_assessment)
     return registry

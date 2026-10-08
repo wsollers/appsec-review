@@ -1,0 +1,21 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-native-cpp",
+  "tool_version": "1.0.0",
+  "project": "repository-local",
+  "license": "Apache-2.0 AND NCSA AND GPL-3.0-or-later",
+  "architecture": "linux/amd64",
+  "generated_from": "ubuntu-24.04-exact-166-deb-closure-2026-10-08",
+  "artifacts": [{
+    "name": "native-cpp-debs.tar",
+    "url": "https://archive.ubuntu.com/ubuntu/",
+    "path": "downloads/native-cpp-debs.tar",
+    "sha256": "9e6b00c17a85e15d55e78cd3c9e110a26de68ca59160e7dbf1947736877d9936",
+    "bytes": 274124800,
+    "version": "ubuntu-24.04-2026-10-08",
+    "license": "various; package copyright files are retained in the image",
+    "license_source": "https://packages.ubuntu.com/noble/",
+    "provenance": "deterministic tar of 166 exact-version .deb files resolved from noble, noble-updates, and noble-security; cache is host-local and ignored",
+    "signature_verification": {"status": "verified", "reason": "APT Release metadata signatures were verified during bounded acquisition; bundle SHA-256 and byte size are enforced"}
+  }]
+}

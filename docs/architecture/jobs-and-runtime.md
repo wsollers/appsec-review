@@ -130,3 +130,16 @@ the accepted plan, execute only selected scanner scopes, and publish explicit `N
 dispositions for unselected families. Because the planner is a real job in the Dagster graph,
 catalog changes invalidate the plan and downstream producers while unrelated upstream work can be
 reused.
+
+## C/C++ compiled-analysis lane
+
+`job_cpp_compiled_analysis` follows the accepted plan and models the target's C++ work as one lane
+with per-case actions, not dozens of independent projects. Its thirteen prepare/configure/compile/
+catalog chains are independent Dagster paths. Once a case catalog is terminal, compiled indexing,
+Clang AST, LLVM IR, CodeQL, Joern, and binary/symbol branches for that case may start even while
+another case is compiling. The acceptance node depends on all 78 branches.
+
+The native container executes untrusted build logic but never target binaries or tests. Application
+code validates compile commands and artifacts, converts tool failures to explicit gaps, and retains
+framework integrity failures as hard failures. See
+[`../operations/cpp-compiled-analysis.md`](../operations/cpp-compiled-analysis.md).

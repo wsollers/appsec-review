@@ -28,6 +28,12 @@ build topology. The shard keeps the catalog manifest as an explicit upstream and
 the existing bounded `search`, `find`, `trace`, and `coverage` MCP filters; no filesystem search or
 new write-capable interface is exposed.
 
+The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard,
+CodeQL-observation shard, Joern-observation shard, and binary/symbol shard per accepted case. A
+blocked producer still publishes an unavailable-coverage shard with zero observations, so absence
+cannot be mistaken for clean coverage. Compile and linker relationships that lack an exact output
+map are explicitly non-exact and carry their ambiguity reason.
+
 `runs/<run-id>/data/indices/accepted.json` binds one manifest to an accepted job handoff. Before
 opening a database, retrieval verifies the pointer, handoff status and hash, manifest membership in
 the handoff artifact list, manifest content hash, each shard hash, and each shard's embedded schema,

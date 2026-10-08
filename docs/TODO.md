@@ -14,10 +14,15 @@ extraction bounds, hash every published file, validate the database with the pin
 publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
 The step must fail truthfully when provenance, validation, or freshness cannot be established.
 
-## Extend the concurrent producer pattern to CodeQL
+## Supply an entitled, pinned CodeQL closure
 
-The runtime and Dagster adapter now support independent scan/normalize/index branches and composite
-logical-name/shard identities. Future CodeQL database, query, normalization, and indexing work should
-use that execution-plan contract so language-specific databases and queries overlap unrelated static
-tools. Preserve producer-local failure dispositions and invalidate only dependent shards, manifests,
-and finding packages.
+The C++ job now publishes a producer-local CodeQL shard and precise blocked disposition. Enabling
+database creation and queries still requires an applicable user/environment entitlement plus a
+hash-pinned offline CLI, extractor, query-pack, and license-notice closure. Preserve the current
+selective invalidation boundary: query-pack changes must not rebuild Clang AST or LLVM IR.
+
+## Supply a pinned Joern/c2cpg closure
+
+The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
+only after reviewing and locking one platform archive and its complete JDK/dependency closure, then
+add bounded CPG export fixtures and security probes. Do not put the full CPG into MCP responses.

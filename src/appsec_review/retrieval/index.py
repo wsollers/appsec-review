@@ -212,6 +212,8 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
             raise ValueError("index manifest references itself")
         load_verified_manifest(run_root, upstream_path, str(upstream.get("sha256", "")), seen_manifests)
     seen: set[tuple[str, str]] = set()
+    entity_ids: set[str] = set()
+    relations: list[tuple[str, str, str, str]] = []
     for raw in document.get("indexes", []):
         identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
         shard_key = (identity.name, identity.shard_id)
@@ -231,4 +233,13 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
                 identity.schema, identity.name, identity.fingerprint, identity.shard_id,
             ):
                 raise ValueError(f"index metadata mismatch: {identity.name}/{identity.shard_id}")
+            if metadata.get("target_snapshot") != document.get("target_snapshot"):
+                raise ValueError(f"index target snapshot mismatch: {identity.name}/{identity.shard_id}")
+            entity_ids.update(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
+            relations.extend((str(row[0]), str(row[1]), str(row[2]), identity.shard_id)
+                             for row in database.execute(
+                                 "SELECT relation_id, source_id, target_id FROM relations"))
+    for relation_id, source_id, target_id, shard_id in relations:
+        if source_id not in entity_ids or target_id not in entity_ids:
+            raise ValueError(f"relation closure mismatch: {shard_id}/{relation_id}")
     return document, actual

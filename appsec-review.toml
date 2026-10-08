@@ -11,9 +11,11 @@ max_concurrent = 8
 scanner = 6
 index = 4
 lifecycle = 1
-ci_linter = 8
+cpp_build = 4
+cpp_analysis = 6
 owasp_validator = 4
 owasp_verification = 2
+ci_linter = 8
 
 [jobs.job_third_party_data_sync]
 name = "third_party_data_sync"
@@ -224,6 +226,183 @@ workers = 1
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.validate_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.index_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.publish_handoff]
+
+[jobs.job_cpp_compiled_analysis]
+name = "cpp_compiled_analysis"
+workers = 8
+
+[jobs.job_cpp_compiled_analysis.settings]
+lane = "cpp"
+case_count = 13
+
+[jobs.job_cpp_compiled_analysis.steps.plan]
+workers = 1
+[jobs.job_cpp_compiled_analysis.steps.plan.tasks.accepted_cpp_plan]
+
+[jobs.job_cpp_compiled_analysis.steps.prepare]
+workers = 2
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.prepare.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.configure]
+workers = 4
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.configure.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.compile]
+workers = 4
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.compile.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.catalog]
+workers = 2
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.catalog.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.compiled]
+workers = 2
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.compiled.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.ast]
+workers = 6
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.ast.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.ir]
+workers = 6
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.ir.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.codeql]
+workers = 2
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.joern]
+workers = 2
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.joern.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.binary]
+workers = 6
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case001]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case002]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case003]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case026]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case027]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case028]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case029]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case030]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case036]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case037]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case038]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case045]
+[jobs.job_cpp_compiled_analysis.steps.binary.tasks.case063]
+
+[jobs.job_cpp_compiled_analysis.steps.acceptance]
+workers = 1
+[jobs.job_cpp_compiled_analysis.steps.acceptance.tasks.publish_handoff]
+
 
 [jobs.job_ci_configuration_analysis]
 name = "ci_configuration_analysis"

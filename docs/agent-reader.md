@@ -8,5 +8,6 @@ Relevant bounded procedures and design references:
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/python-and-retrieval.md`](architecture/python-and-retrieval.md) — accepted immutable retrieval indexes.
 - [`operations/target-analysis-planning.md`](operations/target-analysis-planning.md) — operator behavior and recovery.
+- [`operations/cpp-compiled-analysis.md`](operations/cpp-compiled-analysis.md) — isolated C/C++ build, deep-analysis, licensing, evidence, and recovery.
 
 This file is navigation only and introduces no additional instructions.

@@ -360,6 +360,21 @@ build_args = { TOOL_VERSION = "2.22.0" }
 purpose = "Bounded C/C++ source static analysis with optional sanitized compile database input."
 
 [[images]]
+id = "tool-native-cpp"
+state = "enabled"
+kind = "tool"
+version = "1.0.0"
+tag = "appsec-review/tool-native-cpp:1.0.0"
+image_id = "sha256:83fbf727ddb704ace71c2dbb82c519583ea9e71af6f0bf5dba26adca4bd6585d"
+context = "containers/tools/native-cpp"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/native-cpp/tool.toml"
+build_args = { TOOL_VERSION = "1.0.0" }
+purpose = "Offline C/C++ configure, compilation, Clang AST, LLVM IR, and ELF/symbol evidence."
+
+[[images]]
 id = "tool-gitleaks"
 state = "enabled"
 kind = "tool"
