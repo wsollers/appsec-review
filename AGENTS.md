@@ -51,6 +51,16 @@ agents that inspect or change the repository. It is not a prompt for review work
   old coverage counts.
 - Preserve unrelated new work. Commit coherent changes to `main`; do not push unless the user asks.
 
+## Workspace hygiene
+
+- Keep disposable test state under `test/tmp/`. When concurrent or focused pytest sessions need
+  isolation, use a unique descendant such as `--basetemp=test/tmp/<session-name>`; never create
+  ad hoc scratch directories at the repository root or directly under `test/`.
+- Do not override pytest's configured cache or base-temp locations with paths outside
+  `test/tmp/`. The test harness rejects such overrides.
+- Before finishing, inspect the repository root and remove only disposable material created by
+  your own work. Do not hide accidental output with broader ignore rules.
+
 ## Generated and run-owned material
 
 Generated views are regenerated from authoritative sources, never hand-edited. Run outputs,

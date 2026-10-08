@@ -27,7 +27,8 @@
 __pycache__/
 *.pyc
 .venv/
-# Pytest owns this disposable tree and clears it before every test session.
+# Pytest owns this disposable tree. Focused or concurrent sessions use named
+# descendants; tests/conftest.py rejects scratch paths anywhere else.
 /test/tmp/
 # editors / OS
 .vscode/
