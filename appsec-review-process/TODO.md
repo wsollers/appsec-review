@@ -114,13 +114,32 @@ repository search finds no live references to deleted entry points.
       It owns budgets, timeouts, concurrency/pools, cache policy, retrieval limits, model policy,
       applicability thresholds and per-job overrides. Schemas and immutable evidence records remain
       separate data contracts rather than being embedded as TOML prose.
-- [ ] Implement one typed, immutable configuration loader with closed keys, explicit units, range checks,
+  - [x] Added the tracked TOML and made it authoritative for the new `00-run-configuration`
+        bootstrap slice. The immutable run copy lives under the existing run root at
+        `data/configuration/appsec-review.toml`.
+  - [ ] `pipeline/tunables.json`, job-template tunables and `model-config.json` remain authoritative
+        for their existing readers until their vertical slices migrate; the reader inventory and
+        deletion gates are in `configuration-migration-inventory.json`.
+- [x] Use predictable dotted table paths for job configuration:
+      `[job_####.<step_name>.task_####]`. Identifiers are lowercase snake_case and numeric identifiers
+      are zero-padded and stable; they are identities, not current list positions. Put shared step
+      settings such as worker-pool size, model and reasoning level in `[job_####.<step_name>]`, and put
+      task-only overrides in its `task_####` child. Each step table records the canonical runtime
+      `job_id` explicitly so the configuration path and runtime identity cannot silently diverge.
+- [x] Implement one typed, immutable configuration loader with closed keys, explicit units, range checks,
       source locations in errors and a canonical configuration fingerprint. Permit one optional
       `APPSEC_REVIEW_CONFIG` path override; secrets and host-local identities remain outside tracked TOML.
 - [ ] Migrate `pipeline/tunables.json`, `model-config.json`, duplicated constants and environment-variable
       defaults into the loader. Delete each old source in the same change that migrates its last reader.
-- [ ] Add table-driven tests for default loading, override precedence, unknown keys, invalid values and
+- [x] Add table-driven tests for default loading, override precedence, unknown keys, invalid values and
       stable fingerprints. Test semantics, not individual constant locations.
+
+S2 bootstrap evidence: `configuration.py` exposes immutable `get_global_defaults`,
+`resolve_global_defaults` and layered resolution; `run_configuration.py` registers the first narrow
+`JobSpec`, accepts only local paths/file URIs, allocates concurrency-safe daily serials and publishes no
+configuration after failure. `python -B appsec-review-process/configuration.py` prints deterministic
+redacted effective configuration plus its fingerprint. The current Dagster graph is intentionally not
+rewired until intake/staging and its current configuration readers migrate together.
 
 Exit: one command prints the effective redacted configuration and its fingerprint, and no worker reads
 an old configuration surface.
@@ -1004,6 +1023,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-10-07 | all | (S2 bootstrap tests, no target run) | 00-run-configuration | The supported path had no typed run-configuration boundary, immutable run-owned TOML, or concurrency-safe daily run allocator; configuration remained distributed across JSON, environment defaults and job-local constants | Added the central TOML loader, closed local URI resolver, typed immutable layered API, stable redacted fingerprint, generic bootstrap `JobSpec` boundary, failure receipt and monotonic `yyyy-mm-dd-####` allocator with concurrent tests. Existing readers are inventoried for later vertical migration rather than silently treated as migrated |
 | 2026-10-07 | all | (resume audit, no run) | every model job that reads the supporting-evidence menu (03 workbench, 07 hunters, 07/08/09/12 reviewers, 10 chains, 04 participation code-index pin) | Persona cache miss after a no-op upstream re-run: `supporting_evidence_menu._item` listed each pinned file as `<owner>/attempts/<attempt_id>/<artifact>` and recorded `attempt_id` per item, so the menu bytes, the prompt (`root:path` of every input) and `persona_cache_key` changed whenever a producer re-ran and published byte-identical output under a new attempt id | Pinned files are named by the attempt-free alias `<owner>/accepted/<artifact>`; `execution_state.resolve_accepted_alias` resolves it through the owner's `accepted.json` (artifact must be in `hashes`), and every reader still checks its pinned sha256, so a pointer moved to different bytes fails closed (`persona_invocation.resolve_request`, `attack_chain_composition.native_facts`, `code_query_mcp.CodeIndex`/`LspIndex`, `tool_evidence._summary`, which re-reads the recorded `producer_attempt`). Attempt ids left the menu bytes; `supporting_evidence_menu.lineage` supplies them for citations (`threat_workbench._readable_index`). `tests.test_supporting_evidence_menu` `AttemptFreeAliasTests`. Menu-reading jobs' fingerprints change once. Not done: pool fingerprints still bind upstream `attempt_id`/`accepted_at` (the permission and pool clock) and claim-ledger citations still carry `<owner>/attempts/<id>/` paths, so a pool job still re-runs after an upstream re-run; its cells then reuse the persona cache where their input 0 is unchanged |
 | 2026-10-06 | all | (resume audit, no run) | 02-sca-vulnerability-match | False rerun on resume: `automatic_evidence_inputs` puts the Grype/OSV `snapshot_identities` current at launch in `request.tool`, and `dependency_orchestration.reuse_inputs` keyed reuse on them; the offline registry advances with every OSV sync, so SCA re-ran and cascaded through 02-evidence-assembly into every model job | `dependency_orchestration.bound_identities`: the identities the accepted attempt was produced from (its `reuse.json`) are reopened by id (`dependency_snapshot_registry.resolve(snapshot_id=...)`, every byte re-hashed, age ceiling at the launch clock) and must equal the record field for field; while they verify the reuse key uses them, otherwise the request's current identities (and new work remembers those). `tests.test_dependency_orchestration` `test_a_registry_advance_reuses_the_bound_snapshots_while_they_verify` (branch stable-resume) |
 | 2026-10-06 | all | (resume audit, no run) | 06-cve-reachability, 06-reachability-codeql/-ir | False rerun and silent enrichment drop: `dep_reachability_lifecycle._osv` bound the current OSV snapshot (`osv_feed` makes a new id every 2 h sync, even on 304), and judged its age at the SCA `finished_at`, so a snapshot synced after the SCA raised `TIMESTAMP_IN_FUTURE` and OSV enrichment was dropped with the gap only in `osv_gap` | The run binds one OSV snapshot (`data/<run>/reference-bindings/osv.json`) and reopens it by id and manifest hash (`osv_snapshot.resolve_bound_snapshot`: archives and index re-hashed) at the wall clock; a pruned, changed or over-age bound snapshot rebinds to the current one; an unusable feed is in `gaps` (document coverage gaps). `tests.test_dep_reachability_lifecycle` `OsvRunBindingTests` (branch stable-resume) |
