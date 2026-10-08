@@ -12,14 +12,14 @@ failure behavior:
 ```text
 containers/build-all.sh --list
 containers/build-all.sh --validate-only
-containers/build-all.sh build tool-gitleaks tool-semgrep
+containers/build-all.sh build tool-gitleaks tool-semgrep tool-infer
 containers/build-all.sh build --all --jobs 4 --continue-on-error
 containers/build-all.sh smoke --all
 containers/build-all.sh security --all
 
 containers/build-all.ps1 --list
 containers/build-all.ps1 --validate-only
-containers/build-all.ps1 build tool-gitleaks tool-semgrep
+containers/build-all.ps1 build tool-gitleaks tool-semgrep tool-infer
 containers/build-all.ps1 build --all --jobs 4 --continue-on-error
 containers/build-all.ps1 smoke --all
 containers/build-all.ps1 security --all

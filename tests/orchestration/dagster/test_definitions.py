@@ -217,6 +217,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "cpp_compiled_analysis__compile__projects",
         "cpp_compiled_analysis__ast__projects",
         "cpp_compiled_analysis__ir__projects",
+        "cpp_compiled_analysis__infer__projects",
         "cpp_compiled_analysis__acceptance__publish_handoff",
         "post_build_security_assessment__load__accepted_cpp_build",
         "post_build_security_assessment__provenance__case001",
@@ -255,8 +256,10 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     assert upstream("cpp_compiled_analysis__ir__projects") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
+    assert upstream("cpp_compiled_analysis__infer__projects") == {
+        "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
-    assert len(cpp_barrier) == 7  # claim plus six project-batched terminal branches
+    assert len(cpp_barrier) == 8  # claim plus seven project-batched terminal branches
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
     assert len(post_build_barrier) == 14  # claim plus one shard per accepted case
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")

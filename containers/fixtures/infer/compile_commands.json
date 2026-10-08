@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "/workspace",
+    "file": "/workspace/vulnerable.c",
+    "arguments": ["clang", "-c", "/workspace/vulnerable.c"]
+  }
+]

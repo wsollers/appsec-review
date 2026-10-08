@@ -13,7 +13,7 @@ accepted C++ plan
   -> copy each project and record exact source mappings
   -> configure and compile each project
   -> normalize compile/link records and catalog objects/libraries/executables
-  -> compiled index | Clang AST | LLVM IR | CodeQL | Joern | binary/symbol index
+  -> compiled index | Clang AST | LLVM IR | Infer | CodeQL | Joern | binary/symbol index
   -> verified composite manifest and accepted handoff
 ```
 
@@ -26,8 +26,8 @@ target source before use.
 
 CMake supplies `compile_commands.json` directly. Make and Autotools use Bear compiler interception;
 the MSBuild case is represented explicitly as unavailable because the pinned Linux image does not
-contain MSBuild, and all six of its branch shards retain that named coverage gap.
-compiler logs are not heuristically parsed. Normalization accepts only bounded compilation
+contain MSBuild, and all seven of its branch shards retain that named coverage gap.
+Compiler logs are not heuristically parsed. Normalization accepts only bounded compilation
 semantics needed by Clang replay, removes output/dependency-generation actions, maps source paths,
 and binds every unit to the case, source snapshot, command hash, compiler image, and source hash.
 
@@ -35,6 +35,19 @@ A build or analysis-tool failure is returned as a terminal gap. Sibling projects
 running, and their immutable shards remain usable. Corrupt source mappings, escaped paths, changed
 artifact hashes, malformed compile databases, duplicate shards, or invalid manifests are framework
 integrity failures and stop publication.
+
+## Infer decision
+
+Infer 1.3.0 is an enabled compiled-analysis branch. Its immutable MIT-licensed Linux release is
+hash-pinned in `containers/tools/infer/assets.lock.json`, packaged without build-time network
+access, and executed under the central scanner boundary. The adapter rewrites the normalized
+compilation database to stable read-only container paths and uses Infer's bundled LLVM/Clang 21
+frontend. It does not rerun the target build or execute target binaries.
+
+The producer retains Infer's JSON report, execution receipt, compilation database, and log as
+run-owned artifacts. Each observation resolves through the accepted source mapping and is indexed
+as tool evidence rather than an adjudicated finding. A capture-count mismatch, invalid report,
+timeout, OOM, nonzero exit, or unmapped result path is an explicit coverage gap.
 
 ## Blind evaluation boundary
 
@@ -83,5 +96,6 @@ Bulk products live under ignored `runs/<run-id>/`. Accepted `build`, `compiled`,
 observations are evidence, not adjudicated findings.
 
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
-reused. A CodeQL query-pack change affects CodeQL fingerprints only; a compile identity change
-invalidates the dependent compiled, AST, IR, CodeQL, Joern, and binary branches.
+reused. A CodeQL query-pack change affects CodeQL fingerprints only; an Infer image or adapter
+change affects Infer fingerprints only; a compile identity change invalidates the dependent
+compiled, AST, IR, Infer, CodeQL, Joern, and binary branches.

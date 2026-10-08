@@ -23,12 +23,13 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 
-SCHEMA = "appsec-review/cpp-compiled-analysis/1"
+SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
-BRANCHES = ("compiled", "ast", "ir", "codeql", "joern", "binary")
+BRANCHES = ("compiled", "ast", "ir", "infer", "codeql", "joern", "binary")
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
                    "ir": "llvm-ir/2", "codeql": "codeql-cpp-adapter/2",
-                   "joern": "joern-c2cpg-adapter/2", "binary": "elf-symbols/2"}
+                   "infer": "infer-cpp-adapter/1", "joern": "joern-c2cpg-adapter/2",
+                   "binary": "elf-symbols/2"}
 PROFILE_BY_MARKER = {"CMakeLists.txt": "cmake", "Makefile": "make", "configure.ac": "autotools",
                      ".vcxproj": "msbuild"}
 MSBUILD_GAP = (
@@ -70,8 +71,9 @@ def _terminal_gap(output: Mapping[str, Any]) -> str | None:
     return str(gaps[0]) if gaps else "upstream C++ case action did not succeed"
 
 
-def _checkpoint_identity(unit: UnitContext, case_id: str, stage: str, values: Mapping[str, Any]) -> str:
-    tool = load_catalog(unit.job.repository_root).tool("tool-native-cpp") if (
+def _checkpoint_identity(unit: UnitContext, case_id: str, stage: str, values: Mapping[str, Any],
+                         *, tool_id: str = "tool-native-cpp") -> str:
+    tool = load_catalog(unit.job.repository_root).tool(tool_id) if (
         unit.job.repository_root / "containers" / "catalog.toml").is_file() else None
     tool_identity = ({"tag": tool.tag, "version": tool.version,
                       "expected_image_id": tool.expected_image_id,
@@ -128,6 +130,63 @@ def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_f
             "timed_out": result.timed_out, "oom_killed": result.oom_killed,
             "image_id": result.image_id, "image_digest": result.image_digest,
             "argv_identity": result.argv_identity}
+
+
+def _infer_compile_database(catalog: Mapping[str, Any]) -> list[dict[str, Any]]:
+    mapping = catalog["mapping"]
+    root = str(mapping["root"]).rstrip("/") + "/"
+    rows = []
+    for command in catalog["compile_commands"]:
+        target_path = str(command["target_path"])
+        if not target_path.startswith(root):
+            raise ValueError("Infer compile unit is outside the accepted project root")
+        relative = target_path[len(root):]
+        source = "/target/source/" + relative
+        arguments = []
+        for index, value in enumerate(command["arguments"]):
+            rewritten = str(value).replace("/scratch/source", "/target/source").replace(
+                "/scratch/build", "/target/build")
+            if index == 0:
+                rewritten = "clang++" if PurePosixPath(relative).suffix.lower() in {
+                    ".cc", ".cpp", ".cxx", ".c++", ".mm"
+                } else "clang"
+            arguments.append(rewritten)
+        rows.append({"directory": "/target/source", "file": source, "arguments": arguments})
+    return rows
+
+
+def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
+               executor_factory=None) -> Mapping[str, Any]:
+    case_root = _case_root(unit, case_id)
+    scratch = case_root / "analysis" / "infer-run"
+    if scratch.exists():
+        shutil.rmtree(scratch)
+    scratch.mkdir(parents=True, exist_ok=True)
+    compile_database = scratch / "compile_commands.json"
+    atomic_json(compile_database, _infer_compile_database(catalog))
+    tool_catalog = (load_catalog(unit.job.repository_root) if
+                    (unit.job.repository_root / "containers" / "catalog.toml").is_file() else None)
+    executor = (executor_factory(unit) if executor_factory is not None else
+                ContainerExecutor(tool_catalog, unit.job.run_root))
+    result = executor.execute(ExecutionRequest(
+        tool_id="tool-infer",
+        argv=("/opt/infer/bin/infer", "run", "--no-progress-bar", "--jobs", "2", "--results-dir",
+              "/scratch/infer-out", "--compilation-database", "/scratch/compile_commands.json"),
+        target_root=case_root, scratch_root=scratch,
+    ))
+    retained = unit.unit_root / f"{case_id}-infer-execution.json"
+    retained.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(scratch / "execution.json", retained)
+    report_path = scratch / "infer-out" / "report.json"
+    value = {"execution": _artifact(unit.job.run_root, retained),
+             "compile_database": _artifact(unit.job.run_root, compile_database),
+             "tool_version": tool_catalog.tool("tool-infer").version if tool_catalog else "injected",
+             "exit_code": result.exit_code, "timed_out": result.timed_out,
+             "oom_killed": result.oom_killed, "image_id": result.image_id,
+             "image_digest": result.image_digest, "argv_identity": result.argv_identity}
+    if report_path.is_file() and not report_path.is_symlink():
+        value["report"] = _artifact(unit.job.run_root, report_path)
+    return value
 
 
 def _source_files(root: Path) -> list[Path]:
@@ -602,6 +661,107 @@ def _blocked_index(unit: UnitContext, case_id: str, branch: str, catalog: Mappin
     return result
 
 
+def _bounded_infer_report(path: Path) -> list[Mapping[str, Any]]:
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024 * 1024:
+        raise ValueError("Infer report is missing, linked, or exceeds 64 MiB")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, list) or len(value) > 100000 or any(
+            not isinstance(item, Mapping) for item in value):
+        raise ValueError("Infer report must be a bounded list of objects")
+    return value
+
+
+def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
+                 execution: Mapping[str, Any]) -> Mapping[str, Any]:
+    root = _case_root(unit, case_id)
+    report_path = root / "analysis" / "infer-run" / "infer-out" / "report.json"
+    log_path = root / "analysis" / "infer-run" / "infer-out" / "logs"
+    gaps: list[str] = []
+    if execution.get("timed_out"):
+        gaps.append("Infer timed out before coverage could be established")
+    elif execution.get("oom_killed"):
+        gaps.append("Infer was OOM-killed before coverage could be established")
+    elif execution.get("exit_code") != 0:
+        gaps.append(f"Infer exited with status {execution.get('exit_code')}")
+    try:
+        records = _bounded_infer_report(report_path)
+    except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        records = []
+        gaps.append(f"Infer report unavailable or invalid: {exc}")
+
+    captured_count = None
+    if log_path.is_file() and not log_path.is_symlink() and log_path.stat().st_size <= 16 * 1024 * 1024:
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        matches = re.findall(r"Found ([0-9]+) source files? to analyze", log_text)
+        if matches:
+            captured_count = int(matches[-1])
+    expected_count = len({str(item["target_path"]) for item in catalog["compile_commands"]})
+    if captured_count is None:
+        gaps.append("Infer capture count was unavailable")
+    elif captured_count != expected_count:
+        gaps.append(f"Infer captured {captured_count} of {expected_count} source files")
+
+    artifacts = [execution["execution"], execution["compile_database"], catalog["compile_database"]]
+    if isinstance(execution.get("report"), Mapping):
+        artifacts.append(execution["report"])
+    if log_path.is_file() and not log_path.is_symlink():
+        artifacts.append(_artifact(unit.job.run_root, log_path))
+    builder, path, fingerprint, shard = _new_builder(
+        unit, "observations", case_id, "infer", artifacts, gaps,
+        {"tool": "infer", "version": execution["tool_version"], "image": execution["image_id"],
+         "image_digest": execution["image_digest"]}, catalog["mapping"]["case_snapshot"])
+
+    by_relative = {
+        str(item["scratch_path"])[len("source/"):]: item
+        for item in catalog["mapping"].get("files", ())
+        if str(item.get("scratch_path", "")).startswith("source/")
+    }
+    count = 0
+    for ordinal, record in enumerate(records):
+        raw_path = str(record.get("file", "")).replace("\\", "/")
+        relative = raw_path[len("/target/source/"):] if raw_path.startswith("/target/source/") else ""
+        source = by_relative.get(relative)
+        if source is None:
+            gaps.append(f"Infer observation path did not resolve to accepted source: {raw_path[:512]}")
+            continue
+        target_path = str(source["target_path"])
+        target_file = (unit.job.target_root or Path()) / Path(*PurePosixPath(target_path).parts)
+        if not target_file.is_file() or target_file.is_symlink() or file_sha256(target_file) != source["sha256"]:
+            raise ValueError(f"Infer observation source changed after accepted mapping: {target_path}")
+        line = int(record.get("line", 1)) if str(record.get("line", "1")).isdigit() else 1
+        column = int(record.get("column", 1)) if str(record.get("column", "1")).isdigit() else 1
+        bug_type = str(record.get("bug_type") or "INFER_OBSERVATION")[:256]
+        qualifier = str(record.get("qualifier") or bug_type)[:16384]
+        native = str(record.get("key") or record.get("hash") or f"{bug_type}:{ordinal}")[:2048]
+        identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION,
+            catalog["mapping"]["case_snapshot"], {"project_id": catalog["mapping"]["project_id"],
+            "tool": "infer", "bug_type": bug_type, "path": target_path, "line": line,
+            "column": column, "native": native})
+        trace = []
+        for step in record.get("bug_trace", ())[:100] if isinstance(record.get("bug_trace"), list) else ():
+            if isinstance(step, Mapping):
+                trace.append({"line": step.get("line_number"), "column": step.get("column_number"),
+                              "description": str(step.get("description", ""))[:4096]})
+        builder.add_entity(EntityRecord(identity, native, bug_type, qualifier,
+            {"tool": "infer", "tool_version": execution["tool_version"], "rule_id": bug_type,
+             "severity": str(record.get("severity") or "UNKNOWN")[:64],
+             "category": str(record.get("category") or "")[:256],
+             "procedure": str(record.get("procedure") or "")[:2048],
+             "project_id": catalog["mapping"]["project_id"], "target_path": target_path,
+             "source_sha256": source["sha256"], "trace": trace, "shard_id": shard},
+            _location(unit.job.source_fingerprint, unit.job.target_root or Path(),
+                      target_path, line, column)))
+        count += 1
+    unique_gaps = list(dict.fromkeys(gaps))
+    builder.add_coverage("infer", "partial" if unique_gaps else "complete",
+                         "; ".join(unique_gaps[:10]) or None)
+    result = dict(_finish_index(unit, builder, path, fingerprint, shard,
+                                "observations", "infer", unique_gaps))
+    result.update(observation_count=count, expected_source_files=expected_count,
+                  captured_source_files=captured_count)
+    return result
+
+
 def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any]) -> Mapping[str, Any]:
     records_path = _case_root(unit, case_id) / "analysis" / "binary" / "records.json"
     gaps = []
@@ -845,17 +1005,27 @@ def build_job(*, executor_factory=None) -> Job:
                     projects[case_id] = _finish_index(unit, builder, path, fingerprint, shard,
                                                       builder.name, name, [gap])
                     continue
-                identity = _checkpoint_identity(unit, case_id, f"branch-{name}",
-                    {"compile_database": cataloged["compile_database"]["sha256"],
-                     "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
-                     "link_database": cataloged["link_database"]["sha256"],
-                     "branch_identity": BRANCH_IDENTITY[name]})
+                identity_values = {
+                    "compile_database": cataloged["compile_database"]["sha256"],
+                    "branch_identity": BRANCH_IDENTITY[name],
+                }
+                if name != "infer":
+                    identity_values.update({
+                        "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
+                        "link_database": cataloged["link_database"]["sha256"],
+                    })
+                identity = _checkpoint_identity(
+                    unit, case_id, f"branch-{name}", identity_values,
+                    tool_id="tool-infer" if name == "infer" else "tool-native-cpp")
                 reused = _load_checkpoint(unit, case_id, f"branch-{name}", identity)
                 if reused is not None:
                     projects[case_id] = reused
                     continue
                 if name == "compiled":
                     result = _build_entities(unit, case_id, cataloged)
+                elif name == "infer":
+                    execution = _run_infer(unit, case_id, cataloged, executor_factory)
+                    result = _infer_index(unit, case_id, cataloged, execution)
                 elif name == "codeql":
                     result = _blocked_index(unit, case_id, name, cataloged, CODEQL_GAP)
                 elif name == "joern":

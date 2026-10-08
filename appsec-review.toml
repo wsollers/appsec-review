@@ -266,6 +266,10 @@ workers = 1
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.ir.tasks.projects]
 
+[jobs.job_cpp_compiled_analysis.steps.infer]
+workers = 1
+[jobs.job_cpp_compiled_analysis.steps.infer.tasks.projects]
+
 [jobs.job_cpp_compiled_analysis.steps.codeql]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.codeql.tasks.projects]

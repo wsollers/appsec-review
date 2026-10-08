@@ -1,0 +1,31 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-infer",
+  "tool_version": "1.3.0",
+  "project": "https://github.com/facebook/infer",
+  "license": "MIT",
+  "architecture": "linux/amd64",
+  "generated_from": "facebook/infer immutable release v1.3.0",
+  "artifacts": [
+    {
+      "name": "infer-linux-x86_64-v1.3.0.tar.xz",
+      "url": "https://github.com/facebook/infer/releases/download/v1.3.0/infer-linux-x86_64-v1.3.0.tar.xz",
+      "path": "downloads/infer-linux-x86_64-v1.3.0.tar.xz",
+      "sha256": "02be62ba931cb43e2d42bbf7abf4bd9a410cf8464cce5453934e25c90a825850",
+      "bytes": 275901768,
+      "verification": {
+        "kind": "vendor-published-sha256",
+        "source": "https://github.com/facebook/infer/releases/tag/v1.3.0",
+        "entry": "infer-linux-x86_64-v1.3.0.tar.xz"
+      },
+      "version": "1.3.0",
+      "license": "MIT",
+      "license_source": "https://github.com/facebook/infer/blob/v1.3.0/LICENSE",
+      "provenance": "immutable GitHub release asset and upstream-published SHA-256",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "The upstream release publishes SHA-256 values but no detached signature for this asset."
+      }
+    }
+  ]
+}

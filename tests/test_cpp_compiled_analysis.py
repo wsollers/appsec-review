@@ -12,6 +12,7 @@ from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cataloging import inventory, source_fingerprint
 from appsec_review.jobs.job_cpp_compiled_analysis import PROJECT_TASKS, build_job
 from appsec_review.jobs.job_cpp_compiled_analysis.job import (
+    _infer_compile_database,
     _load_ast_document,
     _project_key,
     normalize_compile_db,
@@ -65,11 +66,13 @@ class FakeNativeExecutor:
     def execute(self, request):
         root = request.scratch_root
         root.mkdir(parents=True, exist_ok=True)
-        mode = request.argv[1]
-        project = root.name
+        infer = request.tool_id == "tool-infer"
+        mode = "infer" if infer else request.argv[1]
+        project_root = request.target_root if infer else root
+        project = project_root.name
         self.calls.append((project, mode))
         exit_code = 9 if self.fail == (project, mode) else 0
-        sources = sorted(path.name for path in (root / "source").glob("*.cpp"))
+        sources = sorted(path.name for path in (project_root / "source").glob("*.cpp"))
         if mode == "compile" and exit_code == 0:
             build = root / "build"
             build.mkdir(exist_ok=True)
@@ -115,6 +118,18 @@ class FakeNativeExecutor:
                 "path": "build/observer", "kind": "executable", "sha256": "f" * 64,
                 "symbols": ["main T 0 1"], "metadata": "ELF64 NX PIE",
             }]), encoding="utf-8")
+        if mode == "infer" and exit_code == 0:
+            destination = root / "infer-out"
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / "report.json").write_text(json.dumps([{
+                "bug_type": "NULLPTR_DEREFERENCE", "qualifier": "fixture null dereference",
+                "severity": "ERROR", "category": "Null pointer dereference", "line": 1,
+                "column": 1, "procedure": "main", "file": "/target/source/main.cpp",
+                "key": f"{project}:main:NULLPTR_DEREFERENCE", "bug_trace": [],
+            }]), encoding="utf-8")
+            (destination / "logs").write_text(
+                f"Found {len(sources)} source file{'s' if len(sources) != 1 else ''} to analyze\n",
+                encoding="utf-8")
         raw = root / "raw"
         raw.mkdir(exist_ok=True)
         stdout, stderr, receipt = raw / "stdout.bin", raw / "stderr.bin", root / "execution.json"
@@ -123,7 +138,8 @@ class FakeNativeExecutor:
         receipt.write_text("{}", encoding="utf-8")
         relative = lambda path: path.relative_to(self.run_root).as_posix()
         return ExecutionResult("appsec-review/container-execution/1", request.tool_id,
-            "appsec-review/tool-native-cpp:1.0.0", DIGEST, DIGEST, "argv", (), {}, "start", "end",
+            "appsec-review/tool-infer:1.3.0" if infer else "appsec-review/tool-native-cpp:1.0.0",
+            DIGEST, DIGEST, "argv", (), {}, "start", "end",
             exit_code, False, False, False, False, relative(stdout), relative(stderr), relative(receipt))
 
 
@@ -158,6 +174,23 @@ def test_compile_database_normalization_preserves_only_reviewed_build_semantics(
     assert "-c" not in rows[0]["arguments"] and "-o" not in rows[0]["arguments"]
     assert rows[0]["output_path"] == "build/x.o"
     assert len(rows) == 1
+
+
+def test_infer_compile_database_uses_stable_read_only_container_paths() -> None:
+    value = _infer_compile_database({
+        "mapping": {"root": "projects/native/a"},
+        "compile_commands": [{
+            "target_path": "projects/native/a/main.cpp",
+            "arguments": ["clang++-18", "-I/scratch/source/include", "-std=c++20",
+                          "/scratch/source/main.cpp"],
+        }],
+    })
+    assert value == [{
+        "directory": "/target/source",
+        "file": "/target/source/main.cpp",
+        "arguments": ["clang++", "-I/target/source/include", "-std=c++20",
+                      "/target/source/main.cpp"],
+    }]
 
 
 def test_clang_ast_loader_accepts_bounded_concatenated_declarations(tmp_path: Path) -> None:
@@ -231,13 +264,15 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     job = build_job(executor_factory=lambda unit: None)
     plan = plan_jobs((job,), config)
     assert PROJECT_TASKS == ("projects",)
-    assert len(job.units) == 12
+    assert len(job.units) == 13
     assert plan.node("job_cpp_compiled_analysis.ast.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     assert plan.node("job_cpp_compiled_analysis.ir.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
+    assert plan.node("job_cpp_compiled_analysis.infer.projects").dependencies == (
+        "job_cpp_compiled_analysis.catalog.projects",)
     final = plan.node("job_cpp_compiled_analysis.acceptance.publish_handoff")
-    assert len(final.dependencies) == 6
+    assert len(final.dependencies) == 7
     assert not any("case001" in node.node_id for node in plan.nodes)
 
 
@@ -257,21 +292,48 @@ def test_cpp_job_discovers_projects_and_indexes_cross_tu_library_topology(tmp_pa
     assert all(value["terminal_status"] == "SUCCEEDED"
                for value in outputs["catalog.projects"]["projects"].values())
     assert outputs["codeql.projects"]["gaps"][0].startswith("BLOCKED: CodeQL")
+    assert outputs["infer.projects"]["terminal_status"] == "SUCCEEDED"
     accepted = outputs["acceptance.publish_handoff"]
     assert accepted["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert (keys[0], "ir") in calls and (keys[1], "symbols") in calls
+    assert (keys[0], "infer") in calls and (keys[1], "infer") in calls
 
     manifest = json.loads((tmp_path / "runs" / upstream["run_id"] /
                            accepted["index_manifest"]["path"]).read_text(encoding="utf-8"))
     build_shard = next(item for item in manifest["indexes"]
                        if item["shard_id"] == f"cpp-{keys[0]}-compiled")
+    infer_shard = next(item for item in manifest["indexes"]
+                       if item["shard_id"] == f"cpp-{keys[0]}-infer")
     with sqlite3.connect(tmp_path / "runs" / upstream["run_id"] / build_shard["relative_path"]) as database:
         entities = {row[0] for row in database.execute("SELECT kind FROM entities")}
         relations = {row[0] for row in database.execute("SELECT kind FROM relations")}
     assert {"project", "source_file", "build_action", "compile_unit", "object_file",
             "library", "executable"}.issubset(entities)
     assert {"CONTAINS", "GENERATED_FROM", "COMPILES_TO", "LINKS_INTO"}.issubset(relations)
+    with sqlite3.connect(tmp_path / "runs" / upstream["run_id"] / infer_shard["relative_path"]) as database:
+        infer_entities = {row[0] for row in database.execute("SELECT kind FROM entities")}
+    assert "tool_observation" in infer_entities
     assert RetrievalCore(config.runtime.runs_dir, upstream["run_id"]).search(query="helper", limit=10)["results"]
+    assert RetrievalCore(config.runtime.runs_dir, upstream["run_id"]).search(
+        query="NULLPTR_DEREFERENCE", indexes=("observations",), limit=10)["results"]
+
+
+def test_infer_failure_is_a_project_scoped_gap(tmp_path: Path) -> None:
+    config, target, keys = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    calls: list[tuple[str, str]] = []
+    factory = lambda unit: FakeNativeExecutor(unit.job.run_root, calls, (keys[0], "infer"))
+    outcome = GraphRunner(config, [build_job(executor_factory=factory)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    outputs = outcome["jobs"]["job_cpp_compiled_analysis"]["result"]["outputs"]
+    failed = outputs["infer.projects"]["projects"][keys[0]]
+    sibling = outputs["infer.projects"]["projects"][keys[1]]
+    assert failed["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("exited with status 9" in gap for gap in failed["gaps"])
+    assert sibling["terminal_status"] == "SUCCEEDED"
+    assert (keys[0], "symbols") in calls and (keys[1], "symbols") in calls
 
 
 def test_project_failure_is_scoped_and_retry_reuses_other_checkpoints(tmp_path: Path) -> None:

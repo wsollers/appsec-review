@@ -572,6 +572,22 @@ build_args = { TOOL_VERSION = "1.178.0" }
 purpose = "Semgrep CE source SAST with rules supplied per run."
 
 [[images]]
+id = "tool-infer"
+state = "enabled"
+kind = "tool"
+version = "1.3.0"
+tag = "appsec-review/tool-infer:1.3.0"
+image_id = "sha256:220ff7ad4fe0b312ca70ec0e9259623c3ae16c2f0eb80b454e5c4fd1516746bb"
+context = "containers/tools/infer"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/infer/tool.toml"
+assets_lock = "containers/tools/infer/assets.lock.json"
+build_args = { TOOL_VERSION = "1.3.0" }
+purpose = "Interprocedural C/C++ memory, lifetime, resource, and concurrency analysis."
+
+[[images]]
 id = "tool-shellcheck"
 state = "enabled"
 kind = "tool"

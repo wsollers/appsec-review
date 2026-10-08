@@ -6,9 +6,9 @@
   "required": ["schema", "project_count", "branch_count", "physical_shard_count", "gaps", "dispositions"],
   "additionalProperties": false,
   "properties": {
-    "schema": {"const": "appsec-review/cpp-compiled-analysis/1"},
+    "schema": {"const": "appsec-review/cpp-compiled-analysis/2"},
     "project_count": {"type": "integer", "minimum": 0},
-    "branch_count": {"const": 6},
+    "branch_count": {"const": 7},
     "physical_shard_count": {"type": "integer", "minimum": 0},
     "gaps": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 4096}},
     "dispositions": {
