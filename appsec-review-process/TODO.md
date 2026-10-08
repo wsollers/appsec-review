@@ -220,6 +220,12 @@ meets recorded thresholds without repository-wide grep or source enumeration.
 - [ ] Keep role semantics stage-specific and machine-enforced. Generate citation, disposition,
       independence and output instructions exactly once; remove conflicting copies from persona, role,
       task and runtime text.
+  - [x] Defined repository/model instruction layers and the run-owned
+        `data/guidance/<bundle-sha256>/` target in `docs/architecture/ai-guidance.md`; decoupled the
+        shared governing fragment from contributor-only `AGENTS.md` text without weakening its
+        discovery/no-model-verification boundary.
+  - [ ] Implement and schema-validate the run guidance-bundle publisher, migrate persona dispatch from
+        `prompt-cache/` one vertical slice at a time, then delete the cache after its last reader moves.
 - [ ] Evaluate persona value against the known-answer targets: incremental true findings, useful
       refutations, duplicate rate, unsupported-claim rate, cost and latency. Retain a persona only when it
       adds measurable coverage or decision quality.

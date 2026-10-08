@@ -1,7 +1,8 @@
 # docs
 
-The information base for the current architecture, partitioned by component. Start with
-[`agent-reader.md`](agent-reader.md); it is the entry point and read order for every agent.
+The information base for the current architecture, partitioned by component. Repository rules live
+in [`../AGENTS.md`](../AGENTS.md); use [`agent-reader.md`](agent-reader.md) to find the contract for
+the work at hand.
 
 For a two-level introduction aimed at executives, operators, and technical leaders, read the
 [`AppSec Review system guide`](appsec-review-system-guide.md). It explains purpose, operation,
@@ -10,7 +11,7 @@ reporting, and current readiness in one place.
 
 | Folder | What lives here | Read it when |
 |---|---|---|
-| `architecture/` | The design authority (`design-v3.md`), the migration rule and the script-migration ledger. | You need the intended shape of the system or are moving code out of `scripts/`. |
+| `architecture/` | The design authority (`design-v3.md`), AI-guidance ownership, migration rules and the script-migration ledger. | You need the intended shape, are changing agent/model instructions, or are moving code out of `scripts/`. |
 | `dagster/` | Submitting, queueing, monitoring and recovering jobs; the run-owned data contract; operations (limits, imports, locks). | Before touching a run. |
 | `evidence/` | Evidence retrieval and indexing, redaction, Scorecard ingest, intelligence collection, SBOM/SCA/NVD binding. | Before reading or producing evidence. |
 | `build-discovery/` | Build discovery and execution gates. | Build jobs or compile databases are involved. |

@@ -10,7 +10,8 @@ agent loads before doing one bounded kind of work. Two families live here:
 | `skills/agents/codex/` | The same skills packaged for Codex (`SKILL.md` with frontmatter). | `appsec-evidence-search`, `appsec-owasp-routing`, `appsec-vuln-lookup` and the language-tooling skills below are active. |
 | `skills/_archive/` | The previous `appsec-review-process/agent-skills/` tree, moved here unchanged on 2026-09-21. **Not in use.** Nothing may point an agent at it. Delete it when the rework lands. | Archived. |
 
-Until the rework lands, the only agent entry point is [`docs/agent-reader.md`](../docs/agent-reader.md).
+Repository-wide rules live in [`AGENTS.md`](../AGENTS.md); [`docs/agent-reader.md`](../docs/agent-reader.md)
+is the navigation map. Skills add one bounded procedure and never replace either source.
 
 ## Language tooling skills (brief C, 2026-09-29)
 
