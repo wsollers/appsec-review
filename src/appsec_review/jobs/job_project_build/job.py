@@ -18,13 +18,17 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
-from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
+from appsec_review.jobs.job_target_analysis_plan import ModelClient, ModelRequest, load_accepted_plan
+from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256
+
+from .repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
 
 
 SCHEMA = "appsec-review/project-build-dispatch/2"
 EXECUTOR_IDENTITY = "appsec-review/build-container-executor/2"
+REPAIR_CACHE_SCHEMA = "appsec-review/build-image-repair-cache/1"
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
 STATIC_LANES = ("global", *BUILD_FAMILIES)
 _IGNORED = {".git", ".hg", ".svn", "build", "target", "node_modules", "bin", "obj", ".gradle"}
@@ -147,7 +151,8 @@ def _probe_cache(unit: UnitContext, recipe_identity: str) -> Path:
     return unit.job.metadata_root / "project-probes" / recipe_identity / "accepted.json"
 
 
-def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=None) -> dict[str, Any]:
+def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=None,
+               *, attempt_number: int = 1) -> dict[str, Any]:
     action, image = entry["action"], entry.get("image")
     recipe, build_unit_id = action.get("recipe"), str(action["build_unit_id"])
     base = {"build_unit_id": build_unit_id, "family": action.get("family"), "root": action.get("root"),
@@ -169,11 +174,13 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
                 return {**base, "schema": SCHEMA, "executor_identity": EXECUTOR_IDENTITY,
                         "recipe_identity": recipe_identity, "image_id": image["image_id"],
                         "terminal_status": "SUCCEEDED", "probe_disposition": "REUSED",
-                        "checkpoint_reused": True, "commands": [], "gaps": []}
+                        "checkpoint_reused": True, "commands": [], "gaps": [],
+                        "attempt_number": 0}
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed after the accepted review snapshot")
-    root, workspace = (unit.job.run_root / "data" / "build" / "probes" / build_unit_id,
-                       unit.job.run_root / "data" / "build" / "probes" / build_unit_id / "workspace")
+    root = (unit.job.run_root / "data" / "build" / "probes" / build_unit_id /
+            f"attempt-{attempt_number:03d}")
+    workspace = root / "workspace"
     _copy_source(unit, action, workspace)
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     profile = BuildProfile(str(action["family"]), str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
@@ -184,10 +191,12 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     command_receipts, gaps = [], []
     for ordinal, argv in enumerate([*recipe["configure_commands"], *recipe["build_commands"]], 1):
         command = _normalized_argv(recipe, argv)
-        invocation = hashlib.sha256(f"{unit.job.run_id}:{unit.job.attempt_id}:{build_unit_id}:{ordinal}".encode()).hexdigest()
+        invocation = hashlib.sha256(
+            f"{unit.job.run_id}:{unit.job.attempt_id}:{build_unit_id}:{attempt_number}:{ordinal}".encode()).hexdigest()
         started = time.monotonic()
         unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_invocation_id=invocation,
-            tool_id="build-probe", retry_count=0, tool_identity={"family": action["family"], "image_id": image["image_id"]},
+            tool_id="build-probe", retry_count=attempt_number - 1,
+            tool_identity={"family": action["family"], "image_id": image["image_id"]},
             input_identities={"recipe_identity": recipe_identity,
                               "argv_sha256": hashlib.sha256(canonical_json(list(command))).hexdigest()})
         result = executor.execute(command, workspace=workspace, working_directory=str(recipe["source_dir"]),
@@ -203,7 +212,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             "stdout": stdout.relative_to(unit.job.run_root).as_posix(), "stderr": stderr.relative_to(unit.job.run_root).as_posix()})
         failed = result.timed_out or result.exit_code != 0
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_invocation_id=invocation,
-            tool_id="build-probe", retry_count=0, tool_identity={"family": action["family"], "image_id": image["image_id"]},
+            tool_id="build-probe", retry_count=attempt_number - 1,
+            tool_identity={"family": action["family"], "image_id": image["image_id"]},
             disposition="FAILED" if failed else "SUCCEEDED", result_count=0, gap_count=1 if failed else 0,
             truncated=False, duration_ms=int((time.monotonic() - started) * 1000))
         if failed:
@@ -216,13 +226,247 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     receipt = {**base, "schema": SCHEMA, "executor_identity": EXECUTOR_IDENTITY,
                "recipe_identity": recipe_identity, "image_id": image["image_id"], "commands": command_receipts,
                "artifacts": artifacts, "terminal_status": status,
-               "probe_disposition": "FAILED" if gaps else "PROBED", "gaps": gaps, "checkpoint_reused": False}
+               "probe_disposition": "FAILED" if gaps else "PROBED", "gaps": gaps,
+               "checkpoint_reused": False, "attempt_number": attempt_number}
     if status == "SUCCEEDED":
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "probe.lock"):
             atomic_json(cache, {"schema": "appsec-review/build-probe-cache/1", "recipe_identity": recipe_identity,
                                 "image_id": image["image_id"], "terminal_status": "SUCCEEDED"})
     return receipt
+
+
+def _repair_cache(unit: UnitContext, base_recipe_identity: str) -> Path:
+    return unit.job.metadata_root / "project-build-repairs" / base_recipe_identity / "accepted.json"
+
+
+def _repair_validation_unit(action: Mapping[str, Any], recipe: Mapping[str, Any]) -> dict[str, Any]:
+    documents = [{"path": str(path)} for path in recipe.get("dependency_files", ())]
+    return {"build_unit_id": action["build_unit_id"], "family": action["family"],
+            "root": action["root"], "build_system": action["build_system"],
+            "markers": documents, "descriptor_package": {"documents": documents}}
+
+
+def _probe_diagnostics(unit: UnitContext, receipt: Mapping[str, Any]) -> dict[str, Any]:
+    command = receipt.get("commands", ())[-1] if receipt.get("commands") else {}
+    result: dict[str, Any] = {
+        "terminal_status": receipt.get("terminal_status"),
+        "gaps": list(receipt.get("gaps", ()))[:20],
+        "command": {key: command.get(key) for key in ("ordinal", "argv_sha256", "exit_code", "timed_out")},
+    }
+    for key in ("stdout", "stderr"):
+        relative = command.get(key)
+        if not isinstance(relative, str):
+            result[f"{key}_tail"] = ""
+            continue
+        path = (unit.job.run_root / relative).resolve()
+        if unit.job.run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+            raise ValueError("probe diagnostic path is invalid")
+        result[f"{key}_tail"] = path.read_bytes()[-32768:].decode("utf-8", "replace")
+    return result
+
+
+def _repair_guidance(unit: UnitContext, family: str, model: Mapping[str, Any]) -> tuple[str, str, str, str]:
+    repository = unit.job.repository_root
+    guidance_path = repository / "skills" / "build-image-repair" / "SKILL.md"
+    if not guidance_path.is_file():
+        guidance_path = Path(__file__).parents[4] / "skills" / "build-image-repair" / "SKILL.md"
+    prompt_root = repository / "pipeline" / "prompt-fragments"
+    if not prompt_root.is_dir():
+        prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"
+    persona = (prompt_root / "personas" / "devops-engineer.md").read_text(encoding="utf-8")
+    role = (prompt_root / "roles" / f"build-engineer-{family}.md").read_text(encoding="utf-8")
+    guidance = guidance_path.read_text(encoding="utf-8")
+    identity = hashlib.sha256(persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()).hexdigest()
+    bundle = unit.job.run_root / "data" / "guidance" / identity
+    atomic_bytes(bundle / "persona.md", persona.encode("utf-8"))
+    atomic_bytes(bundle / "role.md", role.encode("utf-8"))
+    atomic_bytes(bundle / "task.md", guidance.encode("utf-8"))
+    atomic_json(bundle / "model-identity.json", {
+        "provider": str(model["provider"]), "model": str(model["model"]),
+        "reasoning": str(model["reasoning"]), "guidance_sha256": identity,
+        "persona": "devops_engineer", "role": f"build_engineer_{family}",
+        "task": "build_image_repair",
+    })
+    return persona, role, guidance, identity
+
+
+def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mapping[str, Any],
+                  dockerfile: bytes, diagnostics: Mapping[str, Any], attempts: list[Mapping[str, Any]],
+                  repair_number: int, model_client: ModelClient) -> Mapping[str, Any]:
+    model = unit.job.config.settings["model"]
+    persona, role, guidance, guidance_sha = _repair_guidance(unit, str(action["family"]), model)
+    summary = {
+        "schema": "appsec-review/build-image-repair-request/1",
+        "build_unit": {key: action.get(key) for key in
+                       ("build_unit_id", "family", "root", "build_system")},
+        "planning_package_hints": list(action.get("package_hints", ())),
+        "accepted_recipe": {key: recipe.get(key) for key in
+                            ("source_dir", "build_dir", "dependency_files", "configure_commands",
+                             "build_commands", "expected_outputs", "network_required", "system_packages")},
+        "dockerfile": dockerfile.decode("utf-8", "replace"),
+        "failure": diagnostics,
+        "prior_attempts": attempts[-10:],
+    }
+    request = ModelRequest(
+        schema=REPAIR_SCHEMA, persona=persona, role=role, guidance=guidance, summary=summary,
+        allowed_scanners=(), allowed_build_systems=(str(action["build_system"]),),
+        allowed_components=(), allowed_paths=tuple(str(value) for value in recipe.get("dependency_files", ())),
+        allowed_build_units=(str(action["build_unit_id"]),), provider=str(model["provider"]),
+        model=str(model["model"]), reasoning=str(model["reasoning"]),
+        max_input_tokens=int(model["max_input_tokens"]), max_output_tokens=int(model["max_output_tokens"]),
+    )
+    request_payload = {"schema": request.schema, "summary": summary, "provider": request.provider,
+                       "model": request.model, "reasoning": request.reasoning,
+                       "guidance_sha256": guidance_sha}
+    encoded = canonical_json(request_payload)
+    if len(encoded) + len(persona.encode()) + len(role.encode()) + len(guidance.encode()) > request.max_input_tokens * 4:
+        raise ValueError("build image repair request exceeded its configured input budget")
+    request_sha = hashlib.sha256(encoded).hexdigest()
+    invocation = hashlib.sha256(
+        f"{unit.job.run_id}:{unit.job.attempt_id}:{action['build_unit_id']}:{repair_number}:{request_sha}".encode()
+    ).hexdigest()
+    log = PipelineLog(unit.job.run_root)
+    emit_model_event(log, event_type="MODEL_CALL_STARTED", run_id=unit.job.run_id,
+        invocation_id=invocation, provider=request.provider, model=request.model,
+        reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
+        request_sha256=request_sha, retry_count=repair_number - 1, job_id="job_project_build",
+        attempt_id=unit.job.attempt_id, build_unit_id=str(action["build_unit_id"]),
+        inference_task="build_image_repair")
+    started = time.monotonic()
+    try:
+        result = model_client.complete(request, timeout_seconds=int(model["timeout_seconds"]))
+        if result.raw_response is not None:
+            atomic_bytes(unit.unit_root / str(action["build_unit_id"]) /
+                         f"repair-{repair_number:03d}" / "model-response.txt",
+                         result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
+        errors = validate_repair_proposal(result.proposal)
+        if errors:
+            raise ValueError("; ".join(errors))
+        emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
+            invocation_id=invocation, provider=request.provider, model=request.model,
+            reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
+            request_sha256=request_sha, terminal_status="ACCEPTED",
+            duration_ms=int((time.monotonic() - started) * 1000), retry_count=repair_number - 1,
+            input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+            cache_tokens=result.cache_tokens, job_id="job_project_build", attempt_id=unit.job.attempt_id,
+            build_unit_id=str(action["build_unit_id"]), inference_task="build_image_repair")
+        return result.proposal
+    except Exception as exc:
+        emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
+            invocation_id=invocation, provider=request.provider, model=request.model,
+            reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
+            request_sha256=request_sha, terminal_status="FAILED",
+            duration_ms=int((time.monotonic() - started) * 1000), retry_count=repair_number - 1,
+            error_class=type(exc).__name__, job_id="job_project_build", attempt_id=unit.job.attempt_id,
+            build_unit_id=str(action["build_unit_id"]), inference_task="build_image_repair")
+        raise
+
+
+def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile: BuildProfile,
+                        resolver: Any, model_client: ModelClient | None, executor_factory=None) -> dict[str, Any]:
+    action, image = dict(entry["action"]), entry.get("image")
+    first = _probe_one(unit, entry, executor_factory, attempt_number=1)
+    accepted_recipe = action.get("recipe")
+    attempts: list[dict[str, Any]] = [{
+        "attempt_number": 1,
+        "kind": ("reused-repair" if action.get("recipe_provenance") == "reused-image-repair"
+                 else "default"),
+        "recipe_identity": first.get("recipe_identity"),
+        "image_id": first.get("image_id"), "terminal_status": first["terminal_status"],
+        "gaps": list(first.get("gaps", ())),
+    }]
+    if first["terminal_status"] == "SUCCEEDED":
+        return {**first, "accepted_recipe": accepted_recipe, "accepted_image": image,
+                "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
+                "base_recipe_identity": entry.get("base_recipe_identity", first.get("recipe_identity")),
+                "attempts": attempts, "repair_attempt_count": 0}
+    model = unit.job.config.settings["model"]
+    repair_limit = int(unit.job.config.settings["repair_attempts"])
+    if not bool(model["enabled"]) or model_client is None:
+        gap = ("build image repair model is disabled" if not bool(model["enabled"])
+               else "build image repair model is unavailable")
+        return {**first, "gaps": [*first["gaps"], gap], "attempts": attempts,
+                "repair_attempt_count": 0, "accepted_recipe": accepted_recipe,
+                "accepted_image": image, "recipe_provenance": action.get("recipe_provenance", "accepted-inference")}
+    current_recipe = dict(accepted_recipe)
+    diagnostics = _probe_diagnostics(unit, first)
+    last_probe = first
+    for repair_number in range(1, repair_limit + 1):
+        repair_root = unit.unit_root / str(action["build_unit_id"]) / f"repair-{repair_number:03d}"
+        try:
+            _identity, dockerfile = resolver.definition(
+                {**current_recipe, "build_system": action["build_system"]}, profile)
+            atomic_bytes(repair_root / "Dockerfile", dockerfile)
+            proposal = _infer_repair(unit, action=action, recipe=current_recipe, dockerfile=dockerfile,
+                                     diagnostics=diagnostics, attempts=attempts,
+                                     repair_number=repair_number, model_client=model_client)
+            candidate = apply_repair(current_recipe, proposal)
+            errors = validate_build_recipe(candidate, _repair_validation_unit(action, candidate))
+            if errors:
+                raise ValueError("repaired build recipe is invalid: " + "; ".join(errors))
+            current_recipe = candidate
+            repaired_image, stdout, stderr = resolver.resolve(
+                {**candidate, "build_system": action["build_system"]}, profile)
+            atomic_bytes(repair_root / "image-build.stdout", stdout)
+            atomic_bytes(repair_root / "image-build.stderr", stderr)
+            image_value = _image_dict(repaired_image, profile.user)
+            candidate_action = {**action, "recipe": candidate,
+                                "recipe_provenance": "inference-image-repair"}
+            candidate_entry = {"action": candidate_action, "image": image_value,
+                               "terminal_status": "SUCCEEDED", "gaps": []}
+            last_probe = _probe_one(unit, candidate_entry, executor_factory,
+                                    attempt_number=repair_number + 1)
+            attempts.append({"attempt_number": repair_number + 1, "kind": "inference-repair",
+                             "repair_number": repair_number,
+                             "recipe_identity": repaired_image.recipe_identity,
+                             "image_id": repaired_image.image_id,
+                             "dockerfile_sha256": repaired_image.dockerfile_sha256,
+                             "dockerfile_path": repaired_image.dockerfile_path,
+                             "system_packages": list(candidate["system_packages"]),
+                             "terminal_status": last_probe["terminal_status"],
+                             "gaps": list(last_probe.get("gaps", ()))})
+            if last_probe["terminal_status"] == "SUCCEEDED":
+                base_identity = str(entry.get("base_recipe_identity") or first["recipe_identity"])
+                cache = _repair_cache(unit, base_identity)
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                with FileLock(cache.parent / "repair.lock"):
+                    atomic_json(cache, {"schema": REPAIR_CACHE_SCHEMA,
+                        "base_recipe_identity": base_identity, "recipe": candidate,
+                        "recipe_identity": repaired_image.recipe_identity,
+                        "image_id": repaired_image.image_id,
+                        "dockerfile_sha256": repaired_image.dockerfile_sha256,
+                        "dockerfile_path": repaired_image.dockerfile_path})
+                unit.job.events.write("PROJECT_IMAGE_REPAIR_ACCEPTED", unit_id=unit.unit_id,
+                    build_unit_id=action["build_unit_id"], family=action["family"],
+                    repair_attempt=repair_number, recipe_identity=repaired_image.recipe_identity,
+                    image_id=repaired_image.image_id)
+                return {**last_probe, "accepted_recipe": candidate, "accepted_image": image_value,
+                        "recipe_provenance": "inference-image-repair",
+                        "base_recipe_identity": base_identity, "attempts": attempts,
+                        "repair_attempt_count": repair_number}
+            diagnostics = _probe_diagnostics(unit, last_probe)
+        except Exception as exc:
+            stdout = exc.stdout if isinstance(exc, ProjectImageBuildError) else b""
+            stderr = exc.stderr if isinstance(exc, ProjectImageBuildError) else str(exc).encode("utf-8")
+            atomic_bytes(repair_root / "image-build.stdout", stdout)
+            atomic_bytes(repair_root / "image-build.stderr", stderr)
+            diagnostics = {"terminal_status": "FAILED", "error_class": type(exc).__name__,
+                           "stdout_tail": stdout[-32768:].decode("utf-8", "replace"),
+                           "stderr_tail": stderr[-32768:].decode("utf-8", "replace")}
+            attempts.append({"attempt_number": repair_number + 1, "kind": "inference-repair",
+                             "repair_number": repair_number, "terminal_status": "FAILED",
+                             "error_class": type(exc).__name__, "gaps": [str(exc)[:4096]],
+                             "system_packages": list(current_recipe.get("system_packages", ()))})
+            unit.job.events.write("PROJECT_IMAGE_REPAIR_FAILED", unit_id=unit.unit_id,
+                build_unit_id=action["build_unit_id"], family=action["family"],
+                repair_attempt=repair_number, error_class=type(exc).__name__)
+    return {**last_probe, "terminal_status": "FAILED", "probe_disposition": "FAILED",
+            "gaps": [*last_probe.get("gaps", ()),
+                     f"build remained unavailable after {repair_limit} image repair attempts"],
+            "accepted_recipe": current_recipe, "accepted_image": image,
+            "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
+            "attempts": attempts, "repair_attempt_count": repair_limit}
 
 
 def load_accepted_builds(run_root: Path) -> Mapping[str, Any]:
@@ -265,11 +509,49 @@ def _validate_config(context, _result) -> None:
         raise ValueError("project-build profiles must cover every build family")
     if type(context.config.settings.get("force_buildability_probe")) is not bool:
         raise ValueError("force_buildability_probe must be boolean")
+    repair_attempts = context.config.settings.get("repair_attempts")
+    if type(repair_attempts) is not int or not 3 <= repair_attempts <= 10:
+        raise ValueError("repair_attempts must be an integer between 3 and 10")
+    model = context.config.settings.get("model")
+    required_model = {"enabled", "provider", "model", "reasoning", "max_input_tokens",
+                      "max_output_tokens", "timeout_seconds"}
+    if not isinstance(model, Mapping) or set(model) != required_model:
+        raise ValueError("project-build repair model settings are invalid")
+    if type(model["enabled"]) is not bool:
+        raise ValueError("project-build repair model enabled must be boolean")
+    if any(type(model[key]) is not int or model[key] <= 0 for key in
+           ("max_input_tokens", "max_output_tokens", "timeout_seconds")):
+        raise ValueError("project-build repair model limits must be positive integers")
 
 
 def _image_dict(image: Any, user: str) -> dict[str, Any]:
     return {key: getattr(image, key) for key in image.__slots__} | {"user": user,
             "terminal_status": "SUCCEEDED", "gaps": []}
+
+
+def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_identity: str,
+                           resolver: Any, profile: BuildProfile) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    cache = _repair_cache(unit, base_identity)
+    if not cache.is_file():
+        return None
+    with FileLock(cache.parent / "repair.lock"):
+        value = json.loads(cache.read_text(encoding="utf-8"))
+    recipe = value.get("recipe")
+    if (value.get("schema") != REPAIR_CACHE_SCHEMA or value.get("base_recipe_identity") != base_identity or
+            not isinstance(recipe, Mapping)):
+        raise ValueError("accepted build image repair cache is invalid")
+    errors = validate_build_recipe(recipe, _repair_validation_unit(action, recipe))
+    if errors:
+        raise ValueError("accepted build image repair recipe is invalid: " + "; ".join(errors))
+    image, _stdout, _stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profile)
+    if (image.recipe_identity != value.get("recipe_identity") or
+            image.dockerfile_sha256 != value.get("dockerfile_sha256") or
+            image.dockerfile_path != value.get("dockerfile_path")):
+        raise ValueError("accepted build image repair identity changed")
+    if image.image_id != value.get("image_id"):
+        return None  # A rebuilt image must pass the default/repair probe sequence before acceptance.
+    return ({**dict(action), "recipe": dict(recipe), "recipe_provenance": "reused-image-repair"},
+            _image_dict(image, profile.user))
 
 
 def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -300,7 +582,8 @@ def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -
     return recipe
 
 
-def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
+def build_job(*, executor_factory=None, image_resolver_factory=None,
+              model_client: ModelClient | None = None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
@@ -323,10 +606,18 @@ def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
                 dependencies[owner].add(dependency)
         resolved_actions = []
         for item in actions:
-            recipe = _deterministic_native_recipe(unit, item)
-            resolved_actions.append({**dict(item),
-                **({"recipe": recipe, "requires_inference": False,
-                    "recipe_provenance": "deterministic-cmake-marker"} if recipe is not None else {}),
+            deterministic = _deterministic_native_recipe(unit, item)
+            selected = deterministic if deterministic is not None else item.get("recipe")
+            recipe_fields: dict[str, Any] = {}
+            if isinstance(selected, Mapping):
+                recipe_fields = {
+                    "recipe": {**dict(selected), "system_packages": []},
+                    "package_hints": list(selected.get("system_packages", ())),
+                    "requires_inference": False,
+                    "recipe_provenance": ("deterministic-cmake-marker" if deterministic is not None
+                                          else "accepted-inference-default-image"),
+                }
+            resolved_actions.append({**dict(item), **recipe_fields,
                 "build_dependencies": sorted(dependencies[str(item["build_unit_id"])])})
         actions = resolved_actions
         return {"actions": actions, "scanner_selections": accepted["scanner_selections"], "action_count": len(actions),
@@ -352,16 +643,29 @@ def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
                     unit.job.events.write("PROJECT_IMAGE_BUILD_STARTED", unit_id=unit.unit_id,
                                           build_unit_id=action["build_unit_id"], family=family)
                     image, stdout, stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profiles[family])
+                    base_recipe_identity = image.recipe_identity
+                    cached = _reuse_accepted_repair(unit, action, base_recipe_identity,
+                                                    resolver, profiles[family])
+                    if cached is not None:
+                        action, value = cached
+                        image = None
+                        unit.job.events.write("PROJECT_IMAGE_REPAIR_REUSED", unit_id=unit.unit_id,
+                            build_unit_id=action["build_unit_id"], family=family,
+                            recipe_identity=value["recipe_identity"], image_id=value["image_id"])
+                    else:
+                        value = _image_dict(image, profiles[family].user)
                     logs = unit.unit_root / str(action["build_unit_id"])
                     logs.mkdir(parents=True, exist_ok=True)
                     (logs / "image-build.stdout").write_bytes(stdout)
                     (logs / "image-build.stderr").write_bytes(stderr)
-                    value = _image_dict(image, profiles[family].user)
-                    unit.job.events.write("PROJECT_IMAGE_REUSED" if image.reused else "PROJECT_IMAGE_BUILT",
-                        unit_id=unit.unit_id, build_unit_id=action["build_unit_id"], family=family,
-                        recipe_identity=image.recipe_identity, image_id=image.image_id,
-                        disposition="REUSED" if image.reused else "BUILT")
-                    entries.append({"action": action, "image": value, "terminal_status": "SUCCEEDED", "gaps": []})
+                    if image is not None:
+                        unit.job.events.write("PROJECT_IMAGE_REUSED" if image.reused else "PROJECT_IMAGE_BUILT",
+                            unit_id=unit.unit_id, build_unit_id=action["build_unit_id"], family=family,
+                            recipe_identity=image.recipe_identity, image_id=image.image_id,
+                            disposition="REUSED" if image.reused else "BUILT")
+                    entries.append({"action": action, "image": value,
+                                    "base_recipe_identity": base_recipe_identity,
+                                    "terminal_status": "SUCCEEDED", "gaps": []})
                 except (RuntimeError, ValueError, OSError) as exc:
                     logs = unit.unit_root / str(action["build_unit_id"])
                     logs.mkdir(parents=True, exist_ok=True)
@@ -410,7 +714,20 @@ def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
 
     def probe_handler(family: str):
         def execute(unit: UnitContext) -> Mapping[str, Any]:
-            receipts = [_probe_one(unit, entry, executor_factory) for entry in unit.output(f"image.{family}")["entries"]]
+            profiles = profiles_from_settings(unit.job.config.settings["profiles"])
+            resolver = image_resolver_factory(unit) if image_resolver_factory else ProjectImageResolver(
+                metadata_root=unit.job.metadata_root, target_root=unit.job.target_root or Path(),
+                timeout_seconds=int(unit.job.config.settings["image_build_timeout_seconds"]),
+                output_bytes=int(unit.job.config.settings["output_bytes"]))
+            receipts = []
+            for entry in unit.output(f"image.{family}")["entries"]:
+                if (not isinstance(entry.get("image"), Mapping) or
+                        not isinstance(entry.get("action", {}).get("recipe"), Mapping)):
+                    receipts.append(_probe_one(unit, entry, executor_factory))
+                else:
+                    receipts.append(_probe_with_repairs(unit, entry, profile=profiles[family],
+                                                        resolver=resolver, model_client=model_client,
+                                                        executor_factory=executor_factory))
             gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value["gaps"]]
             return {"family": family, "receipts": receipts, "probe_count": len(receipts),
                     "reused_count": sum(value.get("probe_disposition") == "REUSED" for value in receipts),
@@ -428,11 +745,14 @@ def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
                     gaps.extend(receipt["gaps"])
                     continue
                 entry = images[receipt["build_unit_id"]]
+                accepted_recipe = receipt.get("accepted_recipe", entry["action"]["recipe"])
+                accepted_image = receipt.get("accepted_image", entry["image"])
                 value = {"workflow": "lang_jobflow_build", "family": family, "build_unit_id": receipt["build_unit_id"],
                          "root": receipt["root"], "build_system": receipt["build_system"],
-                         "recipe": entry["action"]["recipe"],
-                         "recipe_provenance": entry["action"].get("recipe_provenance", "accepted-inference"),
-                         "recipe_identity": receipt["recipe_identity"], "image": entry["image"],
+                         "recipe": accepted_recipe,
+                         "recipe_provenance": receipt.get(
+                             "recipe_provenance", entry["action"].get("recipe_provenance", "accepted-inference")),
+                         "recipe_identity": receipt["recipe_identity"], "image": accepted_image,
                          "source_fingerprint": unit.job.source_fingerprint,
                          "probe_identity": hashlib.sha256(canonical_json(receipt)).hexdigest(),
                          "build_dependencies": list(entry["action"].get("build_dependencies", ())),
@@ -477,10 +797,12 @@ def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
     terminal = tuple([*(f"static_dispatch.{lane}" for lane in STATIC_LANES),
                       *(f"build_dispatch.{family}" for family in BUILD_FAMILIES)])
     units.append(Unit("acceptance.publish_handoff", publish, terminal))
-    source_files = (Path(__file__), Path(__file__).parents[2] / "container_runtime" / "build_executor.py",
+    source_files = (Path(__file__), Path(__file__).with_name("repair.py"),
+                    Path(__file__).parents[2] / "container_runtime" / "build_executor.py",
                     Path(__file__).parents[2] / "container_runtime" / "project_images.py")
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) +
-                                    (b"injected" if executor_factory or image_resolver_factory else b"docker")).hexdigest()
+                                    (b"injected" if executor_factory or image_resolver_factory or model_client
+                                     else b"docker")).hexdigest()
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, implementation_identity=implementation,
                validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(), units=tuple(units))

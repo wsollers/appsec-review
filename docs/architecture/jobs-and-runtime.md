@@ -133,7 +133,12 @@ assistance publishes an explicit build-planning gap and leaves recipes absent.
 `job_project_build` resolves native CMake recipes deterministically from an accepted
 `CMakeLists.txt` marker. That narrow policy takes precedence over model-proposed CMake commands,
 is validated by the same recipe allowlist, and is marked `deterministic-cmake-marker`; it does not
-generalize to ambiguous build systems.
+generalize to ambiguous build systems. Project-build execution first probes the default pinned
+family image. A failed probe may trigger at least three centrally bounded inference-guided image
+repairs. The repair schema permits only a validated complete apt package set; commands and all
+other recipe fields remain immutable. A successful repair promotes the exact Dockerfile, derived
+image digest, and repaired operational recipe into a cache keyed by the original recipe identity,
+so unchanged recipes reuse the accepted image while changed recipes return to the default probe.
 
 The accepted plan is an immutable run artifact and an `analysis/target-analysis-plan` retrieval
 shard. Its manifest composes the catalog shards rather than replacing them. Evidence producers read

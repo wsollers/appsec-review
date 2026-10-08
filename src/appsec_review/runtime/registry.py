@@ -50,7 +50,8 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_target_analysis_plan",
                       lambda: build_analysis_plan(model_client=ConfiguredClaudeModelClient()))
-    registry.register("job_project_build", build_project_build)
+    registry.register("job_project_build",
+                      lambda: build_project_build(model_client=ConfiguredClaudeModelClient()))
     registry.register("job_language_build", build_language_build)
     registry.register("job_third_party_data_sync", build_sync)
     registry.register("job_evidence_collection", build_evidence)

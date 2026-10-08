@@ -51,6 +51,22 @@ Buildx/BuildKit client and load the result into the local engine. Docker image m
 serialized as an additional engine-safety boundary; the language DAG and static dispatch remain
 parallel.
 
+Every previously unseen recipe is probed against the default language image first; package hints
+from planning do not silently mutate that baseline. If the probe fails, `job_project_build` copies
+the exact generated Dockerfile and bounded failure diagnostics into the run, then asks the
+configured repair model only for a complete validated apt package set. It builds and probes up to
+three distinct repaired images before declaring the build unavailable. Invalid model output,
+failed apt installation, timeout, and compiler failure each remain in the per-attempt record and
+consume a bounded repair attempt. Repair inference cannot alter commands, paths, environment,
+dependency files, outputs, base image, or container policy.
+
+After a repaired image passes the exact probe, its recipe, Dockerfile hash and retained path, image
+digest, and base-recipe identity are accepted under `runs/metadata/project-build-repairs/`. A later
+run with the same operational recipe, dependency hashes, and base image revalidates and reuses that
+definition and image; a changed identity starts again from the default image. Set
+`repair_attempts` to an integer from 3 through 10 and configure the bounded model under
+`[jobs.job_project_build.settings.model]`.
+
 The identity uses the recipe's operational fields; changing only the model's explanatory `reason`
 does not rebuild an identical image or invalidate its accepted probe.
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 from appsec_review.config import load_config
@@ -12,6 +13,7 @@ from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
+from appsec_review.jobs.job_project_build.repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
 from appsec_review.runtime import GraphRunner, plan_jobs
 
 
@@ -73,11 +75,84 @@ class FakeImageResolver:
                             {}), b"", b""
 
 
+class RepairModel:
+    def __init__(self, packages):
+        self.packages = list(packages)
+        self.calls = 0
+
+    def complete(self, request, *, timeout_seconds):
+        assert request.schema == REPAIR_SCHEMA
+        packages = self.packages[min(self.calls, len(self.packages) - 1)]
+        self.calls += 1
+        return ModelResult({"schema": REPAIR_SCHEMA, "system_packages": packages,
+                            "reason": "bounded fixture repair"})
+
+
+class RepairImageResolver:
+    def __init__(self, root: Path):
+        self.root = root
+        self.resolutions = []
+
+    @staticmethod
+    def _identity(recipe) -> str:
+        return hashlib.sha256(json.dumps(recipe, sort_keys=True).encode()).hexdigest()
+
+    def definition(self, recipe, profile):
+        identity = self._identity(recipe)
+        packages = " ".join(recipe.get("system_packages", ()))
+        return identity, f"FROM {profile.tag}\nRUN apt-get install {packages}\n".encode()
+
+    def resolve(self, recipe, profile):
+        identity, dockerfile = self.definition(recipe, profile)
+        packages = tuple(recipe.get("system_packages", ()))
+        self.resolutions.append(packages)
+        if not packages:
+            return ProjectImage("appsec-review/project-build-image/1", identity, profile.name,
+                                profile.image_id, profile.tag, profile.image_id, None, False, True,
+                                {}), b"", b""
+        image_id = "sha256:" + hashlib.sha256((identity + "image").encode()).hexdigest()
+        context = self.root / "project-images" / identity / "context"
+        context.mkdir(parents=True, exist_ok=True)
+        dockerfile_path = context / "Dockerfile"
+        dockerfile_path.write_bytes(dockerfile)
+        relative = dockerfile_path.relative_to(self.root).as_posix()
+        package_tag = "-".join(packages)
+        return ProjectImage("appsec-review/project-build-image/1", identity, profile.name,
+                            profile.image_id, f"repair-{profile.name}:{package_tag}", image_id,
+                            hashlib.sha256(dockerfile).hexdigest(), True, False, {},
+                            f"project-images/{identity}/manifest.json", relative), b"built", b""
+
+
+class RepairingExecutor(FakeBuildExecutor):
+    def __init__(self, calls, profile, *, success_package: str | None):
+        super().__init__(calls)
+        self.profile = profile
+        self.success_package = success_package
+
+    def execute(self, argv, *, workspace, working_directory, environment):
+        if self.profile.name == "native" and argv[0] == "cmake" and "--build" not in argv:
+            if self.success_package is None or self.success_package not in self.profile.tag:
+                self.calls.append(tuple(argv))
+                return BuildCommandResult(tuple(argv), 1, b"", b"fatal error: fixture.h: missing", False)
+        return super().execute(argv, workspace=workspace,
+                               working_directory=working_directory, environment=environment)
+
+
 def test_probe_environment_preserves_offline_maven_repository() -> None:
     recipe = {"build_system": "maven", "source_dir": "projects/java/sample",
               "environment": {"MAVEN_OPTS": "-Dmaven.artifact.threads=1"}}
     assert _probe_environment(recipe)["MAVEN_OPTS"] == (
         "-Dmaven.repo.local=/opt/project-deps/maven -Dmaven.artifact.threads=1")
+
+
+def test_image_repair_accepts_only_bounded_apt_package_sets() -> None:
+    proposal = {"schema": REPAIR_SCHEMA, "system_packages": ["libssl-dev", "zlib1g-dev:amd64"],
+                "reason": "missing development headers"}
+    assert validate_repair_proposal(proposal) == ()
+    recipe = {"system_packages": []}
+    assert apply_repair(recipe, proposal)["system_packages"] == ["libssl-dev", "zlib1g-dev:amd64"]
+    invalid = {**proposal, "system_packages": ["libssl-dev;curl attacker"]}
+    assert validate_repair_proposal(invalid)
 
 
 def _fixture(tmp_path: Path):
@@ -233,3 +308,65 @@ def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
                  "-DCMAKE_BUILD_TYPE=RelWithDebInfo")
     build = ("cmake", "--build", "build", "--parallel", "2")
     assert calls == [configure, build, configure, build]
+
+
+def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    model = RepairModel((["libone-dev"], ["libtwo-dev"]))
+    resolver = RepairImageResolver(tmp_path / "image-metadata")
+    calls: list[tuple[str, ...]] = []
+    job = build_projects(
+        executor_factory=lambda unit, profile: RepairingExecutor(
+            calls, profile, success_package="libtwo-dev"),
+        image_resolver_factory=lambda unit: resolver, model_client=model)
+    run_ids = []
+    for _ in range(2):
+        upstream = GraphRunner(
+            config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+        ).run(target_root=target, source_fingerprint=fingerprint)
+        run_ids.append(upstream["run_id"])
+        outcome = GraphRunner(config, [job]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+        assert outcome["status"] == "SUCCEEDED"
+
+    first = load_accepted_builds(config.runtime.runs_dir / run_ids[0])
+    native_receipt = next(value for value in first["probe_receipts"] if value["family"] == "native")
+    native_dispatch = next(value for value in first["build_dispatches"] if value["family"] == "native")
+    assert native_receipt["repair_attempt_count"] == 2
+    assert [value["terminal_status"] for value in native_receipt["attempts"]] == [
+        "FAILED", "FAILED", "SUCCEEDED"]
+    assert native_dispatch["recipe"]["system_packages"] == ["libtwo-dev"]
+    assert native_dispatch["recipe_provenance"] == "inference-image-repair"
+    definition = resolver.root / native_dispatch["image"]["dockerfile_path"]
+    assert definition.is_file() and "libtwo-dev" in definition.read_text(encoding="utf-8")
+    assert model.calls == 2
+
+    second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
+    reused = next(value for value in second["build_dispatches"] if value["family"] == "native")
+    assert reused["recipe"]["system_packages"] == ["libtwo-dev"]
+    assert reused["recipe_provenance"] == "reused-image-repair"
+    assert reused["probe_disposition"] == "REUSED"
+    assert model.calls == 2
+
+
+def test_build_failure_exhausts_three_image_repair_attempts(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    model = RepairModel((["libone-dev"], ["libtwo-dev"], ["libthree-dev"]))
+    resolver = RepairImageResolver(tmp_path / "image-metadata")
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: RepairingExecutor([], profile, success_package=None),
+        image_resolver_factory=lambda unit: resolver, model_client=model)]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    native = next(value for value in accepted["probe_receipts"] if value["family"] == "native")
+    assert native["terminal_status"] == "FAILED"
+    assert native["repair_attempt_count"] == 3
+    assert len(native["attempts"]) == 4  # Default image plus three inferred custom images.
+    assert model.calls == 3
+    assert native["gaps"][-1] == "build remained unavailable after 3 image repair attempts"

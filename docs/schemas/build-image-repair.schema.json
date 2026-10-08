@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/build-image-repair/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "system_packages", "reason"],
+  "properties": {
+    "schema": {"const": "appsec-review/build-image-repair/1"},
+    "system_packages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 128,
+        "pattern": "^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9][a-z0-9-]*)?(?:=[A-Za-z0-9.+:~_-]+)?$"
+      }
+    },
+    "reason": {"type": "string", "minLength": 1, "maxLength": 4096}
+  }
+}

@@ -23,7 +23,9 @@ Lifecycle families are:
   guidance and request hashes, token/cache counts, duration, retry, status, and error class.
 - `PROJECT_IMAGE_BUILD_STARTED`, `PROJECT_IMAGE_BUILT|REUSED|BUILD_FAILED`, and
   `BUILD_PROBE_REUSED` record project-image and cross-run probe decisions by recipe and image
-  identity. Probe compiler/linker commands use the ordinary `TOOL_INVOCATION_*` lifecycle.
+  identity. `PROJECT_IMAGE_REPAIR_ACCEPTED|FAILED|REUSED` records bounded repair disposition and
+  identities without Dockerfile, package, diagnostic, or model-response text. Probe compiler/linker
+  commands use the ordinary `TOOL_INVOCATION_*` lifecycle.
 - `LANGUAGE_STATIC_WORKFLOW_DISPATCHED` and `LANGUAGE_BUILD_WORKFLOW_DISPATCHED` record bounded
   routing decisions. They carry identities and counts, not raw commands, source, or model content.
 - `FINDING_TRANSITION` for `NONE -> CANDIDATE -> CONFIRMED|REFUTED`. It carries the immutable finding

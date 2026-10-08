@@ -16,7 +16,7 @@ from .build_executor import BuildProfile, Runner, _run
 
 
 SCHEMA = "appsec-review/project-build-image/1"
-GENERATOR_IDENTITY = "appsec-review/project-dockerfile/4"
+GENERATOR_IDENTITY = "appsec-review/project-dockerfile/5"
 
 
 class ProjectImageBuildError(RuntimeError):
@@ -41,6 +41,7 @@ class ProjectImage:
     reused: bool
     dependency_hashes: Mapping[str, str]
     manifest_path: str | None = None
+    dockerfile_path: str | None = None
 
 
 def _safe_dependency(target_root: Path, relative: str) -> Path:
@@ -150,13 +151,44 @@ class ProjectImageResolver:
         value = stdout.decode("utf-8", "replace").strip()
         return value if not timed_out and code == 0 and value.startswith("sha256:") else None
 
-    def resolve(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[ProjectImage, bytes, bytes]:
+    def definition(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[str, bytes]:
+        """Return the exact identity and Dockerfile used for this recipe without mutating Docker."""
         hashes = dependency_hashes(self.target_root, recipe)
         identity = project_recipe_identity(recipe, profile, hashes)
+        uid, gid = profile.user.split(":", 1)
+        lines = [f"FROM {profile.tag}", "USER 0:0",
+                 _json_instruction("RUN", ("mkdir", "-p", "/opt/project", "/opt/project-home",
+                                             "/opt/project-deps"))]
+        packages = tuple(str(value) for value in recipe.get("system_packages", ()))
+        if packages:
+            lines.extend((_json_instruction("RUN", ("apt-get", "update")),
+                          _json_instruction("RUN", ("apt-get", "install", "-y",
+                                                    "--no-install-recommends", *packages)),
+                          _json_instruction("RUN", ("rm", "-rf", "/var/lib/apt/lists"))))
+        for ordinal, relative in enumerate(sorted(hashes)):
+            lines.append("COPY --chown=" + profile.user + " " + json.dumps(
+                [f"inputs/{ordinal:04d}", f"/opt/project/{relative}"], separators=(",", ":")))
+        lines.extend((_json_instruction("RUN", ("chown", "-R", f"{uid}:{gid}",
+                                                   "/opt/project", "/opt/project-home",
+                                                   "/opt/project-deps")),
+                      f"USER {profile.user}", "ENV HOME=/opt/project-home"))
+        for key, value in sorted(project_dependency_environment(recipe).items()):
+            lines.append(f"ENV {key}={value}")
+        lines.append(f"WORKDIR /opt/project/{recipe['source_dir']}")
+        restore = _restore_command({**recipe, "build_system": recipe.get("build_system")})
+        if bool(recipe.get("network_required")):
+            if restore is None:
+                raise ValueError("network-required recipe has no supported deterministic dependency restore")
+            lines.append(_json_instruction("RUN", restore))
+        return identity, ("\n".join(lines) + "\n").encode("utf-8")
+
+    def resolve(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[ProjectImage, bytes, bytes]:
+        hashes = dependency_hashes(self.target_root, recipe)
+        identity, dockerfile = self.definition(recipe, profile)
         customized = bool(recipe.get("system_packages")) or bool(recipe.get("network_required"))
+        if self._inspect(profile.tag) != profile.image_id:
+            raise ValueError(f"base build image identity changed: {profile.name}")
         if not customized:
-            if self._inspect(profile.tag) != profile.image_id:
-                raise ValueError(f"base build image identity changed: {profile.name}")
             return ProjectImage(SCHEMA, identity, profile.name, profile.image_id, profile.tag,
                                 profile.image_id, None, False, True, hashes), b"", b""
         cache_root = self.metadata_root / "project-images" / identity
@@ -167,45 +199,22 @@ class ProjectImageResolver:
             if manifest_path.is_file():
                 value = json.loads(manifest_path.read_text(encoding="utf-8"))
                 image_id = self._inspect(tag)
+                retained_definition = cache_root / "context" / "Dockerfile"
                 if (value.get("schema") == SCHEMA and value.get("recipe_identity") == identity and
-                        image_id == value.get("image_id")):
+                        image_id == value.get("image_id") and retained_definition.is_file() and
+                        not retained_definition.is_symlink() and
+                        file_sha256(retained_definition) == value.get("dockerfile_sha256")):
                     return ProjectImage(**{**value, "reused": True}), b"", b""
             context = cache_root / "context"
             if context.exists():
                 shutil.rmtree(context)
             inputs = context / "inputs"
             inputs.mkdir(parents=True)
-            copies: list[tuple[str, str]] = []
             for ordinal, relative in enumerate(sorted(hashes)):
                 source = _safe_dependency(self.target_root, relative)
                 staged = inputs / f"{ordinal:04d}"
                 shutil.copyfile(source, staged)
-                copies.append((staged.relative_to(context).as_posix(), f"/opt/project/{relative}"))
-            uid, gid = profile.user.split(":", 1)
-            # The tag is verified against the configured immutable image ID before use.
-            # BuildKit treats a bare `sha256:<image-id>` in FROM as a registry name.
-            lines = [f"FROM {profile.tag}", "USER 0:0",
-                     _json_instruction("RUN", ("mkdir", "-p", "/opt/project", "/opt/project-home", "/opt/project-deps"))]
             packages = tuple(str(value) for value in recipe.get("system_packages", ()))
-            if packages:
-                lines.extend((_json_instruction("RUN", ("apt-get", "update")),
-                              _json_instruction("RUN", ("apt-get", "install", "-y", "--no-install-recommends", *packages)),
-                              _json_instruction("RUN", ("rm", "-rf", "/var/lib/apt/lists"))))
-            for source, destination in copies:
-                lines.append("COPY --chown=" + profile.user + " " +
-                             json.dumps([source, destination], separators=(",", ":")))
-            lines.extend((_json_instruction("RUN", ("chown", "-R", f"{uid}:{gid}",
-                                                       "/opt/project", "/opt/project-home", "/opt/project-deps")),
-                          f"USER {profile.user}", "ENV HOME=/opt/project-home"))
-            for key, value in sorted(project_dependency_environment(recipe).items()):
-                lines.append(f"ENV {key}={value}")
-            lines.append(f"WORKDIR /opt/project/{recipe['source_dir']}")
-            restore = _restore_command({**recipe, "build_system": recipe.get("build_system")})
-            if bool(recipe.get("network_required")):
-                if restore is None:
-                    raise ValueError("network-required recipe has no supported deterministic dependency restore")
-                lines.append(_json_instruction("RUN", restore))
-            dockerfile = ("\n".join(lines) + "\n").encode("utf-8")
             dockerfile_path = context / "Dockerfile"
             dockerfile_path.write_bytes(dockerfile)
             # `docker buildx build` reads and uploads its context in the CLI process. Unlike a
@@ -233,6 +242,7 @@ class ProjectImageResolver:
             value = asdict(ProjectImage(SCHEMA, identity, profile.name, profile.image_id, tag,
                                         image_id, hashlib.sha256(dockerfile).hexdigest(), True,
                                         False, hashes,
-                                        manifest_path.relative_to(self.metadata_root).as_posix()))
+                                        manifest_path.relative_to(self.metadata_root).as_posix(),
+                                        dockerfile_path.relative_to(self.metadata_root).as_posix()))
             atomic_json(manifest_path, value)
             return ProjectImage(**value), stdout[:self.output_bytes], stderr[:self.output_bytes]

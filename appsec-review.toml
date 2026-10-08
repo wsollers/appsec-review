@@ -238,6 +238,16 @@ image_build_timeout_seconds = 1800
 output_bytes = 8388608
 artifact_count_limit = 10000
 force_buildability_probe = false
+repair_attempts = 3
+
+[jobs.job_project_build.settings.model]
+enabled = true
+provider = "anthropic-api"
+model = "claude-haiku-4-5-20251001"
+reasoning = "medium"
+max_input_tokens = 16000
+max_output_tokens = 2000
+timeout_seconds = 180
 
 [jobs.job_project_build.settings.profiles.native]
 tag = "audit-buildenv-cpp:local"

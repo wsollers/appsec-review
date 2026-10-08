@@ -57,6 +57,7 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
 
     assert first.customized and not first.reused
     assert second.reused and second.image_id == derived_id
+    assert first.dockerfile_path == second.dockerfile_path
     dockerfile = next((tmp_path / "metadata" / "project-images").glob("*/context/Dockerfile")).read_text()
     assert "FROM node-base:local" in dockerfile
     assert '["npm","ci","--ignore-scripts"]' in dockerfile

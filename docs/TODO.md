@@ -32,7 +32,9 @@ The Linux vertical is complete only when:
 
 Current status: the generic Linux native/CMake slice now covers accepted dispatch validation, real
 build execution, protected compiler/link provenance, artifact catalogs, dependency ordering,
-failure isolation, checkpoint reuse, and dynamic C++/post-build consumption. The full Linux
+failure isolation, checkpoint reuse, default-image-first probing, three bounded inference-guided
+dependency-image repairs, successful Dockerfile/image reuse, and dynamic C++/post-build
+consumption. The full Linux
 vertical remains open: static dispatch execution, the other language-family executors, entitled
 CodeQL, pinned loader-dependency parsing, broader MCP integration, and cross-language live
 acceptance are still required. The retained Dagster verification record is the authority for the

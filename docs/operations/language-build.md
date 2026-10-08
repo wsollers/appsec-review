@@ -3,8 +3,9 @@
 `job_language_build` consumes only the accepted, hash-verified `job_project_build` handoff. The
 current execution implementation is the Linux native family; accepted Rust, Go, Java, Node,
 .NET, Python, PHP, and WASM dispatches remain explicit gaps until equivalent executors are added.
-Native CMake dispatches use the validated deterministic marker recipe; model-proposed package or
-command drift cannot change that accepted execution contract.
+Native CMake dispatches use the validated deterministic marker command recipe. A failed default
+project-build probe may add only validated apt packages through the bounded image-repair workflow;
+model output cannot change the accepted command, path, dependency, environment, or output contract.
 
 For every native unit the job revalidates the target snapshot, successful probe identity, recipe,
 dependency hashes, build-unit root, derived image identity, and dependency edges. It then copies
