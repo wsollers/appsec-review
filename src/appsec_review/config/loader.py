@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import hashlib
+from pathlib import Path
+import tomllib
+from types import MappingProxyType
+from typing import Any, Mapping
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeConfig:
+    repository_root: Path
+    runs_dir: Path
+    data_dir: Path
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleConfig:
+    enabled: bool
+    cron: str
+    timezone: str
+
+    def __post_init__(self) -> None:
+        if len(self.cron.split()) != 5:
+            raise ValueError("schedule cron must have five fields")
+        if self.timezone == "UTC":
+            return
+        try:
+            ZoneInfo(self.timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"unknown schedule timezone: {self.timezone}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class JobConfig:
+    job_id: str
+    name: str
+    workers: int
+    schedule: ScheduleConfig | None
+    settings: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if not self.job_id.startswith("job_") or not self.job_id[4:].isdigit():
+            raise ValueError(f"invalid job id: {self.job_id}")
+        if not self.name.strip():
+            raise ValueError("job name is required")
+        if self.workers < 1:
+            raise ValueError("workers must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class AppConfig:
+    source_path: Path
+    source_sha256: str
+    runtime: RuntimeConfig
+    jobs: Mapping[str, JobConfig]
+
+    def job(self, job_id: str) -> JobConfig:
+        try:
+            return self.jobs[job_id]
+        except KeyError as exc:
+            raise KeyError(f"job is not configured: {job_id}") from exc
+
+
+def _path(root: Path, value: object, field: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty path")
+    candidate = Path(value)
+    return (root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+
+
+def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
+    source = Path(path).resolve(strict=True)
+    repository_root = source.parent
+    source_bytes = source.read_bytes()
+    document = tomllib.loads(source_bytes.decode("utf-8"))
+
+    runtime_value = document.get("runtime")
+    if not isinstance(runtime_value, dict):
+        raise ValueError("[runtime] is required")
+    runtime = RuntimeConfig(
+        repository_root=repository_root,
+        runs_dir=_path(repository_root, runtime_value.get("runs_dir"), "runtime.runs_dir"),
+        data_dir=_path(repository_root, runtime_value.get("data_dir"), "runtime.data_dir"),
+    )
+
+    jobs_value = document.get("jobs")
+    if not isinstance(jobs_value, dict) or not jobs_value:
+        raise ValueError("[jobs] must contain at least one job")
+    jobs: dict[str, JobConfig] = {}
+    for job_id, value in jobs_value.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"jobs.{job_id} must be a table")
+        schedule_value = value.get("schedule")
+        schedule = None
+        if schedule_value is not None:
+            if not isinstance(schedule_value, dict):
+                raise ValueError(f"jobs.{job_id}.schedule must be a table")
+            schedule = ScheduleConfig(
+                enabled=bool(schedule_value.get("enabled", False)),
+                cron=str(schedule_value.get("cron", "")),
+                timezone=str(schedule_value.get("timezone", "")),
+            )
+        settings = value.get("settings", {})
+        if not isinstance(settings, dict):
+            raise ValueError(f"jobs.{job_id}.settings must be a table")
+        jobs[job_id] = JobConfig(
+            job_id=job_id,
+            name=str(value.get("name", "")),
+            workers=int(value.get("workers", 1)),
+            schedule=schedule,
+            settings=MappingProxyType(dict(settings)),
+        )
+    return AppConfig(
+        source_path=source,
+        source_sha256=hashlib.sha256(source_bytes).hexdigest(),
+        runtime=runtime,
+        jobs=MappingProxyType(jobs),
+    )

@@ -1,0 +1,21 @@
+[runtime]
+runs_dir = "runs"
+data_dir = "data"
+
+[jobs.job_0001]
+name = "nvd_sync"
+workers = 1
+
+[jobs.job_0001.schedule]
+enabled = true
+cron = "0 0 * * *"
+timezone = "UTC"
+
+[jobs.job_0001.settings]
+feed_root = "data/feeds/nvd"
+api_key_env = "NVD_API_KEY"
+first_year = 2002
+page_size = 2000
+max_window_days = 119
+request_delay_with_key_seconds = 0.6
+request_delay_without_key_seconds = 6.0

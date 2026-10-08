@@ -8,6 +8,9 @@ version = "0.0.0"
 description = "Evidence-backed application security review orchestration"
 requires-python = ">=3.11"
 
+[project.scripts]
+appsec-review = "appsec_review.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
