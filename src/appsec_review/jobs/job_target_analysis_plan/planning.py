@@ -37,6 +37,8 @@ SOURCE_SUFFIXES = {
 @dataclass(frozen=True, slots=True)
 class ModelRequest:
     schema: str
+    persona: str
+    role: str
     guidance: str
     summary: Mapping[str, Any]
     allowed_scanners: tuple[str, ...]

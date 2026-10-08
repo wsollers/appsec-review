@@ -1,3 +1,5 @@
+FROM docker/buildx-bin:0.37.0@sha256:1387e0aa2b756894e8b6ee10d0f80904cb0badc4356a29e7843b230d0b8fd48f AS buildx
+
 FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -9,6 +11,7 @@ WORKDIR /opt/app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends docker-cli \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=buildx /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
 COPY deploy/dagster/requirements.txt deploy/dagster/requirements.lock.txt /tmp/dagster/
 RUN python -m pip install --no-cache-dir --upgrade "pip==25.0.1" \
@@ -18,6 +21,7 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==25.0.1" \
 COPY pyproject.toml appsec-review.toml ./
 COPY src ./src
 COPY containers ./containers
+COPY pipeline ./pipeline
 COPY rules ./rules
 COPY skills ./skills
 COPY tools/cve-bin-tool ./tools/cve-bin-tool

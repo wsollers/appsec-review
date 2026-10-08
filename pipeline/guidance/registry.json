@@ -2,6 +2,15 @@
   "schema": "appsec-review/guidance-registry/1",
   "version": "1.0.0",
   "roles": {
+    "build_engineer_native": {"responsibility": "Produce bounded reproducible C/C++ and native build-system recipes."},
+    "build_engineer_rust": {"responsibility": "Produce bounded reproducible Rust and Cargo build recipes."},
+    "build_engineer_go": {"responsibility": "Produce bounded reproducible Go module and workspace build recipes."},
+    "build_engineer_java": {"responsibility": "Produce bounded reproducible JVM build-system recipes."},
+    "build_engineer_node": {"responsibility": "Produce bounded reproducible JavaScript and TypeScript build recipes."},
+    "build_engineer_dotnet": {"responsibility": "Produce bounded reproducible .NET and MSBuild recipes."},
+    "build_engineer_python": {"responsibility": "Produce bounded reproducible Python packaging recipes."},
+    "build_engineer_php": {"responsibility": "Produce bounded reproducible PHP and Composer recipes."},
+    "build_engineer_wasm": {"responsibility": "Produce bounded reproducible WebAssembly build recipes."},
     "component_classifier": {"responsibility": "Classify bounded component purpose and trust roles from cited evidence."},
     "applicability_router": {"responsibility": "Resolve one bounded control-component applicability question."},
     "control_assessor": {"responsibility": "Assess assigned proof obligations and return observations with citations."},
@@ -10,6 +19,7 @@
     "result_adjudicator": {"responsibility": "Apply deterministic acceptance rules while preserving disagreement."}
   },
   "personas": {
+    "devops_engineer": {"viewpoint": "Reproducible automation, immutable containers, dependencies, CI behavior, and diagnosable operational failures."},
     "authentication_session": {"viewpoint": "Authentication, session, and identity boundaries."},
     "authorization_access_control": {"viewpoint": "Authorization and access-control boundaries."},
     "cryptography_data_protection": {"viewpoint": "Cryptography, key handling, and data protection."},

@@ -2,6 +2,13 @@
 
 from .catalog import ContainerCatalog, ToolImage, load_catalog
 from .build_executor import BuildCommandResult, BuildContainerExecutor, BuildProfile, profiles_from_settings
+from .project_images import (
+    ProjectImage,
+    ProjectImageBuildError,
+    ProjectImageResolver,
+    project_dependency_environment,
+    project_recipe_identity,
+)
 from .executor import (
     ContainerExecutor,
     ExecutionRequest,
@@ -13,6 +20,10 @@ __all__ = [
     "BuildCommandResult",
     "BuildContainerExecutor",
     "BuildProfile",
+    "ProjectImage",
+    "ProjectImageBuildError",
+    "ProjectImageResolver",
+    "project_dependency_environment",
     "ContainerCatalog",
     "ContainerExecutor",
     "ExecutionRequest",
@@ -21,4 +32,5 @@ __all__ = [
     "ToolImage",
     "load_catalog",
     "profiles_from_settings",
+    "project_recipe_identity",
 ]

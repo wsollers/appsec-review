@@ -210,6 +210,7 @@ max_input_tokens = 32000
 max_output_tokens = 32000
 timeout_seconds = 300
 retries = 1
+workers = 6
 
 [jobs.job_target_analysis_plan.steps.catalog_summary]
 workers = 1
@@ -233,8 +234,10 @@ workers = 8
 
 [jobs.job_project_build.settings]
 command_timeout_seconds = 600
+image_build_timeout_seconds = 1800
 output_bytes = 8388608
 artifact_count_limit = 10000
+force_buildability_probe = false
 
 [jobs.job_project_build.settings.profiles.native]
 tag = "audit-buildenv-cpp:local"
@@ -277,17 +280,54 @@ user = "10001:10001"
 workers = 1
 [jobs.job_project_build.steps.plan.tasks.load_recipes]
 
-[jobs.job_project_build.steps.build]
+[jobs.job_project_build.steps.image]
 workers = 8
-[jobs.job_project_build.steps.build.tasks.native]
-[jobs.job_project_build.steps.build.tasks.rust]
-[jobs.job_project_build.steps.build.tasks.go]
-[jobs.job_project_build.steps.build.tasks.java]
-[jobs.job_project_build.steps.build.tasks.node]
-[jobs.job_project_build.steps.build.tasks.dotnet]
-[jobs.job_project_build.steps.build.tasks.python]
-[jobs.job_project_build.steps.build.tasks.php]
-[jobs.job_project_build.steps.build.tasks.wasm]
+[jobs.job_project_build.steps.image.tasks.native]
+[jobs.job_project_build.steps.image.tasks.rust]
+[jobs.job_project_build.steps.image.tasks.go]
+[jobs.job_project_build.steps.image.tasks.java]
+[jobs.job_project_build.steps.image.tasks.node]
+[jobs.job_project_build.steps.image.tasks.dotnet]
+[jobs.job_project_build.steps.image.tasks.python]
+[jobs.job_project_build.steps.image.tasks.php]
+[jobs.job_project_build.steps.image.tasks.wasm]
+
+[jobs.job_project_build.steps.static_dispatch]
+workers = 8
+[jobs.job_project_build.steps.static_dispatch.tasks.global]
+[jobs.job_project_build.steps.static_dispatch.tasks.native]
+[jobs.job_project_build.steps.static_dispatch.tasks.rust]
+[jobs.job_project_build.steps.static_dispatch.tasks.go]
+[jobs.job_project_build.steps.static_dispatch.tasks.java]
+[jobs.job_project_build.steps.static_dispatch.tasks.node]
+[jobs.job_project_build.steps.static_dispatch.tasks.dotnet]
+[jobs.job_project_build.steps.static_dispatch.tasks.python]
+[jobs.job_project_build.steps.static_dispatch.tasks.php]
+[jobs.job_project_build.steps.static_dispatch.tasks.wasm]
+
+[jobs.job_project_build.steps.probe]
+workers = 8
+[jobs.job_project_build.steps.probe.tasks.native]
+[jobs.job_project_build.steps.probe.tasks.rust]
+[jobs.job_project_build.steps.probe.tasks.go]
+[jobs.job_project_build.steps.probe.tasks.java]
+[jobs.job_project_build.steps.probe.tasks.node]
+[jobs.job_project_build.steps.probe.tasks.dotnet]
+[jobs.job_project_build.steps.probe.tasks.python]
+[jobs.job_project_build.steps.probe.tasks.php]
+[jobs.job_project_build.steps.probe.tasks.wasm]
+
+[jobs.job_project_build.steps.build_dispatch]
+workers = 8
+[jobs.job_project_build.steps.build_dispatch.tasks.native]
+[jobs.job_project_build.steps.build_dispatch.tasks.rust]
+[jobs.job_project_build.steps.build_dispatch.tasks.go]
+[jobs.job_project_build.steps.build_dispatch.tasks.java]
+[jobs.job_project_build.steps.build_dispatch.tasks.node]
+[jobs.job_project_build.steps.build_dispatch.tasks.dotnet]
+[jobs.job_project_build.steps.build_dispatch.tasks.python]
+[jobs.job_project_build.steps.build_dispatch.tasks.php]
+[jobs.job_project_build.steps.build_dispatch.tasks.wasm]
 
 [jobs.job_project_build.steps.acceptance]
 workers = 1

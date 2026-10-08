@@ -11,7 +11,11 @@ from appsec_review.jobs.job_target_analysis_plan.planning import ModelRequest, M
 
 
 class ModelOutputError(ValueError):
-    pass
+    def __init__(self, message: str, *, raw_response: str | None = None,
+                 rejected_output: str | None = None) -> None:
+        super().__init__(message)
+        self.raw_response = raw_response
+        self.rejected_output = rejected_output
 
 
 def _text_from_envelope(value: Any) -> str:
@@ -59,6 +63,13 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
             continue
         if isinstance(value, Mapping) and value.get("schema") == schema:
             candidates.append(value)
+        elif (schema == "appsec-review/target-analysis-proposal/2" and
+              isinstance(value, Mapping) and "schema" not in value and
+              set(value) == {"component_proposals", "build_recipes"}):
+            # The expected schema is already fixed by the authenticated request.  Accept
+            # only this exact, unambiguous omission; conflicting or extra fields remain
+            # invalid and the ordinary proposal validators still authorize every value.
+            candidates.append({"schema": schema, **value})
     unique = {json.dumps(value, sort_keys=True, separators=(",", ":")): value for value in candidates}
     if len(unique) != 1:
         raise ModelOutputError(f"expected exactly one {schema} JSON object, found {len(unique)}")
@@ -77,6 +88,8 @@ class ClaudeCliModelClient:
         if binary is None:
             raise FileNotFoundError(f"configured Claude CLI is unavailable: {self.binary}")
         prompt = {
+            "persona": request.persona,
+            "role": request.role,
             "task": request.guidance,
             "response_schema": request.schema,
             "catalog_summary": request.summary,
@@ -93,7 +106,8 @@ class ClaudeCliModelClient:
         if request.repair_errors:
             prompt["repair"] = {"validation_errors": request.repair_errors,
                                 "rejected_response": request.prior_response,
-                                "instruction": "Return a corrected result only; do not reinvestigate."}
+                                "instruction": ("Return only one corrected JSON object. Its top-level "
+                                                f"schema must be exactly {request.schema}. Do not reinvestigate.")}
         environment = dict(os.environ)
         if self.auth_mode == "subscription":
             environment.pop("ANTHROPIC_API_KEY", None)
@@ -109,7 +123,16 @@ class ClaudeCliModelClient:
         if completed.returncode != 0:
             error = completed.stderr.strip()[:4096]
             raise RuntimeError(f"Claude CLI exited {completed.returncode}: {error}")
-        proposal = parse_model_payload(completed.stdout, request.schema)
+        try:
+            proposal = parse_model_payload(completed.stdout, request.schema)
+        except ModelOutputError as exc:
+            raw = completed.stdout[:2 * 1024 * 1024]
+            try:
+                rejected = _text_from_envelope(json.loads(raw))
+            except (json.JSONDecodeError, ModelOutputError):
+                rejected = raw
+            raise ModelOutputError(str(exc), raw_response=raw,
+                                   rejected_output=rejected[:131072]) from exc
         usage = {}
         try:
             envelope = json.loads(completed.stdout)

@@ -18,10 +18,14 @@ FAMILIES = {
 
 
 def _safe(value: str) -> str:
-    if not value or len(value) > 128 or any(character not in
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-" for character in value):
+    """Return a filesystem-safe storage key without changing the logical shard identity."""
+    if (not value or len(value.encode("utf-8")) > 512 or any(
+            ord(character) < 32 or character in "/\\" for character in value)):
         raise ValueError("index shard identity is invalid")
-    return value
+    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+    if all(character in allowed for character in value):
+        return value
+    return "id-" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _fingerprint(value: Any) -> str:
@@ -33,16 +37,17 @@ def publish_shard(run_root: Path, *, family: str, shard_id: str,
                   gaps: Sequence[str] = ()) -> dict[str, Any]:
     if family not in FAMILIES:
         raise ValueError(f"unknown OWASP index family: {family}")
-    shard_id = _safe(shard_id)
-    fingerprint = _fingerprint({"family": family, "shard_id": shard_id,
+    logical_shard_id = str(shard_id)
+    storage_key = _safe(logical_shard_id)
+    fingerprint = _fingerprint({"family": family, "shard_id": logical_shard_id,
                                 "inputs": fingerprint_inputs})
     document = {
-        "schema": INDEX_SCHEMA, "family": family, "shard_id": shard_id,
+        "schema": INDEX_SCHEMA, "family": family, "shard_id": logical_shard_id,
         "fingerprint": fingerprint, "records": [dict(item) for item in records],
         "gaps": list(gaps),
     }
     document["records_sha256"] = _fingerprint(document["records"])
-    relative = Path("data") / "indexes" / "owasp" / family / shard_id / f"{fingerprint}.json"
+    relative = Path("data") / "indexes" / "owasp" / family / storage_key / f"{fingerprint}.json"
     path = Path(run_root) / relative
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
@@ -50,7 +55,7 @@ def publish_shard(run_root: Path, *, family: str, shard_id: str,
             raise ValueError("immutable OWASP index shard conflicts with existing bytes")
     else:
         atomic_json(path, document)
-    return {"family": family, "shard_id": shard_id, "schema": INDEX_SCHEMA,
+    return {"family": family, "shard_id": logical_shard_id, "schema": INDEX_SCHEMA,
             "fingerprint": fingerprint, "sha256": file_sha256(path),
             "path": relative.as_posix(), "record_count": len(records), "gaps": list(gaps)}
 

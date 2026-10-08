@@ -33,8 +33,11 @@ def test_post_build_job_is_ordered_between_cpp_build_and_evidence_assembly() -> 
     } <= names
     assert "cpp_compiled_analysis__finalize" in _upstream(
         graph, "post_build_security_assessment__begin")
-    assert "post_build_security_assessment__finalize" in _upstream(
+    assert "target_analysis_plan__finalize" in _upstream(
         graph, "evidence_collection__begin")
+    assert {
+        "post_build_security_assessment__finalize", "evidence_collection__finalize",
+    } <= _upstream(graph, "owasp_control_assessment__begin")
     assert _upstream(graph, "post_build_security_assessment__inspection__case001") == {
         "post_build_security_assessment__begin", "post_build_security_assessment__provenance__case001"}
     assert len(_upstream(graph, "post_build_security_assessment__publication__publish_handoff")) == 14

@@ -259,6 +259,9 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
         errors.append("expected_outputs must stay within the accepted build-unit root")
     if type(recipe.get("network_required")) is not bool:
         errors.append("network_required must be boolean")
+    dependency_managers = {"cargo", "go", "maven", "gradle", "dotnet", "node", "composer", "python"}
+    if unit.get("build_system") in dependency_managers and dependencies and recipe.get("network_required") is not True:
+        errors.append("dependency-managed build recipes must resolve dependencies in the project image")
     reason = recipe.get("reason")
     if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:
         errors.append("reason is missing or exceeds the bound")

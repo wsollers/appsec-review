@@ -107,7 +107,7 @@ def _pool_for(unit_id: str) -> str:
         return "owasp_validator"
     if step in {"verification", "join"}:
         return "owasp_verification"
-    if step in {"prepare", "configure", "compile", "catalog"}:
+    if step in {"prepare", "configure", "compile", "catalog", "image", "probe"}:
         return "cpp_build"
     if step in {"compiled", "ast", "ir", "codeql", "joern", "binary", "provenance",
                 "inspection", "deterministic", "inference"}:
@@ -121,20 +121,43 @@ def _pool_for(unit_id: str) -> str:
 
 
 def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
-                         runner_factory: RunnerFactory, *, node_namespace: str = ""):
+                         runner_factory: RunnerFactory, *, node_namespace: str = "",
+                         job_dependencies: Mapping[str, tuple[str, ...]] | None = None):
     plan_jobs(jobs, config)
+    dependencies_by_job = dict(job_dependencies or {})
+    if not dependencies_by_job:
+        dependencies_by_job = {job.job_id: (() if position == 0 else (jobs[position - 1].job_id,))
+                               for position, job in enumerate(jobs)}
     begin_ops = {}
     unit_ops: dict[tuple[str, str], Any] = {}
     finalize_ops = {}
+    terminal_jobs = {job.job_id for job in jobs} - {
+        dependency for values in dependencies_by_job.values() for dependency in values}
     for position, job in enumerate(jobs):
-        begin_ins = {"upstream": In(dict)} if position else {}
+        begin_ins = {f"upstream_{index}": In(dict)
+                     for index, _dependency in enumerate(dependencies_by_job.get(job.job_id, ())) }
 
         def make_begin(selected: Job, ins: Mapping[str, In]):
             @op(name=_node_name(selected, "begin", node_namespace), ins=dict(ins), out=Out(dict),
                 tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
                 description=f"Claim and validate an application attempt for {selected.job_id}.")
             def begin(context, **inputs):
-                upstream = dict(inputs.get("upstream") or {})
+                upstream_values = [dict(value) for value in inputs.values()]
+                run_ids = {str(value.get("run_id")) for value in upstream_values if value.get("run_id")}
+                if len(run_ids) > 1:
+                    raise ValueError("parallel upstream branches belong to different application runs")
+                upstream = {
+                    "run_id": next(iter(run_ids), None),
+                    "handoffs": {key: digest for value in upstream_values
+                                 for key, digest in dict(value.get("handoffs", {})).items()},
+                    "completion_status": ("COMPLETED_WITH_GAPS" if any(
+                        value.get("completion_status") == "COMPLETED_WITH_GAPS" for value in upstream_values)
+                        else "SUCCEEDED"),
+                    "graph_started_at": next((value.get("graph_started_at") for value in upstream_values
+                                               if value.get("graph_started_at")), None),
+                    "resume_decisions": [decision for value in upstream_values
+                                         for decision in value.get("resume_decisions", [])],
+                }
                 tags = dict(context.dagster_run.tags)
                 target = Path(os.environ.get(
                     "APPSEC_REVIEW_TARGET", config.runtime.repository_root / "targets" / "appsec-multi-vuln"
@@ -159,7 +182,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     upstream_handoffs=upstream_handoffs,
                 )
                 claim = {**dict(claim),
-                         "graph_started_at": upstream.get("graph_started_at", claim["started_at"]),
+                         "graph_started_at": upstream.get("graph_started_at") or claim["started_at"],
                          "prior_graph_completion_status": upstream.get("completion_status", "SUCCEEDED"),
                          "resume_decisions": [*upstream.get("resume_decisions", []), {
                              "job_id": selected.job_id,
@@ -257,22 +280,26 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                         "graph_started_at": claim["graph_started_at"],
                         "resume_decisions": list(claim.get("resume_decisions", []))}
             return finalize
-        finalize_ops[job.job_id] = make_finalize(job, finalize_ins, position == len(jobs) - 1)
+        finalize_ops[job.job_id] = make_finalize(job, finalize_ins, job.job_id in terminal_jobs)
 
     @graph(name=name)
     def generated_graph():
-        upstream = None
-        for position, job in enumerate(jobs):
-            claim = begin_ops[job.job_id]() if position == 0 else begin_ops[job.job_id](upstream=upstream)
+        finalized = {}
+        for job in jobs:
+            upstream_inputs = {f"upstream_{index}": finalized[dependency]
+                               for index, dependency in enumerate(dependencies_by_job.get(job.job_id, ())) }
+            claim = begin_ops[job.job_id](**upstream_inputs)
             values = {}
             for unit in job.units:
                 dependencies = {dependency.replace(".", "__"): values[dependency]
                                 for dependency in unit.dependencies}
                 values[unit.unit_id] = unit_ops[(job.job_id, unit.unit_id)](
                     claim=claim, **dependencies)
-            upstream = finalize_ops[job.job_id](
+            finalized[job.job_id] = finalize_ops[job.job_id](
                 claim=claim, **{unit_id.replace(".", "__"): value for unit_id, value in values.items()})
-        return upstream
+        if len(terminal_jobs) != 1:
+            raise ValueError(f"Dagster application graph requires one terminal job: {sorted(terminal_jobs)}")
+        return finalized[next(iter(terminal_jobs))]
 
     executor = multiprocess_executor.configured({
         "max_concurrent": config.dagster.max_concurrent,
@@ -334,20 +361,42 @@ def build_definitions(
             )
     if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan"} <= registered:
         wave_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
+        wave_dependencies: dict[str, tuple[str, ...]] = {
+            "job_review_intake": (), "job_target_catalog": ("job_review_intake",),
+        }
         if "job_ci_configuration_analysis" in registered:
             wave_jobs.append(registry.build("job_ci_configuration_analysis"))
+            wave_dependencies["job_ci_configuration_analysis"] = ("job_target_catalog",)
         wave_jobs.append(registry.build("job_target_analysis_plan"))
+        wave_dependencies["job_target_analysis_plan"] = (("job_ci_configuration_analysis",)
+            if "job_ci_configuration_analysis" in registered else ("job_target_catalog",))
         if "job_project_build" in registered:
             wave_jobs.append(registry.build("job_project_build"))
+            wave_dependencies["job_project_build"] = ("job_target_analysis_plan",)
         if "job_cpp_compiled_analysis" in registered:
             wave_jobs.append(registry.build("job_cpp_compiled_analysis"))
+            wave_dependencies["job_cpp_compiled_analysis"] = (("job_project_build",)
+                if "job_project_build" in registered else ("job_target_analysis_plan",))
         if "job_post_build_security_assessment" in registered:
             wave_jobs.append(registry.build("job_post_build_security_assessment"))
+            wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
+                if "job_cpp_compiled_analysis" in registered else
+                ("job_project_build",) if "job_project_build" in registered else ("job_target_analysis_plan",))
         if "job_evidence_collection" in registered:
             wave_jobs.append(registry.build("job_evidence_collection"))
+            wave_dependencies["job_evidence_collection"] = ("job_target_analysis_plan",)
         if "job_owasp_control_assessment" in registered:
             wave_jobs.append(registry.build("job_owasp_control_assessment"))
-        jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory))
+            build_terminal = ("job_post_build_security_assessment" if "job_post_build_security_assessment" in registered
+                              else "job_cpp_compiled_analysis" if "job_cpp_compiled_analysis" in registered
+                              else "job_project_build" if "job_project_build" in registered
+                              else "job_target_analysis_plan")
+            owasp_dependencies = [build_terminal]
+            if "job_evidence_collection" in registered:
+                owasp_dependencies.append("job_evidence_collection")
+            wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys(owasp_dependencies))
+        jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
+                                         job_dependencies=wave_dependencies))
     if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:
         jobs.append(_build_dagster_graph(
             "ci_configuration_review",

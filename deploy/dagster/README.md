@@ -58,9 +58,11 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exe
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/live-acceptance.json
 ```
 
-Launch the deterministic review graph through the same live instance. The compiled-analysis handoff
-feeds the post-build security assessment before evidence publication, so build-command provenance,
-binary inspection, deterministic checks, and immutable `build_security` shards are all covered by
+Launch the deterministic review graph through the same live instance. After target planning, static
+evidence collection runs independently from project-image resolution, buildability probes, compiled
+analysis, and post-build security assessment. The two branches join before OWASP assessment, so a
+slow or failed compiled tool cannot erase completed static evidence. Build-command provenance,
+binary inspection, deterministic checks, and immutable `build_security` shards remain covered by
 the retained `wave1_review` job. Its target mount is read-only, while application receipts and
 handoffs remain in the ignored `runs/` mount:
 
@@ -83,13 +85,14 @@ snapshots, counts, gaps, and receipt paths. The application `status.json` contai
 `orchestration.system=dagster` and `orchestration.run_id=<Dagster UUID>` link. The verification
 command validates both directions rather than inferring success from one system alone.
 
-`wave1_review` shows intake and catalog units followed by the planned analysis jobs. The post-build
-security nodes cannot start until the accepted C++ analysis handoff exists, and evidence publication
-cannot start until all post-build case shards have terminal receipts. Each evidence branch has scan,
-normalize, and producer-owned index nodes. The cheap manifest barrier waits for a truthful terminal
-disposition from every branch, verifies every immutable shard, and then publication moves the
-accepted pointer. The configured multiprocess executor allows unrelated branches to overlap; Grype
-alone waits for Syft.
+`wave1_review` shows intake and catalog units followed by the planned analysis jobs. Static evidence
+collection and project-build processing both start from the accepted target-analysis plan. The
+post-build security nodes cannot start until the accepted C++ analysis handoff exists. Each evidence
+branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
+truthful terminal disposition from every static branch, verifies every immutable shard, and then
+publication moves the accepted pointer. OWASP assessment waits for both the static-evidence and
+post-build branches. The configured multiprocess executor allows unrelated branches to overlap;
+Grype alone waits for Syft.
 
 A producer failure is not a clean scan and not a framework failure. It becomes a durable `FAILED`,
 `BLOCKED`, `PARTIAL`, or `NOT_APPLICABLE` disposition, with bounded receipts and gaps, and can yield

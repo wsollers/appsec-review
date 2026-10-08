@@ -213,18 +213,19 @@ def test_run_isolated_scoped_index_retrieval_and_pagination(tmp_path: Path) -> N
     runs = tmp_path / "runs"
     run_root = runs / "run-1"
     run_root.mkdir(parents=True)
-    shard = publish_shard(run_root, family="applicability", shard_id="component-a",
+    shard = publish_shard(run_root, family="applicability", shard_id="component:0001",
         records=[{"standard": "ASVS", "version": "5.0.0", "profile": "L2",
-                  "control_id": f"V{i}", "component_id": "component-a", "project_id": "p",
+                  "control_id": f"V{i}", "component_id": "component:0001", "project_id": "p",
                   "outcome": "applicable", "evidence_mode": "static_source"} for i in range(3)],
         fingerprint_inputs={"component": "a"})
+    assert shard["shard_id"] == "component:0001" and "component:0001" not in shard["path"]
     publish_manifest(run_root, run_id="run-1", shards=[shard],
                      accepted_upstream_manifest={"sha256": "a" * 64},
                      configuration_sha256="b" * 64)
     query = WorkbenchIndex(runs, "run-1")
-    first = query.query(family="applicability", standard="ASVS", component="component-a", limit=2)
+    first = query.query(family="applicability", standard="ASVS", component="component:0001", limit=2)
     assert len(first["results"]) == 2 and first["pagination"]["truncated"]
-    second = query.query(family="applicability", standard="ASVS", component="component-a",
+    second = query.query(family="applicability", standard="ASVS", component="component:0001",
                          limit=2, cursor=first["pagination"]["next_cursor"])
     assert len(second["results"]) == 1 and all(item["run_id"] == "run-1" for item in second["results"])
     with pytest.raises(ValueError, match="unavailable"):

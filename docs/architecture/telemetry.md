@@ -8,6 +8,9 @@ index shard, MCP session/invocation, future model invocation, or finding-package
 The writer is process-safe and crash-recovering. It bounds depth, collection size, strings, and total
 record bytes. Credentials, secret-like values, prompts, responses, raw model output, source text,
 and query text are redacted. Telemetry uses request, guidance, reason, evidence, and artifact hashes.
+Where a job explicitly needs raw provider or tool output for diagnosis, it stores bounded bytes as a
+run-owned task artifact with access inherited from the run; those bytes are never copied into this
+central event stream, and credentials remain prohibited.
 
 Lifecycle families are:
 
@@ -18,6 +21,11 @@ Lifecycle families are:
 - `MCP_TOOL_STARTED/COMPLETED` for transport calls and `RETRIEVAL_SUBOP_COMPLETED` for child spans.
 - `MODEL_CALL_STARTED/COMPLETED`, ready for later inference, with provider/model/reasoning identities,
   guidance and request hashes, token/cache counts, duration, retry, status, and error class.
+- `PROJECT_IMAGE_BUILD_STARTED`, `PROJECT_IMAGE_BUILT|REUSED|BUILD_FAILED`, and
+  `BUILD_PROBE_REUSED` record project-image and cross-run probe decisions by recipe and image
+  identity. Probe compiler/linker commands use the ordinary `TOOL_INVOCATION_*` lifecycle.
+- `LANGUAGE_STATIC_WORKFLOW_DISPATCHED` and `LANGUAGE_BUILD_WORKFLOW_DISPATCHED` record bounded
+  routing decisions. They carry identities and counts, not raw commands, source, or model content.
 - `FINDING_TRANSITION` for `NONE -> CANDIDATE -> CONFIRMED|REFUTED`. It carries the immutable finding
   package, evidence identities/count, actor class, and reason/evidence hash. Scanner observations are
   evidence records; they are never counted as confirmed findings without a valid transition.

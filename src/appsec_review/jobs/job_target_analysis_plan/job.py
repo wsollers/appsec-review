@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from dataclasses import asdict
 import hashlib
@@ -127,7 +128,7 @@ def _validate_config(context, result) -> None:
     if not isinstance(model, Mapping):
         raise ValueError("target analysis plan model settings are required")
     required = {"enabled", "provider", "model", "reasoning", "max_input_tokens", "max_output_tokens",
-                "timeout_seconds", "retries"}
+                "timeout_seconds", "retries", "workers"}
     if not required <= set(model):
         raise ValueError("target analysis plan model settings are incomplete")
     if type(model["enabled"]) is not bool:
@@ -140,6 +141,8 @@ def _validate_config(context, result) -> None:
             raise ValueError(f"target analysis plan model setting is invalid: {key}")
     if type(model["retries"]) is not int or not 0 <= model["retries"] <= 5:
         raise ValueError("target analysis plan model retries must be between zero and five")
+    if type(model["workers"]) is not int or not 1 <= model["workers"] <= 16:
+        raise ValueError("target analysis plan model workers must be between one and sixteen")
 
 
 def _base_indexes(run_root: Path) -> tuple[list[IndexIdentity], Path, str]:
@@ -221,104 +224,148 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
         if not guidance_path.is_file():
             guidance_path = Path(__file__).parents[4] / "skills" / "target-analysis-planning" / "SKILL.md"
         guidance = guidance_path.read_text(encoding="utf-8")
-        guidance_sha = hashlib.sha256(guidance.encode("utf-8")).hexdigest()
-        bundle_root = unit.job.run_root / "data" / "guidance" / guidance_sha
-        atomic_bytes(bundle_root / "SKILL.md", guidance.encode("utf-8"))
-        identity = {"provider": str(model["provider"]), "model": str(model["model"]),
-                    "reasoning": str(model["reasoning"]), "guidance_sha256": guidance_sha}
-        atomic_json(bundle_root / "model-identity.json", identity)
-        bounded_paths = sorted({
-            str(item["path"])
-            for prefix in summary["prefixes"] for item in prefix["sample"]
-        } | {
-            str(item["path"])
-            for key in ("recognized_build_files", "compile_databases", "accepted_artifacts")
-            for item in summary[key]
-        })
-        request = ModelRequest(
-            schema=PROPOSAL_SCHEMA, guidance=guidance, summary=summary,
-            allowed_scanners=SCANNERS, allowed_build_systems=tuple(sorted(BUILD_SYSTEMS)),
-            allowed_components=tuple(str(item["component_id"]) for item in summary["components"]),
-            allowed_paths=tuple(bounded_paths),
-            allowed_build_units=tuple(str(item["build_unit_id"]) for item in summary.get("build_units", ())),
-            provider=str(model["provider"]), model=str(model["model"]), reasoning=str(model["reasoning"]),
-            max_input_tokens=int(model["max_input_tokens"]), max_output_tokens=int(model["max_output_tokens"]),
-        )
-        request_identity = {
-            "schema": request.schema, "summary": request.summary,
-            "allowed_scanners": request.allowed_scanners, "allowed_build_systems": request.allowed_build_systems,
-            "allowed_components": request.allowed_components, "allowed_paths": request.allowed_paths,
-            "allowed_build_units": request.allowed_build_units,
-            "provider": request.provider, "model": request.model, "reasoning": request.reasoning,
-            "max_input_tokens": request.max_input_tokens, "max_output_tokens": request.max_output_tokens,
-            "guidance_sha256": guidance_sha,
-        }
-        encoded_request_bytes = len(canonical_json(request_identity)) + len(guidance.encode("utf-8"))
-        request_sha = hashlib.sha256(canonical_json(request_identity)).hexdigest()
-        if encoded_request_bytes > request.max_input_tokens * 4:
-            gap = "analysis planning summary exceeded the configured model input budget; deterministic safe plan published"
-            plan["coverage_gaps"] = [*plan["coverage_gaps"], gap]
-            plan["model"] = {"status": "BUDGET_EXCEEDED", "proposal_sha256": None}
-            return {"plan": plan, "gaps": [gap], "model_calls": 0, "validation_rejections": 0,
-                    "terminal_status": "COMPLETED_WITH_GAPS"}
-        calls = 0
-        last_error: Exception | None = None
-        for retry in range(int(model["retries"]) + 1):
-            calls += 1
-            invocation = hashlib.sha256(f"{unit.job.run_id}:{unit.job.attempt_id}:{retry}:{request_sha}".encode()).hexdigest()
-            log = PipelineLog(unit.job.run_root)
-            emit_model_event(log, event_type="MODEL_CALL_STARTED", run_id=unit.job.run_id,
-                             invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
-                             reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                             request_sha256=request_sha, retry_count=retry, job_id="job_target_analysis_plan",
-                             attempt_id=unit.job.attempt_id)
-            started = time.monotonic()
-            try:
-                result = model_client.complete(request, timeout_seconds=int(model["timeout_seconds"]))
-                if result.raw_response is not None:
-                    raw = result.raw_response.encode("utf-8")[:2 * 1024 * 1024]
-                    atomic_bytes(unit.unit_root / f"model-response-{retry}.txt", raw)
-                duration = int((time.monotonic() - started) * 1000)
-                errors = validate_proposal(result.proposal, catalog=catalog,
-                                           allowed_components=request.allowed_components,
-                                           allowed_paths=request.allowed_paths)
-                emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
+        prompt_root = unit.job.repository_root / "pipeline" / "prompt-fragments"
+        if not prompt_root.is_dir():
+            prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"
+        persona_path = prompt_root / "personas" / "devops-engineer.md"
+        persona = persona_path.read_text(encoding="utf-8")
+        grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+        for build_unit in summary.get("build_units", ()):
+            grouped.setdefault((str(build_unit["family"]), str(build_unit["build_system"])), []).append(build_unit)
+
+        def infer_group(item: tuple[tuple[str, str], list[Mapping[str, Any]]]) -> dict[str, Any]:
+            (family, build_system), build_units = item
+            role_path = prompt_root / "roles" / f"build-engineer-{family}.md"
+            role = role_path.read_text(encoding="utf-8")
+            guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
+            guidance_sha = hashlib.sha256(guidance_bytes).hexdigest()
+            bundle_root = unit.job.run_root / "data" / "guidance" / guidance_sha
+            atomic_bytes(bundle_root / "persona.md", persona.encode("utf-8"))
+            atomic_bytes(bundle_root / "role.md", role.encode("utf-8"))
+            atomic_bytes(bundle_root / "task.md", guidance.encode("utf-8"))
+            atomic_json(bundle_root / "model-identity.json", {
+                "provider": str(model["provider"]), "model": str(model["model"]),
+                "reasoning": str(model["reasoning"]), "guidance_sha256": guidance_sha,
+                "persona": "devops_engineer", "role": f"build_engineer_{family}",
+                "build_system": build_system,
+            })
+            paths = sorted({str(value["path"]) for build_unit in build_units
+                            for value in (*build_unit.get("markers", ()),
+                                          *build_unit.get("descriptor_package", {}).get("documents", ()))})
+            compact_summary = {**summary, "components": [], "prefixes": [],
+                               "recognized_build_files": [value for value in summary["recognized_build_files"]
+                                                          if str(value["path"]) in paths],
+                               "compile_databases": [value for value in summary["compile_databases"]
+                                                     if str(value["path"]) in paths],
+                               "accepted_artifacts": [], "build_units": build_units}
+            request = ModelRequest(
+                schema=PROPOSAL_SCHEMA, persona=persona, role=role, guidance=guidance,
+                summary=compact_summary, allowed_scanners=(), allowed_build_systems=(build_system,),
+                allowed_components=(), allowed_paths=tuple(paths),
+                allowed_build_units=tuple(str(value["build_unit_id"]) for value in build_units),
+                provider=str(model["provider"]), model=str(model["model"]),
+                reasoning=str(model["reasoning"]), max_input_tokens=int(model["max_input_tokens"]),
+                max_output_tokens=int(model["max_output_tokens"]),
+            )
+            request_identity = {
+                "schema": request.schema, "summary": request.summary, "persona_sha256": hashlib.sha256(persona.encode()).hexdigest(),
+                "role_sha256": hashlib.sha256(role.encode()).hexdigest(), "allowed_paths": request.allowed_paths,
+                "allowed_build_units": request.allowed_build_units, "provider": request.provider,
+                "model": request.model, "reasoning": request.reasoning,
+                "max_input_tokens": request.max_input_tokens, "max_output_tokens": request.max_output_tokens,
+                "guidance_sha256": guidance_sha,
+            }
+            request_sha = hashlib.sha256(canonical_json(request_identity)).hexdigest()
+            if len(canonical_json(request_identity)) + len(guidance_bytes) > request.max_input_tokens * 4:
+                return {"status": "BUDGET_EXCEEDED", "proposal": None, "calls": 0, "errors": [],
+                        "gap": f"{family}/{build_system}: recipe inference exceeded its input budget"}
+            group_catalog = {**catalog, "build_units": build_units}
+            calls = 0
+            errors: list[str] = []
+            last_error: Exception | None = None
+            group_slug = hashlib.sha256(f"{family}:{build_system}".encode()).hexdigest()[:12]
+            for retry in range(int(model["retries"]) + 1):
+                calls += 1
+                invocation = hashlib.sha256(
+                    f"{unit.job.run_id}:{unit.job.attempt_id}:{group_slug}:{retry}:{request_sha}".encode()).hexdigest()
+                log = PipelineLog(unit.job.run_root)
+                emit_model_event(log, event_type="MODEL_CALL_STARTED", run_id=unit.job.run_id,
                     invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
                     reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                    request_sha256=request_sha, terminal_status="REJECTED" if errors else "ACCEPTED",
-                    duration_ms=duration, retry_count=retry, input_tokens=result.input_tokens,
-                    output_tokens=result.output_tokens, cache_tokens=result.cache_tokens,
-                    job_id="job_target_analysis_plan", attempt_id=unit.job.attempt_id)
-                if errors:
-                    unit.job.events.write("ANALYSIS_PLAN_VALIDATION_REJECTED", rejection_count=len(errors),
-                                          proposal_sha256=hashlib.sha256(canonical_json(result.proposal)).hexdigest())
+                    request_sha256=request_sha, retry_count=retry, job_id="job_target_analysis_plan",
+                    attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
+                started = time.monotonic()
+                try:
+                    result = model_client.complete(request, timeout_seconds=int(model["timeout_seconds"]))
+                    if result.raw_response is not None:
+                        atomic_bytes(unit.unit_root / f"model-response-{group_slug}-{retry}.txt",
+                                     result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
+                    errors = validate_proposal(result.proposal, catalog=group_catalog,
+                                               allowed_components=(), allowed_paths=request.allowed_paths)
+                    emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
+                        invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
+                        reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
+                        request_sha256=request_sha, terminal_status="REJECTED" if errors else "ACCEPTED",
+                        duration_ms=int((time.monotonic() - started) * 1000), retry_count=retry,
+                        input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+                        cache_tokens=result.cache_tokens, job_id="job_target_analysis_plan",
+                        attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
+                    if not errors:
+                        return {"status": "ACCEPTED", "proposal": result.proposal, "calls": calls,
+                                "errors": [], "gap": None}
+                    unit.job.events.write("ANALYSIS_PLAN_VALIDATION_REJECTED",
+                        rejection_count=len(errors), build_family=family, build_system=build_system,
+                        proposal_sha256=hashlib.sha256(canonical_json(result.proposal)).hexdigest())
                     if retry < int(model["retries"]):
                         request = replace(request, repair_errors=tuple(errors[:20]),
-                                          prior_response=(result.raw_response or canonical_json(result.proposal).decode("utf-8"))[:131072])
-                        continue
-                    gap = "analysis planning model proposal was rejected after bounded repair; deterministic safe plan published"
-                    plan["coverage_gaps"] = [*plan["coverage_gaps"], gap]
-                    plan["contradictions"] = errors[:20]
-                    plan["model"] = {"status": "REJECTED", "proposal_sha256": hashlib.sha256(canonical_json(result.proposal)).hexdigest()}
-                    return {"plan": plan, "gaps": [gap], "model_calls": calls,
-                            "validation_rejections": len(errors), "terminal_status": "COMPLETED_WITH_GAPS"}
-                accepted = merge_proposal(plan, result.proposal, catalog)
-                return {"plan": accepted, "gaps": [], "model_calls": calls,
-                        "validation_rejections": 0, "terminal_status": "SUCCEEDED"}
-            except Exception as exc:  # model/provider failures are planning gaps, never clean coverage
-                last_error = exc
-                duration = int((time.monotonic() - started) * 1000)
-                emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
-                    invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
-                    reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
-                    request_sha256=request_sha, terminal_status="FAILED", duration_ms=duration,
-                    retry_count=retry, error_class=type(exc).__name__, job_id="job_target_analysis_plan",
-                    attempt_id=unit.job.attempt_id)
-        gap = f"analysis planning model failed after bounded retries ({type(last_error).__name__}); deterministic safe plan published"
-        plan["coverage_gaps"] = [*plan["coverage_gaps"], gap]
-        plan["model"] = {"status": "FAILED", "proposal_sha256": None}
-        return {"plan": plan, "gaps": [gap], "model_calls": calls, "validation_rejections": 0,
-                "terminal_status": "COMPLETED_WITH_GAPS"}
+                            prior_response=canonical_json(result.proposal).decode()[:131072])
+                except Exception as exc:
+                    last_error = exc
+                    raw_response = getattr(exc, "raw_response", None)
+                    if isinstance(raw_response, str):
+                        atomic_bytes(unit.unit_root / f"model-response-{group_slug}-{retry}-invalid.txt",
+                                     raw_response.encode("utf-8")[:2 * 1024 * 1024])
+                        if retry < int(model["retries"]):
+                            rejected_output = getattr(exc, "rejected_output", None)
+                            request = replace(request, repair_errors=(str(exc)[:4096],),
+                                              prior_response=(rejected_output if isinstance(rejected_output, str)
+                                                              else raw_response)[:131072])
+                    emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
+                        invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
+                        reasoning_level=str(model["reasoning"]), guidance_bundle_sha256=guidance_sha,
+                        request_sha256=request_sha, terminal_status="FAILED",
+                        duration_ms=int((time.monotonic() - started) * 1000), retry_count=retry,
+                        error_class=type(exc).__name__, job_id="job_target_analysis_plan",
+                        attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
+            if errors:
+                return {"status": "REJECTED", "proposal": None, "calls": calls, "errors": errors[:20],
+                        "gap": f"{family}/{build_system}: recipe proposal rejected after bounded repair"}
+            return {"status": "FAILED", "proposal": None, "calls": calls, "errors": [],
+                    "gap": f"{family}/{build_system}: recipe inference failed ({type(last_error).__name__})"}
+
+        workers = max(1, min(int(model.get("workers", 4)), len(grouped)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(infer_group, sorted(grouped.items())))
+        accepted_recipes = [recipe for value in results if value["proposal"] is not None
+                            for recipe in value["proposal"]["build_recipes"]]
+        gaps = [str(value["gap"]) for value in results if value["gap"]]
+        errors = [error for value in results for error in value["errors"]]
+        if accepted_recipes:
+            proposal = {"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                        "build_recipes": accepted_recipes}
+            plan = merge_proposal(plan, proposal, catalog)
+            plan["model"] = {"status": "ACCEPTED" if not gaps else "PARTIAL",
+                             "proposal_sha256": hashlib.sha256(canonical_json(proposal)).hexdigest(),
+                             "groups": [{"status": value["status"]} for value in results]}
+        else:
+            terminal_model = "REJECTED" if results and all(value["status"] == "REJECTED" for value in results) else "FAILED"
+            plan["model"] = {"status": terminal_model, "proposal_sha256": None,
+                             "groups": [{"status": value["status"]} for value in results]}
+        plan["coverage_gaps"] = [*plan["coverage_gaps"], *gaps]
+        plan["contradictions"] = [*plan.get("contradictions", []), *errors[:20]]
+        return {"plan": plan, "gaps": gaps, "model_calls": sum(value["calls"] for value in results),
+                "validation_rejections": len(errors),
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def validate(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)

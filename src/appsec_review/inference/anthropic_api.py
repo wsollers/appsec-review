@@ -38,11 +38,13 @@ class AnthropicApiModelClient:
         if request.repair_errors:
             prompt["repair"] = {"validation_errors": request.repair_errors,
                                 "rejected_response": request.prior_response,
-                                "instruction": "Return only one corrected JSON object."}
+                                "instruction": ("Return only one corrected JSON object. Its top-level "
+                                                f"schema must be exactly {request.schema}.")}
         budget = min(_THINKING_BUDGETS.get(request.reasoning, 2048),
                      max(1024, request.max_output_tokens - 1024))
         body: dict[str, Any] = {
             "model": request.model, "max_tokens": request.max_output_tokens,
+            "system": request.persona + "\n\n" + request.role,
             "messages": [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
             "thinking": {"type": "enabled", "budget_tokens": budget},
         }
@@ -72,7 +74,9 @@ class AnthropicApiModelClient:
             stop_reason = str(envelope.get("stop_reason", "unknown"))
             raise ModelOutputError(
                 f"Anthropic response was not a complete {request.schema} object "
-                f"(stop_reason={stop_reason})"
+                f"(stop_reason={stop_reason}; parse_error={exc})",
+                raw_response=raw.decode("utf-8", "replace"),
+                rejected_output=text[:131072],
             ) from exc
         usage = envelope.get("usage", {}) if isinstance(envelope.get("usage"), Mapping) else {}
         return ModelResult(proposal=proposal, input_tokens=usage.get("input_tokens"),

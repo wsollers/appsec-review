@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 
 from appsec_review.config import load_config
-from appsec_review.container_runtime import BuildCommandResult
+from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
+from appsec_review.jobs.job_project_build.job import _probe_environment
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
@@ -37,7 +38,7 @@ class RecipeModel:
                 "dependency_files": [item["path"] for item in unit["markers"]],
                 "configure_commands": configure, "build_commands": build,
                 "expected_outputs": [f"{root}/{'build' if system == 'cmake' else 'target'}"],
-                "network_required": False, "reason": "fixture recipe",
+                "network_required": system == "cargo", "reason": "fixture recipe",
             })
         return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
                             "build_recipes": recipes})
@@ -63,6 +64,22 @@ class FakeBuildExecutor:
         return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
 
 
+class FakeImageResolver:
+    def resolve(self, recipe, profile):
+        identity = __import__("hashlib").sha256(
+            __import__("json").dumps(recipe, sort_keys=True).encode()).hexdigest()
+        return ProjectImage("appsec-review/project-build-image/1", identity, profile.name,
+                            profile.image_id, profile.tag, profile.image_id, None, False, True,
+                            {}), b"", b""
+
+
+def test_probe_environment_preserves_offline_maven_repository() -> None:
+    recipe = {"build_system": "maven", "source_dir": "projects/java/sample",
+              "environment": {"MAVEN_OPTS": "-Dmaven.artifact.threads=1"}}
+    assert _probe_environment(recipe)["MAVEN_OPTS"] == (
+        "-Dmaven.repo.local=/opt/project-deps/maven -Dmaven.artifact.threads=1")
+
+
 def _fixture(tmp_path: Path):
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
@@ -83,17 +100,21 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]).run(
         target_root=target, source_fingerprint=fingerprint)
     calls = []
-    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls))
+    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+                         image_resolver_factory=lambda unit: FakeImageResolver())
     outcome = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                              run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    assert accepted["artifact_count"] == 2
-    assert {item["family"] for item in accepted["builds"]} == {"native", "rust"}
+    assert accepted["probe_artifact_count"] == 2
+    assert {item["family"] for item in accepted["probe_receipts"]} == {"native", "rust"}
+    assert {item["family"] for item in accepted["static_dispatches"]
+            if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
+    assert {item["workflow"] for item in accepted["build_dispatches"]} == {"lang_jobflow_build"}
     assert all(item["executor_identity"] == "appsec-review/build-container-executor/2"
-               for item in accepted["builds"])
+               for item in accepted["probe_receipts"])
     assert all((config.runtime.runs_dir / upstream["run_id"] / artifact["path"]).is_file()
-               for build in accepted["builds"] for artifact in build["artifacts"])
+               for build in accepted["probe_receipts"] for artifact in build["artifacts"])
     assert calls == [
         ("cmake", "-S", ".", "-B", "build"),
         ("cmake", "--build", "build"),
@@ -103,12 +124,17 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
 
 def test_project_build_has_independent_language_branches(tmp_path: Path) -> None:
     config, _target = _fixture(tmp_path)
-    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor([]))
+    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor([]),
+                         image_resolver_factory=lambda unit: FakeImageResolver())
     graph = plan_jobs((job,), config)
     for family in ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm"):
-        assert graph.node(f"job_project_build.build.{family}").dependencies == (
+        assert graph.node(f"job_project_build.image.{family}").dependencies == (
             "job_project_build.plan.load_recipes",)
-    assert len(graph.node("job_project_build.acceptance.publish_handoff").dependencies) == 9
+        assert graph.node(f"job_project_build.probe.{family}").dependencies == (
+            f"job_project_build.image.{family}",)
+        assert graph.node(f"job_project_build.build_dispatch.{family}").dependencies == (
+            f"job_project_build.image.{family}", f"job_project_build.probe.{family}")
+    assert len(graph.node("job_project_build.acceptance.publish_handoff").dependencies) == 19
 
 
 def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Path) -> None:
@@ -126,12 +152,61 @@ def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Pat
                                    working_directory=working_directory,
                                    environment=environment)
 
-    job = build_projects(executor_factory=lambda unit, profile: Selective([]))
+    job = build_projects(executor_factory=lambda unit, profile: Selective([]),
+                         image_resolver_factory=lambda unit: FakeImageResolver())
     outcome = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                              run_id=upstream["run_id"])
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    native = next(item for item in accepted["builds"] if item["family"] == "native")
-    rust = next(item for item in accepted["builds"] if item["family"] == "rust")
+    native = next(item for item in accepted["probe_receipts"] if item["family"] == "native")
+    rust = next(item for item in accepted["probe_receipts"] if item["family"] == "rust")
     assert native["terminal_status"] == "SUCCEEDED" and native["artifacts"]
     assert rust["terminal_status"] == "FAILED" and rust["gaps"]
+    assert {item["family"] for item in accepted["static_dispatches"]
+            if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
+    assert {item["family"] for item in accepted["build_dispatches"]} == {"native"}
+
+
+def test_unchanged_recipe_reuses_probe_across_application_runs(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    calls: list[tuple[str, ...]] = []
+    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+                         image_resolver_factory=lambda unit: FakeImageResolver())
+    run_ids = []
+    for _ in range(2):
+        upstream = GraphRunner(
+            config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+        ).run(target_root=target, source_fingerprint=fingerprint)
+        run_ids.append(upstream["run_id"])
+        GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
+                                      run_id=upstream["run_id"])
+    assert len(calls) == 3
+    second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
+    assert {item["probe_disposition"] for item in second["probe_receipts"]} == {"REUSED"}
+    assert all(item["probe_disposition"] == "REUSED" for item in second["build_dispatches"])
+
+
+def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
+    config_path = tmp_path / "appsec-review.toml"
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    config_path.write_text(source.replace("force_buildability_probe = false",
+                                          "force_buildability_probe = true"), encoding="utf-8")
+    target = tmp_path / "target"
+    (target / "native").mkdir(parents=True)
+    (target / "native" / "CMakeLists.txt").write_text("project(sample)\n", encoding="utf-8")
+    (target / "native" / "main.cpp").write_text("int main(){}\n", encoding="utf-8")
+    config, fingerprint = load_config(config_path), source_fingerprint(target)
+    calls: list[tuple[str, ...]] = []
+    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+                         image_resolver_factory=lambda unit: FakeImageResolver())
+    for _ in range(2):
+        upstream = GraphRunner(
+            config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+        ).run(target_root=target, source_fingerprint=fingerprint)
+        GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
+                                      run_id=upstream["run_id"])
+    assert calls == [("cmake", "-S", ".", "-B", "build"),
+                     ("cmake", "--build", "build"),
+                     ("cmake", "-S", ".", "-B", "build"),
+                     ("cmake", "--build", "build")]

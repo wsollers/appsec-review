@@ -47,6 +47,28 @@ def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, b
         return None, exc.stdout or b"", exc.stderr or b"", True
 
 
+def resolve_host_bind_path(path: Path, runner: Runner) -> Path:
+    """Resolve a path through the current container's bind mounts for sibling Docker runs."""
+    hostname = os.environ.get("HOSTNAME")
+    if not hostname or not Path("/.dockerenv").exists():
+        return path
+    code, stdout, _stderr, timed_out = runner(
+        ("docker", "inspect", hostname, "--format", "{{json .Mounts}}"), 60)
+    if timed_out or code != 0:
+        raise RuntimeError("could not resolve build workspace host mount")
+    candidates: list[tuple[int, Path]] = []
+    for mount in json.loads(stdout.decode("utf-8", "replace")):
+        destination = Path(str(mount.get("Destination", "")))
+        try:
+            relative = path.relative_to(destination)
+        except ValueError:
+            continue
+        candidates.append((len(destination.parts), Path(str(mount["Source"])) / relative))
+    if not candidates:
+        raise RuntimeError("build workspace is not backed by a host mount")
+    return max(candidates, key=lambda item: item[0])[1]
+
+
 class BuildContainerExecutor:
     """Run already-validated argv in an immutable, network-disabled build image."""
 
@@ -66,24 +88,7 @@ class BuildContainerExecutor:
             raise ValueError(f"build image identity changed: {self.profile.name}")
 
     def _bind_source(self, path: Path) -> Path:
-        hostname = os.environ.get("HOSTNAME")
-        if not hostname or not Path("/.dockerenv").exists():
-            return path
-        code, stdout, _stderr, timed_out = self.runner(
-            ("docker", "inspect", hostname, "--format", "{{json .Mounts}}"), 60)
-        if timed_out or code != 0:
-            raise RuntimeError("could not resolve build workspace host mount")
-        candidates: list[tuple[int, Path]] = []
-        for mount in json.loads(stdout.decode("utf-8", "replace")):
-            destination = Path(str(mount.get("Destination", "")))
-            try:
-                relative = path.relative_to(destination)
-            except ValueError:
-                continue
-            candidates.append((len(destination.parts), Path(str(mount["Source"])) / relative))
-        if not candidates:
-            raise RuntimeError("build workspace is not backed by a host mount")
-        return max(candidates, key=lambda item: item[0])[1]
+        return resolve_host_bind_path(path, self.runner)
 
     def execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
                 environment: Mapping[str, str]) -> BuildCommandResult:

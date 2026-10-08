@@ -23,7 +23,9 @@ def load_registry(repository_root: Path) -> dict[str, Any]:
     registry = json.loads(path.read_text(encoding="utf-8"))
     if registry.get("schema") != "appsec-review/guidance-registry/1":
         raise ValueError("unsupported guidance registry")
-    if set(registry.get("roles", {})) != ROLES or set(registry.get("personas", {})) != PERSONAS:
+    # This workbench owns and requires its bounded subset. The repository registry may also
+    # contain roles/personas for other jobs; those do not widen this workbench's allowlists.
+    if not ROLES <= set(registry.get("roles", {})) or not PERSONAS <= set(registry.get("personas", {})):
         raise ValueError("role/persona registry is incomplete")
     for name, value in registry["roles"].items():
         if set(value) != {"responsibility"} or not str(value["responsibility"]).strip():

@@ -64,13 +64,17 @@ class _Model:
 
     def complete(self, request, *, timeout_seconds):
         self.calls += 1
-        assert request.guidance and timeout_seconds > 0
+        assert request.persona and request.role and request.guidance and timeout_seconds > 0
         summarized_paths = {
             item["path"] for prefix in request.summary["prefixes"] for item in prefix["sample"]
         } | {
             item["path"]
             for key in ("recognized_build_files", "compile_databases", "accepted_artifacts")
             for item in request.summary[key]
+        } | {
+            item["path"] for unit in request.summary.get("build_units", ())
+            for item in (*unit.get("markers", ()),
+                         *unit.get("descriptor_package", {}).get("documents", ()))
         }
         assert set(request.allowed_paths) == summarized_paths
         assert len(request.allowed_paths) <= request.summary["bounds"]["max_items"]
@@ -102,7 +106,8 @@ def _proposal(request, component_proposals=()):
             "system_packages": [], "environment": {},
             "dependency_files": [item["path"] for item in unit["markers"]],
             "configure_commands": commands[0], "build_commands": commands[1],
-            "expected_outputs": [build_dir], "network_required": False,
+            "expected_outputs": [build_dir], "network_required": system in {
+                "cargo", "go", "maven", "gradle", "dotnet", "node", "composer", "python"},
             "reason": "fixture recipe derived from accepted descriptors",
         })
     return {"schema": PROPOSAL_SCHEMA, "component_proposals": list(component_proposals),
@@ -118,22 +123,21 @@ def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: P
         "ops/tool.sh": "echo ok\n",
     }
     config, target = _fixture(tmp_path, files, model_enabled=True)
-    component_id = "component:0001"
-    model = _Model(lambda request: _proposal(request, [{
-        "component_id": component_id, "scanner_ids": ["tool-gosec"], "build_systems": ["go"],
-        "scope_paths": ["api/main.go"], "dependencies": [], "reason": "bounded contextual refinement",
-    }]))
+    model = _Model(lambda request: _proposal(request))
     outcome, plan = _run(config, target, build_job(model_client=model))
-    assert model.calls == 1
+    assert model.calls == 4
     assert plan["model"]["status"] == "ACCEPTED"
     assert plan["provenance"] == "model-assisted"
     run_root = config.runtime.runs_dir / outcome["run_id"]
     events = [json.loads(line) for line in (run_root / "data/logs/pipeline.jsonl").read_text().splitlines()]
     model_events = [item for item in events if item["event_type"].startswith("MODEL_CALL_")]
-    assert [item["event_type"] for item in model_events] == ["MODEL_CALL_STARTED", "MODEL_CALL_COMPLETED"]
-    assert model_events[-1]["details"]["input_tokens"] == 20
+    assert len([item for item in model_events if item["event_type"] == "MODEL_CALL_STARTED"]) == 4
+    assert len([item for item in model_events if item["event_type"] == "MODEL_CALL_COMPLETED"]) == 4
+    assert all(item["details"]["input_tokens"] == 20 for item in model_events
+               if item["event_type"] == "MODEL_CALL_COMPLETED")
     assert not {"prompt", "response", "model_output", "source_text"} & set(model_events[-1]["details"])
-    assert list((run_root / "data/guidance").glob("*/SKILL.md"))
+    assert list((run_root / "data/guidance").glob("*/persona.md"))
+    assert list((run_root / "data/guidance").glob("*/role.md"))
 
 
 def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path) -> None:
@@ -150,7 +154,8 @@ def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path
     }]))
     outcome, plan = _run(config, target, build_job(model_client=model))
     assert plan["model"]["status"] == "REJECTED"
-    assert plan["coverage_gaps"][-1].startswith("analysis planning model proposal was rejected")
+    assert all("recipe proposal rejected after bounded repair" in gap
+               for gap in plan["coverage_gaps"][-4:])
     assert {"tool-gitleaks", "tool-semgrep", "tool-syft"} <= {
         item["scanner_id"] for item in plan["scanner_selections"]}
     assert outcome["jobs"]["job_target_analysis_plan"]["status"]["status"] == "COMPLETED_WITH_GAPS"
@@ -246,7 +251,7 @@ def test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path: Path) ->
 
     model = FailingModel()
     outcome, plan = _run(config, target, build_job(model_client=model))
-    assert model.calls == 2
+    assert model.calls == 8
     assert plan["model"]["status"] == "FAILED"
-    assert any("failed after bounded retries (TimeoutError)" in gap for gap in plan["coverage_gaps"])
+    assert any("recipe inference failed (TimeoutError)" in gap for gap in plan["coverage_gaps"])
     assert outcome["jobs"]["job_target_analysis_plan"]["status"]["status"] == "COMPLETED_WITH_GAPS"

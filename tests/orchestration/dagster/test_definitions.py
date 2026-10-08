@@ -215,9 +215,10 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "target_analysis_plan__analysis_decisions__apply_deterministic_rules",
         "target_analysis_plan__plan_acceptance__index_plan",
         "project_build__plan__load_recipes",
-        "project_build__build__native",
-        "project_build__build__rust",
-        "project_build__build__go",
+        "project_build__image__native",
+        "project_build__static_dispatch__native",
+        "project_build__probe__native",
+        "project_build__build_dispatch__native",
         "project_build__acceptance__publish_handoff",
         "cpp_compiled_analysis__plan__accepted_cpp_plan",
         "cpp_compiled_analysis__compile__projects",
@@ -257,9 +258,11 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
     assert "target_analysis_plan__finalize" in upstream("project_build__begin")
     assert "project_build__finalize" in upstream("cpp_compiled_analysis__begin")
-    assert len(upstream("project_build__acceptance__publish_handoff")) == 10
+    assert len(upstream("project_build__acceptance__publish_handoff")) == 20
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
-    assert "post_build_security_assessment__finalize" in upstream("evidence_collection__begin")
+    assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")
+    assert "post_build_security_assessment__finalize" in upstream("owasp_control_assessment__begin")
+    assert "evidence_collection__finalize" in upstream("owasp_control_assessment__begin")
     assert upstream("cpp_compiled_analysis__ast__projects") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     assert upstream("cpp_compiled_analysis__ir__projects") == {
