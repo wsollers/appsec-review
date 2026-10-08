@@ -57,6 +57,56 @@ The follow-on work should:
 - validate the executor with synthetic fixtures first, then representative larger native projects,
   while preserving gaps for unsupported platform or toolchain combinations.
 
+## Add Android, iOS, and Unity application coverage
+
+After the Linux execution vertical is accepted, extend the same discovery, recipe, provenance,
+artifact, indexing, and gap contracts to mobile applications and Unity projects. Keep source-only
+analysis useful before the corresponding platform build executor is available.
+
+Android work should:
+
+- discover Gradle/Android Gradle Plugin projects, modules, variants, manifests, resources, Java,
+  Kotlin, JNI/NDK, native libraries, dependency catalogs, signing configuration references, and
+  generated sources without retaining signing secrets;
+- run selected source scanners, including the existing pinned `tool-mobsfscan` lane, before a build
+  is available;
+- build accepted variants in a pinned Linux Android SDK/NDK/JDK image, capture Gradle, Java/Kotlin,
+  native compiler/linker, resource, DEX, packaging, and signing-tool provenance, and retain APK/AAB,
+  mapping, symbol, manifest, SBOM, and native-library artifacts;
+- add bounded APK/AAB MobSF artifact analysis when a reviewed full MobSF runtime is available; and
+- correlate mobile, JVM, native, dependency, manifest, exported-component, permission, and binary
+  observations through shared component and source identities.
+
+iOS work should:
+
+- discover Xcode projects/workspaces, schemes, targets, Swift packages, CocoaPods, Objective-C,
+  Swift, C/C++, entitlements, privacy manifests, resources, frameworks, and extensions;
+- keep source scanning and configuration assessment available on non-macOS workers;
+- use an ephemeral, centrally configured macOS executor for accepted `xcodebuild`, Clang, Swift,
+  linker, asset compiler, interface builder, package, archive, and codesign-metadata capture;
+- retain bounded IPA/app/framework, symbol, dependency, entitlement, privacy, and signing-metadata
+  evidence without retaining signing credentials or executing the application; and
+- publish an explicit platform gap when the required macOS/Xcode capability is unavailable.
+
+Unity work should:
+
+- recognize projects from `Assets`, `Packages`, `ProjectSettings`, assembly definitions, package
+  manifests, scripting backend, platform targets, plugins, native libraries, and recorded editor
+  version;
+- statically analyze C#, shaders, scripts, configuration, packages, managed assemblies, native
+  plugins, and IL2CPP-generated C++ when those artifacts already exist;
+- capture Unity batch-build, compiler, linker, shader compiler, asset pipeline, managed assembly,
+  IL2CPP, packaging, and platform-tool invocations through the generic protected provenance model;
+- shard evidence by project, assembly, package, scene, plugin, platform, configuration, and build
+  target without exposing project assets to inference unnecessarily; and
+- require a centrally configured licensed Unity runtime for builds. If that capability is absent,
+  publish a named build-coverage gap while continuing source, package, configuration, and available
+  artifact analysis.
+
+Acceptance requires synthetic Android, iOS, and Unity fixtures; failure/resume and unavailable-
+platform tests; bounded MobSF/MobSFScan integration tests; and live Dagster runs on workers that
+actually provide each enabled platform capability.
+
 ## Add `grype_db_sync` to `job_third_party_data_sync`
 
 The archived pre-refactor tree was inspected for a reusable Grype database. It contains a Grype
