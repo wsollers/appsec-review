@@ -158,7 +158,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
             "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
-            "job_language_build", "job_artifact_indexing",
+            "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
         )))
         for job_id in job_ids:
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
