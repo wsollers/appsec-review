@@ -196,6 +196,7 @@ def build_job(
             "schema": "appsec-review/global-job-metadata/1", "job_id": "job_third_party_data_sync",
             "updated_at": stamp(), "run_id": context.run_id, "attempt_id": context.attempt_id,
             "trigger": context.trigger, "status": result["status"], "steps": result["steps"],
+            "orchestration": dict(context.orchestration),
             "failed_units": result["failed_units"], "skipped_units": result["skipped_units"],
         })
         return result

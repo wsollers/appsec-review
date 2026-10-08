@@ -1,9 +1,9 @@
 # Third-party data synchronization
 
 `job_third_party_data_sync` is the Dagster-independent runtime job that refreshes external reference
-data. Its schedule is declared once in `appsec-review.toml`: nightly at `00:00 UTC`. Dagster may
-later launch this job, but the Python runtime remains the authority for dependency ordering,
-validation, receipts, and publication.
+data. Its schedule is declared once in `appsec-review.toml`: nightly at `00:00 UTC`. The production
+Dagster deployment launches this same job for both console and scheduled runs, while the Python
+runtime remains the authority for dependency ordering, validation, receipts, and publication.
 
 ## Topology and failure behavior
 
@@ -68,7 +68,10 @@ generated local state and must not be committed.
 
 ## Operation
 
-Run the normal runtime path from the repository root:
+Production operators should launch and verify through Dagster using the exact commands in
+[`deploy/dagster/README.md`](../../deploy/dagster/README.md). The console is available at
+<http://localhost:3000>. Direct runtime invocation remains useful for local diagnosis but is not the
+Dagster acceptance path:
 
 ```powershell
 python -m appsec_review run job_third_party_data_sync --trigger manual

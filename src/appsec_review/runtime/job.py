@@ -17,6 +17,7 @@ class JobContext:
     run_root: Path
     attempt_root: Path
     metadata_root: Path
+    orchestration: Mapping[str, str]
     config: JobConfig
     events: EventLog
 

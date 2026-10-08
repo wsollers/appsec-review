@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import traceback
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from appsec_review.config import AppConfig
@@ -40,6 +41,7 @@ class JobRunner:
         *,
         run_id: str | None = None,
         trigger: str = "manual",
+        orchestration: Mapping[str, str] | None = None,
         now: datetime | None = None,
     ) -> Mapping[str, Any]:
         instant = now or datetime.now(timezone.utc)
@@ -66,6 +68,10 @@ class JobRunner:
             raise RuntimeError(f"attempt id space exhausted for {run_id}/{job.job_id}")
 
         events = EventLog(attempt_root / "logs" / "events.jsonl")
+        orchestration = dict(orchestration or {})
+        if any(not isinstance(key, str) or not isinstance(value, str)
+               for key, value in orchestration.items()):
+            raise ValueError("orchestration correlation must contain string keys and values")
         context = JobContext(
             run_id=run_id,
             attempt_id=attempt_id,
@@ -74,6 +80,7 @@ class JobRunner:
             run_root=run_root,
             attempt_root=attempt_root,
             metadata_root=self.config.runtime.metadata_dir,
+            orchestration=MappingProxyType(orchestration),
             config=job_config,
             events=events,
         )
@@ -83,10 +90,12 @@ class JobRunner:
             "run_id": run_id,
             "attempt_id": attempt_id,
             "trigger": trigger,
+            "orchestration": orchestration,
             "status": "RUNNING",
             "started_at": started,
         })
-        events.write("JOB_STARTED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id, trigger=trigger)
+        events.write("JOB_STARTED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id,
+                     trigger=trigger, orchestration=orchestration)
         try:
             result = dict(job.execute(context))
             atomic_json(attempt_root / "result.json", result)
@@ -99,6 +108,7 @@ class JobRunner:
                 "run_id": run_id,
                 "attempt_id": attempt_id,
                 "trigger": trigger,
+                "orchestration": orchestration,
                 "status": "SUCCEEDED",
                 "started_at": started,
                 "completed_at": completed,
@@ -113,6 +123,7 @@ class JobRunner:
                 "run_id": run_id,
                 "attempt_id": attempt_id,
                 "trigger": trigger,
+                "orchestration": orchestration,
                 "status": "FAILED",
                 "started_at": started,
                 "completed_at": failed,

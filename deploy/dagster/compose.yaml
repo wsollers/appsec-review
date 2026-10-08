@@ -37,6 +37,7 @@ services:
 
   code-location:
     <<: *dagster-service
+    container_name: appsec-review-dagster-code-location
     build:
       context: ../..
       dockerfile: deploy/dagster/Dockerfile
@@ -56,6 +57,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - dagster-storage:/var/dagster
+      - ../../runs:/opt/app/runs
+      - ../../data:/opt/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "127.0.0.1", "-p", "4000"]
       interval: 5s

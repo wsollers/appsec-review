@@ -93,11 +93,13 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                                  errors="replace", check=True)
     image_id = inspect.stdout.strip()
+    bind_input = _docker_bind_source(input_dir.resolve())
+    bind_output = _docker_bind_source(output_dir.resolve())
     command = [
         "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--pids-limit", "128", "--user", "65532:65532",
-        "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "-v", f"{input_dir.resolve()}:/input:ro",
-        "-v", f"{output_dir.resolve()}:/output:rw", "--entrypoint", "python", settings.image,
+        "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "-v", f"{bind_input}:/input:ro",
+        "-v", f"{bind_output}:/output:rw", "--entrypoint", "python", settings.image,
         "/opt/builder/build_db.py", "/input", "/output",
     ]
     completed = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
@@ -107,6 +109,37 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
     if completed.returncode != 0:
         raise RuntimeError(f"cve-bin-tool database build failed with exit {completed.returncode}")
     return {"image": settings.image, "image_id": image_id, "tool_version": settings.tool_version}
+
+
+def _docker_bind_source(path: Path) -> Path:
+    """Translate a path in the Dagster container to its Docker-host bind source."""
+
+    hostname = os.environ.get("HOSTNAME")
+    if not hostname or not Path("/.dockerenv").exists():
+        return path
+    inspected = subprocess.run(
+        ["docker", "inspect", hostname, "--format", "{{json .Mounts}}"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if inspected.returncode != 0:
+        raise RuntimeError(f"could not inspect Dagster container mounts: {inspected.stderr[-2000:]}")
+    mounts = json.loads(inspected.stdout)
+    candidates: list[tuple[int, Path]] = []
+    for mount in mounts:
+        destination = Path(str(mount.get("Destination", "")))
+        try:
+            relative = path.relative_to(destination)
+        except ValueError:
+            continue
+        candidates.append((len(destination.parts), Path(str(mount["Source"])) / relative))
+    if not candidates:
+        raise RuntimeError(f"Docker build path is not backed by a host mount: {path}")
+    return max(candidates, key=lambda item: item[0])[1]
 
 
 def _check(directory: Path, tool_version: str) -> dict[str, Any]:
@@ -133,13 +166,17 @@ def build(settings: CveBinToolSettings, resolved: Mapping[str, Any], work: Path,
     output_dir = work / "output"
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.chmod(0o777)
     for index, layer in enumerate(resolved["layers"]):
         source = Path(layer["path"])
         target = input_dir / f"{index:06d}.json.gz"
         shutil.copyfile(source, target)
         if target.stat().st_size != layer["size_bytes"] or file_sha256(target) != layer["sha256"]:
             raise ValueError("NVD layer changed while staging cve-bin-tool input")
-    tool = dict((runner or _docker_builder)(settings, input_dir.parent, output_dir))
+    try:
+        tool = dict((runner or _docker_builder)(settings, input_dir.parent, output_dir))
+    finally:
+        output_dir.chmod(0o755)
     facts = _check(output_dir, settings.tool_version)
     return {"schema": "appsec-review/cve-bin-tool-build/1", "directory": str(output_dir),
             "nvd_snapshot_id": resolved["snapshot_id"], "nvd_manifest_sha256": resolved["manifest_sha256"],

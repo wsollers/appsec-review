@@ -1,0 +1,38 @@
+{
+  "application_run_id": "2026-10-08-0004",
+  "dagster_run_id": "a6a07c85-e697-4f59-a3e5-6bd31cb9d713",
+  "gaps": {
+    "failed_units": [],
+    "skipped_units": []
+  },
+  "metadata_keys": [
+    "application_attempt_id",
+    "application_result_receipt",
+    "application_run_id",
+    "application_status",
+    "application_status_receipt",
+    "counts",
+    "dagster_run_id",
+    "gaps",
+    "published_snapshot_identities",
+    "step_statuses",
+    "trigger",
+    "unit_receipt_paths",
+    "unit_statuses"
+  ],
+  "per_unit_receipt_metadata_count": 12,
+  "unit_statuses": {
+    "cve_bin_tool_db_build.build": "SUCCEEDED",
+    "cve_bin_tool_db_build.publish": "SUCCEEDED",
+    "cve_bin_tool_db_build.resolve_nvd_snapshot": "SUCCEEDED",
+    "mitre_sync.fetch": "SUCCEEDED",
+    "mitre_sync.normalize": "SUCCEEDED",
+    "mitre_sync.publish": "SUCCEEDED",
+    "nvd_sync.fetch": "SUCCEEDED",
+    "nvd_sync.process": "SUCCEEDED",
+    "nvd_sync.publish": "SUCCEEDED",
+    "osv_sync.fetch": "SUCCEEDED",
+    "osv_sync.index": "SUCCEEDED",
+    "osv_sync.publish": "SUCCEEDED"
+  }
+}

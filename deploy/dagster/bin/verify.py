@@ -1,4 +1,4 @@
-"""Verify the live webserver, code location, semantic jobs, and schedules."""
+"""Verify the live deployment and optionally a completed production run."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import tomllib
 import urllib.request
 
 
-QUERY = """
+WORKSPACE_QUERY = """
 query VerifyDeployment {
   repositoriesOrError {
     __typename
@@ -19,9 +19,31 @@ query VerifyDeployment {
         name
         location { name }
         pipelines { name }
-        schedules { name cronSchedule executionTimezone }
+        schedules {
+          name
+          cronSchedule
+          executionTimezone
+          scheduleState { status }
+        }
       }
     }
+    ... on PythonError { message }
+  }
+}
+"""
+
+RUN_QUERY = """
+query VerifyRun($runId: ID!) {
+  runOrError(runId: $runId) {
+    __typename
+    ... on Run {
+      runId
+      status
+      pipelineName
+      tags { key value }
+      stepStats { stepKey status }
+    }
+    ... on RunNotFoundError { message }
     ... on PythonError { message }
   }
 }
@@ -39,12 +61,9 @@ def request_json(url: str, body: dict | None = None) -> dict:
         return json.load(response)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://127.0.0.1:3000")
-    args = parser.parse_args()
-    request_json(f"{args.url}/server_info")
-    payload = request_json(f"{args.url}/graphql", {"query": QUERY})
+def _workspace(url: str, document: dict) -> dict:
+    request_json(f"{url}/server_info")
+    payload = request_json(f"{url}/graphql", {"query": WORKSPACE_QUERY})
     result = payload.get("data", {}).get("repositoriesOrError", {})
     if result.get("__typename") != "RepositoryConnection":
         raise SystemExit(f"Dagster repository query failed: {result}")
@@ -56,14 +75,16 @@ def main() -> int:
     if location is None:
         raise SystemExit("Dagster code location appsec_review is not connected")
     jobs = sorted(item["name"] for item in location["pipelines"])
-    schedules = sorted(item["name"] for item in location["schedules"])
-    config_path = Path(__file__).resolve().parents[3] / "appsec-review.toml"
-    config_jobs = tomllib.loads(config_path.read_text(encoding="utf-8"))["jobs"]
-    expected_jobs = sorted(value["name"] for value in config_jobs.values())
+    schedules = sorted(location["schedules"], key=lambda item: item["name"])
+    expected_jobs = sorted(value["name"] for value in document["jobs"].values())
     expected_schedules = sorted(
-        f"{value['name']}_schedule"
-        for value in config_jobs.values()
-        if "schedule" in value
+        ({
+            "name": f"{value['name']}_schedule",
+            "cronSchedule": value["schedule"]["cron"],
+            "executionTimezone": value["schedule"]["timezone"],
+            "scheduleState": {"status": "RUNNING" if value["schedule"]["enabled"] else "STOPPED"},
+        } for value in document["jobs"].values() if "schedule" in value),
+        key=lambda item: item["name"],
     )
     if jobs != expected_jobs or schedules != expected_schedules:
         raise SystemExit(
@@ -71,12 +92,129 @@ def main() -> int:
             f"expected jobs={expected_jobs}, schedules={expected_schedules}; "
             f"found jobs={jobs}, schedules={schedules}"
         )
-    print(json.dumps({
+    return {
         "webserver": "healthy",
         "code_location": "appsec_review",
         "jobs": jobs,
         "schedules": schedules,
-    }, sort_keys=True))
+    }
+
+
+def _relative(repository: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repository.resolve()).as_posix()
+    except ValueError:
+        return str(path.resolve())
+
+
+def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
+    payload = request_json(
+        f"{url}/graphql",
+        {"query": RUN_QUERY, "variables": {"runId": run_id}},
+    )
+    run = payload.get("data", {}).get("runOrError", {})
+    if run.get("__typename") != "Run":
+        raise SystemExit(f"Dagster run query failed: {run}")
+    if run.get("status") != "SUCCESS" or run.get("pipelineName") != "third_party_data_sync":
+        raise SystemExit(f"Dagster run is not a successful third_party_data_sync run: {run}")
+    tags = {item["key"]: item["value"] for item in run.get("tags", [])}
+    application_run_id = tags.get("appsec/application_run_id")
+    attempt_id = tags.get("appsec/application_attempt_id")
+    if not application_run_id or not attempt_id:
+        raise SystemExit("Dagster run does not contain application correlation tags")
+
+    job_id = "job_third_party_data_sync"
+    runs_dir = repository / document["runtime"]["runs_dir"]
+    attempt = runs_dir / application_run_id / "data" / "jobs" / job_id / "attempts" / attempt_id
+    status_path = attempt / "status.json"
+    result_path = attempt / "result.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    if status.get("status") != "SUCCEEDED" or result.get("status") != "SUCCEEDED":
+        raise SystemExit(f"application receipts are not successful: status={status}, result={result}")
+    if status.get("orchestration") != {"system": "dagster", "run_id": run_id}:
+        raise SystemExit("application status receipt does not link to the Dagster run")
+
+    configured = document["jobs"][job_id]
+    expected_units = {
+        f"{step_id}.{task_id}"
+        for step_id, step in configured["steps"].items()
+        for task_id in step["tasks"]
+    }
+    unit_statuses = {
+        unit_id: receipt.get("status") for unit_id, receipt in result.get("units", {}).items()
+    }
+    if set(unit_statuses) != expected_units or set(unit_statuses.values()) != {"SUCCEEDED"}:
+        raise SystemExit(f"application unit receipt mismatch: {unit_statuses}")
+
+    snapshots: dict[str, dict] = {}
+    for step_id, step in configured["steps"].items():
+        publication = result["outputs"].get(f"{step_id}.publish")
+        if publication is None:
+            continue
+        feed_root = repository / step["settings"]["feed_root"]
+        current_path = feed_root / "current.json"
+        pointer = json.loads(current_path.read_text(encoding="utf-8"))
+        identity = publication["identity"]
+        if pointer.get("snapshot_id") != identity.get("snapshot_id"):
+            raise SystemExit(f"{step_id} current pointer does not resolve to the published identity")
+        manifest = feed_root / "snapshots" / pointer["snapshot_id"] / "manifest.json"
+        if not manifest.is_file():
+            raise SystemExit(f"{step_id} published manifest does not resolve: {manifest}")
+        snapshots[step_id] = {
+            "snapshot_id": identity["snapshot_id"],
+            "manifest_sha256": pointer.get("manifest_sha256"),
+            "current_pointer": _relative(repository, current_path),
+            "manifest": _relative(repository, manifest),
+        }
+
+    receipts = {
+        unit_id: _relative(
+            repository,
+            attempt / "steps" / receipt["step_id"] / "tasks" / receipt["task_id"] / "status.json",
+        )
+        for unit_id, receipt in result["units"].items()
+    }
+    return {
+        "dagster_run": {
+            "run_id": run_id,
+            "status": run["status"],
+            "job": run["pipelineName"],
+            "step_statuses": {item["stepKey"]: item["status"] for item in run.get("stepStats", [])},
+        },
+        "application_run": {
+            "run_id": application_run_id,
+            "attempt_id": attempt_id,
+            "status": status["status"],
+            "trigger": status["trigger"],
+            "status_receipt": _relative(repository, status_path),
+            "result_receipt": _relative(repository, result_path),
+            "unit_statuses": unit_statuses,
+            "unit_receipts": receipts,
+            "failed_units": result.get("failed_units", []),
+            "skipped_units": result.get("skipped_units", []),
+        },
+        "published_snapshots": snapshots,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default="http://127.0.0.1:3000")
+    parser.add_argument("--run-id", help="also verify this completed Dagster run and its application receipts")
+    parser.add_argument("--evidence", type=Path, help="write the concise verification report to this path")
+    args = parser.parse_args()
+    repository = Path(__file__).resolve().parents[3]
+    config_path = repository / "appsec-review.toml"
+    document = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    report = {"deployment": _workspace(args.url, document)}
+    if args.run_id:
+        report["acceptance_run"] = _run(args.url, args.run_id, repository, document)
+    if args.evidence:
+        args.evidence.parent.mkdir(parents=True, exist_ok=True)
+        with args.evidence.open("w", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    print(json.dumps(report, sort_keys=True))
     return 0
 
 

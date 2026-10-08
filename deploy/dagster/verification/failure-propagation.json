@@ -1,0 +1,17 @@
+{
+  "application_run": {
+    "attempt_id": "attempt_0001",
+    "failed_unit": "cve_bin_tool_db_build.build",
+    "run_id": "2026-10-08-0003",
+    "skipped_unit": "cve_bin_tool_db_build.publish",
+    "status": "FAILED",
+    "status_receipt": "runs/2026-10-08-0003/data/jobs/job_third_party_data_sync/attempts/attempt_0001/status.json"
+  },
+  "dagster_run": {
+    "run_id": "f0bb348f-f4ac-43a6-a122-bcff288f5f5f",
+    "status": "FAILURE",
+    "step": "dispatch_job_third_party_data_sync",
+    "step_status": "FAILURE"
+  },
+  "purpose": "bounded live proof that an application terminal failure fails the Dagster run"
+}

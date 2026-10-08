@@ -1,0 +1,93 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "attempt_id": "attempt_0001",
+      "failed_units": [],
+      "result_receipt": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/result.json",
+      "run_id": "2026-10-08-0004",
+      "skipped_units": [],
+      "status": "SUCCEEDED",
+      "status_receipt": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/status.json",
+      "trigger": "manual",
+      "unit_receipts": {
+        "cve_bin_tool_db_build.build": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/cve_bin_tool_db_build/tasks/build/status.json",
+        "cve_bin_tool_db_build.publish": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/cve_bin_tool_db_build/tasks/publish/status.json",
+        "cve_bin_tool_db_build.resolve_nvd_snapshot": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/cve_bin_tool_db_build/tasks/resolve_nvd_snapshot/status.json",
+        "mitre_sync.fetch": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/mitre_sync/tasks/fetch/status.json",
+        "mitre_sync.normalize": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/mitre_sync/tasks/normalize/status.json",
+        "mitre_sync.publish": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/mitre_sync/tasks/publish/status.json",
+        "nvd_sync.fetch": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/nvd_sync/tasks/fetch/status.json",
+        "nvd_sync.process": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/nvd_sync/tasks/process/status.json",
+        "nvd_sync.publish": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/nvd_sync/tasks/publish/status.json",
+        "osv_sync.fetch": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/osv_sync/tasks/fetch/status.json",
+        "osv_sync.index": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/osv_sync/tasks/index/status.json",
+        "osv_sync.publish": "runs/2026-10-08-0004/data/jobs/job_third_party_data_sync/attempts/attempt_0001/steps/osv_sync/tasks/publish/status.json"
+      },
+      "unit_statuses": {
+        "cve_bin_tool_db_build.build": "SUCCEEDED",
+        "cve_bin_tool_db_build.publish": "SUCCEEDED",
+        "cve_bin_tool_db_build.resolve_nvd_snapshot": "SUCCEEDED",
+        "mitre_sync.fetch": "SUCCEEDED",
+        "mitre_sync.normalize": "SUCCEEDED",
+        "mitre_sync.publish": "SUCCEEDED",
+        "nvd_sync.fetch": "SUCCEEDED",
+        "nvd_sync.process": "SUCCEEDED",
+        "nvd_sync.publish": "SUCCEEDED",
+        "osv_sync.fetch": "SUCCEEDED",
+        "osv_sync.index": "SUCCEEDED",
+        "osv_sync.publish": "SUCCEEDED"
+      }
+    },
+    "dagster_run": {
+      "job": "third_party_data_sync",
+      "run_id": "a6a07c85-e697-4f59-a3e5-6bd31cb9d713",
+      "status": "SUCCESS",
+      "step_statuses": {
+        "dispatch_job_third_party_data_sync": "SUCCESS"
+      }
+    },
+    "published_snapshots": {
+      "cve_bin_tool_db_build": {
+        "current_pointer": "data/feeds/cve-bin-tool/current.json",
+        "manifest": "data/feeds/cve-bin-tool/snapshots/sha256-193154f911516329e4984512/manifest.json",
+        "manifest_sha256": "b5be9008b2a89ae01935e08a150e5d4c9e4fd6d2725a134c34a48ca855fba69a",
+        "snapshot_id": "sha256-193154f911516329e4984512"
+      },
+      "mitre_sync": {
+        "current_pointer": "data/feeds/mitre/current.json",
+        "manifest": "data/feeds/mitre/snapshots/sha256-55a1291906c88e98d3f2e311/manifest.json",
+        "manifest_sha256": "f4a87d3fe559b0619ab34a4495a778055e4717a6916e361587d500b2cc1d03f4",
+        "snapshot_id": "sha256-55a1291906c88e98d3f2e311"
+      },
+      "nvd_sync": {
+        "current_pointer": "data/feeds/nvd/current.json",
+        "manifest": "data/feeds/nvd/snapshots/sha256-34bf8de1d8720fef/manifest.json",
+        "manifest_sha256": "350d425b3a094f48beec033ec0476bc9949e19819627161604f1e8ebeef63e16",
+        "snapshot_id": "sha256-34bf8de1d8720fef"
+      },
+      "osv_sync": {
+        "current_pointer": "data/feeds/osv/current.json",
+        "manifest": "data/feeds/osv/snapshots/sha256-dc9ec531d235e991442c13cb/manifest.json",
+        "manifest_sha256": "db38a82660beb1e64274bb57fac0acb3882ac2cb296d0dc5787b77c04c0120a6",
+        "snapshot_id": "sha256-dc9ec531d235e991442c13cb"
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "third_party_data_sync"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}

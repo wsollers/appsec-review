@@ -8,6 +8,8 @@ attempt directories, validate job output, or publish application status.
 The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
 the web console is published, on `127.0.0.1:3000`. The repository's `runs/` and `data/` directories
 are mounted into the code-location container; PostgreSQL and Dagster compute logs use named volumes.
+The code location alone receives the Docker socket and client needed to execute the pinned,
+network-disabled cve-bin-tool database builder. Do not expose the code location to untrusted code.
 
 ## Build, start, verify, and stop
 
@@ -25,7 +27,16 @@ python deploy/dagster/bin/verify.py
 
 The console is then available at <http://localhost:3000>. The verification command checks the live
 HTTP endpoint and GraphQL workspace, then compares the connected jobs and schedules with
-`appsec-review.toml`.
+`appsec-review.toml`, including cron, time zone, and enabled state.
+
+Rebuild and reload only the code location after an application change, then prove that the
+workspace reconnected:
+
+```powershell
+python deploy/dagster/bin/lifecycle.py build
+docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml up -d --no-deps --force-recreate --wait code-location
+python deploy/dagster/bin/verify.py
+```
 
 Use the code-location CLI as a non-executing manual smoke check. It imports the same definitions
 served to the webserver and prints the discovered semantic jobs:
@@ -34,10 +45,33 @@ served to the webserver and prints the discovered semantic jobs:
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec code-location dagster job list --module-name appsec_review.orchestration.dagster.definitions
 ```
 
-Launch `third_party_data_sync` manually from the console only when an NVD synchronization is
-intended; it performs real network and filesystem work. Its configured schedule and a console
-launch both enter the same generated dispatch op and `JobRunner` path. The schedule is enabled or
-disabled only by `jobs.<job-id>.schedule.enabled` in `appsec-review.toml`.
+Launch `third_party_data_sync` manually from the console only when a real external-data refresh is
+intended; it performs network, filesystem, and isolated Docker work. The following command launches
+through the live Dagster instance and retains the Dagster id for terminal verification:
+
+```powershell
+$dagsterRunId = [guid]::NewGuid().ToString()
+docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j third_party_data_sync --run-id $dagsterRunId
+python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/live-acceptance.json
+```
+
+The configured schedule and a manual launch enter the same generated dispatch op and `JobRunner`
+path. Schedule cron, time zone, and enabled state come only from
+`jobs.job_third_party_data_sync.schedule` in `appsec-review.toml`; the current declaration is
+`0 0 * * *` in `UTC`, enabled.
+
+Dagster and the application intentionally allocate different run ids. Dagster uses its UUID for
+control-plane history. `JobRunner` allocates the date/serial application id used by immutable
+receipts. On success the Dagster run receives `appsec/application_run_id` and
+`appsec/application_attempt_id` tags plus structured output metadata for all unit statuses,
+snapshots, counts, gaps, and receipt paths. The application `status.json` contains the reverse
+`orchestration.system=dagster` and `orchestration.run_id=<Dagster UUID>` link. The verification
+command validates both directions rather than inferring success from one system alone.
+
+Dagster shows one execution op deliberately. The runtime does not yet expose a safe resumable API
+for independently dispatched tasks, so drawing 12 Dagster ops would create false lifecycle
+ownership. `JobRunner` executes and validates the real task graph; Dagster displays its 12 receipts
+as structured metadata on the honest dispatch op.
 
 Stop containers without deleting persistent state:
 
@@ -56,10 +90,15 @@ Do not use `down --volumes` during normal operation; that deletes the Dagster an
 
 ## Tests
 
-The normal repository suite skips Dagster-specific tests when the optional dependency is absent.
-The pinned image has the integration dependency and provides a test stage:
+Run the full repository suite on the host. It skips only the optional Dagster tests when that
+dependency is absent. Then run the deployment-specific suite in the pinned image:
 
 ```powershell
+python -m pytest -q
 docker build --file deploy/dagster/Dockerfile --target test --tag appsec-review-dagster-test .
 docker run --rm appsec-review-dagster-test
 ```
+
+The deployment tests cover TOML schedule generation, registry discovery, manual/scheduled dispatch
+convergence, structured metadata mapping, and application-failure propagation. Live acceptance
+evidence and its scope are described in `deploy/dagster/verification/README.md`.

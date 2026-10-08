@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 import os
 from pathlib import Path
+from typing import Any
 
 from dagster import (
     DefaultScheduleStatus,
     Definitions,
     GraphDefinition,
+    MetadataValue,
     Nothing,
     Out,
     ScheduleDefinition,
@@ -26,28 +28,93 @@ def _trigger_for_run(tags: dict[str, str]) -> str:
     return "schedule" if "dagster/schedule_name" in tags else "manual"
 
 
+def _collect_counts(value: object, prefix: str = "") -> dict[str, Any]:
+    counts: dict[str, Any] = {}
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if str(key).endswith(("_count", "_counts")):
+                counts[path] = child
+            counts.update(_collect_counts(child, path))
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            counts.update(_collect_counts(child, f"{prefix}[{index}]"))
+    return counts
+
+
+def _metadata_for_outcome(outcome: Mapping[str, Any], dagster_run_id: str) -> dict[str, Any]:
+    """Map run-owned application receipts into structured Dagster metadata."""
+
+    status = dict(outcome["status"])
+    result = dict(outcome["result"])
+    attempt_root = Path(str(outcome["attempt_root"]))
+    units = dict(result.get("units", {}))
+    outputs = dict(result.get("outputs", {}))
+    unit_statuses = {unit_id: receipt.get("status") for unit_id, receipt in units.items()}
+    receipt_paths = {
+        unit_id: str(
+            attempt_root / "steps" / receipt["step_id"] / "tasks" / receipt["task_id"] / "status.json"
+        )
+        for unit_id, receipt in units.items()
+    }
+    publications = {
+        unit_id: {
+            key: output[key]
+            for key in ("identity", "pointer", "metadata_path")
+            if key in output
+        }
+        for unit_id, output in outputs.items()
+        if unit_id.endswith(".publish")
+    }
+    metadata: dict[str, Any] = {
+        "dagster_run_id": dagster_run_id,
+        "application_run_id": status["run_id"],
+        "application_attempt_id": status["attempt_id"],
+        "application_status": status["status"],
+        "trigger": status["trigger"],
+        "application_status_receipt": MetadataValue.path(str(attempt_root / "status.json")),
+        "application_result_receipt": MetadataValue.path(str(attempt_root / "result.json")),
+        "step_statuses": MetadataValue.json(dict(result.get("steps", {}))),
+        "unit_statuses": MetadataValue.json(unit_statuses),
+        "unit_receipt_paths": MetadataValue.json(receipt_paths),
+        "published_snapshot_identities": MetadataValue.json(publications),
+        "counts": MetadataValue.json(_collect_counts(outputs)),
+        "gaps": MetadataValue.json({
+            "failed_units": list(result.get("failed_units", [])),
+            "skipped_units": list(result.get("skipped_units", [])),
+        }),
+    }
+    for unit_id, receipt_path in receipt_paths.items():
+        metadata[f"receipt__{unit_id.replace('.', '__')}"] = MetadataValue.path(receipt_path)
+    return metadata
+
+
 def _dagster_job(job_id: str, name: str, config: AppConfig, registry: JobRegistry,
                  runner_factory: RunnerFactory):
     @op(
         name=f"dispatch_{job_id}",
         ins={},
         out=Out(Nothing),
-        description="Dispatch the registered semantic job through JobRunner.",
+        description=(
+            "Execute the complete registered semantic job through JobRunner. Application task "
+            "dependencies, validation, receipts, and publication remain owned by JobRunner; the "
+            "task receipts are attached as structured Dagster metadata."
+        ),
     )
     def dispatch(context) -> None:
+        trigger = _trigger_for_run(dict(context.dagster_run.tags))
         outcome = runner_factory(config).run(
             registry.build(job_id),
-            trigger=_trigger_for_run(dict(context.dagster_run.tags)),
+            trigger=trigger,
+            orchestration={"system": "dagster", "run_id": context.run_id},
         )
         status = outcome["status"]
-        context.add_output_metadata(
-            {
-                "run_id": status["run_id"],
-                "attempt_id": status["attempt_id"],
-                "trigger": status["trigger"],
-                "attempt_root": outcome["attempt_root"],
-            }
-        )
+        context.instance.add_run_tags(context.run_id, {
+            "appsec/application_run_id": status["run_id"],
+            "appsec/application_attempt_id": status["attempt_id"],
+            "appsec/trigger": trigger,
+        })
+        context.add_output_metadata(_metadata_for_outcome(outcome, context.run_id))
 
     graph = GraphDefinition(name=name, node_defs=[dispatch])
     return graph.to_job(

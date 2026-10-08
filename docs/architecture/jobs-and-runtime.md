@@ -37,7 +37,7 @@ workers = 1
 
 Step/task overrides use
 `[jobs.<job_name>.steps.<step_name>.tasks.<task_name>]`; for example, the NVD step declares
-`fetch`, `process`, and `build` tasks.
+`fetch`, `process`, and `publish` tasks.
 
 ## NVD synchronization
 
@@ -61,6 +61,18 @@ duplicated in Python. Both console launches and daemon schedule ticks call the g
 which builds the registered job and hands it to `JobRunner`. The runner therefore retains run
 allocation, immutable configuration binding, validation, locking, events, evidence paths, and status
 publication. Dagster owns only scheduling, launch visibility, and its own orchestration history.
+
+The adapter intentionally exposes one Dagster execution op. The application runtime currently owns
+the only safe whole-job transaction boundary; representing application tasks as independently
+executable Dagster ops would duplicate lifecycle and dependency ownership. The dispatch op instead
+publishes structured Dagster metadata for every application unit receipt, step and unit status,
+published snapshot identity, count, gap, and resolving run-owned receipt path.
+
+Dagster run UUIDs and application run ids are separate identities. The adapter passes the Dagster
+UUID into `JobRunner` as orchestration correlation, and the runner records it in terminal
+`status.json`. After a successful return, the adapter adds the application run and attempt ids to
+the Dagster run tags. This creates a checked bidirectional trace without allowing Dagster to write
+application receipts or allocate application ids.
 
 Deployment layout and exact operator commands are documented in
 [`deploy/dagster/README.md`](../../deploy/dagster/README.md). The job uses a kernel lock, so a manual
