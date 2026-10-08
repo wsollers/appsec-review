@@ -5,7 +5,13 @@ import os
 from multiprocessing import get_context
 from pathlib import Path
 
-from appsec_review.observability import PipelineLog
+import hashlib
+
+import pytest
+
+from appsec_review.observability import (
+    FindingLifecycle, PipelineLog, aggregate_run_metrics, emit_model_event, validate_event,
+)
 from appsec_review.cli import main
 
 
@@ -81,3 +87,47 @@ def test_cli_filters_global_log_without_external_tools(tmp_path: Path, capsys) -
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 1
     assert json.loads(lines[0])["event_type"] == "TWO"
+
+
+def test_canonical_event_model_tool_and_gap_metrics_are_deterministic(tmp_path: Path) -> None:
+    log = PipelineLog(tmp_path)
+    log.write("TASK_STARTED", run_id="run", job_id="job", attempt_id="attempt_0001",
+              details={"dagster_run_id": "dagster", "dagster_node": "node", "tool_id": "tool-x"})
+    emit_model_event(log, event_type="MODEL_CALL_STARTED", run_id="run", invocation_id="model-1",
+                     provider="provider", model="model", reasoning_level="high",
+                     guidance_bundle_sha256="a" * 64, request_sha256="b" * 64)
+    emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id="run", invocation_id="model-1",
+                     provider="provider", model="model", reasoning_level="high",
+                     guidance_bundle_sha256="a" * 64, request_sha256="b" * 64,
+                     terminal_status="SUCCEEDED", duration_ms=12, input_tokens=10,
+                     output_tokens=5, cache_tokens=2)
+    log.write("TASK_COMPLETED_WITH_GAPS", run_id="run", job_id="job", attempt_id="attempt_0001",
+              details={"completion_status": "COMPLETED_WITH_GAPS", "duration_ms": 20,
+                       "prompt": "must not appear", "raw_model_output": "must not appear"})
+    records, _ = log.read()
+    assert all(validate_event(record) is None for record in records)
+    assert "must not appear" not in log.path.read_text(encoding="utf-8")
+    first = aggregate_run_metrics(tmp_path)
+    second = aggregate_run_metrics(tmp_path)
+    assert first == second
+    assert first["model_tokens"] == {"cache_tokens": 2, "input_tokens": 10, "output_tokens": 5}
+    assert first["dispositions"]["COMPLETED_WITH_GAPS"] == 1
+
+
+def test_finding_transitions_are_valid_idempotent_and_distinct_from_observations(tmp_path: Path) -> None:
+    lifecycle = FindingLifecycle(tmp_path)
+    reason = hashlib.sha256(b"bounded reason").hexdigest()
+    candidate = lifecycle.transition(run_id="run", finding_package_id="finding-1",
+                                     new_state="CANDIDATE", evidence_identities=("observation-1",),
+                                     actor_class="deterministic", reason_hash=reason)
+    duplicate = lifecycle.transition(run_id="run", finding_package_id="finding-1",
+                                     new_state="CANDIDATE", evidence_identities=("observation-1",),
+                                     actor_class="deterministic", reason_hash=reason)
+    assert duplicate["event_id"] == candidate["event_id"]
+    lifecycle.transition(run_id="run", finding_package_id="finding-1", new_state="CONFIRMED",
+                         evidence_identities=("observation-1",), actor_class="human", reason_hash=reason)
+    with pytest.raises(ValueError, match="invalid finding transition"):
+        lifecycle.transition(run_id="run", finding_package_id="finding-1", new_state="REFUTED",
+                             evidence_identities=("observation-1",), actor_class="human", reason_hash=reason)
+    metrics = aggregate_run_metrics(tmp_path)
+    assert metrics["finding_states"] == {"CANDIDATE": 1, "CONFIRMED": 1}

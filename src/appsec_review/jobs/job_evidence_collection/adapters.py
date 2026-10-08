@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import inspect
 import json
@@ -15,8 +15,11 @@ from appsec_review.storage import canonical_json
 
 SOURCE_EXTENSIONS = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs",
-    ".c", ".h", ".cc", ".cpp", ".cs", ".rb", ".php", ".swift", ".sh",
+    ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx",
+    ".cs", ".rb", ".php", ".swift", ".sh",
 }
+CPP_EXTENSIONS = {".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"}
+CPP_TRANSLATION_UNITS = {".c", ".cc", ".cpp", ".cxx"}
 IAC_EXTENSIONS = {".tf", ".tfvars", ".hcl"}
 MANIFEST_NAMES = {
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pyproject.toml",
@@ -34,6 +37,8 @@ class ScanCatalog:
     files: tuple[Mapping[str, Any], ...]
     projects: tuple[Mapping[str, Any], ...]
     artifacts: tuple[Mapping[str, Any], ...] = ()
+    target_root: Path | None = None
+    compile_commands: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def paths(self) -> tuple[str, ...]:
@@ -47,11 +52,13 @@ class Applicability:
     files: tuple[str, ...]
     coverage_kind: str
     gaps: tuple[str, ...] = ()
+    families: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: MappingProxyType({}))
 
     def as_dict(self) -> dict[str, Any]:
         return {"applicable": self.applicable, "reason": self.reason,
                 "files": list(self.files), "coverage_kind": self.coverage_kind,
-                "gaps": list(self.gaps)}
+                "gaps": list(self.gaps),
+                "families": {key: list(value) for key, value in sorted(self.families.items())}}
 
 
 Parser = Callable[[bytes], list[dict[str, Any]]]
@@ -143,7 +150,133 @@ def _blint(catalog: ScanCatalog) -> Applicability:
                          if PurePosixPath(str(item.get("path"))).suffix.lower() in BINARY_EXTENSIONS))
     return Applicability(bool(files), "catalog contains accepted native/binary artifacts" if files else
                          "no accepted binary artifact is present", files, "built_binary",
-                         () if files else ("source files are not treated as built binaries",))
+                          () if files else ("source files are not treated as built binaries",))
+
+
+def _bounded_structure(catalog: ScanCatalog, path: str) -> str:
+    if catalog.target_root is None:
+        return ""
+    candidate = (catalog.target_root / PurePosixPath(path)).resolve()
+    if catalog.target_root.resolve() not in candidate.parents or not candidate.is_file():
+        return ""
+    try:
+        data = candidate.read_bytes()
+        if len(data) > 2 * 1024 * 1024:
+            return ""
+        return data.decode("utf-8")
+    except (OSError, UnicodeError):
+        return ""
+
+
+def _checkov(catalog: ScanCatalog) -> Applicability:
+    families: dict[str, tuple[str, ...]] = {}
+    terraform = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in IAC_EXTENSIONS)
+    if terraform:
+        families["terraform"] = terraform
+    dockerfiles = _paths(catalog, lambda path, item: (
+        PurePosixPath(path).name == "Dockerfile" or PurePosixPath(path).name.startswith("Dockerfile.")))
+    if dockerfiles:
+        families["dockerfile"] = dockerfiles
+    workflows = tuple(path for path in _paths(catalog, lambda path, item:
+        path.startswith(".github/workflows/") and PurePosixPath(path).suffix.lower() in {".yml", ".yaml"})
+        if re.search(r"(?m)^(?:on|['\"]on['\"]):\s*", _bounded_structure(catalog, path)) and
+           re.search(r"(?m)^jobs:\s*", _bounded_structure(catalog, path)))
+    if workflows:
+        families["github_actions"] = workflows
+    cloudformation = tuple(path for path in _paths(catalog, lambda path, item:
+        PurePosixPath(path).suffix.lower() in {".yml", ".yaml", ".json"})
+        if re.search(r"(?m)^(?:AWSTemplateFormatVersion|Resources):\s*", _bounded_structure(catalog, path)))
+    if cloudformation:
+        families["cloudformation"] = cloudformation
+    selected = tuple(sorted({path for paths in families.values() for path in paths}))
+    yaml_candidates = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in {".yml", ".yaml"})
+    excluded_yaml = sorted(set(yaml_candidates) - set(workflows) - set(cloudformation))
+    gaps = []
+    if excluded_yaml:
+        gaps.append(f"{len(excluded_yaml)} YAML file(s) lacked supported IaC/workflow structural evidence")
+    gaps.append("Kubernetes, Helm, Bicep, ARM, Serverless, and other Checkov frameworks are not enabled by this bounded adapter")
+    reason = ("catalog contains " + ", ".join(f"{len(paths)} {family}" for family, paths in sorted(families.items())) +
+              " input(s)") if selected else "target catalog contains no structurally supported Checkov inputs"
+    return Applicability(bool(selected), reason, selected, "checkov_typed_configuration",
+                         tuple(gaps), MappingProxyType(families))
+
+
+def _checkov_args(executable: str, selection: Applicability) -> tuple[str, ...]:
+    frameworks = tuple(sorted(selection.families))
+    return (executable, "--quiet", "--compact", "--output", "json",
+            "--framework", *frameworks, "-f", *(_target(path) for path in selection.files))
+
+
+def _safe_catalog_file(catalog: ScanCatalog, relative: str, *, limit: int) -> bytes | None:
+    if catalog.target_root is None:
+        return None
+    pure = PurePosixPath(relative)
+    if pure.is_absolute() or ".." in pure.parts:
+        return None
+    candidate = (catalog.target_root / pure).resolve()
+    root = catalog.target_root.resolve()
+    if root not in candidate.parents or not candidate.is_file() or candidate.stat().st_size > limit:
+        return None
+    return candidate.read_bytes()
+
+
+def _cppcheck(catalog: ScanCatalog) -> Applicability:
+    files = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in CPP_EXTENSIONS)
+    if not files:
+        return Applicability(False, "target catalog contains no C/C++ source files", (), "cpp_source")
+    families: dict[str, tuple[str, ...]] = {}
+    gaps: list[str] = []
+    compile_paths = tuple(sorted(str(item.get("path")) for item in catalog.compile_commands
+                                 if PurePosixPath(str(item.get("path"))).name == "compile_commands.json"))
+    accepted = None
+    if len(compile_paths) == 1:
+        payload = _safe_catalog_file(catalog, compile_paths[0], limit=8 * 1024 * 1024)
+        try:
+            document = json.loads(payload.decode("utf-8")) if payload is not None else None
+            if isinstance(document, list) and any(isinstance(item, Mapping) and item.get("file")
+                                                  for item in document):
+                accepted = compile_paths[0]
+        except (UnicodeError, json.JSONDecodeError):
+            accepted = None
+        if accepted is None:
+            gaps.append("cataloged compile_commands.json was invalid or exceeded the 8 MiB acceptance bound")
+    elif len(compile_paths) > 1:
+        gaps.append("multiple compile_commands.json files were cataloged; no ambiguous build metadata was selected")
+    if accepted is not None:
+        families["compile_database"] = (accepted,)
+        mode = "sanitized compile database"
+        coverage = "cpp_compile_database"
+    else:
+        mode = "defensible source mode"
+        coverage = "cpp_source_without_build_context"
+        gaps.append("build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete")
+    return Applicability(True, f"catalog contains {len(files)} C/C++ input(s); using {mode}", files,
+                         coverage, tuple(gaps), MappingProxyType(families))
+
+
+def _cppcheck_args(executable: str, selection: Applicability) -> tuple[str, ...]:
+    common = (executable, "--enable=warning,style,performance,portability", "--check-level=normal",
+              "--inline-suppr", "--xml", "--xml-version=2", "--output-file=/scratch/output.xml")
+    if selection.families.get("compile_database"):
+        return (*common, "--project=/scratch/compile_commands.json")
+    return (*common, *(_target(path) for path in selection.files))
+
+
+def _pmd(catalog: ScanCatalog) -> Applicability:
+    files = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() == ".java")
+    gaps = (
+        "dependency classpath was not constructed or downloaded; rules requiring complete external type resolution may be incomplete",
+        "PMD source analysis is not JVM bytecode coverage; SpotBugs requires accepted JVM bytecode",
+    )
+    return Applicability(bool(files), f"catalog contains {len(files)} Java source input(s)" if files else
+                         "target catalog contains no Java source files", files, "java_source_ast",
+                         gaps if files else ())
+
+
+def _pmd_args(executable: str, selection: Applicability) -> tuple[str, ...]:
+    return (executable, "check", "--no-cache", "--no-progress", "--format", "json",
+            "--report-file", "/scratch/output.json", "--rulesets", "/rules/java-security.xml",
+            "--file-list", "/scratch/pmd-files.txt")
 
 
 def _target(path: str) -> str:
@@ -299,6 +432,49 @@ def _spotbugs_parser(payload: bytes) -> list[dict[str, Any]]:
     return records
 
 
+def _cppcheck_parser(payload: bytes) -> list[dict[str, Any]]:
+    root = ET.fromstring(payload.decode("utf-8"))
+    records = []
+    gap_ids = {"missingInclude", "missingIncludeSystem", "noValidConfiguration", "toomanyconfigs"}
+    for error in root.findall(".//errors/error"):
+        location = error.find("location")
+        record = {
+            "rule_id": error.get("id", "cppcheck"), "message": error.get("verbose") or error.get("msg", ""),
+            "severity": error.get("severity", "UNKNOWN"), "category": "source_sast",
+            "path": location.get("file") if location is not None else None,
+            "start_line": location.get("line") if location is not None else 1,
+            "end_line": location.get("line") if location is not None else 1,
+            "language": "C/C++",
+        }
+        if error.get("id") in gap_ids:
+            record["coverage_gap"] = f"Cppcheck {error.get('id')}: {record['message']}"
+            record["gap_only"] = True
+        records.append(record)
+    return records
+
+
+def _pmd_parser(payload: bytes) -> list[dict[str, Any]]:
+    value = _json(payload)
+    if value.get("configurationErrors"):
+        raise ValueError("PMD reported a ruleset configuration error")
+    records: list[dict[str, Any]] = []
+    for document in value.get("files", []):
+        path = document.get("filename")
+        for item in document.get("violations", []):
+            records.append({
+                "rule_id": item.get("rule", "pmd"), "message": item.get("description", ""),
+                "severity": item.get("priority", "UNKNOWN"), "category": "source_sast",
+                "path": path, "start_line": item.get("beginline", 1), "end_line": item.get("endline", 1),
+                "language": "Java",
+            })
+        for error in document.get("processingErrors", []):
+            records.append({"rule_id": "pmd-processing-error", "message": error.get("msg", ""),
+                            "severity": "ERROR", "category": "tool_diagnostic", "path": path,
+                            "start_line": 1, "end_line": 1,
+                            "coverage_gap": f"PMD could not process {path}", "gap_only": True})
+    return records
+
+
 def _phpstan_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
     for path, value in _json(payload).get("files", {}).items():
@@ -346,6 +522,12 @@ def _registry() -> dict[str, ToolAdapter]:
                     ("dependency/build context may be incomplete in offline mode",)),
         ToolAdapter("tool-mobsfscan", "source_sast", frozenset({0, 1}), "/scratch/output.json",
                     lang({".java", ".kt", ".swift"}), _args("--json", "-o", "/scratch/output.json"), _mobsfscan_parser),
+        ToolAdapter("tool-cppcheck", "source_sast", frozenset({0}), "/scratch/output.xml", _cppcheck,
+                    _cppcheck_args, _cppcheck_parser,
+                    ("source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",)),
+        ToolAdapter("tool-pmd", "source_sast", frozenset({0, 4}), "/scratch/output.json", _pmd,
+                    _pmd_args, _pmd_parser,
+                    ("security-focused ruleset only; general PMD code-quality rules are excluded",)),
         ToolAdapter("tool-shellcheck", "source_sast", frozenset({0, 1}), None, lang({".sh"}),
                     _args("--format", "json1"), _list_parser),
         ToolAdapter("tool-phpcs", "source_sast", frozenset({0, 1, 2, 3}), None, lang({".php"}),
@@ -370,8 +552,9 @@ def _registry() -> dict[str, ToolAdapter]:
                                       "--only-fixed=false"), _grype_parser),
         ToolAdapter("tool-hadolint", "configuration", frozenset({0, 1}), None, dockerfiles,
                     _args("--format", "json"), _list_parser),
-        ToolAdapter("tool-checkov", "configuration", frozenset({0, 1}), None, iac,
-                    _args("--quiet", "--compact", "--output", "json", "-f"), _checkov_parser),
+        ToolAdapter("tool-checkov", "configuration", frozenset({0, 1}), None, _checkov,
+                    _checkov_args, _checkov_parser,
+                    ("framework selection is restricted to typed Terraform, Dockerfile, GitHub Actions, and CloudFormation inputs",)),
         ToolAdapter("tool-trivy", "configuration", frozenset({0}), "/scratch/output.json",
                     lambda catalog: Applicability(
                         bool((files := tuple(sorted(set(dockerfiles(catalog).files + iac(catalog).files))))),

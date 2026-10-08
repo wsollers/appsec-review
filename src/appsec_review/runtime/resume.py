@@ -78,6 +78,11 @@ class ResumePlanner:
             "tool": (handoff.get("tool_identity"), {"python": os.sys.version.split()[0]}),
         }
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
+        dispositions = [item for output in handoff.get("outputs", {}).values()
+                        if isinstance(output, Mapping)
+                        for item in output.get("dispositions", ()) if isinstance(item, Mapping)]
+        if any(item.get("terminal_status") == "FAILED" for item in dispositions):
+            reasons.append("accepted job contains a retriable failed producer")
         if not handoff.get("artifacts"):
             reasons.append("accepted handoff has no artifact identities")
         for artifact in handoff.get("artifacts", []):
@@ -90,6 +95,10 @@ class ResumePlanner:
             except (KeyError, OSError):
                 reasons.append("artifact identity is corrupt")
         return reasons, handoff_hash
+
+    def accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[tuple[str, ...], str | None]:
+        reasons, handoff_hash = self._accepted(job, upstream)
+        return tuple(reasons), handoff_hash
 
     def plan(self, *, force_from: str | None = None, emit_event: bool = True) -> tuple[ResumeDecision, ...]:
         ids = [job.job_id for job in self.jobs]

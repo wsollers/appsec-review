@@ -82,8 +82,14 @@ class UnitExecutor:
     def execute(self, context: JobContext) -> dict[str, Any]:
         outputs: dict[str, Mapping[str, Any]] = {}
         receipts: dict[str, dict[str, Any]] = {}
+        step_started: dict[str, datetime] = {}
+        remaining = {step: sum(1 for unit in self.units if unit.unit_id.startswith(step + "."))
+                     for step in {unit.unit_id.split(".")[0] for unit in self.units}}
         for unit in self.units:
             step_id, task_id = unit.unit_id.split(".")
+            if step_id not in step_started:
+                step_started[step_id] = datetime.now(timezone.utc)
+                context.events.write("STEP_STARTED", unit_id=f"{step_id}.-")
             unit_root = context.attempt_root / "steps" / step_id / "tasks" / task_id
             unit_root.mkdir(parents=True, exist_ok=True)
             unit_events = EventLog(unit_root / "logs" / "events.jsonl")
@@ -104,6 +110,11 @@ class UnitExecutor:
                 receipts[unit.unit_id] = receipt
                 context.events.write("TASK_SKIPPED", unit_id=unit.unit_id, blocked_by=blocked_by)
                 unit_events.write("TASK_SKIPPED", unit_id=unit.unit_id, blocked_by=blocked_by)
+                remaining[step_id] -= 1
+                if remaining[step_id] == 0:
+                    duration = max(0, int((datetime.now(timezone.utc) - step_started[step_id]).total_seconds() * 1000))
+                    context.events.write("STEP_FAILED", unit_id=f"{step_id}.-",
+                                         completion_status="FAILED", duration_ms=duration)
                 continue
             unit_context = UnitContext(
                 job=context,
@@ -135,8 +146,14 @@ class UnitExecutor:
                 receipt = {**running, "status": "SUCCEEDED", "completed_at": _stamp()}
                 atomic_json(unit_root / "status.json", receipt)
                 receipts[unit.unit_id] = receipt
-                context.events.write("TASK_SUCCEEDED", unit_id=unit.unit_id)
-                unit_events.write("TASK_SUCCEEDED", unit_id=unit.unit_id)
+                disposition = result.get("terminal_status")
+                terminal_event = ("TASK_COMPLETED_WITH_GAPS"
+                                  if disposition not in {None, "SUCCEEDED", "NOT_APPLICABLE"}
+                                  else "TASK_SUCCEEDED")
+                context.events.write(terminal_event, unit_id=unit.unit_id,
+                                     disposition=disposition)
+                unit_events.write(terminal_event, unit_id=unit.unit_id,
+                                  disposition=disposition)
             except Exception as exc:
                 (unit_root / "traceback.txt").write_text(traceback.format_exc(), encoding="utf-8")
                 receipt = {
@@ -149,6 +166,23 @@ class UnitExecutor:
                 receipts[unit.unit_id] = receipt
                 context.events.write("TASK_FAILED", unit_id=unit.unit_id, error_type=type(exc).__name__)
                 unit_events.write("TASK_FAILED", unit_id=unit.unit_id, error_type=type(exc).__name__)
+            remaining[step_id] -= 1
+            if remaining[step_id] == 0:
+                states = [receipts[item.unit_id]["status"] for item in self.units
+                          if item.unit_id.startswith(step_id + ".")]
+                dispositions = [str(outputs[item.unit_id].get("terminal_status")) for item in self.units
+                                if item.unit_id.startswith(step_id + ".") and item.unit_id in outputs and
+                                outputs[item.unit_id].get("terminal_status") is not None]
+                if "FAILED" in states or "SKIPPED" in states:
+                    terminal = "FAILED"
+                elif any(value not in {"SUCCEEDED", "NOT_APPLICABLE"} for value in dispositions):
+                    terminal = "COMPLETED_WITH_GAPS"
+                else:
+                    terminal = "SUCCEEDED"
+                duration = max(0, int((datetime.now(timezone.utc) - step_started[step_id]).total_seconds() * 1000))
+                context.events.write(f"STEP_{terminal}", unit_id=f"{step_id}.-",
+                                     completion_status=terminal, duration_ms=duration,
+                                     dispositions=dispositions)
 
         failed = [unit_id for unit_id, receipt in receipts.items() if receipt["status"] == "FAILED"]
         skipped = [unit_id for unit_id, receipt in receipts.items() if receipt["status"] == "SKIPPED"]
@@ -157,12 +191,45 @@ class UnitExecutor:
             step_id = unit.unit_id.split(".")[0]
             states = [receipts[item.unit_id]["status"] for item in self.units if item.unit_id.startswith(step_id + ".")]
             steps[step_id] = "FAILED" if "FAILED" in states or "SKIPPED" in states else "SUCCEEDED"
+        completion = "FAILED" if failed or skipped else "SUCCEEDED"
+        dispositions = [str(output.get("terminal_status")) for output in outputs.values()
+                        if output.get("terminal_status") is not None]
+        if completion == "SUCCEEDED" and any(value not in {"SUCCEEDED", "NOT_APPLICABLE"}
+                                               for value in dispositions):
+            completion = "COMPLETED_WITH_GAPS"
         return {
             "schema": "appsec-review/unit-execution/1",
-            "status": "FAILED" if failed or skipped else "SUCCEEDED",
+            "status": completion,
             "steps": steps,
             "units": receipts,
             "outputs": outputs,
+            "failed_units": failed,
+            "skipped_units": skipped,
+        }
+
+    @staticmethod
+    def summarize(units: tuple[Unit, ...], receipts: Mapping[str, Mapping[str, Any]],
+                  outputs: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+        failed = [unit_id for unit_id, receipt in receipts.items() if receipt["status"] == "FAILED"]
+        skipped = [unit_id for unit_id, receipt in receipts.items() if receipt["status"] == "SKIPPED"]
+        steps: dict[str, str] = {}
+        for unit in units:
+            step_id = unit.unit_id.split(".")[0]
+            states = [receipts[item.unit_id]["status"] for item in units
+                      if item.unit_id.startswith(step_id + ".")]
+            steps[step_id] = "FAILED" if "FAILED" in states or "SKIPPED" in states else "SUCCEEDED"
+        completion = "FAILED" if failed or skipped else "SUCCEEDED"
+        dispositions = [str(output.get("terminal_status")) for output in outputs.values()
+                        if output.get("terminal_status") is not None]
+        if completion == "SUCCEEDED" and any(value not in {"SUCCEEDED", "NOT_APPLICABLE"}
+                                               for value in dispositions):
+            completion = "COMPLETED_WITH_GAPS"
+        return {
+            "schema": "appsec-review/unit-execution/2",
+            "status": completion,
+            "steps": steps,
+            "units": dict(receipts),
+            "outputs": dict(outputs),
             "failed_units": failed,
             "skipped_units": skipped,
         }

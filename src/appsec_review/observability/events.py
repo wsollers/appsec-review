@@ -14,6 +14,7 @@ from appsec_review.storage import FileLock, LockUnavailable
 
 MAX_RECORD_BYTES = 64 * 1024
 _SECRET = re.compile(r"(?i)(api[_-]?key|authorization|password|secret|token)")
+_CONTENT = re.compile(r"(?i)^(prompt|response|raw_model_output|model_output|source_text|query_text)$")
 
 
 def _bounded(value: Any, *, depth: int = 0) -> Any:
@@ -21,7 +22,11 @@ def _bounded(value: Any, *, depth: int = 0) -> Any:
         return "<truncated>"
     if isinstance(value, Mapping):
         return {
-            str(key)[:128]: "<redacted>" if _SECRET.search(str(key)) else _bounded(child, depth=depth + 1)
+            str(key)[:128]: "<redacted>" if (
+                _CONTENT.fullmatch(str(key)) or
+                (_SECRET.search(str(key)) and not str(key).lower().endswith(("_tokens", "_token_count", "_sha256", "_id")))
+            )
+            else _bounded(child, depth=depth + 1)
             for key, child in list(value.items())[:200]
         }
     if isinstance(value, (list, tuple)):
@@ -93,6 +98,7 @@ class PipelineLog:
                     os.fsync(stream.fileno())
             sequence = int(records[-1]["sequence"]) + 1 if records else 1
             record = {
+                "schema": "appsec-review/telemetry-event/1",
                 "sequence": sequence,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "level": level.upper(),
@@ -108,6 +114,8 @@ class PipelineLog:
                 "message": message or event_type.replace("_", " ").lower(),
                 "details": _bounded(dict(details or {})),
             }
+            record["event_id"] = __import__("hashlib").sha256(
+                f"{run_id}:{sequence}:{event_type}".encode()).hexdigest()
             line = (json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
             if len(line) > MAX_RECORD_BYTES:
                 record["details"] = {"truncated": True, "original_size": len(line)}

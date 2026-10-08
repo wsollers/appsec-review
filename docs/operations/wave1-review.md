@@ -33,8 +33,12 @@ run; wait for it to finish or investigate that process rather than deleting run 
 
 For Dagster, start the documented stack in `deploy/dagster/README.md`, set
 `APPSEC_REVIEW_TARGET` when the target is not the default acceptance target, and launch
-`wave1_review`. The Dagster run exposes the application run id, decisions, handoff hashes, gaps, and
-receipt roots. An application exception fails the Dagster run.
+`wave1_review`. Dagster exposes the real intake, catalog, producer scan/normalize/index, manifest,
+and publication nodes. Scanner timeout, OOM, nonzero exit, unavailable image/prerequisite, missing
+output, or parser incompatibility is persisted as a bounded producer disposition and coverage gap;
+the node succeeds after recording that truth and the review may end `COMPLETED_WITH_GAPS`.
+Configuration corruption, unsafe paths, changed handoffs, receipt persistence/locking failures,
+artifact hash mismatch, invalid manifests, and index corruption fail the Dagster run.
 
 ```powershell
 $dagsterRunId = [guid]::NewGuid().ToString()
@@ -44,4 +48,17 @@ python deploy/dagster/bin/verify.py --run-id $dagsterRunId
 
 To resume an existing application run through Dagster, launch the same job with
 `--tags '{"appsec/application_run_id":"<application-run-id>"}'`. A successful launch writes a new
-run-level orchestration receipt while preserving and reusing the immutable accepted job attempts.
+accepted manifest while preserving old attempt receipts and reusing unaffected producer checkpoints
+and shards. Dagster step selection can rerun a producer branch and its manifest/publication closure
+without rerunning independent branches.
+
+Checkov 3.3.19 is bounded to typed Terraform/HCL, exact Dockerfile names, structurally recognized
+GitHub Actions workflows, and structurally recognized CloudFormation templates. Arbitrary YAML is
+not IaC merely by extension. Unsupported Checkov families are named gaps. Hadolint, Trivy, Checkov,
+and Zizmor retain separate producer scopes and shard identities so overlapping coverage is visible.
+
+Derive operational metrics without mutating authoritative counters:
+
+```powershell
+appsec-review metrics --run-id 2026-10-08-0001
+```

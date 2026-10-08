@@ -368,4 +368,4 @@ def build_job(*, fail_task: str | None = None) -> Job:
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_target_catalog", "target_catalog", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity="appsec-review/target-catalog-job/1",
-               implementation_identity=implementation, validation_identity=validation)
+               implementation_identity=implementation, validation_identity=validation, units=units)

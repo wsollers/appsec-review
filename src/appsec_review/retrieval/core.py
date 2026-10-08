@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import base64
+from contextvars import ContextVar
 import hashlib
 import hmac
 import json
@@ -11,6 +12,7 @@ from pathlib import Path
 import re
 import sqlite3
 import time
+import uuid
 from typing import Any, Callable, Iterable, Mapping
 
 from appsec_review.observability import PipelineLog
@@ -22,6 +24,7 @@ from appsec_review.storage import RunStore, file_sha256
 RESPONSE_SCHEMA = "appsec-review/retrieval-response/1"
 _RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{4}$")
 _WORD = re.compile(r"[\w.$:/@+-]+", re.UNICODE)
+_ACTIVE_MCP: ContextVar[Mapping[str, str] | None] = ContextVar("active_appsec_mcp", default=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +38,17 @@ class RetrievalLimits:
 
 class RetrievalGap(RuntimeError):
     """A truthful unavailability result, not evidence of an empty target."""
+
+
+class ShardGroup(tuple):
+    """Tuple of accepted shards with mapping compatibility for a single legacy shard."""
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            if len(self) != 1:
+                raise TypeError("a logical index with multiple shards has no single mapping value")
+            return tuple.__getitem__(self, 0)[key]
+        return tuple.__getitem__(self, key)
 
 
 def _artifact_in_handoff(handoff: Mapping[str, Any], path: str, sha256: str) -> bool:
@@ -81,17 +95,45 @@ class RetrievalCore:
         self.target_root = Path(str(self.manifest["target_root"])).resolve()
         self.limits = limits or RetrievalLimits()
         self.clock = clock
-        self.indexes = {item["name"]: item for item in self.manifest["indexes"]}
+        grouped: dict[str, list[Mapping[str, Any]]] = {}
+        for item in self.manifest["indexes"]:
+            grouped.setdefault(str(item["name"]), []).append(item)
+        self.indexes = {name: ShardGroup(sorted(items, key=lambda item: str(item.get("shard_id", "default"))))
+                        for name, items in grouped.items()}
         self._cursor_key = hashlib.sha256(f"{run_id}:{self.manifest_sha256}".encode()).digest()
         self.log = PipelineLog(self.run_root)
+        self.mcp_session_id = hashlib.sha256(
+            f"{run_id}:{self.manifest_sha256}".encode()).hexdigest()
 
-    def _database(self, name: str, deadline: float) -> sqlite3.Connection:
+    def begin_mcp_invocation(self, tool: str, parameters: Mapping[str, Any]) -> tuple[object, Mapping[str, str]]:
+        invocation = {"mcp_session_id": self.mcp_session_id,
+                      "mcp_invocation_id": uuid.uuid4().hex,
+                      "mcp_tool": tool,
+                      "request_sha256": self._request_hash(tool, parameters)}
+        token = _ACTIVE_MCP.set(invocation)
+        self.log.write("MCP_TOOL_STARTED", run_id=self.run_id, job_id="retrieval", trigger="mcp",
+                       orchestrator="retrieval", details={**invocation,
+                       "manifest_sha256": self.manifest_sha256})
+        return token, invocation
+
+    def complete_mcp_invocation(self, token: object, invocation: Mapping[str, str], *,
+                                response: Mapping[str, Any] | None = None,
+                                error: BaseException | None = None, duration_ms: int = 0) -> None:
+        details = {**invocation, "manifest_sha256": self.manifest_sha256,
+                   "terminal_status": "FAILED" if error else "SUCCEEDED",
+                   "error_class": type(error).__name__ if error else None,
+                   "result_count": len(response.get("results", ())) if response else 0,
+                   "gap_count": len(response.get("coverage_gaps", ())) if response else 0,
+                   "truncated": bool(response.get("truncated")) if response else False,
+                   "duration_ms": duration_ms}
+        self.log.write("MCP_TOOL_COMPLETED", run_id=self.run_id, job_id="retrieval", trigger="mcp",
+                       orchestrator="retrieval", details=details)
+        _ACTIVE_MCP.reset(token)
+
+    def _database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
+        name = str(identity["name"])
         if name not in INDEX_NAMES:
             raise ValueError("invalid index name")
-        try:
-            identity = self.indexes[name]
-        except KeyError as exc:
-            raise RetrievalGap(f"{name} index is unavailable") from exc
         path = (self.run_root / identity["relative_path"]).resolve()
         uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
         database = sqlite3.connect(uri, uri=True, timeout=0.1)
@@ -160,7 +202,7 @@ class RetrievalCore:
             "schema": RESPONSE_SCHEMA, "tool": tool, "run_id": self.run_id,
             "index_manifest": {"schema": self.manifest["schema"], "sha256": self.manifest_sha256,
                                "content_sha256": self.manifest["content_sha256"]},
-            "indexes": [{key: value[key] for key in ("name", "schema", "sha256", "fingerprint")}
+            "indexes": [{key: value[key] for key in ("name", "schema", "sha256", "fingerprint", "shard_id")}
                         for value in self.manifest["indexes"]],
             "results": results, "pagination": {"next_cursor": None}, "coverage_gaps": unique_gaps,
             "truncated": truncated, "duration_ms": max(0, int((self.clock() - started) * 1000)),
@@ -178,12 +220,16 @@ class RetrievalCore:
         return response
 
     def _audit(self, tool: str, request_hash: str, filters: Mapping[str, Any], response: Mapping[str, Any]) -> None:
-        self.log.write("RETRIEVAL_QUERY", run_id=self.run_id, job_id="retrieval", trigger="mcp",
+        invocation = _ACTIVE_MCP.get()
+        event = "RETRIEVAL_SUBOP_COMPLETED" if invocation else "RETRIEVAL_QUERY"
+        self.log.write(event, run_id=self.run_id, job_id="retrieval", trigger="mcp",
                        orchestrator="retrieval", details={
-                           "mcp_tool": tool, "manifest_sha256": self.manifest_sha256,
-                           "query_sha256": request_hash, "filters": filters,
-                           "result_count": len(response["results"]), "gaps": response["coverage_gaps"],
-                           "truncated": response["truncated"], "duration_ms": response["duration_ms"],
+                            "mcp_tool": tool, "manifest_sha256": self.manifest_sha256,
+                            "query_sha256": request_hash, "filters": filters,
+                            "result_count": len(response["results"]), "gaps": response["coverage_gaps"],
+                            "truncated": response["truncated"], "duration_ms": response["duration_ms"],
+                            "parent_invocation_id": invocation.get("mcp_invocation_id") if invocation else None,
+                            "mcp_session_id": invocation.get("mcp_session_id") if invocation else self.mcp_session_id,
                        })
 
     def _execute(self, tool: str, parameters: Mapping[str, Any], operation: Callable[[float], tuple[list[dict[str, Any]], list[str], bool, int]]) -> dict[str, Any]:
@@ -227,23 +273,29 @@ class RetrievalCore:
                 if name not in self.indexes:
                     gaps.append(f"{name} index is unavailable")
                     continue
-                with self._database(name, deadline) as database:
-                    sql = """SELECT e.*, l.*, bm25(search_fts) AS rank FROM search_fts
-                             JOIN entities e ON e.identity=search_fts.identity
-                             LEFT JOIN locations l ON l.entity_id=e.identity
-                             WHERE search_fts MATCH ?"""
-                    values: list[Any] = [expression]
-                    if kind_values:
-                        sql += " AND e.kind IN (" + ",".join("?" for _ in kind_values) + ")"
-                        values.extend(kind_values)
-                    sql += " ORDER BY rank, e.identity LIMIT ?"
-                    values.append(offset + limit + 1)
-                    for row in database.execute(sql, values):
-                        found.append((float(row["rank"]), row["identity"], self._entity(row, name)))
-                    gaps.extend(item["gap"] for item in database.execute(
-                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
-            found.sort(key=lambda item: (item[0], item[1]))
-            page = [item[2] for item in found[offset:offset + limit]]
+                for shard in self.indexes[name]:
+                    with self._database(shard, deadline) as database:
+                        sql = """SELECT e.*, l.*, bm25(search_fts) AS rank FROM search_fts
+                                 JOIN entities e ON e.identity=search_fts.identity
+                                 LEFT JOIN locations l ON l.entity_id=e.identity
+                                 WHERE search_fts MATCH ?"""
+                        values: list[Any] = [expression]
+                        if kind_values:
+                            sql += " AND e.kind IN (" + ",".join("?" for _ in kind_values) + ")"
+                            values.extend(kind_values)
+                        sql += " ORDER BY rank, e.identity LIMIT ?"
+                        values.append(offset + limit + 1)
+                        for row in database.execute(sql, values):
+                            value = self._entity(row, name)
+                            value["shard_id"] = shard.get("shard_id", "default")
+                            found.append((float(row["rank"]), row["identity"], str(shard.get("shard_id", "default")), value))
+                        gaps.extend(f"{name}/{shard.get('shard_id', 'default')}: {item['gap']}"
+                                    for item in database.execute(
+                            "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                    gaps.extend(f"{name}/{shard.get('shard_id', 'default')}: {gap}"
+                                for gap in shard.get("gaps", ()))
+            found.sort(key=lambda item: (item[0], item[1], item[2]))
+            page = [item[3] for item in found[offset:offset + limit]]
             return page, gaps, len(found) > offset + limit, offset
         return self._execute("search", parameters, operation)
 
@@ -283,9 +335,13 @@ class RetrievalCore:
                 sql = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " + " AND ".join(clauses)
                 sql += " ORDER BY e.identity LIMIT ?"
                 values.append(offset + limit + 1)
-                with self._database(index_name, deadline) as database:
-                    found.extend(self._entity(row, index_name) for row in database.execute(sql, values))
-            found.sort(key=lambda item: item["identity"])
+                for shard in self.indexes[index_name]:
+                    with self._database(shard, deadline) as database:
+                        for row in database.execute(sql, values):
+                            item = self._entity(row, index_name)
+                            item["shard_id"] = shard.get("shard_id", "default")
+                            found.append(item)
+            found.sort(key=lambda item: (item["identity"], item["index"], item["shard_id"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("find", parameters, operation)
 
@@ -345,29 +401,31 @@ class RetrievalCore:
                 next_frontier = set()
                 for index_name in sorted(self.indexes):
                     self._check_deadline(deadline)
-                    with self._database(index_name, deadline) as database:
-                        for current in sorted(frontier):
-                            sql = "SELECT * FROM relations WHERE (source_id=? OR target_id=?)"
-                            values: list[Any] = [current, current]
-                            if kinds:
-                                sql += " AND kind IN (" + ",".join("?" for _ in kinds) + ")"
-                                values.extend(kinds)
-                            sql += " ORDER BY relation_id LIMIT ?"
-                            values.append(limit + 1)
-                            for row in database.execute(sql, values):
-                                value = dict(row)
-                                value["index"] = index_name
-                                value["payload"] = json.loads(value.pop("payload_json"))
-                                value["depth"] = level
-                                results.append(value)
-                                other = row["target_id"] if row["source_id"] == current else row["source_id"]
-                                if other not in seen:
-                                    seen.add(other)
-                                    next_frontier.add(other)
-                                if not row["exact"]:
-                                    gaps.append("trace includes an explicitly ambiguous relationship")
-                                if len(results) > limit:
-                                    return results[:limit], gaps + ["trace result bound reached"], False, 0
+                    for shard in self.indexes[index_name]:
+                        with self._database(shard, deadline) as database:
+                            for current in sorted(frontier):
+                                sql = "SELECT * FROM relations WHERE (source_id=? OR target_id=?)"
+                                values: list[Any] = [current, current]
+                                if kinds:
+                                    sql += " AND kind IN (" + ",".join("?" for _ in kinds) + ")"
+                                    values.extend(kinds)
+                                sql += " ORDER BY relation_id LIMIT ?"
+                                values.append(limit + 1)
+                                for row in database.execute(sql, values):
+                                    value = dict(row)
+                                    value["index"] = index_name
+                                    value["shard_id"] = shard.get("shard_id", "default")
+                                    value["payload"] = json.loads(value.pop("payload_json"))
+                                    value["depth"] = level
+                                    results.append(value)
+                                    other = row["target_id"] if row["source_id"] == current else row["source_id"]
+                                    if other not in seen:
+                                        seen.add(other)
+                                        next_frontier.add(other)
+                                    if not row["exact"]:
+                                        gaps.append("trace includes an explicitly ambiguous relationship")
+                                    if len(results) > limit:
+                                        return results[:limit], gaps + ["trace result bound reached"], False, 0
                 frontier = next_frontier
                 if not frontier:
                     break
@@ -398,12 +456,16 @@ class RetrievalCore:
                 if name not in self.indexes:
                     gaps.append(f"{name} index is unavailable")
                     continue
-                with self._database(name, deadline) as database:
-                    rows = [dict(row) for row in database.execute("SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
-                results.append({"identity": f"coverage:{name}:{self.indexes[name]['sha256']}",
-                                "artifact_reference": {"index": name, "sha256": self.indexes[name]["sha256"]},
-                                "index": name, "coverage": rows})
-                gaps.extend(row["gap"] for row in rows if row["gap"])
-                gaps.extend(self.indexes[name].get("gaps", ()))
+                for shard in self.indexes[name]:
+                    with self._database(shard, deadline) as database:
+                        rows = [dict(row) for row in database.execute(
+                            "SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
+                    shard_id = str(shard.get("shard_id", "default"))
+                    results.append({"identity": f"coverage:{name}:{shard_id}:{shard['sha256']}",
+                                    "artifact_reference": {"index": name, "shard_id": shard_id,
+                                                           "sha256": shard["sha256"]},
+                                    "index": name, "shard_id": shard_id, "coverage": rows})
+                    gaps.extend(f"{name}/{shard_id}: {row['gap']}" for row in rows if row["gap"])
+                    gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             return results, gaps, False, 0
         return self._execute("coverage", parameters, operation)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -9,20 +10,23 @@ from typing import Any
 from dagster import (
     DefaultScheduleStatus,
     Definitions,
-    GraphDefinition,
+    In,
     MetadataValue,
     Nothing,
     Out,
     ScheduleDefinition,
-    in_process_executor,
+    graph,
+    multiprocess_executor,
     op,
 )
 
 from appsec_review.config import AppConfig, load_config
 from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
-from appsec_review.runtime import GraphRunner
+from appsec_review.runtime import Job, plan_jobs
 from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.observability import PipelineLog
+from appsec_review.storage import atomic_json
 
 RunnerFactory = Callable[[AppConfig], JobRunner]
 
@@ -92,90 +96,182 @@ def _metadata_for_outcome(outcome: Mapping[str, Any], dagster_run_id: str) -> di
     return metadata
 
 
-def _dagster_job(job_id: str, name: str, config: AppConfig, registry: JobRegistry,
-                 runner_factory: RunnerFactory):
-    @op(
-        name=f"dispatch_{job_id}",
-        ins={},
-        out=Out(Nothing),
-        description=(
-            "Execute the complete registered semantic job through JobRunner. Application task "
-            "dependencies, validation, receipts, and publication remain owned by JobRunner; the "
-            "task receipts are attached as structured Dagster metadata."
-        ),
-    )
-    def dispatch(context) -> None:
-        trigger = _trigger_for_run(dict(context.dagster_run.tags))
-        outcome = runner_factory(config).run(
-            registry.build(job_id),
-            trigger=trigger,
-            orchestration={"system": "dagster", "run_id": context.run_id},
-        )
-        status = outcome["status"]
-        context.instance.add_run_tags(context.run_id, {
-            "appsec/application_run_id": status["run_id"],
-            "appsec/application_attempt_id": status["attempt_id"],
-            "appsec/trigger": trigger,
-        })
-        context.add_output_metadata(_metadata_for_outcome(outcome, context.run_id))
-
-    graph = GraphDefinition(name=name, node_defs=[dispatch])
-    return graph.to_job(
-        description=f"Dagster adapter for {job_id}; lifecycle ownership remains in JobRunner.",
-        executor_def=in_process_executor,
-    )
+def _node_name(job: Job, suffix: str, namespace: str = "") -> str:
+    base = f"{job.job_id.removeprefix('job_')}__{suffix.replace('.', '__')}"
+    return f"{namespace}__{base}" if namespace else base
 
 
-def _wave1_dagster_job(config: AppConfig, registry: JobRegistry):
-    @op(name="dispatch_wave1_review", ins={}, out=Out(Nothing),
-        description="Run the Wave 1 application graph with application-owned resume checkpoints.")
-    def dispatch(context) -> None:
-        target = Path(os.environ.get(
-            "APPSEC_REVIEW_TARGET", config.runtime.repository_root / "targets" / "appsec-multi-vuln"
-        )).resolve()
-        trigger = _trigger_for_run(dict(context.dagster_run.tags))
-        requested_run_id = dict(context.dagster_run.tags).get("appsec/application_run_id")
-        jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
-        if "job_evidence_collection" in registry.job_ids():
-            jobs.append(registry.build("job_evidence_collection"))
-        outcome = GraphRunner(config, jobs).run(
-            target_root=target,
-            source_fingerprint=source_fingerprint(target),
-            run_id=requested_run_id,
-            trigger=trigger,
-            orchestration={"system": "dagster", "run_id": context.run_id},
-        )
-        context.instance.add_run_tags(context.run_id, {
-            "appsec/application_run_id": outcome["run_id"],
-            "appsec/trigger": trigger,
-        })
-        handoffs = {}
-        attempts = {}
-        receipts = {}
-        application_root = config.runtime.runs_dir / outcome["run_id"]
-        for job_id in outcome["jobs"]:
-            pointer = json.loads((application_root / "data/jobs" / job_id / "latest.json").read_text())
-            handoff = json.loads((application_root / pointer["handoff_path"]).read_text())
-            handoffs[job_id] = pointer["handoff_sha256"]
-            attempts[job_id] = handoff["attempt_id"]
-            receipts[job_id] = str((application_root / pointer["handoff_path"]).parent)
-        gaps = {job_id: value.get("result", {}).get("outputs", {}).get(
-            "publish_catalog.publish_handoff", {}).get("gaps", [])
-            for job_id, value in outcome["jobs"].items()}
-        context.add_output_metadata({
-            "dagster_run_id": context.run_id,
-            "application_run_id": outcome["run_id"],
-            "resume_decisions": MetadataValue.json(outcome["decisions"]),
-            "handoff_identities": MetadataValue.json(handoffs),
-            "attempt_identities": MetadataValue.json(attempts),
-            "receipt_paths": MetadataValue.json(receipts),
-            "orchestration_receipt": MetadataValue.path(outcome["orchestration_receipt"]),
-            "gaps": MetadataValue.json(gaps),
-        })
+def _pool_for(unit_id: str) -> str:
+    task = unit_id.rsplit(".", 1)[-1]
+    if task.endswith("_scan"):
+        return "scanner"
+    if task.endswith("_index"):
+        return "index"
+    return "lifecycle" if unit_id.startswith("__") else "application"
 
-    return GraphDefinition(name="wave1_review", node_defs=[dispatch]).to_job(
-        description="Intake then catalog through the generic application resume path.",
-        executor_def=in_process_executor,
+
+def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
+                         runner_factory: RunnerFactory, *, node_namespace: str = ""):
+    plan_jobs(jobs, config)
+    begin_ops = {}
+    unit_ops: dict[tuple[str, str], Any] = {}
+    finalize_ops = {}
+    for position, job in enumerate(jobs):
+        begin_ins = {"upstream": In(dict)} if position else {}
+
+        def make_begin(selected: Job, ins: Mapping[str, In]):
+            @op(name=_node_name(selected, "begin", node_namespace), ins=dict(ins), out=Out(dict),
+                tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
+                description=f"Claim and validate an application attempt for {selected.job_id}.")
+            def begin(context, **inputs):
+                upstream = dict(inputs.get("upstream") or {})
+                tags = dict(context.dagster_run.tags)
+                target = Path(os.environ.get(
+                    "APPSEC_REVIEW_TARGET", config.runtime.repository_root / "targets" / "appsec-multi-vuln"
+                )).resolve()
+                target_jobs = {
+                    "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
+                    "job_evidence_collection",
+                }
+                uses_target = selected.job_id in target_jobs
+                run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
+                upstream_handoffs = dict(upstream.get("handoffs", {}))
+                runner = runner_factory(config)
+                begin_method = getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
+                claim = begin_method(
+                    selected, run_id=run_id, trigger=_trigger_for_run(tags),
+                    orchestration={"system": "dagster", "run_id": context.run_id,
+                                   "node": context.op.name},
+                    target_root=target if uses_target else None,
+                    source_fingerprint=source_fingerprint(target) if uses_target else "none",
+                    upstream_handoffs=upstream_handoffs,
+                )
+                claim = {**dict(claim),
+                         "graph_started_at": upstream.get("graph_started_at", claim["started_at"]),
+                         "prior_graph_completion_status": upstream.get("completion_status", "SUCCEEDED"),
+                         "resume_decisions": [*upstream.get("resume_decisions", []), {
+                             "job_id": selected.job_id,
+                             "action": "reuse" if claim.get("reused") else "execute",
+                         }]}
+                context.instance.add_run_tags(context.run_id, {
+                    "appsec/application_run_id": str(claim["run_id"]),
+                    "appsec/trigger": str(claim["trigger"]),
+                })
+                context.add_output_metadata({"application_run_id": claim["run_id"],
+                                             "application_attempt_id": claim["attempt_id"],
+                                             "job_id": selected.job_id})
+                return dict(claim)
+            return begin
+        begin_ops[job.job_id] = make_begin(job, begin_ins)
+
+        for unit in job.units:
+            dependency_ins = {dependency.replace(".", "__"): In(Nothing)
+                              for dependency in unit.dependencies}
+            ins = {"claim": In(dict), **dependency_ins}
+
+            def make_unit(selected_job: Job, selected_unit, selected_ins: Mapping[str, In]):
+                @op(name=_node_name(selected_job, selected_unit.unit_id, node_namespace), ins=dict(selected_ins),
+                    out=Out(Nothing), tags={"appsec/pool": _pool_for(selected_unit.unit_id)},
+                    pool=_pool_for(selected_unit.unit_id),
+                    description=f"Execute or reuse {selected_job.job_id}.{selected_unit.unit_id}.")
+                def execute(context, claim, **_dependencies):
+                    correlated = {**dict(claim), "orchestration": {
+                        **dict(claim.get("orchestration", {})), "node": context.op.name}}
+                    output = runner_factory(config).execute_or_reuse_unit(
+                        selected_job, correlated, selected_unit.unit_id)
+                    context.add_output_metadata({
+                        "application_run_id": claim["run_id"], "application_attempt_id": claim["attempt_id"],
+                        "job_id": selected_job.job_id, "unit_id": selected_unit.unit_id,
+                        "producer": output.get("tool_id", "-"),
+                        "disposition": output.get("terminal_status", "SUCCEEDED"),
+                        "checkpoint_reused": bool(output.get("checkpoint_reused", False)),
+                        "index_reused": bool(output.get("index_reused", False)),
+                        "shard": MetadataValue.json(output.get("index_identity", {})),
+                        "gaps": MetadataValue.json(list(output.get("gaps", ()))[:50]),
+                    })
+                return execute
+            unit_ops[(job.job_id, unit.unit_id)] = make_unit(job, unit, ins)
+
+        finalize_ins = {"claim": In(dict), **{
+            unit.unit_id.replace(".", "__"): In(Nothing) for unit in job.units}}
+
+        def make_finalize(selected: Job, selected_ins: Mapping[str, In], is_last: bool):
+            @op(name=_node_name(selected, "finalize", node_namespace), ins=dict(selected_ins), out=Out(dict),
+                tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
+                description=f"Validate and publish the accepted handoff for {selected.job_id}.")
+            def finalize(context, claim, **_units):
+                outcome = runner_factory(config).finalize_attempt(selected, claim)
+                context.instance.add_run_tags(context.run_id, {
+                    f"appsec/{selected.job_id}/attempt": outcome["status"]["attempt_id"],
+                    f"appsec/{selected.job_id}/status": outcome["status"]["status"],
+                })
+                context.add_output_metadata(_metadata_for_outcome(outcome, context.run_id))
+                if is_last:
+                    job_completion = str(outcome["status"]["status"])
+                    completion = ("COMPLETED_WITH_GAPS" if "COMPLETED_WITH_GAPS" in {
+                        str(claim.get("prior_graph_completion_status", "SUCCEEDED")), job_completion,
+                    } else job_completion)
+                    event = "GRAPH_COMPLETED_WITH_GAPS" if completion == "COMPLETED_WITH_GAPS" else "GRAPH_SUCCEEDED"
+                    log = PipelineLog(config.runtime.runs_dir / str(outcome["status"]["run_id"]))
+                    log.write(event, run_id=str(outcome["status"]["run_id"]), trigger=str(claim["trigger"]),
+                              orchestrator="dagster", details={"dagster_run_id": context.run_id,
+                              "completion_status": completion,
+                              "duration_ms": max(0, int((datetime.now(timezone.utc) - datetime.fromisoformat(
+                                  str(claim["graph_started_at"]))).total_seconds() * 1000))})
+                    log.write("RUN_COMPLETED", run_id=str(outcome["status"]["run_id"]),
+                              trigger=str(claim["trigger"]), orchestrator="dagster",
+                              details={"dagster_run_id": context.run_id, "completion_status": completion})
+                    orchestration_path = (config.runtime.runs_dir / str(outcome["status"]["run_id"]) /
+                                          "data" / "orchestration" / "dagster" / f"{context.run_id}.json")
+                    atomic_json(orchestration_path, {
+                        "schema": "appsec-review/orchestration-receipt/1",
+                        "status": "SUCCEEDED",
+                        "completion_status": completion,
+                        "application_run_id": str(outcome["status"]["run_id"]),
+                        "orchestrator": {"system": "dagster", "run_id": context.run_id},
+                        "decisions": list(claim.get("resume_decisions", [])),
+                        "handoff_sha256": {
+                            **dict(claim.get("upstream_handoffs", {})),
+                            selected.job_id: outcome["handoff_sha256"],
+                        },
+                    })
+                return {"run_id": outcome["status"]["run_id"],
+                        "handoffs": {**dict(claim.get("upstream_handoffs", {})),
+                                     selected.job_id: outcome["handoff_sha256"]},
+                        "completion_status": ("COMPLETED_WITH_GAPS" if "COMPLETED_WITH_GAPS" in {
+                            str(claim.get("prior_graph_completion_status", "SUCCEEDED")),
+                            str(outcome["status"]["status"]),
+                        } else outcome["status"]["status"]),
+                        "graph_started_at": claim["graph_started_at"],
+                        "resume_decisions": list(claim.get("resume_decisions", []))}
+            return finalize
+        finalize_ops[job.job_id] = make_finalize(job, finalize_ins, position == len(jobs) - 1)
+
+    @graph(name=name)
+    def generated_graph():
+        upstream = None
+        for position, job in enumerate(jobs):
+            claim = begin_ops[job.job_id]() if position == 0 else begin_ops[job.job_id](upstream=upstream)
+            values = {}
+            for unit in job.units:
+                dependencies = {dependency.replace(".", "__"): values[dependency]
+                                for dependency in unit.dependencies}
+                values[unit.unit_id] = unit_ops[(job.job_id, unit.unit_id)](
+                    claim=claim, **dependencies)
+            upstream = finalize_ops[job.job_id](
+                claim=claim, **{unit_id.replace(".", "__"): value for unit_id, value in values.items()})
+        return upstream
+
+    executor = multiprocess_executor.configured({
+        "max_concurrent": config.dagster.max_concurrent,
+        "tag_concurrency_limits": [
+            {"key": "appsec/pool", "value": pool, "limit": limit}
+            for pool, limit in sorted(config.dagster.pool_limits.items())
+        ],
+    })
+    return generated_graph.to_job(
+        description=f"Application-owned integrity lifecycle exposed as the real {name} Dagster DAG.",
+        executor_def=executor,
     )
 
 
@@ -204,8 +300,9 @@ def build_definitions(
     schedules = []
     for job_id in registry.job_ids():
         job_config = config.job(job_id)
-        dagster_job = _dagster_job(
-            job_id, job_config.name, config, registry, runner_factory
+        dagster_job = _build_dagster_graph(
+            job_config.name, (registry.build(job_id),), config, runner_factory,
+            node_namespace="standalone",
         )
         jobs.append(dagster_job)
         if job_config.schedule is not None:
@@ -223,6 +320,10 @@ def build_definitions(
                     ),
                 )
             )
-    if {"job_review_intake", "job_target_catalog"} <= registered:
-        jobs.append(_wave1_dagster_job(config, registry))
+    if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan"} <= registered:
+        wave_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+                     registry.build("job_target_analysis_plan")]
+        if "job_evidence_collection" in registered:
+            wave_jobs.append(registry.build("job_evidence_collection"))
+        jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory))
     return Definitions(jobs=jobs, schedules=schedules)

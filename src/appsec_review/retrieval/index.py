@@ -27,6 +27,7 @@ class IndexIdentity:
     relative_path: str
     producer: Mapping[str, Any]
     gaps: tuple[str, ...] = ()
+    shard_id: str = "default"
 
     def __post_init__(self) -> None:
         if self.name not in INDEX_NAMES:
@@ -35,6 +36,11 @@ class IndexIdentity:
             raise ValueError("unsupported index schema")
         if len(self.sha256) != 64 or len(self.fingerprint) != 64:
             raise ValueError("index identity requires sha256 fingerprints")
+        if not self.shard_id or len(self.shard_id) > 128 or any(
+            character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+            for character in self.shard_id
+        ):
+            raise ValueError("index shard id is invalid")
         path = Path(self.relative_path)
         if path.is_absolute() or ".." in path.parts:
             raise ValueError("index path must be run-relative")
@@ -57,13 +63,15 @@ def index_fingerprint(
 class IndexBuilder:
     """Build one deterministic read-only shard and atomically place it in the run."""
 
-    def __init__(self, path: Path, *, name: str, fingerprint: str, target_snapshot: str):
+    def __init__(self, path: Path, *, name: str, fingerprint: str, target_snapshot: str,
+                 shard_id: str = "default"):
         if name not in INDEX_NAMES:
             raise ValueError(f"unknown physical index name: {name}")
         self.path = Path(path)
         self.name = name
         self.fingerprint = fingerprint
         self.target_snapshot = target_snapshot
+        self.shard_id = shard_id
         self.entities: list[EntityRecord] = []
         self.relations: list[RelationRecord] = []
         self.coverage: list[tuple[str, str, str | None]] = []
@@ -81,6 +89,8 @@ class IndexBuilder:
 
     def build(self) -> str:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            raise ValueError(f"immutable index shard already exists: {self.name}/{self.shard_id}")
         temporary = self.path.with_name(self.path.name + ".building")
         if temporary.exists():
             temporary.unlink()
@@ -122,7 +132,7 @@ class IndexBuilder:
             """)
             metadata = {
                 "schema": INDEX_SCHEMA, "name": self.name, "fingerprint": self.fingerprint,
-                "target_snapshot": self.target_snapshot,
+                "target_snapshot": self.target_snapshot, "shard_id": self.shard_id,
             }
             database.executemany("INSERT INTO metadata VALUES (?, ?)", sorted(metadata.items()))
             for record in sorted(self.entities, key=lambda item: item.identity.value):
@@ -163,9 +173,9 @@ def write_manifest(
     path: Path, *, run_id: str, target_snapshot: str, target_root: Path,
     indexes: Iterable[IndexIdentity], upstream_manifests: Iterable[Mapping[str, str]] = (),
 ) -> Mapping[str, Any]:
-    values = sorted(indexes, key=lambda item: item.name)
-    if len(values) != len({item.name for item in values}):
-        raise ValueError("manifest contains duplicate index names")
+    values = sorted(indexes, key=lambda item: (item.name, item.shard_id))
+    if len(values) != len({(item.name, item.shard_id) for item in values}):
+        raise ValueError("manifest contains duplicate index shard identities")
     document = {
         "schema": MANIFEST_SCHEMA, "run_id": run_id, "target_snapshot": target_snapshot,
         "target_root": str(Path(target_root).resolve()), "indexes": [asdict(item) for item in values],
@@ -201,12 +211,13 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         if upstream_path == resolved:
             raise ValueError("index manifest references itself")
         load_verified_manifest(run_root, upstream_path, str(upstream.get("sha256", "")), seen_manifests)
-    seen = set()
+    seen: set[tuple[str, str]] = set()
     for raw in document.get("indexes", []):
         identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
-        if identity.name in seen:
-            raise ValueError("duplicate index identity")
-        seen.add(identity.name)
+        shard_key = (identity.name, identity.shard_id)
+        if shard_key in seen:
+            raise ValueError("duplicate index shard identity")
+        seen.add(shard_key)
         candidate = (run_root / identity.relative_path).resolve()
         if run_root not in candidate.parents or not candidate.is_file():
             raise ValueError(f"index is unavailable: {identity.name}")
@@ -215,8 +226,9 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
         with sqlite3.connect(uri, uri=True) as database:
             metadata = dict(database.execute("SELECT key, value FROM metadata"))
-            if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint")) != (
-                identity.schema, identity.name, identity.fingerprint,
+            if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
+                metadata.get("shard_id", "default")) != (
+                identity.schema, identity.name, identity.fingerprint, identity.shard_id,
             ):
-                raise ValueError(f"index metadata mismatch: {identity.name}")
+                raise ValueError(f"index metadata mismatch: {identity.name}/{identity.shard_id}")
     return document, actual

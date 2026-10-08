@@ -4,10 +4,13 @@ from dataclasses import dataclass
 import hashlib
 import inspect
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol, TYPE_CHECKING
 
 from appsec_review.config import JobConfig
 from appsec_review.observability import EventLog
+
+if TYPE_CHECKING:
+    from appsec_review.runtime.units import Unit
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +50,15 @@ class Job:
     implementation_identity: str | None = None
     validation_identity: str | None = None
     runtime_identity: Callable[[], str] | None = None
+    units: tuple["Unit", ...] = ()
+    result_transform: Callable[[JobContext, Mapping[str, Any]], Mapping[str, Any]] | None = None
+    worker_lookup: Callable[[str, str], int] | None = None
+
+    def configured_workers(self, step_id: str, task_id: str) -> int:
+        return self.worker_lookup(step_id, task_id) if self.worker_lookup is not None else 1
+
+    def finalize_result(self, context: JobContext, result: Mapping[str, Any]) -> Mapping[str, Any]:
+        return self.result_transform(context, result) if self.result_transform is not None else result
 
     def identities(self) -> Mapping[str, str]:
         def identity(values: tuple[object, ...], explicit: str | None = None) -> str:
@@ -74,7 +86,7 @@ class Job:
     def execute(self, context: JobContext) -> Mapping[str, Any]:
         for validator in self.input_validators:
             validator(context, None)
-        result = self.handler(context)
+        result = self.finalize_result(context, self.handler(context))
         for validator in self.output_validators:
             validator(context, result)
         return result

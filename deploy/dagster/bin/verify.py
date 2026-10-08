@@ -9,6 +9,8 @@ from pathlib import Path
 import sys
 import tomllib
 import urllib.request
+from collections import Counter
+from datetime import datetime
 
 
 WORKSPACE_QUERY = """
@@ -135,6 +137,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         for job_id in (
             "job_review_intake",
             "job_target_catalog",
+            "job_target_analysis_plan",
             "job_evidence_collection",
         ):
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
@@ -149,39 +152,80 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             result_path = attempt / "result.json"
             status = json.loads(status_path.read_text(encoding="utf-8"))
             result = json.loads(result_path.read_text(encoding="utf-8"))
-            if status.get("status") != "SUCCEEDED" or result.get("status") != "SUCCEEDED" or handoff.get("status") != "ACCEPTED":
+            accepted_statuses = {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+            if (status.get("status") not in accepted_statuses or
+                    result.get("status") not in accepted_statuses or handoff.get("status") != "ACCEPTED"):
                 raise SystemExit(f"{job_id} application receipts are not accepted")
             if status.get("orchestration", {}).get("system") != "dagster":
                 raise SystemExit(f"{job_id} accepted attempt lacks its originating Dagster link")
-            publication = result.get("outputs", {}).get(
-                "evidence_publication.publish_handoff",
-                result.get("outputs", {}).get("publish_catalog.publish_handoff", {}),
-            )
+            publication_units = {
+                "job_review_intake": "publish_intake.publish_handoff",
+                "job_target_catalog": "publish_catalog.publish_handoff",
+                "job_target_analysis_plan": "plan_acceptance.publish_handoff",
+                "job_evidence_collection": "evidence_publication.publish_handoff",
+            }
+            publication = result.get("outputs", {}).get(publication_units[job_id], {})
             job_report = {
                 "attempt_id": handoff["attempt_id"],
                 "handoff_sha256": actual_hash,
                 "status_receipt": _relative(repository, status_path),
                 "result_receipt": _relative(repository, result_path),
                 "handoff_receipt": _relative(repository, handoff_path),
-                "unit_statuses": {key: value["status"] for key, value in result["units"].items()},
-                "gaps": publication.get("gaps", []),
+                "status": status["status"],
+                "unit_count": len(result["units"]),
+                "unit_status_counts": dict(sorted(Counter(
+                    value["status"] for value in result["units"].values()).items())),
+                "gap_count": len(publication.get("gaps", [])),
             }
-            if "dispositions" in publication:
+            if job_id == "job_evidence_collection" and isinstance(publication.get("dispositions"), list):
                 job_report["tool_dispositions"] = [
                     {
                         "tool_id": item["tool_id"],
+                        "shard_id": item["shard_id"],
                         "terminal_status": item["terminal_status"],
                         "record_count": item["record_count"],
                         "checkpoint_reused": item["checkpoint_reused"],
+                        "index_reused": item["index_reused"],
                     }
                     for item in publication["dispositions"]
                 ]
+                job_report["reuse_summary"] = {
+                    "checkpoint_reused": sum(bool(item.get("checkpoint_reused"))
+                                             for item in publication["dispositions"]),
+                    "index_reused": sum(bool(item.get("index_reused"))
+                                        for item in publication["dispositions"]),
+                }
+                job_report["gaps"] = publication.get("gaps", [])
+                job_report["index_manifest"] = publication.get("index_manifest")
+                scans = [value for key, value in result["units"].items() if key.endswith("_scan")]
+                boundaries = []
+                for receipt in scans:
+                    boundaries.extend(((datetime.fromisoformat(receipt["started_at"]), 1),
+                                       (datetime.fromisoformat(receipt["completed_at"]), -1)))
+                active = peak = 0
+                for _, delta in sorted(boundaries, key=lambda value: (value[0], value[1])):
+                    active += delta
+                    peak = max(peak, active)
+                indexes = [value for key, value in result["units"].items() if key.endswith("_index")]
+                barrier = result["units"]["evidence_publication.assemble_manifest"]
+                latest_index = max(datetime.fromisoformat(value["completed_at"]) for value in indexes)
+                barrier_start = datetime.fromisoformat(barrier["started_at"])
+                job_report["concurrency_proof"] = {
+                    "scanner_interval_count": len(scans),
+                    "observed_peak_overlapping_scanners": peak,
+                    "latest_producer_index_completed_at": latest_index.isoformat(),
+                    "manifest_started_at": barrier_start.isoformat(),
+                    "manifest_waited_for_all_producer_indexes": barrier_start >= latest_index,
+                }
             jobs[job_id] = job_report
+        step_statuses = [item["status"] for item in run.get("stepStats", [])]
         return {
             "dagster_run": {"run_id": run_id, "status": run["status"], "job": run["pipelineName"],
-                            "step_statuses": {item["stepKey"]: item["status"] for item in run.get("stepStats", [])}},
+                            "step_count": len(step_statuses),
+                            "step_status_counts": dict(sorted(Counter(step_statuses).items()))},
             "application_run": {"run_id": application_run_id, "jobs": jobs,
                                 "orchestration_receipt": _relative(repository, orchestration_path),
+                                "completion_status": orchestration_receipt.get("completion_status"),
                                 "resume_decisions": orchestration_receipt["decisions"]},
         }
     if run.get("pipelineName") != "third_party_data_sync":

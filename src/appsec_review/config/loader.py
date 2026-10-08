@@ -20,6 +20,21 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class DagsterConfig:
+    executor: str = "multiprocess"
+    max_concurrent: int = 8
+    pool_limits: Mapping[str, int] = MappingProxyType({})
+
+    def __post_init__(self) -> None:
+        if self.executor != "multiprocess":
+            raise ValueError("Dagster executor must be multiprocess")
+        if not 1 <= self.max_concurrent <= 64:
+            raise ValueError("Dagster max_concurrent must be between 1 and 64")
+        if any(not 1 <= value <= 64 for value in self.pool_limits.values()):
+            raise ValueError("Dagster pool limits must be between 1 and 64")
+
+
+@dataclass(frozen=True, slots=True)
 class ScheduleConfig:
     enabled: bool
     cron: str
@@ -99,6 +114,7 @@ class AppConfig:
     source_sha256: str
     runtime: RuntimeConfig
     jobs: Mapping[str, JobConfig]
+    dagster: DagsterConfig = DagsterConfig()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -208,9 +224,21 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
             settings=MappingProxyType(dict(settings)),
             steps=MappingProxyType(steps),
         )
+    orchestration = document.get("orchestration", {})
+    if not isinstance(orchestration, dict):
+        raise ValueError("[orchestration] must be a table")
+    dagster_value = orchestration.get("dagster", {})
+    if not isinstance(dagster_value, dict):
+        raise ValueError("[orchestration.dagster] must be a table")
+    pools = dagster_value.get("pools", {})
+    if not isinstance(pools, dict):
+        raise ValueError("[orchestration.dagster.pools] must be a table")
     return AppConfig(
         source_path=source,
         source_sha256=hashlib.sha256(source_bytes).hexdigest(),
         runtime=runtime,
         jobs=MappingProxyType(jobs),
+        dagster=DagsterConfig(executor=str(dagster_value.get("executor", "multiprocess")),
+                              max_concurrent=int(dagster_value.get("max_concurrent", 8)),
+                              pool_limits=MappingProxyType({str(key): int(value) for key, value in pools.items()})),
     )

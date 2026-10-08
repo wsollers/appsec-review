@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/target-analysis-plan/1",
+  "title": "Accepted target analysis plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_fingerprint", "catalog_handoff_sha256", "summary_sha256", "provenance", "components", "scanner_selections", "scanner_non_selections", "build_topology", "prerequisites", "expected_artifact_families", "confidence", "contradictions", "coverage_gaps", "model"],
+  "properties": {
+    "schema": {"const": "appsec-review/target-analysis-plan/1"},
+    "source_fingerprint": {"type": "string", "minLength": 1},
+    "catalog_handoff_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "summary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "provenance": {"enum": ["deterministic", "model-assisted"]},
+    "components": {"type": "array"},
+    "scanner_selections": {"type": "array"},
+    "scanner_non_selections": {"type": "array"},
+    "build_topology": {"type": "object"},
+    "prerequisites": {"type": "array", "items": {"type": "string"}},
+    "expected_artifact_families": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["high", "medium", "low"]},
+    "contradictions": {"type": "array", "items": {"type": "string"}},
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "proposal_sha256"],
+      "properties": {"status": {"type": "string"}, "proposal_sha256": {"type": ["string", "null"]}}
+    }
+  }
+}

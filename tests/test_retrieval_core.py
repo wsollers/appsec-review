@@ -49,14 +49,16 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
                               {"native": "src/auth.c:1"}, "fixture-exact", 1.0)
     index_values: list[IndexIdentity] = []
 
-    def build(name: str, entities: list[EntityRecord], relations: list[RelationRecord], gap: str | None = None):
+    def build(name: str, entities: list[EntityRecord], relations: list[RelationRecord],
+              gap: str | None = None, shard_id: str = "default"):
         fingerprint = index_fingerprint(
             name=name, target_snapshot=snapshot, producer_artifacts=[{"sha256": "a" * 64}],
             tool_identity={"tool": "fixture", "name": name}, parser_identity="fixture-parser/1",
             normalizer_identity="fixture-normalizer/1", mapping_identity="fixture-mapping/1",
         )
-        path = run_root / "data" / "indices" / name / f"{fingerprint}.sqlite"
-        builder = IndexBuilder(path, name=name, fingerprint=fingerprint, target_snapshot=snapshot)
+        path = run_root / "data" / "indices" / name / shard_id / f"{fingerprint}.sqlite"
+        builder = IndexBuilder(path, name=name, fingerprint=fingerprint, target_snapshot=snapshot,
+                               shard_id=shard_id)
         for entity in entities:
             builder.add_entity(entity)
         for relation in relations:
@@ -65,7 +67,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         sha = builder.build()
         index_values.append(IndexIdentity(name, "appsec-review/retrieval-index/1", sha, fingerprint,
                                           path.relative_to(run_root).as_posix(), {"fixture": name},
-                                          (gap,) if gap else ()))
+                                          (gap,) if gap else (), shard_id))
 
     build("source", [EntityRecord(LogicalIdentity.parse(ids["file"]), "src/auth.c", "src/auth.c",
                                   source.read_text(encoding="utf-8"), {"language": "C"}, location)], [])
@@ -98,7 +100,8 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         RelationRecord(RelationKind.OBSERVED_AT, ids["observation"], ids["file"], True, 1.0),
         RelationRecord(RelationKind.DERIVED_FROM, ids["observation"], ids["artifact"], True, 1.0),
         RelationRecord(RelationKind.SUPPORTS, ids["observation"], ids["fact"], True, 0.95),
-    ])
+    ], shard_id="semgrep")
+    build("observations", [], [], "gitleaks scanner was unavailable", shard_id="gitleaks")
 
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=snapshot, target_root=target, indexes=index_values)
@@ -150,6 +153,21 @@ def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> N
         core.find(path="../outside")
     missing = core.search(query="anything", indexes=("compiled",))
     assert missing["results"] == [] and "compiled index is unavailable" in missing["coverage_gaps"]
+    coverage = core.coverage(indexes=("observations",))
+    assert {item["shard_id"] for item in coverage["results"]} == {"gitleaks", "semgrep"}
+    assert any("observations/gitleaks" in gap for gap in coverage["coverage_gaps"])
+
+
+def test_manifest_rejects_duplicate_composite_shard_identity(tmp_path: Path) -> None:
+    runs, _ = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    item = next(value for value in core.manifest["indexes"]
+                if value["name"] == "observations" and value["shard_id"] == "semgrep")
+    identity = IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+    with pytest.raises(ValueError, match="duplicate index shard"):
+        write_manifest(core.run_root / "data" / "indices" / "manifests" / "duplicate.json",
+                       run_id=RUN_ID, target_snapshot=core.manifest["target_snapshot"],
+                       target_root=core.target_root, indexes=(identity, identity))
 
 
 def test_relationships_excerpt_integrity_and_evidence_resolution(tmp_path: Path) -> None:
@@ -210,7 +228,10 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     adapter = RetrievalMcpAdapter(core)
     assert {item["name"] for item in TOOLS} == {
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage"}
-    assert adapter.call("find", {"identity": ids["symbol"]}) == core.find(identity=ids["symbol"])
+    via_mcp = adapter.call("find", {"identity": ids["symbol"]})
+    direct = core.find(identity=ids["symbol"])
+    assert {key: value for key, value in via_mcp.items() if key != "duration_ms"} == {
+        key: value for key, value in direct.items() if key != "duration_ms"}
     requests = [
         ("search", {"query": "authenticate"}), ("find", {"identity": ids["symbol"]}),
         ("read_excerpt", {"identity": ids["symbol"]}), ("trace", {"identity": ids["observation"]}),
@@ -229,3 +250,10 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     responses = [json.loads(line) for line in stdout.splitlines()]
     assert len(responses) == 6
     assert all(item["result"]["structuredContent"]["run_id"] == RUN_ID for item in responses)
+    records = [json.loads(line) for line in (
+        runs / RUN_ID / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()]
+    completed = [item for item in records if item["event_type"] == "MCP_TOOL_COMPLETED"]
+    assert len(completed) == 7  # one direct adapter call above plus six transport calls
+    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 7
+    children = [item for item in records if item["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
+    assert children and all(item["details"]["parent_invocation_id"] for item in children)

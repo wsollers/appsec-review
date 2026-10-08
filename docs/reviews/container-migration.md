@@ -87,7 +87,7 @@ absent afterward. No other path under `old/scripts` was removed.
 
 ## Application adapter acceptance
 
-The 17 enabled narrow tool images are now represented by explicit adapters in
+The 19 enabled narrow tool images are now represented by explicit adapters in
 `job_evidence_collection`; the catalog and adapter registries must match exactly. Shared application
 code owns applicability, argv, accepted exits, parsing, runtime enforcement, evidence normalization,
 redaction, bounds, checkpointing, and retrieval indexes. The retired omnibus images remain retired.
@@ -97,16 +97,16 @@ executor policy/digest/timeout/output-bound behavior, explicit non-applicable di
 mixed failure/resume proof that executes only the failed tool on retry. Live Docker execution is a
 separate acceptance gate and is not inferred from the earlier image build acceptance.
 
-That live gate passed on application run `2026-10-08-0014`: all 17 adapters reached truthful terminal
-dispositions against the multi-language fixture, with 14 applicable scanners successful and
-SpotBugs, Checkov, and BLint explicitly non-applicable because their required bytecode, IaC, and
-binary inputs were absent. A ShellCheck-only injected failure in `attempt_0005` was recovered in
-`attempt_0006`; the recovery reran ShellCheck, reused the other 13 successful scanner checkpoints,
-and retained the three non-applicable dispositions. Dagster run
-`617a9848-b7d9-404e-9098-f88d1819e7d6` then completed the full graph for application run
-`2026-10-08-0016`, with bidirectional orchestration and accepted-handoff linkage captured in
-`deploy/dagster/verification/static-analysis-live-acceptance.json`. Scanner output and databases
-remain ignored run-owned data.
+The current live gate passed on application run `2026-10-08-0023`: all 19 adapters produced
+truthful terminal dispositions and producer-owned shards against the multi-language fixture. The
+17 applicable scanners succeeded; SpotBugs and BLint were explicitly non-applicable. Checkov's
+typed selector found Dockerfile and GitHub Actions inputs without treating unrelated YAML as IaC.
+Dagster run `87fffd7b-a14f-4fd5-9cef-97b5b9862a08` executed 94 nodes, observed six overlapping
+scanner intervals, and started final manifest assembly only after all producer indexes completed.
+The correlated rerun reused all 19 producer shards while republishing the accepted manifest.
+Bidirectional orchestration and accepted-handoff linkage are captured in
+`deploy/dagster/verification/wave1-live-acceptance.json`. Scanner output and databases remain
+ignored run-owned data.
 
 `tool-cve-bin-tool` remains deferred. Its NVD-derived offline database contract is now implemented,
 but the catalog's GPL policy decision is still unresolved. Enabling its scan adapter before that

@@ -11,11 +11,11 @@ decide which scanners to run.
 | Capability | Tools | Applicability |
 | --- | --- | --- |
 | secrets | Gitleaks | Any bounded cataloged worktree; history is explicitly excluded |
-| source SAST | Semgrep, Gosec, MobSFScan, ShellCheck, PHPCS, PHPStan, Psalm | Cataloged source languages; missing dependency/build context is recorded as a gap |
+| source SAST | Semgrep, Gosec, MobSFScan, ShellCheck, PHPCS, PHPStan, Psalm, Cppcheck, PMD | Cataloged source languages; Cppcheck uses a sanitized compile database or reports source-mode gaps, while PMD reports missing classpath/bytecode coverage |
 | source SAST | SpotBugs | Accepted JVM bytecode only; the scanner never compiles target source |
 | software inventory | Syft | Cataloged directory/manifests; directory, artifact, and OCI/archive coverage are distinct |
 | vulnerability matching | OSV Scanner, Grype | Cataloged manifests/SBOM plus a verified immutable local database; Grype also requires the Syft SBOM |
-| configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit cataloged Dockerfile, IaC, and workflow paths |
+| configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit Dockerfiles, typed Terraform/HCL, structurally identified CloudFormation, and GitHub workflows; arbitrary YAML is excluded |
 | binary hardening | BLint | Accepted cataloged built binaries only |
 
 Every enabled `kind = "tool"` entry in `containers/catalog.toml` must have exactly one adapter. A
@@ -36,9 +36,10 @@ containers never receive the Docker socket and never execute target programs.
 Each execution receipt records image tag/ID/digest, a secret-free argv identity, mounts, limits,
 timestamps, exit/timeout/OOM state, truncation, and resolving raw-output/log paths. Raw output is
 preserved within bounds and normalized separately. Unexpected exit, timeout, OOM, parse failure, or
-missing output fails that tool task. An inapplicable scope produces `NOT_APPLICABLE`; an applicable
-tool with an unavailable prerequisite produces `BLOCKED`. Both preserve an explicit coverage gap
-rather than a clean result.
+missing output produces a durable producer `FAILED` disposition and gap without claiming clean
+coverage. An inapplicable scope produces `NOT_APPLICABLE`; an applicable tool with an unavailable
+prerequisite produces `BLOCKED`. Artifact, receipt, handoff, manifest, index, and path integrity
+violations remain framework failures.
 
 ## Evidence and retrieval
 
@@ -49,9 +50,10 @@ normalized, and secret values are redacted before persistence with stable SHA-25
 Record, field, raw-stream, and total normalized byte bounds are enforced; truncation becomes a gap.
 Tool observations remain evidence/leads and the envelope deliberately contains no accepted findings.
 
-The publication step emits bounded indexes by target-relative path, native rule, component, package,
-advisory, language, and evidence ID. Complete target files and raw scanner output are never placed in
-the index or prompts.
+Every producer emits an immutable SQLite shard. Retrieval fans out deterministically across shards
+by target-relative path, native rule, component, package, advisory, language, and evidence ID. A
+cheap final barrier verifies every shard and disposition before publishing the combined manifest.
+Complete target files and raw scanner output are never placed in indexes or prompts.
 
 ## Rules, databases, CLI, and resume
 
@@ -84,21 +86,19 @@ offline runtime proof, deterministic fixtures, and no target-code execution.
 
 ## Live acceptance record
 
-Application run `2026-10-08-0014` exercised all 17 enabled tool adapters against
-`targets/appsec-multi-vuln` with the real catalog images. Fourteen applicable tools completed and
-three tools returned explicit `NOT_APPLICABLE` dispositions: SpotBugs had no accepted JVM bytecode,
-Checkov had no cataloged IaC, and BLint had no accepted binary artifact. The applicable executions
-produced non-zero records for Gitleaks, Semgrep, MobSFScan, PHPCS, Syft, OSV Scanner, Grype,
-Hadolint, Trivy, and Zizmor; zero records from an applicable scanner remained a successful scanner
-observation, not a clean-target conclusion.
+Dagster run `87fffd7b-a14f-4fd5-9cef-97b5b9862a08` completed the 94-node `wave1_review` graph for
+application run `2026-10-08-0023` against `targets/appsec-multi-vuln`. All 19 producer branches
+published immutable shards; 17 scanners executed successfully and SpotBugs/BLint were explicitly
+`NOT_APPLICABLE`. Checkov scanned typed Dockerfile and GitHub Actions inputs, returned 14 records,
+and excluded unrelated YAML. Cppcheck and PMD returned 3 and 2 records respectively.
 
-The same run proves bounded recovery. Attempt `attempt_0005` injected a ShellCheck-only failure.
-Forced recovery in `attempt_0006` reran ShellCheck and publication, reused the other 13 successful
-scanner checkpoints, and retained the three non-applicable dispositions without executing those
-tools. Intake and target-catalog handoffs were also reused.
+The run receipts show a peak of six overlapping scanner intervals. The manifest barrier began only
+after the last of all 19 producer indexes completed, and this correlated rerun reused all 19
+unaffected producer shards. The automated recovery test injects a
+ShellCheck-only failure and proves that the retry reruns that producer while reusing unaffected
+checkpoints and shards; the failed attempt remains an explicit gap rather than clean coverage.
 
-Dagster acceptance run `617a9848-b7d9-404e-9098-f88d1819e7d6` completed the full review graph for
-application run `2026-10-08-0016`. Its application orchestration receipt links the successful
-Dagster run to accepted intake, catalog, and evidence handoffs. The concise, non-secret verification
-record is `deploy/dagster/verification/static-analysis-live-acceptance.json`; bulk scanner output,
-databases, and run receipts remain under ignored run-owned storage.
+The bidirectional Dagster/application correlation, handoff hashes, shard dispositions, concurrency
+proof, and manifest identity are recorded in
+`deploy/dagster/verification/wave1-live-acceptance.json`. Bulk scanner output, databases, and run
+receipts remain ignored run-owned data.

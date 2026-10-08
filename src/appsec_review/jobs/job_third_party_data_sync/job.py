@@ -189,8 +189,8 @@ def build_job(
     )
     executor = UnitExecutor(units)
 
-    def handler(context: JobContext) -> Mapping[str, Any]:
-        result = executor.execute(context)
+    def transform(context: JobContext, value: Mapping[str, Any]) -> Mapping[str, Any]:
+        result = dict(value)
         result = {**result, "schema": "appsec-review/job-result/third-party-data-sync/1"}
         publish_metadata(context.metadata_root, "jobs", "job_third_party_data_sync", {
             "schema": "appsec-review/global-job-metadata/1", "job_id": "job_third_party_data_sync",
@@ -207,4 +207,5 @@ def build_job(
         if set(result.get("units", {})) != {unit.unit_id for unit in units}:
             raise ValueError("third-party data sync omitted unit receipts")
 
-    return Job("job_third_party_data_sync", "third_party_data_sync", handler, (validate_input,), (validate_output,))
+    return Job("job_third_party_data_sync", "third_party_data_sync", executor.execute,
+               (validate_input,), (validate_output,), units=units, result_transform=transform)

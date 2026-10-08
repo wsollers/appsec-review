@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import time
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
@@ -18,6 +19,7 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     adapter_registry,
 )
 from appsec_review.jobs.job_evidence_collection.evidence import NORMALIZER_IDENTITY, build_envelope
+from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -32,17 +34,21 @@ from appsec_review.jobs.job_third_party_data_sync.publication import verify_curr
 CAPABILITIES: Mapping[str, tuple[str, ...]] = {
     "secrets": ("tool-gitleaks",),
     "source_sast": ("tool-semgrep", "tool-gosec", "tool-mobsfscan", "tool-shellcheck",
-                    "tool-phpcs", "tool-phpstan", "tool-psalm", "tool-spotbugs"),
+                    "tool-phpcs", "tool-phpstan", "tool-psalm", "tool-spotbugs",
+                    "tool-cppcheck", "tool-pmd"),
     "software_inventory": ("tool-syft",),
     "vulnerability_matching": ("tool-osv-scanner", "tool-grype"),
     "configuration": ("tool-hadolint", "tool-checkov", "tool-trivy", "tool-zizmor"),
     "binary_hardening": ("tool-blint",),
 }
 TOPOLOGY: Mapping[str, tuple[str, ...]] = {
-    capability: tuple(tool.removeprefix("tool-").replace("-", "_") for tool in tools)
+    capability: tuple(
+        f"{tool.removeprefix('tool-').replace('-', '_')}_{phase}"
+        for tool in tools for phase in ("scan", "normalize", "index")
+    )
     for capability, tools in CAPABILITIES.items()
 }
-TOPOLOGY = {**TOPOLOGY, "evidence_publication": ("build_indexes", "publish_handoff")}
+TOPOLOGY = {**TOPOLOGY, "evidence_publication": ("assemble_manifest", "publish_handoff")}
 
 
 ExecutorFactory = Callable[[UnitContext], ContainerExecutor]
@@ -83,19 +89,47 @@ def load_target_catalog(run_root: Path) -> ScanCatalog:
     partition = _read_artifact(run_root, catalog_doc["artifacts"]["repository_discovery.partition_repository"])
     projects = _read_artifact(run_root, catalog_doc["artifacts"]["repository_discovery.discover_projects"])
     builds = _read_artifact(run_root, catalog_doc["artifacts"]["build_discovery.catalog_build_targets"])
+    compile_commands = _read_artifact(
+        run_root, catalog_doc["artifacts"]["build_discovery.discover_compile_commands"])
     artifacts = tuple(item for item in builds.get("targets", []) if item.get("artifact_kind") == "built")
+    target_root = None
+    intake_latest = run_root / "data" / "jobs" / "job_review_intake" / "latest.json"
+    if intake_latest.is_file():
+        intake_pointer = json.loads(intake_latest.read_text(encoding="utf-8"))
+        intake_handoff = _read_artifact(run_root, {
+            "path": intake_pointer["handoff_path"], "sha256": intake_pointer["handoff_sha256"]})
+        intake_artifact = intake_handoff.get("outputs", {}).get("publish_intake.publish_handoff", {}).get("artifact")
+        if isinstance(intake_artifact, Mapping):
+            intake = _read_artifact(run_root, intake_artifact)
+            target_root = Path(str(intake.get("target", {}).get("path", ""))).resolve()
     return ScanCatalog(
         source_fingerprint=str(catalog_doc["source_fingerprint"]),
         handoff_sha256=str(latest["handoff_sha256"]), files=tuple(partition.get("files", [])),
-        projects=tuple(projects.get("projects", [])), artifacts=artifacts,
+        projects=tuple(projects.get("projects", [])), artifacts=artifacts, target_root=target_root,
+        compile_commands=tuple(compile_commands.get("files", [])),
     )
 
 
 def plan_applicability(run_root: Path) -> list[dict[str, Any]]:
     catalog = load_target_catalog(run_root)
-    return [{"tool_id": tool_id, "capability": adapter.capability,
-             **adapter.applicability(catalog).as_dict()}
-            for tool_id, adapter in adapter_registry().items()]
+    try:
+        accepted = load_accepted_plan(run_root)
+    except ValueError:
+        accepted = None
+    selections = {item["scanner_id"]: item for item in accepted.get("scanner_selections", [])} if accepted else {}
+    values = []
+    for tool_id, adapter in adapter_registry().items():
+        applicability = adapter.applicability(catalog)
+        if accepted is not None and tool_id not in selections:
+            applicability = Applicability(False, "not selected by accepted target analysis plan", (),
+                                          applicability.coverage_kind)
+        elif accepted is not None:
+            planned = tuple(item["path"] for item in selections[tool_id]["scope"])
+            applicability = Applicability(bool(planned), selections[tool_id]["reason"], planned,
+                                          applicability.coverage_kind, applicability.gaps,
+                                          applicability.families)
+        values.append({"tool_id": tool_id, "capability": adapter.capability, **applicability.as_dict()})
+    return values
 
 
 def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicability) -> tuple[Applicability, tuple[Mount, ...], dict[str, str], str | None]:
@@ -116,6 +150,53 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         if not verified:
             return selection, (), {}, "hash-pinned Semgrep rule bundle is unavailable"
         mounts.append(Mount(rules, "/rules", True))
+    if adapter.tool_id == "tool-pmd":
+        rules = repository / "rules" / "pmd"
+        ruleset = rules / "java-security.xml"
+        try:
+            lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
+            verified = (lock.get("schema") == "appsec-review/rules-lock/1" and
+                        lock.get("ruleset") == "rules/pmd/java-security.xml" and
+                        file_sha256(ruleset) == lock["sha256"])
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            verified = False
+        if not verified:
+            return selection, (), {}, "hash-pinned PMD security rules are unavailable"
+        mounts.append(Mount(rules, "/rules", True))
+        file_list = unit.unit_root / "inputs" / "pmd-files.txt"
+        file_list.parent.mkdir(parents=True, exist_ok=True)
+        file_list.write_text("".join(f"/target/{path}\n" for path in selection.files), encoding="utf-8")
+        mounts.append(Mount(file_list, "/scratch/pmd-files.txt", True))
+    if adapter.tool_id == "tool-cppcheck" and selection.families.get("compile_database"):
+        if unit.job.target_root is None:
+            return selection, (), {}, "target root is unavailable for the compile database"
+        source = unit.job.target_root / selection.families["compile_database"][0]
+        try:
+            original = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return selection, (), {}, "accepted compile database could not be read"
+        cataloged = set(selection.files)
+        sanitized = []
+        for entry in original:
+            if not isinstance(entry, Mapping) or not entry.get("file"):
+                continue
+            raw_file = Path(str(entry["file"]))
+            directory = Path(str(entry.get("directory", unit.job.target_root)))
+            resolved = raw_file if raw_file.is_absolute() else directory / raw_file
+            try:
+                relative = resolved.resolve().relative_to(unit.job.target_root.resolve()).as_posix()
+            except ValueError:
+                continue
+            if relative not in cataloged:
+                continue
+            sanitized.append({"directory": "/target", "file": f"/target/{relative}",
+                              "arguments": ["c++", f"/target/{relative}"]})
+        if not sanitized:
+            return selection, (), {}, "compile database contained no cataloged C/C++ translation units"
+        compile_database = unit.unit_root / "inputs" / "compile_commands.json"
+        compile_database.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(compile_database, sanitized)
+        mounts.append(Mount(compile_database, "/scratch/compile_commands.json", True))
     if adapter.tool_id == "tool-osv-scanner":
         try:
             identity = verify_current(unit.job.repository_root / "data" / "feeds" / "osv", "osv")
@@ -134,7 +215,7 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
             environment["GRYPE_DB_CACHE_DIR"] = "/database"
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
             return selection, (), {}, f"verified immutable Grype database snapshot is unavailable ({type(exc).__name__})"
-        syft = unit.output("software_inventory.syft")
+        syft = unit.output("software_inventory.syft_scan")
         if syft.get("terminal_status") not in {"SUCCEEDED", "PARTIAL"} or not syft.get("scanner_output"):
             return selection, (), {}, "a successful Syft SBOM is required"
         mounts.append(Mount(unit.job.run_root / syft["scanner_output"], "/inputs/syft.json", True))
@@ -211,8 +292,10 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
 
 
 def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
-                  executor_factory: ExecutorFactory, fail_tool: str | None) -> Mapping[str, Any]:
-    selection, mounts, environment, blocked = _prerequisites(unit, adapter, adapter.applicability(catalog))
+                  executor_factory: ExecutorFactory, fail_tool: str | None,
+                  planned: Applicability | None = None) -> Mapping[str, Any]:
+    selection, mounts, environment, blocked = _prerequisites(
+        unit, adapter, planned if planned is not None else adapter.applicability(catalog))
     if not selection.applicable:
         envelope, path = _write_evidence(
             unit, adapter, catalog, selection,
@@ -236,17 +319,33 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
 
     executor = executor_factory(unit)
     tool = executor.catalog.tool(adapter.tool_id)
-    image_id = executor.resolve_image(tool)
+    try:
+        image_id = executor.resolve_image(tool)
+    except RuntimeError as exc:
+        invocation_id = hashlib.sha256(
+            f"{unit.job.run_id}:{unit.job.attempt_id}:{unit.unit_id}:resolve".encode()).hexdigest()
+        unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id,
+                              tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                              tool_identity={"name": tool.name, "version": tool.version}, retry_count=0)
+        unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
+                              tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                              disposition="FAILED", retry_count=0, error_class=type(exc).__name__,
+                              result_count=0, gap_count=1, truncated=False, duration_ms=0)
+        envelope, evidence_path = _write_evidence(
+            unit, adapter, catalog, selection,
+            tool_identity={"id": adapter.tool_id, "name": tool.name, "version": tool.version,
+                           "image_tag": tool.tag, "disposition": "unavailable"},
+            raw_artifacts=(), observations=[], terminal_status="FAILED", gaps=(str(exc),))
+        return {"tool_id": adapter.tool_id, "capability": adapter.capability,
+                "terminal_status": "FAILED", "checkpoint_reused": False,
+                "artifact": _artifact(unit.job.run_root, evidence_path), "scanner_output": None,
+                "execution": None, "record_count": 0, "gaps": envelope["exclusions_and_gaps"],
+                "retry_count": 0}
     identity = _checkpoint_identity(unit, adapter, catalog, selection, image_id, mounts)
     checkpoint_root = unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" / adapter.tool_id / identity[:24]
     checkpoint_path = checkpoint_root / "checkpoint.json"
     retry_marker = checkpoint_root.parent / "retry-required.json"
     with FileLock(checkpoint_root.parent / (identity[:24] + ".lock")):
-        if fail_tool == adapter.tool_id:
-            atomic_json(retry_marker, {"schema": "appsec-review/injected-tool-failure/1",
-                                      "tool_id": adapter.tool_id, "checkpoint_identity": identity,
-                                      "retry_required": True, "failed_attempt": unit.job.attempt_id})
-            raise RuntimeError(f"injected bounded failure: {adapter.tool_id}")
         retry_required = False
         if retry_marker.is_file():
             marker = json.loads(retry_marker.read_text(encoding="utf-8"))
@@ -255,74 +354,219 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
         if checkpoint is not None:
             return {**checkpoint["output"], "checkpoint_reused": True,
                     "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
-        scratch = unit.unit_root / "scratch"
-        if adapter.tool_id == "tool-trivy":
-            staged = scratch / "inputs"
-            for relative in selection.files:
-                source = (unit.job.target_root or Path()) / relative
-                destination = staged / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(source, destination)
-        result = executor.execute(ExecutionRequest(
-            tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
-            target_root=unit.job.target_root or Path(), scratch_root=scratch,
-            extra_mounts=mounts, environment=environment,
-        ))
-        raw_paths = (unit.job.run_root / result.stdout_path, unit.job.run_root / result.stderr_path,
-                     unit.job.run_root / result.receipt_path)
+        configured_retries = int(unit.job.config.settings.get("tool_retries", 1))
+        if not 0 <= configured_retries <= 3:
+            raise ValueError("tool_retries must be between zero and three")
+        raw_paths: tuple[Path, ...] = ()
+        result = None
+        output = None
+        observations: list[dict[str, Any]] = []
         gaps: list[str] = []
-        if result.stdout_truncated:
-            gaps.append("stdout was truncated at the configured byte bound")
-        if result.stderr_truncated:
-            gaps.append("stderr was truncated at the configured byte bound")
-        if result.timed_out:
-            raise RuntimeError(f"{adapter.tool_id} timed out")
-        if result.oom_killed:
-            raise RuntimeError(f"{adapter.tool_id} was OOM-killed")
-        if result.exit_code not in adapter.accepted_exit_codes:
-            raise RuntimeError(f"{adapter.tool_id} exited with {result.exit_code}")
-        output = scratch / adapter.output_file.removeprefix("/scratch/") if adapter.output_file else raw_paths[0]
-        if not output.is_file():
-            raise ValueError(f"{adapter.tool_id} did not produce its expected output")
-        if output.stat().st_size > tool.output_bytes:
-            raise ValueError(f"{adapter.tool_id} output artifact exceeded its byte bound")
-        if output not in raw_paths:
-            raw_paths = (*raw_paths, output)
-        observations = adapter.parse(output.read_bytes())
-        terminal = "PARTIAL" if gaps else "SUCCEEDED"
+        error_class = None
+        for attempt in range(configured_retries + 1):
+            scratch = unit.unit_root / "scratch" / f"attempt_{attempt + 1:02d}"
+            invocation_id = hashlib.sha256(
+                f"{unit.job.run_id}:{unit.job.attempt_id}:{unit.unit_id}:{attempt + 1}".encode()).hexdigest()
+            invoked = time.monotonic()
+            unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id,
+                                  tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                  tool_identity={"name": tool.name, "version": tool.version,
+                                                 "image_id": image_id}, retry_count=attempt)
+            if adapter.tool_id == "tool-trivy":
+                staged = scratch / "inputs"
+                for relative in selection.files:
+                    source = (unit.job.target_root or Path()) / relative
+                    destination = staged / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source, destination)
+            try:
+                if fail_tool == adapter.tool_id:
+                    raise RuntimeError(f"injected bounded failure: {adapter.tool_id}")
+                result = executor.execute(ExecutionRequest(
+                    tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
+                    target_root=unit.job.target_root or Path(), scratch_root=scratch,
+                    extra_mounts=mounts, environment=environment,
+                ))
+                attempt_paths = (unit.job.run_root / result.stdout_path,
+                                 unit.job.run_root / result.stderr_path,
+                                 unit.job.run_root / result.receipt_path)
+                raw_paths = (*raw_paths, *attempt_paths)
+                if result.stdout_truncated:
+                    gaps.append("stdout was truncated at the configured byte bound")
+                if result.stderr_truncated:
+                    gaps.append("stderr was truncated at the configured byte bound")
+                if result.timed_out:
+                    raise RuntimeError(f"{adapter.tool_id} timed out")
+                if result.oom_killed:
+                    raise RuntimeError(f"{adapter.tool_id} was OOM-killed")
+                if result.exit_code not in adapter.accepted_exit_codes:
+                    raise RuntimeError(f"{adapter.tool_id} exited with {result.exit_code}")
+                output = scratch / adapter.output_file.removeprefix("/scratch/") if adapter.output_file else attempt_paths[0]
+                if not output.is_file():
+                    raise RuntimeError(f"{adapter.tool_id} did not produce its expected output")
+                if output.stat().st_size > tool.output_bytes:
+                    raise RuntimeError(f"{adapter.tool_id} output artifact exceeded its byte bound")
+                if output not in raw_paths:
+                    raw_paths = (*raw_paths, output)
+                try:
+                    observations = adapter.parse(output.read_bytes())
+                except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+                    raise RuntimeError(f"{adapter.tool_id} parser incompatibility ({type(exc).__name__})") from exc
+                error_class = None
+                unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
+                                      tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                      disposition="SUCCEEDED", retry_count=attempt,
+                                      result_count=len(observations), gap_count=len(gaps),
+                                      truncated=result.stdout_truncated or result.stderr_truncated,
+                                      duration_ms=max(0, int((time.monotonic() - invoked) * 1000)))
+                break
+            except (RuntimeError, subprocess.SubprocessError) as exc:
+                error_class = type(exc).__name__
+                gaps.append(str(exc))
+                unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
+                                      tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                      disposition="FAILED", retry_count=attempt, error_class=error_class,
+                                      result_count=0, gap_count=1, truncated=False,
+                                      duration_ms=max(0, int((time.monotonic() - invoked) * 1000)))
+                if attempt < configured_retries:
+                    continue
+        terminal = "FAILED" if error_class is not None else ("PARTIAL" if gaps else "SUCCEEDED")
         envelope, evidence_path = _write_evidence(
             unit, adapter, catalog, selection,
             tool_identity={"id": adapter.tool_id, "name": tool.name, "version": tool.version,
-                           "image_tag": tool.tag, "image_id": image_id},
+                           "image_tag": tool.tag, "image_id": image_id,
+                           "attempt_count": configured_retries + 1 if error_class else attempt + 1,
+                           "error_class": error_class},
             raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
         )
         output_value = {
             "tool_id": adapter.tool_id, "capability": adapter.capability,
             "terminal_status": terminal, "checkpoint_reused": False,
             "artifact": _artifact(unit.job.run_root, evidence_path),
-            "scanner_output": _rel(unit.job.run_root, output),
-            "execution": _artifact(unit.job.run_root, unit.job.run_root / result.receipt_path),
+            "scanner_output": _rel(unit.job.run_root, output) if output is not None else None,
+            "execution": (_artifact(unit.job.run_root, unit.job.run_root / result.receipt_path)
+                          if result is not None else None),
             "record_count": envelope["record_count"], "gaps": envelope["exclusions_and_gaps"],
-            "checkpoint_identity": identity,
+            "checkpoint_identity": identity, "retry_count": attempt if error_class is None else configured_retries,
         }
-        checkpoint_root.mkdir(parents=True, exist_ok=True)
-        atomic_json(checkpoint_path, {
-            "schema": "appsec-review/tool-task-checkpoint/1", "identity": identity,
-            "output": output_value,
-            "artifacts": [output_value["artifact"], output_value["execution"],
-                          _artifact(unit.job.run_root, output)],
-        })
-        if retry_required:
-            atomic_json(retry_marker, {"schema": "appsec-review/injected-tool-failure/1",
-                                      "tool_id": adapter.tool_id, "checkpoint_identity": identity,
-                                      "retry_required": False, "failed_attempt": marker.get("failed_attempt"),
-                                      "resolved_attempt": unit.job.attempt_id})
-        return {**output_value, "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
+        if terminal in {"SUCCEEDED", "PARTIAL"}:
+            checkpoint_root.mkdir(parents=True, exist_ok=True)
+            checkpoint_artifacts = [output_value["artifact"]]
+            if output_value["execution"] is not None:
+                checkpoint_artifacts.append(output_value["execution"])
+            if output is not None:
+                checkpoint_artifacts.append(_artifact(unit.job.run_root, output))
+            atomic_json(checkpoint_path, {
+                "schema": "appsec-review/tool-task-checkpoint/1", "identity": identity,
+                "output": output_value, "artifacts": checkpoint_artifacts,
+            })
+            if retry_required:
+                atomic_json(retry_marker, {"schema": "appsec-review/injected-tool-failure/1",
+                                          "tool_id": adapter.tool_id, "checkpoint_identity": identity,
+                                          "retry_required": False, "failed_attempt": marker.get("failed_attempt"),
+                                          "resolved_attempt": unit.job.attempt_id})
+            return {**output_value, "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
+        atomic_json(retry_marker, {"schema": "appsec-review/tool-retry-required/1",
+                                  "tool_id": adapter.tool_id, "checkpoint_identity": identity,
+                                  "retry_required": True, "failed_attempt": unit.job.attempt_id})
+        return output_value
 
 
-def _build_indexes(unit: UnitContext, tool_units: tuple[str, ...]) -> Mapping[str, Any]:
-    gaps: list[str] = []
-    dispositions: list[dict[str, Any]] = []
+def _normalize_tool(unit: UnitContext, scan_unit: str) -> Mapping[str, Any]:
+    output = dict(unit.output(scan_unit))
+    evidence = _read_artifact(unit.job.run_root, output["artifact"])
+    if evidence.get("schema") != "appsec-review/static-tool-evidence/1":
+        raise ValueError("scanner evidence envelope schema mismatch")
+    if evidence.get("terminal_status") != output.get("terminal_status"):
+        raise ValueError("scanner disposition changed before normalization")
+    return {**output, "normalizer_identity": NORMALIZER_IDENTITY,
+            "normalized_artifact": output["artifact"],
+            "normalization_reused": bool(output.get("checkpoint_reused"))}
+
+
+def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str, Any]:
+    output = dict(unit.output(normalize_unit))
+    evidence = _read_artifact(unit.job.run_root, output["normalized_artifact"])
+    producer = str(output["tool_id"])
+    shard_id = producer.removeprefix("tool-").replace("-", "_")
+    fingerprint = index_fingerprint(
+        name="observations", target_snapshot=unit.job.source_fingerprint,
+        producer_artifacts=[{"sha256": output["normalized_artifact"]["sha256"]}],
+        tool_identity={"tool_id": producer}, parser_identity="static-adapters/1",
+        normalizer_identity=NORMALIZER_IDENTITY, mapping_identity="native-location/1",
+    )
+    index_path = (unit.job.run_root / "data" / "indices" / "observations" / shard_id /
+                  f"{fingerprint}.sqlite")
+    checkpoint = (unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" /
+                  "index" / shard_id / f"{fingerprint}.json")
+    if checkpoint.is_file():
+        value = json.loads(checkpoint.read_text(encoding="utf-8"))
+        identity = IndexIdentity(**{**value["index_identity"],
+                                    "gaps": tuple(value["index_identity"].get("gaps", ()))})
+        candidate = unit.job.run_root / identity.relative_path
+        if candidate.is_file() and file_sha256(candidate) == identity.sha256:
+            return {**value, "checkpoint_reused": output.get("checkpoint_reused", False),
+                    "index_reused": True}
+    builder = IndexBuilder(index_path, name="observations", fingerprint=fingerprint,
+                           target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
+    artifact_id = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,
+                                         {"path": output["artifact"]["path"],
+                                          "sha256": output["artifact"]["sha256"]})
+    builder.add_entity(EntityRecord(artifact_id, output["artifact"]["sha256"],
+                                    producer + " evidence", producer,
+                                    {"artifact": output["artifact"], "tool_id": producer}))
+    for record in evidence.get("records", []):
+        observation_id = LogicalIdentity.derive(
+            EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
+            {"tool_id": producer, "evidence_id": record["evidence_id"]})
+        location_value = record.get("location")
+        location = None
+        source_id = None
+        if location_value:
+            target_path = (unit.job.target_root or Path()) / location_value["path"]
+            if target_path.is_file():
+                source_sha = file_sha256(target_path)
+                data = target_path.read_bytes()
+                line_offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
+                start_line, end_line = int(location_value["start_line"]), int(location_value["end_line"])
+                start_byte = line_offsets[min(start_line - 1, len(line_offsets) - 1)]
+                end_byte = line_offsets[min(end_line, len(line_offsets) - 1)] if end_line < len(line_offsets) else len(data)
+                location = SourceLocation(
+                    target_snapshot=unit.job.source_fingerprint, path=location_value["path"],
+                    file_sha256=source_sha, start_byte=start_byte, end_byte=end_byte,
+                    start_line=start_line, end_line=end_line, start_column=1, end_column=1,
+                    producer_location={"tool": producer, **location_value},
+                    mapping_method="producer-line-location", confidence=1.0)
+                source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                                   {"path": location_value["path"], "sha256": source_sha})
+        builder.add_entity(EntityRecord(
+            observation_id, record["evidence_id"], str(record.get("native_rule_id", "observation")),
+            " ".join(str(record.get(key) or "") for key in (
+                "native_rule_id", "message", "category", "component", "package", "advisory", "language")),
+            {"tool_id": producer, **record}, location))
+        builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, observation_id.value,
+                                            artifact_id.value, True, 1.0))
+        if source_id is not None:
+            builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
+                                                source_id.value, True, 1.0))
+    status = "complete" if output["terminal_status"] == "SUCCEEDED" else "partial"
+    builder.add_coverage(producer, status, None if status == "complete" else "; ".join(output.get("gaps", [])[:10]))
+    sha256 = builder.build()
+    identity = IndexIdentity("observations", "appsec-review/retrieval-index/1", sha256, fingerprint,
+                             index_path.relative_to(unit.job.run_root).as_posix(),
+                             {"job": "job_evidence_collection", "producer": producer},
+                             tuple(dict.fromkeys(output.get("gaps", ()))), shard_id)
+    value = {"artifact": _artifact(unit.job.run_root, index_path),
+             "index_identity": __import__("dataclasses").asdict(identity), "index_reused": False,
+             "tool_id": producer, "terminal_status": output["terminal_status"],
+             "checkpoint_reused": output.get("checkpoint_reused", False),
+             "record_count": output.get("record_count", 0), "gaps": output.get("gaps", [])}
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    atomic_json(checkpoint, value)
+    return value
+
+
+def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mapping[str, Any]:
     manifest_path, manifest_sha = resolve_accepted_manifest(unit.job.run_root)
     upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
     if any(item["name"] == "observations" for item in upstream["indexes"]):
@@ -333,88 +577,29 @@ def _build_indexes(unit: UnitContext, tool_units: tuple[str, ...]) -> Mapping[st
         manifest_path = (unit.job.run_root / base["path"]).resolve()
         manifest_sha = base["sha256"]
         upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
-    artifacts = [unit.output(unit_id)["artifact"] for unit_id in tool_units]
-    fingerprint = index_fingerprint(
-        name="observations", target_snapshot=unit.job.source_fingerprint, producer_artifacts=artifacts,
-        tool_identity={"tools": sorted(unit.output(item)["tool_id"] for item in tool_units)},
-        parser_identity="static-adapters/1", normalizer_identity=NORMALIZER_IDENTITY,
-        mapping_identity="native-location/1", upstream_manifests=(manifest_sha,),
-    )
-    index_path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}.sqlite"
-    builder = IndexBuilder(index_path, name="observations", fingerprint=fingerprint,
-                           target_snapshot=unit.job.source_fingerprint)
-    for unit_id in tool_units:
+    gaps: list[str] = []
+    dispositions: list[dict[str, Any]] = []
+    shards: list[IndexIdentity] = []
+    for unit_id in index_units:
         output = unit.output(unit_id)
         dispositions.append({"tool_id": output["tool_id"], "terminal_status": output["terminal_status"],
                              "checkpoint_reused": output["checkpoint_reused"], "record_count": output["record_count"],
+                             "index_reused": output.get("index_reused", False),
+                             "shard_id": output["index_identity"]["shard_id"],
                              "gaps": output.get("gaps", [])})
-        evidence = _read_artifact(unit.job.run_root, output["artifact"])
-        gaps.extend(str(item) for item in evidence.get("exclusions_and_gaps", []))
-        artifact_id = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,
-                                             {"path": output["artifact"]["path"],
-                                              "sha256": output["artifact"]["sha256"]})
-        builder.add_entity(EntityRecord(artifact_id, output["artifact"]["sha256"],
-                                        output["tool_id"] + " evidence", output["tool_id"],
-                                        {"artifact": output["artifact"], "tool_id": output["tool_id"]}))
-        for record in evidence.get("records", []):
-            observation_id = LogicalIdentity.derive(
-                EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
-                {"tool_id": output["tool_id"], "evidence_id": record["evidence_id"]},
-            )
-            location_value = record.get("location")
-            location = None
-            source_id = None
-            if location_value:
-                target_path = (unit.job.target_root or Path()) / location_value["path"]
-                if target_path.is_file():
-                    source_sha = file_sha256(target_path)
-                    data = target_path.read_bytes()
-                    line_offsets = [0]
-                    for match in re.finditer(b"\n", data):
-                        line_offsets.append(match.end())
-                    start_line = int(location_value["start_line"])
-                    end_line = int(location_value["end_line"])
-                    start_byte = line_offsets[min(start_line - 1, len(line_offsets) - 1)]
-                    end_byte = line_offsets[min(end_line, len(line_offsets) - 1)] if end_line < len(line_offsets) else len(data)
-                    location = SourceLocation(
-                        target_snapshot=unit.job.source_fingerprint, path=location_value["path"],
-                        file_sha256=source_sha, start_byte=start_byte, end_byte=end_byte,
-                        start_line=start_line, end_line=end_line, start_column=1, end_column=1,
-                        producer_location={"tool": output["tool_id"], **location_value},
-                        mapping_method="producer-line-location", confidence=1.0,
-                    )
-                    source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
-                                                       {"path": location_value["path"], "sha256": source_sha})
-            builder.add_entity(EntityRecord(
-                observation_id, record["evidence_id"], str(record.get("native_rule_id", "observation")),
-                " ".join(str(record.get(key) or "") for key in (
-                    "native_rule_id", "message", "category", "component", "package", "advisory", "language")),
-                {"tool_id": output["tool_id"], **record}, location,
-            ))
-            builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, observation_id.value,
-                                                artifact_id.value, True, 1.0))
-            if source_id is not None:
-                builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
-                                                    source_id.value, True, 1.0))
-    for disposition in dispositions:
-        status = "complete" if disposition["terminal_status"] == "SUCCEEDED" else "partial"
-        builder.add_coverage(disposition["tool_id"], status,
-                             None if status == "complete" else "; ".join(disposition["gaps"][:10]))
-    observation_sha = builder.build()
-    observation_identity = IndexIdentity(
-        "observations", "appsec-review/retrieval-index/1", observation_sha, fingerprint,
-        index_path.relative_to(unit.job.run_root).as_posix(),
-        {"job": "job_evidence_collection", "unit": unit.unit_id}, tuple(dict.fromkeys(gaps)),
-    )
+        gaps.extend(str(item) for item in output.get("gaps", []))
+        shards.append(IndexIdentity(**{**output["index_identity"],
+                                       "gaps": tuple(output["index_identity"].get("gaps", ())) }))
     existing = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]]
-    combined = existing + [observation_identity]
+    combined = existing + shards
     combined_manifest = unit.job.run_root / "data" / "indices" / "manifests" / f"evidence-{unit.job.attempt_id}.json"
     write_manifest(combined_manifest, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
                    target_root=unit.job.target_root or Path(), indexes=combined,
                    upstream_manifests=({"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
                                         "sha256": manifest_sha},))
-    return {"artifact": _artifact(unit.job.run_root, index_path),
-            "index_manifest": _artifact(unit.job.run_root, combined_manifest),
+    load_verified_manifest(unit.job.run_root, combined_manifest, file_sha256(combined_manifest))
+    return {"index_manifest": _artifact(unit.job.run_root, combined_manifest),
+            "shards": [__import__("dataclasses").asdict(item) for item in shards],
             "item_count": sum(item["record_count"] for item in dispositions),
             "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps))}
 
@@ -440,6 +625,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         target_catalog = load_target_catalog(context.run_root)
         if context.source_fingerprint != target_catalog.source_fingerprint:
             raise ValueError("graph target fingerprint does not match the accepted target catalog")
+        accepted_plan = load_accepted_plan(context.run_root)
+        if accepted_plan.get("source_fingerprint") != context.source_fingerprint:
+            raise ValueError("graph target fingerprint does not match the accepted analysis plan")
 
     def factory(unit: UnitContext) -> ContainerExecutor:
         if executor_factory is not None:
@@ -447,27 +635,45 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         return ContainerExecutor(load_catalog(unit.job.repository_root), unit.job.run_root)
 
     units: list[Unit] = []
-    tool_units: list[str] = []
+    index_units: list[str] = []
     for capability, tool_ids in CAPABILITIES.items():
         for tool_id in tool_ids:
             adapter = adapters[tool_id]
-            unit_id = f"{capability}.{tool_id.removeprefix('tool-').replace('-', '_')}"
-            dependencies = ("software_inventory.syft",) if tool_id == "tool-grype" else ()
+            stem = tool_id.removeprefix("tool-").replace("-", "_")
+            scan_id = f"{capability}.{stem}_scan"
+            normalize_id = f"{capability}.{stem}_normalize"
+            index_id = f"{capability}.{stem}_index"
+            dependencies = ("software_inventory.syft_scan",) if tool_id == "tool-grype" else ()
             def handler(unit: UnitContext, selected: ToolAdapter = adapter) -> Mapping[str, Any]:
-                return _execute_tool(unit, selected, load_target_catalog(unit.job.run_root), factory, fail_tool)
-            units.append(Unit(unit_id, handler, dependencies))
-            tool_units.append(unit_id)
+                catalog = load_target_catalog(unit.job.run_root)
+                plan = load_accepted_plan(unit.job.run_root)
+                by_tool = {item["scanner_id"]: item for item in plan["scanner_selections"]}
+                natural = selected.applicability(catalog)
+                decision = by_tool.get(selected.tool_id)
+                planned = (Applicability(False, "not selected by accepted target analysis plan", (),
+                                         natural.coverage_kind) if decision is None else
+                           Applicability(True, str(decision["reason"]),
+                                         tuple(item["path"] for item in decision["scope"]),
+                                         natural.coverage_kind, natural.gaps, natural.families))
+                return _execute_tool(unit, selected, catalog, factory, fail_tool, planned)
+            units.append(Unit(scan_id, handler, dependencies))
+            units.append(Unit(normalize_id,
+                              lambda unit, scan=scan_id: _normalize_tool(unit, scan), (scan_id,)))
+            units.append(Unit(index_id,
+                              lambda unit, normalized=normalize_id: _build_producer_shard(unit, normalized),
+                              (normalize_id,)))
+            index_units.append(index_id)
 
-    tool_dependencies = tuple(tool_units)
-    units.append(Unit("evidence_publication.build_indexes",
-                      lambda unit: _build_indexes(unit, tool_dependencies), tool_dependencies))
+    index_dependencies = tuple(index_units)
+    units.append(Unit("evidence_publication.assemble_manifest",
+                      lambda unit: _assemble_manifest(unit, index_dependencies), index_dependencies))
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
-        index = unit.output("evidence_publication.build_indexes")
+        index = unit.output("evidence_publication.assemble_manifest")
         document = {
             "schema": "appsec-review/evidence-collection-handoff/1",
             "target_fingerprint": unit.job.source_fingerprint,
-            "index": index["artifact"], "dispositions": index["dispositions"],
+            "shards": index["shards"], "dispositions": index["dispositions"],
             "gaps": index["gaps"], "security_findings": [],
         }
         path = unit.unit_root / "handoff.json"
@@ -479,7 +685,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                 "dispositions": document["dispositions"]}
 
     units.append(Unit("evidence_publication.publish_handoff", publish,
-                      ("evidence_publication.build_indexes",)))
+                      ("evidence_publication.assemble_manifest",)))
     source_files = (Path(__file__), Path(__file__).with_name("adapters.py"), Path(__file__).with_name("evidence.py"))
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) + str(fail_tool).encode()).hexdigest()
 
@@ -502,10 +708,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                     ["docker", "image", "inspect", tool.tag, "--format", "{{.Id}}"],
                     capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
                 )
-                if inspected.returncode != 0:
-                    raise RuntimeError(f"cannot resolve runtime identity for {tool_id}")
                 digest.update(tool_id.encode())
-                digest.update(inspected.stdout.strip().encode())
+                digest.update(tool.tag.encode())
+                digest.update(inspected.stdout.strip().encode() if inspected.returncode == 0 else b"UNAVAILABLE")
         else:
             digest.update(b"injected-executor")
         return digest.hexdigest()
@@ -514,4 +719,4 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                input_validators=(validate,), schema_identity="appsec-review/evidence-collection-job/1",
                implementation_identity=implementation,
                validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
-               runtime_identity=runtime_identity)
+               runtime_identity=runtime_identity, units=tuple(units))

@@ -14,9 +14,19 @@ invalidate an unrelated compile or AST shard, while a composed evidence index or
 can include the observation manifest as an upstream dependency.
 
 The current catalog job produces source, component, build, and bounded declaration-analysis
-shards. Static evidence collection adds an observations shard and composes it with the previously
-accepted catalog manifest. Later compiled, CodeQL, IR, binary, coverage, and finding-package jobs
-use the same physical schema and add their own shards; they do not widen the MCP interface.
+shards. Static evidence collection builds one observations shard per producer as soon as that
+producer is normalized. Physical identity is the composite `(logical name, shard_id)`, so Gitleaks,
+Semgrep, Syft, Checkov, and every other configured producer can publish independently without a
+global index-build barrier. The final manifest only verifies receipts and shard hashes and composes
+them with the accepted catalog manifest. A shard is inference authority only after that manifest is
+bound to an accepted handoff. Later CodeQL/IR branches use the same contract and may overlap
+unrelated scanners and indexers.
+
+The target analysis planner adds a separately fingerprinted `analysis` shard with shard id
+`target-analysis-plan`. It indexes accepted component routing, scanner reasons, and non-executable
+build topology. The shard keeps the catalog manifest as an explicit upstream and is queryable by
+the existing bounded `search`, `find`, `trace`, and `coverage` MCP filters; no filesystem search or
+new write-capable interface is exposed.
 
 `runs/<run-id>/data/indices/accepted.json` binds one manifest to an accepted job handoff. Before
 opening a database, retrieval verifies the pointer, handoff status and hash, manifest membership in
@@ -52,9 +62,16 @@ authenticated. Limits cover result count, response bytes, traversal depth, excer
 execution time. Compile/link arguments and environment-like producer payloads are bounded and
 redacted before indexing.
 
-Every query records a bounded `RETRIEVAL_QUERY` event in the single pipeline log. The event stores
-the tool, manifest, query hash, structured filters, result count, gaps, truncation, and duration; it
-never stores search text verbatim.
+Retrieval deterministically fans out over accepted shards sorted by logical name and shard id.
+Opaque cursors are bound to the accepted manifest and complete request identity. Coverage reports
+shard identities and shard-local gaps, and concurrent readers open every SQLite shard read-only and
+immutable.
+
+Every MCP transport call records exactly one `MCP_TOOL_STARTED`/`MCP_TOOL_COMPLETED` pair. Nested
+`find`/`trace` work used by `read_excerpt` and `resolve_evidence` is recorded as child
+`RETRIEVAL_SUBOP_COMPLETED` spans with the top-level invocation id, so tool-use metrics do not
+double-count. Direct core calls retain `RETRIEVAL_QUERY`. Events store hashes, filters, counts,
+gaps, truncation, and duration; they never store query or source text.
 
 Keep the adapter in the main package until a distinct privilege boundary, dependency conflict,
 independent scaling/restart need, or external versioned consumer is demonstrated.

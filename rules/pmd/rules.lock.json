@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/rules-lock/1",
+  "ruleset": "rules/pmd/java-security.xml",
+  "sha256": "61a1e0d129ee7eb7c96154a39be1584a114f09a633620d6eaacc06267bea356f",
+  "reviewed_at": "2026-10-08",
+  "tool": "PMD 7.28.0",
+  "license": "repository-authored rules under repository license; referenced PMD rules under BSD-4-Clause",
+  "provenance": [
+    "category/java/security.xml/HardCodedCryptoKey from PMD 7.28.0",
+    "category/java/security.xml/InsecureCryptoIv from PMD 7.28.0",
+    "repository-authored RuntimeCommandExecution XPath rule",
+    "repository-authored LegacyTlsProtocol XPath rule"
+  ]
+}

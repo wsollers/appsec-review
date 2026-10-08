@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-pmd",
+  "tool_version": "7.28.0",
+  "project": "https://github.com/pmd/pmd",
+  "license": "BSD-4-Clause",
+  "architecture": "linux/amd64",
+  "generated_from": "upstream-release-7.28.0-2026-09-25",
+  "artifacts": [
+    {
+      "name": "pmd-dist-7.28.0-bin.zip",
+      "url": "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.28.0/pmd-dist-7.28.0-bin.zip",
+      "path": "downloads/pmd-dist-7.28.0-bin.zip",
+      "sha256": "f974ba571f7bc01c73fffe11bade25fbc1f438698f9e9c00e416e8d65e9fbac2",
+      "bytes": 132947834,
+      "version": "7.28.0",
+      "license": "BSD-4-Clause",
+      "license_source": "https://github.com/pmd/pmd/blob/pmd_releases/7.28.0/LICENSE",
+      "provenance": "fixed upstream release binary distribution",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "The release publishes no detached signature for the binary distribution; immutable URL, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

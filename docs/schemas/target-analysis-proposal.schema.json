@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/target-analysis-proposal/1",
+  "title": "Untrusted target analysis proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "component_proposals"],
+  "properties": {
+    "schema": {"const": "appsec-review/target-analysis-proposal/1"},
+    "component_proposals": {
+      "type": "array", "maxItems": 256,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["component_id", "scanner_ids", "build_systems", "scope_paths", "dependencies", "reason"],
+        "properties": {
+          "component_id": {"type": "string", "maxLength": 128},
+          "scanner_ids": {"type": "array", "uniqueItems": true, "maxItems": 19, "items": {"type": "string"}},
+          "build_systems": {"type": "array", "uniqueItems": true, "maxItems": 14, "items": {"type": "string"}},
+          "scope_paths": {"type": "array", "uniqueItems": true, "maxItems": 10000, "items": {"type": "string", "maxLength": 512}},
+          "dependencies": {"type": "array", "uniqueItems": true, "maxItems": 128, "items": {"type": "string", "maxLength": 128}},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 2048}
+        }
+      }
+    }
+  }
+}

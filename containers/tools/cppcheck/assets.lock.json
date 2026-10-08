@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-cppcheck",
+  "tool_version": "2.22.0",
+  "project": "https://github.com/cppcheck-opensource/cppcheck",
+  "license": "GPL-3.0-or-later",
+  "architecture": "linux/amd64",
+  "generated_from": "upstream-release-2.22.0-2026-09-19",
+  "artifacts": [
+    {
+      "name": "cppcheck-2.22.0.tar.gz",
+      "url": "https://github.com/cppcheck-opensource/cppcheck/archive/refs/tags/2.22.0.tar.gz",
+      "path": "downloads/cppcheck-2.22.0.tar.gz",
+      "sha256": "d74945deb2d50393430e07596b766f8a779512c7f60dac2a30ea64e059ece57b",
+      "bytes": 4213443,
+      "version": "2.22.0",
+      "license": "GPL-3.0-or-later",
+      "license_source": "https://github.com/cppcheck-opensource/cppcheck/blob/2.22.0/COPYING",
+      "provenance": "fixed upstream signed-tag source archive",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "The release publishes no detached signature for the source archive; immutable URL, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

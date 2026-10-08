@@ -50,6 +50,13 @@ class GraphRunner:
             run_root = runner.runs.resolve(run_id)
         with FileLock(run_root / "data" / "resume.lock"):
             runner._bind_configuration(run_root)
+            graph_started = datetime.now(timezone.utc)
+            PipelineLog(run_root).write("RUN_STARTED", run_id=run_id, trigger=trigger,
+                orchestrator=dict(orchestration or {}).get("system", "application"),
+                details={"source_fingerprint": source_fingerprint})
+            PipelineLog(run_root).write("GRAPH_STARTED", run_id=run_id, trigger=trigger,
+                orchestrator=dict(orchestration or {}).get("system", "application"),
+                details={"source_fingerprint": source_fingerprint})
             decisions = ResumePlanner(self.config, run_root, self.jobs, source_fingerprint).plan(force_from=force_from)
             upstream: dict[str, str] = {}
             outcomes: dict[str, Any] = {}
@@ -77,9 +84,18 @@ class GraphRunner:
                     message="application graph stopped at failed job",
                     details={"error_type": type(exc).__name__, "completed_handoffs": upstream})
                 raise
-            PipelineLog(run_root).write("GRAPH_SUCCEEDED", run_id=run_id, trigger=trigger,
+            graph_status = ("COMPLETED_WITH_GAPS" if any(
+                value.get("status", {}).get("status") == "COMPLETED_WITH_GAPS"
+                for value in outcomes.values()) else "SUCCEEDED")
+            PipelineLog(run_root).write(
+                "GRAPH_COMPLETED_WITH_GAPS" if graph_status == "COMPLETED_WITH_GAPS" else "GRAPH_SUCCEEDED",
+                run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
-                details={"handoffs": upstream})
+                details={"handoffs": upstream, "completion_status": graph_status,
+                         "duration_ms": max(0, int((datetime.now(timezone.utc) - graph_started).total_seconds() * 1000))})
+            PipelineLog(run_root).write("RUN_COMPLETED", run_id=run_id, trigger=trigger,
+                orchestrator=dict(orchestration or {}).get("system", "application"),
+                details={"completion_status": graph_status, "handoffs": upstream})
             orchestration_receipt = None
             if correlation.get("system") and correlation.get("run_id"):
                 receipt_path = (run_root / "data" / "orchestration" / correlation["system"] /
@@ -93,6 +109,6 @@ class GraphRunner:
                     "handoff_sha256": upstream,
                 })
                 orchestration_receipt = str(receipt_path)
-            return {"run_id": run_id, "status": "SUCCEEDED",
+            return {"run_id": run_id, "status": graph_status,
                     "decisions": [decision.as_dict() for decision in decisions], "jobs": outcomes,
                     "orchestration_receipt": orchestration_receipt}

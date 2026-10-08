@@ -3,6 +3,15 @@ runs_dir = "runs"
 data_dir = "data"
 metadata_dir = "runs/metadata"
 
+[orchestration.dagster]
+executor = "multiprocess"
+max_concurrent = 8
+
+[orchestration.dagster.pools]
+scanner = 6
+index = 4
+lifecycle = 1
+
 [jobs.job_third_party_data_sync]
 name = "third_party_data_sync"
 workers = 3
@@ -178,46 +187,124 @@ workers = 1
 [jobs.job_target_catalog.steps.publish_catalog.tasks.validate_catalog]
 [jobs.job_target_catalog.steps.publish_catalog.tasks.publish_handoff]
 
+[jobs.job_target_analysis_plan]
+name = "target_analysis_plan"
+workers = 1
+
+[jobs.job_target_analysis_plan.settings]
+summary_max_items = 2000
+summary_max_bytes = 524288
+summary_sample_per_prefix = 20
+
+[jobs.job_target_analysis_plan.settings.model]
+enabled = false
+provider = "openai"
+model = "gpt-5"
+reasoning = "medium"
+max_input_tokens = 32000
+max_output_tokens = 8000
+timeout_seconds = 120
+retries = 1
+
+[jobs.job_target_analysis_plan.steps.catalog_summary]
+workers = 1
+[jobs.job_target_analysis_plan.steps.catalog_summary.tasks.load_accepted_catalog]
+[jobs.job_target_analysis_plan.steps.catalog_summary.tasks.summarize_components]
+
+[jobs.job_target_analysis_plan.steps.analysis_decisions]
+workers = 1
+[jobs.job_target_analysis_plan.steps.analysis_decisions.tasks.apply_deterministic_rules]
+[jobs.job_target_analysis_plan.steps.analysis_decisions.tasks.resolve_ambiguity]
+
+[jobs.job_target_analysis_plan.steps.plan_acceptance]
+workers = 1
+[jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.validate_plan]
+[jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.index_plan]
+[jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.publish_handoff]
+
 [jobs.job_evidence_collection]
 name = "evidence_collection"
-workers = 1
+workers = 8
+
+[jobs.job_evidence_collection.settings]
+tool_retries = 1
 
 [jobs.job_evidence_collection.steps.secrets]
 workers = 1
-[jobs.job_evidence_collection.steps.secrets.tasks.gitleaks]
+[jobs.job_evidence_collection.steps.secrets.tasks.gitleaks_scan]
+[jobs.job_evidence_collection.steps.secrets.tasks.gitleaks_normalize]
+[jobs.job_evidence_collection.steps.secrets.tasks.gitleaks_index]
 
 [jobs.job_evidence_collection.steps.source_sast]
 workers = 4
-[jobs.job_evidence_collection.steps.source_sast.tasks.semgrep]
-[jobs.job_evidence_collection.steps.source_sast.tasks.gosec]
-[jobs.job_evidence_collection.steps.source_sast.tasks.mobsfscan]
-[jobs.job_evidence_collection.steps.source_sast.tasks.shellcheck]
-[jobs.job_evidence_collection.steps.source_sast.tasks.phpcs]
-[jobs.job_evidence_collection.steps.source_sast.tasks.phpstan]
-[jobs.job_evidence_collection.steps.source_sast.tasks.psalm]
-[jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs]
+[jobs.job_evidence_collection.steps.source_sast.tasks.semgrep_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.semgrep_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.semgrep_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.gosec_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.gosec_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.gosec_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.mobsfscan_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.mobsfscan_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.mobsfscan_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.shellcheck_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.shellcheck_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.shellcheck_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpcs_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpcs_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpcs_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpstan_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpstan_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.phpstan_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.psalm_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.psalm_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.psalm_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.pmd_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.pmd_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.pmd_index]
 
 [jobs.job_evidence_collection.steps.software_inventory]
 workers = 1
-[jobs.job_evidence_collection.steps.software_inventory.tasks.syft]
+[jobs.job_evidence_collection.steps.software_inventory.tasks.syft_scan]
+[jobs.job_evidence_collection.steps.software_inventory.tasks.syft_normalize]
+[jobs.job_evidence_collection.steps.software_inventory.tasks.syft_index]
 
 [jobs.job_evidence_collection.steps.vulnerability_matching]
 workers = 2
-[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.osv_scanner]
-[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.grype]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.osv_scanner_scan]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.osv_scanner_normalize]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.osv_scanner_index]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.grype_scan]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.grype_normalize]
+[jobs.job_evidence_collection.steps.vulnerability_matching.tasks.grype_index]
 
 [jobs.job_evidence_collection.steps.configuration]
 workers = 4
-[jobs.job_evidence_collection.steps.configuration.tasks.hadolint]
-[jobs.job_evidence_collection.steps.configuration.tasks.checkov]
-[jobs.job_evidence_collection.steps.configuration.tasks.trivy]
-[jobs.job_evidence_collection.steps.configuration.tasks.zizmor]
+[jobs.job_evidence_collection.steps.configuration.tasks.hadolint_scan]
+[jobs.job_evidence_collection.steps.configuration.tasks.hadolint_normalize]
+[jobs.job_evidence_collection.steps.configuration.tasks.hadolint_index]
+[jobs.job_evidence_collection.steps.configuration.tasks.checkov_scan]
+[jobs.job_evidence_collection.steps.configuration.tasks.checkov_normalize]
+[jobs.job_evidence_collection.steps.configuration.tasks.checkov_index]
+[jobs.job_evidence_collection.steps.configuration.tasks.trivy_scan]
+[jobs.job_evidence_collection.steps.configuration.tasks.trivy_normalize]
+[jobs.job_evidence_collection.steps.configuration.tasks.trivy_index]
+[jobs.job_evidence_collection.steps.configuration.tasks.zizmor_scan]
+[jobs.job_evidence_collection.steps.configuration.tasks.zizmor_normalize]
+[jobs.job_evidence_collection.steps.configuration.tasks.zizmor_index]
 
 [jobs.job_evidence_collection.steps.binary_hardening]
 workers = 1
-[jobs.job_evidence_collection.steps.binary_hardening.tasks.blint]
+[jobs.job_evidence_collection.steps.binary_hardening.tasks.blint_scan]
+[jobs.job_evidence_collection.steps.binary_hardening.tasks.blint_normalize]
+[jobs.job_evidence_collection.steps.binary_hardening.tasks.blint_index]
 
 [jobs.job_evidence_collection.steps.evidence_publication]
 workers = 1
-[jobs.job_evidence_collection.steps.evidence_publication.tasks.build_indexes]
+[jobs.job_evidence_collection.steps.evidence_publication.tasks.assemble_manifest]
 [jobs.job_evidence_collection.steps.evidence_publication.tasks.publish_handoff]

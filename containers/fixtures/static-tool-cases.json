@@ -3,6 +3,7 @@
   "cases": {
     "tool-blint": {"positive": "blint/vulnerable.c", "preparation": "compile-outside-scanner"},
     "tool-checkov": {"positive": "checkov/main.tf"},
+    "tool-cppcheck": {"positive": "cppcheck/vulnerable.cpp", "clean": "cppcheck/clean.cpp"},
     "tool-gitleaks": {"positive": "gitleaks/leak.txt"},
     "tool-gosec": {"positive": "gosec/vulnerable.go", "clean": "gosec/clean.go"},
     "tool-grype": {"positive": "grype/sbom.cdx.json"},
@@ -11,6 +12,7 @@
     "tool-osv-scanner": {"positive": "osv/sbom.cdx.json"},
     "tool-phpcs": {"positive": "php/app.php", "clean": "php/clean.php"},
     "tool-phpstan": {"positive": "php/app.php", "clean": "php/clean.php"},
+    "tool-pmd": {"positive": "pmd/Vulnerable.java", "clean": "pmd/Clean.java", "rules": "../../rules/pmd/java-security.xml"},
     "tool-psalm": {"positive": "php/app.php", "clean": "php/clean.php"},
     "tool-semgrep": {"positive": "semgrep/vulnerable.py", "rules": "semgrep/rules.yml"},
     "tool-shellcheck": {"positive": "shellcheck/vulnerable.sh", "clean": "shellcheck/clean.sh"},

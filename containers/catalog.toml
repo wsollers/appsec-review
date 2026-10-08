@@ -330,6 +330,21 @@ reason = "Reconfirm GPL policy decision; port and independently test database li
 recommended_destination = "containers/tools/cve-bin-tool/ plus src/appsec_review/jobs/.../adapters/"
 
 [[images]]
+id = "tool-cppcheck"
+state = "enabled"
+kind = "tool"
+version = "2.22.0"
+tag = "appsec-review/tool-cppcheck:2.22.0"
+context = "containers/tools/cppcheck"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/cppcheck/tool.toml"
+assets_lock = "containers/tools/cppcheck/assets.lock.json"
+build_args = { TOOL_VERSION = "2.22.0" }
+purpose = "Bounded C/C++ source static analysis with optional sanitized compile database input."
+
+[[images]]
 id = "tool-gitleaks"
 state = "enabled"
 kind = "tool"
@@ -483,6 +498,21 @@ tool_manifest = "containers/tools/psalm/tool.toml"
 assets_lock = "containers/tools/psalm/assets.lock.json"
 build_args = { TOOL_VERSION = "6.18.1" }
 purpose = "PHP static and taint analysis."
+
+[[images]]
+id = "tool-pmd"
+state = "enabled"
+kind = "tool"
+version = "7.28.0"
+tag = "appsec-review/tool-pmd:7.28.0"
+context = "containers/tools/pmd"
+dockerfile = "Dockerfile"
+dependencies = ["base-jre"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/pmd/tool.toml"
+assets_lock = "containers/tools/pmd/assets.lock.json"
+build_args = { TOOL_VERSION = "7.28.0" }
+purpose = "Java source AST analysis with a pinned security-focused ruleset."
 
 [[images]]
 id = "tool-sbomasm"

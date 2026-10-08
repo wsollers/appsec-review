@@ -7,12 +7,13 @@ from pathlib import Path
 
 from appsec_review.jobs.job_evidence_collection.adapters import ScanCatalog, adapter_registry
 from appsec_review.jobs.job_evidence_collection.evidence import build_envelope
+from appsec_review.jobs.cataloging import inventory, source_fingerprint
 
 
 def fixture_catalog() -> ScanCatalog:
     paths = [
         ("main.py", "Python"), ("main.go", "Go"), ("app.php", "PHP"), ("run.sh", "Shell"),
-        ("MainActivity.java", "Java"), ("Dockerfile", None), ("main.tf", None),
+        ("MainActivity.java", "Java"), ("native.cpp", "C++"), ("Dockerfile", None), ("main.tf", None),
         (".github/workflows/ci.yml", None), ("package-lock.json", None),
     ]
     return ScanCatalog("fingerprint", "handoff", tuple(
@@ -22,7 +23,7 @@ def fixture_catalog() -> ScanCatalog:
 
 def test_every_enabled_adapter_has_applicability_argv_exit_parser_and_limitations() -> None:
     registry = adapter_registry()
-    assert len(registry) == 17
+    assert len(registry) == 19
     catalog = fixture_catalog()
     for adapter in registry.values():
         selection = adapter.applicability(catalog)
@@ -31,7 +32,8 @@ def test_every_enabled_adapter_has_applicability_argv_exit_parser_and_limitation
             argv = adapter.argv(f"/bin/{adapter.tool_id}", selection)
             assert argv[0] == f"/bin/{adapter.tool_id}"
             assert adapter.accepted_exit_codes
-        payload = b"<BugCollection/>" if adapter.tool_id == "tool-spotbugs" else b"{}"
+        payload = (b"<BugCollection/>" if adapter.tool_id == "tool-spotbugs" else
+                   b"<results><errors/></results>" if adapter.tool_id == "tool-cppcheck" else b"{}")
         assert isinstance(adapter.parse(payload), list)
         assert len(adapter.parser_identity) == 64
 
@@ -90,3 +92,20 @@ def test_evidence_collapses_exact_duplicates_but_preserves_distinct_observations
     )
     assert envelope["record_count"] == 2
     assert len({record["evidence_id"] for record in envelope["records"]}) == 2
+
+
+def test_checkov_typed_multi_vuln_scope_includes_supported_families_not_arbitrary_yaml() -> None:
+    target = Path(__file__).parents[1] / "targets" / "appsec-multi-vuln"
+    snapshot = inventory(target)
+    catalog = ScanCatalog(source_fingerprint(target), "a" * 64, tuple(snapshot["files"]), (), (), target)
+    adapter = adapter_registry()["tool-checkov"]
+    selected = adapter.applicability(catalog)
+    assert selected.applicable
+    assert {"dockerfile", "github_actions"} <= set(selected.families)
+    assert "projects/python/case-078/config.yaml" not in selected.files
+    assert any(path.endswith("Dockerfile") for path in selected.families["dockerfile"])
+    assert set(selected.families["github_actions"]) == {
+        ".github/workflows/ci.yml", ".github/workflows/codeql.yml"}
+    argv = adapter.argv("/opt/tool/bin/checkov", selected)
+    assert "--framework" in argv and "dockerfile" in argv and "github_actions" in argv
+    assert any("structural evidence" in gap for gap in selected.gaps)

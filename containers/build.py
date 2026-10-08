@@ -434,6 +434,13 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
         "tool-trivy": ("trivy", ["/opt/tool/bin/trivy", "config", "--skip-check-update", "--format",
                          "json", "--output", "/scratch/result.json", "/workspace"],
                         {0}, "result.json", "Misconfigurations"),
+        "tool-cppcheck": ("cppcheck", ["/opt/cppcheck/bin/cppcheck", "--enable=warning,style,performance,portability",
+                              "--xml", "--xml-version=2", "/workspace/vulnerable.cpp"],
+                             {0}, None, "arrayIndexOutOfBounds"),
+        "tool-pmd": ("pmd", ["/opt/pmd/bin/pmd", "check", "--no-cache", "--no-progress",
+                       "--format", "json", "--report-file", "/scratch/result.json", "--rulesets",
+                       "/rules/java-security.xml", "--dir", "/workspace/Vulnerable.java"],
+                      {0, 4}, "result.json", "RuntimeCommandExecution"),
     }
     failures = 0
     run_dir = RUN_ROOT / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + f"-smoke-{os.getpid()}")
@@ -448,8 +455,10 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
         argv = runtime_args(policy) + [
             "--mount", f"type=bind,src={source},dst=/workspace,readonly",
             "--mount", f"type=bind,src={output_dir.resolve()},dst=/scratch",
-            catalog["by_id"][image_id]["tag"], *command,
         ]
+        if image_id == "tool-pmd":
+            argv += ["--mount", f"type=bind,src={(ROOT / 'rules' / 'pmd').resolve()},dst=/rules,readonly"]
+        argv += [catalog["by_id"][image_id]["tag"], *command]
         completed = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True,
                                    encoding="utf-8", errors="replace",
                                    timeout=policy["timeout_seconds"], check=False)

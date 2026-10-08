@@ -47,6 +47,9 @@ def parser() -> argparse.ArgumentParser:
     for field in ("level", "job", "step", "task", "attempt"):
         logs.add_argument(f"--{field}")
 
+    metrics = commands.add_parser("metrics", help="derive bounded operational metrics from telemetry")
+    metrics.add_argument("--run-id", required=True)
+
     commands.add_parser("schedules", help="print configured schedules")
     return root
 
@@ -89,6 +92,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     print(f"no pipeline log records for run {args.run_id}", file=__import__("sys").stderr)
                 return 0
             time.sleep(0.5)
+
+    if args.command == "metrics":
+        from appsec_review.observability import aggregate_run_metrics
+        print(json.dumps(aggregate_run_metrics(config.runtime.runs_dir / args.run_id), sort_keys=True, indent=2))
+        return 0
 
     if args.command == "plan-tools":
         from appsec_review.jobs.job_evidence_collection import plan_applicability

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import threading
+import time
 
 import pytest
 
@@ -8,7 +11,7 @@ dagster = pytest.importorskip("dagster")
 
 from appsec_review.orchestration.dagster import build_definitions
 from appsec_review.orchestration.dagster.adapter import _metadata_for_outcome
-from appsec_review.runtime import Job
+from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.registry import JobRegistry
 
 
@@ -28,6 +31,11 @@ workers = 1
 enabled = true
 cron = "15 2 * * *"
 timezone = "UTC"
+
+[jobs.{configured_job}.steps.work]
+workers = 1
+[jobs.{configured_job}.steps.work.tasks.execute]
+workers = 1
 """.strip(),
         encoding="utf-8",
     )
@@ -36,7 +44,10 @@ timezone = "UTC"
 
 def _registry() -> JobRegistry:
     registry = JobRegistry()
-    registry.register("job_fixture", lambda: Job("job_fixture", "fixture", lambda context: {}))
+    def build():
+        units = (Unit("work.execute", lambda context: {"value": 1}),)
+        return Job("job_fixture", "fixture", UnitExecutor(units).execute, units=units)
+    registry.register("job_fixture", build)
     return registry
 
 
@@ -47,15 +58,25 @@ def test_definitions_discover_registry_and_configure_schedule(tmp_path: Path) ->
         def __init__(self, config):
             self.config = config
 
-        def run(self, job, *, trigger, orchestration):
+        def begin_attempt(self, job, *, trigger, orchestration, **kwargs):
             calls.append((trigger, orchestration))
+            return {"run_id": "test-run", "attempt_id": "attempt_0001", "trigger": trigger,
+                    "orchestration": orchestration, "attempt_path": "attempt",
+                    "source_fingerprint": "none", "upstream_handoffs": {}, "started_at": "2026-10-08T00:00:00+00:00"}
+
+        def execute_or_reuse_unit(self, job, claim, unit_id):
+            return {"value": 1}
+
+        def finalize_attempt(self, job, claim):
             return {
                 "status": {
                     "run_id": "test-run",
                     "attempt_id": "attempt_0001",
-                    "trigger": trigger,
+                    "trigger": claim["trigger"],
                     "status": "SUCCEEDED",
                 },
+                "handoff_sha256": "a" * 64,
+                "handoff": {},
                 "attempt_root": str(tmp_path / "attempt"),
                 "result": {
                     "status": "SUCCEEDED",
@@ -95,8 +116,16 @@ def test_application_failure_fails_dagster_run(tmp_path: Path) -> None:
         def __init__(self, config):
             pass
 
-        def run(self, job, *, trigger, orchestration):
+        def begin_attempt(self, job, **kwargs):
+            return {"run_id": "test-run", "attempt_id": "attempt_0001", "trigger": "manual",
+                    "orchestration": {}, "attempt_path": "attempt", "source_fingerprint": "none",
+                    "upstream_handoffs": {}, "started_at": "2026-10-08T00:00:00+00:00"}
+
+        def execute_or_reuse_unit(self, job, claim, unit_id):
             raise RuntimeError("application terminal failure")
+
+        def finalize_attempt(self, job, claim):  # pragma: no cover
+            raise AssertionError
 
     definitions = build_definitions(
         _config(tmp_path), registry=_registry(), runner_factory=Runner
@@ -153,6 +182,7 @@ def test_metadata_maps_units_snapshots_counts_gaps_and_receipts(tmp_path: Path) 
 def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
     definitions = build_definitions(config)
+    definitions.get_repository_def().load_all_definitions()
     schedule = definitions.get_schedule_def("third_party_data_sync_schedule")
 
     assert schedule.cron_schedule == "0 0 * * *"
@@ -161,7 +191,46 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("third_party_data_sync").name == "third_party_data_sync"
     assert definitions.get_job_def("review_intake").name == "review_intake"
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
+    assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
     assert definitions.get_job_def("wave1_review").name == "wave1_review"
+
+
+def test_wave1_exposes_real_producer_shard_topology() -> None:
+    config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
+    graph = build_definitions(config).get_job_def("wave1_review").graph
+    names = {node.name for node in graph.node_defs}
+    assert "dispatch_wave1_review" not in names
+    expected = {
+        "review_intake__begin", "target_catalog__begin", "target_analysis_plan__begin",
+        "target_analysis_plan__analysis_decisions__apply_deterministic_rules",
+        "target_analysis_plan__plan_acceptance__index_plan",
+        "evidence_collection__secrets__gitleaks_scan",
+        "evidence_collection__secrets__gitleaks_normalize",
+        "evidence_collection__secrets__gitleaks_index",
+        "evidence_collection__source_sast__semgrep_scan",
+        "evidence_collection__software_inventory__syft_scan",
+        "evidence_collection__vulnerability_matching__grype_scan",
+        "evidence_collection__evidence_publication__assemble_manifest",
+        "evidence_collection__evidence_publication__publish_handoff",
+    }
+    assert expected <= names
+
+    def upstream(node: str) -> set[str]:
+        mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
+        return {output.node_name for outputs in mapping.values() for output in outputs}
+
+    assert "evidence_collection__secrets__gitleaks_scan" in upstream(
+        "evidence_collection__secrets__gitleaks_normalize")
+    assert "evidence_collection__secrets__gitleaks_normalize" in upstream(
+        "evidence_collection__secrets__gitleaks_index")
+    assert "evidence_collection__software_inventory__syft_scan" in upstream(
+        "evidence_collection__vulnerability_matching__grype_scan")
+    assert "target_catalog__finalize" in upstream("target_analysis_plan__begin")
+    assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")
+    barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
+    assert "evidence_collection__secrets__gitleaks_index" in barrier
+    assert "evidence_collection__source_sast__semgrep_index" in barrier
+    assert "evidence_collection__vulnerability_matching__grype_index" in barrier
 
 
 def test_wave1_dagster_path_runs_application_graph(tmp_path: Path, monkeypatch) -> None:
@@ -172,4 +241,66 @@ def test_wave1_dagster_path_runs_application_graph(tmp_path: Path, monkeypatch) 
     config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
     result = build_definitions(config).get_job_def("wave1_review").execute_in_process()
     assert result.success
-    assert result.output_for_node("dispatch_wave1_review") is None
+    assert "evidence_collection__evidence_publication__assemble_manifest" in {
+        node.name for node in build_definitions(config).get_job_def("wave1_review").graph.node_defs}
+
+
+def test_multiprocess_branches_overlap_and_final_manifest_waits(tmp_path: Path, monkeypatch) -> None:
+    from dagster import DagsterInstance, execute_job, reconstructable
+    from tests.orchestration.dagster.concurrency_fixture import define_job
+
+    config = tmp_path / "appsec-review.toml"
+    config.write_text("""
+[runtime]
+runs_dir = "runs"
+data_dir = "data"
+metadata_dir = "runs/metadata"
+[orchestration.dagster]
+executor = "multiprocess"
+max_concurrent = 4
+[jobs.job_fixture]
+name = "fixture"
+workers = 4
+[jobs.job_fixture.steps.slow]
+workers = 1
+[jobs.job_fixture.steps.slow.tasks.scan]
+[jobs.job_fixture.steps.slow.tasks.normalize]
+[jobs.job_fixture.steps.slow.tasks.index]
+[jobs.job_fixture.steps.fast]
+workers = 1
+[jobs.job_fixture.steps.fast.tasks.scan]
+[jobs.job_fixture.steps.fast.tasks.normalize]
+[jobs.job_fixture.steps.fast.tasks.index]
+[jobs.job_fixture.steps.publication]
+workers = 1
+[jobs.job_fixture.steps.publication.tasks.assemble]
+[jobs.job_fixture.steps.publication.tasks.publish]
+""".strip(), encoding="utf-8")
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "main.py").write_text("pass\n", encoding="utf-8")
+    monkeypatch.setenv("APPSEC_TEST_ROOT", str(tmp_path))
+    monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
+    outcome = []
+    dagster_root = tmp_path / "dagster"
+    dagster_root.mkdir()
+    with DagsterInstance.local_temp(tempdir=str(dagster_root)) as instance:
+        thread = threading.Thread(target=lambda: outcome.append(
+            execute_job(reconstructable(define_job), instance=instance)), daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 60
+        try:
+            while time.monotonic() < deadline and not (tmp_path / "fast-indexed").exists():
+                time.sleep(0.05)
+            assert (tmp_path / "slow-started").exists()
+            assert (tmp_path / "fast-indexed").exists()
+            assert not (tmp_path / "manifest-assembled").exists()
+        finally:
+            (tmp_path / "release-slow").write_text("release", encoding="utf-8")
+        thread.join(30)
+    assert not thread.is_alive()
+    assert outcome and outcome[0].success
+    assert (tmp_path / "manifest-assembled").exists() and (tmp_path / "handoff-published").exists()
+    events = [__import__("json").loads(line) for line in next((tmp_path / "runs").glob(
+        "*/data/logs/pipeline.jsonl")).read_text(encoding="utf-8").splitlines()]
+    assert any(item["event_type"] == "TASK_STARTED" and item["task_id"] == "scan" for item in events)

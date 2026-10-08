@@ -1,10 +1,15 @@
 # Dagster live verification evidence
 
-`live-acceptance.json` is the concise, non-secret report produced by
-`deploy/dagster/bin/verify.py` after a fresh manual launch through the live Dagster instance. It
-records the two run identities, all 12 application unit statuses and resolving receipt paths, the
-four published snapshot identities, the live job, console health, and the enabled schedule resolved
-from `appsec-review.toml`.
+`wave1-live-acceptance.json` is the current concise, non-secret acceptance report. It records live
+Dagster run `87fffd7b-a14f-4fd5-9cef-97b5b9862a08` and application run `2026-10-08-0023`, all four
+accepted job handoffs, 94 successful Dagster nodes, 19 producer dispositions and shards, the
+combined manifest identity, a peak of six overlapping scanner intervals, and proof that manifest
+assembly started after every producer index completed. The correlated rerun reused all 19 producer
+shards and truthfully completed with upstream planning gaps. It contains no target contents, raw
+scanner output, databases, logs, or secrets.
+
+`live-acceptance.json` is the earlier third-party data-sync acceptance record. It retains the feed
+snapshot identities and resolving paths from that bounded historical run.
 
 `failure-propagation.json` records the bounded live failure observed while repairing the first
 container integration defect. It proves that an application terminal failure produced a failed
@@ -16,7 +21,6 @@ Bulk feeds, generated run contents, database files, logs, volumes, and secrets a
 copied here. Receipt and snapshot paths resolve against the repository's ignored `runs/` and
 `data/` state on the accepting host.
 
-`wave1-live-acceptance.json` records the successful manual `wave1_review` launch, its Dagster and
-application run identities, both accepted handoff hashes, every Wave 1 unit state, gaps, and
-resolving receipt paths. It contains no target contents, bulk indexes, logs, secrets, or database
-state.
+`static-analysis-live-acceptance.json` is retained as the pre-concurrency static-analysis baseline.
+Its `dispatch_wave1_review` and monolithic `build_indexes` names describe the superseded graph and
+must not be used as evidence for the current topology. The current record above replaces it.

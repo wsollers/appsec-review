@@ -90,4 +90,4 @@ def build_job() -> Job:
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_review_intake", "review_intake", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity="appsec-review/review-intake-job/1",
-               implementation_identity=implementation, validation_identity=validation)
+               implementation_identity=implementation, validation_identity=validation, units=units)

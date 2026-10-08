@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AppSec Review Java Security"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>
+    Reviewed, narrow Java source-security rules. Results are observations requiring confirmation.
+  </description>
+
+  <rule ref="category/java/security.xml/HardCodedCryptoKey" />
+  <rule ref="category/java/security.xml/InsecureCryptoIv" />
+
+  <rule name="RuntimeCommandExecution"
+        language="java"
+        message="Runtime command execution accepts data that requires trust-boundary review"
+        class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+    <description>Flags Runtime.exec calls for command-injection review.</description>
+    <priority>2</priority>
+    <properties>
+      <property name="xpath">
+        <value><![CDATA[
+//MethodCall[@MethodName = 'exec']
+]]></value>
+      </property>
+    </properties>
+  </rule>
+
+  <rule name="LegacyTlsProtocol"
+        language="java"
+        message="Legacy TLS protocol selection requires review"
+        class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+    <description>Flags explicit TLSv1 and SSL protocol literals passed to getInstance.</description>
+    <priority>2</priority>
+    <properties>
+      <property name="xpath">
+        <value><![CDATA[
+//MethodCall[@MethodName = 'getInstance']/ArgumentList/StringLiteral[
+    @ConstValue = ('SSL', 'SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.0')
+]
+]]></value>
+      </property>
+    </properties>
+  </rule>
+</ruleset>

@@ -83,19 +83,18 @@ python -m appsec_review run job_third_party_data_sync --trigger manual
 python -m appsec_review run job_third_party_data_sync --trigger schedule
 ```
 
-The Dagster adapter under `src/appsec_review/orchestration/dagster/` enumerates `JobRegistry` and
-generates one single-op Dagster job for every registered semantic job. It also generates schedule
-definitions from the TOML declarations; cron expressions, time zones, and enabled state are never
-duplicated in Python. Both console launches and daemon schedule ticks call the generated dispatch op,
-which builds the registered job and hands it to `JobRunner`. The runner therefore retains run
-allocation, immutable configuration binding, validation, locking, events, evidence paths, and status
-publication. Dagster owns only scheduling, launch visibility, and its own orchestration history.
+The application runtime exposes a typed `ExecutionPlan` and safe lifecycle methods to begin an
+attempt, execute or reuse one unit, and finalize its validated handoff. Dagster consumes that plan
+and displays the actual dependency graph. Intake and catalog tasks are visible nodes; every evidence
+producer is a `scan -> normalize -> index` branch; Syft is a real prerequisite of Grype; final
+manifest assembly depends on every producer-owned index shard; handoff publication depends on the
+verified manifest. There is no whole-job dispatch op.
 
-The adapter intentionally exposes one Dagster execution op. The application runtime currently owns
-the only safe whole-job transaction boundary; representing application tasks as independently
-executable Dagster ops would duplicate lifecycle and dependency ownership. The dispatch op instead
-publishes structured Dagster metadata for every application unit receipt, step and unit status,
-published snapshot identity, count, gap, and resolving run-owned receipt path.
+Dagster owns dependency scheduling, multiprocess concurrency, pools, node visibility, and selected
+re-execution. The application remains authoritative for run/attempt allocation, immutable
+configuration binding, handlers and validator lists, checkpoints, receipts, hashes, source identity,
+coverage gaps, shard validation, the accepted manifest pointer, the central log, and accepted
+handoffs. TOML controls the multiprocess executor and concurrency bounds.
 
 Dagster run UUIDs and application run ids are separate identities. The adapter passes the Dagster
 UUID into `JobRunner` as orchestration correlation, and the runner records it in terminal
@@ -104,5 +103,30 @@ the Dagster run tags. This creates a checked bidirectional trace without allowin
 application receipts or allocate application ids.
 
 Deployment layout and exact operator commands are documented in
-[`deploy/dagster/README.md`](../../deploy/dagster/README.md). The job uses a kernel lock, so a manual
-invocation and scheduled invocation cannot publish concurrently.
+[`deploy/dagster/README.md`](../../deploy/dagster/README.md). The process-safe central log and
+immutable publication checks remain coherent across Dagster worker processes. Direct
+`JobRunner.run` remains available for fast runtime tests and controlled application execution;
+integration and acceptance tests use the Dagster DAG.
+
+## Target analysis planning
+
+`job_target_analysis_plan` is the semantic boundary between the accepted target catalog and costly
+producer branches. It consumes only hash-verified catalog artifacts and accepted index identities;
+it never walks the target during inference and never builds or executes target code. Its bounded
+summary groups large trees by prefix and component while preserving exact target-relative path and
+hash identities for every accepted scope.
+
+Deterministic rules select mandatory baseline coverage, language-specific scanners, dependency
+managers, configuration scanners, and recognized build systems first. A centrally configured model
+may be injected only when the summary identifies bounded ambiguity. Model proposals are untrusted,
+versioned data: scanners, build systems, components, dependencies, and paths must resolve against
+fixed allowlists and the accepted catalog. Commands, images, plugins, arbitrary paths, and
+target-supplied guidance are not representable. Disabled, unavailable, failed, invalid, or
+contradictory model assistance publishes the deterministic safe plan with a named gap.
+
+The accepted plan is an immutable run artifact and an `analysis/target-analysis-plan` retrieval
+shard. Its manifest composes the catalog shards rather than replacing them. Evidence producers read
+the accepted plan, execute only selected scanner scopes, and publish explicit `NOT_APPLICABLE`
+dispositions for unselected families. Because the planner is a real job in the Dagster graph,
+catalog changes invalidate the plan and downstream producers while unrelated upstream work can be
+reused.

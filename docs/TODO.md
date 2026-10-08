@@ -13,3 +13,11 @@ Grype tool/image identity and upstream database schema/build identity, enforce d
 extraction bounds, hash every published file, validate the database with the pinned Grype version,
 publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
 The step must fail truthfully when provenance, validation, or freshness cannot be established.
+
+## Extend the concurrent producer pattern to CodeQL
+
+The runtime and Dagster adapter now support independent scan/normalize/index branches and composite
+logical-name/shard identities. Future CodeQL database, query, normalization, and indexing work should
+use that execution-plan contract so language-specific databases and queries overlap unrelated static
+tools. Preserve producer-local failure dispositions and invalidate only dependent shards, manifests,
+and finding packages.

@@ -1,9 +1,11 @@
 # Dagster deployment
 
-This deployment is a thin adapter around the application runtime. The code location discovers
-semantic jobs from `JobRegistry`, reads names and schedules from `appsec-review.toml`, and sends
-every Dagster launch through `JobRunner`. Dagster does not allocate application run ids, create
-attempt directories, validate job output, or publish application status.
+This deployment turns the application runtime's typed execution plan into a real Dagster DAG. The
+code location discovers semantic jobs from `JobRegistry`, reads schedules and executor/concurrency
+settings from `appsec-review.toml`, and maps each application unit to a Dagster node. Dagster owns
+dependencies, multiprocess scheduling, node selection, and visibility. Application lifecycle
+methods still allocate application attempts, validate unit receipts and artifacts, and publish
+accepted handoffs and manifests.
 
 The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
 the web console is published, on `127.0.0.1:3000`. The repository's `runs/` and `data/` directories
@@ -66,8 +68,8 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exe
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/wave1-live-acceptance.json
 ```
 
-The configured schedule and a manual launch enter the same generated dispatch op and `JobRunner`
-path. Schedule cron, time zone, and enabled state come only from
+The configured schedule and a manual launch enter the same generated semantic DAG. Schedule cron,
+time zone, and enabled state come only from
 `jobs.job_third_party_data_sync.schedule` in `appsec-review.toml`; the current declaration is
 `0 0 * * *` in `UTC`, enabled.
 
@@ -79,10 +81,16 @@ snapshots, counts, gaps, and receipt paths. The application `status.json` contai
 `orchestration.system=dagster` and `orchestration.run_id=<Dagster UUID>` link. The verification
 command validates both directions rather than inferring success from one system alone.
 
-Dagster shows one execution op deliberately. The runtime does not yet expose a safe resumable API
-for independently dispatched tasks, so drawing 12 Dagster ops would create false lifecycle
-ownership. `JobRunner` executes and validates the real task graph; Dagster displays its 12 receipts
-as structured metadata on the honest dispatch op.
+`wave1_review` shows intake and catalog units followed by independent evidence branches. Each branch
+has scan, normalize, and producer-owned index nodes. The cheap manifest barrier waits for a truthful
+terminal disposition from every branch, verifies every immutable shard, and then publication moves
+the accepted pointer. The configured multiprocess executor allows unrelated branches to overlap;
+Grype alone waits for Syft.
+
+A producer failure is not a clean scan and not a framework failure. It becomes a durable `FAILED`,
+`BLOCKED`, `PARTIAL`, or `NOT_APPLICABLE` disposition, with bounded receipts and gaps, and can yield
+`COMPLETED_WITH_GAPS`. Hash, path, configuration, receipt, handoff, manifest, and index-integrity
+failures still fail the Dagster run.
 
 Stop containers without deleting persistent state:
 
@@ -110,6 +118,7 @@ docker build --file deploy/dagster/Dockerfile --target test --tag appsec-review-
 docker run --rm appsec-review-dagster-test
 ```
 
-The deployment tests cover TOML schedule generation, registry discovery, manual/scheduled dispatch
-convergence, structured metadata mapping, and application-failure propagation. Live acceptance
+The deployment tests cover TOML schedule generation, registry discovery, repository-wide node-name
+uniqueness, manual/scheduled graph convergence, structured metadata mapping, multiprocess branch
+overlap and barrier ordering, and application-failure propagation. Live acceptance
 evidence and its scope are described in `deploy/dagster/verification/README.md`.

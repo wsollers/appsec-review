@@ -26,4 +26,6 @@ are in `docs/schemas/retrieval-mcp-tools.json`. Application code should instanti
 `RetrievalCore` instead of calling the MCP process.
 
 The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes all six tools.
-Query audits appear in `data/logs/pipeline.jsonl` under the run.
+Top-level tool-call spans and nested retrieval spans appear in `data/logs/pipeline.jsonl` under the
+run. One transport call produces one `MCP_TOOL_COMPLETED` metric event even when it invokes several
+internal retrieval operations.
