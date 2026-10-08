@@ -6,6 +6,214 @@ hardening (qualification rituals, recovery proofs, batch protocol) is out of sco
 
 The earlier batch backlog and phase plan were removed on 2026-09-27; see git history at `2e98423a`.
 
+## Simplification program (owner decision, 2026-10-07)
+
+The next priority is to simplify the product before adding more analysis lanes. Preserve the evidence
+rules in `AGENTS.md`, but remove legacy implementations, duplicate orchestration, stale documentation,
+unnecessary tests and model work that does not improve review decisions. The intended operator-visible
+process is: intake/applicability -> searchable evidence -> applicable deterministic collection ->
+candidate/context assembly -> focused inference and verification -> deterministic report.
+
+This program temporarily takes precedence over the four-target sequence below. Resume the sequence
+after the simplified path produces a report for `hello-autotools`; use `appsec-multi-vuln` as the
+accuracy/recall acceptance target before scaling to `freeciv21` and `doom3-bfg`.
+
+### Working method
+
+- Make small, reviewable changes directly on `main`, following ADR-0013. Each change must leave one
+  coherent path working; do not maintain two permanent implementations behind compatibility shims.
+- Before deleting behavior, classify it as current, legacy, generated, host-local or unknown. Record
+  the current consumer, replacement and deletion proof. Unknown behavior is investigated, not retained
+  indefinitely.
+- Use characterization tests only around contracts that must survive the migration: evidence lineage,
+  citation resolution, gap semantics, applicability, immutable attempts, validation/publication,
+  independent verification and report rendering. Replace implementation-shaped tests as their code is
+  removed.
+- Migrate in vertical slices through configuration -> input resolution -> execution -> validation ->
+  publication. Do not perform a repository-wide abstract rewrite with no runnable slice.
+- After every graph, registry or catalog change, run the touched tests plus
+  `validate_design_parity.py --check-generated-views` and `docs/processes/job_catalog.py --check`.
+- Do not add another tool, persona, job or evidence format unless it replaces an existing surface or a
+  target acceptance test demonstrates a coverage gap that cannot be served by the current primitives.
+
+### S0 - Recoverable baseline and deletion inventory
+
+- [x] Classify every current untracked file. `Claude outputs/` and obsolete
+      `appsec-review-process/registry/container-images/*.json` are host-local leftovers and are ignored;
+      do not include them in the baseline.
+- [ ] Commit the intended tracked baseline, then create annotated tag
+      `pre-simplification-2026-10-07`. Record the commit and tag here. A tag of a dirty working tree is
+      insufficient because it cannot preserve untracked content.
+- [x] Generate a deletion inventory covering legacy scripts, manual lane harnesses, shared-scratch
+      adapters, compatibility output surfaces, obsolete prompts, stale documentation and tests whose
+      only subject is deleted behavior. For every entry record `current consumer`, `replacement`,
+      `delete now / later`, and the proving test or target run.
+- [x] Identify the minimal invariants that survive the rewrite and add one small golden fixture for
+      each before deletion begins. Prefer the existing known-answer targets over synthetic framework
+      ceremony.
+
+S0 evidence: [`docs/architecture/simplification-s0-inventory.md`](../docs/architecture/simplification-s0-inventory.md)
+classifies all 79,895 ignored untracked files (zero product-source and zero unknown), records the
+deletion matrix and maps every surviving invariant to an existing small golden/known-answer fixture
+and focused executable tests. No new fixture was added because the audit found no missing
+characterization coverage. Baseline/tag remains open until the intended tracked changes are committed;
+the inventory records the guarded tag command and verification step.
+
+Exit: the baseline is retrievable, every proposed deletion is classified, and the required invariants
+have executable characterization coverage.
+
+### S1 - Remove legacy code and documentation
+
+- [ ] Delete the old `appsec-review-process/registry/` path and all callers or documentation that name
+      it. Current registry definitions live under `appsec-review-process/pipeline/` until the TOML
+      migration below replaces that layout.
+- [ ] Remove the legacy manual lane/scanner harness (`run_process.py`, `stage_artifacts.py`,
+      `create_handoff.py`, `validate_lane_output.py`, legacy scratch import/routing and lane-only status)
+      once the inventory confirms that the current Dagster/run-owned path has replacements. Do not leave
+      wrappers or shims.
+- [ ] Remove the legacy root `pipeline/engagement_job.*` / pregather / assemble path after mapping any
+      still-current transforms into run-owned workers. Static reference data moves to `data/`; review
+      logic does not move back under `scripts/`.
+- [ ] Move historical prompts, plans and superseded ADR implementation notes that remain useful into one
+      clearly non-authoritative archive; delete duplicated or inaccurate documentation.
+- [ ] Rewrite `README.md`, `docs/agent-reader.md` and one operator guide so they describe only the
+      current path. Generated graph/readiness/catalog views remain generated, not hand-summarized.
+- [ ] Delete tests that solely protect removed code. Keep no skipped compatibility suite.
+
+Exit: one supported execution path, one authoritative operator guide, no tracked legacy workflow, and
+repository search finds no live references to deleted entry points.
+
+### S2 - One centralized TOML configuration
+
+- [ ] Define `appsec-review-process/appsec-review.toml` as the single tracked operational configuration.
+      It owns budgets, timeouts, concurrency/pools, cache policy, retrieval limits, model policy,
+      applicability thresholds and per-job overrides. Schemas and immutable evidence records remain
+      separate data contracts rather than being embedded as TOML prose.
+- [ ] Implement one typed, immutable configuration loader with closed keys, explicit units, range checks,
+      source locations in errors and a canonical configuration fingerprint. Permit one optional
+      `APPSEC_REVIEW_CONFIG` path override; secrets and host-local identities remain outside tracked TOML.
+- [ ] Migrate `pipeline/tunables.json`, `model-config.json`, duplicated constants and environment-variable
+      defaults into the loader. Delete each old source in the same change that migrates its last reader.
+- [ ] Add table-driven tests for default loading, override precedence, unknown keys, invalid values and
+      stable fingerprints. Test semantics, not individual constant locations.
+
+Exit: one command prints the effective redacted configuration and its fingerprint, and no worker reads
+an old configuration surface.
+
+### S3 - Central abstract job runtime
+
+- [ ] Define one `JobSpec`/handler protocol: identity, applicability, required capabilities, input
+      resolver, executor, semantic validator, result contract, cache key and resource class.
+- [ ] Define one runtime state machine: resolve -> applicability -> fingerprint -> reuse -> allocate ->
+      execute -> validate -> publish. It owns locks, immutable attempts, terminal status, diagnostics,
+      retries, cancellation, recovery and accepted pointers.
+- [ ] Use typed result/error values for `OK`, `OK_WITH_GAPS`, `SKIPPED`, `BLOCKED`, `FAILED` and
+      `CANCELED`. A missing tool or unsupported surface becomes a named coverage gap when the consumer
+      contract permits it; it never becomes a false negative.
+- [ ] Move fingerprint selection into declarative `JobSpec` inputs. Delete per-module `_code_hashes`
+      wrappers and bespoke `current_inputs`/publication state machines as each job migrates.
+- [ ] Generate Dagster lifecycle ops and dependencies from registered `JobSpec` records. Delete the
+      hand-maintained `LIFECYCLE_OPS`, pass-through exception maps and per-job wrapper functions after
+      parity is demonstrated.
+- [ ] Migrate three representative vertical slices first: one deterministic worker, one pinned-container
+      worker and one persona worker. Then migrate by family and delete each old implementation immediately.
+
+Exit: all jobs execute through the same runtime and validator boundary; specialized modules contain
+analysis logic rather than orchestration boilerplate.
+
+### S4 - Simplify the graph and evidence flow
+
+- [ ] Replace the 29-input `02-evidence-assembly` barrier with an incrementally published evidence
+      catalog. Consumers declare minimum required capabilities plus optional enrichment families.
+- [ ] Run cheap applicability and language/build census first. Publish one accepted skip/gap receipt for
+      an inapplicable family instead of scheduling its entire subgraph.
+- [ ] Allow source/document/code-index consumers to start before native, binary, mobile or deployment
+      evidence finishes. Late evidence enriches later decisions without invalidating unrelated accepted
+      work.
+- [ ] Reduce the operator-visible workflow to six phases: intake/applicability, searchable evidence,
+      deterministic collection, candidate/context assembly, focused inference/verification, report.
+- [ ] Produce a generated critical-path and duration/cost report for every run. Set explicit budgets for
+      maximum required depth, model calls, repeated evidence reads and avoidable re-execution.
+
+Exit: an unsupported native build cannot block a source-only report, and the required critical path is
+materially shorter than the current 27 nodes.
+
+### S5 - Unified search and evidence retrieval
+
+- [ ] Define one bounded query service with `search`, `fetch` and `neighbors`. It federates source/doc
+      FTS, derived evidence, semantic recall, symbols/call graph, LSP recordings, build facts and
+      dependency evidence, returning one stable locator/citation envelope.
+- [ ] Use reciprocal-rank fusion for literal, semantic and structural results; preserve each substrate's
+      completeness/gap state. Do not treat semantic similarity or an incomplete graph as proof.
+- [ ] Normalize large scanner/SBOM/build evidence into queryable tables (SQLite or DuckDB/Parquet) and
+      make raw `input_jq`, JSON paging and grep diagnostic fallbacks rather than the normal model path.
+- [ ] Build deterministic per-claim context bundles: cited lines and enclosing symbol, callers/callees,
+      related tool leads, component/trust boundary, dependency/build facts and known gaps. Models begin
+      from this bundle and query outward only when necessary.
+- [ ] Preserve Python-written, hash-bound citations for every factual query used in a decision. Query
+      answers remain untrusted target data and are re-runnable during validation.
+- [ ] Add retrieval evaluations over known-answer targets: index coverage, Recall@5/20, citation validity,
+      empty/error/truncation rates, query latency, repeated reads and model tool-call count. Make regressions
+      fail a focused retrieval acceptance suite.
+
+Exit: model jobs normally use the unified service, evidence citations resolve, and known-answer recall
+meets recorded thresholds without repository-wide grep or source enumeration.
+
+### S6 - Personas, roles and prompts
+
+- [ ] Preserve the multi-perspective intent: personas are security viewpoints used for red/blue review,
+      categorization, build/compile discovery, component discovery and cataloging. They are not lifecycle
+      state machines, output schemas or substitutes for deterministic routing.
+- [ ] Split personas into a small reviewed core and an on-demand specialist catalog. Remove unused,
+      duplicate and mechanically generated production personas; unreviewed personas cannot participate in
+      a production finding decision.
+- [ ] Give each retained persona an explicit threat posture, evidence expertise, questions it must ask,
+      failure modes it catches, abstention criteria and counter-bias. Add adversarial examples and an
+      incomplete-evidence example.
+- [ ] Route personas deterministically from claim/component attributes (language, CWE family, component
+      type, attack surface, evidence producer and deployment context). Use multiple viewpoints for
+      high-risk or ambiguous claims, not for every low-value scanner lead.
+- [ ] Keep role semantics stage-specific and machine-enforced. Generate citation, disposition,
+      independence and output instructions exactly once; remove conflicting copies from persona, role,
+      task and runtime text.
+- [ ] Evaluate persona value against the known-answer targets: incremental true findings, useful
+      refutations, duplicate rate, unsupported-claim rate, cost and latency. Retain a persona only when it
+      adds measurable coverage or decision quality.
+
+Exit: every active persona is reviewed, has a measured purpose, and receives the tools/context needed for
+that purpose; specialist viewpoints improve recall without multiplying every claim by every persona.
+
+### S7 - Replace the test strategy
+
+- [ ] Inventory tests by protected invariant and production failure caught. Delete tests that assert file
+      placement, duplicated prompt text, implementation-private helper shapes, historical compatibility or
+      fixtures no supported path consumes.
+- [ ] Build a small test pyramid: pure state/config/query tests; contract tests for one runtime; container
+      adapter tests; golden known-answer reviews; and one end-to-end report smoke. Avoid per-job copies of
+      the same runtime assertions.
+- [ ] Add property-based tests for lifecycle transitions, reuse/fingerprint stability, skip authorization,
+      citation resolution and path containment.
+- [ ] Add mutation/fault cases only at trust boundaries: changed source, corrupt accepted artifact,
+      incomplete query answer, unavailable tool, canceled worker, malformed model result and forged
+      citation.
+- [ ] Keep test fixtures minimal and generated from declared builders. Remove large or opaque fixtures that
+      cannot explain which invariant they prove.
+
+Exit: the suite is smaller, faster and mapped to product invariants; deleting implementation boilerplate
+deletes its redundant tests without reducing behavioral coverage.
+
+### S8 - Acceptance and resumed target sequence
+
+- [ ] `hello-autotools`: one clean run from intake through report, plus a second unchanged run proving
+      cheap reuse. Record wall time, critical path, model calls, retrieval metrics and gaps.
+- [ ] `appsec-multi-vuln`: score precision/recall against the private answer key; investigate every miss
+      before adding new general machinery.
+- [ ] `freeciv21`: validate large-repository retrieval, build planning, storage and cache behavior.
+- [ ] `doom3-bfg`: prove that expected Linux build failure becomes explicit gaps while source review and
+      report generation continue.
+- [ ] Update the generated catalog/readiness views at each target milestone and remove this simplification
+      program when all exit criteria are met.
+
 ## Targets, in order
 
 | # | Target | Source | Pinned commit | What it exercises | Status |
@@ -1069,4 +1277,3 @@ Design: [`docs/code-query-tools.md`](../docs/code-query-tools.md).
 - [ ] `threat-workbench-static-evidence` grants only help if the index is accepted before stage 03; check the job order on a real run.
 - [ ] Decide whether `06-cve-reachability` should depend on `02-treesitter-ast` in the job graph (today: consumed when present).
 - [ ] Brief V (lead context) after merge; sealed code-intel sidecar and query-time CodeQL stay deferred.
-
