@@ -1,173 +1,82 @@
-# pipeline — engagement job → pregather → assemble → LLM input
+# Review pipeline
 
-| Phase | Script | LLM? | Output |
-|---|---|---|---|
-| engagement job | `engagement_job.sh` / `engagement_job.ps1` | no | broad static evidence, native scratch, LLM input index, coverage ledger |
-| static prepass | Retired (ADR-0010 task V14); replaced by run-owned `02-*` Dagster jobs | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes |
-| static summary | `summarize_evidence.py` (ported from `scripts/` 2026-09-19) | no | `SUMMARY.md`: mechanical per-tool rollup + `MANIFEST.json` status table |
-| repo profile | `profile_repo.py` (ported from `scripts/` 2026-09-21) | no | language/size/binary profile of a tree |
-| native binary fingerprints | `fingerprint_native_binaries.py` (ported 2026-09-21) | no | `binary-fingerprints.csv`/`.md` |
-| mobile source preflight | `check_mobile_source.py` (ported 2026-09-21) | no | mobile applicability signals |
-| layered SBOM | `build_layered_sbom.py` (ported 2026-09-21) | no | layered SBOM, OSV scan, native template |
-| build capture | `capture_build_commands.py` (ported 2026-09-21) | no | build/link command JSONL |
-| vendor candidates | `extract_vendor_candidates.py` (ported 2026-09-21; reads `data/native-libdir-reference.json`) | no | native vendored-dependency candidates |
-| SBOM component locations | `extract_component_locations.py` (ported from `scripts/` 2026-09-19) | no | CSV preserving Syft package locations and cataloger metadata, plus bounded path/no-location summaries |
-| pregather | `pregather.sh` / `pregather.ps1` (twins; logic in container scripts) | no | compile DB, feasibility, IR, linked modules, ir-facts, CSA, CodeQL traced DB + regular C/C++ SARIF + mythos custom-memory SARIF, `pregather-manifest.json` |
-| assemble | `assemble.py` (Python, one impl) | no | `bundle.json` + `bundle.md`: verified / unresolved / refuted with IR evidence and `needs` |
-| correlate | `correlate_findings.py` | no | cross-tool clusters by nearby file/line across Semgrep, native SAST, CSA/native bundle, CodeQL, and SARIF tools |
-| deep confirmation | `deep_confirm.py` | no | per-cluster source/native/CodeQL/IR support plus candidate callers/callees from the symbol index |
-| component IR slice | `component_ir_slice.py` | no | optional post-characterization compiled-evidence slices by functional component |
-| retrieval plan | `generate_retrieval_plan.py` | no | risky files, semantic queries, CodeQL follow-up commands, and source searches |
-| handoff | `appsec-review-process/create_handoff.py` | yes | lane-specific task prompt over staged evidence |
-| report | `appsec-review-process/10-synthesis-report/` | yes | executive + technical report inputs |
+The supported engagement path is the run-owned Dagster `full_review` job. It resolves applicability,
+executes only the relevant deterministic and model workers, validates immutable outputs, and carries
+accepted evidence through independent verification to a draft report. This document is the short
+entry point; the complete procedure is the
+[`happy-path operator guide`](../docs/report-path/happy-path-operator-guide.md).
 
-Extract the Syft location metadata from a legacy CycloneDX package without assigning reachability
-or scope:
+## Operator path
+
+1. Prepare the Linux/WSL host with `orchestrator/prepare-host.sh` and stage the pinned target as the
+   operator guide specifies.
+2. Create/stage the run on the Linux owner of the target and run data.
+3. Submit from the host:
+
+   ```powershell
+   python -B appsec-review-process/launch_job.py --run-id <run_id> --job full_review --wait
+   python -B appsec-review-process/review_cli.py status --run-id <run_id>
+   ```
+
+4. Fix the first recorded breakage and submit the same run again. Reuse is accepted only when the
+   worker's declared inputs, code, configuration, capabilities, and immutable output still validate.
+5. Inspect the evidence-backed report and retained gaps. Final publication requires human approval
+   of the exact draft hash.
+
+Do not operate a new engagement through the retained root `engagement_job`, `pregather`, or manual
+lane scripts. They remain only while the S1 inventory's field-parity and replacement gates are open;
+they are not a parallel supported workflow and must not gain new callers.
+
+## Run-owned lifecycle
+
+The graph is generated from the registered job definitions under `appsec-review-process/pipeline/`.
+At a high level it performs:
+
+| Phase | Result |
+|---|---|
+| Intake and applicability | Fixed source identity, scope, permissions, language/build census, and explicit skip/gap decisions. |
+| Searchable evidence | Hash-bound source, document, symbol, structural, and semantic retrieval records. |
+| Deterministic collection | Applicable source, dependency, build, native, binary, mobile, deployment, test, and standards evidence in pinned workers. |
+| Context assembly | Components, trust boundaries, controls, dependency reachability, tool leads, and bounded candidate records. |
+| Focused review | Adversarial hypotheses, refutation, independent verification, scoring, and optional attack-chain/remediation work. |
+| Report | Deterministic evidence and coverage synthesis, rendered draft artifacts, and a human-gated final package. |
+
+Every worker terminates as `OK`, `OK_WITH_GAPS`, `SKIPPED`, `BLOCKED`, `FAILED`, or `CANCELED` with
+explicit semantics. Missing tools and unsupported surfaces remain named gaps when the consumer
+contract permits them. A scanner hit, similarity result, symbol edge, or model statement is not a
+finding without resolving evidence and disposition.
+
+## Data contract
+
+Authoritative data lives under `appsec-review-process/runs/<run_id>/data/`:
+
+```text
+orchestration/launches/<launch_id>/
+workflows/<workflow>/
+jobs/<job>/<partition>/attempts/<attempt_id>/
+imports/<import_id>/
+```
+
+Accepted pointers are the discovery boundary. Do not infer success from a directory's presence,
+edit generated status, delete locks, or read shared scratch as current evidence. Explicit historical
+imports are copied and hash-bound beneath `data/imports/`; they never make the source location
+authoritative.
+
+## Source and validation
+
+- Job graph and contracts: `appsec-review-process/pipeline/`.
+- Worker implementations and validators: `appsec-review-process/`.
+- Dagster definitions and service integration: `orchestrator/dagster/`.
+- Evidence retrieval contract: `docs/evidence/evidence-retrieval.md`.
+- Run-data contract: `docs/dagster/run-data-and-job-execution.md`.
+- Generated graph/readiness views: `docs/design-parity/`.
+
+Run touched tests plus these checks after graph, registry, or catalog source changes:
 
 ```powershell
-python -B pipeline\extract_component_locations.py `
-  --sbom scratch\<project>-engagement\static-evidence\sbom\sbom.cdx.json `
-  --out scratch\<project>-engagement\static-evidence\sbom\component-locations.csv `
-  --summary-top-levels 3
+python -B appsec-review-process/validate_design_parity.py --check-generated-views
+python -B docs/processes/job_catalog.py --check
 ```
 
-The CSV contains one row per package/location and retains a row for components with no location.
-The console summaries group path prefixes and missing-location packages by Syft cataloger metadata.
-This transform does not prove that a dependency is shipped, reachable, vulnerable, or in scope.
-
-`engagement_job.sh` and `engagement_job.ps1` are the high-level runners for real engagements. They run the existing broad
-static pre-pass (Semgrep, gitleaks, Trivy/config, BinSkim, SBOM/SCA, search/indexing, etc.),
-then the native `pregather` lane, then `assemble.py`, then writes `llm/ENGAGEMENT_LLM_INPUT.md`
-and `llm/coverage-ledger.json`. It also writes `llm/correlated-findings.json/.md`, a deterministic
-cross-tool grouping of Semgrep, clang-tidy, cppcheck, SARIF tools, regular CodeQL,
-custom mythos CodeQL memory queries, and CSA/native bundle results by nearby file/line.
-
-`llm/deep-confirmation.json/.md` is the deeper confirmation layer. For every correlated cluster it
-records the evidence substrates that saw the issue (source SAST, native/CSA bundle, CodeQL), whether
-IR facts exist near the source location, the likely enclosing symbol, nearby callees, and candidate
-callers from the tree-sitter symbol index. Candidate callers/callees are navigation hints, not
-semantic reachability proof; use CodeQL, Joern, source review, or reviewer analysis before making a
-final reachability claim.
-
-`llm/retrieval-plan.json/.md` then points the LLM at risky files, symbol-index candidate callers,
-semantic-index queries, CodeQL follow-up commands, and source-search patterns. The LLM should start
-from those files, not from raw source.
-
-After `01-component-characterization` produces a `component-purpose-map.json`, use
-`component_ir_slice.py` to turn the linked LLVM IR into component-scoped compiled evidence. This is
-not part of the initial engagement job because component ids do not exist until the LLM
-characterization lane runs. The output belongs under `llm/component-ir/` and gives downstream
-red-team, blue-team, native-memory, and verifier lanes a compact view of compiled functions, direct
-call edges, GEP/pointer-arithmetic sites, and memory intrinsics for each functional component.
-
-Example:
-
-```powershell
-python pipeline\component_ir_slice.py `
-  --ir scratch\eastl-engagement\native-scratch\component-ir\eastl.ll `
-  --component-map appsec-review-process\runs\<run_id>\outputs\01-component-characterization\component-purpose-map.json `
-  --all-components `
-  --out scratch\eastl-engagement\llm\component-ir
-```
-
-If only linked bitcode exists, first disassemble it in the native image:
-
-```powershell
-.\images\audit-native\run.ps1 F:\repos\appsec-review - F:\repos\appsec-review\scratch\eastl-engagement\native-scratch -- bash -lc "mkdir -p /scratch/component-ir && llvm-dis /scratch/linked/eastl.bc -o /scratch/component-ir/eastl.ll"
-```
-
-Every top-level step records an exit code, duration, and log path in `job-manifest.jsonl`.
-The final `job_status.py` pass writes `job-status.json/.md` and exits non-zero when an
-enabled phase failed or a required artifact is missing. That means the job can keep gathering
-partial evidence after CodeQL/Semgrep/etc. failures, while still ending with an explicit
-degraded status instead of a quiet success.
-
-The legacy monolithic static prepass runners (`pipeline/Invoke-VendorAuditPrePass.sh` and
-`.ps1`) were retired in ADR-0010 task V14. Static analysis and evidence collection are decomposed
-into discrete run-owned Dagster jobs (`02-secrets-inventory`, `02-iac-config-scan`,
-`02-container-image-inventory`, `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`,
-`02-dependency-lifecycle`, `02-binary-hardening`, `02-mobile-sast`, `02-source-sast`, `02-evidence-index`).
-
-Semantic recall is the run-owned job `02-semantic-recall-index`
-(`appsec-review-process/semantic_recall_index.py`): it embeds one chunk per accepted `02-code-index`
-function span with a preseeded, hash-pinned model (`fetch-model` once per host; pin in
-`data/embedding-models/`) inside the pinned image, network none, and publishes locators only.
-The legacy `build_semantic_index.py`, `query_semantic_index.py`, `run-semantic-index-batched.sh` and
-`find_oversized_chunks.py` were ported into it (`semantic_index_build.py`, `semantic_index_oversized.py`)
-and deleted; their OOM history is kept in those modules' docstrings.
-
-Tools live in the images (`images/*/Dockerfile`) — that is the catalog; digests are recorded in
-every manifest. Run from WSL2 on Windows with sources on the WSL filesystem (fast); from a
-Linux host identically. Host scripts have bash/PowerShell twins; anything with logic is Python.
-
-When a heavy run is performed in WSL, copy the target source and generated engagement artifacts
-back into this repo's ignored layout before starting LLM prompt lanes:
-
-```bash
-scripts/sync-wsl-engagement-to-repo.sh \
-  --project <project> \
-  --source-url <git-url> \
-  --source-ref <branch-or-commit> \
-  --engagement-dir <wsl-scratch/project-engagement> \
-  --run-id <run_id>
-```
-
-This produces repo-local `targets/<project>` and `scratch/<project>-engagement` paths and, when a
-run id is supplied, rewrites the process artifact manifest to those locations. If the source is
-already present in WSL, use `--source-dir <wsl-target>` instead of `--source-url`.
-
-Native Linux targets (EASTL, yquake2, Unreal): `--compile-db` with the cmake/bear/UBT
-compile_commands.json, no `--msvc`; the gate and CodeQL replay detect the GNU driver.
-Windows targets: converter + `--msvc`.
-
-## Windows PowerShell Validation
-
-The PowerShell path is validated against EASTL using a WSL UNC target path:
-
-```powershell
-.\pipeline\engagement_job.ps1 `
-  -Project eastl `
-  -Target '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl' `
-  -CompileDb '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl\build\compile_commands.json' `
-  -Out scratch\eastl-windows-codeql `
-  -StaticRunner powershell `
-  -StaticSteps cloc
-```
-
-That validation completed `Status: OK` with native Tier A feasibility, IR Tier A feasibility,
-linked bitcode, `ir-facts`, regular CodeQL, custom Mythos CodeQL, and refreshed LLM artifacts.
-CSA/CTU was also tested through `images/audit-native/run.ps1` against the same normalized scratch
-directory. The full broad static prepass was also run from PowerShell against EASTL; that run
-validated the broader static tool stack and found the original monolithic `semantic-index` OOM.
-
-After replacing the monolithic semantic index invocation with
-Historically, prior to the runner's retirement in ADR-0010 task V14, the Windows path was
-smoke-tested with the legacy runner:
-
-```powershell
-# (Historical reference)
-# .\pipeline\Invoke-VendorAuditPrePass.ps1 -RepoPath scratch\semantic-index-smoke\repo ...
-```
-
-The first smoke produced two `semantic-index slice start=... limit=1 batch-size=1` log lines,
-`semantic-index/index.json` with `"complete": true`, and a successful semantic query against the
-tiny LanceDB index. The implementation was then tightened further so the default full run uses
-`batch-size=1`, streams each batch directly into LanceDB, and only uses process slicing when
-`SEMANTIC_INDEX_SLICE_LIMIT` is explicitly set.
-
-The focused EASTL rerun of `symbol-index,semantic-index` completed through the PowerShell runner in
-875 seconds. Final `semantic-index/index.json` reported 5,086 chunks and 5,086 rows with
-`"complete": true`, and `query_semantic_index.py` returned plausible EASTL UTF conversion chunks
-from the generated LanceDB table.
-and then folded into the regenerated LLM package.
-
-The Windows path now handles:
-
-- WSL UNC paths without PowerShell provider prefixes in Docker mounts
-- WSL UNC roots mapped to `/workspace` when normalizing compile databases
-- include arguments such as `-I/home/...` mapped to `-I/workspace/...`
-- Windows hosts where `python3.exe` is only the Microsoft Store app-execution alias
-- PowerShell-safe command arrays for container arguments beginning with `--`
-
-For very large targets, WSL/Linux remains preferred because the Windows/UNC path is materially
-slower, especially for `ir-facts` and CodeQL.
+Review logic does not move into `scripts/`. Static reference data belongs in `data/`; tools belong
+in pinned images; current workers publish only inside their run-owned attempt.

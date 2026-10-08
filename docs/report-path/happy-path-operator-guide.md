@@ -16,50 +16,30 @@ python3 docs/processes/job_catalog.py --check
 python3 -B images/tool_pins.py check
 ```
 
-Define explicit, absolute run paths. Never reuse an accepted attempt directory.
+Define the repository and run root explicitly. Never reuse an accepted attempt directory.
 
 ```bash
 export REPO=/home/wsollers/projects/appsec-review
 export APPSEC_RUNS_ROOT="$REPO/appsec-review-process/runs"
-export RUN_ID=<engagement-run-id>
+```
+
+Use the supported staging command; do not create run directories or manifests by hand. It creates a
+fresh run id, stages the engagement and minimum run-local permissions, completes intake, then binds
+the build controls to the accepted intake identity. It grants neither live-network access nor
+unrestricted target execution. The target must already be populated at the pinned fixture commit.
+
+```bash
+cd "$REPO"
+fixtures/populate-targets.sh hello-autotools
+RUN_ID=$(orchestrator/stage-run.sh hello-autotools)
+export RUN_ID
 export RUN_ROOT="$APPSEC_RUNS_ROOT/$RUN_ID"
 export JOBS_ROOT="$RUN_ROOT/data/jobs"
 ```
 
-Create and stage the run before starting Dagster. `run_process.py` owns the run directory and
-`stage_artifacts.py` owns the engagement definition; do not create either by hand. This Hello
-example grants the minimum run-local permissions required by the automatic evidence workers. It
-does not grant live-network access or unrestricted target execution.
-
-```bash
-cd "$REPO"
-python3 -B appsec-review-process/run_process.py --run-id "$RUN_ID" --start
-python3 -B appsec-review-process/stage_artifacts.py \
-  --run-id "$RUN_ID" \
-  --project hello-autotools \
-  --target /home/wsollers/projects/appsec-review/fixtures/targets/hello-autotools \
-  --business-goal "Complete evidence-qualified application security review of hello-autotools with final PDF and HTML publication." \
-  --platform Linux \
-  --budget full \
-  --permission read-source \
-  --permission read-run-data \
-  --permission write-run-data \
-  --permission read-offline-snapshots \
-  --execution-environment dagster-read-only-linux
-python3 -B appsec-review-process/offline_evidence_control.py stage-control "$RUN_ID" \
-  --snapshot-registry "$REPO/appsec-review-process/offline/dependency-snapshots" \
-  --max-database-age-seconds 1209600 \
-  --reference-table "$REPO/data/reference/dependency-lifecycle-reference.json" \
-  --max-reference-age-days 30
-# Intake rewrites artifact-manifest.json on acceptance and the build grants bind to its hash, so run
-# intake before staging the build controls (otherwise 02-build-resolution blocks with STALE_GRANT).
-# This needs the stack and code location from section 2 (orchestrator/prepare-host.sh starts both).
-python3 -B appsec-review-process/launch_job.py --run-id "$RUN_ID" --job phase1_intake --wait
-python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
-python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
-```
-
-`RUN_ID=$(orchestrator/stage-run.sh <target>)` runs this whole sequence; its stdout is only the run id, and only when every step succeeded (progress goes to stderr).
+The staging command's stdout is only the run id and appears only after every step succeeds; progress
+goes to stderr. It requires the Dagster stack and code location, which
+`orchestrator/prepare-host.sh` starts and checks.
 
 The build control commands retain the engagement owner's run- and source-bound authorization for
 package resolution and no-network replay of the accepted configure/build lock. They do not grant

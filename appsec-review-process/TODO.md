@@ -69,18 +69,41 @@ have executable characterization coverage.
 - [ ] Delete the old `appsec-review-process/registry/` path and all callers or documentation that name
       it. Current registry definitions live under `appsec-review-process/pipeline/` until the TOML
       migration below replaces that layout.
+  - [x] Removed the two ignored stale B16 records, their empty legacy directory, and the obsolete
+        `.gitignore` rule. No current code reader used that location.
+  - [ ] Historical qualification snapshots, completed briefs/proposals, and archived skills still name
+        the former path. They remain until their machine readers are migrated or the documents move to
+        the single non-authoritative archive; see the S1 cleanup record.
 - [ ] Remove the legacy manual lane/scanner harness (`run_process.py`, `stage_artifacts.py`,
       `create_handoff.py`, `validate_lane_output.py`, legacy scratch import/routing and lane-only status)
       once the inventory confirms that the current Dagster/run-owned path has replacements. Do not leave
       wrappers or shims.
+  - [ ] Blocked: live callers remain in `phase1.py`, `review_cli.py`, OWASP helpers, qualification
+        tools, `orchestrator/stage-run.sh`, generated catalog/BPMN sources, and mixed current-path tests;
+        a clean `hello-autotools` report without this path has not been recorded.
 - [ ] Remove the legacy root `pipeline/engagement_job.*` / pregather / assemble path after mapping any
       still-current transforms into run-owned workers. Static reference data moves to `data/`; review
       logic does not move back under `scripts/`.
+  - [ ] Blocked: transform field/gap parity is incomplete and `extract_component_locations.py` still
+        owns unique tested Syft-location semantics. The hello report replacement proof is also absent.
 - [ ] Move historical prompts, plans and superseded ADR implementation notes that remain useful into one
       clearly non-authoritative archive; delete duplicated or inaccurate documentation.
-- [ ] Rewrite `README.md`, `docs/agent-reader.md` and one operator guide so they describe only the
+  - [x] Deleted the six tracked obsolete `Claude outputs/` artifacts and superseded continuation
+        prompts after adding the 2026-10-07 S1 continuation; retained the 2026-10-03 hello gap record.
+  - [ ] Blocked: `qualify_phase1.py` still hashes the phase-1 prompt, proposal packets remain test data,
+        and generated/historical documents still link to qualification-era records.
+- [x] Rewrite `README.md`, `docs/agent-reader.md` and one operator guide so they describe only the
       current path. Generated graph/readiness/catalog views remain generated, not hand-summarized.
+  - [x] The root README and `pipeline/README.md` now name Dagster `full_review` as the only supported
+        engagement path; the agent reader and happy-path guide route through the supported staging
+        command without advertising manual lane or root scanner entry points.
 - [ ] Delete tests that solely protect removed code. Keep no skipped compatibility suite.
+  - [x] No runtime behavior was removed in the safe slice, so no compatibility test was deleted ahead
+        of its implementation.
+  - [ ] Delete the S0-listed cases atomically with their matching behavior while retaining the eight
+        surviving invariant suites.
+
+S1 progress and exact retained gates: [`docs/architecture/simplification-s1-cleanup.md`](../docs/architecture/simplification-s1-cleanup.md).
 
 Exit: one supported execution path, one authoritative operator guide, no tracked legacy workflow, and
 repository search finds no live references to deleted entry points.
@@ -234,7 +257,8 @@ languages and tools that did not run appear as gaps inside the report; they do n
 ### Re-run hello-autotools after the gap punch list (2026-10-03)
 
 Punch list and status: `docs/continuation-prompts/2026-10-03-gap-punchlist-hello-autotools.md`;
-prompt: `docs/continuation-prompts/2026-10-03-hello-autotools-rerun.md`.
+run procedure: `docs/report-path/happy-path-operator-guide.md`; simplification continuation:
+`docs/continuation-prompts/2026-10-07-s1-legacy-cleanup.md`.
 
 - [ ] Host (zarathustra): `orchestrator/prepare-host.sh` rebuilds `audit-binary-analysis` (E3), `audit-native`
       and the images on it (`audit-buildenv-cpp`, `audit-buildenv-cpp-resolute`, `audit-codeql-native` = E2),

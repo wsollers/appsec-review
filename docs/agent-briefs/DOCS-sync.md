@@ -9,7 +9,7 @@ Goal: after code branches merge, bring every human-facing artifact in line, with
 4. BPMN: `docs/processes/bpmn/*.bpmn` (and `render/`): add/adjust tasks for new or changed jobs; keep the cross-check in `job_catalog.py` green. Regenerate renders with the script that exists in `docs/processes/render/`.
 5. Tunables: `docs/processes/tunables.md` is generated from job code; regenerate with the repo's generator (find it: `grep -rn tunables.md appsec-review-process/*.py docs -l`) and never hand-edit.
 6. Design parity: `python3 appsec-review-process/validate_design_parity.py --write-generated-views` then `--check-generated-views`; update readiness/qualification text only from real evidence; do not raise a job to `implemented_and_qualified` without a live qualification record.
-7. Job-graph diagram: keep `docs/design-parity/job-graph.mmd` and the top-level pipeline diagram in sync (also refresh `Claude outputs/pipeline-job-graph.mermaid` if tracked; it is currently untracked, move it to `docs/design-parity/pipeline-job-graph.mermaid` and commit).
+7. Job-graph diagram: keep `docs/design-parity/job-graph.mmd` and the generated top-level pipeline diagram in sync. Do not write generated views under `Claude outputs/`.
 8. ADRs: update the Status/Implementation lines of the ADRs the merge implements (0016 kill chains, 0017 codeql, 0018 hunters, 0020 report, 0021 sharded reviewers, OSV feed). Do not change decisions.
 9. `appsec-review-process/TODO.md`: collapse the per-agent sections into the existing structure, mark DONE with the merge commit, keep OPEN items honest. Skills: ensure `skills/README.md` lists new skills.
 10. Personas: `python3 appsec-review-process/catalog_personas.py check`.

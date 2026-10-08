@@ -11,7 +11,7 @@ breakage as found). The Dagster docs below matter when you change the runtime, g
 ## Read Order
 
 0. [`pipeline/README.md`](../pipeline/README.md) first for any review run: it describes the
-   engagement path (prepass, pregather, assemble, correlate, LLM input) that runs today.
+   supported run-owned `full_review` path.
 1. [`appsec-review-system-guide.md`](appsec-review-system-guide.md) for the executive and operator
    overview: use, configuration, job interactions, analysis coverage, multi-agent decisions,
    standards processes, reporting and current readiness.
@@ -97,8 +97,9 @@ Important job boundaries:
 - `b13_harmless_container`: standalone adapter qualification only; runs `fixture-harmless` through
   B13 and the Docker pool, then publishes a verified common envelope. It is not a scanner or a
   lifecycle node.
-- `full_review`: exposes the lifecycle graph, but many workers intentionally block with
-  `WORKER_NOT_IMPLEMENTED` until implemented and qualified.
+- `full_review`: runs the registered lifecycle through evidence-backed draft report generation.
+  Missing capabilities, unavailable tools, unsupported surfaces, and failed prerequisites remain
+  explicit job gaps or blockers; they are never silently treated as clean coverage.
 
 Before changing lifecycle readiness, run:
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepare a run host for the hello-autotools re-run after the 2026-10-03 gap punch list
-# (docs/continuation-prompts/2026-10-03-hello-autotools-rerun.md). Wraps the repo's own tools in
+# (docs/report-path/happy-path-operator-guide.md). Wraps the repo's own tools in
 # order; safe to re-run, each step only acts when something is missing or stale.
 #
 #   orchestrator/prep-rerun-host.sh               do everything
@@ -162,7 +162,7 @@ if [[ ${#FAILED[@]} -eq 0 ]]; then
         echo "check done (TODO lines are what a normal run of this script would do). Log: $LOG"
     else
         cat <<'NEXT'
-Host ready. Start the re-run (docs/continuation-prompts/2026-10-03-hello-autotools-rerun.md):
+Host ready. Start the run (docs/report-path/happy-path-operator-guide.md):
 
   RUN_ID=$(orchestrator/stage-run.sh hello-autotools)
   python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait

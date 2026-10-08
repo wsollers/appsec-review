@@ -190,4 +190,5 @@ named limits:
 - **New items found during the fixes:** P35 (configure-generated headers, root cause of P12), P36/P37
   (build-dependency capture into the SBOM), P38-P40, P41-P43 (base-image OS packages).
 
-Re-run: [`2026-10-03-hello-autotools-rerun.md`](2026-10-03-hello-autotools-rerun.md).
+Current run procedure: [`../report-path/happy-path-operator-guide.md`](../report-path/happy-path-operator-guide.md).
+Simplification continuation: [`2026-10-07-s1-legacy-cleanup.md`](2026-10-07-s1-legacy-cleanup.md).
