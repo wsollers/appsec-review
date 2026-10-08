@@ -3,18 +3,16 @@
   "$id": "https://appsec-review.local/schemas/cpp-compiled-analysis.schema.json",
   "title": "Accepted C/C++ compiled-analysis summary",
   "type": "object",
-  "required": ["schema", "case_count", "branch_count", "physical_shard_count", "gaps", "dispositions"],
+  "required": ["schema", "project_count", "branch_count", "physical_shard_count", "gaps", "dispositions"],
   "additionalProperties": false,
   "properties": {
     "schema": {"const": "appsec-review/cpp-compiled-analysis/1"},
-    "case_count": {"const": 13},
+    "project_count": {"type": "integer", "minimum": 0},
     "branch_count": {"const": 6},
-    "physical_shard_count": {"type": "integer", "minimum": 78},
+    "physical_shard_count": {"type": "integer", "minimum": 0},
     "gaps": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 4096}},
     "dispositions": {
       "type": "object",
-      "minProperties": 78,
-      "maxProperties": 78,
       "additionalProperties": {"enum": ["SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED_AS_GAP", "BLOCKED_BY_CONFIGURE", "BLOCKED_BY_COMPILE", "INVALID_COMPILE_DATABASE"]}
     }
   }

@@ -99,6 +99,7 @@ def emit_link_commands() -> None:
             output = next((build_path(value) for value in argv[1:] if value.endswith(".a")), None)
         inputs = sorted({mapped for value in argv for mapped in [build_path(value)]
                          if mapped and mapped != output
+                         and not value.startswith("-")
                          and Path(value).suffix in {".o", ".obj", ".a", ".so"}})
         if output and inputs:
             receipts.append({"output_path": output, "input_paths": inputs,

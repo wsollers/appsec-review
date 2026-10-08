@@ -214,9 +214,9 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "target_analysis_plan__analysis_decisions__apply_deterministic_rules",
         "target_analysis_plan__plan_acceptance__index_plan",
         "cpp_compiled_analysis__plan__accepted_cpp_plan",
-        "cpp_compiled_analysis__compile__case001",
-        "cpp_compiled_analysis__ast__case001",
-        "cpp_compiled_analysis__ir__case001",
+        "cpp_compiled_analysis__compile__projects",
+        "cpp_compiled_analysis__ast__projects",
+        "cpp_compiled_analysis__ir__projects",
         "cpp_compiled_analysis__acceptance__publish_handoff",
         "post_build_security_assessment__load__accepted_cpp_build",
         "post_build_security_assessment__provenance__case001",
@@ -251,12 +251,12 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "target_analysis_plan__finalize" in upstream("cpp_compiled_analysis__begin")
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "post_build_security_assessment__finalize" in upstream("evidence_collection__begin")
-    assert upstream("cpp_compiled_analysis__ast__case001") == {
-        "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__case001"}
-    assert upstream("cpp_compiled_analysis__ir__case001") == {
-        "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__case001"}
+    assert upstream("cpp_compiled_analysis__ast__projects") == {
+        "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
+    assert upstream("cpp_compiled_analysis__ir__projects") == {
+        "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
-    assert len(cpp_barrier) == 79  # claim plus six terminal branches for each of thirteen cases
+    assert len(cpp_barrier) == 7  # claim plus six project-batched terminal branches
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
     assert len(post_build_barrier) == 14  # claim plus one shard per accepted case
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")

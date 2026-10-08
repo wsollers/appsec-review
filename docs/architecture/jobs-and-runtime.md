@@ -133,11 +133,11 @@ reused.
 
 ## C/C++ compiled-analysis lane
 
-`job_cpp_compiled_analysis` follows the accepted plan and models the target's C++ work as one lane
-with per-case actions, not dozens of independent projects. Its thirteen prepare/configure/compile/
-catalog chains are independent Dagster paths. Once a case catalog is terminal, compiled indexing,
-Clang AST, LLVM IR, CodeQL, Joern, and binary/symbol branches for that case may start even while
-another case is compiling. The acceptance node depends on all 78 branches.
+`job_cpp_compiled_analysis` follows the accepted plan and discovers native projects from accepted
+build actions. Its graph is repository-independent: one task per stage batches an arbitrary project
+set while retaining per-project checkpoints, terminal states, and shard identities. Once a project
+catalog is terminal, compiled indexing, Clang AST, LLVM IR, CodeQL, Joern, and binary/symbol branches
+can be produced without encoding project names or counts in the graph.
 
 The native container executes untrusted build logic but never target binaries or tests. Application
 code validates compile commands and artifacts, converts tool failures to explicit gaps, and retains

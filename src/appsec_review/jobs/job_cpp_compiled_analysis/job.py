@@ -24,8 +24,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/1"
-CASE_IDS = tuple(f"case{number:03d}" for number in (1, 2, 3, 26, 27, 28, 29, 30, 36, 37, 38, 45, 63))
-CASE_NAMES = {value: value.replace("case", "case-") for value in CASE_IDS}
+PROJECT_TASKS = ("projects",)
 BRANCHES = ("compiled", "ast", "ir", "codeql", "joern", "binary")
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
                    "ir": "llvm-ir/2", "codeql": "codeql-cpp-adapter/2",
@@ -46,8 +45,12 @@ JOERN_GAP = (
 )
 
 
+def _project_key(root: PurePosixPath) -> str:
+    return "project-" + hashlib.sha256(root.as_posix().encode()).hexdigest()[:16]
+
+
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    return unit.job.run_root / "data" / "cpp" / "cases" / CASE_NAMES[case_id]
+    return unit.job.run_root / "data" / "cpp" / "projects" / case_id
 
 
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
@@ -75,7 +78,7 @@ def _checkpoint_identity(unit: UnitContext, case_id: str, stage: str, values: Ma
                       "manifest_sha256": file_sha256(tool.manifest_path)} if tool else
                      {"injected_executor": True})
     return hashlib.sha256(canonical_json({"schema": "appsec-review/cpp-checkpoint/1",
-        "case": CASE_NAMES[case_id], "stage": stage,
+        "project": case_id, "stage": stage,
         "tool": tool_identity, "values": values})).hexdigest()
 
 
@@ -106,7 +109,7 @@ def _save_checkpoint(unit: UnitContext, case_id: str, stage: str, identity: str,
         return
     atomic_json(_case_root(unit, case_id) / "checkpoints" / f"{stage}.json",
                 {"schema": "appsec-review/cpp-checkpoint/1", "identity": identity,
-                 "case_id": CASE_NAMES[case_id], "stage": stage, "result": dict(result)})
+                 "project_key": case_id, "stage": stage, "result": dict(result)})
 
 
 def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_factory=None) -> Mapping[str, Any]:
@@ -118,7 +121,7 @@ def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_f
         target_root=unit.job.target_root or unit.job.repository_root, scratch_root=root,
     ))
     receipt = root / "execution.json"
-    retained = unit.unit_root / f"{CASE_NAMES[case_id]}-execution.json"
+    retained = unit.unit_root / f"{case_id}-execution.json"
     retained.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(receipt, retained)
     return {"execution": _artifact(unit.job.run_root, retained), "exit_code": result.exit_code,
@@ -134,11 +137,11 @@ def _source_files(root: Path) -> list[Path]:
 def _safe_copy_case(unit: UnitContext, case_id: str, action: Mapping[str, Any]) -> Mapping[str, Any]:
     target = (unit.job.target_root or Path()).resolve(strict=True)
     relative = PurePosixPath(str(action["root"]))
-    if relative.parts[:2] != ("projects", "cpp") or relative.name != CASE_NAMES[case_id]:
-        raise ValueError(f"accepted C++ action identity mismatch for {case_id}")
+    if not relative.parts or relative.parts[0] != "projects" or _project_key(relative) != case_id:
+        raise ValueError(f"accepted C/C++ project identity mismatch for {case_id}")
     source = (target / Path(*relative.parts)).resolve(strict=True)
     if target not in source.parents or not source.is_dir():
-        raise ValueError("accepted C++ case root escapes the target")
+        raise ValueError("accepted C/C++ project root escapes the target")
     destination = _case_root(unit, case_id) / "source"
     if destination.exists():
         shutil.rmtree(destination)
@@ -156,8 +159,9 @@ def _safe_copy_case(unit: UnitContext, case_id: str, action: Mapping[str, Any]) 
         mapping.append({"target_path": f"{action['root']}/{relative_file}",
                         "scratch_path": f"source/{relative_file}", "sha256": source_sha})
     case_snapshot = hashlib.sha256(canonical_json(mapping)).hexdigest()
-    return {"schema": "appsec-review/cpp-source-mapping/1", "case_id": CASE_NAMES[case_id],
-            "project_id": f"cpp:{CASE_NAMES[case_id]}", "build_system": action["build_system"],
+    return {"schema": "appsec-review/cpp-source-mapping/2", "project_key": case_id,
+            "project_id": f"cpp:{relative.as_posix()}", "display_name": relative.name,
+            "build_system": action["build_system"],
             "root": action["root"], "case_snapshot": case_snapshot, "files": mapping}
 
 
@@ -248,6 +252,25 @@ def _output_path(row: Mapping[str, Any], root: Path) -> str | None:
     return None
 
 
+def normalize_link_commands(value: Any, outputs: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Retain only bounded link edges between cataloged build artifacts."""
+    if not isinstance(value, list) or len(value) > 4096:
+        return []
+    known = {str(item["path"]) for item in outputs}
+    result = []
+    for item in value:
+        if not isinstance(item, Mapping) or str(item.get("output_path")) not in known:
+            continue
+        inputs = sorted({str(path) for path in item.get("input_paths", ()) if str(path) in known
+                         and str(path) != str(item["output_path"])})
+        if not inputs:
+            continue
+        result.append({"output_path": str(item["output_path"]), "input_paths": inputs,
+                       "receipt": str(item.get("receipt", "")),
+                       "command_sha256": str(item.get("command_sha256", ""))})
+    return result
+
+
 def _tu_identity(mapping: Mapping[str, Any], row: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json({
         "schema": "appsec-review/cpp-translation-unit/1",
@@ -286,7 +309,7 @@ def normalize_compile_db(root: Path, mapping: Mapping[str, Any]) -> list[dict[st
                               if item.get("target_path") == target_path), None)
         if source_record is None:
             raise ValueError(f"compile database source is not in the accepted case mapping: {target_path}")
-        result.append({"case_id": mapping["case_id"], "index": index, "directory": "/scratch/source",
+        result.append({"project_key": mapping["project_key"], "index": index, "directory": "/scratch/source",
                        "file": scratch_source, "target_path": target_path, "arguments": arguments,
                        "source_sha256": source_record["sha256"], "output_path": _output_path(row, root),
                        "command_sha256": hashlib.sha256(canonical_json(arguments)).hexdigest()})
@@ -310,8 +333,8 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
                  scope_snapshot: str):
     fingerprint = index_fingerprint(name=name, target_snapshot=scope_snapshot,
         producer_artifacts=artifacts, tool_identity=tool, parser_identity=f"cpp-{branch}-parser/2",
-        normalizer_identity=f"cpp-{branch}-normalizer/2", mapping_identity="cpp-source-mapping/1")
-    shard = f"cpp-{CASE_NAMES[case_id]}-{branch}"
+        normalizer_identity=f"cpp-{branch}-normalizer/3", mapping_identity="cpp-source-mapping/2")
+    shard = f"cpp-{case_id}-{branch}"
     path = unit.job.run_root / "data" / "indices" / name / f"{fingerprint}-{shard}.sqlite"
     return IndexBuilder(path, name=name, fingerprint=fingerprint,
                         target_snapshot=unit.job.source_fingerprint, shard_id=shard), path, fingerprint, shard
@@ -337,13 +360,31 @@ def _build_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any])
     artifacts = [catalog["compile_database"], catalog["artifact_catalog"], catalog["link_database"]]
     builder, path, fingerprint, shard = _new_builder(unit, "build", case_id, "compiled", artifacts, [],
         {"compiler_image": catalog["image_id"], "compiler": "clang-18"}, mapping["case_snapshot"])
+    project = LogicalIdentity.derive(EntityKind.PROJECT, mapping["case_snapshot"],
+                                     {"project_id": mapping["project_id"], "root": mapping["root"]})
+    builder.add_entity(EntityRecord(project, mapping["project_id"], mapping["display_name"],
+                                    mapping["root"], {**mapping, "shard_id": shard}))
     action = LogicalIdentity.derive(EntityKind.BUILD_ACTION, mapping["case_snapshot"],
                                     {"project_id": mapping["project_id"],
                                      "case_snapshot": mapping["case_snapshot"],
                                      "profile": mapping["build_system"]})
-    builder.add_entity(EntityRecord(action, CASE_NAMES[case_id], CASE_NAMES[case_id],
+    builder.add_entity(EntityRecord(action, case_id, mapping["display_name"],
                                     f"{mapping['build_system']} build action",
                                     {**mapping, "shard_id": shard}))
+    builder.add_relation(RelationRecord(RelationKind.CONTAINS, project.value, action.value, True, 1.0))
+    source_entities: dict[str, str] = {}
+    for record in mapping["files"]:
+        source = LogicalIdentity.derive(EntityKind.SOURCE_FILE, mapping["case_snapshot"],
+                                        {"project_id": mapping["project_id"],
+                                         "path": record["target_path"], "sha256": record["sha256"]})
+        source_entities[record["target_path"]] = source.value
+        builder.add_entity(EntityRecord(source, record["target_path"],
+                                        PurePosixPath(record["target_path"]).name,
+                                        record["target_path"],
+                                        {**record, "project_id": mapping["project_id"], "shard_id": shard},
+                                        _location(unit.job.source_fingerprint, unit.job.target_root or Path(),
+                                                  record["target_path"])))
+        builder.add_relation(RelationRecord(RelationKind.CONTAINS, project.value, source.value, True, 1.0))
     compile_entities: dict[str, str] = {}
     for row in commands:
         compile_id = LogicalIdentity.derive(EntityKind.COMPILE_UNIT, mapping["case_snapshot"],
@@ -355,6 +396,10 @@ def _build_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any])
                                         _location(unit.job.source_fingerprint,
                                                   unit.job.target_root or Path(), row["target_path"])))
         builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, compile_id.value, action.value, True, 1.0))
+        source_id = source_entities.get(row["target_path"])
+        if source_id is not None:
+            builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM,
+                                                compile_id.value, source_id, True, 1.0))
     output_entities: dict[str, str] = {}
     for item in catalog["outputs"]:
         kind = {"object": EntityKind.OBJECT_FILE, "library": EntityKind.LIBRARY,
@@ -548,8 +593,8 @@ def _blocked_index(unit: UnitContext, case_id: str, branch: str, catalog: Mappin
         [catalog["compile_database"]], [gap], {"tool": branch, "availability": "blocked"},
         catalog["mapping"]["case_snapshot"])
     identity = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, catalog["mapping"]["case_snapshot"],
-                                      {"case": CASE_NAMES[case_id], "producer": branch, "status": "BLOCKED"})
-    builder.add_entity(EntityRecord(identity, f"{branch}:{CASE_NAMES[case_id]}", branch,
+                                      {"case": case_id, "producer": branch, "status": "BLOCKED"})
+    builder.add_entity(EntityRecord(identity, f"{branch}:{case_id}", branch,
                                     gap, {"status": "BLOCKED", "observation_count": 0}))
     builder.add_coverage(branch, "unavailable", gap)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard, "observations", branch, [gap]))
@@ -611,8 +656,8 @@ def _validate_config(context, _result) -> None:
     if tuple(context.config.step("plan").tasks) != ("accepted_cpp_plan",):
         raise ValueError("C++ plan task configuration is invalid")
     for step in ("prepare", "configure", "compile", "catalog", *BRANCHES):
-        if tuple(context.config.step(step).tasks) != CASE_IDS:
-            raise ValueError(f"C++ case task configuration mismatch: {step}")
+        if tuple(context.config.step(step).tasks) != PROJECT_TASKS:
+            raise ValueError(f"C/C++ project task configuration mismatch: {step}")
     if tuple(context.config.step("acceptance").tasks) != ("publish_handoff",):
         raise ValueError("C++ acceptance task configuration is invalid")
 
@@ -622,126 +667,139 @@ def build_job(*, executor_factory=None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = []
+        target = (unit.job.target_root or Path()).resolve(strict=True)
         for action in accepted["build_topology"]["build_actions"]:
             root = PurePosixPath(str(action.get("root", "")))
-            if root.parts[:2] != ("projects", "cpp") or action.get("build_system") not in {
-                    "cmake", "make", "autotools", "msbuild"}:
+            if (not root.parts or root.parts[0] != "projects" or
+                    action.get("build_system") not in {"cmake", "make", "autotools", "msbuild"}):
                 continue
-            case_id = root.name.replace("case-", "case")
-            if case_id not in CASE_IDS:
-                raise ValueError(f"accepted C++ action is outside the 13-case topology: {root}")
-            actions.append({**dict(action), "case_id": case_id})
+            source = (target / Path(*root.parts)).resolve(strict=True)
+            if target not in source.parents or not source.is_dir():
+                raise ValueError(f"accepted C/C++ project escapes the target: {root}")
+            native_sources = [path for path in source.rglob("*") if path.is_file() and not path.is_symlink()
+                              and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm"}]
+            if not native_sources:
+                continue
+            actions.append({**dict(action), "project_key": _project_key(root),
+                            "project_id": f"cpp:{root.as_posix()}",
+                            "source_count": len(native_sources)})
+        keys = [str(item["project_key"]) for item in actions]
+        if len(set(keys)) != len(keys):
+            raise ValueError("accepted C/C++ project identities are not unique")
+        actions.sort(key=lambda item: (str(item["root"]), str(item["build_system"])))
+        counts = {profile: sum(item["build_system"] == profile for item in actions)
+                  for profile in ("cmake", "make", "autotools", "msbuild")}
         if not actions:
-            document = {"schema": SCHEMA, "lane": "cpp", "case_count": 0,
+            document = {"schema": SCHEMA, "lane": "cpp", "project_count": 0,
                         "topology": {"cmake": 0, "make": 0, "autotools": 0, "msbuild": 0}, "actions": [],
                         "source_fingerprint": unit.job.source_fingerprint}
             artifact = _json_artifact(unit, unit.unit_root / "accepted-cpp-plan.json", document)
             return {"artifact": artifact, "plan": document, "terminal_status": "NOT_APPLICABLE",
                     "gaps": []}
-        if tuple(item["case_id"] for item in sorted(actions, key=lambda item: item["case_id"])) != tuple(sorted(CASE_IDS)):
-            raise ValueError("accepted plan must contain exactly 13 C++ actions (10 CMake, Make, Autotools, MSBuild)")
-        counts = {profile: sum(item["build_system"] == profile for item in actions)
-                  for profile in ("cmake", "make", "autotools", "msbuild")}
-        if counts != {"cmake": 10, "make": 1, "autotools": 1, "msbuild": 1}:
-            raise ValueError(f"accepted C++ build profile counts are invalid: {counts}")
-        document = {"schema": SCHEMA, "lane": "cpp", "case_count": 13,
-                    "topology": counts, "actions": sorted(actions, key=lambda item: item["case_id"]),
+        document = {"schema": SCHEMA, "lane": "cpp", "project_count": len(actions),
+                    "topology": counts, "actions": actions,
                     "source_fingerprint": unit.job.source_fingerprint}
         artifact = _json_artifact(unit, unit.unit_root / "accepted-cpp-plan.json", document)
         return {"artifact": artifact, "plan": document, "terminal_status": "SUCCEEDED"}
 
-    def prepare(case_id: str):
-        def handler(unit: UnitContext) -> Mapping[str, Any]:
-            value = unit.output("plan.accepted_cpp_plan")["plan"]
-            if not value["actions"]:
-                return {"case_id": CASE_NAMES[case_id], "terminal_status": "NOT_APPLICABLE",
-                        "gaps": [], "profile": None, "mapping": None}
-            action = next(item for item in value["actions"] if item["case_id"] == case_id)
-            mapping = _safe_copy_case(unit, case_id, action)
-            artifact = _json_artifact(unit, _case_root(unit, case_id) / "source-mapping.json", mapping)
-            unit.job.events.write("CPP_BUILD_CASE_PREPARED", case_id=CASE_NAMES[case_id],
-                                  source_count=len(mapping["files"]), build_system=action["build_system"])
-            return {"mapping": mapping, "artifact": artifact, "case_id": CASE_NAMES[case_id],
-                    "profile": action["build_system"], "terminal_status": "SUCCEEDED", "gaps": []}
-        return handler
+    def prepare(unit: UnitContext) -> Mapping[str, Any]:
+        actions = unit.output("plan.accepted_cpp_plan")["plan"]["actions"]
+        projects = {}
+        for action in actions:
+            project_key = str(action["project_key"])
+            mapping = _safe_copy_case(unit, project_key, action)
+            artifact = _json_artifact(unit, _case_root(unit, project_key) / "source-mapping.json", mapping)
+            projects[project_key] = {"mapping": mapping, "artifact": artifact,
+                                     "project_key": project_key, "profile": action["build_system"],
+                                     "terminal_status": "SUCCEEDED", "gaps": []}
+            unit.job.events.write("CPP_BUILD_PROJECT_PREPARED", project_key=project_key,
+                                  project_id=mapping["project_id"], source_count=len(mapping["files"]),
+                                  build_system=action["build_system"])
+        return {"projects": projects, "project_count": len(projects),
+                "terminal_status": "SUCCEEDED" if projects else "NOT_APPLICABLE", "gaps": []}
 
-    def configure(case_id: str):
-        def handler(unit: UnitContext) -> Mapping[str, Any]:
-            source = unit.output(f"prepare.{case_id}")
-            if source["terminal_status"] == "NOT_APPLICABLE":
-                return {"case_id": CASE_NAMES[case_id], "terminal_status": "NOT_APPLICABLE",
-                        "gaps": [], "profile": None}
+    def configure(unit: UnitContext) -> Mapping[str, Any]:
+        projects = {}
+        for case_id, source in unit.output("prepare.projects")["projects"].items():
             if source["profile"] == "msbuild":
-                return {"case_id": CASE_NAMES[case_id], "profile": "msbuild",
-                        "gaps": [MSBUILD_GAP], "terminal_status": "UNAVAILABLE"}
+                projects[case_id] = {"project_key": case_id, "profile": "msbuild",
+                                     "gaps": [MSBUILD_GAP], "terminal_status": "UNAVAILABLE"}
+                continue
             identity = _checkpoint_identity(unit, case_id, "configure",
                                             {"source_mapping": source["artifact"]["sha256"],
                                              "profile": source["profile"]})
             reused = _load_checkpoint(unit, case_id, "configure", identity)
             if reused is not None:
-                return reused
+                projects[case_id] = reused
+                continue
             execution = _run_tool(unit, case_id, ("configure", str(source["profile"])), executor_factory)
-            gap = None if execution["exit_code"] == 0 else f"{CASE_NAMES[case_id]} configure failed with exit {execution['exit_code']}"
-            unit.job.events.write("CPP_BUILD_CASE_CONFIGURED", case_id=CASE_NAMES[case_id],
+            gap = None if execution["exit_code"] == 0 else f"{case_id} configure failed with exit {execution['exit_code']}"
+            unit.job.events.write("CPP_BUILD_PROJECT_CONFIGURED", project_key=case_id,
                                   terminal_status="SUCCEEDED" if gap is None else "FAILED_AS_GAP",
                                   image_id=execution["image_id"])
-            result = {**execution, "case_id": CASE_NAMES[case_id], "profile": source["profile"],
+            result = {**execution, "project_key": case_id, "profile": source["profile"],
                       "gaps": [gap] if gap else [], "terminal_status": "SUCCEEDED" if gap is None else "FAILED_AS_GAP"}
             _save_checkpoint(unit, case_id, "configure", identity, result)
-            return result
-        return handler
+            projects[case_id] = result
+        gaps = [gap for result in projects.values() for gap in result.get("gaps", ())]
+        return {"projects": projects, "project_count": len(projects), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else ("SUCCEEDED" if projects else "NOT_APPLICABLE")}
 
-    def compile_case(case_id: str):
-        def handler(unit: UnitContext) -> Mapping[str, Any]:
-            configured = unit.output(f"configure.{case_id}")
-            if configured["terminal_status"] == "NOT_APPLICABLE":
-                return {"case_id": CASE_NAMES[case_id], "terminal_status": "NOT_APPLICABLE",
-                        "gaps": [], "profile": None}
+    def compile_projects(unit: UnitContext) -> Mapping[str, Any]:
+        projects = {}
+        for case_id, configured in unit.output("configure.projects")["projects"].items():
             gap = _terminal_gap(configured)
             if gap:
-                return {"case_id": CASE_NAMES[case_id], "gaps": [gap], "terminal_status": "BLOCKED_BY_CONFIGURE"}
+                projects[case_id] = {"project_key": case_id, "profile": configured.get("profile"),
+                                     "gaps": [gap], "terminal_status": "BLOCKED_BY_CONFIGURE"}
+                continue
             identity = _checkpoint_identity(unit, case_id, "compile",
                                             {"configure_execution": configured["execution"]["sha256"],
                                              "profile": configured["profile"]})
             reused = _load_checkpoint(unit, case_id, "compile", identity)
             if reused is not None:
-                return reused
+                projects[case_id] = reused
+                continue
             execution = _run_tool(unit, case_id, ("compile", str(configured["profile"])), executor_factory)
-            gap = None if execution["exit_code"] == 0 else f"{CASE_NAMES[case_id]} compile failed with exit {execution['exit_code']}"
-            unit.job.events.write("CPP_BUILD_CASE_COMPILED", case_id=CASE_NAMES[case_id],
+            gap = None if execution["exit_code"] == 0 else f"{case_id} compile failed with exit {execution['exit_code']}"
+            unit.job.events.write("CPP_BUILD_PROJECT_COMPILED", project_key=case_id,
                                   terminal_status="SUCCEEDED" if gap is None else "FAILED_AS_GAP",
                                   image_id=execution["image_id"])
-            result = {**execution, "case_id": CASE_NAMES[case_id], "profile": configured["profile"],
+            result = {**execution, "project_key": case_id, "profile": configured["profile"],
                       "gaps": [gap] if gap else [], "terminal_status": "SUCCEEDED" if gap is None else "FAILED_AS_GAP"}
             _save_checkpoint(unit, case_id, "compile", identity, result)
-            return result
-        return handler
+            projects[case_id] = result
+        gaps = [gap for result in projects.values() for gap in result.get("gaps", ())]
+        return {"projects": projects, "project_count": len(projects), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else ("SUCCEEDED" if projects else "NOT_APPLICABLE")}
 
-    def catalog(case_id: str):
-        def handler(unit: UnitContext) -> Mapping[str, Any]:
-            compiled = unit.output(f"compile.{case_id}")
-            if compiled["terminal_status"] == "NOT_APPLICABLE":
-                return {"case_id": CASE_NAMES[case_id], "terminal_status": "NOT_APPLICABLE",
-                        "gaps": [], "mapping": None}
+    def catalog(unit: UnitContext) -> Mapping[str, Any]:
+        projects = {}
+        prepared = unit.output("prepare.projects")["projects"]
+        for case_id, compiled in unit.output("compile.projects")["projects"].items():
             gap = _terminal_gap(compiled)
-            mapping = unit.output(f"prepare.{case_id}")["mapping"]
+            mapping = prepared[case_id]["mapping"]
             if gap:
-                return {"case_id": CASE_NAMES[case_id], "mapping": mapping, "gaps": [gap],
-                        "terminal_status": "BLOCKED_BY_COMPILE"}
+                projects[case_id] = {"project_key": case_id, "mapping": mapping, "gaps": [gap],
+                                     "terminal_status": "BLOCKED_BY_COMPILE"}
+                continue
             identity = _checkpoint_identity(unit, case_id, "catalog",
                                             {"compile_execution": compiled["execution"]["sha256"],
-                                             "mapping": unit.output(f"prepare.{case_id}")["artifact"]["sha256"]})
+                                             "mapping": prepared[case_id]["artifact"]["sha256"],
+                                             "link_normalizer": "native-link-normalizer/2"})
             reused = _load_checkpoint(unit, case_id, "catalog", identity)
             if reused is not None:
-                return reused
+                projects[case_id] = reused
+                continue
             root = _case_root(unit, case_id)
             try:
                 commands = normalize_compile_db(root, mapping)
                 compile_artifact = _json_artifact(unit, root / "normalized-compile-commands.json", commands)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
-                return {"case_id": CASE_NAMES[case_id], "mapping": mapping,
-                        "gaps": [f"{CASE_NAMES[case_id]} compile database invalid: {type(exc).__name__}: {exc}"],
-                        "terminal_status": "INVALID_COMPILE_DATABASE"}
+                projects[case_id] = {"project_key": case_id, "mapping": mapping,
+                    "gaps": [f"{case_id} compile database invalid: {type(exc).__name__}: {exc}"],
+                    "terminal_status": "INVALID_COMPILE_DATABASE"}
+                continue
             outputs = []
             for path in sorted((root / "build").rglob("*")):
                 if not path.is_file() or path.is_symlink() or path.name == "compile_commands.json":
@@ -756,11 +814,10 @@ def build_job(*, executor_factory=None) -> Job:
             link_commands = []
             if links_path.is_file() and not links_path.is_symlink() and links_path.stat().st_size <= 4 * 1024 * 1024:
                 candidate_links = json.loads(links_path.read_text(encoding="utf-8"))
-                if isinstance(candidate_links, list) and len(candidate_links) <= 4096:
-                    link_commands = [item for item in candidate_links if isinstance(item, Mapping)]
+                link_commands = normalize_link_commands(candidate_links, outputs)
             output_artifact = _json_artifact(unit, root / "artifact-catalog.json", outputs)
             link_artifact = _json_artifact(unit, root / "normalized-link-commands.json", link_commands)
-            result = {"case_id": CASE_NAMES[case_id], "mapping": mapping, "compile_commands": commands,
+            result = {"project_key": case_id, "mapping": mapping, "compile_commands": commands,
                       "compile_database": compile_artifact, "artifact_catalog": output_artifact,
                       "link_database": link_artifact, "link_commands": link_commands,
                       "outputs": outputs, "image_id": compiled["image_id"], "gaps": [],
@@ -769,60 +826,65 @@ def build_job(*, executor_factory=None) -> Job:
                                  "libraries": sum(x["kind"] == "library" for x in outputs),
                                  "executables": sum(x["kind"] == "executable" for x in outputs)}}
             _save_checkpoint(unit, case_id, "catalog", identity, result)
-            return result
-        return handler
+            projects[case_id] = result
+        gaps = [gap for result in projects.values() for gap in result.get("gaps", ())]
+        return {"projects": projects, "project_count": len(projects), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else ("SUCCEEDED" if projects else "NOT_APPLICABLE")}
 
-    def branch(case_id: str, name: str):
+    def branch(name: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
-            cataloged = unit.output(f"catalog.{case_id}")
-            if cataloged["terminal_status"] == "NOT_APPLICABLE":
-                return {"case_id": CASE_NAMES[case_id], "branch": name,
-                        "terminal_status": "NOT_APPLICABLE", "gaps": []}
-            gap = _terminal_gap(cataloged)
-            if gap:
-                builder, path, fingerprint, shard = _new_builder(unit,
-                    "observations" if name in {"codeql", "joern"} else "analysis",
-                    case_id, name, [], [gap], {"tool": name, "status": "blocked-by-build"},
-                    cataloged["mapping"]["case_snapshot"])
-                builder.add_coverage(name, "unavailable", gap)
-                return _finish_index(unit, builder, path, fingerprint, shard, builder.name, name, [gap])
-            identity = _checkpoint_identity(unit, case_id, f"branch-{name}",
-                {"compile_database": cataloged["compile_database"]["sha256"],
-                 "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
-                 "link_database": cataloged["link_database"]["sha256"],
-                 "branch_identity": BRANCH_IDENTITY[name]})
-            reused = _load_checkpoint(unit, case_id, f"branch-{name}", identity)
-            if reused is not None:
-                return reused
-            if name == "compiled":
-                result = _build_entities(unit, case_id, cataloged)
+            projects = {}
+            for case_id, cataloged in unit.output("catalog.projects")["projects"].items():
+                gap = _terminal_gap(cataloged)
+                if gap:
+                    builder, path, fingerprint, shard = _new_builder(unit,
+                        "observations" if name in {"codeql", "joern"} else "analysis",
+                        case_id, name, [], [gap], {"tool": name, "status": "blocked-by-build"},
+                        cataloged["mapping"]["case_snapshot"])
+                    builder.add_coverage(name, "unavailable", gap)
+                    projects[case_id] = _finish_index(unit, builder, path, fingerprint, shard,
+                                                      builder.name, name, [gap])
+                    continue
+                identity = _checkpoint_identity(unit, case_id, f"branch-{name}",
+                    {"compile_database": cataloged["compile_database"]["sha256"],
+                     "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
+                     "link_database": cataloged["link_database"]["sha256"],
+                     "branch_identity": BRANCH_IDENTITY[name]})
+                reused = _load_checkpoint(unit, case_id, f"branch-{name}", identity)
+                if reused is not None:
+                    projects[case_id] = reused
+                    continue
+                if name == "compiled":
+                    result = _build_entities(unit, case_id, cataloged)
+                elif name == "codeql":
+                    result = _blocked_index(unit, case_id, name, cataloged, CODEQL_GAP)
+                elif name == "joern":
+                    result = _blocked_index(unit, case_id, name, cataloged, JOERN_GAP)
+                else:
+                    tool_mode = "symbols" if name == "binary" else name
+                    execution = _run_tool(unit, case_id, (tool_mode,), executor_factory)
+                    tool_gap = (None if execution["exit_code"] == 0 else
+                                f"{case_id} {name} failed with exit {execution['exit_code']}")
+                    if tool_gap:
+                        builder, path, fingerprint, shard = _new_builder(
+                            unit, "compiled" if name == "binary" else "analysis", case_id, name,
+                            [execution["execution"]], [tool_gap],
+                            {"tool": name, "image": execution["image_id"]},
+                            cataloged["mapping"]["case_snapshot"])
+                        builder.add_coverage(name, "unavailable", tool_gap)
+                        result = _finish_index(unit, builder, path, fingerprint, shard,
+                                               builder.name, name, [tool_gap])
+                    elif name == "ast":
+                        result = _ast_index(unit, case_id, cataloged, execution)
+                    elif name == "ir":
+                        result = _ir_index(unit, case_id, cataloged, execution)
+                    else:
+                        result = _binary_index(unit, case_id, cataloged, execution)
                 _save_checkpoint(unit, case_id, f"branch-{name}", identity, result)
-                return result
-            if name == "codeql":
-                return _blocked_index(unit, case_id, name, cataloged, CODEQL_GAP)
-            if name == "joern":
-                return _blocked_index(unit, case_id, name, cataloged, JOERN_GAP)
-            tool_mode = "symbols" if name == "binary" else name
-            execution = _run_tool(unit, case_id, (tool_mode,), executor_factory)
-            tool_gap = None if execution["exit_code"] == 0 else f"{CASE_NAMES[case_id]} {name} failed with exit {execution['exit_code']}"
-            if tool_gap:
-                builder, path, fingerprint, shard = _new_builder(unit, "compiled" if name == "binary" else "analysis",
-                    case_id, name, [execution["execution"]], [tool_gap],
-                    {"tool": name, "image": execution["image_id"]},
-                    cataloged["mapping"]["case_snapshot"])
-                builder.add_coverage(name, "unavailable", tool_gap)
-                return _finish_index(unit, builder, path, fingerprint, shard, builder.name, name, [tool_gap])
-            if name == "ast":
-                result = _ast_index(unit, case_id, cataloged, execution)
-                _save_checkpoint(unit, case_id, f"branch-{name}", identity, result)
-                return result
-            if name == "ir":
-                result = _ir_index(unit, case_id, cataloged, execution)
-                _save_checkpoint(unit, case_id, f"branch-{name}", identity, result)
-                return result
-            result = _binary_index(unit, case_id, cataloged, execution)
-            _save_checkpoint(unit, case_id, f"branch-{name}", identity, result)
-            return result
+                projects[case_id] = result
+            gaps = [gap for result in projects.values() for gap in result.get("gaps", ())]
+            return {"projects": projects, "project_count": len(projects), "branch": name, "gaps": gaps,
+                    "terminal_status": "COMPLETED_WITH_GAPS" if gaps else ("SUCCEEDED" if projects else "NOT_APPLICABLE")}
         return handler
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
@@ -833,13 +895,12 @@ def build_job(*, executor_factory=None) -> Job:
         current_identities: list[IndexIdentity] = []
         gaps, dispositions = [], {}
         for name in BRANCHES:
-            for case_id in CASE_IDS:
-                output = unit.output(f"{name}.{case_id}")
+            for case_id, output in unit.output(f"{name}.projects")["projects"].items():
                 identity = output.get("index_identity")
                 if isinstance(identity, Mapping):
                     current_identities.append(IndexIdentity(**{**identity, "gaps": tuple(identity.get("gaps", ())) }))
                 gaps.extend(str(item) for item in output.get("gaps", ()))
-                dispositions[f"{CASE_NAMES[case_id]}:{name}"] = output.get("terminal_status", "UNKNOWN")
+                dispositions[f"{case_id}:{name}"] = output.get("terminal_status", "UNKNOWN")
         current_keys = {(item.name, item.shard_id) for item in current_identities}
         identities = [item for item in prior_identities if (item.name, item.shard_id) not in current_keys]
         identities.extend(current_identities)
@@ -850,11 +911,12 @@ def build_job(*, executor_factory=None) -> Job:
                                             "sha256": manifest_sha},))
         load_verified_manifest(unit.job.run_root, destination, file_sha256(destination))
         unique_gaps = list(dict.fromkeys(gaps))
-        summary = {"schema": SCHEMA, "case_count": 13, "branch_count": len(BRANCHES),
+        project_count = unit.output("plan.accepted_cpp_plan")["plan"]["project_count"]
+        summary = {"schema": SCHEMA, "project_count": project_count, "branch_count": len(BRANCHES),
                    "physical_shard_count": len(identities), "gaps": unique_gaps,
                    "dispositions": dispositions}
         summary_artifact = _json_artifact(unit, unit.unit_root / "cpp-compiled-summary.json", summary)
-        unit.job.events.write("CPP_COMPILED_ANALYSIS_COMPLETED", case_count=13,
+        unit.job.events.write("CPP_COMPILED_ANALYSIS_COMPLETED", project_count=project_count,
                               shard_count=len(identities), gap_count=len(unique_gaps))
         return {"schema": SCHEMA, "artifact": summary_artifact,
                 "index_manifest": _artifact(unit.job.run_root, destination),
@@ -862,18 +924,13 @@ def build_job(*, executor_factory=None) -> Job:
                 "terminal_status": "COMPLETED_WITH_GAPS" if unique_gaps else "SUCCEEDED"}
 
     units: list[Unit] = [Unit("plan.accepted_cpp_plan", plan)]
-    for case_id in CASE_IDS:
-        units.append(Unit(f"prepare.{case_id}", prepare(case_id), ("plan.accepted_cpp_plan",)))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"configure.{case_id}", configure(case_id), (f"prepare.{case_id}",)))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"compile.{case_id}", compile_case(case_id), (f"configure.{case_id}",)))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"catalog.{case_id}", catalog(case_id), (f"compile.{case_id}", f"prepare.{case_id}")))
+    units.append(Unit("prepare.projects", prepare, ("plan.accepted_cpp_plan",)))
+    units.append(Unit("configure.projects", configure, ("prepare.projects",)))
+    units.append(Unit("compile.projects", compile_projects, ("configure.projects",)))
+    units.append(Unit("catalog.projects", catalog, ("compile.projects", "prepare.projects")))
     for name in BRANCHES:
-        for case_id in CASE_IDS:
-            units.append(Unit(f"{name}.{case_id}", branch(case_id, name), (f"catalog.{case_id}",)))
-    dependencies = tuple(f"{name}.{case_id}" for name in BRANCHES for case_id in CASE_IDS)
+        units.append(Unit(f"{name}.projects", branch(name), ("catalog.projects",)))
+    dependencies = tuple(f"{name}.projects" for name in BRANCHES)
     units.append(Unit("acceptance.publish_handoff", publish, dependencies))
     values = tuple(units)
     implementation = hashlib.sha256(Path(__file__).read_bytes() +

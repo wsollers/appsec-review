@@ -2,13 +2,13 @@
   "schema": "appsec-review/evaluator-guide-lock/1",
   "guide": {
     "repository": "https://github.com/wsollers/appsec-multi-vuln-guide",
-    "commit": "33b44e6d504b8ef98478066ea394cc52aa4a23a3",
-    "oracle_sha256": "fa48a7b163b0a90aa506f4d6c98b9c4be91cf1f07fda4e902ebe26ac281ebcbe",
-    "provenance_sha256": "5b63d3d322f0234020da2c595cd2bd57337a50c626f1b240e023242ff6f9629e",
-    "observed_run_sha256": "03a40bd4faa9dae77cd444e22cbdd4b6db3e1a7bfe2a2ce2ee53eeac347b88a9"
+    "commit": "dc82680d5b49ddb54e0ad78465f1faa12d1988f0",
+    "oracle_sha256": "45c27fbda3b9283d2ebc5bbe9d78de2964c6bc7867e4df8089fdfc6ea43cc5f8",
+    "provenance_sha256": "1a733ece34a8fcf085f7d4d8456b055d869805138d6546e3894adc1b746df936",
+    "observed_run_sha256": "023e09679c49efb2b9319eae500d7874365f653b30dfe1d12918b805b1fa18b3"
   },
   "target": {
     "repository": "https://github.com/wsollers/appsec-multi-vuln",
-    "commit": "7525d7fdc032c4d123f8ea5f299c76f7ee57909f"
+    "commit": "437ec5141591b25e54dac44168a6bcf832609242"
   }
 }

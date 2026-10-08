@@ -1,23 +1,23 @@
 # C/C++ compiled-analysis operations
 
-`job_cpp_compiled_analysis` consumes the accepted target-analysis plan and exposes one C++
-toolchain lane. For `targets/appsec-multi-vuln` that lane contains thirteen independently resumable
-case actions: ten CMake roots, one Make root, and one Autotools root. `configure.ac` and
-`Makefile.am` at the same root describe one Autotools action, not two projects.
+`job_cpp_compiled_analysis` consumes the accepted target-analysis plan and discovers native
+projects from accepted build actions below `projects/`. There is no repository-specific project
+list or expected count. Each project receives a stable key derived from its root and keeps
+independent checkpoints inside project-batched graph tasks.
 
 The real Dagster graph is:
 
 ```text
 accepted C++ plan
-  -> prepare case copy and exact source mapping
-  -> configure/generate
-  -> compile
-  -> validate compile database and catalog objects/libraries/executables
+  -> discover projects
+  -> copy each project and record exact source mappings
+  -> configure and compile each project
+  -> normalize compile/link records and catalog objects/libraries/executables
   -> compiled index | Clang AST | LLVM IR | CodeQL | Joern | binary/symbol index
   -> verified composite manifest and accepted handoff
 ```
 
-Each case uses an allowlisted `cmake`, `make`, or `autotools` profile. Target build files execute
+Each project uses an allowlisted `cmake`, `make`, or `autotools` profile. Target build files execute
 only in `tool-native-cpp`, with no network, a read-only container root and target mount, one bounded
 run-owned writable scratch mount, non-root UID/GID 10001, dropped capabilities,
 `no-new-privileges`, and central CPU, memory, PID, timeout, tmpfs, and output limits. The pipeline
@@ -31,7 +31,7 @@ compiler logs are not heuristically parsed. Normalization accepts only bounded c
 semantics needed by Clang replay, removes output/dependency-generation actions, maps source paths,
 and binds every unit to the case, source snapshot, command hash, compiler image, and source hash.
 
-A build or analysis-tool failure is returned as a terminal gap. Sibling cases and branches keep
+A build or analysis-tool failure is returned as a terminal gap. Sibling projects and branches keep
 running, and their immutable shards remain usable. Corrupt source mappings, escaped paths, changed
 artifact hashes, malformed compile databases, duplicate shards, or invalid manifests are framework
 integrity failures and stop publication.
@@ -47,10 +47,10 @@ Tests reject answer-bearing target paths or prose and reject evaluator-guide mat
 artifacts. Evaluators may read the guide only after a blind run completes; it is never mounted into
 review workers, tool containers, retrieval indexes, MCP, or prompts.
 
-The neutral native workspace was independently adapted from the NIST SARD Juliet C/C++ 1.3 suite,
-whose published archive SHA-256 is pinned by the external guide. The target carries only the
-general public-domain/CC0 attribution required to document that origin. No upstream case labels or
-local defect map is present in the scan root.
+The Linux calibration workspace is an original, concept-only implementation informed by the
+hash-pinned CMU SEI CERT Secure Coding Standards revision recorded in the external guide. No source
+example was copied, and no MISRA Example Suite or CodeQL test source was used. No rule identifiers,
+weakness labels, or local defect map is present in the scan root.
 
 ## CodeQL decision
 

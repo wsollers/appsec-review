@@ -10,7 +10,6 @@ import time
 from typing import Any
 
 from appsec_review.observability import PipelineLog, emit_model_event
-from appsec_review.jobs.job_cpp_compiled_analysis import CASE_IDS
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, index_fingerprint, write_manifest,
@@ -25,7 +24,7 @@ from .assessment import (
     normalize_action, shard_fingerprint, validate_inference,
 )
 
-
+CASE_IDS = tuple(f"case{number:03d}" for number in (1, 2, 3, 26, 27, 28, 29, 30, 36, 37, 38, 45, 63))
 CASE_NAMES = {value: value.replace("case", "case-") for value in CASE_IDS}
 TOPOLOGY = {
     "load": ("accepted_cpp_build",),
