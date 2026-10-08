@@ -9,6 +9,8 @@ Dagster/graph/catalog/SAT wiring is intentionally outside this isolated core.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 from datetime import datetime, timezone
 import json
 from pathlib import Path, PurePosixPath
@@ -690,6 +692,25 @@ def _orchestrator_fill(record: dict[str, Any]):
     return fill
 
 
+def _postprocess(value: dict[str, Any], inputs: dict[str, Any]) -> None:
+    """The deterministic normalization applied to an accepted reply before independent validation."""
+    target_root, evidence_root = Path(inputs["target_root"]), Path(inputs["evidence_root"])
+    _normalize_component_ids(value)
+    _normalize_tag_cloud(value)
+    _retype_citations(value, target_root, evidence_root)
+    _resolve_evidence_paths(value, target_root, evidence_root)
+    _drop_unresolved_relationships(value)
+    _normalize_lanes(value)
+    _normalize_references(value)
+    _repair_against_target(value, target_root)
+    _resolve_security_tags(value)
+    _record_untagged_gaps(value)
+    if inputs.get("code_index_gap"):
+        _gap(value, "gap-code-index-unavailable", "tooling:code_*", inputs["code_index_gap"],
+             "Characterization ran on the evidence lookups without the structural code_* query tools.",
+             "Publish 02-code-index for this source generation and re-run characterization.")
+
+
 def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str, Any]) -> tuple[dict[str, Any], str, dict[str, Any]]:
     attempt, attempt_id = allocation["attempt"], allocation["attempt_id"]
     target_root, evidence_root = Path(record["target_root"]), Path(record["evidence_root"])
@@ -709,7 +730,23 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
         roots[record["code_index"]["root"]] = data_path(run_id, "jobs").absolute()
     model_identity = request["model"]
     def extra_validate(result: dict[str, Any]) -> list[str]:
-        return category_coverage_errors(result) + security_tag_errors(result)
+        # The full independent validation runs here, on a post-processed copy, so a structural mistake (run
+        # 20261008: overlapping scope classifications) gets a repair round inside the paid call instead of
+        # failing the job after the reply was accepted.
+        errors = category_coverage_errors(result) + security_tag_errors(result)
+        candidate = deepcopy(result)
+        try:
+            candidate.update(target=record["target_name"], source_revision=record["source_revision"],
+                             source_snapshot_sha256=record["source_snapshot_sha256"],
+                             evidence_manifest_lineage=_manifest_lineage(record))
+            _backfill_citations(candidate,
+                {item["path"]: item["sha256"] for item in request["readable_inputs"] if item["root"] == pd.DEFAULT_READABLE_ROOT},
+                {item["path"]: item["sha256"] for item in request["readable_inputs"] if item["root"] == pd.UPSTREAM_ROOT_ID})
+            _postprocess(candidate, record)
+            errors += validate_payload(candidate, target_root=target_root, evidence_root=evidence_root)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            errors.append(f"result could not be normalized for validation: {type(exc).__name__}: {str(exc)[:200]}")
+        return list(dict.fromkeys(errors))
 
     def dispatch(argv: list[str], prompt: str, timeout: int, transcript: Path) -> dict[str, Any]:
         return rc._dispatch_streaming(argv, prompt + ORCHESTRATOR_INSTRUCTIONS, timeout, transcript)
@@ -1073,20 +1110,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
-        _normalize_component_ids(value)
-        _normalize_tag_cloud(value)
-        _retype_citations(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
-        _resolve_evidence_paths(value, Path(inputs["target_root"]), Path(inputs["evidence_root"]))
-        _drop_unresolved_relationships(value)
-        _normalize_lanes(value)
-        _normalize_references(value)
-        _repair_against_target(value, Path(inputs["target_root"]))
-        _resolve_security_tags(value)
-        _record_untagged_gaps(value)
-        if inputs.get("code_index_gap"):
-            _gap(value, "gap-code-index-unavailable", "tooling:code_*", inputs["code_index_gap"],
-                 "Characterization ran on the evidence lookups without the structural code_* query tools.",
-                 "Publish 02-code-index for this source generation and re-run characterization.")
+        _postprocess(value, inputs)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
         if errors:
