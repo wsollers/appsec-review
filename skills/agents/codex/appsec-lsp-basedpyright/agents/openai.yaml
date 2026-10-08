@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec basedpyright"
-  short_description: "Navigate Python code with basedpyright via lsp_driver.py"

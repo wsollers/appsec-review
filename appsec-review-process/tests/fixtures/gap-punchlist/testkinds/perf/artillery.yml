@@ -1,6 +1,0 @@
-config:
-  target: "http://localhost"
-scenarios:
-  - flow:
-      - get:
-          url: "/"

@@ -1,3 +1,0 @@
-# example.com/vuln v1.0.0
-## explicit
-example.com/vuln

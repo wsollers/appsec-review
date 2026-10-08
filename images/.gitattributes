@@ -1,4 +1,0 @@
-# Hash-bound text inputs must have identical bytes on every checkout.  The pin
-# records intentionally hash the LF form written by tool_pins.py.
-tool-*/requirements*.txt text eol=lf
-tool-*/keys/*.pub text eol=lf

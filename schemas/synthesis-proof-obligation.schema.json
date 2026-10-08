@@ -1,4 +1,0 @@
-{
-  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"synthesis-proof-obligation.schema.json","type":"object","additionalProperties":false,
-  "required":["obligation_id","statement"],"properties":{"obligation_id":{"type":"string"},"statement":{"type":"string"}}
-}

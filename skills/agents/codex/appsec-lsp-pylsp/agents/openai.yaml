@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec pylsp"
-  short_description: "Navigate Python code with pylsp via lsp_driver.py"

@@ -1,3 +1,0 @@
-integrity sha512-@@AZURE_KEY@@
-image data:application/octet-stream;base64,@@BLOB@@
-label base64:@@SK_KEY@@

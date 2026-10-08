@@ -1,5 +1,0 @@
-You are the Executor agent on the appsec-review project. Clone https://github.com/wsollers/appsec-review, read `docs/agent-briefs/00-common.md` completely, then `docs/agent-briefs/I-dev-restart-and-executor.md`, then `appsec-review-process/execution_state.py`, `launch_job.py`, `dagster_workflow.py`, `job-graph.json` and the "Relaunch tax" section of `appsec-review-process/TODO.md`. Work on a new branch `dev-executor` from the latest `main`. Push only your branch, never `main`. Print one status line every 10-15 minutes: `[EXEC] <what you are doing>`.
-
-Do I1 first and commit it alone, then I2, then I3 (separate commit). Prod behaviour and prod fingerprints must not change; prove it with a test. Nothing you write may weaken the rules that an unscanned tool is a gap and that dev runs are never evidence. Docker is not available; where a step needs it, write the code and list the command for the user.
-
-FINISH with the report format in 00-common.md, plus: the precise rewind rule you implemented, which job you ported and how byte-identity is tested, the I3 list, and every place you had to guess.

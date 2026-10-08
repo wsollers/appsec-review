@@ -1,7 +1,0 @@
-name: appsec/go-reachability
-version: 0.1.0
-library: false
-# Pinned to the library shipped in codeql-bundle-v2.27.0 (images/audit-codeql/tool.json);
-# dep_reachability_codeql.PACK_PINS must match (tests.test_dep_reachability_engines checks it).
-dependencies:
-  codeql/go-all: 7.3.1

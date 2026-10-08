@@ -1,8 +1,0 @@
-{
-  "schema": "appsec-review/role/0.1", "role_id": "claim-ledger-custodian", "display_name": "Candidate Claim Ledger Custodian", "category": "verification",
-  "summary": "Preserves candidate claim provenance and authorized decisions in a deterministic hash chain.",
-  "allowed_outputs": ["candidate_hypothesis", "candidate_status", "proof_obligation", "dissent", "causal_link", "supersession", "verification_route"],
-  "forbidden_outputs": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"],
-  "required_behavior": ["bind exact producer artifacts and generations", "preserve evidence citations and proof obligations", "reject illegal transitions and broken chains"],
-  "must_not": ["promote admission to a finding", "self-verify a producer candidate", "hide dissent or supersession"]
-}

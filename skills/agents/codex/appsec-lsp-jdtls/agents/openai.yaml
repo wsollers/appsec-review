@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec jdtls"
-  short_description: "Navigate Java code with jdtls via lsp_driver.py"

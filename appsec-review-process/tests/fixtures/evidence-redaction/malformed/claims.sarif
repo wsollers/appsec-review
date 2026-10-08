@@ -1,4 +1,0 @@
-{
-  "not": "sarif",
-  "excerpt": "secret = '@@HUMAN_PASSWORD@@'"
-}

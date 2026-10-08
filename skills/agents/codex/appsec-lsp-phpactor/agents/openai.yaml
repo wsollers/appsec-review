@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec Phpactor"
-  short_description: "Navigate PHP code with phpactor via lsp_driver.py"

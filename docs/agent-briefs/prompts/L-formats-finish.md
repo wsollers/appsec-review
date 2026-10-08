@@ -1,3 +1,0 @@
-You are the Formats agent on the appsec-review project. Clone https://github.com/wsollers/appsec-review, read `docs/agent-briefs/00-common.md` completely, then `docs/agent-briefs/L-formats-finish.md`. Confirm brief J (`personas-folder`) is merged into `main`; if not, stop and report. Work on a new branch `formats-2` from the latest `main`. Push only your branch, never `main`. Print one status line every 10-15 minutes: `[FMT] <what you are doing>`.
-
-Do not merge or rebase `ws-formats`; treat it as a sketch. Stop and report before any slice that would change published artifact bytes or fingerprints.

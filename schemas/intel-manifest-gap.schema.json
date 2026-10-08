@@ -1,7 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "intel-manifest-gap.schema.json",
-  "type": "object", "additionalProperties": false,
-  "required": ["producer_job_id", "kind", "detail"],
-  "properties": {"producer_job_id": {"type": "string"}, "kind": {"enum": ["missing-producer", "authorized-skip", "producer-gap"]}, "detail": {"type": "string"}}
-}

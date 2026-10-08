@@ -84,3 +84,7 @@ images/audit-buildenv-java/jdtls.tar.gz
 
 # Host-local seeds and keys (dependency DB seeds, demo HMAC key): never source.
 .artifacts/
+
+# Local archive of the pre-refactor repository. Git history and the
+# pre-simplification tag are the durable recovery points.
+/old/

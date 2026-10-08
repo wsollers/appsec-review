@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec rust-analyzer"
-  short_description: "Navigate Rust code with rust-analyzer via lsp_driver.py"

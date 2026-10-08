@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec csharp-ls"
-  short_description: "Navigate C# code with csharp-ls via lsp_driver.py"

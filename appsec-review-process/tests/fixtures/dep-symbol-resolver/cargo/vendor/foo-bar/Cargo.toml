@@ -1,7 +1,0 @@
-[package]
-name = "foo-bar"
-version = "0.2.0"
-
-[lib]
-name = "foobar"
-path = "src/lib.rs"

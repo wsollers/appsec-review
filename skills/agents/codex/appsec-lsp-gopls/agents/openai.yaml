@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec gopls"
-  short_description: "Navigate Go code with gopls via lsp_driver.py"

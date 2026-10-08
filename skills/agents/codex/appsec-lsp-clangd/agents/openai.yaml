@@ -1,3 +1,0 @@
-interface:
-  display_name: "AppSec clangd"
-  short_description: "Navigate C and C++ code with clangd via lsp_driver.py"

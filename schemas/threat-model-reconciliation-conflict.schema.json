@@ -1,7 +1,0 @@
-{
-  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"threat-model-reconciliation-conflict.schema.json",
-  "type":"object","additionalProperties":false,"required":["conflict_id","kind","record_ids","input_ids","statement","status","citation_ids"],
-  "properties":{"conflict_id":{"type":"string"},"kind":{"enum":["component-change","relationship-change","evidence-generation-change","source-generation-change","review-input"]},
-    "record_ids":{"type":"array","items":{"type":"string"}},"input_ids":{"type":"array","items":{"type":"string"}},"statement":{"type":"string"},
-    "status":{"const":"unresolved"},"citation_ids":{"type":"array","minItems":1,"items":{"type":"string"},"uniqueItems":true}}
-}

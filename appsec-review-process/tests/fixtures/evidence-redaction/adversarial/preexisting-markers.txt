@@ -1,2 +1,0 @@
-already [REDACTED:named-secret:7] here and password = "@@SHORT_PASSWORD@@"
-secret: [REDACTED:jwt:1]

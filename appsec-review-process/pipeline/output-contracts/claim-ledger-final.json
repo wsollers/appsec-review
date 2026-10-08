@@ -1,7 +1,0 @@
-{
-  "schema": "appsec-review/output-contract/0.1", "contract_id": "claim-ledger-final", "display_name": "Final Claim-Decision Ledger",
-  "required_files": ["claim-decision-ledger.json", "claim-ledger-final-summary.md", "permission.json", "lineage.json", "status.json"],
-  "required_status_fields": ["process", "status", "claims", "decisions", "gaps", "origin_head_hash", "ledger_head_hash", "claim_limit"],
-  "result_schema": {"artifact": "claim-decision-ledger.json", "schema_file": "claim-decision-ledger.schema.json"},
-  "validation_rules": ["consume only the exact accepted L01 ledger and the accepted 07, 08, 09 and 12 results that review its head, each consuming the previous one", "keep every L01 entry and the L01 head byte-identical; append status_decision entries after the admissions, stage by stage", "Python builds each decision request from the accepted stage result; claim_ledger.load_decision re-derives its authority, permission receipt and generations from that producer's accepted attempt", "map dispositions only through claim_ledger.DECISION_PRODUCERS, TRANSITIONS and AUTHORITY; 12 assigns no ledger status and must agree with 09", "a claim a stage did not decide (no row, or 09 BLOCKED) keeps its status and is a named gap", "an illegal transition, missing authority or a stage that reviewed another ledger head blocks", "decisions never create a finding"]
-}

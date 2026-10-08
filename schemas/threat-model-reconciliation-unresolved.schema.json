@@ -1,7 +1,0 @@
-{
-  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"threat-model-reconciliation-unresolved.schema.json",
-  "type":"object","additionalProperties":false,"required":["assumption_id","statement","affected_record_ids","related_input_ids","status","citation_ids"],
-  "properties":{"assumption_id":{"type":"string"},"statement":{"type":"string"},"affected_record_ids":{"type":"array","items":{"type":"string"}},
-    "related_input_ids":{"type":"array","items":{"type":"string"}},"status":{"const":"unresolved"},
-    "citation_ids":{"type":"array","minItems":1,"items":{"type":"string"},"uniqueItems":true}}
-}

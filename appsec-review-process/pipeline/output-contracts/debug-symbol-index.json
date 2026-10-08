@@ -1,8 +1,0 @@
-{
-  "schema":"appsec-review/output-contract/0.1","contract_id":"debug-symbol-index","display_name":"Debug Symbol Index",
-  "required_files":["debug-symbol-index.json","status.json","permission.json","lineage.json","binary-static-raw.json","binary-b13-receipts.json","applicability-receipt.json","debug-symbol-index.records.jsonl"],
-  "required_status_fields":["process","status","records","static_only","qualification"],
-  "result_schema":{"artifact":"debug-symbol-index.json","schema_file":"debug-symbol-index.schema.json"},
-  "claim_class":{"claim_class_id":"debug_symbol_static_evidence","allowed_assertions":["symbol-record","coverage-gap"],"forbidden_promotions":["finding","severity","runtime-state"]},
-  "validation_rules":["bind exact accepted native-build result, envelope, source revision, binary and build identities","bind the exact registered audit-binary-analysis image record and B13 boundary","index symbols deterministically without executing target binaries","represent stripped, missing, partial, mismatched and duplicate symbols as explicit gaps","publish per-binary symbol records in the hash- and count-bound debug-symbol-index.records.jsonl; the result is the summary","SKIPPED is valid only when accepted native-build evidence contains zero binaries"]
-}

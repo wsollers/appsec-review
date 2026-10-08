@@ -1,8 +1,0 @@
-{
-  "schema": "appsec-review/output-contract/0.1", "contract_id": "threat-model-core", "display_name": "Static DFD And Candidate STRIDE Model",
-  "required_files": ["integrated-threat-model.json", "threat-model-summary.md", "attack-trees.mmd", "dfd.mmd", "ranked-threat-scenarios.json", "intercom-transcript.jsonl", "permission.json", "lineage.json", "status.json"],
-  "required_status_fields": ["process", "status", "elements", "flows", "candidate_hypotheses", "coverage_gaps", "claim_limit"],
-  "result_schema": {"artifact": "integrated-threat-model.json", "schema_file": "integrated-threat-model.schema.json"},
-  "claim_class": {"claim_class_id": "threat_model_candidate", "allowed_assertions": ["modeled-architecture", "modeled-data-flow", "trust-boundary", "candidate-threat-hypothesis", "assumption", "coverage-gap", "rescope-trigger"], "forbidden_promotions": ["finding", "severity", "runtime-state"]},
-  "validation_rules": ["consume only the current exact accepted F03 map and its bound F02 assembly", "every model record cites dereferenced hash-bound F03 and F02 evidence", "all element, flow and boundary references resolve", "every F03 component is modeled or explicitly unmodeled", "every trust-boundary crossing has six STRIDE decisions backed by a candidate hypothesis or explicit gap", "candidate hypotheses are never findings, verification, runtime state or severity", "workbench overlays (data classes, LINDDUN privacy threats, declared zones, abuse scenarios, attack trees) are derived by the deterministic join from retained cell replies and replay byte for byte (ADR-0019)", "projections (attack-trees.mmd, dfd.mmd, ranked-threat-scenarios.json, intercom transcript) regenerate from the model"]
-}

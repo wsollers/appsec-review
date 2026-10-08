@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="fixture" tests="3" failures="1" skipped="1">
-  <testcase classname="fixture.math" name="adds" time="0.01"/>
-  <testcase classname="fixture.math" name="rejects_bad_input" time="0.02"><failure message="expected fixture failure"/></testcase>
-  <testcase classname="fixture.math" name="platform_only" time="0"><skipped/></testcase>
-</testsuite>

@@ -1,3 +1,0 @@
-# pip install --require-hashes --no-deps -r requirements.lock
-cvss==3.6 \
-    --hash=sha256:e342c6ad9c7eb69d2aebbbc2768a03cabd57eb947c806e145de5b936219833ea

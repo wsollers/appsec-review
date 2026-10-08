@@ -1,8 +1,0 @@
-{
-  "schema": "appsec-review/role/0.1", "role_id": "threat-model-core", "display_name": "Static Threat Model Core", "category": "discovery",
-  "summary": "Builds an evidence-backed DFD and candidate STRIDE worklist from accepted component evidence.",
-  "allowed_outputs": ["modeled_architecture", "modeled_data_flow", "trust_boundary", "candidate_threat_hypothesis", "assumption", "coverage_gap", "rescope_trigger"],
-  "forbidden_outputs": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"],
-  "required_behavior": ["cite exact accepted F03 and F02 evidence", "account for every component and trust-boundary crossing", "attach proof obligations to each candidate hypothesis"],
-  "must_not": ["promote a hypothesis to a finding", "claim runtime behavior", "assign severity", "hide an unresolved crossing or component"]
-}

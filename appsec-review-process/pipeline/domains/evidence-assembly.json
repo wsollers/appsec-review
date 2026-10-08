@@ -1,9 +1,0 @@
-{
-  "schema": "appsec-review/domain/0.1",
-  "domain_id": "evidence-assembly",
-  "display_name": "Run-owned Evidence Assembly",
-  "surfaces": ["terminal instance manifests", "accepted producer pointers", "worker result envelopes", "producer artifacts", "permission receipts"],
-  "common_failure_modes": ["early publication", "stale accepted pointer", "mixed source generation", "mixed build lineage", "unauthorized skip", "artifact hash drift"],
-  "preferred_standards": ["run-owned immutable evidence", "fail-closed publication"],
-  "required_evidence_hints": ["source snapshot SHA-256", "producer attempt ID", "envelope SHA-256", "artifact SHA-256", "terminal instance ID"]
-}

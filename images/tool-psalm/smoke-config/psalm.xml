@@ -1,8 +1,0 @@
-<?xml version="1.0"?>
-<!-- Smoke-run configuration only (tool_pins.py smoke mounts this folder at /config). The scan job
-     supplies its own configuration the same way; nothing is baked into the image. -->
-<psalm errorLevel="4" resolveFromConfigFile="false" findUnusedCode="false">
-    <projectFiles>
-        <directory name="/workspace" />
-    </projectFiles>
-</psalm>

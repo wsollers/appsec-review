@@ -1,2 +1,0 @@
-# Fixture
-Generic README only.

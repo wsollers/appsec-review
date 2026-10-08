@@ -1,9 +1,0 @@
-{
-  "schema": "appsec-review/domain/0.1",
-  "domain_id": "claim-review-lifecycle",
-  "display_name": "Evidence-qualified Claim Review Lifecycle",
-  "surfaces": ["candidate admission", "adversarial hypothesis", "defensive refutation", "independent verification", "scoring"],
-  "common_failure_modes": ["unsupported decision", "stale evidence", "identity collision", "silent omission", "premature promotion"],
-  "preferred_standards": ["common worker result envelope", "claim lifecycle transition rules"],
-  "required_evidence_hints": ["accepted pointer identity", "source generation", "claim citations", "proof obligations"]
-}

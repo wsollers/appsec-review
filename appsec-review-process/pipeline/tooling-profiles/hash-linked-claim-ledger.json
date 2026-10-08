@@ -1,7 +1,0 @@
-{
-  "schema": "appsec-review/tooling-profile/0.1", "tooling_profile_id": "hash-linked-claim-ledger", "display_name": "Deterministic Hash-Linked Claim Ledger", "mode": "static-only",
-  "required_inputs": ["accepted candidate route artifact", "source generation", "component generation"], "optional_inputs": ["accepted prior ledger", "authorized decision events"],
-  "allowed_actions": ["normalize candidate routes", "append canonical hash-linked entries", "validate authorized status transitions", "emit inert later-stage routing"],
-  "disallowed_actions": ["execute target code", "access network", "publish findings", "assign severity", "assert runtime state or compliance"],
-  "claim_limits": {"allowed": ["candidate_hypothesis", "candidate_status", "proof_obligation", "dissent", "causal_link", "supersession", "verification_route"], "forbidden": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"]}
-}

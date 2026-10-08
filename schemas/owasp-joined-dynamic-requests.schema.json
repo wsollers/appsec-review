@@ -1,7 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-joined-dynamic-requests.schema.json",
-  "type": "object", "additionalProperties": false, "required": ["schema", "run_id", "selection_id", "authorization", "execution", "requests"],
-  "properties": {"schema": {"const": "appsec-review/owasp-joined-dynamic-requests/1.0"}, "run_id": {"type": "string"}, "selection_id": {"type": "string"},
-    "authorization": {"const": "not_authorized"}, "execution": {"const": "not_executed"},
-    "requests": {"type": "array", "items": {"$ref": "owasp-dynamic-test-candidate.schema.json"}}}
-}

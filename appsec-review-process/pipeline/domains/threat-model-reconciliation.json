@@ -1,7 +1,0 @@
-{
-  "schema":"appsec-review/domain/0.1","domain_id":"threat-model-reconciliation","display_name":"Threat Model Generation Reconciliation",
-  "surfaces":["L6A model generation","component and relationship deltas","evidence generation deltas","unresolved assumptions","reviewer/model inputs"],
-  "common_failure_modes":["stale L6A snapshot","mixed component generation","unsupported input promotion","silently resolved assumption","uncited delta"],
-  "preferred_standards":["STRIDE"],
-  "required_evidence_hints":["accepted reproducible L6A model","current accepted F03 map","exact F02 evidence manifest lineage","bounded optional reconciliation control"]
-}

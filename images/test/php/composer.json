@@ -1,8 +1,0 @@
-{
-  "name": "appsec-review/hello-php",
-  "description": "Minimal PHP smoke test for audit-buildenv-php",
-  "type": "project",
-  "require": {
-    "php": ">=8.3"
-  }
-}

@@ -1,7 +1,0 @@
-{
-  "schema":"appsec-review/domain/0.1","domain_id":"synthesis-report-core","display_name":"Evidence-backed Draft Reporting",
-  "surfaces":["review scope","verified finding projection","control coverage","unresolved candidates","dissent","limitations","evidence trace"],
-  "common_failure_modes":["stale ledger head","mixed source generation","uncited claim","score invention","coverage denominator collapse","draft presented as final"],
-  "preferred_standards":["OWASP evidence accounting","CVSS-derived upstream scoring only"],
-  "required_evidence_hints":["current accepted common pointers","immutable artifact hashes","claim-ledger head","independent verification citations","separate OWASP denominators"]
-}

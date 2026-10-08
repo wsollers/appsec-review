@@ -1,6 +1,0 @@
-{
-  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"threat-model-reconciliation-citation.schema.json",
-  "type":"object","additionalProperties":false,"required":["citation_id","producer_job_id","attempt_id","path","sha256","purpose"],
-  "properties":{"citation_id":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]*$"},"producer_job_id":{"type":"string"},
-    "attempt_id":{"type":"string"},"path":{"type":"string","minLength":1},"sha256":{"$ref":"threat-model-reconciliation-sha.schema.json"},"purpose":{"type":"string"}}
-}

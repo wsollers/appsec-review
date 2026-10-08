@@ -1,7 +1,0 @@
-{
-  "schema":"appsec-review/tooling-profile/0.1","tooling_profile_id":"synthesis-report-static","display_name":"Deterministic Static Draft Renderer","mode":"static-only",
-  "required_inputs":["exact accepted synthesis input manifest","hash-bound upstream artifacts","accepted ledger and L08 decisions"],"optional_inputs":[],
-  "allowed_actions":["validate pointers and hashes","join verified claims","preserve coverage, gaps and dissent","render JSON and Markdown draft artifacts"],
-  "disallowed_actions":["execute target content","access network","derive scores","create findings from hypotheses","publish final report or remediation"],
-  "claim_limits":{"allowed":["draft_report","verified_finding_projection","coverage_accounting","unresolved_risk_projection","evidence_trace","publication_manifest"],"forbidden":["final_report","human_signoff","invented_finding","invented_severity","runtime_state","compliance_verdict","remediation_status"]}
-}

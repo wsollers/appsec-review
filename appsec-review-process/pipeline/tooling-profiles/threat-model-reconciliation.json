@@ -1,8 +1,0 @@
-{
-  "schema":"appsec-review/tooling-profile/0.1","tooling_profile_id":"threat-model-reconciliation","display_name":"Deterministic Threat Model Reconciliation","mode":"evidence-only",
-  "required_inputs":["accepted reproducible L6A snapshot","current accepted F03 component/evidence generation"],
-  "optional_inputs":["bounded reviewer/model reconciliation control"],
-  "allowed_actions":["compare immutable generations","record source-cited deltas","preserve unresolved inputs","request L6A regeneration"],
-  "disallowed_actions":["execute target code","access network","rewrite L6A","publish findings","assign severity","treat model output as evidence"],
-  "claim_limits":{"allowed":["model_generation_binding","component_delta","evidence_generation_delta","unresolved_assumption","unresolved_input","reconciliation_conflict","regeneration_action","coverage_gap"],"forbidden":["finding","verified_security_finding","severity","runtime_state","compliance_verdict","remediation_status"]}
-}
