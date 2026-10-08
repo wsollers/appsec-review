@@ -11,6 +11,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 
 SECRET_FIELDS = {"secret", "match", "password", "token", "apikey", "api_key", "private_key"}
+NORMALIZER_IDENTITY = "static-evidence/2"
 _ASSIGNMENT = re.compile(
     r"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*([\"']?)([^\s,;\"']+)\2"
 )
@@ -86,6 +87,7 @@ def build_envelope(
 ) -> dict[str, Any]:
     paths = set(cataloged_paths)
     records: list[dict[str, Any]] = []
+    seen_evidence_ids: set[str] = set()
     bounded_gaps = [str(item) for item in gaps]
     total = 0
     for observation in observations:
@@ -112,10 +114,10 @@ def build_envelope(
         }
         if location is None:
             record["artifact_evidence"] = True
-        stable = {key: record[key] for key in (
-            "native_rule_id", "message", "location", "component", "package", "advisory"
-        )}
-        record["evidence_id"] = "evidence-" + hashlib.sha256(canonical_json(stable)).hexdigest()[:24]
+        record["evidence_id"] = "evidence-" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]
+        if record["evidence_id"] in seen_evidence_ids:
+            continue
+        seen_evidence_ids.add(record["evidence_id"])
         encoded = canonical_json(record)
         if total + len(encoded) > bounds.max_total_bytes:
             bounded_gaps.append("normalized total byte bound reached")

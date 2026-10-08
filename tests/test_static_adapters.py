@@ -74,3 +74,19 @@ def test_evidence_redacts_secret_values_bounds_records_and_rejects_uncataloged_l
     assert "abcd" not in json.dumps(record)
     assert record["location"] is None and record["artifact_evidence"]
     assert record["evidence_id"].startswith("evidence-")
+
+
+def test_evidence_collapses_exact_duplicates_but_preserves_distinct_observations(tmp_path) -> None:
+    raw = tmp_path / "raw.json"
+    raw.write_text("{}", encoding="utf-8")
+    common = {"rule_id": "rule-1", "message": "same location", "path": "main.py", "start_line": 4}
+    envelope = build_envelope(
+        tool={"id": "tool-semgrep"}, target_fingerprint="fp",
+        applicability={"applicable": True}, coverage_scope={"paths": ["main.py"]}, gaps=(),
+        raw_artifacts=(raw,), parser_identity="parser",
+        observations=({**common, "severity": "HIGH"}, {**common, "severity": "HIGH"},
+                      {**common, "severity": "LOW"}),
+        cataloged_paths=("main.py",), terminal_status="SUCCEEDED", run_root=tmp_path,
+    )
+    assert envelope["record_count"] == 2
+    assert len({record["evidence_id"] for record in envelope["records"]}) == 2

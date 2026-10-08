@@ -17,7 +17,7 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     ToolAdapter,
     adapter_registry,
 )
-from appsec_review.jobs.job_evidence_collection.evidence import build_envelope
+from appsec_review.jobs.job_evidence_collection.evidence import NORMALIZER_IDENTITY, build_envelope
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -169,7 +169,8 @@ def _checkpoint_identity(unit: UnitContext, adapter: ToolAdapter, catalog: ScanC
         "tool_id": adapter.tool_id, "target_fingerprint": catalog.source_fingerprint,
         "catalog_handoff": catalog.handoff_sha256, "scope": _scope_identity(catalog, selection),
         "image_id": image_id, "adapter": adapter.adapter_identity, "parser": adapter.parser_identity,
-        "validator": "static-tool-evidence/1", "inputs": _extra_identity(mounts),
+        "normalizer": NORMALIZER_IDENTITY, "validator": "static-tool-evidence/1",
+        "inputs": _extra_identity(mounts),
         "job_settings": dict(unit.job.config.settings),
         "task_settings": dict(unit.job.config.step(unit.step_id).task(unit.task_id).settings),
     }
@@ -336,7 +337,7 @@ def _build_indexes(unit: UnitContext, tool_units: tuple[str, ...]) -> Mapping[st
     fingerprint = index_fingerprint(
         name="observations", target_snapshot=unit.job.source_fingerprint, producer_artifacts=artifacts,
         tool_identity={"tools": sorted(unit.output(item)["tool_id"] for item in tool_units)},
-        parser_identity="static-adapters/1", normalizer_identity="static-evidence/1",
+        parser_identity="static-adapters/1", normalizer_identity=NORMALIZER_IDENTITY,
         mapping_identity="native-location/1", upstream_manifests=(manifest_sha,),
     )
     index_path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}.sqlite"
