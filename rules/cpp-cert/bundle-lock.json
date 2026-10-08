@@ -1,0 +1,88 @@
+{
+  "schema": "appsec-review/cpp-cert-rule-bundle-lock/1",
+  "generated_at": "2026-10-08",
+  "sources": [
+    {
+      "name": "GitHub CodeQL coding standards",
+      "repository": "https://github.com/github/codeql-coding-standards",
+      "revision": "6ac4b1dfc3c3d55dc79ec99b8ab960a46df4231e",
+      "release": "v2.62.0",
+      "source_path": "cpp/cert/src",
+      "license": "MIT",
+      "license_path": "codeql/LICENSE.md",
+      "use": "Vendored CERT C++ CodeQL query pack, unchanged."
+    },
+    {
+      "name": "Ericsson CodeChecker",
+      "repository": "https://github.com/Ericsson/codechecker",
+      "revision": "29100d4df7e599f7ffbdd7d5ed7cd14fe6b0260d",
+      "source_paths": [
+        "config/guidelines/sei-cert-cpp.yaml",
+        "config/guidelines/sei-cert-c.yaml",
+        "config/labels/analyzers/cppcheck.json",
+        "config/labels/analyzers/clang-tidy.json",
+        "config/labels/analyzers/clangsa.json"
+      ],
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_path": "mappings/codechecker/LICENSE.TXT",
+      "use": "Vendored identifier and analyzer-label mappings, unchanged; no analyzer runtime."
+    },
+    {
+      "name": "CMU SEI Secure Coding Standards",
+      "repository": "https://github.com/cmu-sei/secure-coding-standards",
+      "revision": "819d26c9ab228ab6d0c4e8766bfcedce20b13465",
+      "license": "CC-BY-4.0 for standard text; MIT for code examples",
+      "use": "Identifier and canonical-link authority only; no standard prose or examples copied."
+    },
+    {
+      "name": "appsec-review original gap rules",
+      "repository": "this repository",
+      "revision": "working tree at lock generation",
+      "license": "MIT",
+      "license_path": "LICENSE.local-rules.md",
+      "use": "Original Semgrep/OpenGrep-compatible rules and fixtures."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "codeql/cert",
+      "kind": "tree",
+      "file_count": 247,
+      "sha256": "ec0825c854f70cb119efa7381ccb0ae763a4faf7fd872495b350524685b3c701",
+      "query_count": 117,
+      "cert_rule_count": 82,
+      "pack": "codeql/cert-cpp-coding-standards@2.62.0",
+      "dependencies": {
+        "codeql/cpp-all": "5.0.0",
+        "codeql/common-cpp-coding-standards": "*"
+      }
+    },
+    {"path": "codeql/LICENSE.md", "kind": "file", "sha256": "7dd4234f17de03a374a77487c8727a7cde3e656d0157cf8efaa9c1dd691c82f3"},
+    {"path": "mappings/codechecker/sei-cert-cpp.yaml", "kind": "file", "sha256": "1cea1c402d605b3221e75196180a8e77b9ebe6f88490e311dbab4d7081d69794"},
+    {"path": "mappings/codechecker/sei-cert-c.yaml", "kind": "file", "sha256": "a56d90c6d1faa997dd4cc023b1582c4d78a34df3b70800a81f697d40dc1611ae"},
+    {"path": "mappings/codechecker/cppcheck.json", "kind": "file", "sha256": "a87f1c80ac12ad9cddb8e6b09f5fbae004b26b24df363fc0347919b8226f5aa4"},
+    {"path": "mappings/codechecker/clang-tidy.json", "kind": "file", "sha256": "0a364548e35c6583644c2635561296a352b83e972d22f6a2bf11e27e2da8abb1"},
+    {"path": "mappings/codechecker/clangsa.json", "kind": "file", "sha256": "df081a11f8fed5812d299da7c180ab136d19d8fff65707f3d5084bb6c778c325"},
+    {"path": "mappings/codechecker/LICENSE.TXT", "kind": "file", "sha256": "b78bd0e20d08af5dd2603980367b28dfe82b08345524c1944913cdaa7d6ffcbe"},
+    {"path": "semgrep/cpp-cert-gap-rules.yml", "kind": "file", "sha256": "8a57f0d4c53239dc82a8c7bf382c32736573632a15b785fc36f735d2195ce8fb"},
+    {"path": "tests/semgrep/positive.cpp", "kind": "file", "sha256": "d408cf5c300a1f2a0c63e30a248ac9f32b2049dbf857e2727868b157fe2b5f2f"},
+    {"path": "tests/semgrep/clean.cpp", "kind": "file", "sha256": "4901a577a67cd8cef7fb2897d106f2c9cc5793f7e75c719a4c59b9fa433131f4"},
+    {"path": "LICENSE.local-rules.md", "kind": "file", "sha256": "89b3bae1985d6ad984aae4b8ace0289c298cf7a3e53dddb6234fde28ea2935b4"},
+    {"path": "coverage.json", "kind": "file", "sha256": "a6cb6fee562dbf9704a1d22e89841addecc4fee8fca6268b83885c88ba94891f"},
+    {"path": "coverage.schema.json", "kind": "file", "sha256": "7e183895abc454d433a80a665d148a42f309b7cb96c03072b81aef2726f63710"}
+  ],
+  "excluded_sources": [
+    {
+      "name": "Semgrep Registry and semgrep-rules",
+      "reason": "The Semgrep Rules License v1.0 does not grant the redistribution terms required for this repository. No registry rules were copied or adapted."
+    },
+    {
+      "name": "MISRA and AUTOSAR rule text and example suites",
+      "reason": "Redistribution and derivative rights were not established. Only third-party identifier labels already present in the Apache-licensed CodeChecker mappings are retained."
+    },
+    {
+      "name": "CERT Rosecheckers",
+      "reason": "Obsolete compiler integration and maintenance state made it unsuitable for the generic current C/C++ analysis workflow."
+    }
+  ]
+}

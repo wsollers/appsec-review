@@ -1,0 +1,121 @@
+rules:
+  - id: appsec-review.cpp-cert.mem56-unrelated-shared-owner
+    languages: [cpp]
+    message: Constructing a new shared owner from another owner's raw pointer can create independent control blocks.
+    severity: ERROR
+    metadata:
+      cert: MEM56-CPP
+      cwe: CWE-415
+      confidence: HIGH
+      license: MIT
+    pattern: std::shared_ptr<$T>($OWNER.get())
+
+  - id: appsec-review.cpp-cert.exp51-array-scalar-delete
+    languages: [cpp]
+    message: Storage allocated with array new is released with scalar delete.
+    severity: ERROR
+    metadata:
+      cert: EXP51-CPP
+      cwe: CWE-762
+      confidence: HIGH
+      license: MIT
+    pattern: |
+      $T *$PTR = new $U[$N];
+      ...
+      delete $PTR;
+
+  - id: appsec-review.cpp-cert.str52-return-local-string-view
+    languages: [cpp]
+    message: The returned string view refers to a local string whose lifetime ends at return.
+    severity: ERROR
+    metadata:
+      cert: STR52-CPP
+      cwe: CWE-416
+      confidence: HIGH
+      license: MIT
+    patterns:
+      - pattern-inside: |
+          $RET $FUNC(...) {
+            ...
+            std::string $LOCAL(...);
+            ...
+          }
+      - pattern: return std::string_view($LOCAL);
+
+  - id: appsec-review.cpp-cert.con54-predicate-free-condition-wait
+    languages: [cpp]
+    message: This condition-variable wait has no predicate and is not guarded by a retry loop.
+    severity: ERROR
+    metadata:
+      cert: CON54-CPP
+      cwe: CWE-667
+      confidence: HIGH
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: $CV.wait($LOCK)
+          - pattern: $CV.wait_for($LOCK, ...)
+          - pattern: $CV.wait_until($LOCK, ...)
+      - pattern-not-inside: |
+          while (...) {
+            ...
+            $CV.wait($LOCK);
+            ...
+          }
+      - pattern-not-inside: |
+          while (...) {
+            ...
+            $CV.wait_for($LOCK, ...);
+            ...
+          }
+      - pattern-not-inside: |
+          while (...) {
+            ...
+            $CV.wait_until($LOCK, ...);
+            ...
+          }
+
+  - id: appsec-review.cpp-cert.con51-manual-lock-before-throw
+    languages: [cpp]
+    message: A manually acquired lock can remain held when this exception leaves the guarded region.
+    severity: ERROR
+    metadata:
+      cert: CON51-CPP
+      cwe: CWE-667
+      confidence: HIGH
+      license: MIT
+    pattern: |
+      $MUTEX.lock();
+      ...
+      throw $EXCEPTION;
+
+  - id: appsec-review.cpp-cert.con56-repeat-nonrecursive-lock
+    languages: [cpp]
+    message: The same nonrecursive timed mutex is locked again before it is released.
+    severity: ERROR
+    metadata:
+      cert: CON56-CPP
+      cwe: CWE-667
+      confidence: HIGH
+      license: MIT
+    pattern: |
+      std::timed_mutex $MUTEX;
+      ...
+      $MUTEX.lock();
+      ...
+      $MUTEX.try_lock_for(...);
+
+  - id: appsec-review.cpp-cert.con50-destroy-locked-pthread-mutex
+    languages: [c, cpp]
+    message: A POSIX mutex is destroyed on a path where it remains locked.
+    severity: ERROR
+    metadata:
+      cert: CON50-CPP
+      cert_c: CON31-C
+      cwe: CWE-667
+      confidence: HIGH
+      license: MIT
+    pattern: |
+      pthread_mutex_lock(&$MUTEX);
+      ...
+      pthread_mutex_destroy(&$MUTEX);

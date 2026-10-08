@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/cpp-cert-coverage/1",
+  "type": "object",
+  "required": ["schema", "scope", "inventory", "priorities", "known_gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/cpp-cert-coverage/1"},
+    "scope": {"type": "string", "minLength": 1},
+    "inventory": {
+      "type": "object",
+      "required": ["codeql_queries", "codeql_cert_rules", "local_semgrep_rules"],
+      "properties": {
+        "codeql_queries": {"type": "integer", "minimum": 0},
+        "codeql_cert_rules": {"type": "integer", "minimum": 0},
+        "local_semgrep_rules": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "priorities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cert", "weakness", "codeql", "semgrep", "mapping_evidence"],
+        "properties": {
+          "cert": {"type": "string", "pattern": "^[A-Z]{3}[0-9]{2}-CPP$"},
+          "weakness": {"type": "string", "minLength": 1},
+          "cwe": {"type": "array", "items": {"type": "string", "pattern": "^CWE-[0-9]+$"}, "uniqueItems": true},
+          "codeql": {"type": "array", "items": {"type": "string", "pattern": "^codeql/cert/rules/.+\\.ql$"}, "uniqueItems": true},
+          "semgrep": {"type": "array", "items": {"type": "string", "pattern": "^appsec-review\\.cpp-cert\\."}, "uniqueItems": true},
+          "mapping_evidence": {"type": "array", "items": {"enum": ["clang-tidy", "clangsa", "cppcheck"]}, "uniqueItems": true},
+          "gap": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "known_gaps": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "additionalProperties": false
+}

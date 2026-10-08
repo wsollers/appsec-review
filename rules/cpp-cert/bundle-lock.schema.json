@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/cpp-cert-rule-bundle-lock/1",
+  "type": "object",
+  "required": ["schema", "generated_at", "sources", "artifacts", "excluded_sources"],
+  "properties": {
+    "schema": {"const": "appsec-review/cpp-cert-rule-bundle-lock/1"},
+    "generated_at": {"type": "string", "format": "date"},
+    "sources": {"type": "array", "minItems": 3},
+    "artifacts": {"type": "array", "minItems": 1},
+    "excluded_sources": {"type": "array", "minItems": 1}
+  },
+  "additionalProperties": true
+}

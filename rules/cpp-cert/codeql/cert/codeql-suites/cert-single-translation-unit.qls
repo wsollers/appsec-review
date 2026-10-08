@@ -1,0 +1,2 @@
+- description: "DEPRECATED - CERT C++ 2016 (Single Translation Unit) - use cert-cpp-single-translation-unit.qls instead"
+- import: codeql-suites/cert-cpp-single-translation-unit.qls

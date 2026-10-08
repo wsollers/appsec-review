@@ -1,0 +1,195 @@
+{
+  "schema": "appsec-review/cpp-cert-coverage/1",
+  "scope": "High-value native C/C++ memory, lifetime, exception, container, and concurrency coverage. This crosswalk records rule assets, not runtime enablement.",
+  "inventory": {
+    "codeql_queries": 117,
+    "codeql_cert_rules": 82,
+    "local_semgrep_rules": 7
+  },
+  "priorities": [
+    {
+      "cert": "MEM50-CPP",
+      "weakness": "use after free",
+      "cwe": ["CWE-416"],
+      "codeql": ["codeql/cert/rules/MEM50-CPP/UseAfterFree.ql"],
+      "semgrep": [],
+      "mapping_evidence": ["clang-tidy", "clangsa"],
+      "gap": "No local syntactic rule: reliable coverage requires lifetime/data-flow analysis."
+    },
+    {
+      "cert": "MEM51-CPP",
+      "weakness": "incorrect or missing deallocation",
+      "cwe": ["CWE-415", "CWE-762"],
+      "codeql": ["codeql/cert/rules/MEM51-CPP/ProperlyDeallocateDynamicallyAllocatedResources.ql"],
+      "semgrep": [],
+      "mapping_evidence": ["clang-tidy", "clangsa"],
+      "gap": "No local syntactic rule: ownership and path reasoning are required."
+    },
+    {
+      "cert": "MEM52-CPP",
+      "weakness": "unchecked allocation failure",
+      "cwe": ["CWE-252", "CWE-690"],
+      "codeql": ["codeql/cert/rules/MEM52-CPP/DetectAndHandleMemoryAllocationErrors.ql"],
+      "semgrep": [],
+      "mapping_evidence": ["clang-tidy"],
+      "gap": "No local rule currently models allocation APIs and failure contracts across calls."
+    },
+    {
+      "cert": "MEM53-CPP",
+      "weakness": "manual object lifetime",
+      "cwe": [],
+      "codeql": [
+        "codeql/cert/rules/MEM53-CPP/MissingConstructorCallForManuallyManagedObject.ql",
+        "codeql/cert/rules/MEM53-CPP/MissingDestructorCallForManuallyManagedObject.ql"
+      ],
+      "semgrep": [],
+      "mapping_evidence": [],
+      "gap": "No equivalent local syntactic or imported analyzer mapping."
+    },
+    {
+      "cert": "MEM54-CPP",
+      "weakness": "invalid placement-new storage",
+      "cwe": [],
+      "codeql": [
+        "codeql/cert/rules/MEM54-CPP/PlacementNewInsufficientStorageCert.ql",
+        "codeql/cert/rules/MEM54-CPP/PlacementNewNotProperlyAlignedCert.ql"
+      ],
+      "semgrep": [],
+      "mapping_evidence": ["clangsa"],
+      "gap": "No local syntactic rule can calculate type size and alignment safely."
+    },
+    {
+      "cert": "MEM56-CPP",
+      "weakness": "unrelated smart-pointer ownership",
+      "cwe": ["CWE-415"],
+      "codeql": ["codeql/cert/rules/MEM56-CPP/OwnedPointerValueStoredInUnrelatedSmartPointerCert.ql"],
+      "semgrep": ["appsec-review.cpp-cert.mem56-unrelated-shared-owner"],
+      "mapping_evidence": [],
+      "gap": null
+    },
+    {
+      "cert": "MEM57-CPP",
+      "weakness": "over-aligned allocation",
+      "cwe": [],
+      "codeql": ["codeql/cert/rules/MEM57-CPP/UsingDefaultOperatorNewForOverAlignedTypes.ql"],
+      "semgrep": [],
+      "mapping_evidence": ["clang-tidy"],
+      "gap": "No local syntactic rule can resolve effective alignment and allocation overloads."
+    },
+    {
+      "cert": "EXP51-CPP",
+      "weakness": "mismatched array deallocation",
+      "cwe": ["CWE-762"],
+      "codeql": ["codeql/cert/rules/EXP51-CPP/DoNotDeleteAnArrayThroughAPointerOfTheIncorrectType.ql"],
+      "semgrep": ["appsec-review.cpp-cert.exp51-array-scalar-delete"],
+      "mapping_evidence": ["clangsa"],
+      "gap": "Local rule intentionally covers only a same-function high-confidence allocation/deallocation shape."
+    },
+    {
+      "cert": "EXP54-CPP",
+      "weakness": "access outside object lifetime",
+      "cwe": [],
+      "codeql": [
+        "codeql/cert/rules/EXP54-CPP/ObjectAccessedAfterLifetimeCert.ql",
+        "codeql/cert/rules/EXP54-CPP/ObjectAccessedBeforeLifetimeCert.ql"
+      ],
+      "semgrep": [],
+      "mapping_evidence": ["clang-tidy", "clangsa"],
+      "gap": "General lifetime analysis is not expressible as a sound local pattern."
+    },
+    {
+      "cert": "STR52-CPP",
+      "weakness": "dangling string element or view",
+      "cwe": ["CWE-416"],
+      "codeql": ["codeql/cert/rules/STR52-CPP/UseValidReferencesForElementsOfString.ql"],
+      "semgrep": ["appsec-review.cpp-cert.str52-return-local-string-view"],
+      "mapping_evidence": ["clangsa"],
+      "gap": "Local rule covers returned string_view over a local string; other invalidation cases remain data-flow work."
+    },
+    {
+      "cert": "CTR50-CPP",
+      "weakness": "unchecked container index",
+      "cwe": ["CWE-119", "CWE-129"],
+      "codeql": ["codeql/cert/rules/CTR50-CPP/ContainerAccessWithoutRangeCheckCert.ql"],
+      "semgrep": [],
+      "mapping_evidence": ["cppcheck"],
+      "gap": "No local rule added because a syntax-only subscript match is too noisy."
+    },
+    {
+      "cert": "CTR51-CPP",
+      "weakness": "invalidated iterator, pointer, or reference",
+      "cwe": [],
+      "codeql": ["codeql/cert/rules/CTR51-CPP/UsesValidContainerElementAccess.ql"],
+      "semgrep": [],
+      "mapping_evidence": [],
+      "gap": "No local syntactic or analyzer mapping equivalent; mutation-aware lifetime analysis is required."
+    },
+    {
+      "cert": "ERR56-CPP",
+      "weakness": "failed exception safety guarantee",
+      "cwe": ["CWE-703"],
+      "codeql": ["codeql/cert/rules/ERR56-CPP/GuaranteeExceptionSafety.ql"],
+      "semgrep": [],
+      "mapping_evidence": [],
+      "gap": "No local pattern or imported mapping establishes exception guarantees."
+    },
+    {
+      "cert": "ERR57-CPP",
+      "weakness": "resource leak during exception handling",
+      "cwe": [],
+      "codeql": ["codeql/cert/rules/ERR57-CPP/DoNotLeakResourcesWhenHandlingExceptions.ql"],
+      "semgrep": [],
+      "mapping_evidence": [],
+      "gap": "No local syntactic equivalent; path-sensitive resource modeling is required."
+    },
+    {
+      "cert": "CON50-CPP",
+      "weakness": "mutex destroyed or leaves scope while locked",
+      "cwe": ["CWE-667"],
+      "codeql": [
+        "codeql/cert/rules/CON50-CPP/DoNotAllowAMutexToGoOutOfScopeWhileLocked.ql",
+        "codeql/cert/rules/CON50-CPP/DoNotDestroyAMutexWhileItIsLocked.ql"
+      ],
+      "semgrep": ["appsec-review.cpp-cert.con50-destroy-locked-pthread-mutex"],
+      "mapping_evidence": [],
+      "gap": "Local rule covers the direct pthread lock/destroy sequence only."
+    },
+    {
+      "cert": "CON51-CPP",
+      "weakness": "lock not released on exception",
+      "cwe": ["CWE-667"],
+      "codeql": ["codeql/cert/rules/CON51-CPP/EnsureActivelyHeldLocksAreReleasedOnExceptionalConditions.ql"],
+      "semgrep": ["appsec-review.cpp-cert.con51-manual-lock-before-throw"],
+      "mapping_evidence": [],
+      "gap": "Local rule covers a direct manual lock followed by throw; interprocedural exceptional exits require deeper analysis."
+    },
+    {
+      "cert": "CON54-CPP",
+      "weakness": "condition-variable wait without retry condition",
+      "cwe": ["CWE-667"],
+      "codeql": ["codeql/cert/rules/CON54-CPP/WrapFunctionsThatCanSpuriouslyWakeUpInLoop.ql"],
+      "semgrep": ["appsec-review.cpp-cert.con54-predicate-free-condition-wait"],
+      "mapping_evidence": ["clang-tidy"],
+      "gap": "Local rule does not prove that surrounding non-while control flow is equivalent to a retry loop."
+    },
+    {
+      "cert": "CON56-CPP",
+      "weakness": "recursive acquisition of nonrecursive mutex",
+      "cwe": ["CWE-667"],
+      "codeql": [
+        "codeql/cert/rules/CON56-CPP/DoNotSpeculativelyLockALockedNonRecursiveMutex.ql",
+        "codeql/cert/rules/CON56-CPP/LockedALockedNonRecursiveMutexAudit.ql"
+      ],
+      "semgrep": ["appsec-review.cpp-cert.con56-repeat-nonrecursive-lock"],
+      "mapping_evidence": [],
+      "gap": "Local rule covers a direct std::timed_mutex lock/try_lock_for sequence only."
+    }
+  ],
+  "known_gaps": [
+    "This bundle does not enable or license the CodeQL CLI; the generic C/C++ workflow must supply an approved CLI and the lock-file dependencies.",
+    "OpenGrep execution parity is not yet demonstrated because no pinned OpenGrep executable or image is present; the local YAML is Semgrep-compatible and tested with the pinned Semgrep image.",
+    "CodeChecker files are mappings only; they do not install or enable clang-tidy, Clang Static Analyzer, or Cppcheck checkers.",
+    "MISRA and AUTOSAR rule prose, examples, and commercial checker content are intentionally excluded because redistribution and derivative rights were not established.",
+    "A mapped CERT identifier is evidence of a crosswalk, not evidence that a checker is installed, enabled, or complete."
+  ]
+}
