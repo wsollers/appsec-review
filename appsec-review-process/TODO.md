@@ -54,11 +54,12 @@ accuracy/recall acceptance target before scaling to `freeciv21` and `doom3-bfg`.
       ceremony.
 
 S0 evidence: [`docs/architecture/simplification-s0-inventory.md`](../docs/architecture/simplification-s0-inventory.md)
-classifies all 79,895 ignored untracked files (zero product-source and zero unknown), records the
-deletion matrix and maps every surviving invariant to an existing small golden/known-answer fixture
-and focused executable tests. No new fixture was added because the audit found no missing
-characterization coverage. The intended tracked baseline was committed as `8e2a184d` from a clean
-tree and annotated tag `pre-simplification-2026-10-07` was created at that commit.
+classifies all 79,895 enumerable ignored untracked files plus the permission-protected
+`.pytest_cache/` subtree (zero product-source and zero unknown), records the deletion matrix and maps
+every surviving invariant to an existing small golden/known-answer fixture and focused executable
+tests. No new fixture was added because the audit found no missing characterization coverage. The
+intended tracked baseline was committed as `8e2a184d` from a clean tree and annotated tag
+`pre-simplification-2026-10-07` was created at that commit.
 
 Exit: the baseline is retrievable, every proposed deletion is classified, and the required invariants
 have executable characterization coverage.
