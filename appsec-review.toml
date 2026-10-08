@@ -509,11 +509,11 @@ archive_ratio_limit = 1000
 archive_depth_limit = 4
 
 [jobs.job_artifact_security_analysis.settings.scanner_identities]
-blint = "tool-blint:3.4.0:adapter-1"
-syft = "tool-syft:1.52.0:adapter-1"
-grype = "tool-grype:0.119.0:adapter-1"
-osv = "tool-osv-scanner:1.9.2:adapter-1"
-spotbugs = "tool-spotbugs:4.10.4:adapter-1"
+blint = "tool-blint:3.4.0:adapter-2"
+syft = "tool-syft:1.52.0:adapter-2"
+grype = "tool-grype:0.119.0:adapter-2"
+osv = "tool-osv-scanner:1.9.2:adapter-2"
+spotbugs = "tool-spotbugs:4.10.4:adapter-2"
 
 [jobs.job_artifact_security_analysis.steps.load]
 workers = 1

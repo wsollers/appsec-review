@@ -83,6 +83,10 @@ def test_scanner_adapters_mount_artifacts_as_data() -> None:
     parsed = ADAPTERS["spotbugs"].parse(
         b'<BugCollection><BugInstance type="X" category="SECURITY" priority="1"/></BugCollection>')
     assert parsed["finding_count"] == 1
+    blint = ADAPTERS["blint"].argv("/opt/blint", "sample.bin")
+    assert blint == ("/opt/blint", "--no-banner", "--no-error", "--quiet", "--src",
+                     "/target/sample.bin", "--reports", "/scratch")
+    assert ADAPTERS["blint"].output_file == "/scratch/blint-output.json"
 
 
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0"):

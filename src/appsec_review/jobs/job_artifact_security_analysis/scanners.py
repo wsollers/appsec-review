@@ -69,13 +69,14 @@ class ScannerAdapter:
     def identity(self) -> str:
         return hashlib.sha256(repr((self.capability, self.tool_id,
             sorted(self.accepted_exit_codes), self.output_file, inspect.getsource(parse_json),
-            inspect.getsource(parse_spotbugs))).encode()).hexdigest()
+            inspect.getsource(parse_spotbugs), inspect.getsource(type(self).argv))).encode()).hexdigest()
 
     def argv(self, executable: str, artifact_name: str) -> tuple[str, ...]:
         name = PurePosixPath(artifact_name).name
         target = f"/target/{name}"
         if self.capability == "blint":
-            return (executable, "--no-banner", "--format", "json", "--output", self.output_file, target)
+            return (executable, "--no-banner", "--no-error", "--quiet", "--src", target,
+                    "--reports", "/scratch")
         if self.capability == "syft":
             return (executable, f"file:{target}", "--output", f"json={self.output_file}")
         if self.capability == "grype":
@@ -93,7 +94,7 @@ class ScannerAdapter:
 
 
 ADAPTERS = {item.capability: item for item in (
-    ScannerAdapter("blint", "tool-blint", frozenset({0, 1}), "/scratch/output.json"),
+    ScannerAdapter("blint", "tool-blint", frozenset({0}), "/scratch/blint-output.json"),
     ScannerAdapter("syft", "tool-syft", frozenset({0}), "/scratch/output.json"),
     ScannerAdapter("grype", "tool-grype", frozenset({0}), "/scratch/output.json"),
     ScannerAdapter("osv", "tool-osv-scanner", frozenset({0, 1}), "/scratch/output.json"),

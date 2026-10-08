@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 import sys
 import tomllib
 import urllib.request
@@ -129,7 +130,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
     tags = {item["key"]: item["value"] for item in run.get("tags", [])}
     application_run_id = tags.get("appsec/application_run_id")
     if run.get("pipelineName") in {
-        "wave1_review", "ci_configuration_review", "project_build_review", "artifact_indexing"
+        "wave1_review", "ci_configuration_review", "project_build_review", "artifact_indexing",
+        "artifact_security_analysis",
     }:
         if not application_run_id:
             raise SystemExit("Dagster Wave 1 run does not contain the application run id")
@@ -142,7 +144,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         }:
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
-        job_ids = (("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else (
+        job_ids = (("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
+        ("job_artifact_security_analysis",) if run.get("pipelineName") == "artifact_security_analysis" else (
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
@@ -183,6 +186,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_project_build": "acceptance.publish_handoff",
                 "job_language_build": "acceptance.publish_handoff",
                 "job_artifact_indexing": "acceptance.publish_handoff",
+                "job_artifact_security_analysis": "acceptance.publish_handoff",
                 "job_cpp_compiled_analysis": "acceptance.publish_handoff",
                 "job_post_build_security_assessment": "publication.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
@@ -314,6 +318,45 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "all_artifact_shards_preserved": (
                         len(artifact_shards) == summary["artifact_shard_count"]
                     ),
+                }
+            if job_id == "job_artifact_security_analysis":
+                summary_path = run_root / publication["artifact"]["path"]
+                if hashlib.sha256(summary_path.read_bytes()).hexdigest() != publication["artifact"]["sha256"]:
+                    raise SystemExit("artifact-security accepted analysis hash does not resolve")
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                manifest_path = run_root / publication["index_manifest"]["path"]
+                if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != publication["index_manifest"]["sha256"]:
+                    raise SystemExit("artifact-security index manifest hash does not resolve")
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                shards = [item for item in manifest["indexes"] if item.get("name") == "observations"
+                          and item.get("shard_id") == "artifact-security"]
+                if len(shards) != 1:
+                    raise SystemExit("artifact-security manifest does not contain its exact observation shard")
+                shard_path = run_root / shards[0]["relative_path"]
+                if hashlib.sha256(shard_path.read_bytes()).hexdigest() != shards[0]["sha256"]:
+                    raise SystemExit("artifact-security observation shard hash does not resolve")
+                evidence_count = 0
+                with sqlite3.connect(f"file:{shard_path.as_posix()}?mode=ro", uri=True) as database:
+                    for (payload_json,) in database.execute(
+                            "SELECT payload_json FROM entities WHERE kind = 'tool_observation'"):
+                        payload = json.loads(payload_json)
+                        for identity in payload.get("evidence_identities", ()):
+                            evidence_path = run_root / identity["relative_path"]
+                            if (not evidence_path.is_file() or
+                                    hashlib.sha256(evidence_path.read_bytes()).hexdigest() != identity["sha256"]):
+                                raise SystemExit("artifact-security raw evidence identity does not resolve")
+                            evidence_count += 1
+                if evidence_count < summary["observation_count"] * 2:
+                    raise SystemExit("artifact-security observations are missing stdout/stderr identities")
+                job_report["artifact_security_analysis"] = {
+                    "artifact_count": summary["artifact_count"],
+                    "observation_count": summary["observation_count"],
+                    "capability_statuses": {key: value["terminal_status"]
+                                            for key, value in summary["capabilities"].items()},
+                    "gap_count": len(summary.get("gaps", [])),
+                    "raw_evidence_identity_count": evidence_count,
+                    "manifest_sha256": publication["index_manifest"]["sha256"],
+                    "all_raw_evidence_resolved": True,
                 }
             if job_id == "job_cpp_compiled_analysis":
                 summary_path = run_root / publication["artifact"]["path"]
