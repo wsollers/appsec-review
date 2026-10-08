@@ -41,9 +41,10 @@ accuracy/recall acceptance target before scaling to `freeciv21` and `doom3-bfg`.
 - [x] Classify every current untracked file. `Claude outputs/` and obsolete
       `appsec-review-process/registry/container-images/*.json` are host-local leftovers and are ignored;
       do not include them in the baseline.
-- [ ] Commit the intended tracked baseline, then create annotated tag
+- [x] Commit the intended tracked baseline, then create annotated tag
       `pre-simplification-2026-10-07`. Record the commit and tag here. A tag of a dirty working tree is
-      insufficient because it cannot preserve untracked content.
+      insufficient because it cannot preserve untracked content. Baseline commit: `8e2a184d`;
+      annotated tag: `pre-simplification-2026-10-07` (points to `8e2a184d`).
 - [x] Generate a deletion inventory covering legacy scripts, manual lane harnesses, shared-scratch
       adapters, compatibility output surfaces, obsolete prompts, stale documentation and tests whose
       only subject is deleted behavior. For every entry record `current consumer`, `replacement`,
@@ -56,8 +57,8 @@ S0 evidence: [`docs/architecture/simplification-s0-inventory.md`](../docs/archit
 classifies all 79,895 ignored untracked files (zero product-source and zero unknown), records the
 deletion matrix and maps every surviving invariant to an existing small golden/known-answer fixture
 and focused executable tests. No new fixture was added because the audit found no missing
-characterization coverage. Baseline/tag remains open until the intended tracked changes are committed;
-the inventory records the guarded tag command and verification step.
+characterization coverage. The intended tracked baseline was committed as `8e2a184d` from a clean
+tree and annotated tag `pre-simplification-2026-10-07` was created at that commit.
 
 Exit: the baseline is retrievable, every proposed deletion is classified, and the required invariants
 have executable characterization coverage.

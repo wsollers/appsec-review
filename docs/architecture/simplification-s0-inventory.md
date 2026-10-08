@@ -14,15 +14,16 @@ intended tracked baseline consists of the pre-existing `.gitignore` and `appsec-
 edits plus this inventory and the S0 checklist update. The tag must not be created until those files
 are committed and `git status --short` is empty.
 
-The requested tag did not exist at audit time. After committing the intended baseline, the safe
-command is:
+The requested tag did not exist at audit time. The intended baseline was committed as `8e2a184d`
+and the clean-tree check was repeated before creating the annotated tag
+`pre-simplification-2026-10-07` at that commit. The command used was:
 
 ```powershell
-git tag -a pre-simplification-2026-10-07 -m "Pre-simplification baseline 2026-10-07" <baseline-commit>
+git tag -a pre-simplification-2026-10-07 -m "Pre-simplification baseline 2026-10-07" 8e2a184d
 ```
 
-Substitute the committed baseline SHA, not `HEAD` from an unverified or dirty checkout. Verify with
-`git show --stat pre-simplification-2026-10-07` and record that SHA in `TODO.md`.
+Future recovery should use the tag, not `HEAD` from an unverified checkout, and confirm it with
+`git show --stat pre-simplification-2026-10-07`.
 
 ## Untracked-file classification
 
