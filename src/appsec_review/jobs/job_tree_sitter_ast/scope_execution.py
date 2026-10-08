@@ -69,7 +69,13 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
                "max_scope_nodes": limits["max_scope_nodes"],
                "max_file_bytes": limits["max_file_bytes"],
                "files": [{"path": item["path"], "sha256": item["sha256"]} for item in scope.files]}
-    atomic_json(scratch / "request.json", request)
+    request_path = scratch / "request.json"
+    atomic_json(request_path, request)
+    # The production scanner deliberately runs as a different, non-root UID.  Grant it only the
+    # permissions needed on this dedicated run-owned boundary: read the immutable request and
+    # create its declared output.  The target mount remains read-only.
+    request_path.chmod(0o444)
+    scratch.chmod(0o733)
     executor = executor_factory(unit) if executor_factory else ContainerExecutor(
         load_catalog(unit.job.repository_root), unit.job.run_root)
     execution = executor.execute(ExecutionRequest("tool-tree-sitter",
