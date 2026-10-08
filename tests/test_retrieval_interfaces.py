@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from appsec_review.retrieval import SearchHit, SearchRequest
+from appsec_review.retrieval import ArtifactQueryRequest, SearchHit, SearchRequest
 
 
 def test_search_request_enforces_a_bounded_page() -> None:
@@ -19,3 +19,12 @@ def test_search_hit_requires_resolving_lines() -> None:
             end_line=10,
             excerpt="def authenticate(...):",
         )
+
+
+def test_artifact_query_contract_is_bounded_and_transport_neutral() -> None:
+    request = ArtifactQueryRequest(language="rust", architecture="wasm32", limit=7)
+    assert request.filters == {"language": "rust", "architecture": "wasm32"}
+    with pytest.raises(ValueError, match="invalid artifact query filter"):
+        ArtifactQueryRequest(shard="bad/shard")
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        ArtifactQueryRequest(limit=101)

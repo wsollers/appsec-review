@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+import re
+from typing import Any, Mapping, Protocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,63 @@ class SearchBackend(Protocol):
 
     def search(self, request: SearchRequest) -> SearchPage:
         """Return one bounded page from an already-built index."""
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactQueryRequest:
+    """Transport-neutral exact filters for accepted produced-artifact evidence."""
+
+    artifact_identity: str | None = None
+    sha256: str | None = None
+    kind: str | None = None
+    format: str | None = None
+    language: str | None = None
+    runtime: str | None = None
+    platform: str | None = None
+    architecture: str | None = None
+    build_unit: str | None = None
+    project: str | None = None
+    component: str | None = None
+    producing_build_action: str | None = None
+    package: str | None = None
+    purl: str | None = None
+    scanner: str | None = None
+    tool: str | None = None
+    coverage_status: str | None = None
+    shard: str | None = None
+    limit: int = 20
+    cursor: str | None = None
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        for name, value in self.filters.items():
+            maximum = 128 if name in {"coverage_status", "shard"} else 4096
+            if not isinstance(value, str) or not value or len(value) > maximum or "\x00" in value:
+                raise ValueError(f"invalid artifact query filter: {name}")
+        if self.shard is not None and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", self.shard):
+            raise ValueError("invalid artifact query filter: shard")
+
+    @property
+    def filters(self) -> Mapping[str, str]:
+        return {name: value for name, value in (
+            ("artifact_identity", self.artifact_identity), ("sha256", self.sha256),
+            ("kind", self.kind), ("format", self.format), ("language", self.language),
+            ("runtime", self.runtime), ("platform", self.platform),
+            ("architecture", self.architecture), ("build_unit", self.build_unit),
+            ("project", self.project), ("component", self.component),
+            ("producing_build_action", self.producing_build_action),
+            ("package", self.package), ("purl", self.purl), ("scanner", self.scanner),
+            ("tool", self.tool), ("coverage_status", self.coverage_status),
+            ("shard", self.shard),
+        ) if value is not None}
+
+
+class ArtifactQueryBackend(Protocol):
+    """Implemented by run-pinned readers; protocol adapters only serialize it."""
+
+    def query_artifacts(self, request: ArtifactQueryRequest) -> Mapping[str, Any]:
+        """Return one bounded page from accepted artifact and evidence shards."""
 
 
 class RunIndexBackend:

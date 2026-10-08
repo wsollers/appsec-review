@@ -17,7 +17,11 @@ from typing import Any, Callable, Iterable, Mapping
 
 from appsec_review.observability import PipelineLog
 from appsec_review.retrieval.index import INDEX_NAMES, load_verified_manifest
-from appsec_review.retrieval.model import EntityKind, LogicalIdentity, RelationKind, canonical_json, normalize_relative_path
+from appsec_review.retrieval.interfaces import ArtifactQueryRequest
+from appsec_review.retrieval.model import (
+    EntityKind, LogicalIdentity, RelationKind, canonical_json, normalize_relative_path,
+    sanitize_producer_data,
+)
 from appsec_review.storage import RunStore, file_sha256
 
 
@@ -62,6 +66,8 @@ def resolve_accepted_manifest(run_root: Path) -> tuple[Path, str]:
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     if pointer.get("schema") != "appsec-review/accepted-index-set/1":
         raise RetrievalGap("accepted index pointer schema is unsupported")
+    if pointer.get("run_id") != run_root.name:
+        raise ValueError("accepted index pointer run isolation mismatch")
     handoff_path = (run_root / str(pointer.get("handoff_path", ""))).resolve()
     manifest_path = (run_root / str(pointer.get("manifest_path", ""))).resolve()
     if run_root not in handoff_path.parents or run_root not in manifest_path.parents:
@@ -135,10 +141,20 @@ class RetrievalCore:
         if name not in INDEX_NAMES:
             raise ValueError("invalid index name")
         path = (self.run_root / identity["relative_path"]).resolve()
+        if self.run_root not in path.parents or not path.is_file():
+            raise ValueError(f"index is unavailable: {name}")
+        if not hmac.compare_digest(file_sha256(path), str(identity["sha256"])):
+            raise ValueError(f"index integrity mismatch: {name}")
         uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
         database = sqlite3.connect(uri, uri=True, timeout=0.1)
         database.row_factory = sqlite3.Row
         database.execute("PRAGMA query_only=ON")
+        metadata = dict(database.execute("SELECT key, value FROM metadata"))
+        if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
+                metadata.get("shard_id", "default")) != (
+                identity["schema"], name, identity["fingerprint"], identity.get("shard_id", "default")):
+            database.close()
+            raise ValueError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
         database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
         return database
 
@@ -181,9 +197,10 @@ class RetrievalCore:
 
     @staticmethod
     def _entity(row: sqlite3.Row, index: str) -> dict[str, Any]:
+        payload = RetrievalCore._safe_payload(json.loads(row["payload_json"]))
         value = {
             "identity": row["identity"], "kind": row["kind"], "native_id": row["native_id"],
-            "name": row["name"], "payload": json.loads(row["payload_json"]), "index": index,
+            "name": row["name"], "payload": payload, "index": index,
         }
         if "path" in row.keys() and row["path"] is not None:
             value["location"] = {key: row[key] for key in (
@@ -193,6 +210,23 @@ class RetrievalCore:
         else:
             value["artifact_reference"] = {"index": index, "identity": row["identity"]}
         return value
+
+    @staticmethod
+    def _safe_payload(value: Any, *, depth: int = 0) -> Any:
+        """Defense in depth: never serialize protected command or raw-content fields."""
+        denied = re.compile(
+            r"(?i)^(argv|command(?:_line|_text)?|credentials?|environment|model(?:_output|_text)?|"
+            r"raw_artifacts?|source_text|stderr|stdout|protected(?:_artifacts?|_data)?)$"
+        )
+        if depth > 6:
+            return "<truncated>"
+        if isinstance(value, Mapping):
+            return {str(key)[:128]: RetrievalCore._safe_payload(child, depth=depth + 1)
+                    for key, child in list(value.items())[:200]
+                    if not denied.fullmatch(str(key)) and str(key) != "path"}
+        if isinstance(value, (list, tuple)):
+            return [RetrievalCore._safe_payload(child, depth=depth + 1) for child in list(value)[:500]]
+        return sanitize_producer_data(value, depth=depth)
 
     def _envelope(self, *, tool: str, results: list[dict[str, Any]], gaps: Iterable[str],
                   started: float, request_hash: str, offset: int = 0, has_more: bool = False,
@@ -232,20 +266,26 @@ class RetrievalCore:
                             "mcp_session_id": invocation.get("mcp_session_id") if invocation else self.mcp_session_id,
                        })
 
-    def _execute(self, tool: str, parameters: Mapping[str, Any], operation: Callable[[float], tuple[list[dict[str, Any]], list[str], bool, int]]) -> dict[str, Any]:
+    def _execute(self, tool: str, parameters: Mapping[str, Any], operation: Callable[[float], tuple]) -> dict[str, Any]:
         started = self.clock()
         request_hash = self._request_hash(tool, parameters)
         deadline = started + self.limits.timeout_ms / 1000
         try:
-            results, gaps, has_more, offset = operation(deadline)
+            outcome = operation(deadline)
+            if len(outcome) == 5:
+                results, gaps, has_more, offset, operation_truncated = outcome
+            else:
+                results, gaps, has_more, offset = outcome
+                operation_truncated = False
             timed_out = False
         except sqlite3.OperationalError as exc:
             if "interrupted" not in str(exc).lower():
                 raise
-            results, gaps, has_more, offset, timed_out = [], ["query execution-time budget exceeded"], False, 0, True
+            results, gaps, has_more, offset, timed_out, operation_truncated = (
+                [], ["query execution-time budget exceeded"], False, 0, True, False)
         response = self._envelope(tool=tool, results=results, gaps=gaps, started=started,
                                   request_hash=request_hash, offset=offset, has_more=has_more,
-                                  truncated=timed_out)
+                                  truncated=timed_out or operation_truncated)
         filters = {key: value for key, value in parameters.items() if key not in {"query", "cursor"}}
         self._audit(tool, request_hash, filters, response)
         return response
@@ -415,7 +455,7 @@ class RetrievalCore:
                                     value = dict(row)
                                     value["index"] = index_name
                                     value["shard_id"] = shard.get("shard_id", "default")
-                                    value["payload"] = json.loads(value.pop("payload_json"))
+                                    value["payload"] = self._safe_payload(json.loads(value.pop("payload_json")))
                                     value["depth"] = level
                                     results.append(value)
                                     other = row["target_id"] if row["source_id"] == current else row["source_id"]
@@ -425,11 +465,11 @@ class RetrievalCore:
                                     if not row["exact"]:
                                         gaps.append("trace includes an explicitly ambiguous relationship")
                                     if len(results) > limit:
-                                        return results[:limit], gaps + ["trace result bound reached"], False, 0
+                                        return results[:limit], gaps + ["trace result bound reached"], False, 0, True
                 frontier = next_frontier
                 if not frontier:
                     break
-            return results, gaps, False, 0
+            return results, gaps, False, 0, False
         return self._execute("trace", parameters, operation)
 
     def resolve_evidence(self, *, identity: str, limit: int = 50) -> dict[str, Any]:
@@ -469,6 +509,144 @@ class RetrievalCore:
                     gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             return results, gaps, False, 0
         return self._execute("coverage", parameters, operation)
+
+    def query_artifacts(
+        self, request: ArtifactQueryRequest | None = None, *,
+        artifact_identity: str | None = None, sha256: str | None = None,
+        kind: str | None = None, format: str | None = None,
+        language: str | None = None, runtime: str | None = None,
+        platform: str | None = None, architecture: str | None = None,
+        build_unit: str | None = None, project: str | None = None,
+        component: str | None = None, producing_build_action: str | None = None,
+        package: str | None = None, purl: str | None = None,
+        scanner: str | None = None, tool: str | None = None,
+        coverage_status: str | None = None, shard: str | None = None,
+        limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Query accepted produced artifacts and their bounded indexed evidence by exact facets."""
+        if request is not None:
+            supplied = any(value is not None for value in (
+                artifact_identity, sha256, kind, format, language, runtime, platform, architecture,
+                build_unit, project, component, producing_build_action, package, purl, scanner,
+                tool, coverage_status, shard, cursor)) or limit != 20
+            if supplied:
+                raise ValueError("artifact request object cannot be combined with keyword filters")
+            return self.query_artifacts(**request.filters, limit=request.limit, cursor=request.cursor)
+        request = ArtifactQueryRequest(
+            artifact_identity=artifact_identity, sha256=sha256, kind=kind, format=format,
+            language=language, runtime=runtime, platform=platform, architecture=architecture,
+            build_unit=build_unit, project=project, component=component,
+            producing_build_action=producing_build_action, package=package, purl=purl,
+            scanner=scanner, tool=tool, coverage_status=coverage_status, shard=shard,
+            limit=limit, cursor=cursor,
+        )
+        if artifact_identity is not None:
+            LogicalIdentity.parse(artifact_identity)
+        if sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", sha256):
+            raise ValueError("artifact sha256 must be lowercase hexadecimal")
+        if kind is not None:
+            EntityKind(kind)
+        if producing_build_action is not None:
+            parsed_action = LogicalIdentity.parse(producing_build_action)
+            if parsed_action.kind is not EntityKind.BUILD_ACTION:
+                raise ValueError("producing build action requires a build_action identity")
+        if coverage_status is not None and coverage_status not in {
+                "complete", "partial", "unavailable", "stale"}:
+            raise ValueError("invalid artifact coverage status")
+        if shard is not None and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", shard):
+            raise ValueError("invalid artifact shard")
+
+        parameters = {**request.filters, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_artifacts", parameters)
+        offset = self._offset(cursor, request_hash)
+        json_paths: dict[str, tuple[str, ...]] = {
+            "sha256": ("$.sha256", "$.artifact.sha256"),
+            "format": ("$.format", "$.kind", "$.classification.format"),
+            "language": ("$.language", "$.producer_family", "$.classification.language"),
+            "runtime": ("$.runtime", "$.classification.runtime"),
+            "platform": ("$.platform", "$.classification.platform"),
+            "architecture": ("$.architecture", "$.arch", "$.classification.architecture"),
+            "build_unit": ("$.build_unit_id", "$.artifact.build_unit_id"),
+            "project": ("$.project", "$.project_id", "$.artifact.project"),
+            "component": ("$.component", "$.component_id", "$.artifact.component"),
+            "package": ("$.package", "$.package_id", "$.parent_artifact", "$.artifact.package"),
+            "purl": ("$.purl", "$.package_purl", "$.artifact.purl"),
+            "scanner": ("$.scanner_identity", "$.tool_identity.scanner", "$.tool_identity.id"),
+            "tool": ("$.tool", "$.tool_identity.tool", "$.tool_identity.name", "$.tool_identity.id"),
+        }
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            produced_ids: set[str] | None = None
+            if producing_build_action is not None:
+                produced_ids = set()
+                for relation_index in sorted(self.indexes):
+                    for relation_shard in self.indexes[relation_index]:
+                        self._check_deadline(deadline)
+                        with self._database(relation_shard, deadline) as database:
+                            produced_ids.update(str(row[0]) for row in database.execute(
+                                "SELECT source_id FROM relations WHERE kind=? AND target_id=? "
+                                "ORDER BY source_id",
+                                (RelationKind.GENERATED_FROM.value, producing_build_action)))
+            candidates = [
+                (index_name, identity) for index_name in ("artifacts", "observations", "evidence")
+                for identity in self.indexes.get(index_name, ())
+                if shard is None or str(identity.get("shard_id", "default")) == shard
+            ]
+            if "artifacts" not in self.indexes:
+                gaps.append("artifacts index is unavailable")
+            if (scanner is not None or tool is not None) and "observations" not in self.indexes:
+                gaps.append("artifact scanner observation indexes are unavailable")
+            if shard is not None and not candidates:
+                gaps.append(f"artifact shard is unavailable: {shard}")
+            for index_name, identity in candidates:
+                self._check_deadline(deadline)
+                clauses: list[str] = []
+                values: list[Any] = []
+                if artifact_identity is not None:
+                    clauses.append("e.identity=?")
+                    values.append(artifact_identity)
+                if kind is not None:
+                    clauses.append("e.kind=?")
+                    values.append(kind)
+                for filter_name, paths in json_paths.items():
+                    expected = request.filters.get(filter_name)
+                    if expected is None:
+                        continue
+                    clauses.append("(" + " OR ".join(
+                        "json_extract(e.payload_json, ?) = ?" for _ in paths) + ")")
+                    for path in paths:
+                        values.extend((path, expected))
+                if produced_ids is not None:
+                    if not produced_ids:
+                        continue
+                    clauses.append("e.identity IN (" + ",".join("?" for _ in produced_ids) + ")")
+                    values.extend(sorted(produced_ids))
+                if coverage_status is not None:
+                    clauses.append("EXISTS (SELECT 1 FROM coverage c WHERE c.status=?)")
+                    values.append(coverage_status)
+                sql = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity"
+                if clauses:
+                    sql += " WHERE " + " AND ".join(clauses)
+                sql += " ORDER BY e.identity LIMIT ?"
+                values.append(offset + limit + 1)
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, index_name)
+                        item["shard_id"] = str(identity.get("shard_id", "default"))
+                        item["index_identity"] = {key: identity[key] for key in
+                            ("name", "schema", "sha256", "fingerprint", "shard_id")}
+                        found.append(item)
+                    gaps.extend(f"{index_name}/{identity.get('shard_id', 'default')}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"{index_name}/{identity.get('shard_id', 'default')}: {gap}"
+                            for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["identity"], item["index"], item["shard_id"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+
+        return self._execute("query_artifacts", parameters, operation)
 
     def query_ci_configuration(
         self, *, provider: str | None = None, pipeline: str | None = None,

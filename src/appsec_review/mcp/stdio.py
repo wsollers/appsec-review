@@ -28,7 +28,7 @@ def dispatch(adapter: RetrievalMcpAdapter, request: dict[str, Any]) -> dict[str,
         return None
     if method == "initialize":
         result = {"protocolVersion": "2025-06-18", "capabilities": {"tools": {"listChanged": False}},
-                  "serverInfo": {"name": "appsec-review-retrieval", "version": "1"}}
+                  "serverInfo": {"name": "appsec-review-retrieval", "version": "2"}}
     elif method == "tools/list":
         result = {"tools": list(TOOLS)}
     elif method == "tools/call":

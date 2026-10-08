@@ -72,10 +72,19 @@ re-hash the current target file and fail with an explicit gap when it changed af
 
 ## Query boundary
 
-The public surface is seven bounded tools: `search`, `find`, `read_excerpt`, `trace`,
-`resolve_evidence`, `coverage`, and `query_build_security`. The MCP process is pinned at startup to one run and optionally
+The common public surface includes `search`, `find`, `read_excerpt`, `trace`,
+`resolve_evidence`, `coverage`, `query_artifacts`, and `query_build_security`, with bounded
+domain-specific query tools where an accepted producer publishes those shards. The MCP process is pinned at startup to one run and optionally
 one exact manifest hash. It has no shell, write, glob, grep, arbitrary SQL, arbitrary regular
 expression, or caller-supplied filesystem-path operation.
+
+`query_artifacts` is the single cross-language artifact query. It uses parameterized exact filters
+over accepted artifact and evidence shards and never exposes raw bytes or protected producer
+streams. Catalog, member, relationship, observation, and vulnerability shards remain independently
+identified in responses; absent, stale, partial, corrupt, or unavailable coverage cannot be
+collapsed into a clean result. Artifact relationships reuse the canonical typed graph, so build
+actions, source/build units, containment, package membership, linked artifacts, observations, and
+CVE evidence preserve exactness or explicit ambiguity rather than being inferred by the adapter.
 
 All responses include the run and manifest identity, physical index identities, resolving source
 or artifact identity, pagination, coverage gaps, truncation, and duration. Cursors are opaque and
