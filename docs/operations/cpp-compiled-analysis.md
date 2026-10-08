@@ -1,32 +1,30 @@
 # C/C++ compiled-analysis operations
 
-`job_cpp_compiled_analysis` consumes the accepted target-analysis plan and discovers native
-projects from accepted build actions below `projects/`. There is no repository-specific project
-list or expected count. Each project receives a stable key derived from its root and keeps
+`job_cpp_compiled_analysis` consumes the accepted `job_language_build` handoff and discovers native
+projects from successful generic build receipts at any normalized target-relative root. There is no
+repository-specific project list, required `projects/` prefix, or expected count. Each project keeps
+the generic build-unit identity and
 independent checkpoints inside project-batched graph tasks.
 
 The real Dagster graph is:
 
 ```text
-accepted C++ plan
-  -> discover projects
-  -> copy each project and record exact source mappings
-  -> configure and compile each project
+accepted generic language-build handoff
+  -> verify native workspace manifests, artifacts, recipes, images, and source mappings
+  -> copy accepted source/build products into analysis scratch
   -> normalize compile/link records and catalog objects/libraries/executables
   -> compiled index | Clang AST | LLVM IR | Infer | CodeQL | Joern | binary/symbol index
   -> verified composite manifest and accepted handoff
 ```
 
-Each project uses an allowlisted `cmake`, `make`, or `autotools` profile. Target build files execute
-only in `tool-native-cpp`, with no network, a read-only container root and target mount, one bounded
-run-owned writable scratch mount, non-root UID/GID 10001, dropped capabilities,
-`no-new-privileges`, and central CPU, memory, PID, timeout, tmpfs, and output limits. The pipeline
-never runs target executables or tests. The run-owned source copy is hashed back to the accepted
-target source before use.
+The job never reruns CMake, Make, Autotools, a compiler, or a linker. Those actions belong to the
+generic native executor described in [`language-build.md`](language-build.md). This job verifies the
+generic workspace file set and hashes, then uses `tool-native-cpp` only for bounded AST, IR, and
+binary/symbol extraction. The pipeline never runs target executables or tests. The run-owned source
+copy is hashed back to the accepted target source before use.
 
-CMake supplies `compile_commands.json` directly. Make and Autotools use Bear compiler interception;
-the MSBuild case is represented explicitly as unavailable because the pinned Linux image does not
-contain MSBuild, and all seven of its branch shards retain that named coverage gap.
+CMake supplies `compile_commands.json` directly. Other native systems must supply an accepted
+compile database or an equivalent future generic capture adapter; missing capture is a named gap.
 Compiler logs are not heuristically parsed. Normalization accepts only bounded compilation
 semantics needed by Clang replay, removes output/dependency-generation actions, maps source paths,
 and binds every unit to the case, source snapshot, command hash, compiler image, and source hash.
@@ -96,6 +94,7 @@ Bulk products live under ignored `runs/<run-id>/`. Accepted `build`, `compiled`,
 observations are evidence, not adjudicated findings.
 
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
-reused. A CodeQL query-pack change affects CodeQL fingerprints only; an Infer image or adapter
-change affects Infer fingerprints only; a compile identity change invalidates the dependent
+reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
+executor, capture, and handoff identities. A CodeQL query-pack change affects CodeQL fingerprints
+only; an Infer image or adapter change affects Infer fingerprints only; a compile identity invalidates the dependent
 compiled, AST, IR, Infer, CodeQL, Joern, and binary branches.

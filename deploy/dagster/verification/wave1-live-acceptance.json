@@ -3,11 +3,39 @@
     "application_run": {
       "completion_status": "COMPLETED_WITH_GAPS",
       "jobs": {
+        "job_cpp_compiled_analysis": {
+          "attempt_id": "attempt_0001",
+          "cpp_wave": {
+            "all_cpp_shards_preserved": true,
+            "all_physical_shards_preserved": true,
+            "branch_count": 7,
+            "cpp_shard_count": 7,
+            "disposition_counts": {
+              "COMPLETED_WITH_GAPS": 6,
+              "SUCCEEDED": 1
+            },
+            "manifest_index_count": 31,
+            "manifest_sha256": "d63ed6f2f08de768cbaeb6548d1d111c3b84dcdbeef99d169f5848145fc9cf87",
+            "physical_shard_count": 31,
+            "project_count": 1,
+            "terminal_branch_count": 7
+          },
+          "gap_count": 8,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "7e19d1883a192c5314c8935b6588a70770832ed8dd1a75c06e3731d5d22c2536",
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 11,
+          "unit_status_counts": {
+            "SUCCEEDED": 11
+          }
+        },
         "job_evidence_collection": {
-          "attempt_id": "attempt_0002",
+          "attempt_id": "attempt_0001",
           "concurrency_proof": {
-            "latest_producer_index_completed_at": "2026-10-08T05:19:25.144043+00:00",
-            "manifest_started_at": "2026-10-08T05:19:27.583526+00:00",
+            "latest_producer_index_completed_at": "2026-10-08T16:03:55.154252+00:00",
+            "manifest_started_at": "2026-10-08T16:03:58.685305+00:00",
             "manifest_waited_for_all_producer_indexes": true,
             "observed_peak_overlapping_scanners": 6,
             "scanner_interval_count": 19
@@ -29,28 +57,28 @@
             "directory coverage only; no cataloged OCI/archive artifact",
             "directory coverage is distinct from built artifact or OCI/archive coverage",
             "the synchronized OSV snapshot currently covers PyPI only",
-            "2 YAML file(s) lacked supported IaC/workflow structural evidence",
+            "6 YAML file(s) lacked supported IaC/workflow structural evidence",
             "Kubernetes, Helm, Bicep, ARM, Serverless, and other Checkov frameworks are not enabled by this bounded adapter",
             "framework selection is restricted to typed Terraform, Dockerfile, GitHub Actions, and CloudFormation inputs"
           ],
-          "handoff_receipt": "runs/2026-10-08-0023/data/jobs/job_evidence_collection/attempts/attempt_0002/handoff.json",
-          "handoff_sha256": "d922180ed967c56a158b5053285a8122d5aaff037f474775c10a15b0bdcd8e53",
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_evidence_collection/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "878f9363a22a081bb9ceaaec3794793559c2905e06f7c0e9ce3129abc3aa81fd",
           "index_manifest": {
-            "path": "data/indices/manifests/evidence-attempt_0002.json",
-            "sha256": "0379e785c31f6f83711e122afb6952625208def2891ab3e1444ee38ce32a91c7",
-            "size_bytes": 17792
+            "path": "data/indices/manifests/evidence-attempt_0001.json",
+            "sha256": "155f20ef888826d84681ed7adb6c11972ded741d1ad8acb036f3b1c131f4782a",
+            "size_bytes": 13176
           },
-          "result_receipt": "runs/2026-10-08-0023/data/jobs/job_evidence_collection/attempts/attempt_0002/result.json",
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_evidence_collection/attempts/attempt_0001/result.json",
           "reuse_summary": {
             "checkpoint_reused": 0,
-            "index_reused": 19
+            "index_reused": 0
           },
           "status": "SUCCEEDED",
-          "status_receipt": "runs/2026-10-08-0023/data/jobs/job_evidence_collection/attempts/attempt_0002/status.json",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_evidence_collection/attempts/attempt_0001/status.json",
           "tool_dispositions": [
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 1,
               "shard_id": "gitleaks",
               "terminal_status": "SUCCEEDED",
@@ -58,7 +86,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 23,
               "shard_id": "semgrep",
               "terminal_status": "SUCCEEDED",
@@ -66,7 +94,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 0,
               "shard_id": "gosec",
               "terminal_status": "SUCCEEDED",
@@ -74,7 +102,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 17,
               "shard_id": "mobsfscan",
               "terminal_status": "SUCCEEDED",
@@ -82,7 +110,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 113,
               "shard_id": "shellcheck",
               "terminal_status": "SUCCEEDED",
@@ -90,7 +118,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 13,
               "shard_id": "phpcs",
               "terminal_status": "SUCCEEDED",
@@ -98,7 +126,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 0,
               "shard_id": "phpstan",
               "terminal_status": "SUCCEEDED",
@@ -106,7 +134,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 0,
               "shard_id": "psalm",
               "terminal_status": "SUCCEEDED",
@@ -114,7 +142,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 0,
               "shard_id": "spotbugs",
               "terminal_status": "NOT_APPLICABLE",
@@ -122,15 +150,15 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
-              "record_count": 3,
+              "index_reused": false,
+              "record_count": 6,
               "shard_id": "cppcheck",
               "terminal_status": "SUCCEEDED",
               "tool_id": "tool-cppcheck"
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 2,
               "shard_id": "pmd",
               "terminal_status": "SUCCEEDED",
@@ -138,15 +166,15 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
-              "record_count": 18,
+              "index_reused": false,
+              "record_count": 19,
               "shard_id": "syft",
               "terminal_status": "SUCCEEDED",
               "tool_id": "tool-syft"
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 3,
               "shard_id": "osv_scanner",
               "terminal_status": "SUCCEEDED",
@@ -154,7 +182,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 6,
               "shard_id": "grype",
               "terminal_status": "SUCCEEDED",
@@ -162,7 +190,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 8,
               "shard_id": "hadolint",
               "terminal_status": "SUCCEEDED",
@@ -170,7 +198,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 14,
               "shard_id": "checkov",
               "terminal_status": "SUCCEEDED",
@@ -178,7 +206,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 15,
               "shard_id": "trivy",
               "terminal_status": "SUCCEEDED",
@@ -186,7 +214,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 1,
               "shard_id": "zizmor",
               "terminal_status": "SUCCEEDED",
@@ -194,7 +222,7 @@
             },
             {
               "checkpoint_reused": false,
-              "index_reused": true,
+              "index_reused": false,
               "record_count": 0,
               "shard_id": "blint",
               "terminal_status": "NOT_APPLICABLE",
@@ -206,27 +234,101 @@
             "SUCCEEDED": 59
           }
         },
+        "job_language_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 14,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_language_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "6697a85bd045c5f7d6b3f8b3e63775d8a78a0925e366454b6cf64e655fc0625c",
+          "language_build": {
+            "artifact_count": 19,
+            "checkpoint_reused": 0,
+            "gaps": [
+              "build-unit-85ed003b5e79e13da49e: accepted java execution is not implemented",
+              "build-unit-0b0e21fbf90f2dde1437: accepted java execution is not implemented",
+              "build-unit-c5f65d38abd03ace509b: accepted java execution is not implemented",
+              "build-unit-89f334cc31147dac7d2c: accepted java execution is not implemented",
+              "build-unit-3706425f5fad37227c24: accepted java execution is not implemented",
+              "build-unit-4db99ff3cf9e5f070b9e: accepted java execution is not implemented",
+              "build-unit-ba0768d09e23ae151369: accepted java execution is not implemented",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_C.bin: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CompilerIdC/a.out: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/CMakeFiles/3.28.3/CompilerIdCXX/a.out: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/libcoordination.so: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/observer_a: static loader dependencies were not observable without a pinned parser",
+              "build-unit-c2796659e86145dddfaf: projects/native/linux-calibration/build/observer_b: static loader dependencies were not observable without a pinned parser"
+            ],
+            "native_receipt_count": 1,
+            "protected_command_set_count": 1,
+            "receipt_count": 1,
+            "successful_native_count": 1
+          },
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_language_build/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_language_build/attempts/attempt_0001/status.json",
+          "unit_count": 3,
+          "unit_status_counts": {
+            "SUCCEEDED": 3
+          }
+        },
+        "job_post_build_security_assessment": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 32,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "ef7d82c447421847dfb8ff297cc8d3bd98888c7a7626cd1e8eca336d19acfcf9",
+          "post_build_security": {
+            "all_build_security_shards_preserved": true,
+            "case_count": 1,
+            "gap_count": 32,
+            "index_reused": 0,
+            "manifest_shard_count": 1,
+            "normalizer_version": "build-security-command-normalizer/1",
+            "parser_version": "build-security-binary-parser/1",
+            "rule_version": "build-security-rules/1",
+            "shard_count": 1
+          },
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_project_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 36,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_project_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "4f981889da3c4d69bac67c97abfe61b01b7eb7e20e2396bc49095bfa649a3b4b",
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_project_build/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_project_build/attempts/attempt_0001/status.json",
+          "unit_count": 39,
+          "unit_status_counts": {
+            "SUCCEEDED": 39
+          }
+        },
         "job_review_intake": {
           "attempt_id": "attempt_0001",
-          "gap_count": 30,
-          "handoff_receipt": "runs/2026-10-08-0023/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
-          "handoff_sha256": "52369373c6335f2caf3de1981a320e8206203ac018ad15fcebb7d6c5e9898e0c",
-          "result_receipt": "runs/2026-10-08-0023/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
+          "gap_count": 1,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "b802b85741e000d5e8a6963a293f2d5d4aea1cfd10b305258b2ad9c67a7322d7",
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
           "status": "SUCCEEDED",
-          "status_receipt": "runs/2026-10-08-0023/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
           "unit_count": 7,
           "unit_status_counts": {
             "SUCCEEDED": 7
           }
         },
         "job_target_analysis_plan": {
-          "attempt_id": "attempt_0002",
-          "gap_count": 34,
-          "handoff_receipt": "runs/2026-10-08-0023/data/jobs/job_target_analysis_plan/attempts/attempt_0002/handoff.json",
-          "handoff_sha256": "662203712757150d6418e4a21c1a8a3da38dbeae51c5ef3aea59e410571af336",
-          "result_receipt": "runs/2026-10-08-0023/data/jobs/job_target_analysis_plan/attempts/attempt_0002/result.json",
+          "attempt_id": "attempt_0001",
+          "gap_count": 7,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_target_analysis_plan/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "bc529bd8e3d6f3cdb3e6041cf9069753c7a1c0441b24a80d9536216393b2099d",
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_target_analysis_plan/attempts/attempt_0001/result.json",
           "status": "COMPLETED_WITH_GAPS",
-          "status_receipt": "runs/2026-10-08-0023/data/jobs/job_target_analysis_plan/attempts/attempt_0002/status.json",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_target_analysis_plan/attempts/attempt_0001/status.json",
           "unit_count": 7,
           "unit_status_counts": {
             "SUCCEEDED": 7
@@ -234,27 +336,63 @@
         },
         "job_target_catalog": {
           "attempt_id": "attempt_0001",
-          "gap_count": 30,
-          "handoff_receipt": "runs/2026-10-08-0023/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
-          "handoff_sha256": "47104cdbe1a5ccba61511f54e0dbe86ee3083c4fb6f645624442127d9945f709",
-          "result_receipt": "runs/2026-10-08-0023/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
+          "gap_count": 1,
+          "handoff_receipt": "runs/2026-10-08-0060/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "b254ea42b026e79dd86e12946aeb751750b38611fb1b5315df5717508dccd136",
+          "result_receipt": "runs/2026-10-08-0060/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
           "status": "SUCCEEDED",
-          "status_receipt": "runs/2026-10-08-0023/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
+          "status_receipt": "runs/2026-10-08-0060/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
           "unit_count": 13,
           "unit_status_counts": {
             "SUCCEEDED": 13
           }
         }
       },
-      "orchestration_receipt": "runs/2026-10-08-0023/data/orchestration/dagster/87fffd7b-a14f-4fd5-9cef-97b5b9862a08.json",
+      "orchestration_receipt": "runs/2026-10-08-0060/data/orchestration/dagster/3f7cc512-6736-4e53-a067-c1d4e78d8fd9.json",
       "resume_decisions": [
         {
-          "action": "reuse",
+          "action": "execute",
           "job_id": "job_review_intake"
         },
         {
-          "action": "reuse",
+          "action": "execute",
           "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_cpp_compiled_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_post_build_security_assessment"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
         },
         {
           "action": "execute",
@@ -263,24 +401,36 @@
         {
           "action": "execute",
           "job_id": "job_evidence_collection"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_owasp_control_assessment"
         }
       ],
-      "run_id": "2026-10-08-0023"
+      "run_id": "2026-10-08-0060"
     },
     "dagster_run": {
       "job": "wave1_review",
-      "run_id": "87fffd7b-a14f-4fd5-9cef-97b5b9862a08",
+      "run_id": "3f7cc512-6736-4e53-a067-c1d4e78d8fd9",
       "status": "SUCCESS",
-      "step_count": 94,
+      "step_count": 232,
       "step_status_counts": {
-        "SUCCESS": 94
+        "SUCCESS": 232
       }
     }
   },
   "deployment": {
     "code_location": "appsec_review",
     "jobs": [
+      "ci_configuration_analysis",
+      "ci_configuration_review",
+      "cpp_compiled_analysis",
       "evidence_collection",
+      "language_build",
+      "owasp_control_assessment",
+      "post_build_security_assessment",
+      "project_build",
+      "project_build_review",
       "review_intake",
       "target_analysis_plan",
       "target_catalog",

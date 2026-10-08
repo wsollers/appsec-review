@@ -12,7 +12,7 @@ import shutil
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
-from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
+from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -30,12 +30,6 @@ BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
                    "ir": "llvm-ir/2", "codeql": "codeql-cpp-adapter/2",
                    "infer": "infer-cpp-adapter/1", "joern": "joern-c2cpg-adapter/2",
                    "binary": "elf-symbols/2"}
-PROFILE_BY_MARKER = {"CMakeLists.txt": "cmake", "Makefile": "make", "configure.ac": "autotools",
-                     ".vcxproj": "msbuild"}
-MSBUILD_GAP = (
-    "UNAVAILABLE: the accepted project requires MSBuild, which is not present in the pinned "
-    "Linux native-analysis image; no compiled MSBuild coverage is claimed."
-)
 CODEQL_GAP = (
     "BLOCKED: CodeQL C/C++ assets and an applicable user/environment entitlement were not supplied; "
     "no database or query suite was executed and no CodeQL coverage is claimed."
@@ -193,37 +187,6 @@ def _source_files(root: Path) -> list[Path]:
     return [path for path in sorted(root.rglob("*")) if path.is_file() and not path.is_symlink()]
 
 
-def _safe_copy_case(unit: UnitContext, case_id: str, action: Mapping[str, Any]) -> Mapping[str, Any]:
-    target = (unit.job.target_root or Path()).resolve(strict=True)
-    relative = PurePosixPath(str(action["root"]))
-    if not relative.parts or relative.parts[0] != "projects" or _project_key(relative) != case_id:
-        raise ValueError(f"accepted C/C++ project identity mismatch for {case_id}")
-    source = (target / Path(*relative.parts)).resolve(strict=True)
-    if target not in source.parents or not source.is_dir():
-        raise ValueError("accepted C/C++ project root escapes the target")
-    destination = _case_root(unit, case_id) / "source"
-    if destination.exists():
-        shutil.rmtree(destination)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, destination, symlinks=False, ignore=shutil.ignore_patterns(".git", "build"))
-    mapping = []
-    for path in _source_files(destination):
-        relative_file = path.relative_to(destination).as_posix()
-        original = source / Path(*PurePosixPath(relative_file).parts)
-        if not original.is_file() or original.is_symlink():
-            raise ValueError("copied source mapping is not a regular accepted file")
-        source_sha = file_sha256(original)
-        if file_sha256(path) != source_sha:
-            raise ValueError("run-owned source copy differs from accepted target source")
-        mapping.append({"target_path": f"{action['root']}/{relative_file}",
-                        "scratch_path": f"source/{relative_file}", "sha256": source_sha})
-    case_snapshot = hashlib.sha256(canonical_json(mapping)).hexdigest()
-    return {"schema": "appsec-review/cpp-source-mapping/2", "project_key": case_id,
-            "project_id": f"cpp:{relative.as_posix()}", "display_name": relative.name,
-            "build_system": action["build_system"],
-            "root": action["root"], "case_snapshot": case_snapshot, "files": mapping}
-
-
 def _raw_compile_db(root: Path) -> Path:
     values = [root / "build" / "compile_commands.json", root / "source" / "compile_commands.json"]
     for path in values:
@@ -255,7 +218,8 @@ def _raw_arguments(row: Mapping[str, Any]) -> list[str]:
     return list(raw)
 
 
-def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: str) -> list[str]:
+def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: str,
+                        target_root: str = "") -> list[str]:
     raw = _raw_arguments(row)
     compiler = "clang++-18" if PurePosixPath(source_path).suffix.lower() in {".cc", ".cpp", ".cxx", ".c++", ".mm"} else "clang-18"
     result = [compiler]
@@ -273,6 +237,8 @@ def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: st
         if value in {"-c", "-M", "-MM", "-MD", "-MMD", "-MP"}:
             continue
         mapped = value.replace(str(case_root).replace("\\", "/"), "/scratch")
+        if target_root:
+            mapped = mapped.replace("/workspace/" + target_root.strip("/"), "/scratch/source")
         if value in paired:
             result.append(value)
             continue
@@ -288,7 +254,7 @@ def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: st
     return result
 
 
-def _output_path(row: Mapping[str, Any], root: Path) -> str | None:
+def _output_path(row: Mapping[str, Any], root: Path, target_root: str = "") -> str | None:
     raw = _raw_arguments(row)
     value = row.get("output") if isinstance(row.get("output"), str) else None
     if value is None:
@@ -302,7 +268,8 @@ def _output_path(row: Mapping[str, Any], root: Path) -> str | None:
     directory = str(row.get("directory", "")).replace("\\", "/")
     if not normalized.startswith("/") and not re.match(r"^[A-Za-z]:/", normalized):
         normalized = posixpath.normpath(posixpath.join(directory, normalized))
-    prefixes = ((root / "build").as_posix(), "/scratch/build")
+    prefixes = ((root / "build").as_posix(), "/scratch/build",
+                "/workspace/" + target_root.strip("/") + "/build" if target_root else "")
     for prefix in prefixes:
         if normalized == prefix:
             return "build"
@@ -363,14 +330,14 @@ def normalize_compile_db(root: Path, mapping: Mapping[str, Any]) -> list[dict[st
                 raise ValueError(f"compile database path does not resolve uniquely: {row['file']}")
             target_path = str(matches[0]["target_path"])
         scratch_source = "/scratch/source/" + target_path[len(target_root.rstrip("/") + "/"):]
-        arguments = _sanitize_arguments(row, root, scratch_source)
+        arguments = _sanitize_arguments(row, root, scratch_source, target_root)
         source_record = next((item for item in mapping.get("files", ())
                               if item.get("target_path") == target_path), None)
         if source_record is None:
             raise ValueError(f"compile database source is not in the accepted case mapping: {target_path}")
         result.append({"project_key": mapping["project_key"], "index": index, "directory": "/scratch/source",
                        "file": scratch_source, "target_path": target_path, "arguments": arguments,
-                       "source_sha256": source_record["sha256"], "output_path": _output_path(row, root),
+                       "source_sha256": source_record["sha256"], "output_path": _output_path(row, root, target_root),
                        "command_sha256": hashlib.sha256(canonical_json(arguments)).hexdigest()})
         result[-1]["compile_unit_id"] = _tu_identity(mapping, result[-1])
     return sorted(result, key=lambda item: (item["target_path"], item["command_sha256"]))
@@ -810,12 +777,12 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
 
 
 def _validate_config(context, _result) -> None:
-    expected_steps = ("plan", "prepare", "configure", "compile", "catalog", *BRANCHES, "acceptance")
+    expected_steps = ("plan", "prepare", "catalog", *BRANCHES, "acceptance")
     if tuple(context.config.steps) != expected_steps:
         raise ValueError("C++ compiled-analysis topology does not match central configuration")
     if tuple(context.config.step("plan").tasks) != ("accepted_cpp_plan",):
         raise ValueError("C++ plan task configuration is invalid")
-    for step in ("prepare", "configure", "compile", "catalog", *BRANCHES):
+    for step in ("prepare", "catalog", *BRANCHES):
         if tuple(context.config.step(step).tasks) != PROJECT_TASKS:
             raise ValueError(f"C/C++ project task configuration mismatch: {step}")
     if tuple(context.config.step("acceptance").tasks) != ("publish_handoff",):
@@ -825,22 +792,28 @@ def _validate_config(context, _result) -> None:
 def build_job(*, executor_factory=None) -> Job:
 
     def plan(unit: UnitContext) -> Mapping[str, Any]:
-        accepted = load_accepted_plan(unit.job.run_root)
+        accepted = load_accepted_language_build(unit.job.run_root)
+        if accepted.get("source_fingerprint") != unit.job.source_fingerprint:
+            raise ValueError("C++ analysis target snapshot differs from accepted language build")
         actions = []
         target = (unit.job.target_root or Path()).resolve(strict=True)
-        for action in accepted["build_topology"]["build_actions"]:
-            root = PurePosixPath(str(action.get("root", "")))
-            if (not root.parts or root.parts[0] != "projects" or
-                    action.get("build_system") not in {"cmake", "make", "autotools", "msbuild"}):
+        for receipt in accepted["receipts"]:
+            if receipt.get("family") != "native":
                 continue
+            root = PurePosixPath(str(receipt.get("root", "")))
+            if not root.parts or root.is_absolute() or ".." in root.parts:
+                raise ValueError("accepted native build root is invalid")
             source = (target / Path(*root.parts)).resolve(strict=True)
-            if target not in source.parents or not source.is_dir():
+            if (source != target and target not in source.parents) or not source.is_dir():
                 raise ValueError(f"accepted C/C++ project escapes the target: {root}")
             native_sources = [path for path in source.rglob("*") if path.is_file() and not path.is_symlink()
                               and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm"}]
             if not native_sources:
                 continue
-            actions.append({**dict(action), "project_key": _project_key(root),
+            actions.append({"root": root.as_posix(), "build_system": receipt.get("build_system"),
+                            "build_unit_id": receipt["build_unit_id"], "receipt": dict(receipt),
+                            "language_build_handoff_sha256": accepted["language_build_handoff_sha256"],
+                            "project_key": str(receipt["build_unit_id"]),
                             "project_id": f"cpp:{root.as_posix()}",
                             "source_count": len(native_sources)})
         keys = [str(item["project_key"]) for item in actions]
@@ -867,76 +840,80 @@ def build_job(*, executor_factory=None) -> Job:
         projects = {}
         for action in actions:
             project_key = str(action["project_key"])
-            mapping = _safe_copy_case(unit, project_key, action)
+            receipt = action["receipt"]
+            case_root = _case_root(unit, project_key)
+            if case_root.exists():
+                shutil.rmtree(case_root)
+            workspace = (unit.job.run_root / str(receipt.get("workspace", ""))).resolve()
+            if unit.job.run_root.resolve() not in workspace.parents or not workspace.is_dir() or workspace.is_symlink():
+                raise ValueError("accepted native build workspace is unavailable or outside the run")
+            manifest_identity = receipt.get("workspace_manifest")
+            if not isinstance(manifest_identity, Mapping):
+                raise ValueError("accepted native build does not bind its workspace manifest")
+            manifest_path = (unit.job.run_root / str(manifest_identity.get("path", ""))).resolve()
+            if (unit.job.run_root.resolve() not in manifest_path.parents or not manifest_path.is_file() or
+                    manifest_path.is_symlink() or file_sha256(manifest_path) != manifest_identity.get("sha256")):
+                raise ValueError("accepted native build workspace manifest identity changed")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            expected_files = manifest.get("files") if manifest.get("schema") == "appsec-review/build-workspace-manifest/1" else None
+            if not isinstance(expected_files, Mapping):
+                raise ValueError("accepted native build workspace manifest is invalid")
+            actual_paths = {path.relative_to(workspace).as_posix() for path in workspace.rglob("*")
+                            if path.is_file() and not path.is_symlink()}
+            if actual_paths != set(expected_files):
+                raise ValueError("accepted native build workspace file set changed")
+            for relative_file, digest in expected_files.items():
+                logical = PurePosixPath(str(relative_file))
+                path = (workspace / Path(*logical.parts)).resolve()
+                if (workspace != path and workspace not in path.parents) or not path.is_file() or path.is_symlink():
+                    raise ValueError("accepted native build workspace manifest contains an invalid path")
+                if file_sha256(path) != digest:
+                    raise ValueError("accepted native build workspace content changed")
+            for identity in receipt.get("artifacts", ()):
+                path = (unit.job.run_root / str(identity.get("path", ""))).resolve()
+                if (unit.job.run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink() or
+                        file_sha256(path) != identity.get("sha256")):
+                    raise ValueError("accepted native build artifact identity changed")
+            relative = PurePosixPath(str(action["root"]))
+            target_source = (unit.job.target_root or Path()).resolve() / Path(*relative.parts)
+            source = case_root / "source"
+            shutil.copytree(target_source, source, ignore=shutil.ignore_patterns(".git", "build", "target"))
+            build_relative = PurePosixPath(str(receipt["recipe"]["build_dir"]))
+            built = workspace / Path(*build_relative.parts)
+            build = case_root / "build"
+            if built.is_dir() and not built.is_symlink():
+                shutil.copytree(built, build)
+            else:
+                build.mkdir(parents=True)
+            files = []
+            for path in _source_files(source):
+                relative_file = path.relative_to(source).as_posix()
+                original = target_source / Path(*PurePosixPath(relative_file).parts)
+                if not original.is_file() or original.is_symlink() or file_sha256(original) != file_sha256(path):
+                    raise ValueError("accepted native source mapping changed")
+                files.append({"target_path": f"{action['root']}/{relative_file}",
+                              "scratch_path": f"source/{relative_file}", "sha256": file_sha256(path)})
+            mapping = {"schema": "appsec-review/cpp-source-mapping/3", "project_key": project_key,
+                       "project_id": action["project_id"], "display_name": relative.name,
+                       "build_system": action.get("build_system"), "root": action["root"],
+                       "case_snapshot": hashlib.sha256(canonical_json(files)).hexdigest(), "files": files,
+                       "language_build_fingerprint": receipt.get("fingerprint"),
+                       "language_build_handoff_sha256": action["language_build_handoff_sha256"]}
             artifact = _json_artifact(unit, _case_root(unit, project_key) / "source-mapping.json", mapping)
             projects[project_key] = {"mapping": mapping, "artifact": artifact,
                                      "project_key": project_key, "profile": action["build_system"],
-                                     "terminal_status": "SUCCEEDED", "gaps": []}
+                                     "build_receipt": receipt, "terminal_status": receipt.get("terminal_status"),
+                                     "gaps": list(receipt.get("gaps", ()))}
             unit.job.events.write("CPP_BUILD_PROJECT_PREPARED", project_key=project_key,
                                   project_id=mapping["project_id"], source_count=len(mapping["files"]),
                                   build_system=action["build_system"])
         return {"projects": projects, "project_count": len(projects),
                 "terminal_status": "SUCCEEDED" if projects else "NOT_APPLICABLE", "gaps": []}
 
-    def configure(unit: UnitContext) -> Mapping[str, Any]:
-        projects = {}
-        for case_id, source in unit.output("prepare.projects")["projects"].items():
-            if source["profile"] == "msbuild":
-                projects[case_id] = {"project_key": case_id, "profile": "msbuild",
-                                     "gaps": [MSBUILD_GAP], "terminal_status": "UNAVAILABLE"}
-                continue
-            identity = _checkpoint_identity(unit, case_id, "configure",
-                                            {"source_mapping": source["artifact"]["sha256"],
-                                             "profile": source["profile"]})
-            reused = _load_checkpoint(unit, case_id, "configure", identity)
-            if reused is not None:
-                projects[case_id] = reused
-                continue
-            execution = _run_tool(unit, case_id, ("configure", str(source["profile"])), executor_factory)
-            gap = None if execution["exit_code"] == 0 else f"{case_id} configure failed with exit {execution['exit_code']}"
-            unit.job.events.write("CPP_BUILD_PROJECT_CONFIGURED", project_key=case_id,
-                                  terminal_status="SUCCEEDED" if gap is None else "FAILED_AS_GAP",
-                                  image_id=execution["image_id"])
-            result = {**execution, "project_key": case_id, "profile": source["profile"],
-                      "gaps": [gap] if gap else [], "terminal_status": "SUCCEEDED" if gap is None else "FAILED_AS_GAP"}
-            _save_checkpoint(unit, case_id, "configure", identity, result)
-            projects[case_id] = result
-        gaps = [gap for result in projects.values() for gap in result.get("gaps", ())]
-        return {"projects": projects, "project_count": len(projects), "gaps": gaps,
-                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else ("SUCCEEDED" if projects else "NOT_APPLICABLE")}
-
-    def compile_projects(unit: UnitContext) -> Mapping[str, Any]:
-        projects = {}
-        for case_id, configured in unit.output("configure.projects")["projects"].items():
-            gap = _terminal_gap(configured)
-            if gap:
-                projects[case_id] = {"project_key": case_id, "profile": configured.get("profile"),
-                                     "gaps": [gap], "terminal_status": "BLOCKED_BY_CONFIGURE"}
-                continue
-            identity = _checkpoint_identity(unit, case_id, "compile",
-                                            {"configure_execution": configured["execution"]["sha256"],
-                                             "profile": configured["profile"]})
-            reused = _load_checkpoint(unit, case_id, "compile", identity)
-            if reused is not None:
-                projects[case_id] = reused
-                continue
-            execution = _run_tool(unit, case_id, ("compile", str(configured["profile"])), executor_factory)
-            gap = None if execution["exit_code"] == 0 else f"{case_id} compile failed with exit {execution['exit_code']}"
-            unit.job.events.write("CPP_BUILD_PROJECT_COMPILED", project_key=case_id,
-                                  terminal_status="SUCCEEDED" if gap is None else "FAILED_AS_GAP",
-                                  image_id=execution["image_id"])
-            result = {**execution, "project_key": case_id, "profile": configured["profile"],
-                      "gaps": [gap] if gap else [], "terminal_status": "SUCCEEDED" if gap is None else "FAILED_AS_GAP"}
-            _save_checkpoint(unit, case_id, "compile", identity, result)
-            projects[case_id] = result
-        gaps = [gap for result in projects.values() for gap in result.get("gaps", ())]
-        return {"projects": projects, "project_count": len(projects), "gaps": gaps,
-                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else ("SUCCEEDED" if projects else "NOT_APPLICABLE")}
-
     def catalog(unit: UnitContext) -> Mapping[str, Any]:
         projects = {}
         prepared = unit.output("prepare.projects")["projects"]
-        for case_id, compiled in unit.output("compile.projects")["projects"].items():
+        for case_id, compiled in prepared.items():
             gap = _terminal_gap(compiled)
             mapping = prepared[case_id]["mapping"]
             if gap:
@@ -944,7 +921,7 @@ def build_job(*, executor_factory=None) -> Job:
                                      "terminal_status": "BLOCKED_BY_COMPILE"}
                 continue
             identity = _checkpoint_identity(unit, case_id, "catalog",
-                                            {"compile_execution": compiled["execution"]["sha256"],
+                                            {"language_build": compiled["build_receipt"]["fingerprint"],
                                              "mapping": prepared[case_id]["artifact"]["sha256"],
                                              "link_normalizer": "native-link-normalizer/2"})
             reused = _load_checkpoint(unit, case_id, "catalog", identity)
@@ -970,7 +947,7 @@ def build_job(*, executor_factory=None) -> Job:
                 if kind:
                     outputs.append({"path": path.relative_to(root).as_posix(), "kind": kind,
                                     "sha256": file_sha256(path), "size_bytes": path.stat().st_size})
-            links_path = root / "build" / "link-commands.json"
+            links_path = root / "build" / ".appsec-review-link-commands.json"
             link_commands = []
             if links_path.is_file() and not links_path.is_symlink() and links_path.stat().st_size <= 4 * 1024 * 1024:
                 candidate_links = json.loads(links_path.read_text(encoding="utf-8"))
@@ -980,7 +957,8 @@ def build_job(*, executor_factory=None) -> Job:
             result = {"project_key": case_id, "mapping": mapping, "compile_commands": commands,
                       "compile_database": compile_artifact, "artifact_catalog": output_artifact,
                       "link_database": link_artifact, "link_commands": link_commands,
-                      "outputs": outputs, "image_id": compiled["image_id"], "gaps": [],
+                      "outputs": outputs, "image_id": compiled["build_receipt"]["image"]["image_id"],
+                      "build_receipt": compiled["build_receipt"], "gaps": [],
                       "terminal_status": "SUCCEEDED",
                       "counts": {"compile_units": len(commands), "objects": sum(x["kind"] == "object" for x in outputs),
                                  "libraries": sum(x["kind"] == "library" for x in outputs),
@@ -1095,9 +1073,7 @@ def build_job(*, executor_factory=None) -> Job:
 
     units: list[Unit] = [Unit("plan.accepted_cpp_plan", plan)]
     units.append(Unit("prepare.projects", prepare, ("plan.accepted_cpp_plan",)))
-    units.append(Unit("configure.projects", configure, ("prepare.projects",)))
-    units.append(Unit("compile.projects", compile_projects, ("configure.projects",)))
-    units.append(Unit("catalog.projects", catalog, ("compile.projects", "prepare.projects")))
+    units.append(Unit("catalog.projects", catalog, ("prepare.projects",)))
     for name in BRANCHES:
         units.append(Unit(f"{name}.projects", branch(name), ("catalog.projects",)))
     dependencies = tuple(f"{name}.projects" for name in BRANCHES)

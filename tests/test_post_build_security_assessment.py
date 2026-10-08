@@ -212,16 +212,14 @@ def test_build_security_core_and_thin_mcp_support_every_scope(tmp_path: Path) ->
 def test_job_topology_is_parallel_per_case_and_publishes_after_all_shards() -> None:
     job = build_job()
     ids = {unit.unit_id: unit for unit in job.units}
-    assert len(job.units) == 67
-    assert ids["inspection.case001"].dependencies == ("provenance.case001",)
-    assert ids["inference.case001"].dependencies == (
-        "provenance.case001", "inspection.case001", "deterministic.case001")
-    assert len(ids["publication.publish_handoff"].dependencies) == 13
+    assert len(job.units) == 7
+    assert ids["inspection.native_units"].dependencies == ("provenance.native_units",)
+    assert ids["inference.native_units"].dependencies == (
+        "provenance.native_units", "inspection.native_units", "deterministic.native_units")
+    assert ids["publication.publish_handoff"].dependencies == ("index.native_units",)
 
 
 def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
-    cases = ("case001", "case002", "case003", "case026", "case027", "case028",
-             "case029", "case030", "case036", "case037", "case038", "case045", "case063")
     lines = ["[runtime]", 'runs_dir = "runs"', 'data_dir = "data"', 'metadata_dir = "runs/metadata"',
              "", "[jobs.job_post_build_security_assessment]", 'name = "post_build_security_assessment"',
              "workers = 4", "", "[jobs.job_post_build_security_assessment.settings.model]",
@@ -231,7 +229,7 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
              "[jobs.job_post_build_security_assessment.steps.load.tasks.accepted_cpp_build]", ""]
     for step in ("provenance", "inspection", "deterministic", "inference", "index"):
         lines.extend((f"[jobs.job_post_build_security_assessment.steps.{step}]", "workers = 4"))
-        lines.extend(f"[jobs.job_post_build_security_assessment.steps.{step}.tasks.{case}]" for case in cases)
+        lines.append(f"[jobs.job_post_build_security_assessment.steps.{step}.tasks.native_units]")
         lines.append("")
     lines.extend(("[jobs.job_post_build_security_assessment.steps.publication]", "workers = 1",
                   "[jobs.job_post_build_security_assessment.steps.publication.tasks.publish_handoff]"))
@@ -244,7 +242,7 @@ def _accepted_cpp_fixture(tmp_path: Path) -> tuple[Path, Path]:
     runs, run_root = tmp_path / "runs", tmp_path / "runs" / RUN_ID
     target = tmp_path / "target"
     target.mkdir()
-    case_root = run_root / "data" / "cpp" / "cases" / "case-001"
+    case_root = run_root / "data" / "cpp" / "projects" / "unit-a"
     (case_root / "build").mkdir(parents=True)
     (case_root / "source").mkdir()
     source = case_root / "source" / "main.cpp"
@@ -269,10 +267,7 @@ def _accepted_cpp_fixture(tmp_path: Path) -> tuple[Path, Path]:
     (case_root / "build" / "compile_commands.json").write_text(json.dumps([{
         "directory": str(case_root / "build"), "file": str(source), "arguments": exact,
     }]), encoding="utf-8")
-    outputs = {}
-    for case in ("case001", "case002", "case003", "case026", "case027", "case028",
-                 "case029", "case030", "case036", "case037", "case038", "case045", "case063"):
-        outputs[f"catalog.{case}"] = ({
+    outputs = {"catalog.projects": {"projects": {"unit-a": {
             "terminal_status": "SUCCEEDED", "mapping": {"root": "projects/cpp/case-001", "build_system": "cmake"},
             "outputs": [{"path": "build/app", "kind": "executable", "sha256": file_sha256(binary),
                          "size_bytes": binary.stat().st_size},
@@ -280,7 +275,7 @@ def _accepted_cpp_fixture(tmp_path: Path) -> tuple[Path, Path]:
                          "size_bytes": object_file.stat().st_size},
                         {"path": "build/libapp.a", "kind": "library", "sha256": file_sha256(archive),
                          "size_bytes": archive.stat().st_size}], "image_id": "sha256:" + "1" * 64,
-        } if case == "case001" else {"terminal_status": "NOT_APPLICABLE", "gaps": []})
+        }}}}
     result = {"schema": "appsec-review/unit-execution/2", "status": "SUCCEEDED", "steps": {},
               "units": {}, "outputs": outputs, "failed_units": [], "skipped_units": []}
     attempt = run_root / "data" / "jobs" / "job_cpp_compiled_analysis" / "attempts" / "attempt_0001"
@@ -315,7 +310,7 @@ def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp
     first = runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
                        upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
     assert first["status"]["status"] == "COMPLETED_WITH_GAPS"
-    protected = list((runs / RUN_ID / "data" / "cpp" / "cases" / "case-001" /
+    protected = list((runs / RUN_ID / "data" / "cpp" / "projects" / "unit-a" /
                       "build-security" / "protected-commands").glob("*.json"))
     assert any("super-secret" in item.read_text(encoding="utf-8") for item in protected)
     log_path = runs / RUN_ID / "data" / "logs" / "pipeline.jsonl"
@@ -325,19 +320,19 @@ def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp
     assert any(item["event_type"] == "BUILD_SECURITY_CHECKS_COMPLETED" for item in events)
     assert any(item["event_type"] == "BUILD_SECURITY_INFERENCE_COMPLETED" for item in events)
     assert any(item["event_type"] == "POST_BUILD_SECURITY_ASSESSMENT_COMPLETED" for item in events)
-    inspection = first["result"]["outputs"]["inspection.case001"]["records"][0]
+    inspection = first["result"]["outputs"]["inspection.native_units"]["projects"]["unit-a"]["records"][0]
     assert inspection["pinned_tool_observation"]["tool"].startswith("tool-native-cpp:1.0.0")
     assert inspection["symbols"]["defined_names"] == ["main"]
     metrics = aggregate_run_metrics(runs / RUN_ID)
-    assert metrics["event_counts"]["TASK_STARTED"] >= 62
+    assert metrics["event_counts"]["TASK_STARTED"] >= 7
     assert metrics["domain_counts"]["inspected_count"] == 3
     assert metrics["domain_counts"]["check_count"] > 0
     second = runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
                         upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
-    reused = [value for key, value in second["result"]["outputs"].items() if key.startswith("index.")]
-    assert len(reused) == 13 and all(item["index_reused"] for item in reused)
+    reused = second["result"]["outputs"]["index.native_units"]["projects"]
+    assert len(reused) == 1 and all(item["index_reused"] for item in reused.values())
     metrics = aggregate_run_metrics(runs / RUN_ID)
-    assert metrics["domain_counts"]["resumption_count"] == 13
+    assert metrics["domain_counts"]["resumption_count"] == 1
     core = RetrievalCore(runs, RUN_ID)
     library = core.find(name="libapp.a", indexes=("build_security",))["results"][0]
     membership = core.trace(identity=library["identity"], relations=("CONTAINS",), depth=1)
@@ -384,7 +379,7 @@ def test_bounded_inference_records_tokens_and_validates_observations(tmp_path: P
     outcome = JobRunner(config).run(build_job(inference_client=_ContextInferenceClient()),
         run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
         upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
-    inference = outcome["result"]["outputs"]["inference.case001"]
+    inference = outcome["result"]["outputs"]["inference.native_units"]["projects"]["unit-a"]
     assert inference["model_calls"] == 1
     assert inference["confirmed_count"] == 1 and inference["refuted_count"] == 1
     assert {item["validation"] for item in inference["observations"]} == {"CONFIRMED", "REFUTED"}

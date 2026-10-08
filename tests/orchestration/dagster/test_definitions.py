@@ -220,18 +220,21 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "project_build__probe__native",
         "project_build__build_dispatch__native",
         "project_build__acceptance__publish_handoff",
+        "language_build__load__accepted_dispatch",
+        "language_build__execute__native",
+        "language_build__acceptance__publish_handoff",
         "cpp_compiled_analysis__plan__accepted_cpp_plan",
-        "cpp_compiled_analysis__compile__projects",
+        "cpp_compiled_analysis__catalog__projects",
         "cpp_compiled_analysis__ast__projects",
         "cpp_compiled_analysis__ir__projects",
         "cpp_compiled_analysis__infer__projects",
         "cpp_compiled_analysis__acceptance__publish_handoff",
         "post_build_security_assessment__load__accepted_cpp_build",
-        "post_build_security_assessment__provenance__case001",
-        "post_build_security_assessment__inspection__case001",
-        "post_build_security_assessment__deterministic__case001",
-        "post_build_security_assessment__inference__case001",
-        "post_build_security_assessment__index__case001",
+        "post_build_security_assessment__provenance__native_units",
+        "post_build_security_assessment__inspection__native_units",
+        "post_build_security_assessment__deterministic__native_units",
+        "post_build_security_assessment__inference__native_units",
+        "post_build_security_assessment__index__native_units",
         "post_build_security_assessment__publication__publish_handoff",
         "evidence_collection__secrets__gitleaks_scan",
         "evidence_collection__secrets__gitleaks_normalize",
@@ -257,7 +260,8 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "target_catalog__finalize" in upstream("ci_configuration_analysis__begin")
     assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
     assert "target_analysis_plan__finalize" in upstream("project_build__begin")
-    assert "project_build__finalize" in upstream("cpp_compiled_analysis__begin")
+    assert "project_build__finalize" in upstream("language_build__begin")
+    assert "language_build__finalize" in upstream("cpp_compiled_analysis__begin")
     assert len(upstream("project_build__acceptance__publish_handoff")) == 20
     assert "cpp_compiled_analysis__finalize" in upstream("post_build_security_assessment__begin")
     assert "target_analysis_plan__finalize" in upstream("evidence_collection__begin")
@@ -272,7 +276,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
     assert len(cpp_barrier) == 8  # claim plus seven project-batched terminal branches
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
-    assert len(post_build_barrier) == 14  # claim plus one shard per accepted case
+    assert len(post_build_barrier) == 2  # claim plus the generic accepted-unit index barrier
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
     assert "evidence_collection__secrets__gitleaks_index" in barrier
     assert "evidence_collection__source_sast__semgrep_index" in barrier

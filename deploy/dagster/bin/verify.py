@@ -10,6 +10,7 @@ import sys
 import tomllib
 import urllib.request
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime
 
 
@@ -144,6 +145,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_target_catalog",
             "job_target_analysis_plan",
             "job_project_build",
+            "job_language_build",
             "job_cpp_compiled_analysis",
             "job_post_build_security_assessment",
             "job_evidence_collection",
@@ -176,6 +178,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",
                 "job_project_build": "acceptance.publish_handoff",
+                "job_language_build": "acceptance.publish_handoff",
                 "job_cpp_compiled_analysis": "acceptance.publish_handoff",
                 "job_post_build_security_assessment": "publication.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
@@ -234,30 +237,48 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "manifest_started_at": barrier_start.isoformat(),
                     "manifest_waited_for_all_producer_indexes": barrier_start >= latest_index,
                 }
+            if job_id == "job_language_build":
+                receipt_path = run_root / publication["artifact"]["path"]
+                receipt_set = json.loads(receipt_path.read_text(encoding="utf-8"))
+                native = [item for item in receipt_set.get("receipts", ()) if item.get("family") == "native"]
+                successful = [item for item in native if item.get("terminal_status") == "SUCCEEDED"]
+                if run.get("pipelineName") == "wave1_review" and not successful:
+                    raise SystemExit("live Wave 1 acceptance did not produce a successful native build receipt")
+                job_report["language_build"] = {
+                    "receipt_count": len(receipt_set.get("receipts", ())),
+                    "native_receipt_count": len(native),
+                    "successful_native_count": len(successful),
+                    "artifact_count": sum(len(item.get("artifacts", ())) for item in native),
+                    "protected_command_set_count": sum(
+                        isinstance(item.get("protected_compile_commands"), Mapping) for item in successful),
+                    "checkpoint_reused": sum(bool(item.get("checkpoint_reused")) for item in successful),
+                    "gaps": receipt_set.get("gaps", []),
+                }
             if job_id == "job_cpp_compiled_analysis":
                 summary_path = run_root / publication["artifact"]["path"]
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
                 manifest_path = run_root / publication["index_manifest"]["path"]
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 cpp_shards = [item for item in manifest["indexes"]
-                              if str(item.get("shard_id", "")).startswith("cpp-case-")]
+                              if str(item.get("shard_id", "")).startswith("cpp-")]
                 branches = [value for key, value in result["units"].items()
-                            if key.split(".", 1)[0] in {"compiled", "ast", "ir", "codeql", "joern", "binary"}]
+                            if key.split(".", 1)[0] in {"compiled", "ast", "ir", "infer", "codeql", "joern", "binary"}]
                 job_report["cpp_wave"] = {
-                    "case_count": summary["case_count"],
+                    "project_count": summary["project_count"],
                     "branch_count": summary["branch_count"],
+                    "physical_shard_count": summary["physical_shard_count"],
                     "cpp_shard_count": len(cpp_shards),
                     "manifest_index_count": len(manifest["indexes"]),
                     "manifest_sha256": publication["index_manifest"]["sha256"],
                     "disposition_counts": dict(sorted(Counter(
                         publication.get("dispositions", {}).values()).items())),
-                    "msbuild": {
-                        key: publication.get("dispositions", {}).get(key)
-                        for key in sorted(publication.get("dispositions", {}))
-                        if key.startswith("case-038:")
-                    },
                     "terminal_branch_count": len(branches),
-                    "all_cpp_shards_preserved": len(cpp_shards) == summary["case_count"] * summary["branch_count"],
+                    "all_cpp_shards_preserved": (
+                        len(cpp_shards) == summary["project_count"] * summary["branch_count"]
+                    ),
+                    "all_physical_shards_preserved": (
+                        len(manifest["indexes"]) == summary["physical_shard_count"]
+                    ),
                 }
             if job_id == "job_post_build_security_assessment":
                 summary_path = run_root / publication["artifact"]["path"]

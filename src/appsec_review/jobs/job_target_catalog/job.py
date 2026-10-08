@@ -365,7 +365,9 @@ def build_job(*, fail_task: str | None = None) -> Job:
         u("retrieval_indexes.build_symbol_index", symbol_index, ("repository_discovery.partition_repository",)),
         u("retrieval_indexes.build_component_index", component_index, ("component_discovery.catalog_components",)),
         u("publish_catalog.validate_catalog", validate_catalog, ("retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index", "retrieval_indexes.build_component_index")),
-        u("publish_catalog.publish_handoff", publish, ("publish_catalog.validate_catalog", "build_discovery.catalog_build_targets", "component_discovery.catalog_dependencies")),
+        u("publish_catalog.publish_handoff", publish, ("publish_catalog.validate_catalog",
+          "build_discovery.catalog_build_targets", "component_discovery.catalog_dependencies",
+          "repository_discovery.census_languages")),
     )
     implementation = hashlib.sha256(Path(__file__).read_bytes() +
         Path(__file__).parents[1].joinpath("cataloging.py").read_bytes() +

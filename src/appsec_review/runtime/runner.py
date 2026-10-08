@@ -245,25 +245,35 @@ class JobRunner:
                                      producer=result.get("tool_id"), disposition=result.get("terminal_status"),
                                      shard_identity=result.get("index_identity"))
                 return result
+        units_by_id = {candidate.unit_id: candidate for candidate in job.units}
+        required_outputs: set[str] = set()
+        stack = list(unit.dependencies)
+        while stack:
+            dependency = stack.pop()
+            if dependency in required_outputs:
+                continue
+            required_outputs.add(dependency)
+            dependency_unit = units_by_id.get(dependency)
+            if dependency_unit is None:
+                raise ValueError(f"unit declares an unknown dependency: {dependency}")
+            stack.extend(dependency_unit.dependencies)
         outputs: dict[str, Mapping[str, Any]] = {}
         for dependency_unit in job.units:
             dependency = dependency_unit.unit_id
-            if dependency == unit_id:
+            if dependency not in required_outputs:
                 continue
             dependency_step, dependency_task = dependency.split(".")
             root = context.attempt_root / "steps" / dependency_step / "tasks" / dependency_task
             if not (root / "status.json").is_file():
-                continue
+                raise ValueError(f"dependency receipt is unavailable: {dependency}")
             receipt = json.loads((root / "status.json").read_text(encoding="utf-8"))
             result_file = root / "result.json"
             if receipt.get("status") != "SUCCEEDED":
-                if dependency in unit.dependencies:
-                    raise ValueError(f"dependency receipt is unavailable: {dependency}")
-                continue
+                raise ValueError(f"dependency receipt is unavailable: {dependency}")
             if not result_file.is_file() or receipt.get("result_sha256") != file_sha256(result_file):
                 raise ValueError(f"completed unit result changed: {dependency}")
             outputs[dependency] = json.loads(result_file.read_text(encoding="utf-8"))
-        missing = sorted(set(unit.dependencies) - set(outputs))
+        missing = sorted(required_outputs - set(outputs))
         if missing:
             raise ValueError(f"dependency results are unavailable: {missing}")
         unit_root.mkdir(parents=True, exist_ok=True)

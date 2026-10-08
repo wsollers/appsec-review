@@ -24,11 +24,11 @@ def test_post_build_job_is_ordered_between_cpp_build_and_evidence_assembly() -> 
     names = {node.name for node in graph.node_defs}
     assert {
         "post_build_security_assessment__load__accepted_cpp_build",
-        "post_build_security_assessment__provenance__case001",
-        "post_build_security_assessment__inspection__case001",
-        "post_build_security_assessment__deterministic__case001",
-        "post_build_security_assessment__inference__case001",
-        "post_build_security_assessment__index__case001",
+        "post_build_security_assessment__provenance__native_units",
+        "post_build_security_assessment__inspection__native_units",
+        "post_build_security_assessment__deterministic__native_units",
+        "post_build_security_assessment__inference__native_units",
+        "post_build_security_assessment__index__native_units",
         "post_build_security_assessment__publication__publish_handoff",
     } <= names
     assert "cpp_compiled_analysis__finalize" in _upstream(
@@ -38,9 +38,9 @@ def test_post_build_job_is_ordered_between_cpp_build_and_evidence_assembly() -> 
     assert {
         "post_build_security_assessment__finalize", "evidence_collection__finalize",
     } <= _upstream(graph, "owasp_control_assessment__begin")
-    assert _upstream(graph, "post_build_security_assessment__inspection__case001") == {
-        "post_build_security_assessment__begin", "post_build_security_assessment__provenance__case001"}
-    assert len(_upstream(graph, "post_build_security_assessment__publication__publish_handoff")) == 14
+    assert _upstream(graph, "post_build_security_assessment__inspection__native_units") == {
+        "post_build_security_assessment__begin", "post_build_security_assessment__provenance__native_units"}
+    assert len(_upstream(graph, "post_build_security_assessment__publication__publish_handoff")) == 2
 
 
 @pytest.mark.skipif(not os.environ.get("APPSEC_CPP_ACCEPTANCE_TARGET"),

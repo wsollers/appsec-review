@@ -130,6 +130,11 @@ invent a build unit or authorize execution; a later build job may execute only a
 inside its matching image profile. Disabled, unavailable, failed, invalid, or contradictory model
 assistance publishes an explicit build-planning gap and leaves recipes absent.
 
+`job_project_build` resolves native CMake recipes deterministically from an accepted
+`CMakeLists.txt` marker. That narrow policy takes precedence over model-proposed CMake commands,
+is validated by the same recipe allowlist, and is marked `deterministic-cmake-marker`; it does not
+generalize to ambiguous build systems.
+
 The accepted plan is an immutable run artifact and an `analysis/target-analysis-plan` retrieval
 shard. Its manifest composes the catalog shards rather than replacing them. Evidence producers read
 the accepted plan, execute only selected scanner scopes, and publish explicit `NOT_APPLICABLE`
@@ -137,26 +142,40 @@ dispositions for unselected families. Because the planner is a real job in the D
 catalog changes invalidate the plan and downstream producers while unrelated upstream work can be
 reused.
 
+## Generic language-build execution
+
+`job_language_build` is the execution boundary after project-build probing. It hash-verifies the
+accepted dispatch, probe receipt, recipe, dependency files, source snapshot, and exact derived
+image before executing accepted argv in a fresh run-owned workspace. Native builds are currently
+implemented; every other accepted family publishes a named unsupported gap until its executor is
+added. Build dependencies form topological layers, while unrelated units share the configured
+worker pool. Receipts bind command, compile-database, link, artifact, workspace-manifest, image,
+and checkpoint identities. Exact argv remains in protected run-owned artifacts; central logs and
+retrieval-visible records contain hashes and sanitized facts only. See
+[`../operations/language-build.md`](../operations/language-build.md).
+
 ## C/C++ compiled-analysis lane
 
-`job_cpp_compiled_analysis` follows the accepted plan and discovers native projects from accepted
-build actions. Its graph is repository-independent: one task per stage batches an arbitrary project
+`job_cpp_compiled_analysis` consumes successful native receipts from the accepted generic
+language-build handoff. It does not configure or compile projects. Its graph is repository-independent:
+one task per stage batches an arbitrary project
 set while retaining per-project checkpoints, terminal states, and shard identities. Once a project
 catalog is terminal, compiled indexing, Clang AST, LLVM IR, Infer, CodeQL, Joern, and binary/symbol branches
 can be produced without encoding project names or counts in the graph.
 
-The native container executes untrusted build logic but never target binaries or tests. Application
-code validates compile commands and artifacts, converts tool failures to explicit gaps, and retains
-framework integrity failures as hard failures. See
+The generic native build container executes untrusted build logic but never target binaries or tests.
+The C++ analysis container only replays bounded compile units for analysis. Application code validates
+workspace manifests, compile commands, and artifacts; converts tool failures to explicit gaps; and
+retains framework integrity failures as hard failures. See
 [`../operations/cpp-compiled-analysis.md`](../operations/cpp-compiled-analysis.md).
 
 ## Post-build security assessment
 
 `job_post_build_security_assessment` runs after the accepted C/C++ compiled-analysis handoff and
 before evidence-package assembly. It reads the accepted handoff and manifest rather than walking
-the target. Thirteen independent case paths capture protected exact argv artifacts plus redacted
-indexed command summaries across thirteen accepted cases, inspect produced files as bytes without executing them, apply
-platform-aware deterministic hardening rules, validate bounded model observations against exact
+the target. A dynamic project set reuses the generic build's protected exact argv artifacts plus
+redacted indexed command summaries, inspects produced files as bytes without executing them, applies
+platform-aware deterministic hardening rules, validates bounded model observations against exact
 command or artifact identities, and publish independently fingerprinted `build_security` shards.
 
 The fingerprint for each shard binds its protected command artifacts, produced-binary hashes,

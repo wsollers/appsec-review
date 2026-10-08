@@ -30,6 +30,14 @@ The Linux vertical is complete only when:
 - unit tests, failure/resume tests, MCP integration tests, and a live Dagster acceptance run prove
   dispatch, execution, provenance capture, indexing, gaps, and selective reuse end to end.
 
+Current status: the generic Linux native/CMake slice now covers accepted dispatch validation, real
+build execution, protected compiler/link provenance, artifact catalogs, dependency ordering,
+failure isolation, checkpoint reuse, and dynamic C++/post-build consumption. The full Linux
+vertical remains open: static dispatch execution, the other language-family executors, entitled
+CodeQL, pinned loader-dependency parsing, broader MCP integration, and cross-language live
+acceptance are still required. The retained Dagster verification record is the authority for the
+latest native live result.
+
 Probe policy must be centrally configurable per build unit as `configure`, `selected-target`, or
 `full-build`. This keeps the default test target rigorous without forcing future large repositories
 through an unnecessary full probe before every instrumented or traced build.

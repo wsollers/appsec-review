@@ -116,10 +116,14 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
     assert all((config.runtime.runs_dir / upstream["run_id"] / artifact["path"]).is_file()
                for build in accepted["probe_receipts"] for artifact in build["artifacts"])
     assert calls == [
-        ("cmake", "-S", ".", "-B", "build"),
-        ("cmake", "--build", "build"),
+        ("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"),
+        ("cmake", "--build", "build", "--parallel", "2"),
         ("cargo", "build", "--manifest-path", "Cargo.toml"),
     ]
+    native = next(item for item in accepted["build_dispatches"] if item["family"] == "native")
+    assert native["recipe_provenance"] == "deterministic-cmake-marker"
+    assert native["recipe"]["system_packages"] == []
 
 
 def test_project_build_has_independent_language_branches(tmp_path: Path) -> None:
@@ -135,6 +139,25 @@ def test_project_build_has_independent_language_branches(tmp_path: Path) -> None
         assert graph.node(f"job_project_build.build_dispatch.{family}").dependencies == (
             f"job_project_build.image.{family}", f"job_project_build.probe.{family}")
     assert len(graph.node("job_project_build.acceptance.publish_handoff").dependencies) == 19
+
+
+def test_project_build_resolves_missing_cmake_recipe_deterministically(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    calls = []
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+        image_resolver_factory=lambda unit: FakeImageResolver())]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # Rust still requires an accepted recipe.
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    native = next(item for item in accepted["build_dispatches"] if item["family"] == "native")
+    assert native["recipe_provenance"] == "deterministic-cmake-marker"
+    assert native["recipe"]["configure_commands"][0][-2:] == [
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DCMAKE_BUILD_TYPE=RelWithDebInfo"]
+    assert native["recipe"]["build_commands"][0][-2:] == ["--parallel", "2"]
 
 
 def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Path) -> None:
@@ -206,7 +229,7 @@ def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
         ).run(target_root=target, source_fingerprint=fingerprint)
         GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                       run_id=upstream["run_id"])
-    assert calls == [("cmake", "-S", ".", "-B", "build"),
-                     ("cmake", "--build", "build"),
-                     ("cmake", "-S", ".", "-B", "build"),
-                     ("cmake", "--build", "build")]
+    configure = ("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+                 "-DCMAKE_BUILD_TYPE=RelWithDebInfo")
+    build = ("cmake", "--build", "build", "--parallel", "2")
+    assert calls == [configure, build, configure, build]

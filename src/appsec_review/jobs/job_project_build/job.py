@@ -16,6 +16,7 @@ from appsec_review.container_runtime import (
     project_dependency_environment,
     profiles_from_settings,
 )
+from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -190,7 +191,7 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             input_identities={"recipe_identity": recipe_identity,
                               "argv_sha256": hashlib.sha256(canonical_json(list(command))).hexdigest()})
         result = executor.execute(command, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                  environment=_probe_environment(recipe))
+                                  environment=_probe_environment({**recipe, "build_system": action["build_system"]}))
         logs = root / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         stdout, stderr = logs / f"command-{ordinal:03d}.stdout", logs / f"command-{ordinal:03d}.stderr"
@@ -229,15 +230,26 @@ def load_accepted_builds(run_root: Path) -> Mapping[str, Any]:
     if not pointer.is_file():
         raise ValueError("accepted job_project_build handoff is required")
     value = json.loads(pointer.read_text(encoding="utf-8"))
-    handoff_path = run_root / value["handoff_path"]
+    handoff_path = (run_root / str(value.get("handoff_path", ""))).resolve()
+    if run_root.resolve() not in handoff_path.parents or not handoff_path.is_file() or handoff_path.is_symlink():
+        raise ValueError("project-build handoff path is invalid")
     if file_sha256(handoff_path) != value["handoff_sha256"]:
         raise ValueError("project-build handoff identity changed")
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
+            handoff.get("job_id") != "job_project_build"):
+        raise ValueError("project-build handoff is not accepted")
     artifact = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
-    path = run_root / artifact["path"]
+    path = (run_root / str(artifact.get("path", ""))).resolve()
+    if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+        raise ValueError("project-build artifact path is invalid")
     if file_sha256(path) != artifact["sha256"]:
         raise ValueError("project-build artifact identity changed")
-    return json.loads(path.read_text(encoding="utf-8"))
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if document.get("schema") != SCHEMA:
+        raise ValueError("project-build dispatch schema is unsupported")
+    return {**document, "project_build_handoff_sha256": value["handoff_sha256"],
+            "project_build_artifact_sha256": artifact["sha256"]}
 
 
 def _validate_config(context, _result) -> None:
@@ -260,10 +272,63 @@ def _image_dict(image: Any, user: str) -> dict[str, Any]:
             "terminal_status": "SUCCEEDED", "gaps": []}
 
 
+def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    if action.get("family") != "native" or action.get("build_system") != "cmake":
+        return None
+    root = str(action["root"])
+    source = _safe_root(unit.job.target_root or Path(), root)
+    marker = source / "CMakeLists.txt"
+    if not marker.is_file() or marker.is_symlink():
+        return None
+    build_dir = "build" if root == "." else f"{root}/build"
+    marker_path = "CMakeLists.txt" if root == "." else f"{root}/CMakeLists.txt"
+    recipe = {"schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
+              "image_profile": "native", "source_dir": root, "build_dir": build_dir,
+              "system_packages": [], "environment": {}, "dependency_files": [marker_path],
+              "configure_commands": [["cmake", "-S", root, "-B", build_dir,
+                                        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+                                        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"]],
+              "build_commands": [["cmake", "--build", build_dir, "--parallel", "2"]],
+              "expected_outputs": [build_dir], "network_required": False,
+              "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker."}
+    pseudo_unit = {"build_unit_id": action["build_unit_id"], "family": "native", "root": root,
+                   "build_system": "cmake", "markers": [{"path": marker_path}],
+                   "descriptor_package": {"documents": [{"path": marker_path}]}}
+    errors = validate_build_recipe(recipe, pseudo_unit)
+    if errors:
+        raise ValueError("deterministic native recipe is invalid: " + "; ".join(errors))
+    return recipe
+
+
 def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
+        components = {str(item["component_id"]): str(item["root"])
+                      for item in accepted.get("components", ())}
+        action_by_component: dict[str, str] = {}
+        for component_id, component_root in components.items():
+            candidates = [item for item in actions if component_root == "." or item["root"] == component_root or
+                          str(item["root"]).startswith(component_root.rstrip("/") + "/")]
+            if candidates:
+                action_by_component[component_id] = str(min(candidates, key=lambda item: len(str(item["root"])))
+                                                        ["build_unit_id"])
+        dependencies: dict[str, set[str]] = {str(item["build_unit_id"]): set() for item in actions}
+        for relation in accepted.get("build_topology", {}).get("relationships", ()):
+            if relation.get("kind") != "depends_on":
+                continue
+            owner = action_by_component.get(str(relation.get("component_id")))
+            dependency = action_by_component.get(str(relation.get("dependency_component_id")))
+            if owner and dependency and owner != dependency:
+                dependencies[owner].add(dependency)
+        resolved_actions = []
+        for item in actions:
+            recipe = _deterministic_native_recipe(unit, item)
+            resolved_actions.append({**dict(item),
+                **({"recipe": recipe, "requires_inference": False,
+                    "recipe_provenance": "deterministic-cmake-marker"} if recipe is not None else {}),
+                "build_dependencies": sorted(dependencies[str(item["build_unit_id"])])})
+        actions = resolved_actions
         return {"actions": actions, "scanner_selections": accepted["scanner_selections"], "action_count": len(actions),
                 "terminal_status": "SUCCEEDED" if actions else "NOT_APPLICABLE", "gaps": []}
 
@@ -364,8 +429,13 @@ def build_job(*, executor_factory=None, image_resolver_factory=None) -> Job:
                     continue
                 entry = images[receipt["build_unit_id"]]
                 value = {"workflow": "lang_jobflow_build", "family": family, "build_unit_id": receipt["build_unit_id"],
-                         "root": receipt["root"], "recipe": entry["action"]["recipe"],
+                         "root": receipt["root"], "build_system": receipt["build_system"],
+                         "recipe": entry["action"]["recipe"],
+                         "recipe_provenance": entry["action"].get("recipe_provenance", "accepted-inference"),
                          "recipe_identity": receipt["recipe_identity"], "image": entry["image"],
+                         "source_fingerprint": unit.job.source_fingerprint,
+                         "probe_identity": hashlib.sha256(canonical_json(receipt)).hexdigest(),
+                         "build_dependencies": list(entry["action"].get("build_dependencies", ())),
                          "probe_disposition": receipt["probe_disposition"],
                          "capabilities": list(_BUILD_CAPABILITIES[family])}
                 dispatches.append(value)

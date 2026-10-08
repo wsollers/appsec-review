@@ -6,6 +6,7 @@ import json
 from pathlib import Path, PurePosixPath
 import shutil
 import sqlite3
+import pytest
 
 from appsec_review.config import load_config
 from appsec_review.container_runtime.executor import ExecutionResult
@@ -264,7 +265,7 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     job = build_job(executor_factory=lambda unit: None)
     plan = plan_jobs((job,), config)
     assert PROJECT_TASKS == ("projects",)
-    assert len(job.units) == 13
+    assert len(job.units) == 11
     assert plan.node("job_cpp_compiled_analysis.ast.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     assert plan.node("job_cpp_compiled_analysis.ir.projects").dependencies == (
@@ -274,6 +275,7 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     final = plan.node("job_cpp_compiled_analysis.acceptance.publish_handoff")
     assert len(final.dependencies) == 7
     assert not any("case001" in node.node_id for node in plan.nodes)
+    assert not any(node.node_id.endswith(("configure.projects", "compile.projects")) for node in plan.nodes)
 
 
 def test_cpp_job_discovers_projects_and_indexes_cross_tu_library_topology(tmp_path: Path) -> None:
@@ -281,82 +283,23 @@ def test_cpp_job_discovers_projects_and_indexes_cross_tu_library_topology(tmp_pa
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
         target_root=target, source_fingerprint=fingerprint)
-    calls: list[tuple[str, str]] = []
-    factory = lambda unit: FakeNativeExecutor(unit.job.run_root, calls)
-    outcome = GraphRunner(config, [build_job(executor_factory=factory)]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
-    outputs = outcome["jobs"]["job_cpp_compiled_analysis"]["result"]["outputs"]
-    assert set(outputs["prepare.projects"]["projects"]) == set(keys)
-    assert outputs["compile.projects"]["terminal_status"] == "SUCCEEDED"
-    assert all(value["terminal_status"] == "SUCCEEDED"
-               for value in outputs["catalog.projects"]["projects"].values())
-    assert outputs["codeql.projects"]["gaps"][0].startswith("BLOCKED: CodeQL")
-    assert outputs["infer.projects"]["terminal_status"] == "SUCCEEDED"
-    accepted = outputs["acceptance.publish_handoff"]
-    assert accepted["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert (keys[0], "ir") in calls and (keys[1], "symbols") in calls
-    assert (keys[0], "infer") in calls and (keys[1], "infer") in calls
-
-    manifest = json.loads((tmp_path / "runs" / upstream["run_id"] /
-                           accepted["index_manifest"]["path"]).read_text(encoding="utf-8"))
-    build_shard = next(item for item in manifest["indexes"]
-                       if item["shard_id"] == f"cpp-{keys[0]}-compiled")
-    infer_shard = next(item for item in manifest["indexes"]
-                       if item["shard_id"] == f"cpp-{keys[0]}-infer")
-    with sqlite3.connect(tmp_path / "runs" / upstream["run_id"] / build_shard["relative_path"]) as database:
-        entities = {row[0] for row in database.execute("SELECT kind FROM entities")}
-        relations = {row[0] for row in database.execute("SELECT kind FROM relations")}
-    assert {"project", "source_file", "build_action", "compile_unit", "object_file",
-            "library", "executable"}.issubset(entities)
-    assert {"CONTAINS", "GENERATED_FROM", "COMPILES_TO", "LINKS_INTO"}.issubset(relations)
-    with sqlite3.connect(tmp_path / "runs" / upstream["run_id"] / infer_shard["relative_path"]) as database:
-        infer_entities = {row[0] for row in database.execute("SELECT kind FROM entities")}
-    assert "tool_observation" in infer_entities
-    assert RetrievalCore(config.runtime.runs_dir, upstream["run_id"]).search(query="helper", limit=10)["results"]
-    assert RetrievalCore(config.runtime.runs_dir, upstream["run_id"]).search(
-        query="NULLPTR_DEREFERENCE", indexes=("observations",), limit=10)["results"]
+    with pytest.raises(RuntimeError, match="plan.accepted_cpp_plan"):
+        GraphRunner(config, [build_job(executor_factory=lambda unit: None)]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    traceback_path = (config.runtime.runs_dir / upstream["run_id"] / "data" / "jobs" /
+        "job_cpp_compiled_analysis" / "attempts" / "attempt_0001" / "steps" / "plan" /
+        "tasks" / "accepted_cpp_plan" / "traceback.txt")
+    assert "accepted job_language_build handoff is required" in traceback_path.read_text(encoding="utf-8")
 
 
 def test_infer_failure_is_a_project_scoped_gap(tmp_path: Path) -> None:
-    config, target, keys = _fixture(tmp_path)
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
-        target_root=target, source_fingerprint=fingerprint)
-    calls: list[tuple[str, str]] = []
-    factory = lambda unit: FakeNativeExecutor(unit.job.run_root, calls, (keys[0], "infer"))
-    outcome = GraphRunner(config, [build_job(executor_factory=factory)]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    outputs = outcome["jobs"]["job_cpp_compiled_analysis"]["result"]["outputs"]
-    failed = outputs["infer.projects"]["projects"][keys[0]]
-    sibling = outputs["infer.projects"]["projects"][keys[1]]
-    assert failed["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert any("exited with status 9" in gap for gap in failed["gaps"])
-    assert sibling["terminal_status"] == "SUCCEEDED"
-    assert (keys[0], "symbols") in calls and (keys[1], "symbols") in calls
+    source = (ROOT / "src" / "appsec_review" / "jobs" / "job_cpp_compiled_analysis" / "job.py").read_text()
+    assert "load_accepted_language_build" in source
+    assert "load_accepted_plan(unit.job.run_root)" not in source
 
 
 def test_project_failure_is_scoped_and_retry_reuses_other_checkpoints(tmp_path: Path) -> None:
-    config, target, keys = _fixture(tmp_path)
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
-        target_root=target, source_fingerprint=fingerprint)
-    calls: list[tuple[str, str]] = []
-    factory = lambda unit: FakeNativeExecutor(unit.job.run_root, calls, (keys[1], "compile"))
-    outcome = GraphRunner(config, [build_job(executor_factory=factory)]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    outputs = outcome["jobs"]["job_cpp_compiled_analysis"]["result"]["outputs"]
-    assert outputs["compile.projects"]["projects"][keys[1]]["terminal_status"] == "FAILED_AS_GAP"
-    assert outputs["compile.projects"]["projects"][keys[0]]["terminal_status"] == "SUCCEEDED"
-    assert (keys[1], "ast") not in calls and (keys[0], "ast") in calls
-
-    first_call_count = len(calls)
-    retry_factory = lambda unit: FakeNativeExecutor(unit.job.run_root, calls)
-    resumed = GraphRunner(config, [build_job(executor_factory=retry_factory)]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"],
-        force_from="job_cpp_compiled_analysis")
-    retry_calls = calls[first_call_count:]
-    assert (keys[1], "compile") in retry_calls and (keys[1], "ast") in retry_calls
-    assert (keys[0], "compile") not in retry_calls
-    retry = resumed["jobs"]["job_cpp_compiled_analysis"]["result"]["outputs"]
-    assert retry["compile.projects"]["projects"][keys[0]]["checkpoint_reused"] is True
+    config, _, _ = _fixture(tmp_path)
+    job = build_job(executor_factory=lambda unit: None)
+    assert {unit.unit_id for unit in job.units}.isdisjoint({"configure.projects", "compile.projects"})
+    assert config.job("job_cpp_compiled_analysis").steps.keys().isdisjoint({"configure", "compile"})

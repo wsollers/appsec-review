@@ -24,15 +24,14 @@ from .assessment import (
     normalize_action, shard_fingerprint, validate_inference,
 )
 
-CASE_IDS = tuple(f"case{number:03d}" for number in (1, 2, 3, 26, 27, 28, 29, 30, 36, 37, 38, 45, 63))
-CASE_NAMES = {value: value.replace("case", "case-") for value in CASE_IDS}
+PROJECT_TASKS = ("native_units",)
 TOPOLOGY = {
     "load": ("accepted_cpp_build",),
-    "provenance": CASE_IDS,
-    "inspection": CASE_IDS,
-    "deterministic": CASE_IDS,
-    "inference": CASE_IDS,
-    "index": CASE_IDS,
+    "provenance": PROJECT_TASKS,
+    "inspection": PROJECT_TASKS,
+    "deterministic": PROJECT_TASKS,
+    "inference": PROJECT_TASKS,
+    "index": PROJECT_TASKS,
     "publication": ("publish_handoff",),
 }
 
@@ -70,7 +69,7 @@ def _accepted_cpp(run_root: Path) -> Mapping[str, Any]:
     if not isinstance(result_identity, Mapping):
         raise ValueError("accepted C++ handoff does not bind its result")
     result = _read_json_artifact(run_root, result_identity)
-    if result.get("schema") != "appsec-review/unit-execution/2":
+    if result.get("schema") not in {"appsec-review/unit-execution/1", "appsec-review/unit-execution/2"}:
         raise ValueError("accepted C++ result schema is unsupported")
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     manifest_identity = published.get("index_manifest") if isinstance(published, Mapping) else None
@@ -89,10 +88,21 @@ def _accepted_cpp(run_root: Path) -> Mapping[str, Any]:
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    root = (unit.job.run_root / "data" / "cpp" / "cases" / CASE_NAMES[case_id]).resolve()
+    root = (unit.job.run_root / "data" / "cpp" / "projects" / case_id).resolve()
     if unit.job.run_root.resolve() not in root.parents:
         raise ValueError("case root escapes the run")
     return root
+
+
+def _display(case_id: str) -> str:
+    return case_id
+
+
+def _stage_case(unit: UnitContext, stage: str, case_id: str) -> Mapping[str, Any]:
+    value = unit.output(f"{stage}.native_units").get("projects", {}).get(case_id)
+    if not isinstance(value, Mapping):
+        raise ValueError(f"post-build {stage} output is unavailable for {case_id}")
+    return value
 
 
 def _raw_rows(root: Path) -> list[Mapping[str, Any]]:
@@ -118,6 +128,8 @@ def _link_rows(root: Path) -> list[dict[str, Any]]:
 
 
 def _argv(row: Mapping[str, Any]) -> list[str]:
+    if isinstance(row.get("argv"), list):
+        return [str(item) for item in row["argv"]]
     if isinstance(row.get("arguments"), list):
         return [str(item) for item in row["arguments"]]
     return shlex.split(str(row.get("command", "")), posix=True)
@@ -158,11 +170,10 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
         if accepted["handoff"].get("source_fingerprint") != unit.job.source_fingerprint:
             raise ValueError("post-build target snapshot differs from accepted build")
         cases = {}
-        for case_id in CASE_IDS:
-            catalog = accepted["result"].get("outputs", {}).get(f"catalog.{case_id}", {})
-            build_execution = accepted["result"].get("outputs", {}).get(f"compile.{case_id}", {})
+        catalogs = accepted["result"].get("outputs", {}).get("catalog.projects", {}).get("projects", {})
+        for case_id, catalog in catalogs.items():
             if catalog.get("terminal_status") in {"SUCCEEDED", "NOT_APPLICABLE"}:
-                cases[case_id] = {**dict(catalog), "build_execution": dict(build_execution)}
+                cases[case_id] = dict(catalog)
             else:
                 cases[case_id] = {"terminal_status": catalog.get("terminal_status", "UNAVAILABLE"),
                                   "gaps": list(catalog.get("gaps", ())) or ["accepted build catalog is unavailable"]}
@@ -171,37 +182,67 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
         return {"schema": SCHEMA, "cases": cases, "upstream_handoff_sha256": accepted["handoff_sha256"],
                 "upstream_manifest": accepted["manifest"], "terminal_status": "SUCCEEDED"}
 
+    def aggregate(factory):
+        def handler(unit: UnitContext) -> Mapping[str, Any]:
+            projects = {}
+            for case_id in sorted(unit.output("load.accepted_cpp_build")["cases"]):
+                project_root = unit.unit_root / ("p-" + hashlib.sha256(case_id.encode()).hexdigest()[:12])
+                project_root.mkdir(parents=True, exist_ok=True)
+                child = UnitContext(unit.job, unit.unit_id, unit.step_id, case_id,
+                                    project_root, unit.outputs)
+                projects[case_id] = factory(case_id)(child)
+            gaps = [gap for value in projects.values() for gap in value.get("gaps", ())]
+            return {"projects": projects, "project_count": len(projects), "gaps": gaps,
+                    "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
+                    "SUCCEEDED" if projects else "NOT_APPLICABLE"}
+        return handler
+
     def provenance(case_id: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
             catalog = _case_catalog(unit, case_id)
             if catalog.get("terminal_status") == "NOT_APPLICABLE":
-                document = {"schema": PROVENANCE_SCHEMA, "case_id": CASE_NAMES[case_id],
+                document = {"schema": PROVENANCE_SCHEMA, "case_id": _display(case_id),
                             "actions": [], "artifacts": [], "relationships_exact": False, "gaps": []}
                 return {**document, "artifact": _artifact(unit.job.run_root,
                         unit.unit_root / "build-command-provenance.json", document),
                         "terminal_status": "NOT_APPLICABLE"}
             if catalog.get("terminal_status") != "SUCCEEDED":
                 gaps = list(catalog.get("gaps", ())) or ["accepted build catalog is unavailable"]
-                return {"case_id": CASE_NAMES[case_id], "actions": [], "artifacts": [], "gaps": gaps,
+                return {"case_id": _display(case_id), "actions": [], "artifacts": [], "gaps": gaps,
                         "terminal_status": "COMPLETED_WITH_GAPS"}
             root = _case_root(unit, case_id)
-            rows, gaps = [], []
-            try:
-                rows.extend(_raw_rows(root))
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
-                gaps.append(f"compile action provenance unavailable: {type(exc).__name__}")
-            links = _link_rows(root)
-            rows.extend(links)
-            if not links:
-                gaps.append("exact linker/archiver provenance was not emitted by this build system")
+            rows, gaps, generic_protected = [], [], None
+            build_receipt = catalog.get("build_receipt", {})
+            if isinstance(build_receipt, Mapping) and isinstance(
+                    build_receipt.get("protected_compile_commands"), Mapping):
+                try:
+                    generic_protected = dict(build_receipt["protected_compile_commands"])
+                    protected_document = _read_json_artifact(unit.job.run_root, generic_protected)
+                    if (protected_document.get("schema") != "appsec-review/protected-compile-commands/1" or
+                            not isinstance(protected_document.get("rows"), list)):
+                        raise ValueError("generic build command provenance schema is unsupported")
+                    rows.extend(protected_document["rows"])
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    gaps.append(f"generic build action provenance unavailable: {type(exc).__name__}")
+                    generic_protected = None
+            if generic_protected is None:
+                try:
+                    rows.extend(_raw_rows(root))
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    gaps.append(f"compile action provenance unavailable: {type(exc).__name__}")
+                links = _link_rows(root)
+                rows.extend(links)
+                if not links:
+                    gaps.append("exact linker/archiver provenance was not emitted by this build system")
             if rows:
                 gaps.append("per-action environment was not emitted; only sanitized empty facts are retained")
             protected = root / "build-security" / "protected-commands"
-            protected.mkdir(parents=True, exist_ok=True)
+            if generic_protected is None:
+                protected.mkdir(parents=True, exist_ok=True)
             actions = []
             mapping = catalog.get("mapping", {})
             profile = str(catalog.get("profile") or mapping.get("build_system") or "unknown")
-            build_execution = catalog.get("build_execution", {})
+            build_execution = build_receipt if isinstance(build_receipt, Mapping) else {}
             execution_identity = build_execution.get("execution") if isinstance(build_execution, Mapping) else None
             try:
                 execution = (_read_json_artifact(unit.job.run_root, execution_identity)
@@ -209,41 +250,46 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
             except (OSError, ValueError, json.JSONDecodeError):
                 execution = {}
                 gaps.append("accepted build execution receipt is unavailable")
-            roots = {str(root): f"<run>/data/cpp/cases/{CASE_NAMES[case_id]}",
-                     str(root / "source"): str(mapping.get("root", f"projects/cpp/{CASE_NAMES[case_id]}"))}
+            roots = {str(root): f"<run>/data/cpp/projects/{case_id}",
+                     str(root / "source"): str(mapping.get("root", case_id))}
             for index, row in enumerate(rows):
                 argv = _argv(row)
                 if not argv:
                     gaps.append(f"build action {index} had no parseable argv")
                     continue
                 action_id = hashlib.sha256(canonical_json({"case": case_id, "index": index, "argv": argv})).hexdigest()
-                protected_path = protected / f"{action_id}.json"
-                protected_value = {"schema": "appsec-review/protected-build-command/1", "argv": argv,
-                                   "argv_source": "arguments" if isinstance(row.get("arguments"), list) else "parsed-command",
-                                   "original_command": (None if isinstance(row.get("arguments"), list)
-                                                        else str(row.get("command", ""))),
-                                   "directory": row.get("directory"), "origin": row.get("origin"),
-                                   "environment": {}, "access": "run-owned-protected"}
-                protected_artifact = _artifact(unit.job.run_root, protected_path, protected_value)
-                protected_path.chmod(0o600)
+                exact_argv = isinstance(row.get("argv"), list) or isinstance(row.get("arguments"), list)
+                if generic_protected is not None:
+                    protected_artifact = generic_protected
+                    protected_value = {"argv_source": "generic-build-protected-argv"}
+                else:
+                    protected_path = protected / f"{action_id[:24]}.json"
+                    protected_value = {"schema": "appsec-review/protected-build-command/1", "argv": argv,
+                                       "argv_source": "arguments" if exact_argv else "parsed-command",
+                                       "original_command": (None if exact_argv else str(row.get("command", ""))),
+                                       "directory": row.get("directory"), "origin": row.get("origin"),
+                                       "environment": {}, "access": "run-owned-protected"}
+                    protected_artifact = _artifact(unit.job.run_root, protected_path, protected_value)
+                    protected_path.chmod(0o600)
                 has_action_timing = all(row.get(key) is not None for key in ("start", "end", "exit_status"))
                 timed_row = {**dict(row), "start": row.get("start", execution.get("started_at")),
                              "end": row.get("end", execution.get("completed_at")),
-                             "exit_status": row.get("exit_status", execution.get("exit_code"))}
+                             "exit_status": row.get("exit_status", execution.get("exit_code")),
+                             "arguments": argv}
                 normalized = normalize_action(timed_row, action_id=action_id, run_id=unit.job.run_id,
                     target_snapshot=unit.job.source_fingerprint,
-                    project=str(mapping.get("root", f"projects/cpp/{CASE_NAMES[case_id]}")),
-                    build_root=f"data/cpp/cases/{CASE_NAMES[case_id]}/build", configuration="RelWithDebInfo",
-                    producer={"job": "job_cpp_compiled_analysis", "task": f"compile.{case_id}"},
+                    project=str(mapping.get("root", case_id)),
+                    build_root=f"data/cpp/projects/{case_id}/build", configuration="accepted-recipe",
+                    producer={"job": "job_language_build", "task": "execute.native"},
                     toolchain={"executable": PurePosixPath(argv[0].replace("\\", "/")).name,
-                               "tool_id": str(execution.get("tool_id", "tool-native-cpp")),
-                               "tool_version": str(execution.get("image_tag", "unknown")),
+                               "tool_id": "generic-native-build",
+                               "tool_version": str(build_receipt.get("image", {}).get("image_tag", "unknown")),
                                "image_id": str(catalog.get("image_id", execution.get("image_id", "unknown"))),
                                "image_digest": str(execution.get("image_digest", catalog.get("image_id", "unknown")))},
                     protected_artifact=protected_artifact, roots=roots)
                 normalized["timing_granularity"] = "action" if has_action_timing else "build-invocation"
                 normalized["argv_source"] = protected_value["argv_source"]
-                if protected_value["argv_source"] != "arguments":
+                if not exact_argv:
                     gaps.append(f"exact argv unavailable for command-only action {action_id}; protected command text was retained")
                 if not has_action_timing:
                     gaps.append(f"per-action timing/exit status unavailable for {action_id}")
@@ -305,12 +351,12 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                     gaps.append(f"no exact producing action resolved for {PurePosixPath(str(artifact['path'])).name}")
             for action in actions:
                 action["command_fingerprint"] = command_fingerprint(action)
-            document = {"schema": PROVENANCE_SCHEMA, "case_id": CASE_NAMES[case_id], "actions": actions,
+            document = {"schema": PROVENANCE_SCHEMA, "case_id": _display(case_id), "actions": actions,
                         "artifacts": artifacts,
                         "relationships_exact": len(related_artifacts) == len(artifacts),
                         "relationship_count": len(related_artifacts), "gaps": list(dict.fromkeys(gaps))}
             artifact = _artifact(unit.job.run_root, unit.unit_root / "build-command-provenance.json", document)
-            unit.job.events.write("BUILD_COMMAND_PROVENANCE_CAPTURED", case_id=CASE_NAMES[case_id],
+            unit.job.events.write("BUILD_COMMAND_PROVENANCE_CAPTURED", case_id=_display(case_id),
                                   action_count=len(actions), artifact_count=len(artifacts), gap_count=len(document["gaps"]))
             return {**document, "artifact": artifact,
                     "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
@@ -318,10 +364,10 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
 
     def inspection(case_id: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
-            provenance_value = unit.output(f"provenance.{case_id}")
+            provenance_value = _stage_case(unit, "provenance", case_id)
             if provenance_value.get("terminal_status") == "NOT_APPLICABLE":
                 document = {"schema": "appsec-review/binary-inspection-set/1",
-                            "case_id": CASE_NAMES[case_id], "records": [], "gaps": []}
+                            "case_id": _display(case_id), "records": [], "gaps": []}
                 return {**document, "artifact": _artifact(unit.job.run_root,
                         unit.unit_root / "binary-inspections.json", document),
                         "terminal_status": "NOT_APPLICABLE"}
@@ -356,10 +402,10 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                     record.setdefault("gaps", []).append("pinned nm/readelf observation was unavailable for this ELF artifact")
                 records.append(record)
                 gaps.extend(f"{PurePosixPath(artifact['run_path']).name}: {gap}" for gap in record.get("gaps", ()))
-            document = {"schema": "appsec-review/binary-inspection-set/1", "case_id": CASE_NAMES[case_id],
+            document = {"schema": "appsec-review/binary-inspection-set/1", "case_id": _display(case_id),
                         "records": records, "gaps": list(dict.fromkeys(gaps))}
             artifact = _artifact(unit.job.run_root, unit.unit_root / "binary-inspections.json", document)
-            unit.job.events.write("BUILD_ARTIFACTS_INSPECTED", case_id=CASE_NAMES[case_id],
+            unit.job.events.write("BUILD_ARTIFACTS_INSPECTED", case_id=_display(case_id),
                                   inspected_count=len(records), unsupported_count=sum(
                                       item.get("format") in {"unsupported", "malformed"} for item in records),
                                   truncated_count=sum(any(word in str(gap).lower() for word in ("bound", "truncat"))
@@ -371,11 +417,11 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
 
     def deterministic(case_id: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
-            provenance_value = unit.output(f"provenance.{case_id}")
-            inspection_value = unit.output(f"inspection.{case_id}")
+            provenance_value = _stage_case(unit, "provenance", case_id)
+            inspection_value = _stage_case(unit, "inspection", case_id)
             if provenance_value.get("terminal_status") == "NOT_APPLICABLE":
                 document = {"schema": "appsec-review/build-security-deterministic-results/1",
-                            "case_id": CASE_NAMES[case_id], "rule_version": RULE_VERSION, "checks": [],
+                            "case_id": _display(case_id), "rule_version": RULE_VERSION, "checks": [],
                             "counts": {"pass": 0, "fail": 0, "unknown": 0, "not_applicable": 0}, "gaps": []}
                 return {**document, "artifact": _artifact(unit.job.run_root,
                         unit.unit_root / "deterministic-results.json", document),
@@ -386,12 +432,12 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
             gaps = list(dict.fromkeys([*provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
                                       *( [f"{unknown} applicable deterministic checks remain unknown"] if unknown else [])]))
             document = {"schema": "appsec-review/build-security-deterministic-results/1",
-                        "case_id": CASE_NAMES[case_id], "rule_version": RULE_VERSION,
+                        "case_id": _display(case_id), "rule_version": RULE_VERSION,
                         "checks": checks, "counts": {status.lower(): sum(item["status"] == status for item in checks)
                                                      for status in ("PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE")},
                         "gaps": gaps}
             artifact = _artifact(unit.job.run_root, unit.unit_root / "deterministic-results.json", document)
-            unit.job.events.write("BUILD_SECURITY_CHECKS_COMPLETED", case_id=CASE_NAMES[case_id],
+            unit.job.events.write("BUILD_SECURITY_CHECKS_COMPLETED", case_id=_display(case_id),
                                   check_count=len(checks), failed_count=failed, unknown_count=unknown,
                                   gap_count=len(gaps))
             return {**document, "artifact": artifact,
@@ -400,9 +446,9 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
 
     def inference(case_id: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
-            provenance_value = unit.output(f"provenance.{case_id}")
-            inspection_value = unit.output(f"inspection.{case_id}")
-            deterministic_value = unit.output(f"deterministic.{case_id}")
+            provenance_value = _stage_case(unit, "provenance", case_id)
+            inspection_value = _stage_case(unit, "inspection", case_id)
+            deterministic_value = _stage_case(unit, "deterministic", case_id)
             settings = unit.job.config.settings["model"]
             guidance_path = unit.job.repository_root / "skills" / "post-build-security-assessment" / "SKILL.md"
             guidance = guidance_path.read_text(encoding="utf-8") if guidance_path.is_file() else GUIDANCE_IDENTITY
@@ -414,7 +460,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
             atomic_json(bundle / "model-identity.json", model_identity)
             if provenance_value.get("terminal_status") == "NOT_APPLICABLE":
                 document = {"schema": "appsec-review/build-security-inference/1",
-                            "case_id": CASE_NAMES[case_id], "model_identity": model_identity,
+                            "case_id": _display(case_id), "model_identity": model_identity,
                             "request_sha256": hashlib.sha256(canonical_json({"case": case_id,
                                 "status": "NOT_APPLICABLE"})).hexdigest(), "model_calls": 0,
                             "observations": [], "rejections": [], "confirmed_count": 0,
@@ -430,7 +476,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                         "dependencies", "archive_members", "build_id", "debug", "symbols", "hardening", "gaps")}
                        for value in inspection_value.get("records", ())]
             request = {"schema": "appsec-review/build-security-inference-request/1", "guidance": GUIDANCE_IDENTITY,
-                       "case_id": CASE_NAMES[case_id], "topology": {"actions": len(actions), "artifacts": len(records)},
+                       "case_id": _display(case_id), "topology": {"actions": len(actions), "artifacts": len(records)},
                        "actions": actions, "artifacts": records, "deterministic_results": deterministic_value["checks"],
                        "rules": ["missing data is a gap, never a clean result", "cite only supplied evidence ids",
                                  "model output remains an observation until deterministic validation"]}
@@ -466,7 +512,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                         model=str(settings["model"]), reasoning_level=str(settings["reasoning"]),
                         guidance_bundle_sha256=guidance_sha, request_sha256=request_sha, retry_count=retry,
                         job_id="job_post_build_security_assessment", attempt_id=unit.job.attempt_id,
-                        case_id=CASE_NAMES[case_id])
+                        case_id=_display(case_id))
                     started = time.monotonic()
                     try:
                         proposal = inference_client.complete(request, timeout_seconds=int(settings["timeout_seconds"]))
@@ -481,7 +527,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                             terminal_status="ACCEPTED", duration_ms=int((time.monotonic() - started) * 1000),
                             retry_count=retry, input_tokens=proposal.input_tokens, output_tokens=proposal.output_tokens,
                             cache_tokens=proposal.cache_tokens, job_id="job_post_build_security_assessment",
-                            attempt_id=unit.job.attempt_id, case_id=CASE_NAMES[case_id])
+                            attempt_id=unit.job.attempt_id, case_id=_display(case_id))
                         break
                     except Exception as exc:
                         last_error = exc
@@ -491,18 +537,18 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                             guidance_bundle_sha256=guidance_sha, request_sha256=request_sha,
                             terminal_status="FAILED", duration_ms=int((time.monotonic() - started) * 1000),
                             retry_count=retry, error_class=type(exc).__name__, job_id="job_post_build_security_assessment",
-                            attempt_id=unit.job.attempt_id, case_id=CASE_NAMES[case_id])
+                            attempt_id=unit.job.attempt_id, case_id=_display(case_id))
                 else:
                     gaps.append(f"build-security inference failed after bounded retries ({type(last_error).__name__})")
                     result = {"observations": [], "rejections": [], "confirmed_count": 0,
                               "refuted_count": 0, "unvalidated_count": 0}
             if result.get("rejections"):
                 gaps.append(f"{len(result['rejections'])} inference observations were rejected during evidence validation")
-            document = {"schema": "appsec-review/build-security-inference/1", "case_id": CASE_NAMES[case_id],
+            document = {"schema": "appsec-review/build-security-inference/1", "case_id": _display(case_id),
                         "model_identity": model_identity, "request_sha256": hashlib.sha256(encoded).hexdigest(),
                         "model_calls": calls, **result, "gaps": gaps}
             artifact = _artifact(unit.job.run_root, unit.unit_root / "inference-results.json", document)
-            unit.job.events.write("BUILD_SECURITY_INFERENCE_COMPLETED", case_id=CASE_NAMES[case_id], model_calls=calls,
+            unit.job.events.write("BUILD_SECURITY_INFERENCE_COMPLETED", case_id=_display(case_id), model_calls=calls,
                                   observation_count=len(result["observations"]), confirmed_count=result["confirmed_count"],
                                   refuted_count=result["refuted_count"], gap_count=len(gaps))
             return {**document, "artifact": artifact,
@@ -511,10 +557,10 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
 
     def index_case(case_id: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
-            provenance_value = unit.output(f"provenance.{case_id}")
-            inspection_value = unit.output(f"inspection.{case_id}")
-            deterministic_value = unit.output(f"deterministic.{case_id}")
-            inference_value = unit.output(f"inference.{case_id}")
+            provenance_value = _stage_case(unit, "provenance", case_id)
+            inspection_value = _stage_case(unit, "inspection", case_id)
+            deterministic_value = _stage_case(unit, "deterministic", case_id)
+            inference_value = _stage_case(unit, "inference", case_id)
             upstream = unit.output("load.accepted_cpp_build")["upstream_manifest"]
             artifacts = [provenance_value.get("artifact", {}), inspection_value.get("artifact", {}),
                          deterministic_value.get("artifact", {}), inference_value.get("artifact", {})]
@@ -529,7 +575,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                                "executables": sorted({str(item.get("toolchain", {}).get("executable"))
                                                       for item in provenance_value.get("actions", ())})},
                 model_identity=inference_value["model_identity"], upstream_manifest_sha256=upstream["sha256"])
-            shard_id = f"build-security-{CASE_NAMES[case_id]}"
+            shard_id = f"build-security-{case_id}"
             path = unit.job.run_root / "data" / "indices" / "build_security" / f"{fingerprint}-{shard_id}.sqlite"
             reused = path.exists()
             if not reused:
@@ -571,8 +617,8 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                     binary_names[PurePosixPath(str(record["run_path"])).name] = identity.value
                     builder.add_entity(EntityRecord(identity, record["artifact_id"],
                         PurePosixPath(str(record["run_path"])).name, f"{record['format']} {record['kind']}",
-                        {**dict(record), "project": f"projects/cpp/{CASE_NAMES[case_id]}",
-                         "build_root": f"data/cpp/cases/{CASE_NAMES[case_id]}/build",
+                        {**dict(record), "project": case_id,
+                         "build_root": f"data/cpp/projects/{case_id}/build",
                          "configuration": "RelWithDebInfo", "linked_artifact": record["artifact_id"],
                          "producer": "job_cpp_compiled_analysis", "shard": shard_id}))
                     for member in record.get("archive_members", ()):
@@ -581,7 +627,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                              "size": member.get("size"), "index": member.get("index")})
                         builder.add_entity(EntityRecord(member_id, str(member.get("name")), str(member.get("name")),
                             "archive member", {"archive": record["artifact_id"], "member": dict(member),
-                            "project": f"projects/cpp/{CASE_NAMES[case_id]}", "shard": shard_id}))
+                            "project": case_id, "shard": shard_id}))
                         builder.add_relation(RelationRecord(RelationKind.CONTAINS, identity.value,
                                                            member_id.value, True, 1.0))
                     for dependency in record.get("dependencies", ()):
@@ -591,7 +637,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                             dependency_ids.add(dependency_id.value)
                             builder.add_entity(EntityRecord(dependency_id, str(dependency), str(dependency),
                                 "loader dependency", {"dependency": dependency, "producer": "binary-loader-metadata",
-                                "project": f"projects/cpp/{CASE_NAMES[case_id]}", "shard": shard_id}))
+                                "project": case_id, "shard": shard_id}))
                         builder.add_relation(RelationRecord(RelationKind.DEPENDS_ON, identity.value,
                                                            dependency_id.value, True, 1.0))
                 for action in provenance_value.get("actions", ()):
@@ -622,8 +668,8 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                     **{str(record["sha256"]): binary_ids[record["artifact_id"]]
                        for record in inspection_value.get("records", ()) if record["artifact_id"] in binary_ids}}
                 first_action = next(iter(provenance_value.get("actions", ())), {})
-                common_scope = {"project": first_action.get("project", f"projects/cpp/{CASE_NAMES[case_id]}"),
-                                "build_root": first_action.get("build_root", f"data/cpp/cases/{CASE_NAMES[case_id]}/build"),
+                common_scope = {"project": first_action.get("project", case_id),
+                                "build_root": first_action.get("build_root", f"data/cpp/projects/{case_id}/build"),
                                 "configuration": first_action.get("configuration", "RelWithDebInfo"),
                                 "shard": shard_id}
                 for check in deterministic_value.get("checks", ()):
@@ -642,7 +688,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                     identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
                         {"case": case_id, "observation": observation["observation_id"]})
                     builder.add_entity(EntityRecord(identity, observation["observation_id"],
-                        observation["check_id"], observation["claim"], {**dict(observation), "project": f"projects/cpp/{CASE_NAMES[case_id]}",
+                        observation["check_id"], observation["claim"], {**dict(observation), "project": case_id,
                         "configuration": "RelWithDebInfo", "producer": "bounded_inference", "shard": shard_id}))
                     for evidence_id in observation.get("evidence_ids", ()):
                         if str(evidence_id) in evidence_entities:
@@ -662,7 +708,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                  "rule_version": RULE_VERSION, "parser_version": PARSER_VERSION,
                  "normalizer_version": NORMALIZER_VERSION, "guidance_identity": GUIDANCE_IDENTITY},
                 tuple(gaps), shard_id)
-            unit.job.events.write("BUILD_SECURITY_SHARD_PUBLISHED", case_id=CASE_NAMES[case_id],
+            unit.job.events.write("BUILD_SECURITY_SHARD_PUBLISHED", case_id=_display(case_id),
                                   shard=shard_id, fingerprint=fingerprint, reused=reused,
                                   resumption_count=int(reused), gap_count=len(gaps))
             return {"index_identity": asdict(identity), "index_reused": reused,
@@ -677,41 +723,37 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
         manifest, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
         existing = [IndexIdentity(**{**value, "gaps": tuple(value.get("gaps", ()))})
                     for value in manifest["indexes"] if value["name"] != "build_security"]
-        current = [IndexIdentity(**{**unit.output(f"index.{case_id}")["index_identity"],
-                                    "gaps": tuple(unit.output(f"index.{case_id}")["index_identity"].get("gaps", ()))})
-                   for case_id in CASE_IDS]
+        indexed = unit.output("index.native_units")["projects"]
+        current = [IndexIdentity(**{**value["index_identity"],
+                                    "gaps": tuple(value["index_identity"].get("gaps", ()))})
+                   for value in indexed.values()]
         destination = unit.job.run_root / "data" / "indices" / "manifests" / f"build-security-{unit.job.attempt_id}.json"
         write_manifest(destination, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
             target_root=unit.job.target_root or Path(), indexes=(*existing, *current),
             upstream_manifests=({"path": manifest_path.relative_to(unit.job.run_root).as_posix(), "sha256": manifest_sha},))
         load_verified_manifest(unit.job.run_root, destination, file_sha256(destination))
-        gaps = list(dict.fromkeys(item for case_id in CASE_IDS for item in unit.output(f"index.{case_id}").get("gaps", ())))
-        summary = {"schema": SCHEMA, "case_count": len(CASE_IDS), "shard_count": len(current),
+        gaps = list(dict.fromkeys(item for value in indexed.values() for item in value.get("gaps", ())))
+        summary = {"schema": SCHEMA, "case_count": len(indexed), "shard_count": len(current),
                    "gaps": gaps, "rule_version": RULE_VERSION, "parser_version": PARSER_VERSION,
                    "normalizer_version": NORMALIZER_VERSION}
         summary_artifact = _artifact(unit.job.run_root, unit.unit_root / "post-build-security-summary.json", summary)
-        unit.job.events.write("POST_BUILD_SECURITY_ASSESSMENT_COMPLETED", case_count=len(CASE_IDS),
+        unit.job.events.write("POST_BUILD_SECURITY_ASSESSMENT_COMPLETED", case_count=len(indexed),
                               shard_count=len(current), gap_count=len(gaps))
         return {"schema": SCHEMA, "artifact": summary_artifact,
                 "index_manifest": _artifact(unit.job.run_root, destination), "item_count": len(current),
                 "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     units: list[Unit] = [Unit("load.accepted_cpp_build", load)]
-    for case_id in CASE_IDS:
-        units.append(Unit(f"provenance.{case_id}", provenance(case_id), ("load.accepted_cpp_build",)))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"inspection.{case_id}", inspection(case_id), (f"provenance.{case_id}",)))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"deterministic.{case_id}", deterministic(case_id),
-                          (f"provenance.{case_id}", f"inspection.{case_id}")))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"inference.{case_id}", inference(case_id),
-                          (f"provenance.{case_id}", f"inspection.{case_id}", f"deterministic.{case_id}")))
-    for case_id in CASE_IDS:
-        units.append(Unit(f"index.{case_id}", index_case(case_id),
-                          ("load.accepted_cpp_build", f"provenance.{case_id}", f"inspection.{case_id}",
-                           f"deterministic.{case_id}", f"inference.{case_id}")))
-    units.append(Unit("publication.publish_handoff", publish, tuple(f"index.{case_id}" for case_id in CASE_IDS)))
+    units.append(Unit("provenance.native_units", aggregate(provenance), ("load.accepted_cpp_build",)))
+    units.append(Unit("inspection.native_units", aggregate(inspection), ("provenance.native_units",)))
+    units.append(Unit("deterministic.native_units", aggregate(deterministic),
+                      ("provenance.native_units", "inspection.native_units")))
+    units.append(Unit("inference.native_units", aggregate(inference),
+                      ("provenance.native_units", "inspection.native_units", "deterministic.native_units")))
+    units.append(Unit("index.native_units", aggregate(index_case),
+                      ("load.accepted_cpp_build", "provenance.native_units", "inspection.native_units",
+                       "deterministic.native_units", "inference.native_units")))
+    units.append(Unit("publication.publish_handoff", publish, ("index.native_units",)))
     values = tuple(units)
     implementation = hashlib.sha256(Path(__file__).read_bytes() +
                                     Path(__file__).with_name("assessment.py").read_bytes()).hexdigest()

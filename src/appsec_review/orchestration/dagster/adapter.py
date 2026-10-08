@@ -107,7 +107,7 @@ def _pool_for(unit_id: str) -> str:
         return "owasp_validator"
     if step in {"verification", "join"}:
         return "owasp_verification"
-    if step in {"prepare", "configure", "compile", "catalog", "image", "probe"}:
+    if step in {"prepare", "configure", "compile", "catalog", "image", "probe", "execute"}:
         return "cpp_build"
     if step in {"compiled", "ast", "ir", "codeql", "joern", "binary", "provenance",
                 "inspection", "deterministic", "inference"}:
@@ -164,7 +164,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 )).resolve()
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-                    "job_project_build", "job_evidence_collection", "job_cpp_compiled_analysis",
+                    "job_project_build", "job_language_build", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis",
                 }
@@ -373,10 +373,15 @@ def build_definitions(
         if "job_project_build" in registered:
             wave_jobs.append(registry.build("job_project_build"))
             wave_dependencies["job_project_build"] = ("job_target_analysis_plan",)
+        if "job_language_build" in registered:
+            wave_jobs.append(registry.build("job_language_build"))
+            wave_dependencies["job_language_build"] = (("job_project_build",)
+                if "job_project_build" in registered else ("job_target_analysis_plan",))
         if "job_cpp_compiled_analysis" in registered:
             wave_jobs.append(registry.build("job_cpp_compiled_analysis"))
-            wave_dependencies["job_cpp_compiled_analysis"] = (("job_project_build",)
-                if "job_project_build" in registered else ("job_target_analysis_plan",))
+            wave_dependencies["job_cpp_compiled_analysis"] = (("job_language_build",)
+                if "job_language_build" in registered else
+                ("job_project_build",) if "job_project_build" in registered else ("job_target_analysis_plan",))
         if "job_post_build_security_assessment" in registered:
             wave_jobs.append(registry.build("job_post_build_security_assessment"))
             wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
@@ -404,11 +409,13 @@ def build_definitions(
              registry.build("job_ci_configuration_analysis")),
             config, runner_factory, node_namespace="ci_review",
         ))
-    if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build"} <= registered:
+    if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan",
+        "job_project_build", "job_language_build"} <= registered:
         jobs.append(_build_dagster_graph(
             "project_build_review",
             (registry.build("job_review_intake"), registry.build("job_target_catalog"),
-             registry.build("job_target_analysis_plan"), registry.build("job_project_build")),
+             registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
+             registry.build("job_language_build")),
             config, runner_factory, node_namespace="project_build_review",
         ))
     return Definitions(jobs=jobs, schedules=schedules)

@@ -333,6 +333,27 @@ workers = 8
 workers = 1
 [jobs.job_project_build.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_language_build]
+name = "language_build"
+workers = 8
+
+[jobs.job_language_build.settings]
+command_timeout_seconds = 600
+output_bytes = 8388608
+artifact_count_limit = 10000
+
+[jobs.job_language_build.steps.load]
+workers = 1
+[jobs.job_language_build.steps.load.tasks.accepted_dispatch]
+
+[jobs.job_language_build.steps.execute]
+workers = 4
+[jobs.job_language_build.steps.execute.tasks.native]
+
+[jobs.job_language_build.steps.acceptance]
+workers = 1
+[jobs.job_language_build.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_cpp_compiled_analysis]
 name = "cpp_compiled_analysis"
 workers = 8
@@ -347,14 +368,6 @@ workers = 1
 [jobs.job_cpp_compiled_analysis.steps.prepare]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.prepare.tasks.projects]
-
-[jobs.job_cpp_compiled_analysis.steps.configure]
-workers = 1
-[jobs.job_cpp_compiled_analysis.steps.configure.tasks.projects]
-
-[jobs.job_cpp_compiled_analysis.steps.compile]
-workers = 1
-[jobs.job_cpp_compiled_analysis.steps.compile.tasks.projects]
 
 [jobs.job_cpp_compiled_analysis.steps.catalog]
 workers = 1
@@ -413,83 +426,23 @@ workers = 1
 
 [jobs.job_post_build_security_assessment.steps.provenance]
 workers = 6
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case001]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case002]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case003]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case026]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case027]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case028]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case029]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case030]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case036]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case037]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case038]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case045]
-[jobs.job_post_build_security_assessment.steps.provenance.tasks.case063]
+[jobs.job_post_build_security_assessment.steps.provenance.tasks.native_units]
 
 [jobs.job_post_build_security_assessment.steps.inspection]
 workers = 6
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case001]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case002]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case003]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case026]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case027]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case028]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case029]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case030]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case036]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case037]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case038]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case045]
-[jobs.job_post_build_security_assessment.steps.inspection.tasks.case063]
+[jobs.job_post_build_security_assessment.steps.inspection.tasks.native_units]
 
 [jobs.job_post_build_security_assessment.steps.deterministic]
 workers = 6
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case001]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case002]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case003]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case026]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case027]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case028]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case029]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case030]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case036]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case037]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case038]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case045]
-[jobs.job_post_build_security_assessment.steps.deterministic.tasks.case063]
+[jobs.job_post_build_security_assessment.steps.deterministic.tasks.native_units]
 
 [jobs.job_post_build_security_assessment.steps.inference]
 workers = 2
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case001]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case002]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case003]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case026]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case027]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case028]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case029]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case030]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case036]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case037]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case038]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case045]
-[jobs.job_post_build_security_assessment.steps.inference.tasks.case063]
+[jobs.job_post_build_security_assessment.steps.inference.tasks.native_units]
 
 [jobs.job_post_build_security_assessment.steps.index]
 workers = 2
-[jobs.job_post_build_security_assessment.steps.index.tasks.case001]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case002]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case003]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case026]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case027]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case028]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case029]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case030]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case036]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case037]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case038]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case045]
-[jobs.job_post_build_security_assessment.steps.index.tasks.case063]
+[jobs.job_post_build_security_assessment.steps.index.tasks.native_units]
 
 [jobs.job_post_build_security_assessment.steps.publication]
 workers = 1

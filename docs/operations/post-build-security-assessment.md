@@ -6,9 +6,10 @@ analysis, and before evidence collection assembles its accepted manifest.
 
 ## What it retains
 
-For every accepted build action, the run keeps an exact argv record under
-`data/cpp/cases/<case>/build-security/protected-commands/`. These files are run-owned and restricted
-to the creating account where the host supports file modes. Retrieval and telemetry receive only a
+For every accepted native build action, the job consumes the exact protected argv set retained by
+`job_language_build` under `data/build/native/units/<build-unit-id>/protected-commands/`. Legacy
+fixtures without that receipt use a local protected fallback. These files are run-owned and
+restricted to the creating account where the host supports file modes. Retrieval and telemetry receive only a
 bounded redacted form. The record binds run, target snapshot, project, build root, configuration,
 action and compile-unit identities, tool/image identity, working directory, sanitized environment
 facts, inputs, outputs and hashes, timing/status when observable, and the producing job/task.
@@ -33,11 +34,11 @@ unknown evidence unvalidated. Provider failures and budget overflow complete wit
 
 ## Retrieval and resume
 
-Each case publishes an immutable `build_security` shard. Query through
+Each dynamically discovered build unit publishes an immutable `build_security` shard. Query through
 `query_build_security` with one or more exact scopes: `project`, `build_root`, `build_action`,
 `configuration`, `compile_unit`, `linked_artifact`, `producer`, or `shard`. The shard fingerprint
-is local to its command and binary dependency closure, so unchanged cases reuse their immutable
-shards while changed cases and their linked outputs are rebuilt.
+is local to its command and binary dependency closure, so unchanged units reuse their immutable
+shards while changed units and their linked outputs are rebuilt.
 
 Inspect `data/logs/pipeline.jsonl` for job/step/task lifecycle events,
 `BUILD_COMMAND_PROVENANCE_CAPTURED`, `BUILD_ARTIFACTS_INSPECTED`,
@@ -46,12 +47,10 @@ resumption, truncation, and gaps. The file is process-safe and crash-recovers a 
 
 ## Acceptance
 
-Unit and synthetic fixture coverage validates redaction, formats, rules, inference validation,
-index scopes, fingerprints, telemetry contracts, and DAG topology. Live Dagster run
-`82f99ee5-cd6f-4c55-85c8-06919ee55494` (application run `2026-10-08-0037`) consumed the accepted
-13-case native C++ handoff and published an accepted post-build handoff with 13 immutable
-`build_security` shards. The overall Wave 1 run later failed in the separate OWASP batching job, so
-that run is evidence for this job's live boundary only, not for end-to-end Wave 1 success.
+Unit and synthetic fixture coverage validates dynamic enumeration, redaction, formats, rules,
+inference validation, index scopes, fingerprints, telemetry contracts, and DAG topology. Current
+live generic-build acceptance is recorded by the verification evidence named in the deployment
+guide; historical fixed-case acceptance is no longer the active topology.
 
 Exact per-command timings and linker actions remain named gaps when the build system emits only a
 compile database and no link command file. Model inference was disabled in the live run as centrally
