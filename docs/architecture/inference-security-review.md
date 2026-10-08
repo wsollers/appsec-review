@@ -33,11 +33,9 @@ The job follows these non-negotiable rules:
    verification. Proof-of-trigger execution is separately authorized and is never a prerequisite
    for truthful confirmation when the other evidence is sufficient.
 
-The repository-local files required by the `appsec-review-process` skill (`initiate.md`,
-`environment.md`, `artifacts.md`, `budget-policy.md`, and `manual-orchestration-runbook.md`) are not
-present in the rebuilt tree. That is a process-guidance gap, not permission to recover their
-archived versions. This design therefore applies the skill's surviving trust, evidence,
-failure-propagation, and independent-verification principles directly.
+Repository-agent authority lives in root `AGENTS.md`; bounded review-worker procedures live under
+`skills/`; runtime configuration lives in `appsec-review.toml`. This design uses those rebuilt
+sources directly and does not depend on or recover the archived process harness.
 
 ## Placement and consumers
 
