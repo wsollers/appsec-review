@@ -1,7 +1,6 @@
 # evidence and run outputs never enter the repo
 /evidence/
 /scratch/
-/runs/
 # Mutable NVD feed state is published locally and never committed. The feed
 # contract and operator README remain tracked under data/feeds/nvd/.
 /data/feeds/nvd/blobs/
@@ -39,7 +38,6 @@ images/audit-buildenv-java/jdtls.tar.gz
 # per-target scratch outputs (databases, bitcode, logs) — never committed
 /scratch*/
 /fixtures/targets/
-/runs/
 
 # image build inputs fetched by images/image_build.py
 /images/scancode-toolkit/src/
