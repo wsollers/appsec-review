@@ -27,6 +27,8 @@
 __pycache__/
 *.pyc
 .venv/
+# Pytest owns this disposable tree and clears it before every test session.
+/test/tmp/
 # editors / OS
 .vscode/
 .idea/
