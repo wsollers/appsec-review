@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("dagster")
+
 from appsec_review.config import load_config
 from appsec_review.jobs.job_tree_sitter_ast.dagster import build_dagster_job
 from appsec_review.runtime import JobRunner
