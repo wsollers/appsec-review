@@ -86,8 +86,9 @@ mkdir -p /tmp/p1 && PHASE1_TEST_DATA=/tmp/p1 APPSEC_DEFINITIONS_DIR=orchestrator
 ```
 
 To run a suite in exactly the jobs' environment (instance, run root, definitions), use
-`orchestrator/dagster/code-location.sh run -B <script> [args]`; `qualify_phase1.py` does this for
-its Linux test pass and its live-Dagster checks.
+`orchestrator/dagster/code-location.sh run -B <script> [args]`. Current acceptance uses focused
+runtime suites plus an actual `full_review`; the retired qualification wrapper is not a second
+acceptance path.
 
 `compose.yaml`, `Dockerfile`, `definitions.py` and `dagster.yaml` are part of every job's runtime
 fingerprint (`job_graph.py`), so a change to any of them makes previously accepted pointers
@@ -117,8 +118,8 @@ Use `stop` to preserve containers and volumes. Do not use `down --volumes` to st
 engagement. This project only starts, stops and reports on its own Compose project (`appsec-review`); other
 projects' containers on the same Docker engine are outside its scope and are never inspected. Port 3000 must be free for this stack's webserver.
 
-Follow the [Phase 1 prompt](../../appsec-review-process/phase-1-implementation-prompt.md),
-[run-data contract](../../docs/dagster/run-data-and-job-execution.md), and
+Follow the [run-data contract](../../docs/dagster/run-data-and-job-execution.md),
+[current architecture](../../docs/architecture/design-v3.md), and
 [generated job graph](../../docs/design-parity/job-graph.mmd) for production job wiring.
 Dagster [asset-check documentation](https://docs.dagster.io/guides/test/asset-checks) explains that
 checks must be configured to block downstream execution; check visibility alone is not a gate.

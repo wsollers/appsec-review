@@ -20,8 +20,9 @@ Use paired implementation/review tasks:
 
 Every task lists its **exclusive paths**. Two tasks never share a path. Every task's acceptance
 includes the `TODO.md` minimum: focused tests, `python -B -m py_compile` on changed modules,
-`python -B appsec-review-process/validate_design_parity.py`,
-`python -B appsec-review-process/qualify_phase1.py --check-contracts`, `git diff --check`, and the
+`python -B appsec-review-process/validate_design_parity.py --check-generated-views`,
+`python -B appsec-review-process/catalog_personas.py check`,
+`python -B docs/processes/job_catalog.py --check`, `git diff --check`, and the
 focused suite in the Linux code-server. A batch result states scope included/excluded, files
 changed, commands and counts, evidence, limitations, and the next unblocked task. Missing
 prerequisites mean `BLOCKED`, not improvised scope.
@@ -112,7 +113,7 @@ Deliver:
   `validation_rules` listing the six prohibitions in prose;
 - cell-result contract with `result_schema.artifact = cell-result.json`.
 
-Acceptance: `qualify_phase1.py --check-contracts` passes; the contract validates against
+Acceptance: design-parity, persona-catalog and job-catalog checks pass; the contract validates against
 `schemas/output-contract.schema.json` **without** changing that schema; a test asserts the graph
 node's `contract` string resolves once the file exists.
 

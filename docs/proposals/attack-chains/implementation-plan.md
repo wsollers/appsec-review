@@ -132,8 +132,8 @@ Tests: `tests/test_attack_chain_pool.py` with a stub invoker: request shape and 
 one cell per cluster up to the cap; repair round-trip on an unknown claim id; cell failure →
 gap, not an exception; persona result cache hit on an unchanged cluster request.
 
-Acceptance: pool runs end to end on the S1 fixture with a stub invoker; registry validation
-(`qualify_phase1.py --check-contracts`) passes.
+Acceptance: pool runs end to end on the S1 fixture with a stub invoker; design-parity,
+persona-catalog and job-catalog validation passes.
 
 ### S3: lifecycle workers, job graph and Dagster wiring
 

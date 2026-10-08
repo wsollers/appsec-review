@@ -222,10 +222,9 @@ Shared surfaces, to be done sequentially by whoever owns them. None were edited 
    `validate_design_parity.py` compares template permissions with the manifest ("registry
    permission mismatch") and `design-parity-manifest.json` / `job-graph.json` / generated parity
    views must change in the same step.
-2. `appsec-review-process/qualify_phase1.py` (`contracts()`): add
-   `permission-capabilities` to the validated registry kinds (it currently validates six named
-   folders; the new folder is hashed by `code_identity()` but not schema-checked there) or call
-   `permission_capabilities.load_definitions()`.
+2. Registry validation is owned by `validate_design_parity.py`, `catalog_personas.py check` and
+   focused permission-capability tests. New permission records must be rejected by those current
+   validators when their schema, identity or composition is invalid.
 3. Run staging (`phase1.py` / `intake.py` / `launch_job.py` staging path): accept grant files
    under `runs/<run_id>/inputs/`, stamp `origin` from the read location (`staged-run-config`),
    and never read grants or requirements from the target tree, evidence or worker output.

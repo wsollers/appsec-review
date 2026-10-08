@@ -90,8 +90,16 @@ have executable characterization coverage.
       clearly non-authoritative archive; delete duplicated or inaccurate documentation.
   - [x] Deleted the six tracked obsolete `Claude outputs/` artifacts and superseded continuation
         prompts after adding the 2026-10-07 S1 continuation; retained the 2026-10-03 hello gap record.
-  - [ ] Blocked: `qualify_phase1.py` still hashes the phase-1 prompt, proposal packets remain test data,
-        and generated/historical documents still link to qualification-era records.
+  - [x] Deleted the unreferenced id-Software starter prompt, implementation-status generator and six
+        checked-in status snapshots; these were stale qualification artifacts with no live reader.
+  - [x] Deleted the retired A01-A16 qualification runner, Dagster helper, prompt attestation helper,
+        phase-1 implementation prompt and composable-review implementation plan. Current validation is
+        design parity, persona/catalog checks, focused runtime tests and live `full_review` evidence.
+  - [ ] Proposal packets remain test data, and historical documents still describe qualification-era
+        commands; retain them only where they are clearly historical or still machine-read.
+- [x] Delete dead manual-harness support with no live caller: `verify_failure_propagation.py` and the
+      unused lane-result/process-status templates. Current terminal-state and failure propagation
+      remain protected by worker-runtime and Dagster lifecycle tests.
 - [x] Rewrite `README.md`, `docs/agent-reader.md` and one operator guide so they describe only the
       current path. Generated graph/readiness/catalog views remain generated, not hand-summarized.
   - [x] The root README and `pipeline/README.md` now name Dagster `full_review` as the only supported
@@ -1018,7 +1026,8 @@ Retired and deleted the legacy monolithic static prepass runners `pipeline/Invok
 - [ ] Later (D-22): a stable logical key (`kind/id`) for implementation maps would stop future moves
   invalidating fingerprints; that is a logic change.
 - [x] `pipeline/prompt-fragments/governing-rules.md` now names the real authoring template path.
-  `phase-1-implementation-prompt.md` keeps `registry/` on purpose (A01 prompt-hash attestation).
+- [x] Remove the superseded Phase 1 prompt and its A01 prompt-hash attestation after replacing the
+  qualification wrapper with current validators and focused tests.
 - [ ] Not run live: needs the Dagster code location restarted in WSL (`orchestrator/dagster/definitions.py`
   now reads `registry_paths`), and `images/registry_records.py generate` writes to
   `pipeline/container-images/` (host-local records under the old path are no longer read).
@@ -1029,6 +1038,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-10-07 | all | (S1 cleanup tests, no target run) | 00-intake | Accepted intake freshness recorded supplied evidence in the fingerprint but omitted its hashes from `inputs.json` and from the live comparison, so evidence added after intake could leave the accepted pointer looking current | Persist `supplied_artifacts` in the immutable attempt inputs and compare it during freshness validation; `test_A08_restaging_preserves_and_supplied_changes` now exercises the fail-closed behavior |
 | 2026-10-07 | all | (S2 bootstrap tests, no target run) | 00-run-configuration | The supported path had no typed run-configuration boundary, immutable run-owned TOML, or concurrency-safe daily run allocator; configuration remained distributed across JSON, environment defaults and job-local constants | Added the central TOML loader, closed local URI resolver, typed immutable layered API, stable redacted fingerprint, generic bootstrap `JobSpec` boundary, failure receipt and monotonic `yyyy-mm-dd-####` allocator with concurrent tests. Existing readers are inventoried for later vertical migration rather than silently treated as migrated |
 | 2026-10-07 | all | (resume audit, no run) | every model job that reads the supporting-evidence menu (03 workbench, 07 hunters, 07/08/09/12 reviewers, 10 chains, 04 participation code-index pin) | Persona cache miss after a no-op upstream re-run: `supporting_evidence_menu._item` listed each pinned file as `<owner>/attempts/<attempt_id>/<artifact>` and recorded `attempt_id` per item, so the menu bytes, the prompt (`root:path` of every input) and `persona_cache_key` changed whenever a producer re-ran and published byte-identical output under a new attempt id | Pinned files are named by the attempt-free alias `<owner>/accepted/<artifact>`; `execution_state.resolve_accepted_alias` resolves it through the owner's `accepted.json` (artifact must be in `hashes`), and every reader still checks its pinned sha256, so a pointer moved to different bytes fails closed (`persona_invocation.resolve_request`, `attack_chain_composition.native_facts`, `code_query_mcp.CodeIndex`/`LspIndex`, `tool_evidence._summary`, which re-reads the recorded `producer_attempt`). Attempt ids left the menu bytes; `supporting_evidence_menu.lineage` supplies them for citations (`threat_workbench._readable_index`). `tests.test_supporting_evidence_menu` `AttemptFreeAliasTests`. Menu-reading jobs' fingerprints change once. Not done: pool fingerprints still bind upstream `attempt_id`/`accepted_at` (the permission and pool clock) and claim-ledger citations still carry `<owner>/attempts/<id>/` paths, so a pool job still re-runs after an upstream re-run; its cells then reuse the persona cache where their input 0 is unchanged |
 | 2026-10-06 | all | (resume audit, no run) | 02-sca-vulnerability-match | False rerun on resume: `automatic_evidence_inputs` puts the Grype/OSV `snapshot_identities` current at launch in `request.tool`, and `dependency_orchestration.reuse_inputs` keyed reuse on them; the offline registry advances with every OSV sync, so SCA re-ran and cascaded through 02-evidence-assembly into every model job | `dependency_orchestration.bound_identities`: the identities the accepted attempt was produced from (its `reuse.json`) are reopened by id (`dependency_snapshot_registry.resolve(snapshot_id=...)`, every byte re-hashed, age ceiling at the launch clock) and must equal the record field for field; while they verify the reuse key uses them, otherwise the request's current identities (and new work remembers those). `tests.test_dependency_orchestration` `test_a_registry_advance_reuses_the_bound_snapshots_while_they_verify` (branch stable-resume) |

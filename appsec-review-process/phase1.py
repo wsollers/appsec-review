@@ -136,6 +136,7 @@ def accepted(run_id, job=JOB, scope='whole', fresh=True):
             # every schema and every job template, so any unrelated edit would re-run the whole run.
             if (live['source'] != source or live['config'] != inputs['config'] or
                     live['dependencies'] != inputs.get('dependencies', live['dependencies']) or
+                    live['supplied_artifacts'] != inputs.get('supplied_artifacts', live['supplied_artifacts']) or
                     tool_staleness(live['tool']) != tool_staleness(inputs.get('tool', live['tool']))):
                 raise Blocked('accepted intake is stale; rerun intake')
     return pointer
@@ -282,6 +283,7 @@ class Session:
             self.fingerprint = digest(self.inputs)
             atomic_json(self.attempt / 'inputs.json', {'config':config,'fingerprint':self.fingerprint,
                 'definition_hash':self.inputs['definition_hash'],'tool':self.inputs['tool'],'dependencies':self.inputs['dependencies'],
+                'supplied_artifacts':self.inputs['supplied_artifacts'],
                 'composition':self.job['composition'],'data_root':str(data_path(self.run_id))})
             atomic_json(self.attempt / 'evidence/source.json', self.inputs['source'])
             if self.cancel.is_set():

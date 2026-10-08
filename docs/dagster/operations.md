@@ -170,27 +170,17 @@ the same adapter and dispatch is BLOCKED before writes because evidence assembly
 Full scanner dispatch and its contracts are downstream work, not Phase 1's qualification. Legacy direct scratch invocations are explicitly legacy examples, not a new-run
 cache or an accepted-input discovery mechanism.
 
-## Qualification
+## Validation and acceptance
+
+There is no separate A01-A16 qualification workflow. Validate the current sources directly:
 
 ```bash
-$PY -B appsec-review-process/qualify_phase1.py --run-id <qualification_run_id>
+python -B appsec-review-process/validate_design_parity.py --check-generated-views
+python -B appsec-review-process/catalog_personas.py check
+python -B docs/processes/job_catalog.py --check
 ```
 
-Run it on the host with the stack and the host code location up (`code-location.sh start`, then
-`reload`) and the target checkout present. The target defaults to the `hello-autotools` fixture
-(`fixtures/populate-targets.sh`); pass `--target <path> --project <name> [--platform ...]` for
-another. Since ADR-0011 the Linux test pass and the live-Dagster checks (`qualify_dagster.py`) run
-through `orchestrator/dagster/code-location.sh run`, i.e. in the same environment, instance and
-run root as the jobs, instead of `docker compose exec` into the retired code-server container.
-
-The command records argv, exit codes, hashes, tested code identity, limits, gate results and resume
-commands under the run's `data/acceptance/`.
-
-Gate A01 also needs `data/acceptance/prompt-vetting.json` on the qualification run, recording a
-review of `phase-1-implementation-prompt.md` at its **current** SHA-256. The hash binds a review to
-the exact text reviewed, so any edit to the spec (even a moved link) invalidates it. After a
-maintenance edit, carry the review forward with `appsec-review-process/attest_prompt.py`: it shows the
-diff since the reviewed revision and writes the new record only with `--approve`, a named
-`--approved-by` and a `--classification` of why the diff changes no requirement. A substantive
-change to the spec needs a real re-review instead. It performs bounded tests and Freeciv21 intake only.
-Use `phase1.py graph --check` to verify `docs/design-parity/job-graph.mmd` against `job-graph.json`.
+Run focused tests for the modules changed in the code location's environment, then run the
+`hello-autotools` `full_review` through draft report generation. The run's immutable attempts,
+accepted pointers, coverage gaps and report artifacts are the live acceptance evidence. Historical
+qualification records remain in git history but are not current acceptance inputs.

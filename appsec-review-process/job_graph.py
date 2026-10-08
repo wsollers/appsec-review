@@ -150,8 +150,8 @@ def definition_hash(job):
     for name in sorted(templates):
         template=read_json(REGISTRY/'job-templates'/(name+'.json'))
         registry[name]={'template':template,'composition':composition(template)}
-    # Semantics only (brief I3): the phase-1 implementation spec and the lane's operator config.md /
-    # prompt.md are documentation; no worker reads them.
+    # Semantics only (brief I3): lane operator config.md and prompt.md files are documentation;
+    # no worker reads them.
     paths = [ROOT / 'execution_state.py', ROOT / 'process_gate.py', ROOT / 'phase1.py', ROOT / 'intake.py',
              ROOT / 'job_graph.py', ROOT / 'process-manifest.json', ROOT / 'tooling/buildenv-catalog.json', GRAPH]
     paths += sorted((ROOT.parent / 'schemas').glob('*.schema.json'))

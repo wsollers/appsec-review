@@ -7,8 +7,9 @@ a job is a bounded unit of work within a lane:
 lane + persona + role + domain + tooling profile + output contract + evidence bundle
 ```
 
-Read [README.md](README.md), the [implementation plan](../composable-review-implementation-plan.md),
-and the relevant [schemas](../../schemas/) before authoring. Reuse existing records when their
+Read [README.md](README.md), the [current architecture](../../docs/architecture/design-v3.md),
+the active migration gates in [`TODO.md`](../TODO.md), and the relevant
+[schemas](../../schemas/) before authoring. Reuse existing records when their
 scope and boundaries fit. Create only the records needed for a distinct review capability.
 
 ## Choose the record type

@@ -17,8 +17,9 @@ overreach and integration conflicts; only an `INTEGRATION` owner touches shared 
 `arp/dagster_workflow.py`, `arp/launch_job.py`, `orchestrator/dagster/definitions.py`, common
 runtime modules, generated parity views, `arp/TODO.md`). Every task's acceptance includes the
 `TODO.md` minimum: focused tests, `python -B -m py_compile` on changed modules,
-`python -B appsec-review-process/validate_design_parity.py`,
-`python -B appsec-review-process/qualify_phase1.py --check-contracts`, `git diff --check`, and the
+`python -B appsec-review-process/validate_design_parity.py --check-generated-views`,
+`python -B appsec-review-process/catalog_personas.py check`,
+`python -B docs/processes/job_catalog.py --check`, `git diff --check`, and the
 focused suite in the Linux code-server.
 
 ## Dependency Map

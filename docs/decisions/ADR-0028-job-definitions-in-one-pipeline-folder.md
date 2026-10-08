@@ -78,8 +78,9 @@ change and outside brief K.
 ## Left as written
 
 History (ADRs, decision logs, agent briefs, continuation prompts, proposals, dated reports) keeps
-the old paths. So does `phase-1-implementation-prompt.md`: it is the accepted Phase 1 spec, attested
-by prompt hash (A01), and a path edit would void that vetting for no behaviour gain.
+the old paths. The accepted Phase 1 prompt and its A01 prompt-hash attestation were subsequently
+removed during S1 cleanup after current validators and focused tests replaced that qualification
+wrapper. Git history retains the reviewed snapshot.
 
 `pipeline/prompt-fragments/governing-rules.md` is live prompt text, so it now names
 `appsec-review-process/pipeline/AUTHORING-TEMPLATE.md` (follow-up to the merge). The change reaches

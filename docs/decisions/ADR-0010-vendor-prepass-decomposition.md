@@ -504,7 +504,8 @@ a result.
 
 Status tokens follow `TODO.md`. `V` tasks are this series; bare IDs are `TODO.md` batches. Every
 task's acceptance includes the `TODO.md` minimum (focused tests, `py_compile`,
-`validate_design_parity.py`, `qualify_phase1.py --check-contracts`, `git diff --check`, Linux
+`validate_design_parity.py --check-generated-views`, `catalog_personas.py check`,
+`docs/processes/job_catalog.py --check`, `git diff --check`, Linux
 code-server run). Two tasks never share a path; only `INTEGRATION` tasks touch shared surfaces.
 Full text: `docs/proposals/vendor-prepass/task-series.md`.
 

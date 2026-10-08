@@ -2,8 +2,8 @@
 
 Status: implemented for Phase 1 intake; downstream lane/scanner migration remains explicit.
 See [operations](operations.md) for supported execution and recovery boundaries.
-The [Phase 1 implementation prompt](../../appsec-review-process/phase-1-implementation-prompt.md)
-defines implementation and acceptance. This supersedes shared project scratch as the authoritative
+The current architecture, accepted ADRs, schemas and executable validators define implementation
+and acceptance. This supersedes shared project scratch as the authoritative
 location for new orchestrated-run data; existing runs remain readable without destructive migration.
 
 ## Ownership and layout

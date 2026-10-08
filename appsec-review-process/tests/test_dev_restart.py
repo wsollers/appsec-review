@@ -451,8 +451,7 @@ class FingerprintScopeTests(unittest.TestCase):
         with patch.object(job_graph, 'file_hash', side_effect=spy):
             job_graph.definition_hash(template)
         names = {path.relative_to(ROOT.parent).as_posix() for path in hashed}
-        for doc in ('appsec-review-process/phase-1-implementation-prompt.md',
-                    'appsec-review-process/00-intake-recovery/config.md',
+        for doc in ('appsec-review-process/00-intake-recovery/config.md',
                     'appsec-review-process/00-intake-recovery/prompt.md'):
             self.assertNotIn(doc, names)
         self.assertFalse([name for name in names if name.lower().endswith(('.md', 'readme'))])
