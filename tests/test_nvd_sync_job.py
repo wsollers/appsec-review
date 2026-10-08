@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.jobs.job_0001_nvd_sync import build_job
-from appsec_review.jobs.job_0001_nvd_sync.feed import NvdPublisher, timestamp
-from appsec_review.jobs.job_0001_nvd_sync.models import NvdSettings
+from appsec_review.jobs.job_third_party_data_sync import build_job
+from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher, timestamp
+from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
 from appsec_review.runtime import JobRunner
 
 
@@ -72,16 +72,19 @@ def write_config(root: Path) -> Path:
 runs_dir = "runs"
 data_dir = "data"
 
-[jobs.job_0001]
-name = "nvd_sync"
+[jobs.job_third_party_data_sync]
+name = "third_party_data_sync"
 workers = 1
 
-[jobs.job_0001.schedule]
+[jobs.job_third_party_data_sync.schedule]
 enabled = true
 cron = "0 0 * * *"
 timezone = "UTC"
 
-[jobs.job_0001.settings]
+[jobs.job_third_party_data_sync.steps.nvd_sync]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.nvd_sync.settings]
 feed_root = "data/feeds/nvd"
 api_key_env = "TEST_NVD_API_KEY"
 first_year = 2026
@@ -89,6 +92,15 @@ page_size = 2000
 max_window_days = 119
 request_delay_with_key_seconds = 0
 request_delay_without_key_seconds = 0
+
+[jobs.job_third_party_data_sync.steps.nvd_sync.tasks.fetch]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.nvd_sync.tasks.process]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.nvd_sync.tasks.build]
+workers = 1
 """.strip(),
         encoding="utf-8",
     )

@@ -1,4 +1,4 @@
-"""Immutable NVD CVE 2.0 publisher used by job_0001."""
+"""Immutable NVD CVE 2.0 publisher used by the nvd_sync step."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 import uuid
 
-from appsec_review.jobs.job_0001_nvd_sync.models import NvdSettings
+from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
 from appsec_review.storage import FileLock, atomic_json, file_sha256
 from appsec_review.storage.atomic import canonical_json
 

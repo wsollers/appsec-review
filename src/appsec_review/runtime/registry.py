@@ -27,8 +27,8 @@ class JobRegistry:
 
 
 def builtin_registry() -> JobRegistry:
-    from appsec_review.jobs.job_0001_nvd_sync import build_job
+    from appsec_review.jobs.job_third_party_data_sync import build_job
 
     registry = JobRegistry()
-    registry.register("job_0001", build_job)
+    registry.register("job_third_party_data_sync", build_job)
     return registry

@@ -18,7 +18,7 @@ def write_config(root: Path) -> Path:
 runs_dir = "runs"
 data_dir = "data"
 
-[jobs.job_9999]
+[jobs.job_fixture]
 name = "fixture"
 workers = 1
 """.strip(),
@@ -42,7 +42,7 @@ def test_job_composes_validators_around_handler(tmp_path: Path) -> None:
         assert result == {"value": 7}
         calls.append("post")
 
-    job = Job("job_9999", "fixture", handler, (pre,), (post,))
+    job = Job("job_fixture", "fixture", handler, (pre,), (post,))
     outcome = JobRunner(load_config(write_config(tmp_path))).run(
         job,
         now=datetime(2026, 10, 8, tzinfo=timezone.utc),
@@ -60,12 +60,12 @@ def test_failed_job_has_a_terminal_receipt(tmp_path: Path) -> None:
     def fail(context):
         raise RuntimeError("expected failure")
 
-    job = Job("job_9999", "fixture", fail)
+    job = Job("job_fixture", "fixture", fail)
     runner = JobRunner(load_config(write_config(tmp_path)))
     with pytest.raises(RuntimeError, match="expected failure"):
         runner.run(job, now=datetime(2026, 10, 8, tzinfo=timezone.utc))
 
-    status_path = next((tmp_path / "runs").glob("*/data/jobs/job_9999/attempts/*/status.json"))
+    status_path = next((tmp_path / "runs").glob("*/data/jobs/job_fixture/attempts/*/status.json"))
     status = json.loads(status_path.read_text(encoding="utf-8"))
     assert status["status"] == "FAILED"
     assert status["error"]["type"] == "RuntimeError"

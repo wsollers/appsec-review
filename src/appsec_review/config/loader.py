@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path
+import re
 import tomllib
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -34,20 +35,60 @@ class ScheduleConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TaskConfig:
+    task_id: str
+    workers: int
+    settings: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", self.task_id):
+            raise ValueError(f"invalid task id: {self.task_id}")
+        if self.workers < 1:
+            raise ValueError("task workers must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class StepConfig:
+    step_id: str
+    workers: int
+    settings: Mapping[str, Any]
+    tasks: Mapping[str, TaskConfig]
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", self.step_id):
+            raise ValueError(f"invalid step id: {self.step_id}")
+        if self.workers < 1:
+            raise ValueError("step workers must be positive")
+
+    def task(self, task_id: str) -> TaskConfig:
+        try:
+            return self.tasks[task_id]
+        except KeyError as exc:
+            raise KeyError(f"task is not configured: {self.step_id}.{task_id}") from exc
+
+
+@dataclass(frozen=True, slots=True)
 class JobConfig:
     job_id: str
     name: str
     workers: int
     schedule: ScheduleConfig | None
     settings: Mapping[str, Any]
+    steps: Mapping[str, StepConfig]
 
     def __post_init__(self) -> None:
-        if not self.job_id.startswith("job_") or not self.job_id[4:].isdigit():
+        if not re.fullmatch(r"job_[a-z][a-z0-9_]*", self.job_id):
             raise ValueError(f"invalid job id: {self.job_id}")
         if not self.name.strip():
             raise ValueError("job name is required")
         if self.workers < 1:
             raise ValueError("workers must be positive")
+
+    def step(self, step_id: str) -> StepConfig:
+        try:
+            return self.steps[step_id]
+        except KeyError as exc:
+            raise KeyError(f"step is not configured: {self.job_id}.{step_id}") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,12 +147,44 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         settings = value.get("settings", {})
         if not isinstance(settings, dict):
             raise ValueError(f"jobs.{job_id}.settings must be a table")
+        steps_value = value.get("steps", {})
+        if not isinstance(steps_value, dict):
+            raise ValueError(f"jobs.{job_id}.steps must be a table")
+        steps: dict[str, StepConfig] = {}
+        for step_id, step_value in steps_value.items():
+            if not isinstance(step_value, dict):
+                raise ValueError(f"jobs.{job_id}.steps.{step_id} must be a table")
+            step_settings = step_value.get("settings", {})
+            tasks_value = step_value.get("tasks", {})
+            if not isinstance(step_settings, dict) or not isinstance(tasks_value, dict):
+                raise ValueError(f"jobs.{job_id}.steps.{step_id} settings/tasks must be tables")
+            tasks: dict[str, TaskConfig] = {}
+            for task_id, task_value in tasks_value.items():
+                if not isinstance(task_value, dict):
+                    raise ValueError(f"jobs.{job_id}.steps.{step_id}.tasks.{task_id} must be a table")
+                task_settings = task_value.get("settings", {})
+                if not isinstance(task_settings, dict):
+                    raise ValueError(
+                        f"jobs.{job_id}.steps.{step_id}.tasks.{task_id}.settings must be a table"
+                    )
+                tasks[task_id] = TaskConfig(
+                    task_id=task_id,
+                    workers=int(task_value.get("workers", 1)),
+                    settings=MappingProxyType(dict(task_settings)),
+                )
+            steps[step_id] = StepConfig(
+                step_id=step_id,
+                workers=int(step_value.get("workers", 1)),
+                settings=MappingProxyType(dict(step_settings)),
+                tasks=MappingProxyType(tasks),
+            )
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
             workers=int(value.get("workers", 1)),
             schedule=schedule,
             settings=MappingProxyType(dict(settings)),
+            steps=MappingProxyType(steps),
         )
     return AppConfig(
         source_path=source,
