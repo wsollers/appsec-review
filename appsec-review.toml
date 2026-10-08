@@ -228,6 +228,35 @@ workers = 1
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.index_plan]
 [jobs.job_target_analysis_plan.steps.plan_acceptance.tasks.publish_handoff]
 
+[jobs.job_tree_sitter_ast]
+name = "tree_sitter_ast"
+workers = 8
+
+[jobs.job_tree_sitter_ast.settings]
+workers = 8
+max_file_bytes = 2097152
+max_nodes_per_file = 20000
+max_nodes_per_scope = 20000
+max_files_per_scope = 128
+max_source_bytes_per_scope = 16777216
+
+[jobs.job_tree_sitter_ast.steps.load]
+workers = 1
+[jobs.job_tree_sitter_ast.steps.load.tasks.accepted_inputs]
+
+[jobs.job_tree_sitter_ast.steps.plan]
+workers = 1
+[jobs.job_tree_sitter_ast.steps.plan.tasks.route_scopes]
+
+[jobs.job_tree_sitter_ast.steps.parse]
+workers = 8
+[jobs.job_tree_sitter_ast.steps.parse.tasks.dynamic_scopes]
+workers = 8
+
+[jobs.job_tree_sitter_ast.steps.acceptance]
+workers = 1
+[jobs.job_tree_sitter_ast.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_project_build]
 name = "project_build"
 workers = 8

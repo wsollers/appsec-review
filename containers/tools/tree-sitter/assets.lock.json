@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-tree-sitter",
+  "tool_version": "1.0.0",
+  "project": "xberg-io/tree-sitter-language-pack with pinned upstream grammars",
+  "license": "MIT",
+  "architecture": "linux/amd64",
+  "base": "python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f",
+  "tree_sitter": {"version": "0.26.0", "project": "https://github.com/tree-sitter/py-tree-sitter", "license": "MIT", "artifact": "tree_sitter-0.26.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", "wheel_sha256": "5a6b333b0282d8bb0af741f9b018bd2523d4eecb2686bf6717066a625fecfaa4", "wheel_bytes": 667487},
+  "language_pack": {"version": "1.12.5", "project": "https://github.com/xberg-io/tree-sitter-language-pack", "release": "https://github.com/xberg-io/tree-sitter-language-pack/releases/tag/v1.12.5", "source_archive": "https://github.com/xberg-io/tree-sitter-language-pack/archive/refs/tags/v1.12.5.tar.gz", "license": "MIT", "artifact": "tree_sitter_language_pack-1.12.5-cp310-abi3-manylinux_2_34_x86_64.whl", "wheel_sha256": "de5ec0c1b184176443fc6093f07fe5a1c403ee51ec8593bde372bd5960819941", "wheel_bytes": 2299397, "source_archive_sha256": "d48e71c1212c2e5ec0cbecbc2bf78859e9572c2dfd9b306ee6774a42386403e7"},
+  "normalizer_schema": "appsec-review/tree-sitter-normalizer/1",
+  "grammars": [
+    {"language":"C#","grammar":"csharp","repository":"https://github.com/tree-sitter/tree-sitter-c-sharp","revision":"af29416d729b7a6603101b513604392d8f675e3b","license":"MIT","artifact":"libtree_sitter_c_sharp.so","sha256":"8d0b8f736f1ef056d4272a7a15f613380bfddbac7b1b6088b082e35127b00b8e","bytes":5851232},
+    {"language":"C","grammar":"c","repository":"https://github.com/tree-sitter/tree-sitter-c","revision":"b780e47fc780ddc8da13afa35a3f4ed5c157823d","license":"MIT","artifact":"libtree_sitter_c.so","sha256":"fa0a49b5d31ad40866c1efafc53a61cf87020f7c45ae4f642fc0adb53b596c9b","bytes":623280},
+    {"language":"C++","grammar":"cpp","repository":"https://github.com/tree-sitter/tree-sitter-cpp","revision":"8b5b49eb196bec7040441bee33b2c9a4838d6967","license":"MIT","artifact":"libtree_sitter_cpp.so","sha256":"dc3ccbfa1e23c29b7dfe585815745fb40fabfe80350f40c214755533f32339f8","bytes":5587896},
+    {"language":"Go","grammar":"go","repository":"https://github.com/tree-sitter/tree-sitter-go","revision":"2346a3ab1bb3857b48b29d779a1ef9799a248cd7","license":"MIT","artifact":"libtree_sitter_go.so","sha256":"e262c4d29952631cc5bd40d97eb28758ee2dc6fefa58811f015a15e5a1f53486","bytes":233712},
+    {"language":"Java","grammar":"java","repository":"https://github.com/tree-sitter/tree-sitter-java","revision":"e10607b45ff745f5f876bfa3e94fbcc6b44bdc11","license":"MIT","artifact":"libtree_sitter_java.so","sha256":"38d7debeacab7eb5be73fff12cff9c14ce4162baaa80e165ac9d18076874e380","bytes":433720},
+    {"language":"JavaScript","grammar":"javascript","repository":"https://github.com/tree-sitter/tree-sitter-javascript","revision":"58404d8cf191d69f2674a8fd507bd5776f46cb11","license":"MIT","artifact":"libtree_sitter_javascript.so","sha256":"c7fcc3f5f5ac36bf4da02d2ef3a8c0e4f0bdcac41f9facc872189a95a4dc32d6","bytes":431408},
+    {"language":"PHP","grammar":"php","repository":"https://github.com/tree-sitter/tree-sitter-php","revision":"38216983c07bf9e1b56e16acde53b25adaeab61c","license":"MIT","artifact":"libtree_sitter_php.so","sha256":"7307fd6e0d4ff88e53fa7c73fd831893a006d601327df687655f7966250c575f","bytes":1091920},
+    {"language":"Python","grammar":"python","repository":"https://github.com/tree-sitter/tree-sitter-python","revision":"26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64","license":"MIT","artifact":"libtree_sitter_python.so","sha256":"97e6a7e7a036abae1e26b8e6f271a61e0439c44be78cfc98a7facb1ea3689e45","bytes":480184},
+    {"language":"Rust","grammar":"rust","repository":"https://github.com/tree-sitter/tree-sitter-rust","revision":"77a3747266f4d621d0757825e6b11edcbf991ca5","license":"MIT","artifact":"libtree_sitter_rust.so","sha256":"eadc3fb3b13088026ddb315503cb369ca46e4cf8eddabb8dd47cae04321ca205","bytes":1128216},
+    {"language":"TSX","grammar":"tsx","repository":"https://github.com/tree-sitter/tree-sitter-typescript","revision":"75b3874edb2dc714fb1fd77a32013d0f8699989f","license":"MIT","artifact":"libtree_sitter_tsx.so","sha256":"bc1a3cb9402c3c2ce1c3d42240bc728fb9e3a5a30ad70df5b5058745d17fa977","bytes":1472168},
+    {"language":"TypeScript","grammar":"typescript","repository":"https://github.com/tree-sitter/tree-sitter-typescript","revision":"75b3874edb2dc714fb1fd77a32013d0f8699989f","license":"MIT","artifact":"libtree_sitter_typescript.so","sha256":"41ec0b9435857a746d45454a5fe5683714c1e51f09907d918e5b85f5e0a45f03","bytes":1439376}
+  ]
+}

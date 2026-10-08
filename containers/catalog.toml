@@ -375,6 +375,22 @@ build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline C/C++ configure, compilation, Clang AST, LLVM IR, and ELF/symbol evidence."
 
 [[images]]
+id = "tool-tree-sitter"
+state = "enabled"
+kind = "tool"
+version = "1.0.0"
+tag = "appsec-review/tool-tree-sitter:1.0.0"
+image_id = "sha256:6b9e72bf99b7e61b4988cca41189a3c866028de8bf88a527887928a12479a94a"
+context = "containers/tools/tree-sitter"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/tree-sitter/tool.toml"
+assets_lock = "containers/tools/tree-sitter/assets.lock.json"
+build_args = { TOOL_VERSION = "1.0.0" }
+purpose = "Offline bounded Tree-sitter concrete-syntax-tree production for accepted source scopes."
+
+[[images]]
 id = "tool-gitleaks"
 state = "enabled"
 kind = "tool"

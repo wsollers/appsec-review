@@ -167,7 +167,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_project_build", "job_language_build", "job_artifact_indexing",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
-                    "job_ci_configuration_analysis",
+                    "job_ci_configuration_analysis", "job_tree_sitter_ast",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -340,10 +340,14 @@ def build_definitions(
     schedules = []
     for job_id in registry.job_ids():
         job_config = config.job(job_id)
-        dagster_job = _build_dagster_graph(
-            job_config.name, (registry.build(job_id),), config, runner_factory,
-            node_namespace="standalone",
-        )
+        if job_id == "job_tree_sitter_ast":
+            from appsec_review.jobs.job_tree_sitter_ast.dagster import build_dagster_job
+            dagster_job = build_dagster_job(config, runner_factory)
+        else:
+            dagster_job = _build_dagster_graph(
+                job_config.name, (registry.build(job_id),), config, runner_factory,
+                node_namespace="standalone",
+            )
         jobs.append(dagster_job)
         if job_config.schedule is not None:
             schedule = job_config.schedule
@@ -371,6 +375,9 @@ def build_definitions(
         wave_jobs.append(registry.build("job_target_analysis_plan"))
         wave_dependencies["job_target_analysis_plan"] = (("job_ci_configuration_analysis",)
             if "job_ci_configuration_analysis" in registered else ("job_target_catalog",))
+        if "job_tree_sitter_ast" in registered:
+            wave_jobs.append(registry.build("job_tree_sitter_ast"))
+            wave_dependencies["job_tree_sitter_ast"] = ("job_target_analysis_plan",)
         if "job_project_build" in registered:
             wave_jobs.append(registry.build("job_project_build"))
             wave_dependencies["job_project_build"] = ("job_target_analysis_plan",)
@@ -410,6 +417,8 @@ def build_definitions(
                 owasp_dependencies.append("job_evidence_collection")
             if "job_artifact_security_analysis" in registered:
                 owasp_dependencies.append("job_artifact_security_analysis")
+            if "job_tree_sitter_ast" in registered:
+                owasp_dependencies.append("job_tree_sitter_ast")
             wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys(owasp_dependencies))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))

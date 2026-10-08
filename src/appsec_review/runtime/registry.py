@@ -36,6 +36,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
+    from appsec_review.jobs.job_tree_sitter_ast import build_job as build_tree_sitter_ast
     from appsec_review.jobs.job_project_build import build_job as build_project_build
     from appsec_review.jobs.job_language_build import build_job as build_language_build
     from appsec_review.jobs.job_artifact_indexing import build_job as build_artifact_indexing
@@ -52,6 +53,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_target_analysis_plan",
                       lambda: build_analysis_plan(model_client=ConfiguredClaudeModelClient()))
+    registry.register("job_tree_sitter_ast", build_tree_sitter_ast)
     registry.register("job_project_build",
                       lambda: build_project_build(model_client=ConfiguredClaudeModelClient()))
     registry.register("job_language_build", build_language_build)
