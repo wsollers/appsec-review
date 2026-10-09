@@ -14,6 +14,26 @@ PostgreSQL and Dagster compute logs use named volumes.
 The code location alone receives the Docker socket and client needed to execute the pinned,
 network-disabled cve-bin-tool database builder. Do not expose the code location to untrusted code.
 
+## Windows host WSL memory limit
+
+On the current Windows Docker Desktop host, the global WSL 2 configuration is stored at
+`C:\Users\wsoll\.wslconfig` (`%UserProfile%\.wslconfig`). It limits the shared WSL 2 virtual
+machine to 16 GB of memory, provides 8 GB of swap, and enables immediate cache reclamation:
+
+```ini
+[wsl2]
+memory=16GB
+swap=8GB
+
+[experimental]
+autoMemoryReclaim=dropCache
+```
+
+The 16 GB limit is shared by Docker Desktop and every running WSL 2 distribution; it is not a
+per-container or per-distribution allowance. After changing the file, save active WSL work, run
+`wsl --shutdown`, and restart Docker Desktop. The shutdown stops all WSL distributions and running
+containers.
+
 ## Build, start, verify, and stop
 
 Run these commands from the repository root. Bootstrap creates an ignored `.env` once and preserves
