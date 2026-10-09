@@ -14,7 +14,7 @@ from typing import Any, BinaryIO
 
 PARSER_IDENTITY = "appsec-review/elf-loader-dependencies/1"
 _PT_LOAD, _PT_DYNAMIC, _PT_INTERP = 1, 2, 3
-_DT_NULL, _DT_NEEDED, _DT_STRTAB, _DT_SONAME, _DT_RPATH, _DT_RUNPATH = 0, 1, 5, 14, 15, 29
+_DT_NULL, _DT_NEEDED, _DT_STRTAB, _DT_STRSZ, _DT_SONAME, _DT_RPATH, _DT_RUNPATH = 0, 1, 5, 10, 14, 15, 29
 _PROGRAM_HEADER_LIMIT = 4096
 _DYNAMIC_ENTRY_LIMIT = 65536
 _NEEDED_LIMIT = 1024
@@ -29,12 +29,15 @@ def _read(stream: BinaryIO, offset: int, size: int) -> bytes:
     return data
 
 
-def _string(stream: BinaryIO, offset: int) -> str:
+def _string(stream: BinaryIO, offset: int, available: int) -> str:
+    """Read one NUL-terminated string that lies wholly inside `available` declared bytes."""
+    if available <= 0:
+        raise ValueError("ELF string lies outside its declared region")
     stream.seek(offset)
-    data = stream.read(_STRING_LIMIT)
+    data = stream.read(min(available, _STRING_LIMIT))
     end = data.find(b"\0")
     if end < 0:
-        raise ValueError("ELF dynamic string is unterminated or exceeds its bound")
+        raise ValueError("ELF string is unterminated within its declared region or exceeds its bound")
     return data[:end].decode("utf-8", "replace")
 
 
@@ -69,7 +72,7 @@ def loader_facts(path: Path) -> dict[str, Any]:
             elif kind == _PT_DYNAMIC:
                 dynamic = (offset, size)
             elif kind == _PT_INTERP:
-                interpreter = _string(stream, offset)
+                interpreter = _string(stream, offset, size)
         facts: dict[str, Any] = {"needed": [], "interpreter": interpreter, "soname": None,
                                  "run_paths": [], "linkage": "static" if dynamic is None else "dynamic"}
         if dynamic is None:
@@ -89,14 +92,18 @@ def loader_facts(path: Path) -> dict[str, Any]:
         if not named:
             return facts
         table = next((value for tag, value in tags if tag == _DT_STRTAB), None)
+        table_size = next((value for tag, value in tags if tag == _DT_STRSZ), None)
+        if table is None or not table_size:
+            raise ValueError("ELF dynamic string table address or size is missing")
+        # The whole declared table, not just its first byte, must be file-backed by one segment.
         base = next((offset + table - address for address, offset, size in loads
-                     if table is not None and address <= table < address + size), None)
+                     if address <= table and table + table_size <= address + size), None)
         if base is None:
             raise ValueError("ELF dynamic string table is not mapped by a loadable segment")
         if sum(1 for tag, _value in named if tag == _DT_NEEDED) > _NEEDED_LIMIT:
             raise ValueError("ELF dependency count exceeds its bound")
         for tag, value in named:
-            text = _string(stream, base + value)
+            text = _string(stream, base + value, table_size - value)
             if tag == _DT_NEEDED:
                 facts["needed"].append(text)
             elif tag == _DT_SONAME:

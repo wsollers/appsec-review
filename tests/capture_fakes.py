@@ -23,26 +23,31 @@ SYNTHETIC_SECRET = "e7322523fb86ed64c836a979cf8465fbd436378c653c1db38f9ae87bc62a
 Scanner = Callable[[Path, Path], tuple[int | None, bytes, bytes, bool]]
 
 
-def minimal_elf(needed: Sequence[str] = ("libc.so.6",)) -> bytes:
+def minimal_elf(needed: Sequence[str] = ("libc.so.6",), *, interpreter: str | None = None) -> bytes:
     """A little-endian ELF64 holding only the program headers and dynamic section a loader reads."""
     strings = b"\0" + b"".join(name.encode() + b"\0" for name in needed)
     offsets, cursor = [], 1
     for name in needed:
         offsets.append(cursor)
         cursor += len(name) + 1
-    header, program = 64, 56
-    dynamic_offset = header + 2 * program
+    interp = interpreter.encode() + b"\0" if interpreter else b""
+    header, program, count = 64, 56, 3 if interp else 2
+    dynamic_offset = header + count * program
+    string_offset = dynamic_offset + (len(offsets) + 3) * 16
     dynamic = b"".join(struct.pack("<qQ", 1, offset) for offset in offsets)
-    string_offset = dynamic_offset + len(dynamic) + 3 * 16
     dynamic += struct.pack("<qQ", 5, string_offset) + struct.pack("<qQ", 10, len(strings))
     dynamic += struct.pack("<qQ", 0, 0)
-    size = string_offset + len(strings)
+    interp_offset = string_offset + len(strings)
+    size = interp_offset + len(interp)
     ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + bytes(8)
-    elf_header = ident + struct.pack("<HHIQQQIHHHHHH", 3, 62, 1, 0, header, 0, 0, header, program, 2, 0, 0, 0)
-    load = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, size, size, 4096)
-    segment = struct.pack("<IIQQQQQQ", 2, 6, dynamic_offset, dynamic_offset, dynamic_offset,
-                          len(dynamic), len(dynamic), 8)
-    return elf_header + load + segment + dynamic + strings
+    elf_header = ident + struct.pack("<HHIQQQIHHHHHH", 3, 62, 1, 0, header, 0, 0, header, program, count, 0, 0, 0)
+    headers = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, size, size, 4096)
+    headers += struct.pack("<IIQQQQQQ", 2, 6, dynamic_offset, dynamic_offset, dynamic_offset,
+                           len(dynamic), len(dynamic), 8)
+    if interp:
+        headers += struct.pack("<IIQQQQQQ", 3, 4, interp_offset, interp_offset, interp_offset,
+                               len(interp), len(interp), 1)
+    return elf_header + headers + dynamic + strings + interp
 
 
 def _quoted(value: str) -> str:

@@ -20,7 +20,9 @@ central CPU, memory, PID, timeout, tmpfs, and output limits. Target binaries and
 Receipts catalog generated sources, compile databases, objects, static/shared libraries,
 executables, LLVM bitcode/IR, debug data, and link maps. Loader dependencies of ELF executables and
 shared libraries are read from the dynamic section by a bounded in-repository parser that loads and
-executes nothing; a file it cannot parse is a named gap. Exact recipe and compiler/linker argv are retained only under
+executes nothing. Every name must terminate inside the `DT_STRSZ`-declared string table, and the
+interpreter inside its `PT_INTERP` segment; a file it cannot parse that strictly is a named gap, never
+a resolved dependency list. Exact recipe and compiler/linker argv are retained only under
 the unit's `protected-commands/` directory; searchable records retain argv hashes, sanitized
 environment facts, resolved inputs/outputs, artifact hashes, and mapping confidence. A complete
 workspace manifest protects the handoff consumed by later language-specific analysis.
