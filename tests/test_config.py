@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from appsec_review.config import CodeQLAnalysisSettings, LanguageBuildSettings, load_config
+from appsec_review.config import BuildCaptureConfig, CodeQLAnalysisSettings, LanguageBuildSettings, load_config
 
 
 def test_default_config_declares_midnight_nvd_schedule() -> None:
@@ -17,6 +17,11 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert job.schedule.timezone == "UTC"
     assert config.runtime.metadata_dir == config.runtime.runs_dir / "metadata"
     assert config.tools.disable_grype is True
+    assert config.build_capture == BuildCaptureConfig(
+        "ptrace", 100000, 256, 16384, 4096, 10000, 1048576)
+    assert config.job("job_project_build").build_capture.event_count_limit == 250000
+    assert config.job("job_language_build").build_capture.event_count_limit == 250000
+    assert config.job("job_codeql_analysis").build_capture == config.build_capture
     assert set(job.steps) == {"nvd_sync", "osv_sync", "mitre_sync", "cve_bin_tool_db_build"}
     assert tuple(job.step("nvd_sync").tasks) == ("fetch", "process", "publish")
     assert tuple(job.step("osv_sync").tasks) == ("fetch", "index", "publish")

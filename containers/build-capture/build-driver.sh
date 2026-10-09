@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+capture_root=$1
+string_limit=$2
+call_limit=$3
+stream_limit=$4
+wrapper_root=$5
+shift 5
+export APPSEC_CAPTURE_ROOT="$capture_root"
+export APPSEC_CAPTURE_CALL_LIMIT="$call_limit"
+export APPSEC_CAPTURE_STREAM_LIMIT="$stream_limit"
+export APPSEC_CAPTURE_REAL_PATH="$PATH"
+APPSEC_CAPTURE_PYTHON=$(command -v python3)
+export APPSEC_CAPTURE_PYTHON
+export PATH="$wrapper_root:$PATH"
+exec strace -ff -qq -ttt -s "$string_limit" \
+  -e trace=clone,clone3,fork,vfork,execve,execveat,exit,exit_group,openat,openat2,connect \
+  -o "$capture_root/trace" -- "$@"

@@ -6,10 +6,11 @@ import shutil
 import subprocess
 
 import pytest
+import json
 
 from appsec_review.config import RustBuildSettings, load_config
 from appsec_review.container_runtime import (
-    BuildContainerExecutor,
+    BuildContainerExecutor, CaptureScope,
     BuildProfile,
     ProjectImageResolver,
     profiles_from_settings,
@@ -165,6 +166,77 @@ def test_live_build_container_compiles_fixture_and_emits_cataloged_artifacts(
     for relative in case.expected:
         artifact = project / relative
         assert artifact.is_file() and artifact.stat().st_size > 0, f"missing {case.family} artifact: {relative}"
+    _assert_catalog_contract(case, project)
+
+
+def test_live_cpp_build_syscalls_are_captured_in_standard_records(tmp_path: Path) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    capture_config = config.job("job_project_build").build_capture
+    assert capture_config is not None and capture_config.backend == "ptrace"
+    workspace = tmp_path / "workspace"
+    shutil.copytree(FIXTURE / "native", workspace / "native")
+    executor = BuildContainerExecutor(_profile("native"), timeout_seconds=900,
+                                      output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    commands = (
+        ("configure", ("cmake", "-S", ".", "-B", "build", "-DCMAKE_BUILD_TYPE=Debug")),
+        ("compile", ("cmake", "--build", "build", "--verbose")),
+    )
+    for ordinal, (name, command) in enumerate(commands, 1):
+        result = executor.execute_captured(
+            command, workspace=workspace, working_directory="native", environment={},
+            capture_directory=workspace / ".capture" / name, capture_config=capture_config,
+            scope=CaptureScope("live-cpp-capture", "job_project_build", "attempt_0001",
+                               f"build-unit-cpp-{ordinal}", "native"))
+        detail = (result.stdout + b"\n" + result.stderr).decode("utf-8", "replace")[-12000:]
+        assert not result.timed_out and result.exit_code == 0, detail
+        assert result.capture_record is not None
+        record = json.loads(result.capture_record.read_text(encoding="utf-8"))
+        assert record["schema"] == "appsec-review/build-execution-record/1"
+        assert record["coverage"]["complete"] is True, record["coverage"]["gaps"]
+        assert {"process_exec", "file_open", "connect"} <= set(record["collector"]["event_kinds"])
+        assert record["events"]["counts"]["process_exec"] > 0
+        assert record["events"]["counts"]["file_open"] > 0
+        assert record["tool_calls"]["retained"] > 0
+        assert record["tool_calls"]["capped"] is False
+    assert (workspace / "native" / "build" / "fixture_native").is_file()
+
+
+@pytest.mark.parametrize("case", CASES[1:], ids=lambda case: f"captured-{case.family}")
+def test_live_language_build_syscalls_are_captured_in_standard_records(
+        tmp_path: Path, case: LiveBuildCase) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    capture_config = config.job("job_language_build").build_capture
+    assert capture_config is not None and capture_config.backend == "ptrace"
+    workspace = tmp_path / "workspace"
+    shutil.copytree(FIXTURE / case.family, workspace / case.family)
+    project = workspace / case.family
+    if case.family == "go":
+        (project / "build").mkdir()
+    executor = BuildContainerExecutor(_profile(case.profile), timeout_seconds=900,
+                                      output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    for ordinal, command in enumerate(case.commands, 1):
+        result = executor.execute_captured(
+            command, workspace=workspace, working_directory=case.family,
+            environment=case.environment,
+            capture_directory=workspace / ".capture" / f"command-{ordinal}",
+            capture_config=capture_config,
+            scope=CaptureScope("live-language-capture", "job_language_build", "attempt_0001",
+                               f"build-unit-{case.family}-{ordinal}", case.family))
+        detail = ((result.stdout_tail or result.stdout) + b"\n" +
+                  (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+        assert not result.timed_out and result.exit_code == 0, detail
+        assert result.capture_record is not None
+        record = json.loads(result.capture_record.read_text(encoding="utf-8"))
+        assert record["coverage"]["complete"] is True, record["coverage"]["gaps"]
+        assert "connect" in record["collector"]["event_kinds"]
+        assert record["events"]["counts"]["process_exec"] > 0
+        assert record["tool_calls"]["retained"] > 0
+        assert record["tool_calls"]["capped"] is False
+    for relative in case.expected:
+        artifact = project / relative
+        assert artifact.is_file() and artifact.stat().st_size > 0
     _assert_catalog_contract(case, project)
 
 

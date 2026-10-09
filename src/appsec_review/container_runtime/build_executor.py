@@ -10,6 +10,9 @@ import signal
 import subprocess
 from typing import Any
 
+from appsec_review.config import BuildCaptureConfig
+from .build_capture import BuildExecutionRecorder, CaptureScope, record_strace_files
+
 
 @dataclass(frozen=True, slots=True)
 class BuildProfile:
@@ -40,6 +43,7 @@ class BuildCommandResult:
     stderr_truncated: bool = False
     stdout_tail: bytes = b""
     stderr_tail: bytes = b""
+    capture_record: Path | None = None
 
 
 Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
@@ -100,6 +104,12 @@ def resolve_host_bind_path(path: Path, runner: Runner) -> Path:
 class BuildContainerExecutor:
     """Run already-validated argv in an immutable build image with dependency egress."""
 
+    CAPTURED_TOOLS = (
+        "ar", "c++", "cargo", "cc", "clang", "clang++", "cmake", "composer", "dotnet", "g++", "gcc",
+        "go", "jar", "java", "javac", "kotlinc", "ld", "make", "mvn", "ninja", "npm",
+        "php", "python", "python3", "rustc",
+    )
+
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
                  runner: Runner | None = None) -> None:
         self.profile = profile
@@ -118,10 +128,8 @@ class BuildContainerExecutor:
     def _bind_source(self, path: Path) -> Path:
         return resolve_host_bind_path(path, self.runner)
 
-    def execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
-                environment: Mapping[str, str]) -> BuildCommandResult:
-        if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
-            raise ValueError("build command argv is invalid")
+    def _prepare(self, *, workspace: Path, working_directory: str,
+                 environment: Mapping[str, str]) -> tuple[Path, list[str]]:
         root = workspace.resolve(strict=True)
         relative_workdir = Path(*working_directory.split("/"))
         resolved_workdir = (root / relative_workdir).resolve(strict=True)
@@ -140,6 +148,14 @@ class BuildContainerExecutor:
         ]
         for key, value in sorted(environment.items()):
             command.extend(("--env", f"{key}={value}"))
+        return root, command
+
+    def execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
+                environment: Mapping[str, str]) -> BuildCommandResult:
+        if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
+            raise ValueError("build command argv is invalid")
+        _root, command = self._prepare(
+            workspace=workspace, working_directory=working_directory, environment=environment)
         command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
         code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
         stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
@@ -150,6 +166,76 @@ class BuildContainerExecutor:
             stdout_truncated=stdout_truncated, stderr_truncated=stderr_truncated,
             stdout_tail=stdout[-tail_bytes:] if stdout_truncated else b"",
             stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
+        )
+
+    def execute_captured(self, argv: Sequence[str], *, workspace: Path,
+                         working_directory: str, environment: Mapping[str, str],
+                         capture_directory: Path, capture_config: BuildCaptureConfig,
+                         scope: CaptureScope) -> BuildCommandResult:
+        """Run a build under a process-tree-local syscall catcher and emit its JSON record."""
+        if capture_config.backend != "ptrace":
+            raise ValueError("this executor supports the ptrace build-capture backend")
+        if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
+            raise ValueError("build command argv is invalid")
+        capture_environment = dict(environment)
+        if scope.family == "dotnet":
+            # Persistent MSBuild/Roslyn servers outlive the requested command and would keep a
+            # process-tree tracer attached after a successful build.
+            capture_environment.setdefault("DOTNET_CLI_USE_MSBUILD_SERVER", "0")
+            capture_environment.setdefault("MSBUILDDISABLENODEREUSE", "1")
+            capture_environment.setdefault("UseSharedCompilation", "false")
+        root, command = self._prepare(
+            workspace=workspace, working_directory=working_directory,
+            environment=capture_environment)
+        capture_root = capture_directory.resolve()
+        try:
+            relative_capture = capture_root.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("capture directory must be inside the run-owned workspace") from exc
+        recorder = BuildExecutionRecorder(
+            capture_root, scope, capture_config,
+            {"backend": "ptrace", "tool": "strace", "image_id": self.profile.image_id,
+             "event_kinds": sorted(("process_fork", "process_exec", "process_exit",
+                                    "file_open", "connect"))},
+        )
+        driver = capture_root / "build-driver.sh"
+        source_driver = Path(__file__).resolve().parents[3] / "containers" / "build-capture" / "build-driver.sh"
+        driver.write_bytes(source_driver.read_bytes())
+        wrapper = capture_root / "tool-wrapper.py"
+        source_wrapper = source_driver.with_name("tool-wrapper.py")
+        wrapper.write_bytes(source_wrapper.read_bytes())
+        wrapper_root = capture_root / "wrappers"
+        wrapper_root.mkdir()
+        for tool in self.CAPTURED_TOOLS:
+            launcher = wrapper_root / tool
+            launcher.write_text(
+                "#!/bin/sh\nexec \"$APPSEC_CAPTURE_PYTHON\" \"$APPSEC_CAPTURE_ROOT/tool-wrapper.py\" " +
+                tool + " \"$@\"\n", encoding="utf-8", newline="\n")
+            launcher.chmod(0o755)
+        logical_capture = "/workspace/" + relative_capture.as_posix()
+        logical_driver = logical_capture + "/build-driver.sh"
+        logical_wrappers = logical_capture + "/wrappers"
+        command.extend(("--entrypoint", "/bin/sh", self.profile.image_id, logical_driver,
+                        logical_capture, str(capture_config.argument_bytes_limit),
+                        str(capture_config.tool_call_count_limit),
+                        str(capture_config.tool_stream_bytes_limit), logical_wrappers, *argv))
+        code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+        stdout_path, stderr_path = capture_root / "stdout", capture_root / "stderr"
+        stdout_path.write_bytes(stdout)
+        stderr_path.write_bytes(stderr)
+        parse_errors = record_strace_files(capture_root.glob("trace*"), recorder)
+        record = recorder.finish(
+            argv=argv, working_directory=working_directory, exit_code=code, timed_out=timed_out,
+            stdout_path=stdout_path, stderr_path=stderr_path, collector_errors=parse_errors)
+        stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
+        tail_bytes = min(32768, self.output_bytes)
+        return BuildCommandResult(
+            tuple(argv), code, stdout[:self.output_bytes], stderr[:self.output_bytes], timed_out,
+            stdout_bytes=len(stdout), stderr_bytes=len(stderr),
+            stdout_truncated=stdout_truncated, stderr_truncated=stderr_truncated,
+            stdout_tail=stdout[-tail_bytes:] if stdout_truncated else b"",
+            stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
+            capture_record=record,
         )
 
     def prepare_node_dependencies(self, *, workspace: Path, source_dir: str) -> None:

@@ -3,6 +3,15 @@ runs_dir = "runs"
 data_dir = "data"
 metadata_dir = "runs/metadata"
 
+[build_capture]
+backend = "ptrace"
+event_count_limit = 100000
+argv_count_limit = 256
+argument_bytes_limit = 16384
+path_bytes_limit = 4096
+tool_call_count_limit = 10000
+tool_stream_bytes_limit = 1048576
+
 [tools]
 # Global selection policy; disabled coverage is a named gap, never a clean result.
 disable_grype = true
@@ -273,6 +282,9 @@ artifact_count_limit = 10000
 force_buildability_probe = false
 repair_attempts = 3
 
+[jobs.job_project_build.settings.build_capture]
+event_count_limit = 250000
+
 [jobs.job_project_build.settings.model]
 enabled = true
 provider = "anthropic-api"
@@ -384,6 +396,9 @@ workers = 8
 command_timeout_seconds = 600
 output_bytes = 8388608
 artifact_count_limit = 10000
+
+[jobs.job_language_build.settings.build_capture]
+event_count_limit = 250000
 
 [jobs.job_language_build.settings.go]
 offline = false

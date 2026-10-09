@@ -20,6 +20,64 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class BuildCaptureConfig:
+    """Resolved limits for kernel-observed build execution evidence."""
+
+    backend: str
+    event_count_limit: int
+    argv_count_limit: int
+    argument_bytes_limit: int
+    path_bytes_limit: int
+    tool_call_count_limit: int
+    tool_stream_bytes_limit: int
+
+    def __post_init__(self) -> None:
+        if self.backend not in {"ptrace", "ebpf"}:
+            raise ValueError("build capture backend must be ptrace or ebpf")
+        if not 1 <= self.event_count_limit <= 10_000_000:
+            raise ValueError("build capture event_count_limit is invalid")
+        if not 1 <= self.argv_count_limit <= 4096:
+            raise ValueError("build capture argv_count_limit is invalid")
+        if not 1 <= self.argument_bytes_limit <= 1024 * 1024:
+            raise ValueError("build capture argument_bytes_limit is invalid")
+        if not 1 <= self.path_bytes_limit <= 64 * 1024:
+            raise ValueError("build capture path_bytes_limit is invalid")
+        if not 1 <= self.tool_call_count_limit <= 1_000_000:
+            raise ValueError("build capture tool_call_count_limit is invalid")
+        if not 1 <= self.tool_stream_bytes_limit <= 64 * 1024 * 1024:
+            raise ValueError("build capture tool_stream_bytes_limit is invalid")
+
+
+def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
+                   field: str = "build_capture") -> BuildCaptureConfig:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be a table")
+    allowed = {"backend", "event_count_limit", "argv_count_limit",
+               "argument_bytes_limit", "path_bytes_limit", "tool_call_count_limit",
+               "tool_stream_bytes_limit"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise ValueError(f"{field} has unknown settings: {', '.join(sorted(unknown))}")
+    if base is None and set(value) != allowed:
+        raise ValueError(f"{field} must define every capture setting")
+    return BuildCaptureConfig(
+        backend=str(value.get("backend", base.backend if base else "")),
+        event_count_limit=int(value.get(
+            "event_count_limit", base.event_count_limit if base else 0)),
+        argv_count_limit=int(value.get(
+            "argv_count_limit", base.argv_count_limit if base else 0)),
+        argument_bytes_limit=int(value.get(
+            "argument_bytes_limit", base.argument_bytes_limit if base else 0)),
+        path_bytes_limit=int(value.get(
+            "path_bytes_limit", base.path_bytes_limit if base else 0)),
+        tool_call_count_limit=int(value.get(
+            "tool_call_count_limit", base.tool_call_count_limit if base else 0)),
+        tool_stream_bytes_limit=int(value.get(
+            "tool_stream_bytes_limit", base.tool_stream_bytes_limit if base else 0)),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ToolCapabilityConfig:
     """Global tool selection policy shared by every producer."""
 
@@ -279,6 +337,7 @@ class JobConfig:
     settings: Mapping[str, Any]
     steps: Mapping[str, StepConfig]
     typed_settings: object | None = None
+    build_capture: BuildCaptureConfig | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"job_[a-z][a-z0-9_]*", self.job_id):
@@ -300,6 +359,7 @@ class AppConfig:
     source_path: Path
     source_sha256: str
     runtime: RuntimeConfig
+    build_capture: BuildCaptureConfig
     jobs: Mapping[str, JobConfig]
     dagster: DagsterConfig = DagsterConfig()
     tools: ToolCapabilityConfig = ToolCapabilityConfig()
@@ -345,6 +405,8 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         raise ValueError("tools.disable_grype must be a Boolean")
     tool_capabilities = ToolCapabilityConfig(disable_grype=disable_grype)
 
+    build_capture = _build_capture(document.get("build_capture"), field="build_capture")
+
     runtime_value = document.get("runtime")
     if not isinstance(runtime_value, dict):
         raise ValueError("[runtime] is required")
@@ -381,6 +443,11 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         settings = value.get("settings", {})
         if not isinstance(settings, dict):
             raise ValueError(f"jobs.{job_id}.settings must be a table")
+        capture_override = settings.get("build_capture")
+        resolved_capture = (_build_capture(
+            capture_override, base=build_capture,
+            field=f"jobs.{job_id}.settings.build_capture")
+            if capture_override is not None else build_capture)
         steps_value = value.get("steps", {})
         if not isinstance(steps_value, dict):
             raise ValueError(f"jobs.{job_id}.steps must be a table")
@@ -538,6 +605,7 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
             settings=MappingProxyType(dict(settings)),
             steps=MappingProxyType(steps),
             typed_settings=typed_settings,
+            build_capture=resolved_capture,
         )
     orchestration = document.get("orchestration", {})
     if not isinstance(orchestration, dict):
@@ -552,6 +620,7 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         source_path=source,
         source_sha256=hashlib.sha256(source_bytes).hexdigest(),
         runtime=runtime,
+        build_capture=build_capture,
         jobs=MappingProxyType(jobs),
         dagster=DagsterConfig(executor=str(dagster_value.get("executor", "multiprocess")),
                               max_concurrent=int(dagster_value.get("max_concurrent", 8)),
