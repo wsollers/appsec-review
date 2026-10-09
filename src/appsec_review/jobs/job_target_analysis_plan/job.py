@@ -10,6 +10,7 @@ from pathlib import Path
 import time
 from typing import Any
 
+from appsec_review.jobs.build_discovery import normalize_build_recipe
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
@@ -300,7 +301,13 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
                     if result.raw_response is not None:
                         atomic_bytes(unit.unit_root / f"model-response-{group_slug}-{retry}.txt",
                                      result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
-                    errors = validate_proposal(result.proposal, catalog=group_catalog,
+                    proposal = dict(result.proposal)
+                    recipes = proposal.get("build_recipes")
+                    if isinstance(recipes, list):
+                        proposal["build_recipes"] = [
+                            normalize_build_recipe(recipe) if isinstance(recipe, Mapping) else recipe
+                            for recipe in recipes]
+                    errors = validate_proposal(proposal, catalog=group_catalog,
                                                allowed_components=(), allowed_paths=request.allowed_paths)
                     emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
                         invocation_id=invocation, provider=str(model["provider"]), model=str(model["model"]),
@@ -311,11 +318,11 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
                         cache_tokens=result.cache_tokens, job_id="job_target_analysis_plan",
                         attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
                     if not errors:
-                        return {"status": "ACCEPTED", "proposal": result.proposal, "calls": calls,
+                        return {"status": "ACCEPTED", "proposal": proposal, "calls": calls,
                                 "errors": [], "gap": None}
                     unit.job.events.write("ANALYSIS_PLAN_VALIDATION_REJECTED",
                         rejection_count=len(errors), build_family=family, build_system=build_system,
-                        proposal_sha256=hashlib.sha256(canonical_json(result.proposal)).hexdigest())
+                        proposal_sha256=hashlib.sha256(canonical_json(proposal)).hexdigest())
                     if retry < int(model["retries"]):
                         request = replace(request, repair_errors=tuple(errors[:20]),
                             prior_response=canonical_json(result.proposal).decode()[:131072])

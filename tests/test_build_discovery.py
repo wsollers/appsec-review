@@ -4,7 +4,8 @@ import hashlib
 from pathlib import Path
 
 from appsec_review.jobs.build_discovery import (
-    BUILD_RECIPE_SCHEMA, descriptor_package, discover_build_units, validate_build_recipe,
+    BUILD_RECIPE_SCHEMA, descriptor_package, discover_build_units, normalize_build_recipe,
+    validate_build_recipe,
 )
 
 
@@ -110,3 +111,18 @@ def test_recipe_validation_forbids_target_execution_and_tool_installation() -> N
     }
     assert any("execution, tests, or tool installation" in error
                for error in validate_build_recipe(recipe, unit))
+
+
+def test_lockless_node_recipe_normalizes_npm_ci_before_acceptance() -> None:
+    unit = discover_build_units([_file("web/package.json")])[0]
+    recipe = {
+        "schema": BUILD_RECIPE_SCHEMA, "build_unit_id": unit["build_unit_id"],
+        "image_profile": "node", "source_dir": "web", "build_dir": "web/dist",
+        "system_packages": [], "environment": {}, "dependency_files": ["web/package.json"],
+        "configure_commands": [["npm", "ci"]], "build_commands": [["npm", "run", "build"]],
+        "expected_outputs": [], "network_required": True, "reason": "inferred fixture",
+    }
+    assert any("npm ci only" in error for error in validate_build_recipe(recipe, unit))
+    normalized = normalize_build_recipe(recipe)
+    assert normalized["configure_commands"] == []
+    assert validate_build_recipe(normalized, unit) == []

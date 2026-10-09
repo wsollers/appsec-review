@@ -192,6 +192,29 @@ def _within(value: str, root: str) -> bool:
     return root == "." or path == boundary or boundary in path.parents
 
 
+def normalize_build_recipe(recipe: Mapping[str, Any]) -> dict[str, Any]:
+    """Apply narrow descriptor-backed corrections before accepting inferred build argv."""
+    value = dict(recipe)
+    dependencies = value.get("dependency_files")
+    names = ({PurePosixPath(item).name for item in dependencies if isinstance(item, str)}
+             if isinstance(dependencies, list) else set())
+    if value.get("image_profile") == "node" and "package-lock.json" not in names:
+        for field in ("configure_commands", "build_commands"):
+            commands = value.get(field)
+            if not isinstance(commands, list):
+                continue
+            normalized = []
+            for raw in commands:
+                argv = list(raw) if isinstance(raw, list) else raw
+                if isinstance(argv, list) and argv[:2] == ["npm", "ci"]:
+                    # The derived project image performs the lockless, script-disabled restore.
+                    # Do not repeat an installer against the writable target workspace.
+                    continue
+                normalized.append(argv)
+            value[field] = normalized
+    return value
+
+
 def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     required = {"schema", "build_unit_id", "image_profile", "source_dir", "build_dir",

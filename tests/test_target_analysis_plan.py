@@ -145,6 +145,24 @@ def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: P
     assert list((run_root / "data/guidance").glob("*/role.md"))
 
 
+def test_lockless_node_inference_is_normalized_before_plan_acceptance(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path, {
+        "web/package.json": '{"scripts":{"build":"node --check index.js"}}',
+        "web/index.js": "export const value = 1;\n",
+    }, model_enabled=True)
+
+    def proposal(request):
+        value = _proposal(request)
+        value["build_recipes"][0]["configure_commands"] = [["npm", "ci"]]
+        return value
+
+    model = _Model(proposal)
+    _outcome, plan = _run(config, target, build_job(model_client=model))
+    recipe = plan["build_topology"]["build_actions"][0]["recipe"]
+    assert recipe["configure_commands"] == []
+    assert plan["model"]["status"] == "ACCEPTED"
+
+
 def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path, {
         "a/package.json": "{}", "a/tsconfig.json": "{}", "a/index.ts": "export {}\n",
