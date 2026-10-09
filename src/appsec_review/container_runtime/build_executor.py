@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import signal
 import subprocess
@@ -151,6 +151,18 @@ class BuildContainerExecutor:
             stdout_tail=stdout[-tail_bytes:] if stdout_truncated else b"",
             stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
         )
+
+    def prepare_node_dependencies(self, *, workspace: Path, source_dir: str) -> None:
+        """Expose image-owned node_modules at the writable target source root."""
+        logical = PurePosixPath(source_dir)
+        if source_dir != "." and (logical.is_absolute() or ".." in logical.parts):
+            raise ValueError("Node source directory is not normalized")
+        dependency_root = "/opt/project/node_modules" if source_dir == "." else (
+            f"/opt/project/{logical.as_posix()}/node_modules")
+        result = self.execute(("ln", "-s", dependency_root, "node_modules"),
+                              workspace=workspace, working_directory=source_dir, environment={})
+        if result.timed_out or result.exit_code != 0:
+            raise RuntimeError("could not expose image-owned Node dependencies to the build workspace")
 
 
 def profiles_from_settings(value: Any) -> dict[str, BuildProfile]:

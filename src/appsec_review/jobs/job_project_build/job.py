@@ -245,6 +245,11 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))
     executor.resolve()
+    if action["family"] == "node" and recipe.get("network_required"):
+        prepare = getattr(executor, "prepare_node_dependencies", None)
+        if not callable(prepare):
+            raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
+        prepare(workspace=workspace, source_dir=str(recipe["source_dir"]))
     command_receipts, gaps = [], []
     for ordinal, argv in enumerate([*recipe["configure_commands"], *recipe["build_commands"]], 1):
         command = _normalized_argv(recipe, argv)

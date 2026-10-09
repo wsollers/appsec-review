@@ -195,6 +195,12 @@ def _within(value: str, root: str) -> bool:
 def normalize_build_recipe(recipe: Mapping[str, Any]) -> dict[str, Any]:
     """Apply narrow descriptor-backed corrections before accepting inferred build argv."""
     value = dict(recipe)
+    if value.get("image_profile") == "java" and isinstance(value.get("environment"), Mapping):
+        # The pinned build image owns the JDK location. Model-inferred JAVA_HOME values are
+        # target-host assumptions and can name a JDK that is absent from the image.
+        environment = dict(value["environment"])
+        environment.pop("JAVA_HOME", None)
+        value["environment"] = environment
     dependencies = value.get("dependency_files")
     names = ({PurePosixPath(item).name for item in dependencies if isinstance(item, str)}
              if isinstance(dependencies, list) else set())

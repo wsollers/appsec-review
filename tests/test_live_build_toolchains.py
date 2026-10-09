@@ -8,7 +8,12 @@ import subprocess
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.container_runtime import BuildContainerExecutor, profiles_from_settings
+from appsec_review.container_runtime import (
+    BuildContainerExecutor,
+    BuildProfile,
+    ProjectImageResolver,
+    profiles_from_settings,
+)
 from appsec_review.jobs.job_language_build import dotnet, jvm, node, php, python, rust, wasm
 from appsec_review.jobs.job_language_build.job import _catalog, _kind
 
@@ -160,3 +165,44 @@ def test_live_build_container_compiles_fixture_and_emits_cataloged_artifacts(
         artifact = project / relative
         assert artifact.is_file() and artifact.stat().st_size > 0, f"missing {case.family} artifact: {relative}"
     _assert_catalog_contract(case, project)
+
+
+def test_live_typescript_project_image_dependencies_are_visible_in_clean_workspace(
+        tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    source_dir = "projects/typescript/case"
+    project = target / source_dir
+    shutil.copytree(FIXTURE / "typescript", project)
+    recipe = {
+        "schema": "appsec-review/build-recipe/1",
+        "build_unit_id": "build-unit-live-typescript",
+        "image_profile": "node",
+        "source_dir": source_dir,
+        "build_dir": f"{source_dir}/dist",
+        "system_packages": [],
+        "environment": {},
+        "dependency_files": [f"{source_dir}/package.json"],
+        "configure_commands": [],
+        "build_commands": [["npm", "run", "build"]],
+        "expected_outputs": [f"{source_dir}/dist/index.js"],
+        "network_required": True,
+        "reason": "live dependency-image visibility fixture",
+        "build_system": "node",
+    }
+    base = _profile("node")
+    image, _stdout, _stderr = ProjectImageResolver(
+        metadata_root=tmp_path / "metadata", target_root=target, timeout_seconds=900,
+    ).resolve(recipe, base)
+    workspace = tmp_path / "workspace"
+    shutil.copytree(target, workspace)
+    executor = BuildContainerExecutor(
+        BuildProfile("node", image.image_tag, image.image_id, base.user),
+        timeout_seconds=900, output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    executor.prepare_node_dependencies(workspace=workspace, source_dir=source_dir)
+    result = executor.execute(("npm", "run", "build"), workspace=workspace,
+                              working_directory=source_dir, environment={})
+    detail = ((result.stdout_tail or result.stdout) + b"\n" +
+              (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+    assert not result.timed_out and result.exit_code == 0, detail
+    assert (workspace / source_dir / "dist" / "index.js").is_file()

@@ -126,3 +126,15 @@ def test_lockless_node_recipe_normalizes_npm_ci_before_acceptance() -> None:
     normalized = normalize_build_recipe(recipe)
     assert normalized["configure_commands"] == []
     assert validate_build_recipe(normalized, unit) == []
+
+
+def test_java_recipe_normalization_removes_host_specific_java_home() -> None:
+    recipe = {
+        "image_profile": "java",
+        "environment": {
+            "JAVA_HOME": "/usr/lib/jvm/java-11-openjdk-amd64",
+            "MAVEN_OPTS": "-Xmx1g",
+        },
+    }
+    normalized = normalize_build_recipe(recipe)
+    assert normalized["environment"] == {"MAVEN_OPTS": "-Xmx1g"}

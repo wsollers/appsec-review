@@ -41,6 +41,31 @@ def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -
     assert result.exit_code == 0 and result.stdout == b"built"
 
 
+def test_build_executor_exposes_image_owned_node_modules(tmp_path: Path) -> None:
+    image_id = "sha256:" + "b" * 64
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append((tuple(argv), timeout))
+        if argv[:2] == ("docker", "inspect"):
+            return 0, json.dumps([{"Destination": "/", "Source": "/"}]).encode(), b"", False
+        return 0, b"", b"", False
+
+    workspace = tmp_path / "workspace"
+    (workspace / "projects" / "typescript" / "sample").mkdir(parents=True)
+    executor = BuildContainerExecutor(
+        BuildProfile("node", "build-node:local", image_id, "10001:10001"),
+        timeout_seconds=90, output_bytes=1024, runner=runner)
+    executor.prepare_node_dependencies(
+        workspace=workspace, source_dir="projects/typescript/sample")
+    command = calls[-1][0]
+    assert command[command.index("--entrypoint") + 1:] == (
+        "ln", image_id, "-s", "/opt/project/projects/typescript/sample/node_modules",
+        "node_modules")
+    assert "--read-only" in command
+    assert command[command.index("--network") + 1] == "bridge"
+
+
 @pytest.mark.skipif(os.name != "posix", reason="process-session cleanup is used by the Linux deployment")
 def test_default_runner_timeout_releases_descendants_holding_capture_pipes() -> None:
     script = (

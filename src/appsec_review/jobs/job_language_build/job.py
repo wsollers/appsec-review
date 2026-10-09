@@ -755,6 +755,11 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))
     executor.resolve()
+    if family == "node" and recipe.get("network_required"):
+        prepare = getattr(executor, "prepare_node_dependencies", None)
+        if not callable(prepare):
+            raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
+        prepare(workspace=workspace, source_dir=str(recipe["source_dir"]))
     protected = root / "protected-commands"
     protected.mkdir(parents=True, exist_ok=True)
     commands, gaps, go_trace_rows, node_rows = [], [], [], []
