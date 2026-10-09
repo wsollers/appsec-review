@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shlex
 import shutil
+import struct
 import time
 from typing import Any
 
@@ -32,7 +33,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 
-from . import dotnet, jvm, node, php, python, rust
+from . import dotnet, elf, jvm, node, php, python, rust
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
@@ -244,8 +245,16 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
                           "mapping_confidence": 1.0}
         if kind in {"executable", "shared-library", "native-output"}:
-            artifact.update(loader_dependencies=[], loader_dependency_status="unobserved")
-            gaps.append(f"{relative}: static loader dependencies were not observable without a pinned parser")
+            try:
+                facts = elf.loader_facts(path)
+            except (OSError, ValueError, struct.error) as exc:
+                artifact.update(loader_dependencies=[], loader_dependency_status="unparsed")
+                gaps.append(f"{relative}: loader dependencies were not parseable: {exc}")
+            else:
+                artifact.update(loader_dependencies=facts["needed"], loader_dependency_status="resolved",
+                                loader_linkage=facts["linkage"], loader_interpreter=facts["interpreter"],
+                                loader_soname=facts["soname"], loader_run_paths=facts["run_paths"],
+                                loader_parser=elf.PARSER_IDENTITY)
         artifacts.append(artifact)
         if len(artifacts) >= limit:
             gaps.append("artifact catalog truncated at configured count bound")
@@ -857,6 +866,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     protected.mkdir(parents=True, exist_ok=True)
     commands, gaps, go_trace_rows, node_rows = [], [], [], []
     cargo_metadata: dict[str, Any] | None = None
+    provenance_gaps: list[str] = []
     captures: list[tuple[int, VerifiedCapture]] = []
     capture_root = root / "attempts" / unit.job.attempt_id / "execution-capture"
     if capture_root.exists():
@@ -1107,11 +1117,16 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         link_rows = []
         normalized_links = _normalized_links(rust.link_rows(compile_rows), str(recipe["build_dir"]))
         kinds = {str(row.get("tool_kind")) for row in compile_rows}
-        required_kinds = ("compiler", "linker-driver", "archiver") if (
-            rust_settings is not None and rust_settings.capture_linker) else ("compiler",)
-        for expected in required_kinds:
-            if expected not in kinds:
-                gaps.append(f"Rust {expected} execution was not observed in the standardized capture")
+        capture_facts["observed_tool_kinds"] = sorted(kinds)
+        if "compiler" not in kinds:
+            gaps.append("Rust compiler execution was not observed in the standardized capture")
+        # A complete syscall capture is also the authority for what did not run: rustc writes
+        # rlibs in-process and a library-only build never links. Absence is unknown, and so a
+        # gap, only when the capture itself lost evidence.
+        if (any(gap.startswith(_CAPTURE_GAP) for gap in gaps) or provenance_gaps) and \
+                rust_settings is not None and rust_settings.capture_linker:
+            gaps.extend(f"Rust {expected} execution could not be established from an incomplete capture"
+                        for expected in ("linker-driver", "archiver") if expected not in kinds)
         if cargo_metadata is None:
             gaps.append("Cargo metadata was unavailable")
     elif family == "python":
@@ -1159,7 +1174,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     atomic_json(workspace_manifest_path, {"schema": "appsec-review/build-workspace-manifest/1",
                 "build_unit_id": build_unit_id, "files": workspace_files})
     status = "FAILED" if any("build command" in gap for gap in gaps) else "SUCCEEDED"
-    capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps)
+    capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not (
+        family == "rust" and provenance_gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"], "build_unit_id": build_unit_id,
         "family": family, "root": dispatch["root"], "build_system": dispatch.get("recipe", {}).get("build_system", dispatch.get("build_system")),
@@ -1196,7 +1212,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["composer"] = php_metadata
         receipt["composer_policy"] = php_policy
         receipt["package_relationships"] = list((php_metadata or {}).get("relationships", ()))
-    # An incomplete capture is never checkpointed: reuse would republish it without its gap.
+    # A capture that lost evidence, or tool provenance it could not establish, is never
+    # checkpointed: the next run must capture again.
     if status == "SUCCEEDED" and capture_complete:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
@@ -1516,6 +1533,7 @@ def build_job(*, executor_factory=None) -> Job:
                   ("execute.native", "execute.go", "execute.dotnet", "execute.node", "execute.python",
                    "execute.rust", "execute.php", "execute.java", "execute.wasm")))
     implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
+        Path(elf.__file__).read_bytes() +
         Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
         Path(wasm.__file__).read_bytes() +
         (b"injected" if executor_factory else b"container")).hexdigest()

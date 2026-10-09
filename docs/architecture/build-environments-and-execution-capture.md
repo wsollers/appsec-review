@@ -260,11 +260,13 @@ hashes of the normalized findings, the scanner execution receipt, and the gitlea
 `build` retrieval shard exposes only the record, event, and findings hashes, completeness, and
 finding count.
 
-Rust tool provenance is derived from the verified records, not from Cargo output. A successful
-process-exec event is the authority that `rustc`, a C linker driver, a linker, an archiver, or a
+Rust tool provenance is derived from the verified records, not from Cargo output. Only a successful
+process-exec event establishes that `rustc`, a C linker driver, a linker, an archiver, or a
 Cargo build script ran, including the toolchain compiler Cargo starts by absolute path. PATH
-tool-call records are reconciled onto the same invocation and add exit and stream identities; a
-launcher, a toolchain proxy, and the resolved binary collapse into one row. The former
+tool-call records are reconciled onto an invocation the collector observed and add exit and stream
+identities; a launcher, a toolchain proxy, and the resolved binary collapse into one row. A
+tool-call record with no matching successful process-exec event never becomes an invocation, cannot
+satisfy a provenance check, and is reported as a gap. The former
 `RUSTC_WRAPPER`, linker, and archiver shims and the `Running` line parser were removed because they
 recorded nothing the syscall evidence lacks. Exact argv stays in the unit's protected compile
 commands; receipts keep argv hashes, the classified tool, mapped inputs and outputs, and the
@@ -273,12 +275,15 @@ container user owns; the Rust link database is stored beside the workspace.
 
 Lost evidence is reported rather than reconstructed. Capture gaps appear in the receipt as
 `execution capture command N: ...`; an exec event redacted by the scan removes that tool's
-provenance and names a gap; `rustc` archives rlibs in-process, so an unobserved archiver remains a
-named gap when `capture_linker` requires linker and archiver observation. When the scan redacts the
-top invocation, the protected command artifact stores the redacted argv and environment instead of
-reintroducing them, and Cargo metadata that was truncated or redacted is a gap. A unit whose
-capture is incomplete is never checkpointed; a reused checkpoint re-verifies every retained capture
-against the scope and hashes its receipt recorded and republishes the gaps that receipt named.
+provenance and names a gap. A complete capture is also the authority for what did not run: `rustc`
+writes rlibs in-process and a library-only build never links, so the receipt records the observed
+tool kinds and an absent linker driver or archiver is a fact, not a gap. Absence becomes a named gap
+only when the capture lost evidence and `capture_linker` is set; an unobserved compiler is always a
+gap. When the scan redacts the top invocation, the protected command artifact stores the redacted
+argv and environment instead of reintroducing them, and Cargo metadata that was truncated or
+redacted is a gap. A unit whose capture or tool provenance is incomplete is never checkpointed; a
+reused checkpoint re-verifies every retained capture against the scope and hashes its receipt
+recorded and republishes the gaps that receipt named.
 
 ## Configuration ownership
 

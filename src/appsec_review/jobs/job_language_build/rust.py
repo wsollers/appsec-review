@@ -234,20 +234,20 @@ def capture_invocations(captures: Sequence[tuple[int, VerifiedCapture]], workspa
                         directory: str) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
     """Derive Rust tool provenance from hash-verified standardized capture records.
 
-    Successful process-exec syscall events are the authority that a tool ran, including tools
-    started by absolute path. PATH tool-call records are reconciled onto the same invocation and
-    contribute exit and stream identities; they never stand in for a redacted or failed exec.
+    Only a successful process-exec syscall event establishes that a tool ran, including tools
+    started by absolute path. A PATH tool-call record is reconciled onto an invocation the
+    collector observed and contributes exit and stream identities. A tool-call record with no
+    such event never becomes an invocation: it is counted and reported as a gap.
     """
     rows: dict[str, dict[str, Any]] = {}
     facts = {"process_exec_events": 0, "failed_exec_events": 0, "redacted_exec_events": 0,
              "tool_call_records": 0, "redacted_tool_calls": 0, "unreconciled_tool_calls": 0,
              "connect_events": 0, "envp_events": 0, "envp_redacted_names": []}
     redacted_names: set[str] = set()
-    truncated = events_capped = False
+    truncated = False
     for ordinal, capture in captures:
         label = f"execution-capture:command-{ordinal:03d}"
         record_sha = str(capture.identity["sha256"])
-        events_capped = events_capped or bool(capture.document.get("events", {}).get("capped"))
         for event in capture.events():
             if event.get("kind") == "connect":
                 facts["connect_events"] += 1
@@ -294,35 +294,26 @@ def capture_invocations(captures: Sequence[tuple[int, VerifiedCapture]], workspa
             kind = tool_kind(name, argv)
             if kind is None:
                 continue
-            key = _invocation_key(name, argv)
-            row = rows.get(key)
+            row = rows.get(_invocation_key(name, argv))
             if row is None:
                 facts["unreconciled_tool_calls"] += 1
-                if len(rows) >= _INVOCATION_LIMIT:
-                    truncated = True
-                    continue
-                row = rows[key] = _row(name, kind, argv, workspace, directory,
-                                       f"{label}:{call['uri']}")
-                row["evidence"] = {"capture_record_sha256": record_sha, "tool_call": None,
-                                   "process_exec": {"count": 0, "event_ordinals": [], "executable": ""}}
+                continue
             if row["evidence"]["tool_call"] is None:
                 row["evidence"]["tool_call"] = {
                     "uri": call["uri"], "sha256": call["sha256"], "exit_code": document.get("exit_code"),
                     "stdout_sha256": document.get("stdout", {}).get("sha256"),
                     "stderr_sha256": document.get("stderr", {}).get("sha256")}
     for row in rows.values():
-        evidence = row["evidence"]
-        row["mapping"] = ("capture-tool-call" if not evidence["process_exec"]["count"] else
-                          "syscall-process-exec+tool-call" if evidence["tool_call"] else
+        row["mapping"] = ("syscall-process-exec+tool-call" if row["evidence"]["tool_call"] else
                           "syscall-process-exec")
     facts["envp_redacted_names"] = sorted(redacted_names)[:256]
     gaps: list[str] = []
     if facts["redacted_exec_events"]:
         gaps.append(f"{facts['redacted_exec_events']} process-exec events were redacted by the secret "
                     "scan; their tool provenance is unavailable")
-    if facts["unreconciled_tool_calls"] and not events_capped:
-        gaps.append(f"{facts['unreconciled_tool_calls']} tool-call records had no matching "
-                    "process-exec event")
+    if facts["unreconciled_tool_calls"]:
+        gaps.append(f"{facts['unreconciled_tool_calls']} tool-call records had no matching successful "
+                    "process-exec event and are not claimed as tool execution")
     if truncated:
         gaps.append("Rust tool invocation catalog truncated at its row bound")
     return list(rows.values()), facts, gaps

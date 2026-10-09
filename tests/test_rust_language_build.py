@@ -21,7 +21,7 @@ from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import file_sha256
-from tests.capture_fakes import SYNTHETIC_SECRET, failing_scanner, simulated_executor
+from tests.capture_fakes import SYNTHETIC_SECRET, failing_scanner, minimal_elf, simulated_executor
 
 
 ROOT = Path(__file__).parents[1]
@@ -78,7 +78,8 @@ def _metadata(working_directory: str) -> bytes:
                                  "dependencies": ["helper 0.1.0"]}]}}).encode()
 
 
-def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None):
+def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None,
+                   phantom_archiver: bool = False):
     """A Cargo build as the syscall collector and PATH wrappers would observe it."""
     def behavior(argv, workspace, working_directory, environment, container):
         calls.append(argv)
@@ -93,7 +94,7 @@ def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None):
         root = workspace / working_directory / "target" / "x86_64-unknown-linux-gnu" / "debug"
         deps, generated = root / "deps", root / "build" / "sample-hash" / "out"
         deps.mkdir(parents=True, exist_ok=True); generated.mkdir(parents=True, exist_ok=True)
-        (root / "sample").write_bytes(b"\x7fELFrust")
+        (root / "sample").write_bytes(minimal_elf())
         (deps / "libsample.rlib").write_bytes(b"rlib")
         (deps / "libsample.rmeta").write_bytes(b"rmeta")
         (deps / "libsample.a").write_bytes(b"archive")
@@ -112,7 +113,8 @@ def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None):
         container.exec("/usr/bin/cc", ["/usr/bin/cc", *link])
         container.tool_call("cc", link, executable="/usr/bin/cc")
         archive = ["crs", f"{debug}/deps/libsample.a", f"{debug}/deps/sample.o"]
-        container.exec("/usr/bin/ar", ["ar", *archive])
+        # A wrapper record alone, or beside only a failed exec, is not an observed execution.
+        container.exec("/usr/bin/ar", ["ar", *archive], succeeded=not phantom_archiver)
         container.tool_call("ar", archive, executable="/usr/bin/ar")
         script = f"{logical}/target/debug/build/sample-hash/build-script-build"
         container.exec(script, [script],
@@ -195,12 +197,14 @@ def test_rust_build_retains_streams_provenance_artifacts_metadata_and_sanitized_
     run_id, fingerprint = _accepted_project(config, target, calls)
     outcome = _language(config, target, fingerprint, run_id, lambda unit, profile: simulated_executor(
         profile, rust_container(calls), output_bytes=4096))
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert outcome["status"] == "SUCCEEDED"
     run_root = config.runtime.runs_dir / run_id
     receipt = _rust_receipt(config, run_id)
-    assert receipt["terminal_status"] == "SUCCEEDED"
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
     assert receipt["capture_identity"] == rust.CAPTURE_IDENTITY
-    assert not any(gap.startswith("execution capture") for gap in receipt["gaps"])
+    executable = next(item for item in receipt["artifacts"] if item["kind"] == "executable")
+    assert executable["loader_dependencies"] == ["libc.so.6"]
+    assert executable["loader_dependency_status"] == "resolved" and executable["loader_linkage"] == "dynamic"
     assert {item["kind"] for item in receipt["artifacts"]} >= {
         "rust-library", "rust-metadata", "static-library", "generated-source", "executable"}
     assert not any("execution-capture" in item["path"] for item in receipt["artifacts"])
@@ -250,6 +254,7 @@ def test_rust_build_retains_streams_provenance_artifacts_metadata_and_sanitized_
     assert provenance["complete"] is True and provenance["command_count"] == 2
     assert provenance["failed_exec_events"] == 1 and provenance["redacted_exec_events"] == 0
     assert provenance["connect_events"] == 2 and provenance["unreconciled_tool_calls"] == 0
+    assert provenance["observed_tool_kinds"] == ["archiver", "code-generator", "compiler", "linker-driver"]
 
     # Envp is captured on the later exec, and exact-name redaction removed its value.
     compiler = next(event for event in _events(run_root, receipt["commands"][1])
@@ -298,8 +303,33 @@ def test_rust_capture_secret_is_detected_recorded_and_absent_from_every_retained
     assert not tuple(capture_root.glob("trace*")) and not (capture_root / ".secret-scan-input").exists()
     # The redacted exec is reported as lost provenance instead of being reconstructed.
     assert receipt["capture_provenance"]["redacted_exec_events"] == 1
+    assert receipt["capture_provenance"]["complete"] is False
     assert "code-generator" not in {item["tool_kind"] for item in receipt["tool_invocations"]}
     assert any("redacted by the secret scan" in gap for gap in receipt["gaps"])
+    assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+
+
+def test_rust_tool_call_without_a_successful_exec_is_never_tool_provenance(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _accepted_project(config, target, [])
+    outcome = _language(config, target, fingerprint, run_id, lambda unit, profile: simulated_executor(
+        profile, rust_container([], phantom_archiver=True)))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    receipt = _rust_receipt(config, run_id)
+    # The wrapper wrote an `ar` record, but the only `ar` execve the collector saw failed.
+    assert all(command["execution_capture"]["complete"] for command in receipt["commands"])
+    assert all(item["evidence"]["process_exec"]["count"] >= 1 for item in receipt["tool_invocations"])
+    assert {item["mapping"] for item in receipt["tool_invocations"]} <= {
+        "syscall-process-exec", "syscall-process-exec+tool-call"}
+    assert "archiver" not in {item["tool_kind"] for item in receipt["tool_invocations"]}
+    provenance = receipt["capture_provenance"]
+    assert provenance["unreconciled_tool_calls"] == 1 and provenance["complete"] is False
+    assert "archiver" not in provenance["observed_tool_kinds"]
+    assert ("1 tool-call records had no matching successful process-exec event and are not claimed "
+            "as tool execution") in receipt["gaps"]
+    assert "Rust archiver execution could not be established from an incomplete capture" in receipt["gaps"]
+    assert receipt["link_database"]["relationship_count"] == 1
+    assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
 
 
 def test_rust_invocation_secret_is_not_reintroduced_by_the_protected_command(tmp_path: Path) -> None:
@@ -354,6 +384,7 @@ def test_rust_scanner_failure_fails_closed_as_an_explicit_gap_and_is_not_checkpo
     assert SYNTHETIC_SECRET not in _retained_text(run_root)
     assert receipt["tool_invocations"] == []
     assert "Rust compiler execution was not observed in the standardized capture" in receipt["gaps"]
+    assert "Rust linker-driver execution could not be established from an incomplete capture" in receipt["gaps"]
     assert "Cargo metadata was unavailable" in receipt["gaps"]
     assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
 
@@ -445,7 +476,7 @@ def test_rust_checkpoint_reuses_verified_captures_and_detects_tampering(tmp_path
     _language(config, target, fingerprint, run_id, factory, force_from="job_language_build")
     reused = _rust_receipt(config, run_id)
     assert reused["checkpoint_reused"] is True
-    assert reused["gaps"] == receipt["gaps"] and reused["gaps"]
+    assert reused["gaps"] == receipt["gaps"] == []
     assert [command["execution_capture"] for command in reused["commands"]] == [
         command["execution_capture"] for command in receipt["commands"]]
     run_root = config.runtime.runs_dir / run_id

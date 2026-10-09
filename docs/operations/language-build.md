@@ -18,8 +18,9 @@ runs non-root with dropped capabilities and `no-new-privileges`, has a read-only
 central CPU, memory, PID, timeout, tmpfs, and output limits. Target binaries and tests are never run.
 
 Receipts catalog generated sources, compile databases, objects, static/shared libraries,
-executables, LLVM bitcode/IR, debug data, and link maps. Loader dependencies remain an explicit gap
-until a pinned parser is available. Exact recipe and compiler/linker argv are retained only under
+executables, LLVM bitcode/IR, debug data, and link maps. Loader dependencies of ELF executables and
+shared libraries are read from the dynamic section by a bounded in-repository parser that loads and
+executes nothing; a file it cannot parse is a named gap. Exact recipe and compiler/linker argv are retained only under
 the unit's `protected-commands/` directory; searchable records retain argv hashes, sanitized
 environment facts, resolved inputs/outputs, artifact hashes, and mapping confidence. A complete
 workspace manifest protects the handoff consumed by later language-specific analysis.
@@ -61,9 +62,10 @@ evidence for rustc, linker-driver, linker, archiver, and build-script/code-gener
 Cargo output is retained as a diagnostic stream and is not parsed for provenance. Cargo metadata
 identifies proc-macro targets, workspace packages, and exact resolve relationships. Generated Rust
 sources, rlib/rmeta files, static/shared libraries, binaries, and debug/dependency metadata are
-cataloged without executing target programs. Capture caps, scanner failure, redacted exec events,
-and an unobserved linker or archiver are named gaps; a unit with an incomplete capture is not
-checkpointed.
+cataloged without executing target programs. A tool-call record without a matching successful
+process-exec event is never tool provenance. Capture caps, scanner failure, redacted exec events,
+unreconciled tool-call records, and an unobserved compiler are named gaps; a unit with an
+incomplete capture or incomplete tool provenance is not checkpointed.
 
 Each command stream is a separate protected artifact with its SHA-256, original and retained byte
 counts, configured limit, truncation state, exit/timeout state, duration, image, command, and attempt

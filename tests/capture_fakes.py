@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterable, Sequence
 import hashlib
 import json
 from pathlib import Path
+import struct
 
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.container_runtime.catalog import load_catalog
@@ -20,6 +21,28 @@ from appsec_review.container_runtime.catalog import load_catalog
 ROOT = Path(__file__).parents[1]
 SYNTHETIC_SECRET = "e7322523fb86ed64c836a979cf8465fbd436378c653c1db38f9ae87bc62a6fd5"
 Scanner = Callable[[Path, Path], tuple[int | None, bytes, bytes, bool]]
+
+
+def minimal_elf(needed: Sequence[str] = ("libc.so.6",)) -> bytes:
+    """A little-endian ELF64 holding only the program headers and dynamic section a loader reads."""
+    strings = b"\0" + b"".join(name.encode() + b"\0" for name in needed)
+    offsets, cursor = [], 1
+    for name in needed:
+        offsets.append(cursor)
+        cursor += len(name) + 1
+    header, program = 64, 56
+    dynamic_offset = header + 2 * program
+    dynamic = b"".join(struct.pack("<qQ", 1, offset) for offset in offsets)
+    string_offset = dynamic_offset + len(dynamic) + 3 * 16
+    dynamic += struct.pack("<qQ", 5, string_offset) + struct.pack("<qQ", 10, len(strings))
+    dynamic += struct.pack("<qQ", 0, 0)
+    size = string_offset + len(strings)
+    ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + bytes(8)
+    elf_header = ident + struct.pack("<HHIQQQIHHHHHH", 3, 62, 1, 0, header, 0, 0, header, program, 2, 0, 0, 0)
+    load = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, size, size, 4096)
+    segment = struct.pack("<IIQQQQQQ", 2, 6, dynamic_offset, dynamic_offset, dynamic_offset,
+                          len(dynamic), len(dynamic), 8)
+    return elf_header + load + segment + dynamic + strings
 
 
 def _quoted(value: str) -> str:

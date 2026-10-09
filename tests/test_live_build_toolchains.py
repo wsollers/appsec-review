@@ -503,8 +503,8 @@ def _capture_events(run_root: Path, command) -> list[dict]:
 def _assert_live_rust_capture(config, run_root: Path, receipt) -> None:
     """Every Rust command carries a complete, hash-valid standardized capture with a real scan."""
     assert receipt["terminal_status"] == "SUCCEEDED", receipt["gaps"]
+    assert receipt["gaps"] == []
     assert [command["role"] for command in receipt["commands"]] == ["metadata", "build"]
-    assert not [gap for gap in receipt["gaps"] if gap.startswith("execution capture")], receipt["gaps"]
     gitleaks = load_catalog(ROOT).tool("tool-gitleaks")
     for ordinal, command in enumerate(receipt["commands"], 1):
         assert command["exit_code"] == 0 and command["timed_out"] is False
@@ -543,7 +543,7 @@ def _assert_live_rust_capture(config, run_root: Path, receipt) -> None:
 
 def test_live_rust_language_build_accepts_hash_verified_execution_capture(tmp_path: Path) -> None:
     config, run_root, outcome, receipt = _live_rust_language_build(tmp_path, secret=False)
-    assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+    assert outcome["status"] == "SUCCEEDED", outcome
     _assert_live_rust_capture(config, run_root, receipt)
 
     # The dependency-bearing build produced the executable and Rust intermediates.
@@ -551,6 +551,10 @@ def test_live_rust_language_build_accepts_hash_verified_execution_capture(tmp_pa
     executable = artifacts["rust/target/debug/appsec-fixture-rust"]
     assert executable["kind"] == "executable"
     assert file_sha256(run_root / executable["path"]) == executable["sha256"]
+    assert executable["loader_dependency_status"] == "resolved"
+    assert "libc.so.6" in executable["loader_dependencies"] and executable["loader_interpreter"]
+    assert all(item["loader_dependency_status"] == "resolved" for item in receipt["artifacts"]
+               if item["kind"] in {"executable", "shared-library"})
     kinds = {item["kind"] for item in receipt["artifacts"]}
     assert kinds >= {"executable", "rust-library", "rust-metadata", "dependency-metadata"}
     assert any(path.startswith("rust/target/debug/deps/libtime-") and path.endswith(".rlib")
@@ -578,17 +582,17 @@ def test_live_rust_language_build_accepts_hash_verified_execution_capture(tmp_pa
     assert all(item["evidence"]["process_exec"]["count"] >= 1 for item in rows)
     assert all("argv" not in item and len(item["argv_sha256"]) == 64 for item in rows)
     assert receipt["link_database"]["relationship_count"] >= 1
-    # rustc writes rlib archives in-process; an unobserved archiver stays a named gap.
-    assert ("archiver" in row_kinds) != (
-        "Rust archiver execution was not observed in the standardized capture" in receipt["gaps"])
     provenance = receipt["capture_provenance"]
+    # rustc writes rlib archives in-process: the complete capture shows that no archiver ran.
+    assert provenance["observed_tool_kinds"] == sorted(row_kinds) and "archiver" not in row_kinds
     assert provenance["complete"] is True and provenance["redacted_exec_events"] == 0
     assert provenance["envp_events"] > 0 and provenance["unreconciled_tool_calls"] == 0
     assert not any(command["tool"] != "cargo" for command in receipt["commands"])
 
 
 def test_live_rust_language_build_detects_and_removes_an_envp_secret(tmp_path: Path) -> None:
-    config, run_root, _outcome, receipt = _live_rust_language_build(tmp_path, secret=True)
+    config, run_root, outcome, receipt = _live_rust_language_build(tmp_path, secret=True)
+    assert outcome["status"] == "SUCCEEDED", outcome
     _assert_live_rust_capture(config, run_root, receipt)
     for command in receipt["commands"]:
         identity = command["execution_capture"]
