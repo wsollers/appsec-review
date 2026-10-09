@@ -111,6 +111,30 @@ immutable publication checks remain coherent across Dagster worker processes. Di
 `JobRunner.run` remains available for fast runtime tests and controlled application execution;
 integration and acceptance tests use the Dagster DAG.
 
+## Inference entry point and model preflight
+
+`appsec_review.inference.infer` is the only path from the application to a language model. A job
+builds a `ModelRequest` naming its configured provider and model and calls `infer`; the inference
+package resolves the provider to one transport function (`anthropic-api` or `claude-cli`). Jobs
+receive `infer` as a parameter from the registry and never import a provider module, an SDK, or a
+provider endpoint. A test fails if any module outside the inference package does.
+
+Every review graph starts with `job_review_intake`, whose first step is `model_preflight`:
+
+- `resolve_models` reads the run's frozen configuration and collects every provider/model pair any
+  job's settings name, including jobs whose model is disabled and nested model tables.
+- `verify_models` asks each named provider once, through `inference.check_models`, whether it serves
+  each model. API providers return their model listing and resolve aliases by lookup; the Claude CLI
+  has no listing, so each model is confirmed by one minimal call that the model itself must answer.
+
+The provider listings, per-model results, and provider errors are written to
+`model-preflight.json` before any decision. If one configured model is unavailable, its provider
+cannot be reached or authenticated, or its provider has no inference transport, `verify_models`
+fails, the intake handoff is not published, and no later job in the review can start. A job
+instance built outside the registry has no check wired and reports `NOT_APPLICABLE` rather than
+claiming the models were confirmed. `jobs.job_review_intake.settings.model_preflight.timeout_seconds`
+bounds each provider request or probe.
+
 ## Target analysis planning
 
 `job_target_analysis_plan` is the semantic boundary between the accepted target catalog and costly

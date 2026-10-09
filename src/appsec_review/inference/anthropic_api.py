@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
+from urllib.parse import quote
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -82,3 +83,46 @@ def send(request: ModelRequest, *, timeout_seconds: int, endpoint: str = ENDPOIN
                        output_tokens=usage.get("output_tokens"),
                        cache_tokens=usage.get("cache_read_input_tokens"),
                        raw_response=raw.decode("utf-8", "replace"))
+
+
+MODELS_ENDPOINT = "https://api.anthropic.com/v1/models"
+
+
+def _get(url: str, key: str, timeout_seconds: int) -> tuple[int, Mapping[str, Any]]:
+    http_request = Request(url, method="GET", headers={
+        "x-api-key": key, "anthropic-version": "2023-06-01", "user-agent": "appsec-review/0.0.0"})
+    try:
+        with urlopen(http_request, timeout=timeout_seconds) as response:
+            value = json.loads(response.read(4 * 1024 * 1024))
+    except HTTPError as exc:
+        if exc.code == 404:
+            return 404, {}
+        raise RuntimeError(f"Anthropic API returned HTTP {exc.code}: "
+                           f"{exc.read(1024).decode('utf-8', 'replace')}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Anthropic API request failed: {exc.reason}") from exc
+    if not isinstance(value, Mapping):
+        raise RuntimeError("Anthropic API model response is not an object")
+    return 200, value
+
+
+def models(names: Sequence[str], *, timeout_seconds: int,
+           endpoint: str = MODELS_ENDPOINT) -> dict[str, Any]:
+    """List the account's models and confirm each named model, resolving aliases by lookup."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise RuntimeError("ANTHROPIC_API_KEY is unavailable to the configured inference provider")
+    _status, listing = _get(endpoint + "?limit=1000", key, timeout_seconds)
+    listed = sorted(str(item["id"]) for item in listing.get("data", ())
+                    if isinstance(item, Mapping) and isinstance(item.get("id"), str))
+    result: dict[str, Any] = {}
+    for name in names:
+        if name in listed:
+            result[name] = {"available": True, "detail": "listed by the provider"}
+            continue
+        # An alias is served but not listed; the provider resolves it on direct lookup.
+        status, value = _get(f"{endpoint}/{quote(name, safe='')}", key, timeout_seconds)
+        result[name] = ({"available": True, "detail": f"resolved by the provider to {value.get('id')}"}
+                        if status == 200 and value.get("id") else
+                        {"available": False, "detail": "the provider does not serve this model"})
+    return {"method": "catalog", "listed": listed, "models": result}

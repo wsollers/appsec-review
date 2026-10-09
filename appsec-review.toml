@@ -168,6 +168,15 @@ workers = 1
 name = "review_intake"
 workers = 1
 
+[jobs.job_review_intake.settings.model_preflight]
+# Per provider request or per-model probe; an unavailable model blocks the review run.
+timeout_seconds = 120
+
+[jobs.job_review_intake.steps.model_preflight]
+workers = 1
+[jobs.job_review_intake.steps.model_preflight.tasks.resolve_models]
+[jobs.job_review_intake.steps.model_preflight.tasks.verify_models]
+
 [jobs.job_review_intake.steps.resolve_configuration]
 workers = 1
 [jobs.job_review_intake.steps.resolve_configuration.tasks.fetch_config]

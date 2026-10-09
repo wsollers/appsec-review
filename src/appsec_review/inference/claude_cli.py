@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .request import ModelRequest, ModelResult
 
@@ -139,3 +139,43 @@ def send(request: ModelRequest, *, timeout_seconds: int, binary: str = "claude",
         input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
         cache_tokens=usage.get("cache_read_input_tokens"), raw_response=completed.stdout,
     )
+
+
+def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude",
+           auth_mode: str = "subscription") -> dict[str, Any]:
+    """Confirm each named model by one minimal call; the CLI offers no model listing."""
+    executable = shutil.which(binary)
+    if executable is None:
+        raise FileNotFoundError(f"configured Claude CLI is unavailable: {binary}")
+    environment = dict(os.environ)
+    if auth_mode == "subscription":
+        environment.pop("ANTHROPIC_API_KEY", None)
+        environment.pop("ANTHROPIC_AUTH_TOKEN", None)
+    result: dict[str, Any] = {}
+    for name in names:
+        argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
+                "--permission-mode", "bypassPermissions", "--model", name, "--allowedTools", "",
+                "--system-prompt", "Reply with the single word ok."]
+        try:
+            completed = subprocess.run(
+                argv, input="ok", text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, timeout=timeout_seconds, check=False, env=environment)
+        except subprocess.TimeoutExpired:
+            result[name] = {"available": False, "detail": "the availability probe timed out"}
+            continue
+        try:
+            envelope = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            envelope = None
+        if not isinstance(envelope, Mapping):
+            detail = completed.stderr.strip()[:512] or "the CLI returned no result envelope"
+            result[name] = {"available": False, "detail": f"Claude CLI exited {completed.returncode}: {detail}"}
+            continue
+        served = sorted(str(key) for key in envelope.get("modelUsage", {}) or {})
+        answered = (completed.returncode == 0 and envelope.get("is_error") is False and
+                    any(key == name or key.startswith(name) for key in served))
+        result[name] = ({"available": True, "detail": "answered an availability probe"} if answered else
+                        {"available": False, "detail": "probe was not answered by this model: " + str(
+                            envelope.get("terminal_reason") or envelope.get("subtype") or
+                            envelope.get("result") or "unknown")[:256]})
+    return {"method": "probe", "listed": None, "models": result}

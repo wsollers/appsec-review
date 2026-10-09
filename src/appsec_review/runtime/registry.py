@@ -32,7 +32,7 @@ class JobRegistry:
 
 
 def builtin_registry() -> JobRegistry:
-    from appsec_review.inference import infer
+    from appsec_review.inference import check_models, infer
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
@@ -50,7 +50,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_owasp_control_assessment import build_job as build_owasp_control_assessment
 
     registry = JobRegistry()
-    registry.register("job_review_intake", build_intake)
+    registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_target_analysis_plan",
                       lambda: build_analysis_plan(infer=infer))
