@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "minimist": "0.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}

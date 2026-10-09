@@ -1,0 +1,11 @@
+{
+  "name": "local/appsec-fixture-php",
+  "require": {
+    "psr/log": "3.0.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "AppsecFixture\\": "src/"
+    }
+  }
+}

@@ -579,6 +579,7 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
             path = unit.job.run_root / "data" / "indices" / "build_security" / f"{fingerprint}-{shard_id}.sqlite"
             reused = path.exists()
             if not reused:
+                path.parent.mkdir(parents=True, exist_ok=True)
                 builder = IndexBuilder(path, name="build_security", fingerprint=fingerprint,
                                        target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
                 action_ids: dict[str, str] = {}

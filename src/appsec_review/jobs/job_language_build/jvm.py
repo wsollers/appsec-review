@@ -221,7 +221,10 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
              build_unit_id: str) -> tuple[list[dict[str, Any]], list[str]]:
     artifacts, gaps = [], []
     for path in sorted(workspace.rglob("*")):
-        if not path.is_file() or path.is_symlink() or ".appsec-review-jvm" in path.parts:
+        try:
+            if path.is_symlink() or not path.is_file() or ".appsec-review-jvm" in path.parts:
+                continue
+        except OSError:
             continue
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         kind = _artifact_kind(path)

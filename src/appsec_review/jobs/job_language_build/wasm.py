@@ -147,7 +147,10 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
     artifacts: list[dict[str, Any]] = []
     gaps: list[str] = []
     for path in sorted(workspace.rglob("*")):
-        if not path.is_file() or path.is_symlink():
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+        except OSError:
             continue
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         kind = _kind(path)

@@ -181,10 +181,14 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
 def _snapshot(root: Path, limit: int) -> dict[str, str]:
     values: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
-        if path.is_file() and not path.is_symlink():
-            values[path.relative_to(root).as_posix()] = file_sha256(path)
-            if len(values) > limit:
-                raise ValueError("language-build workspace file-count bound exceeded")
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+        except OSError:
+            continue
+        values[path.relative_to(root).as_posix()] = file_sha256(path)
+        if len(values) > limit:
+            raise ValueError("language-build workspace file-count bound exceeded")
     return values
 
 
@@ -220,7 +224,10 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         return node.catalog(run_root, workspace, before, limit, build_unit_id)
     artifacts, gaps = [], []
     for path in sorted(workspace.rglob("*")):
-        if not path.is_file() or path.is_symlink():
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+        except OSError:
             continue
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         kind = _kind(path, family, relative=relative, before=before)

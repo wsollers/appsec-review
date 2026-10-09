@@ -90,10 +90,14 @@ def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) 
 def _snapshot(root: Path, limit: int) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
-        if path.is_file() and not path.is_symlink():
-            result[path.relative_to(root).as_posix()] = file_sha256(path)
-            if len(result) > limit:
-                raise ValueError("probe workspace file-count bound exceeded")
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+        except OSError:
+            continue
+        result[path.relative_to(root).as_posix()] = file_sha256(path)
+        if len(result) > limit:
+            raise ValueError("probe workspace file-count bound exceeded")
     return result
 
 

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(appsec_fixture LANGUAGES C CXX)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_library(fixture_helper STATIC helper.c)
+add_executable(fixture_native main.cpp)
+target_link_libraries(fixture_native PRIVATE fixture_helper)

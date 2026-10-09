@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "build": "asc assembly/index.ts --outFile build/fixture.wasm --textFile build/fixture.wat --sourceMap"
+  },
+  "devDependencies": {
+    "assemblyscript": "0.27.31"
+  }
+}
