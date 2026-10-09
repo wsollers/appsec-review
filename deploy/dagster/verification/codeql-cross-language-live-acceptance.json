@@ -1,0 +1,211 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "completion_status": "SUCCEEDED",
+      "jobs": {
+        "job_codeql_analysis": {
+          "attempt_id": "attempt_0006",
+          "codeql": {
+            "all_observation_shards_resolved": true,
+            "gap_count": 26,
+            "languages": {
+              "actions": {
+                "database_reused_count": 1,
+                "gap_count": 5,
+                "observation_count": 5,
+                "profiles": {
+                  "default": {
+                    "gap_count": 5,
+                    "observation_count": 5,
+                    "sarif_result_count": 5,
+                    "scope_count": 1,
+                    "successful_scope_count": 1
+                  }
+                },
+                "query_reused_count": 1,
+                "sarif_result_count": 5,
+                "scope_count": 1,
+                "successful_scope_count": 1
+              },
+              "cpp": {
+                "database_reused_count": 2,
+                "gap_count": 4,
+                "observation_count": 0,
+                "profiles": {
+                  "cert-cpp": {
+                    "gap_count": 2,
+                    "observation_count": 0,
+                    "sarif_result_count": 0,
+                    "scope_count": 1,
+                    "successful_scope_count": 1
+                  },
+                  "default": {
+                    "gap_count": 2,
+                    "observation_count": 0,
+                    "sarif_result_count": 0,
+                    "scope_count": 1,
+                    "successful_scope_count": 1
+                  }
+                },
+                "query_reused_count": 2,
+                "sarif_result_count": 0,
+                "scope_count": 2,
+                "successful_scope_count": 2
+              },
+              "go": {
+                "database_reused_count": 0,
+                "gap_count": 14,
+                "observation_count": 0,
+                "profiles": {
+                  "default": {
+                    "gap_count": 14,
+                    "observation_count": 0,
+                    "sarif_result_count": 0,
+                    "scope_count": 7,
+                    "successful_scope_count": 0
+                  }
+                },
+                "query_reused_count": 0,
+                "sarif_result_count": 0,
+                "scope_count": 7,
+                "successful_scope_count": 0
+              },
+              "java": {
+                "database_reused_count": 6,
+                "gap_count": 8,
+                "observation_count": 14,
+                "profiles": {
+                  "default": {
+                    "gap_count": 8,
+                    "observation_count": 14,
+                    "sarif_result_count": 14,
+                    "scope_count": 7,
+                    "successful_scope_count": 7
+                  }
+                },
+                "query_reused_count": 6,
+                "sarif_result_count": 14,
+                "scope_count": 7,
+                "successful_scope_count": 7
+              },
+              "javascript": {
+                "database_reused_count": 12,
+                "gap_count": 10,
+                "observation_count": 8,
+                "profiles": {
+                  "default": {
+                    "gap_count": 10,
+                    "observation_count": 8,
+                    "sarif_result_count": 8,
+                    "scope_count": 12,
+                    "successful_scope_count": 12
+                  }
+                },
+                "query_reused_count": 12,
+                "sarif_result_count": 8,
+                "scope_count": 12,
+                "successful_scope_count": 12
+              },
+              "python": {
+                "database_reused_count": 8,
+                "gap_count": 12,
+                "observation_count": 3,
+                "profiles": {
+                  "default": {
+                    "gap_count": 12,
+                    "observation_count": 3,
+                    "sarif_result_count": 3,
+                    "scope_count": 8,
+                    "successful_scope_count": 8
+                  }
+                },
+                "query_reused_count": 8,
+                "sarif_result_count": 3,
+                "scope_count": 8,
+                "successful_scope_count": 8
+              }
+            },
+            "manifest_sha256": "cc436fe9611a8182b7de4073c95995c738998e8de89ceb96ac09b5990e195b57",
+            "non_applicable": [
+              {
+                "language": "php",
+                "reason": "PHP is not a CodeQL source language in the pinned runtime",
+                "status": "NOT_APPLICABLE"
+              },
+              {
+                "language": "wasm",
+                "reason": "raw WebAssembly bytes are not a CodeQL source language; source producers are covered separately",
+                "status": "NOT_APPLICABLE"
+              }
+            ],
+            "observation_count": 30,
+            "scope_count": 37,
+            "shard_count": 37,
+            "successful_scope_count": 30
+          },
+          "gap_count": 26,
+          "handoff_receipt": "runs/2026-10-09-0007/data/jobs/job_codeql_analysis/attempts/attempt_0006/handoff.json",
+          "handoff_sha256": "c1a9a40d9f6256958e4d3b8123a6d5773a2a5ff9a6aed7862b1dbe720812e010",
+          "result_receipt": "runs/2026-10-09-0007/data/jobs/job_codeql_analysis/attempts/attempt_0006/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0007/data/jobs/job_codeql_analysis/attempts/attempt_0006/status.json",
+          "unit_count": 5,
+          "unit_status_counts": {
+            "SUCCEEDED": 5
+          }
+        }
+      },
+      "orchestration_receipt": "runs/2026-10-09-0007/data/orchestration/dagster/0958c6ff-907d-43fc-b82a-004243f3a573.json",
+      "resume_decisions": [
+        {
+          "action": "reuse",
+          "job_id": "job_codeql_analysis"
+        }
+      ],
+      "run_id": "2026-10-09-0007"
+    },
+    "dagster_run": {
+      "job": "codeql_analysis",
+      "run_id": "0958c6ff-907d-43fc-b82a-004243f3a573",
+      "status": "SUCCESS",
+      "step_count": 7,
+      "step_status_counts": {
+        "SUCCESS": 7
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "artifact_indexing",
+      "artifact_security_analysis",
+      "ci_configuration_analysis",
+      "ci_configuration_review",
+      "codeql_analysis",
+      "cpp_compiled_analysis",
+      "evidence_collection",
+      "language_build",
+      "owasp_control_assessment",
+      "post_build_security_assessment",
+      "project_build",
+      "project_build_review",
+      "review_intake",
+      "target_analysis_plan",
+      "target_catalog",
+      "third_party_data_sync",
+      "tree_sitter_ast",
+      "wave1_review"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}

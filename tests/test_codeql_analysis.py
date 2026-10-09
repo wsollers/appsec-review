@@ -1,23 +1,33 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import threading
+import time
 from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
-from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan
+from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan, replay_commands
 from appsec_review.jobs.job_codeql_analysis.sarif import map_location, normalize_sarif
 from appsec_review.config.codeql import parse_codeql_settings
-from appsec_review.codeql.runtime import _bounded_stream, load_asset_lock, tree_manifest
+from appsec_review.codeql.runtime import (
+    CodeQLImageResolver,
+    _bounded_stream,
+    load_asset_lock,
+    tree_manifest,
+)
 from appsec_review.jobs.job_codeql_analysis.job import (
     _database_identity,
     _query_identity,
     _query_profiles,
 )
+from appsec_review.storage import canonical_json
 
 
 IMAGE = "sha256:" + "1" * 64
@@ -33,7 +43,8 @@ def receipt(family: str, root: str, unit: str, *, status: str = "SUCCEEDED",
     return {
         "family": family, "root": root, "build_unit_id": unit, "terminal_status": status,
         "workspace": f"data/build/{family}/{unit}/workspace" if status == "SUCCEEDED" else None,
-        "commands": ([{"ordinal": 1}] if commands is None else commands),
+        "commands": ([{"ordinal": 1, "role": "build"}] if commands is None else commands),
+        "recipe": {"configure_commands": [], "build_commands": [["build"]]},
         "fingerprint": (unit[-1] * 64), "recipe_identity": "2" * 64,
         "dependency_identity": "3" * 64,
         "workspace_manifest": {"path": f"{unit}.json", "sha256": "4" * 64},
@@ -118,7 +129,40 @@ def test_manual_requires_commands_but_source_modes_prohibit_them() -> None:
     )
     assert [item.language for item in plan.scopes] == ["python"]
     assert plan.scopes[0].mode == "none" and not plan.scopes[0].commands_permitted
-    assert any("accepted compiled build has no replayable commands" in gap for gap in plan.gaps)
+    assert any("accepted compiled build has no exact replayable command set" in gap
+               for gap in plan.gaps)
+
+
+def test_java_commands_without_roles_derive_order_from_accepted_recipe() -> None:
+    java = receipt("java", "jvm", "build-unit-aaaaaaaaaaaaaaaaaaaa",
+                   commands=[{"ordinal": 1}, {"ordinal": 2}])
+    java["recipe"] = {"configure_commands": [["configure"]],
+                      "build_commands": [["build"]]}
+    plan = build_codeql_plan(
+        source_fingerprint="f" * 64, files=[source("jvm/A.java"), source("jvm/B.kt")],
+        receipts=[java], supported_extractors={"java"}, source_image_id=IMAGE,
+    )
+    assert len(plan.scopes) == 1
+    assert plan.scopes[0].source_languages == ("Java", "Kotlin")
+
+
+def test_replay_commands_ignores_labeled_catalog_commands() -> None:
+    go = receipt("go", "go", "build-unit-bbbbbbbbbbbbbbbbbbbb", commands=[
+        {"ordinal": 1, "role": "build"},
+        {"ordinal": 2, "role": "catalog"},
+    ])
+
+    assert replay_commands(go) == ((go["commands"][0], "build"),)
+
+
+def test_replay_commands_rejects_ambiguous_unlabeled_inventory() -> None:
+    java = receipt("java", "jvm", "build-unit-cccccccccccccccccccc", commands=[
+        {"ordinal": 1}, {"ordinal": 2}, {"ordinal": 3},
+    ])
+    java["recipe"] = {"configure_commands": [["configure"]],
+                      "build_commands": [["build"]]}
+
+    assert replay_commands(java) is None
 
 
 def test_rust_cannot_be_represented_as_manual() -> None:
@@ -350,6 +394,7 @@ def test_runner_tree_identity_uses_posix_path_order(tmp_path: Path) -> None:
     rows = [f"{runner._sha256(path)}  {path.as_posix()}\n".encode() for path in files]
 
     assert runner._tree(tmp_path) == (hashlib.sha256(b"".join(rows)).hexdigest(), 2)
+    assert runner._canonical(["build", "--flag"]) == canonical_json(["build", "--flag"])
 
 
 def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None:
@@ -358,6 +403,89 @@ def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None
 
     assert lines[:3] == ["ARG CODEQL_SOURCE_IMAGE", "ARG BUILD_IMAGE",
                          "FROM ${CODEQL_SOURCE_IMAGE} AS codeql_source"]
+
+
+def test_derived_image_build_holds_the_global_docker_build_lock(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source_id = "sha256:" + "1" * 64
+    derived_id = "sha256:" + "2" * 64
+    settings = SimpleNamespace(source_image_tag="codeql-source:test", source_image_id=source_id)
+    held: set[Path] = set()
+    observed: set[Path] = set()
+
+    @contextmanager
+    def fake_lock(path: Path, timeout_seconds: int):
+        assert timeout_seconds == 30
+        held.add(path)
+        observed.add(path)
+        try:
+            yield
+        finally:
+            held.remove(path)
+
+    def runner(argv: tuple[str, ...], _timeout: int):
+        if argv[:3] == ("docker", "image", "inspect"):
+            reference = argv[3]
+            value = derived_id if reference.startswith("appsec-review-codeql:") else source_id
+            return 0, (value + "\n").encode(), b"", False
+        if argv[:3] == ("docker", "image", "tag"):
+            return 0, b"", b"", False
+        if argv[:3] == ("docker", "buildx", "build"):
+            assert tmp_path / "metadata" / "codeql-images" / "docker-build.lock" in held
+            assert any(path.name == "build.lock" for path in held)
+            return 0, b"built", b"", False
+        raise AssertionError(argv)
+
+    monkeypatch.setattr("appsec_review.codeql.runtime.bounded_file_lock", fake_lock)
+    resolver = CodeQLImageResolver(repository_root=ROOT, metadata_root=tmp_path / "metadata",
+                                   settings=settings, timeout_seconds=30, runner=runner)
+    image, _stdout, _stderr = resolver.resolve(
+        build_image_tag=settings.source_image_tag, build_image_id=source_id,
+        runtime_user="10001:10001")
+    assert image.image_id == derived_id
+    assert not held
+    assert tmp_path / "metadata" / "codeql-images" / "docker-build.lock" in observed
+    assert any(path.name == "build.lock" for path in observed)
+
+
+def test_concurrent_derived_image_resolution_waits_and_reuses(
+        tmp_path: Path) -> None:
+    source_id = "sha256:" + "1" * 64
+    derived_id = "sha256:" + "2" * 64
+    settings = SimpleNamespace(source_image_tag="codeql-source:test", source_image_id=source_id)
+    guard = threading.Lock()
+    built = False
+    build_count = 0
+
+    def runner(argv: tuple[str, ...], _timeout: int):
+        nonlocal built, build_count
+        if argv[:3] == ("docker", "image", "inspect"):
+            reference = argv[3]
+            with guard:
+                value = derived_id if reference.startswith("appsec-review-codeql:") and built else source_id
+                exists = not reference.startswith("appsec-review-codeql:") or built
+            return ((0, (value + "\n").encode(), b"", False) if exists else
+                    (1, b"", b"", False))
+        if argv[:3] == ("docker", "image", "tag"):
+            return 0, b"", b"", False
+        if argv[:3] == ("docker", "buildx", "build"):
+            with guard:
+                build_count += 1
+            time.sleep(0.05)
+            with guard:
+                built = True
+            return 0, b"built", b"", False
+        raise AssertionError(argv)
+
+    resolver = CodeQLImageResolver(repository_root=ROOT, metadata_root=tmp_path / "metadata",
+                                   settings=settings, timeout_seconds=30, runner=runner)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        images = list(pool.map(lambda _ordinal: resolver.resolve(
+            build_image_tag=settings.source_image_tag, build_image_id=source_id,
+            runtime_user="10001:10001")[0], (1, 2)))
+
+    assert build_count == 1
+    assert sorted(image.reused for image in images) == [False, True]
 
 
 def test_bounded_logs_retain_head_tail_and_total_size(tmp_path: Path) -> None:

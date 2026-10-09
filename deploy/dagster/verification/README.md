@@ -27,3 +27,14 @@ copied here. Receipt and snapshot paths resolve against the repository's ignored
 Its `dispatch_wave1_review` and monolithic `build_indexes` names describe the superseded graph and
 must not be used as evidence for the current topology. Newer historical reports provide broader
 coverage, but none replaces live verification of the current tree.
+
+`codeql-cross-language-live-acceptance.json` records the fresh bounded CodeQL acceptance for
+exact-tree Dagster run `0958c6ff-907d-43fc-b82a-004243f3a573`, application run
+`2026-10-09-0007`, and accepted `attempt_0006`. The report records whole-job reuse after producer
+run `e596f2f0-3b47-4263-973e-e0bc0362fe5a`; all seven selected orchestration steps succeeded in
+both runs. The report resolves every one of
+37 profile shards, records 30 successful database/query scopes and 30 normalized observations,
+and retains 26 explicit coverage gaps. It also records checkpoint reuse, exact per-language and
+per-profile counts, PHP/WebAssembly non-applicability, the accepted manifest identity, and the
+resolving run-owned receipts. Go remains an honest gap because its exact accepted recipes did not
+compile source; C# and Rust were excluded at planning by their recorded prerequisites.

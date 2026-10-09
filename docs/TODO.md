@@ -64,11 +64,20 @@ Rust, and WebAssembly. The composed retrieval manifest and an MCP query resolved
 class evidence while retaining the unrelated catalog build shard. Producer-positive live coverage
 for Rust, Go, Node, .NET, Python, PHP, and WASM remains required before the Linux vertical can be
 closed; focused executor tests cover those family contracts in this revision.
-The pinned cross-language CodeQL job and exact `query_codeql` MCP surface are implemented. Fresh
-cross-language Dagster acceptance is still required, along with static dispatch execution, pinned
-loader-dependency parsing, broader MCP integration, and producer-positive live coverage for the
-remaining language-build families. Retained Dagster records describe only the revisions and
-selected target recipes they captured.
+The pinned cross-language CodeQL job and exact `query_codeql` MCP surface are implemented and have
+fresh live acceptance on `appsec-multi-vuln`: producer Dagster run
+`e596f2f0-3b47-4263-973e-e0bc0362fe5a`, application run `2026-10-09-0007`, and CodeQL attempt
+`attempt_0006` completed all seven selected steps. Exact-tree verification run
+`0958c6ff-907d-43fc-b82a-004243f3a573` then reused that accepted attempt and also completed all
+seven selected steps. Thirty of 37 profile scopes completed real
+database and query execution and published 30 normalized observations across Actions, C/C++,
+Java/Kotlin, JavaScript/TypeScript, and Python. The seven Go scopes preserve explicit database and
+query gaps because their exact accepted recipes download modules without compiling source; C# is
+blocked by the accepted build environment, and Rust by missing accepted Cargo locks. PHP and raw
+WebAssembly are explicitly not applicable. Static dispatch execution, pinned loader-dependency
+parsing, broader MCP integration, and producer-positive live coverage for the remaining
+language-build families are still required. Retained Dagster records describe only the revisions
+and selected target recipes they captured.
 
 Probe policy must be centrally configurable per build unit as `configure`, `selected-target`, or
 `full-build`. This keeps the default test target rigorous without forcing future large repositories
@@ -193,12 +202,14 @@ concurrency with partitioned resumability. Telemetry must report artifact/byte t
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
 
-## Extend the enabled CodeQL closure beyond C/C++
+## Close the remaining CodeQL platform and accepted-build gaps
 
-The C++ job now has an enabled, hash-pinned offline CodeQL CLI, extractor, query-pack, license
-notice, traced database replay, bounded SARIF normalization, and independent database/query
-checkpoints. Future work may add no-build interpreted-language databases and equivalent typed
-normalizers without widening the C++ runtime or coupling their invalidation domains. Preserve the
+Cross-language CodeQL now provides hash-pinned offline extractors and query packs, exact protected
+compiled-build replay, source/no-build analysis, bounded SARIF normalization, independent
+database/query checkpoints, and accepted MCP retrieval. Remaining work is deliberately narrower:
+provide an accepted .NET build environment for C#, accepted Cargo locks and analyzer prerequisites
+for Rust, and Go recipes that perform the real accepted compilation rather than dependency download
+alone. Visual Basic, F#, Ruby, and Swift remain explicit unsupported-platform gaps. Preserve the
 current selective invalidation boundary: query-pack changes must not rebuild Clang AST, LLVM IR,
 or an otherwise reusable CodeQL database.
 

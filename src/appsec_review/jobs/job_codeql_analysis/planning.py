@@ -83,6 +83,29 @@ def _rust_prerequisite_gaps(files: Sequence[Mapping[str, Any]], root: str) -> tu
     return tuple(gaps)
 
 
+def replay_commands(receipt: Mapping[str, Any]) -> tuple[tuple[Mapping[str, Any], str], ...] | None:
+    """Resolve exact configure/build commands, deriving absent roles from the accepted recipe."""
+    recipe, commands = receipt.get("recipe"), receipt.get("commands")
+    if not isinstance(recipe, Mapping) or not isinstance(commands, list):
+        return None
+    expected_roles = (
+        ("configure",) * len(recipe.get("configure_commands", ())) +
+        ("build",) * len(recipe.get("build_commands", ()))
+    )
+    if not expected_roles:
+        return None
+    labeled = tuple(command for command in commands
+                    if isinstance(command, Mapping) and command.get("role") in {"configure", "build"})
+    if len(labeled) == len(expected_roles) and tuple(
+            str(command["role"]) for command in labeled) == expected_roles:
+        return tuple(zip(labeled, expected_roles, strict=True))
+    if len(commands) == len(expected_roles) and all(
+            isinstance(command, Mapping) and command.get("role") in {None, ""}
+            for command in commands):
+        return tuple(zip(commands, expected_roles, strict=True))
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class CodeQLScope:
     schema: str
@@ -202,8 +225,8 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         commands = receipt.get("commands")
         if not isinstance(commands, list):
             raise ValueError("accepted language-build command inventory is invalid")
-        if family in _COMPILED_FAMILIES and not commands:
-            gaps.append(f"{build_unit}/{language}: accepted compiled build has no replayable commands")
+        if family in _COMPILED_FAMILIES and replay_commands(receipt) is None:
+            gaps.append(f"{build_unit}/{language}: accepted compiled build has no exact replayable command set")
             continue
         if language == "rust":
             rust_gaps = _rust_prerequisite_gaps(normalized_files, root)

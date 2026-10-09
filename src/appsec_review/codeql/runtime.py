@@ -12,7 +12,7 @@ import time
 from typing import Any, Protocol
 
 from appsec_review.container_runtime.build_executor import Runner, _run, resolve_host_bind_path
-from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
 
 
 IMAGE_SCHEMA = "appsec-review/codeql-derived-image/2"
@@ -131,7 +131,7 @@ class CodeQLImageResolver:
         manifest_path = root / "manifest.json"
         image_tag = f"appsec-review-codeql:{identity[:24]}"
         root.mkdir(parents=True, exist_ok=True)
-        with FileLock(root / "build.lock"):
+        with bounded_file_lock(root / "build.lock", self.timeout_seconds):
             image_id = self._inspect(image_tag)
             if manifest_path.is_file() and image_id is not None:
                 value = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -160,7 +160,11 @@ class CodeQLImageResolver:
             command_values.extend(("--build-arg", f"RUNTIME_USER={runtime_user}",
                 "--file", str((context / "Dockerfile").resolve()), str(context.resolve())))
             command = tuple(command_values)
-            code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+            # Docker Desktop's layer commits are not reliably concurrent. Keep the
+            # immutable identity lock above, and serialize only the daemon mutation.
+            with bounded_file_lock(self.metadata_root / "codeql-images" / "docker-build.lock",
+                                   self.timeout_seconds):
+                code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
             if timed_out or code != 0:
                 detail = stderr[:self.output_bytes].decode("utf-8", "replace")
                 raise RuntimeError("CodeQL derived image build timed out" if timed_out else

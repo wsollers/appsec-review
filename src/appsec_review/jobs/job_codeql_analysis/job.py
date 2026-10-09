@@ -24,7 +24,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
-from .planning import CodeQLPlan, CodeQLScope, build_codeql_plan
+from .planning import CodeQLPlan, CodeQLScope, build_codeql_plan, replay_commands
 from .sarif import NORMALIZER_IDENTITY, normalize_sarif
 
 
@@ -131,13 +131,11 @@ def _accepted_replay(unit: UnitContext, receipt: Mapping[str, Any]) -> Mapping[s
     recipe, image = receipt.get("recipe"), receipt.get("image")
     if not isinstance(recipe, Mapping) or not isinstance(image, Mapping):
         raise FrameworkIntegrityError("accepted CodeQL build recipe or image is unavailable")
-    expected_count = len(recipe.get("configure_commands", ())) + len(recipe.get("build_commands", ()))
-    accepted = [command for command in receipt.get("commands", ())
-                if command.get("role") in {"configure", "build"}]
-    if len(accepted) != expected_count or not accepted:
+    accepted = replay_commands(receipt)
+    if accepted is None:
         raise FrameworkIntegrityError("accepted CodeQL build command set is incomplete")
     commands, protected = [], []
-    for ordinal, command in enumerate(accepted, 1):
+    for ordinal, (command, role) in enumerate(accepted, 1):
         identity = command.get("protected_argv")
         if not isinstance(identity, Mapping):
             raise FrameworkIntegrityError("accepted CodeQL build command lacks protected argv")
@@ -153,7 +151,7 @@ def _accepted_replay(unit: UnitContext, receipt: Mapping[str, Any]) -> Mapping[s
             raise FrameworkIntegrityError("accepted CodeQL build command identity mismatch")
         commands.append({"ordinal": ordinal, "argv": argv, "argv_sha256": argv_sha,
                          "working_directory": document["working_directory"],
-                         "environment": dict(environment), "role": command["role"]})
+                         "environment": dict(environment), "role": role})
         protected.append({"path": identity["path"], "sha256": identity["sha256"],
                           "argv_sha256": argv_sha})
     return {"schema": "appsec-review/codeql-build-replay/1", "commands": commands,

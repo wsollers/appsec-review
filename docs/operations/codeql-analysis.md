@@ -14,6 +14,15 @@ C# use `manual` databases and replay the exact protected configure/build argv ca
 source/no-build extractor; missing Cargo manifests or lockfiles are explicit coverage gaps.
 GitHub Actions is analyzed only when accepted `.github/workflows/*.yml` or `.yaml` files exist.
 
+Auxiliary build evidence such as package-catalog commands is never replayed as compilation. When
+the accepted producer labels commands, CodeQL selects only the ordered `configure` and `build`
+commands and requires their role sequence and arity to match the accepted recipe. A roleless
+command inventory is usable only when its complete ordered sequence has exactly the recipe's
+configure/build arity; the roles are then derived from that immutable recipe order. Extra, missing,
+or mixed-role inventories are rejected as gaps instead of guessed. Replay uses the protected argv,
+working directory, and environment that the accepted build actually executed, not reconstructed
+recipe text.
+
 Visual Basic and F# are not implied by C# coverage. PHP and raw WebAssembly are recorded as
 `NOT_APPLICABLE`. Ruby and Swift remain explicit gaps until an accepted executor/platform exists.
 
@@ -63,3 +72,25 @@ For a fresh `appsec-multi-vuln` run, verify:
 6. `query_codeql` returns the same accepted observations; and
 7. deployment verification reports per-language and per-profile execution, SARIF, observation,
    and gap counts.
+
+## Live acceptance
+
+The current bounded acceptance report is
+`deploy/dagster/verification/codeql-cross-language-live-acceptance.json`. Dagster run
+`0958c6ff-907d-43fc-b82a-004243f3a573` executed all seven selected steps successfully for
+application run `2026-10-09-0007` and reused accepted CodeQL attempt `attempt_0006`. The producer
+execution for that attempt was Dagster run `e596f2f0-3b47-4263-973e-e0bc0362fe5a`. It records
+37 profile scopes,
+30 successful database/query executions, 37 resolved observation shards, 30 normalized
+observations, and 26 explicit gaps. The successful scopes comprise Actions 1/1, C/C++ 2/2,
+Java/Kotlin 7/7, JavaScript/TypeScript 12/12, and Python 8/8. All seven Go scopes truthfully failed
+database creation because the exact accepted recipes only downloaded modules and never compiled
+source. C# and Rust remain planning gaps for unavailable accepted .NET environments and missing
+Cargo locks, while PHP and raw WebAssembly are `NOT_APPLICABLE`.
+
+The producer retry reused 29 previously successful database/query checkpoints and executed the
+formerly blocked Java scope after bounded derived-image locking was fixed; the final exact-tree run
+then verified whole-job reuse. `query_codeql`
+resolved Java and JavaScript findings from accepted manifest
+`cc436fe9611a8182b7de4073c95995c738998e8de89ceb96ac09b5990e195b57`, including normalized
+code-flow-bearing observations.

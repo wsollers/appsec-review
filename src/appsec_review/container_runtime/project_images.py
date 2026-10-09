@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import shutil
-import time
 from typing import Any
 
-from appsec_review.storage import FileLock, LockUnavailable, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import FileLock, atomic_json, bounded_file_lock, canonical_json, file_sha256
 
 from .build_executor import BuildProfile, Runner, _run
 
@@ -135,24 +133,6 @@ def _json_instruction(name: str, argv: Sequence[str]) -> str:
     return name + " " + json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
 
 
-@contextmanager
-def _bounded_lock(path: Path, timeout_seconds: int):
-    lock = FileLock(path)
-    deadline = time.monotonic() + timeout_seconds
-    while True:
-        try:
-            lock.__enter__()
-            break
-        except LockUnavailable:
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(0.05)
-    try:
-        yield
-    finally:
-        lock.__exit__(None, None, None)
-
-
 class ProjectImageResolver:
     """Generate or reuse a dependency-bearing image derived from a pinned language baseline."""
 
@@ -258,8 +238,8 @@ class ProjectImageResolver:
             # Docker Desktop may expose only the legacy builder inside the code location.
             # Its layer commits are not reliably concurrent, so serialize only this narrow
             # daemon mutation while the surrounding family DAG remains parallel.
-            with _bounded_lock(self.metadata_root / "project-images" / "docker-build.lock",
-                               self.timeout_seconds):
+            with bounded_file_lock(self.metadata_root / "project-images" / "docker-build.lock",
+                                   self.timeout_seconds):
                 code, stdout, stderr, timed_out = self.runner((
                     "docker", "buildx", "build", "--load", "--pull=false", "--network", network, "--tag", tag,
                     "--file", str(build_context / "Dockerfile"), str(build_context)), self.timeout_seconds)

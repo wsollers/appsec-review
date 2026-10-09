@@ -18,7 +18,7 @@ NONE_LANGUAGES = {"javascript", "python", "rust", "actions"}
 
 
 def _canonical(value: object) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
 
 
 def _safe_relative(value: str) -> Path:

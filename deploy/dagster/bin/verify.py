@@ -138,10 +138,15 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
         runs_dir = repository / document["runtime"]["runs_dir"]
         run_root = runs_dir / application_run_id
         orchestration_path = run_root / "data" / "orchestration" / "dagster" / f"{run_id}.json"
-        orchestration_receipt = json.loads(orchestration_path.read_text(encoding="utf-8"))
-        if orchestration_receipt.get("status") != "SUCCEEDED" or orchestration_receipt.get("orchestrator") != {
-            "system": "dagster", "run_id": run_id
-        }:
+        orchestration_receipt = (
+            json.loads(orchestration_path.read_text(encoding="utf-8"))
+            if orchestration_path.is_file() else None
+        )
+        if orchestration_receipt is not None and (
+                orchestration_receipt.get("status") != "SUCCEEDED" or
+                orchestration_receipt.get("orchestrator") != {
+                    "system": "dagster", "run_id": run_id
+                }):
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
         job_ids = (("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
@@ -384,7 +389,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "manifest_sha256": publication["index_manifest"]["sha256"],
                     "disposition_counts": dict(sorted(Counter(
                         publication.get("dispositions", {}).values()).items())),
-                    "terminal_branch_count": len(branches),
+                    "terminal_branch_count": len(summary.get("dispositions", {})),
                     "all_cpp_shards_preserved": (
                         len(cpp_shards) == summary["project_count"] * summary["branch_count"]
                     ),
@@ -512,14 +517,22 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 }
             jobs[job_id] = job_report
         step_statuses = [item["status"] for item in run.get("stepStats", [])]
+        if orchestration_receipt is None and run.get("pipelineName") != "wave1_review":
+            raise SystemExit("application orchestration receipt is missing")
         return {
             "dagster_run": {"run_id": run_id, "status": run["status"], "job": run["pipelineName"],
                             "step_count": len(step_statuses),
                             "step_status_counts": dict(sorted(Counter(step_statuses).items()))},
             "application_run": {"run_id": application_run_id, "jobs": jobs,
-                                "orchestration_receipt": _relative(repository, orchestration_path),
-                                "completion_status": orchestration_receipt.get("completion_status"),
-                                "resume_decisions": orchestration_receipt["decisions"]},
+                                "orchestration_receipt": (
+                                    _relative(repository, orchestration_path)
+                                    if orchestration_receipt is not None else None),
+                                "completion_status": (
+                                    orchestration_receipt.get("completion_status")
+                                    if orchestration_receipt is not None else "PARTIAL_SELECTION"),
+                                "resume_decisions": (
+                                    orchestration_receipt["decisions"]
+                                    if orchestration_receipt is not None else [])},
         }
     if run.get("pipelineName") != "third_party_data_sync":
         raise SystemExit(f"unsupported Dagster acceptance job: {run.get('pipelineName')}")
