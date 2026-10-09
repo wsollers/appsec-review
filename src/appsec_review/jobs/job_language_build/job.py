@@ -13,7 +13,11 @@ import time
 from typing import Any
 
 from appsec_review.config import LanguageBuildSettings
-from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
+from appsec_review.container_runtime import (
+    BuildContainerExecutor, BuildProfile, CaptureIntegrityError, CaptureScope, VerifiedCapture,
+    verify_capture_record,
+)
+from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS
 from appsec_review.container_runtime.project_images import project_recipe_identity
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
@@ -62,6 +66,8 @@ _TOOL_KINDS = {
     "pack": "package-builder", "go": "build-driver", "gcc": "compiler",
 }
 _GO_TRACE_TOOLS = {"compile", "asm", "link", "cgo", "pack", "gcc", "clang", "as", "ld", "ar"}
+_CAPTURED_FAMILIES = frozenset({"rust"})
+_CAPTURE_GAP = "execution capture command"
 
 
 class FrameworkIntegrityError(ValueError):
@@ -624,6 +630,90 @@ def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
             "executor_identity": EXECUTOR_IDENTITY, "capture_identity": node.CAPTURE_IDENTITY}
 
 
+def _captured_command(unit: UnitContext, executor: Any, argv: Sequence[str], *, workspace: Path,
+                      working_directory: str, environment: Mapping[str, str],
+                      capture_directory: Path, build_unit_id: str,
+                      family: str) -> tuple[Any, VerifiedCapture, dict[str, Any]]:
+    """Run one accepted command under standardized capture and hash-verify what it recorded."""
+    captured = getattr(executor, "execute_captured", None)
+    if not callable(captured) or unit.job.config.build_capture is None:
+        raise FrameworkIntegrityError(f"{family} language builds require execution capture")
+    scope = CaptureScope(unit.job.run_id, "job_language_build", unit.job.attempt_id,
+                         build_unit_id, family)
+    result = captured(argv, workspace=workspace, working_directory=working_directory,
+                      environment=environment, capture_directory=capture_directory,
+                      capture_config=unit.job.config.build_capture, scope=scope)
+    record = getattr(result, "capture_record", None)
+    if not isinstance(record, Path):
+        raise FrameworkIntegrityError("build execution capture record is required")
+    if record.parent.resolve() != capture_directory.resolve():
+        raise FrameworkIntegrityError("build execution capture record left its command directory")
+    try:
+        verified = verify_capture_record(record, run_root=unit.job.run_root, scope=scope)
+    except CaptureIntegrityError as exc:
+        raise FrameworkIntegrityError(str(exc)) from exc
+    return result, verified, _capture_receipt(unit.job.run_root, verified)
+
+
+def _capture_receipt(run_root: Path, verified: VerifiedCapture) -> dict[str, Any]:
+    """Hashes and bounded facts for a verified capture; exact argv, envp, and streams stay run-owned."""
+    document = verified.document
+    collector, limits = document.get("collector"), document.get("limits")
+    events, tool_calls = document["events"], document["tool_calls"]
+    secret_scan = document["secret_scan"]
+    if (not isinstance(collector, Mapping) or not isinstance(collector.get("event_kinds"), list) or
+            not REQUIRED_EVENT_KINDS <= set(collector["event_kinds"]) or
+            not isinstance(limits, Mapping) or type(limits.get("capture_envp")) is not bool or
+            not isinstance(events.get("counts"), Mapping) or
+            any(type(events.get(key)) is not int for key in ("observed", "retained")) or
+            any(type(tool_calls.get(key)) is not int for key in ("observed", "retained")) or
+            type(events.get("capped")) is not bool or type(tool_calls.get("capped")) is not bool):
+        raise FrameworkIntegrityError("build execution capture record is not a standardized record")
+    capture_root = verified.record_path.parent
+    resolved_run = run_root.resolve()
+
+    def member(value: Mapping[str, Any]) -> dict[str, Any]:
+        path = (capture_root / Path(*PurePosixPath(str(value["uri"])).parts)).resolve()
+        return {"path": path.relative_to(resolved_run).as_posix(), "sha256": value["sha256"]}
+
+    execution_member = member(secret_scan["execution"])
+    execution_root = (resolved_run / execution_member["path"]).parent
+    report = verified.execution.get("report")
+    return {**verified.identity, "scope": dict(document["scope"]),
+            "collector": {"backend": collector.get("backend"),
+                          "event_kinds": sorted(str(kind) for kind in collector["event_kinds"])},
+            "envp_captured": limits["capture_envp"],
+            "events": {**member(events), "observed": events["observed"], "retained": events["retained"],
+                       "capped": events["capped"],
+                       "counts": {str(key): int(value) for key, value in events["counts"].items()}},
+            "tool_calls": {"observed": tool_calls["observed"], "retained": tool_calls["retained"],
+                           "capped": tool_calls["capped"]},
+            "secret_scan": {"scanner": secret_scan["scanner"], "execution": execution_member,
+                            "exit_code": verified.execution.get("exit_code"),
+                            "report": ({"path": (execution_root / str(report["uri"])).relative_to(
+                                            resolved_run).as_posix(), "sha256": report["sha256"]}
+                                       if isinstance(report, Mapping) else None),
+                            "coverage_gap": bool(secret_scan.get("coverage_gap"))}}
+
+
+def _verify_retained_capture(run_root: Path, identity: Mapping[str, Any]) -> None:
+    """Re-verify a checkpointed capture against the scope and hashes its receipt recorded."""
+    try:
+        scope = identity.get("scope")
+        if not isinstance(scope, Mapping):
+            raise CaptureIntegrityError("build execution capture scope is unavailable")
+        verified = verify_capture_record(
+            run_root / str(identity.get("path", "")), run_root=run_root,
+            scope=CaptureScope(**{key: str(scope.get(key, "")) for key in
+                                  ("run_id", "job_id", "attempt_id", "build_unit_id", "family")}))
+        if _capture_receipt(run_root, verified) != identity:
+            raise CaptureIntegrityError("build execution capture identity changed")
+    except FrameworkIntegrityError:
+        raise
+    except (CaptureIntegrityError, ValueError, TypeError) as exc:
+        raise FrameworkIntegrityError(f"language-build checkpoint capture is invalid: {exc}") from exc
+
+
 def _validate_checkpoint_artifacts(run_root: Path, receipt: Mapping[str, Any]) -> None:
     identities: list[Mapping[str, Any]] = []
     identities.extend(item for item in receipt.get("artifacts", ()) if isinstance(item, Mapping))
@@ -638,6 +728,11 @@ def _validate_checkpoint_artifacts(run_root: Path, receipt: Mapping[str, Any]) -
                 identities.append(value)
                 tail = value.get("diagnostic_tail")
                 if isinstance(tail, Mapping): identities.append(tail)
+        capture = command.get("execution_capture")
+        if capture is not None or receipt.get("family") in _CAPTURED_FAMILIES:
+            if not isinstance(capture, Mapping):
+                raise FrameworkIntegrityError("language-build checkpoint capture identity is missing")
+            _verify_retained_capture(run_root, capture)
     for identity in identities:
         path = (run_root / str(identity.get("path", ""))).resolve()
         if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
@@ -680,7 +775,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     shutil.copytree(prior_workspace.parent, root)
                 _validate_checkpoint_artifacts(unit.job.run_root, prior["receipt"])
                 artifacts = [dict(identity) for identity in prior["receipt"].get("artifacts", ())]
-                gaps: list[str] = []
+                # Reuse is not new coverage: a capture-backed receipt keeps the gaps it named.
+                gaps: list[str] = (list(prior["receipt"].get("gaps", ()))
+                                   if family in _CAPTURED_FAMILIES else [])
                 receipt = {**prior["receipt"], "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
                            "artifacts": artifacts, "gaps": gaps, "checkpoint_reused": True,
                            "completed_at": datetime.now(timezone.utc).isoformat()}
@@ -746,10 +843,6 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     "checkpoint_reused": False, "executor_identity": EXECUTOR_IDENTITY,
                     "capture_identity": python.CAPTURE_IDENTITY}
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
-    rust_environment: dict[str, str] = {}
-    rust_invocations: Path | None = None
-    if family == "rust" and rust_settings is not None:
-        rust_environment, rust_invocations = rust.install_capture_wrappers(workspace, rust_settings)
     profile = BuildProfile(family, str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
@@ -764,7 +857,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     protected.mkdir(parents=True, exist_ok=True)
     commands, gaps, go_trace_rows, node_rows = [], [], [], []
     cargo_metadata: dict[str, Any] | None = None
-    rust_stderr = bytearray()
+    captures: list[tuple[int, VerifiedCapture]] = []
+    capture_root = root / "attempts" / unit.job.attempt_id / "execution-capture"
+    if capture_root.exists():
+        shutil.rmtree(capture_root)
     operational_recipe = {**recipe, "build_system": dispatch.get("build_system")}
     started_at = datetime.now(timezone.utc).isoformat()
     started = time.monotonic()
@@ -794,12 +890,6 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                                 "YARN_ENABLE_IMMUTABLE_INSTALLS": "false",
                                 "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0", "V": "1",
                                 "MAKEFLAGS": "V=1", "npm_config_loglevel": "verbose"})
-        elif family == "rust":
-            prior_flags = environment.get("RUSTFLAGS", "").strip()
-            wrapper_flags = rust_environment.get("RUSTFLAGS", "").strip()
-            environment.update(rust_environment)
-            if prior_flags and wrapper_flags:
-                environment["RUSTFLAGS"] = prior_flags + " " + wrapper_flags
         elif family == "python":
             environment.update(python.environment(operational_recipe))
         elif family == "php":
@@ -808,8 +898,28 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         command_before = (_snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
                           if family == "node" else {})
         command_started = time.monotonic()
-        result = executor.execute(argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                  environment=environment)
+        capture_identity: dict[str, Any] | None = None
+        capture_gaps: list[str] = []
+        protected_argv, protected_environment = None, dict(environment)
+        if family in _CAPTURED_FAMILIES:
+            result, verified, capture_identity = _captured_command(
+                unit, executor, argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
+                environment=environment, capture_directory=capture_root / f"command-{ordinal:03d}",
+                build_unit_id=build_unit_id, family=family)
+            captures.append((ordinal, verified))
+            capture_gaps = [f"{_CAPTURE_GAP} {ordinal}: {gap}" for gap in verified.gaps]
+            if not capture_identity["envp_captured"]:
+                capture_gaps.append(f"{_CAPTURE_GAP} {ordinal}: envp capture is disabled")
+            gaps.extend(capture_gaps)
+            recorded_argv = [str(value) for value in verified.document.get("command", {}).get("argv", ())]
+            if recorded_argv[:1] and recorded_argv[0].startswith("<redacted"):
+                # The scan found a secret in the invocation (or failed closed); the protected
+                # command artifact must not reintroduce what the capture removed.
+                protected_argv = recorded_argv
+                protected_environment = {key: "<redacted: secret scan disposition>" for key in environment}
+        else:
+            result = executor.execute(argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
+                                      environment=environment)
         command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
                                                     "unit": build_unit_id, "ordinal": ordinal,
                                                     "argv": list(argv)})).hexdigest()
@@ -817,8 +927,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         stdout.parent.mkdir(parents=True, exist_ok=True)
         stdout.write_bytes(result.stdout); stderr.write_bytes(result.stderr)
         exact = protected / f"{command_id[:24]}.json"
-        protected_json(exact, {"schema": "appsec-review/protected-build-command/2", "argv": list(result.argv),
-            "working_directory": str(recipe["source_dir"]), "environment": dict(environment),
+        protected_json(exact, {"schema": "appsec-review/protected-build-command/2",
+            "argv": protected_argv if protected_argv is not None else list(result.argv),
+            "working_directory": str(recipe["source_dir"]), "environment": protected_environment,
             "access": "run-owned-protected"})
         try: exact.chmod(0o600)
         except OSError: pass
@@ -841,6 +952,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "image_id": image["image_id"], "build_unit_id": build_unit_id,
             "role": role,
             "module": (argv[2] if len(argv) > 2 and argv[1] == "-m" else None)})
+        if capture_identity is not None:
+            commands[-1]["execution_capture"] = capture_identity
         if family == "go":
             go_trace_rows.extend(_go_trace_rows(workspace, result.stderr))
         elif family == "node":
@@ -852,15 +965,14 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             node_rows.extend(observed)
             gaps.extend(observed_gaps)
         elif family == "rust":
-            rust_stderr.extend(result.stderr)
-            if result.stderr_truncated and result.stderr_tail:
-                rust_stderr.extend(b"\n")
-                rust_stderr.extend(result.stderr_tail)
             if role == "metadata" and not failed:
-                cargo_metadata = rust.parse_metadata(result.stdout)
+                try:
+                    cargo_metadata = rust.parse_metadata(result.stdout)
+                except (ValueError, UnicodeDecodeError):
+                    gaps.append("Cargo metadata output was truncated, redacted, or not parseable")
         unit.job.events.write("BUILD_COMMAND_COMPLETED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
             command_id=command_id, tool=Path(argv[0]).name, disposition="FAILED" if failed else "SUCCEEDED",
-            result_count=0, gap_count=1 if failed else 0,
+            result_count=0, gap_count=(1 if failed else 0) + len(capture_gaps),
             truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
             duration_ms=commands[-1]["duration_ms"])
         if failed:
@@ -989,17 +1101,17 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if not compile_rows:
             gaps.append("Node build did not expose compiler, transpiler, generator, bundler, or package invocations")
     elif family == "rust":
-        compile_rows = rust.parse_invocations(bytes(rust_stderr), workspace,
-                                              rust_invocations or workspace / ".missing")
+        compile_rows, capture_facts, provenance_gaps = rust.capture_invocations(
+            captures, workspace, str(recipe["source_dir"]))
+        gaps.extend(provenance_gaps)
         link_rows = []
-        normalized_links = _normalized_links(
-            [row for row in compile_rows if row.get("tool_kind") in {"linker-driver", "archiver"}],
-            str(recipe["build_dir"]),
-        )
+        normalized_links = _normalized_links(rust.link_rows(compile_rows), str(recipe["build_dir"]))
         kinds = {str(row.get("tool_kind")) for row in compile_rows}
-        for expected in ("compiler", "linker-driver", "archiver"):
+        required_kinds = ("compiler", "linker-driver", "archiver") if (
+            rust_settings is not None and rust_settings.capture_linker) else ("compiler",)
+        for expected in required_kinds:
             if expected not in kinds:
-                gaps.append(f"Rust {expected} invocation was not observable in the bounded capture")
+                gaps.append(f"Rust {expected} execution was not observed in the standardized capture")
         if cargo_metadata is None:
             gaps.append("Cargo metadata was unavailable")
     elif family == "python":
@@ -1028,7 +1140,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         link_rows, normalized_links = [], []
         if not compile_rows:
             gaps.append("MSBuild diagnostic streams did not expose compiler or post-compile invocations")
-    link_database = workspace / Path(*PurePosixPath(str(recipe["build_dir"])).parts) / ".appsec-review-link-commands.json"
+    # Cargo creates `target/` as the container user; the orchestrator keeps its own Rust records
+    # beside the workspace instead of writing into a tree the build user owns.
+    link_database = (root / "link-commands.json" if family == "rust" else
+                     workspace / Path(*PurePosixPath(str(recipe["build_dir"])).parts) / ".appsec-review-link-commands.json")
     atomic_json(link_database, normalized_links)
     compile_protected = root / "protected-commands" / f"compile-database-{unit.job.attempt_id}.json"
     protected_json(compile_protected, {"schema": "appsec-review/protected-compile-commands/1",
@@ -1044,6 +1159,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     atomic_json(workspace_manifest_path, {"schema": "appsec-review/build-workspace-manifest/1",
                 "build_unit_id": build_unit_id, "files": workspace_files})
     status = "FAILED" if any("build command" in gap for gap in gaps) else "SUCCEEDED"
+    capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"], "build_unit_id": build_unit_id,
         "family": family, "root": dispatch["root"], "build_system": dispatch.get("recipe", {}).get("build_system", dispatch.get("build_system")),
@@ -1070,6 +1186,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["cargo_metadata"] = cargo_metadata or {
             "schema": "appsec-review/rust-cargo-metadata/1", "packages": [], "relationships": []}
         receipt["package_relationships"] = list(receipt["cargo_metadata"].get("relationships", ()))
+        receipt["capture_provenance"] = {
+            "schema": "appsec-review/rust-capture-provenance/1", "complete": capture_complete,
+            "command_count": len(captures), **capture_facts}
     if family == "python":
         receipt["package_relationships"] = python_relationships
         receipt["package_members"] = package_members
@@ -1077,7 +1196,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["composer"] = php_metadata
         receipt["composer_policy"] = php_policy
         receipt["package_relationships"] = list((php_metadata or {}).get("relationships", ()))
-    if status == "SUCCEEDED":
+    # An incomplete capture is never checkpointed: reuse would republish it without its gap.
+    if status == "SUCCEEDED" and capture_complete:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/language-build-checkpoint/1", "fingerprint": fingerprint,
@@ -1101,6 +1221,8 @@ def _validate_config(context, _result) -> None:
     for key in ("command_timeout_seconds", "output_bytes", "artifact_count_limit"):
         if type(context.config.settings.get(key)) is not int or context.config.settings[key] < 1:
             raise ValueError(f"language-build bound is invalid: {key}")
+    if context.config.build_capture is None:
+        raise ValueError("language-build execution capture configuration is unavailable")
     dotnet_settings = context.config.settings.get("dotnet")
     expected_dotnet = {"require_locked_restore", "capture_msbuild_diagnostics", "generated_sources",
                        "allow_publish", "allow_pack", "allow_aot"}
@@ -1198,6 +1320,13 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
                        ("command_id", "ordinal", "tool", "tool_kind", "argv_sha256", "working_directory",
                         "environment_facts", "exit_code", "timed_out", "duration_ms", "image_id")}
             payload["streams"] = streams
+            capture = command.get("execution_capture")
+            if isinstance(capture, Mapping):
+                payload["execution_capture"] = {
+                    "sha256": capture.get("sha256"), "complete": capture.get("complete"),
+                    "events_sha256": capture.get("events", {}).get("sha256"),
+                    "secret_findings_sha256": capture.get("secret_findings", {}).get("sha256"),
+                    "secret_finding_count": capture.get("secret_findings", {}).get("count")}
             builder.add_entity(EntityRecord(identity, str(command.get("command_id")),
                 f"{command.get('tool', 'build')} command", f"{command.get('tool_kind', 'build-driver')} "
                 f"{command.get('exit_code')} {command.get('argv_sha256')}", payload))
@@ -1387,7 +1516,7 @@ def build_job(*, executor_factory=None) -> Job:
                   ("execute.native", "execute.go", "execute.dotnet", "execute.node", "execute.python",
                    "execute.rust", "execute.php", "execute.java", "execute.wasm")))
     implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
-        Path(python.__file__).read_bytes() +
+        Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
         Path(wasm.__file__).read_bytes() +
         (b"injected" if executor_factory else b"container")).hexdigest()
     return Job("job_language_build", "language_build", UnitExecutor(units).execute,

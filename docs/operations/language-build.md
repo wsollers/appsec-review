@@ -50,12 +50,20 @@ embedded debug data are hash-bound to the workspace manifest.
 
 The Rust adapter accepts bounded Cargo workspace/package, target triple, profile, feature,
 `--locked`, and `--offline` choices. Central policy permits dependency download and can still
-require a lockfile when configured. Recipes requesting tests, examples, benchmarks, `cargo run`, or installation are
-rejected before execution. A protected wrapper layer records rustc, linker-driver, and archiver
-argv; Cargo verbose output records build-script/code-generator execution, while Cargo metadata
+require a lockfile when configured. Cargo incremental compilation is disabled for probes and builds:
+its owner-only session locks would be unreadable to the orchestrating user that hashes the workspace. Recipes requesting tests, examples, benchmarks, `cargo run`, or installation are
+rejected before execution. Cargo metadata and every accepted Cargo command run under the
+standardized execution capture described in
+[`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md);
+each command receipt carries a hash-verified `execution_capture` identity and its gitleaks findings
+identity. Successful process-exec syscall events, reconciled with PATH tool-call records, are the
+evidence for rustc, linker-driver, linker, archiver, and build-script/code-generator execution;
+Cargo output is retained as a diagnostic stream and is not parsed for provenance. Cargo metadata
 identifies proc-macro targets, workspace packages, and exact resolve relationships. Generated Rust
 sources, rlib/rmeta files, static/shared libraries, binaries, and debug/dependency metadata are
-cataloged without executing target programs.
+cataloged without executing target programs. Capture caps, scanner failure, redacted exec events,
+and an unobserved linker or archiver are named gaps; a unit with an incomplete capture is not
+checkpointed.
 
 Each command stream is a separate protected artifact with its SHA-256, original and retained byte
 counts, configured limit, truncation state, exit/timeout state, duration, image, command, and attempt
@@ -101,9 +109,9 @@ sanitized `build` retrieval shard exposes command hashes, status, bounded stream
 artifact identities without exposing those protected bytes.
 
 Rust command, artifact, Cargo-package, and dependency evidence is published through the same
-sanitized `build` shard. Raw Cargo output, exact argv, wrapper captures, environment values, and
-diagnostic tails remain run-owned protected artifacts and are never returned through retrieval or
-MCP.
+sanitized `build` shard, together with the capture record, event, and findings hashes. Raw Cargo
+output, exact argv, syscall events, tool-call records, environment values, and diagnostic tails
+remain run-owned protected artifacts and are never returned through retrieval or MCP.
 
 The PHP adapter requires `composer.json`; `composer.lock` is used when present. Composer dependency
 installation may occur while deriving the pinned project image or during the network-enabled build,

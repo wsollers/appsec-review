@@ -330,6 +330,8 @@ class BuildContainerExecutor:
         findings: list[dict[str, Any]] = []
         capped = False
         redact_invocation = False
+        scan_code: int | None = None
+        scan_timed_out = False
 
         def redact_source(source: Path, line_number: int | None = None) -> None:
             if source.name == "events.jsonl":
@@ -338,9 +340,15 @@ class BuildContainerExecutor:
                             else range(len(rows)))
                 for index in selected:
                     event = json.loads(rows[index])
+                    if event.get("kind") == "file_open":
+                        event["path"] = "<redacted: secret scan disposition>"
+                        rows[index] = canonical_json(event).decode().rstrip("\n")
+                        continue
                     if event.get("kind") != "process_exec":
                         continue
                     event["argv"] = ["<redacted: secret scan disposition>"]
+                    if "executable" in event:
+                        event["executable"] = "<redacted: secret scan disposition>"
                     for entry in event.get("envp", []):
                         entry["value"] = "<redacted: secret scan disposition>"
                         entry["redacted"] = True
@@ -391,17 +399,18 @@ class BuildContainerExecutor:
                 "/scratch/gitleaks.json", "--exit-code", "1",
             ]
             code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
+            scan_code, scan_timed_out = code, timed_out
             stdout_path.write_bytes(stdout[:tool.output_bytes])
             stderr_path.write_bytes(stderr[:tool.output_bytes])
             if timed_out or code not in {0, 1} or not report.is_file():
-                detail = image_stderr.decode("utf-8", "replace")[-200:] if code is None else ""
-                gap = f"gitleaks capture scan failed{': ' + detail if detail else ''}"
-                raw_findings: list[object] = []
-            else:
-                loaded = json.loads(report.read_text(encoding="utf-8"))
-                if not isinstance(loaded, list):
-                    raise ValueError("gitleaks report is not an array")
-                raw_findings = loaded
+                # No trustworthy result set exists, so nothing below may be retained unredacted.
+                raise RuntimeError("scanner timed out" if timed_out else
+                                   f"scanner exited {code}" if code not in {0, 1} else
+                                   "scanner wrote no report")
+            loaded = json.loads(report.read_text(encoding="utf-8"))
+            if not isinstance(loaded, list):
+                raise ValueError("gitleaks report is not an array")
+            raw_findings: list[object] = loaded
             capped = len(raw_findings) > finding_limit
             for item in raw_findings:
                 if not isinstance(item, Mapping):
@@ -457,7 +466,7 @@ class BuildContainerExecutor:
             })
             atomic_json(execution_path, {
                 "schema": "appsec-review/build-capture-secret-scan-execution/1",
-                "tool_id": "tool-gitleaks", "exit_code": None, "timed_out": False,
+                "tool_id": "tool-gitleaks", "exit_code": scan_code, "timed_out": scan_timed_out,
                 "stdout": {"uri": "stdout", "sha256": self._digest(stdout_path)},
                 "stderr": {"uri": "stderr", "sha256": self._digest(stderr_path)},
                 "report": None,

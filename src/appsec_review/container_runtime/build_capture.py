@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.storage import atomic_json, canonical_json
@@ -14,6 +14,9 @@ from appsec_review.storage import atomic_json, canonical_json
 
 SCHEMA = "appsec-review/build-execution-record/1"
 EVENT_SCHEMA = "appsec-review/build-syscall-event/1"
+TOOL_CALL_SCHEMA = "appsec-review/build-tool-call/1"
+SECRET_FINDINGS_SCHEMA = "appsec-review/build-capture-secret-findings/1"
+SECRET_SCAN_EXECUTION_SCHEMA = "appsec-review/build-capture-secret-scan-execution/1"
 REQUIRED_EVENT_KINDS = frozenset({"process_fork", "process_exec", "process_exit", "file_open", "connect"})
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
 
@@ -112,7 +115,13 @@ class BuildExecutionRecorder:
             while values and len(canonical_json(values)) > self.limits.argument_bytes_limit:
                 values.pop()
             normalized.update(argv=values, argv_truncated=argv_truncated,
-                              envp_captured=self.limits.capture_envp)
+                              envp_captured=self.limits.capture_envp,
+                              result=int(event.get("result", 0)))
+            executable = event.get("executable")
+            if isinstance(executable, str):
+                # argv[0] is chosen by the caller; the exec path is what the kernel resolved.
+                encoded_path = executable.encode("utf-8", "replace")[:self.limits.path_bytes_limit]
+                normalized["executable"] = encoded_path.decode("utf-8", "ignore")
             if self.limits.capture_envp:
                 envp = event.get("envp", ())
                 if not isinstance(envp, Sequence) or isinstance(envp, (str, bytes)):
@@ -321,7 +330,10 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                 if call in {"execve", "execveat"}:
                     executable = _trace_string(body.split(",", 1)[0] if call == "execve" else body.split(",", 2)[1])
                     argv, envp = _exec_arguments(body, executable)
-                    recorder.add({**base, "kind": "process_exec", "argv": argv, "envp": envp})
+                    outcome = result.split(" ", 1)[0]
+                    recorder.add({**base, "kind": "process_exec", "argv": argv, "envp": envp,
+                                  "executable": executable,
+                                  "result": int(outcome) if outcome.lstrip("-").isdigit() else -1})
                 elif call in {"clone", "clone3", "fork", "vfork"}:
                     child = result.split(" ", 1)[0]
                     if child.isdigit():
@@ -346,3 +358,154 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                                   "port": int(port.group(1)) if port else 0,
                                   "result": int(outcome) if outcome.lstrip("-").isdigit() else -1})
     return tuple(errors)
+
+
+class CaptureIntegrityError(ValueError):
+    """A capture record or member whose path, hash, schema, or scope does not verify."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedCapture:
+    """One execution record whose every referenced member resolved and hash-verified."""
+
+    record_path: Path
+    document: Mapping[str, Any]
+    identity: Mapping[str, Any]
+    gaps: tuple[str, ...]
+    events_path: Path
+    tool_calls: tuple[Mapping[str, Any], ...]
+    findings: Mapping[str, Any]
+    execution: Mapping[str, Any]
+
+    def events(self) -> Iterator[Mapping[str, Any]]:
+        with self.events_path.open("r", encoding="utf-8") as stream:
+            for line in stream:
+                if line.strip():
+                    yield json.loads(line)
+
+
+def _capture_member(root: Path, value: object) -> Path:
+    if not isinstance(value, Mapping):
+        raise CaptureIntegrityError("build execution capture member is invalid")
+    uri = value.get("uri")
+    if not isinstance(uri, str):
+        raise CaptureIntegrityError("build execution capture member URI is invalid")
+    logical = PurePosixPath(uri)
+    if not logical.parts or logical.is_absolute() or ".." in logical.parts:
+        raise CaptureIntegrityError("build execution capture member URI is not normalized")
+    lexical = root / Path(*logical.parts)
+    if lexical.is_symlink():
+        raise CaptureIntegrityError("build execution capture member escaped its root")
+    path = lexical.resolve(strict=True)
+    resolved_root = root.resolve(strict=True)
+    if resolved_root not in path.parents or not path.is_file():
+        raise CaptureIntegrityError("build execution capture member escaped its root")
+    if _sha256(path) != value.get("sha256"):
+        raise CaptureIntegrityError("build execution capture member identity changed")
+    return path
+
+
+def _capture_json(path: Path) -> Mapping[str, Any]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, Mapping):
+        raise CaptureIntegrityError("build execution capture document is invalid")
+    return document
+
+
+def verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureScope) -> VerifiedCapture:
+    """Resolve and hash-verify an execution record and every artifact it references.
+
+    The caller states the run, job, attempt, build unit, and family it executed; a record that
+    names any other scope is rejected. Coverage gaps are returned as data, never raised.
+    """
+    try:
+        return _verify_capture_record(record_path, run_root=run_root, scope=scope)
+    except CaptureIntegrityError:
+        raise
+    except (OSError, ValueError, TypeError) as exc:
+        raise CaptureIntegrityError(
+            f"build execution capture is unreadable: {type(exc).__name__}") from exc
+
+
+def _verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureScope) -> VerifiedCapture:
+    resolved_run = run_root.resolve(strict=True)
+    if record_path.is_symlink():
+        raise CaptureIntegrityError("build execution capture record escaped the run")
+    path = record_path.resolve(strict=True)
+    if resolved_run not in path.parents or not path.is_file():
+        raise CaptureIntegrityError("build execution capture record escaped the run")
+    document = _capture_json(path)
+    recorded = document.get("scope")
+    expected = {"run_id": scope.run_id, "job_id": scope.job_id, "attempt_id": scope.attempt_id,
+                "build_unit_id": scope.build_unit_id, "family": scope.family}
+    if document.get("schema") != SCHEMA or not isinstance(recorded, Mapping) or dict(recorded) != expected:
+        raise CaptureIntegrityError("build execution capture record identity is invalid")
+    coverage = document.get("coverage")
+    if not isinstance(coverage, Mapping) or not isinstance(coverage.get("gaps"), list):
+        raise CaptureIntegrityError("build execution capture coverage is invalid")
+    complete = coverage.get("complete")
+    if not isinstance(complete, bool) or complete == bool(coverage["gaps"]):
+        raise CaptureIntegrityError("build execution capture coverage disposition is inconsistent")
+    capture_root = path.parent
+    events = document.get("events")
+    events_path = _capture_member(capture_root, events)
+    retained = 0
+    with events_path.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if (not isinstance(event, Mapping) or event.get("schema") != EVENT_SCHEMA or
+                    event.get("kind") not in REQUIRED_EVENT_KINDS):
+                raise CaptureIntegrityError("build execution syscall event schema is invalid")
+            retained += 1
+    if "retained" in events and events["retained"] != retained:
+        raise CaptureIntegrityError("build execution syscall event count is inconsistent")
+    streams = document.get("streams")
+    if not isinstance(streams, Mapping) or set(streams) != {"stdout", "stderr"}:
+        raise CaptureIntegrityError("build execution capture streams are invalid")
+    for stream_member in streams.values():
+        _capture_member(capture_root, stream_member)
+    tool_calls = document.get("tool_calls")
+    if not isinstance(tool_calls, Mapping) or not isinstance(tool_calls.get("records"), list):
+        raise CaptureIntegrityError("build execution tool calls are invalid")
+    if "retained" in tool_calls and tool_calls["retained"] != len(tool_calls["records"]):
+        raise CaptureIntegrityError("build execution tool-call count is inconsistent")
+    verified_calls: list[Mapping[str, Any]] = []
+    for member in tool_calls["records"]:
+        tool_path = _capture_member(capture_root, member)
+        tool = _capture_json(tool_path)
+        if tool.get("schema") != TOOL_CALL_SCHEMA:
+            raise CaptureIntegrityError("build execution tool-call schema is invalid")
+        for name in ("stdout", "stderr"):
+            _capture_member(tool_path.parent, tool.get(name))
+        verified_calls.append({"uri": member["uri"], "sha256": member["sha256"], "record": tool})
+    secret_scan = document.get("secret_scan")
+    if not isinstance(secret_scan, Mapping) or secret_scan.get("scanner") != "tool-gitleaks":
+        raise CaptureIntegrityError("build execution secret scan is invalid")
+    findings_member = secret_scan.get("findings")
+    findings_path = _capture_member(capture_root, findings_member)
+    findings = _capture_json(findings_path)
+    if (findings.get("schema") != SECRET_FINDINGS_SCHEMA or
+            not isinstance(findings.get("findings"), list) or
+            findings.get("retained") != len(findings["findings"]) or
+            ("count" in findings_member and
+             findings_member["count"] != len(findings["findings"]))):
+        raise CaptureIntegrityError("build execution secret findings are invalid")
+    execution_path = _capture_member(capture_root, secret_scan.get("execution"))
+    execution = _capture_json(execution_path)
+    if execution.get("schema") != SECRET_SCAN_EXECUTION_SCHEMA:
+        raise CaptureIntegrityError("build execution secret scan receipt is invalid")
+    for name in ("stdout", "stderr"):
+        _capture_member(execution_path.parent, execution.get(name))
+    if execution.get("report") is not None:
+        _capture_member(execution_path.parent, execution["report"])
+    identity = {"schema": document["schema"],
+                "path": path.relative_to(resolved_run).as_posix(),
+                "sha256": _sha256(path), "size_bytes": path.stat().st_size,
+                "complete": complete,
+                "secret_findings": {"path": findings_path.relative_to(resolved_run).as_posix(),
+                                    "sha256": _sha256(findings_path),
+                                    "count": len(findings["findings"])}}
+    return VerifiedCapture(path, document, identity, tuple(str(gap) for gap in coverage["gaps"]),
+                           events_path, tuple(verified_calls), findings, execution)

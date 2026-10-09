@@ -13,6 +13,7 @@ from appsec_review.config import BuildCaptureConfig
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, CaptureScope
 from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.container_runtime.build_executor import _run
+from tests.capture_fakes import SYNTHETIC_SECRET, secret_scanner, simulated_executor
 
 
 def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -> None:
@@ -174,6 +175,77 @@ def test_capture_secret_scan_failure_redacts_retained_inputs_and_records_gap(tmp
     assert retained_call["stdout"]["sha256"] == hashlib.sha256(
         (tool_call / "stdout").read_bytes()).hexdigest()
     assert not trace.exists()
+
+
+def _leaking_capture(tmp_path: Path, scanner, *, finding_limit: int = 100):
+    workspace = tmp_path / "workspace"
+    (workspace / "unit").mkdir(parents=True)
+
+    def behavior(_argv, _workspace, _directory, environment, container):
+        container.exec("/usr/bin/rustc", ["rustc", f"--cfg=key={SYNTHETIC_SECRET}"])
+        container.open(f"/workspace/unit/{SYNTHETIC_SECRET}.rs")
+        container.tool_call("rustc", [f"--cfg=key={SYNTHETIC_SECRET}"], executable="/usr/bin/rustc",
+                            stderr=SYNTHETIC_SECRET.encode())
+        return 0, SYNTHETIC_SECRET.encode(), b""
+
+    executor = simulated_executor(
+        BuildProfile("rust", "build-rust:local", "sha256:" + "c" * 64, "10001:10001"), behavior,
+        scanner=scanner)
+    capture = tmp_path / "capture"
+    result = executor.execute_captured(
+        ("cargo", "build"), workspace=workspace, working_directory="unit",
+        environment={"UNLISTED_NAME": SYNTHETIC_SECRET}, capture_directory=capture,
+        capture_config=BuildCaptureConfig(
+            "ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 4096, finding_limit),
+        scope=CaptureScope("2026-10-09-0001", "job_language_build", "attempt_0001",
+                           "build-unit-rust", "rust"))
+    return capture, result, json.loads(result.capture_record.read_text(encoding="utf-8"))
+
+
+def _capture_text(capture: Path) -> str:
+    return "".join(path.read_text(encoding="utf-8", errors="replace")
+                   for path in capture.rglob("*") if path.is_file())
+
+
+@pytest.mark.parametrize("outcome", ["exit", "timeout", "no-report", "invalid-report"])
+def test_capture_scanner_failure_modes_all_fail_closed(tmp_path: Path, outcome: str) -> None:
+    def scanner(target: Path, scratch: Path):
+        # Even a scanner that produced a plausible report before failing is not trusted.
+        secret_scanner()(target, scratch)
+        if outcome == "exit":
+            return 2, b"", b"crashed", False
+        if outcome == "timeout":
+            return None, b"", b"", True
+        if outcome == "no-report":
+            (scratch / "gitleaks.json").unlink()
+            return 1, b"", b"", False
+        (scratch / "gitleaks.json").write_text("{}", encoding="utf-8")
+        return 1, b"", b"", False
+
+    capture, result, record = _leaking_capture(tmp_path, scanner)
+    assert record["coverage"]["complete"] is False
+    assert any(gap.startswith("gitleaks capture scan failed") for gap in record["coverage"]["gaps"])
+    assert record["secret_scan"]["findings"]["count"] == 0
+    assert record["command"]["argv"] == ["<redacted: secret detected by gitleaks>"]
+    retained = _capture_text(capture)
+    assert SYNTHETIC_SECRET not in retained and SYNTHETIC_SECRET.encode() not in result.stdout
+    assert not tuple(capture.glob("trace*")) and not (capture / ".secret-scan-input").exists()
+    execution = json.loads((capture / "secret-scan" / "execution.json").read_text(encoding="utf-8"))
+    assert execution["report"] is None
+    assert execution["timed_out"] is (outcome == "timeout")
+
+
+def test_capture_finding_cap_limits_retained_findings_but_not_sanitization(tmp_path: Path) -> None:
+    capture, result, record = _leaking_capture(tmp_path, secret_scanner(), finding_limit=1)
+    findings = json.loads((capture / "secret-scan" / "findings.json").read_text(encoding="utf-8"))
+    assert findings["observed"] > 1 and findings["retained"] == 1 and findings["capped"] is True
+    assert record["coverage"]["gaps"] == ["gitleaks capture finding retention limit reached"]
+    assert SYNTHETIC_SECRET not in _capture_text(capture)
+    assert SYNTHETIC_SECRET.encode() not in result.stdout
+    events = [json.loads(line) for line in (capture / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert next(event for event in events if event["kind"] == "file_open")["path"].startswith("<redacted")
+    assert next(event for event in events if event["kind"] == "process_exec")["executable"].startswith(
+        "<redacted")
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-session cleanup is used by the Linux deployment")

@@ -17,6 +17,7 @@ from appsec_review.container_runtime import (
     ProjectImageResolver,
     project_dependency_environment,
     profiles_from_settings,
+    verify_capture_record,
 )
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
@@ -151,6 +152,11 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         options = environment.get("MAVEN_OPTS", "").strip()
         environment["MAVEN_OPTS"] = "-Dmaven.repo.local=/tmp/appsec-review-maven" + (
             f" {options}" if options else "")
+    if str(recipe.get("build_system", "")) == "cargo":
+        # rustc creates incremental session locks owner-only (0700) as the container user, so
+        # the orchestrating user could not hash the workspace it must catalog. A run-owned
+        # workspace is built once; incremental state has no reader.
+        environment["CARGO_INCREMENTAL"] = "0"
     for key, protected in project_dependency_environment(recipe).items():
         if key == "MAVEN_OPTS":
             continue
@@ -212,89 +218,16 @@ def _retained_stream(run_root: Path, path: Path, data: bytes, limit: int) -> dic
     return value
 
 
-def _capture_member(root: Path, value: object) -> Path:
-    if not isinstance(value, Mapping):
-        raise ValueError("build execution capture member is invalid")
-    uri = value.get("uri")
-    if not isinstance(uri, str):
-        raise ValueError("build execution capture member URI is invalid")
-    logical = PurePosixPath(uri)
-    if not logical.parts or logical.is_absolute() or ".." in logical.parts:
-        raise ValueError("build execution capture member URI is not normalized")
-    path = (root / Path(*logical.parts)).resolve(strict=True)
-    resolved_root = root.resolve(strict=True)
-    if resolved_root not in path.parents or not path.is_file() or path.is_symlink():
-        raise ValueError("build execution capture member escaped its root")
-    if file_sha256(path) != value.get("sha256"):
-        raise ValueError("build execution capture member identity changed")
-    return path
-
-
 def _capture_identity(unit: UnitContext, result: Any, *, build_unit_id: str,
                       family: str) -> tuple[dict[str, Any], list[str]]:
     value = getattr(result, "capture_record", None)
     if not isinstance(value, Path):
         raise RuntimeError("build execution capture record is required")
-    path = value.resolve(strict=True)
-    run_root = unit.job.run_root.resolve(strict=True)
-    if run_root not in path.parents or path.is_symlink():
-        raise ValueError("build execution capture record escaped the run")
-    document = json.loads(path.read_text(encoding="utf-8"))
-    scope = document.get("scope")
-    if (document.get("schema") != "appsec-review/build-execution-record/1" or
-            not isinstance(scope, Mapping) or scope.get("run_id") != unit.job.run_id or
-            scope.get("job_id") != "job_project_build" or
-            scope.get("attempt_id") != unit.job.attempt_id or
-            scope.get("build_unit_id") != build_unit_id or scope.get("family") != family):
-        raise ValueError("build execution capture record identity is invalid")
-    coverage = document.get("coverage")
-    if not isinstance(coverage, Mapping) or not isinstance(coverage.get("gaps"), list):
-        raise ValueError("build execution capture coverage is invalid")
-    complete = coverage.get("complete")
-    if not isinstance(complete, bool) or complete == bool(coverage["gaps"]):
-        raise ValueError("build execution capture coverage disposition is inconsistent")
-    capture_root = path.parent
-    _capture_member(capture_root, document.get("events"))
-    streams = document.get("streams")
-    if not isinstance(streams, Mapping) or set(streams) != {"stdout", "stderr"}:
-        raise ValueError("build execution capture streams are invalid")
-    for stream in streams.values():
-        _capture_member(capture_root, stream)
-    tool_calls = document.get("tool_calls")
-    if not isinstance(tool_calls, Mapping) or not isinstance(tool_calls.get("records"), list):
-        raise ValueError("build execution tool calls are invalid")
-    for member in tool_calls["records"]:
-        tool_path = _capture_member(capture_root, member)
-        tool = json.loads(tool_path.read_text(encoding="utf-8"))
-        if tool.get("schema") != "appsec-review/build-tool-call/1":
-            raise ValueError("build execution tool-call schema is invalid")
-        for name in ("stdout", "stderr"):
-            _capture_member(tool_path.parent, tool.get(name))
-    secret_scan = document.get("secret_scan")
-    if not isinstance(secret_scan, Mapping) or secret_scan.get("scanner") != "tool-gitleaks":
-        raise ValueError("build execution secret scan is invalid")
-    findings_path = _capture_member(capture_root, secret_scan.get("findings"))
-    findings = json.loads(findings_path.read_text(encoding="utf-8"))
-    if (findings.get("schema") != "appsec-review/build-capture-secret-findings/1" or
-            not isinstance(findings.get("findings"), list) or
-            findings.get("retained") != len(findings["findings"])):
-        raise ValueError("build execution secret findings are invalid")
-    execution_path = _capture_member(capture_root, secret_scan.get("execution"))
-    execution = json.loads(execution_path.read_text(encoding="utf-8"))
-    if execution.get("schema") != "appsec-review/build-capture-secret-scan-execution/1":
-        raise ValueError("build execution secret scan receipt is invalid")
-    for name in ("stdout", "stderr"):
-        _capture_member(execution_path.parent, execution.get(name))
-    if execution.get("report") is not None:
-        _capture_member(execution_path.parent, execution["report"])
-    identity = {"schema": document["schema"],
-                "path": path.relative_to(run_root).as_posix(),
-                "sha256": file_sha256(path), "size_bytes": path.stat().st_size,
-                "complete": complete,
-                "secret_findings": {"path": findings_path.relative_to(run_root).as_posix(),
-                                    "sha256": file_sha256(findings_path),
-                                    "count": len(findings["findings"])}}
-    return identity, [str(gap) for gap in coverage["gaps"]]
+    verified = verify_capture_record(
+        value, run_root=unit.job.run_root,
+        scope=CaptureScope(unit.job.run_id, "job_project_build", unit.job.attempt_id,
+                           build_unit_id, family))
+    return dict(verified.identity), list(verified.gaps)
 
 
 def _probe_cache(unit: UnitContext, recipe_identity: str) -> Path:

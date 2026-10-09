@@ -2,7 +2,10 @@
 
 from .catalog import ContainerCatalog, ToolImage, load_catalog
 from .build_executor import BuildCommandResult, BuildContainerExecutor, BuildProfile, profiles_from_settings
-from .build_capture import BuildExecutionRecorder, CaptureScope
+from .build_capture import (
+    BuildExecutionRecorder, CaptureIntegrityError, CaptureScope, VerifiedCapture,
+    verify_capture_record,
+)
 from .project_images import (
     ProjectImage,
     ProjectImageBuildError,
@@ -22,7 +25,9 @@ __all__ = [
     "BuildExecutionRecorder",
     "BuildContainerExecutor",
     "BuildProfile",
+    "CaptureIntegrityError",
     "CaptureScope",
+    "VerifiedCapture",
     "ProjectImage",
     "ProjectImageBuildError",
     "ProjectImageResolver",
@@ -36,4 +41,5 @@ __all__ = [
     "load_catalog",
     "profiles_from_settings",
     "project_recipe_identity",
+    "verify_capture_record",
 ]

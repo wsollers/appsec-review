@@ -18,10 +18,11 @@ be treated as one container lifecycle:
    `execute_captured` is used, surrounds that command with process capture and a post-command
    gitleaks scan.
 
-Captured execution is currently an acceptance requirement for `job_project_build` probes. The
-generic `job_language_build` adapters still use their family-specific execution and provenance
-paths; they must not be described as producing the standardized syscall/envp/secret-scan record
-until they are explicitly migrated and tested. The current capture backend is in-container
+Captured execution is an acceptance requirement for `job_project_build` probes and for every
+command of the Rust/Cargo adapter in `job_language_build`. The remaining `job_language_build`
+adapters still use their family-specific execution and provenance paths; they must not be described
+as producing the standardized syscall/envp/secret-scan record until they are explicitly migrated
+and tested. The current capture backend is in-container
 `ptrace` through `strace`. Configuration reserves `ebpf` as a future backend, but the executor
 rejects it because a safe, build-cgroup-scoped implementation has not been completed.
 
@@ -133,7 +134,7 @@ observes descendants of the authorized build command rather than unrelated host 
 The required syscall event families are:
 
 - `clone`, `clone3`, `fork`, and `vfork` for process creation;
-- `execve` and `execveat` for executable argv and envp;
+- `execve` and `execveat` for the kernel-resolved executable path, argv, envp, and result;
 - `exit` and `exit_group` for process completion;
 - `openat` and `openat2` for file-open evidence; and
 - `connect` for mandatory egress evidence.
@@ -144,6 +145,10 @@ executable from the saved path, runs it without a shell, tees bounded stdout and
 an `appsec-review/build-tool-call/1` record containing argv, environment, status, stream sizes,
 truncation state, URIs, and hashes. Absolute-path tool execution can bypass a PATH wrapper, but it
 cannot bypass process-exec observation by the syscall collector.
+
+A process-exec event keeps `executable` (the path passed to the kernel, which the caller cannot
+relabel the way it can `argv[0]`) and `result`. A PATH search that misses produces failed `execve`
+rows; only an event with `result` zero is evidence that a tool ran.
 
 ## Envp capture and configured redaction
 
@@ -181,15 +186,18 @@ limits. Gitleaks scans in directory mode with JSON output, exit code `1` meaning
 
 The full gitleaks result set drives sanitization even when the configured finding-retention cap is
 reached. The cap limits stored normalized findings; it never limits secret removal. A finding in a
-retained process-exec event redacts that event's argv and envp values while preserving valid JSONL.
+retained process-exec event redacts that event's executable path, argv, and envp values while
+preserving valid JSONL; a finding in a file-open event redacts its path.
 A finding in a tool-call record redacts argv and environment. A finding in a retained stream
 replaces its contents and repairs the owning stream hash and retained-byte metadata. A finding in
 the top invocation redacts the command argv stored in the execution record. The executor returns
 the sanitized stream bytes so later project-build logs cannot reintroduce a detected secret.
 
-If gitleaks is unavailable, times out, returns an invalid report, or otherwise fails, the path fails
-closed: all retained argv, envp, tool environments, and captured streams are conservatively
+If gitleaks is unavailable, times out, exits with any code other than `0` or `1`, writes no report,
+returns an invalid report, or otherwise fails, the path fails closed: all retained executable
+paths, argv, envp, file-open paths, tool environments, and captured streams are conservatively
 redacted, the raw corpus is removed, and the execution record contains an explicit coverage gap.
+A report written by a scanner that then failed is not used.
 Scanner failure writes an empty normalized findings artifact only alongside the explicit failure
 gap; it is never treated as a successful zero-findings result or clean coverage. After either a
 successful or failed scan, all raw strace files and the temporary corpus are deleted.
@@ -224,12 +232,53 @@ coverage disposition. Syscall rows use `appsec-review/build-syscall-event/1`. No
 findings use `appsec-review/build-capture-secret-findings/1`, and the scanner receipt uses
 `appsec-review/build-capture-secret-scan-execution/1`.
 
-Project-build acceptance resolves every URI below the run root and verifies its SHA-256. It also
-validates scope identity, schemas, nested tool stream identities, secret-finding count consistency,
-and scanner stream/report identities. Escaped paths, symlinks, changed hashes, invalid schemas, or
-inconsistent coverage are framework-integrity failures. Event, tool-call, or finding caps and
-collector/scanner failures are named coverage gaps. A gitleaks finding is evidence to retain and
-route; by itself it is not a capture-coverage gap.
+Acceptance uses one shared verifier, `verify_capture_record`, for both jobs. The caller states the
+run, job, attempt, build unit, and family it executed; the verifier resolves every URI below the run
+root and verifies its SHA-256. It also validates scope identity, record and syscall-event schemas,
+retained event and tool-call counts, nested tool stream identities, secret-finding count
+consistency, and scanner stream/report identities. Escaped paths, symlinks, changed hashes, invalid
+schemas, a foreign scope, or inconsistent coverage are framework-integrity failures. Event,
+tool-call, or finding caps and collector/scanner failures are named coverage gaps. A gitleaks
+finding is evidence to retain and route; by itself it is not a capture-coverage gap.
+
+## Rust language-build integration
+
+`job_language_build` runs Cargo metadata and every accepted Cargo configure/build command through
+`execute_captured` with the job's resolved `BuildCaptureConfig` and a `CaptureScope` naming the real
+run, `job_language_build`, attempt, build unit, and `rust` family. An executor without captured
+execution, a missing record, or a record that fails verification stops the unit as a
+framework-integrity failure instead of producing a receipt. Each command is stored beside, never
+inside, the build workspace:
+
+```text
+data/build/rust/units/<build-unit-id>/attempts/<attempt-id>/execution-capture/command-NNN/
+```
+
+Each Rust command receipt carries an `execution_capture` identity: the record path, hash, size, and
+scope; the event-file hash and counts; collector kinds; envp enablement; tool-call counts; and the
+hashes of the normalized findings, the scanner execution receipt, and the gitleaks report. The
+`build` retrieval shard exposes only the record, event, and findings hashes, completeness, and
+finding count.
+
+Rust tool provenance is derived from the verified records, not from Cargo output. A successful
+process-exec event is the authority that `rustc`, a C linker driver, a linker, an archiver, or a
+Cargo build script ran, including the toolchain compiler Cargo starts by absolute path. PATH
+tool-call records are reconciled onto the same invocation and add exit and stream identities; a
+launcher, a toolchain proxy, and the resolved binary collapse into one row. The former
+`RUSTC_WRAPPER`, linker, and archiver shims and the `Running` line parser were removed because they
+recorded nothing the syscall evidence lacks. Exact argv stays in the unit's protected compile
+commands; receipts keep argv hashes, the classified tool, mapped inputs and outputs, and the
+evidence identities. The job writes nothing into the Cargo `target/` tree, which the non-root
+container user owns; the Rust link database is stored beside the workspace.
+
+Lost evidence is reported rather than reconstructed. Capture gaps appear in the receipt as
+`execution capture command N: ...`; an exec event redacted by the scan removes that tool's
+provenance and names a gap; `rustc` archives rlibs in-process, so an unobserved archiver remains a
+named gap when `capture_linker` requires linker and archiver observation. When the scan redacts the
+top invocation, the protected command artifact stores the redacted argv and environment instead of
+reintroducing them, and Cargo metadata that was truncated or redacted is a gap. A unit whose
+capture is incomplete is never checkpointed; a reused checkpoint re-verifies every retained capture
+against the scope and hashes its receipt recorded and republishes the gaps that receipt named.
 
 ## Configuration ownership
 
@@ -246,10 +295,15 @@ The main implementation surfaces are:
 - `src/appsec_review/container_runtime/build_executor.py` — sandbox launch and gitleaks pass;
 - `containers/build-capture/build-driver.sh` — process-tree syscall driver;
 - `containers/build-capture/tool-wrapper.py` — exact known-tool calls and streams;
-- `src/appsec_review/container_runtime/build_capture.py` — normalization and execution record;
-- `src/appsec_review/jobs/job_project_build/job.py` — run integration and hash verification; and
+- `src/appsec_review/container_runtime/build_capture.py` — normalization, execution record, and
+  the shared record verifier;
+- `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
+- `src/appsec_review/jobs/job_language_build/job.py` and `rust.py` — Rust capture routing, receipt
+  identities, and capture-derived tool provenance; and
 - `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
-  `tests/test_project_build.py`, and `tests/test_live_build_toolchains.py` — unit and live contracts.
+  `tests/test_project_build.py`, `tests/test_rust_language_build.py`, and
+  `tests/test_live_build_toolchains.py` — unit and live contracts. `tests/capture_fakes.py` replaces
+  only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.
 
 ## Acceptance sequence
 

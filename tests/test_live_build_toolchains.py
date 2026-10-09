@@ -8,8 +8,9 @@ import subprocess
 
 import pytest
 import json
+import re
 
-from appsec_review.config import RustBuildSettings, load_config
+from appsec_review.config import load_config
 from appsec_review.container_runtime import (
     BuildContainerExecutor, CaptureScope,
     BuildProfile,
@@ -17,13 +18,17 @@ from appsec_review.container_runtime import (
     ProjectImageResolver,
     profiles_from_settings,
 )
-from appsec_review.jobs.job_language_build import dotnet, jvm, node, php, python, rust, wasm
+from appsec_review.container_runtime.catalog import load_catalog
+from appsec_review.jobs.job_language_build import (
+    build_job as build_language, dotnet, jvm, load_accepted_language_build, node, php, python, rust, wasm,
+)
 from appsec_review.jobs.job_language_build.job import _catalog, _kind
 from appsec_review.jobs.job_project_build.job import _probe_environment
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
+from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import file_sha256
@@ -50,7 +55,7 @@ CASES = (
         ("clang++", "-S", "-emit-llvm", "main.cpp", "-o", "build/main.ll"),
     ), {}, ("build/compile_commands.json", "build/libfixture_helper.a", "build/fixture_native", "build/main.ll")),
     LiveBuildCase("rust", "rust", (("cargo", "build", "--verbose"),),
-                  {"CARGO_HOME": "/tmp/cargo"},
+                  {"CARGO_HOME": "/tmp/cargo", "CARGO_INCREMENTAL": "0"},
                   ("target/debug/appsec-fixture-rust", "Cargo.lock")),
     LiveBuildCase("go", "go", (("go", "build", "-x", "-o", "build/appsec-fixture-go", "."),),
                   {"GOCACHE": "/tmp/go-cache", "GOMODCACHE": "/tmp/go-mod"},
@@ -428,19 +433,181 @@ def test_live_maven_project_image_can_fill_old_plugin_gaps_in_writable_runtime_c
     assert (workspace / source_dir / "target" / "appsec-fixture-java-0.1.0.jar").is_file()
 
 
-def test_live_rust_capture_wrappers_are_writable_to_the_non_root_build_user(
-        tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    shutil.copytree(FIXTURE, workspace)
-    settings = RustBuildSettings("stable", None, "dev", (), False, False, True, 32768)
-    capture_environment, invocations = rust.install_capture_wrappers(workspace, settings)
-    executor = BuildContainerExecutor(_profile("rust"), timeout_seconds=900,
-                                      output_bytes=8 * 1024 * 1024)
-    executor.resolve()
-    result = executor.execute(("cargo", "build", "--verbose"), workspace=workspace,
-                              working_directory="rust",
-                              environment={"CARGO_HOME": "/tmp/cargo", **capture_environment})
-    detail = ((result.stdout_tail or result.stdout) + b"\n" +
-              (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
-    assert not result.timed_out and result.exit_code == 0, detail
-    assert list(invocations.glob("rustc.*")), "the non-root wrapper emitted no compiler invocation"
+SYNTHETIC_SECRET = "e7322523fb86ed64c836a979cf8465fbd436378c653c1db38f9ae87bc62a6fd5"
+
+
+class _RustFixtureRecipeModel:
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            root = unit["root"]
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "rust", "source_dir": root, "build_dir": f"{root}/target",
+                "system_packages": [], "environment": {"CARGO_TERM_COLOR": "never"},
+                "dependency_files": [f"{root}/Cargo.toml", f"{root}/Cargo.lock"],
+                "configure_commands": [], "build_commands": [["cargo", "build", "--locked"]],
+                "expected_outputs": [f"{root}/target"], "network_required": True,
+                "reason": "live Rust capture fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+class _SecretEnvironmentExecutor(BuildContainerExecutor):
+    """The real executor, started with one extra variable the accepted recipe never named."""
+
+    def execute_captured(self, argv, *, environment, **options):
+        return super().execute_captured(
+            argv, environment={**environment, "DISCORD_PUBLIC_KEY": SYNTHETIC_SECRET}, **options)
+
+
+def _live_rust_language_build(tmp_path: Path, *, secret: bool):
+    _profile("rust")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if secret:
+        names = '  "PIP_INDEX_URL",\n]'
+        assert text.count(names) == 1
+        text = text.replace(names, '  "PIP_INDEX_URL",\n  "DISCORD_PUBLIC_KEY",\n]')
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text(text, encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "rust", target / "rust")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        model_client=_RustFixtureRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
+    run_id = upstream["run_id"]
+    # The default resolver derives the real dependency-bearing project image from the pinned
+    # Rust profile, so Cargo downloads through the allowed build environment only.
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert project["status"] == "SUCCEEDED"
+    settings = config.job("job_language_build").settings
+    factory = (lambda unit, profile: _SecretEnvironmentExecutor(
+        profile, timeout_seconds=int(settings["command_timeout_seconds"]),
+        output_bytes=int(settings["output_bytes"]))) if secret else None
+    outcome = GraphRunner(config, [build_language(executor_factory=factory)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    run_root = config.runtime.runs_dir / run_id
+    receipt = next(item for item in load_accepted_language_build(run_root)["receipts"]
+                   if item["family"] == "rust")
+    return config, run_root, outcome, receipt
+
+
+def _capture_events(run_root: Path, command) -> list[dict]:
+    path = run_root / command["execution_capture"]["events"]["path"]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _assert_live_rust_capture(config, run_root: Path, receipt) -> None:
+    """Every Rust command carries a complete, hash-valid standardized capture with a real scan."""
+    assert receipt["terminal_status"] == "SUCCEEDED", receipt["gaps"]
+    assert [command["role"] for command in receipt["commands"]] == ["metadata", "build"]
+    assert not [gap for gap in receipt["gaps"] if gap.startswith("execution capture")], receipt["gaps"]
+    gitleaks = load_catalog(ROOT).tool("tool-gitleaks")
+    for ordinal, command in enumerate(receipt["commands"], 1):
+        assert command["exit_code"] == 0 and command["timed_out"] is False
+        identity = command["execution_capture"]
+        assert identity["scope"]["job_id"] == "job_language_build"
+        assert identity["scope"]["run_id"] == run_root.name
+        assert identity["scope"]["build_unit_id"] == receipt["build_unit_id"]
+        assert identity["scope"]["family"] == "rust"
+        assert identity["path"].endswith(f"execution-capture/command-{ordinal:03d}/record.json")
+        assert identity["path"].startswith(f"data/build/rust/units/{receipt['build_unit_id']}/attempts/")
+        assert identity["complete"] is True and identity["envp_captured"] is True
+        assert "connect" in identity["collector"]["event_kinds"]
+        assert identity["events"]["capped"] is False and identity["tool_calls"]["capped"] is False
+        assert identity["events"]["counts"]["process_exec"] > 0
+        assert identity["events"]["counts"]["file_open"] > 0
+        assert identity["tool_calls"]["retained"] > 0
+        for member in (identity, identity["events"], identity["secret_findings"],
+                       identity["secret_scan"]["execution"], identity["secret_scan"]["report"]):
+            assert file_sha256(run_root / member["path"]) == member["sha256"]
+        record_path = run_root / identity["path"]
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        assert record["coverage"] == {"complete": True, "gaps": []}
+        for call in record["tool_calls"]["records"]:
+            assert file_sha256(record_path.parent / call["uri"]) == call["sha256"]
+        # gitleaks really ran from the cataloged image and left a parseable report.
+        execution = json.loads((run_root / identity["secret_scan"]["execution"]["path"]).read_text())
+        assert execution["tool_id"] == "tool-gitleaks" and execution["version"] == gitleaks.version
+        assert execution["exit_code"] in {0, 1} and execution["timed_out"] is False
+        assert re.fullmatch(r"sha256:[0-9a-f]{64}", execution["image_id"])
+        assert gitleaks.expected_image_id in {None, execution["image_id"]}
+        assert isinstance(json.loads((run_root / identity["secret_scan"]["report"]["path"]).read_text()), list)
+        capture_root = record_path.parent
+        assert not tuple(capture_root.glob("trace*")) and not (capture_root / ".secret-scan-input").exists()
+    assert not tuple(run_root.rglob("trace.[0-9]*"))
+
+
+def test_live_rust_language_build_accepts_hash_verified_execution_capture(tmp_path: Path) -> None:
+    config, run_root, outcome, receipt = _live_rust_language_build(tmp_path, secret=False)
+    assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+    _assert_live_rust_capture(config, run_root, receipt)
+
+    # The dependency-bearing build produced the executable and Rust intermediates.
+    artifacts = {item["workspace_path"]: item for item in receipt["artifacts"]}
+    executable = artifacts["rust/target/debug/appsec-fixture-rust"]
+    assert executable["kind"] == "executable"
+    assert file_sha256(run_root / executable["path"]) == executable["sha256"]
+    kinds = {item["kind"] for item in receipt["artifacts"]}
+    assert kinds >= {"executable", "rust-library", "rust-metadata", "dependency-metadata"}
+    assert any(path.startswith("rust/target/debug/deps/libtime-") and path.endswith(".rlib")
+               for path in artifacts)
+    assert not any("execution-capture" in item["path"] for item in receipt["artifacts"])
+    assert {package["name"] for package in receipt["cargo_metadata"]["packages"]} >= {
+        "appsec-fixture-rust", "time", "libc"}
+    assert receipt["cargo_metadata"]["relationships"]
+
+    # rustc and the linker driver are observed directly as successful execve events, including
+    # the toolchain compiler Cargo starts by absolute path.
+    build = receipt["commands"][1]
+    executed = [event for event in _capture_events(run_root, build)
+                if event["kind"] == "process_exec" and event["result"] == 0]
+    compilers = [event for event in executed if Path(event["executable"]).name == "rustc"]
+    assert any("--crate-name" in event["argv"] and "appsec_fixture_rust" in event["argv"]
+               for event in compilers)
+    assert any(event["executable"].startswith("/usr/local/rustup/toolchains/") for event in compilers)
+    assert any(Path(event["executable"]).name == "cc" for event in executed)
+    assert all(event["envp_captured"] and event["envp"] for event in compilers)
+    rows = receipt["tool_invocations"]
+    row_kinds = {item["tool_kind"] for item in rows}
+    assert row_kinds >= {"compiler", "linker-driver", "code-generator"}
+    assert all(item["mapping"].startswith("syscall-process-exec") for item in rows)
+    assert all(item["evidence"]["process_exec"]["count"] >= 1 for item in rows)
+    assert all("argv" not in item and len(item["argv_sha256"]) == 64 for item in rows)
+    assert receipt["link_database"]["relationship_count"] >= 1
+    # rustc writes rlib archives in-process; an unobserved archiver stays a named gap.
+    assert ("archiver" in row_kinds) != (
+        "Rust archiver execution was not observed in the standardized capture" in receipt["gaps"])
+    provenance = receipt["capture_provenance"]
+    assert provenance["complete"] is True and provenance["redacted_exec_events"] == 0
+    assert provenance["envp_events"] > 0 and provenance["unreconciled_tool_calls"] == 0
+    assert not any(command["tool"] != "cargo" for command in receipt["commands"])
+
+
+def test_live_rust_language_build_detects_and_removes_an_envp_secret(tmp_path: Path) -> None:
+    config, run_root, _outcome, receipt = _live_rust_language_build(tmp_path, secret=True)
+    _assert_live_rust_capture(config, run_root, receipt)
+    for command in receipt["commands"]:
+        identity = command["execution_capture"]
+        assert identity["secret_findings"]["count"] >= 1
+        assert identity["secret_scan"]["exit_code"] == 1
+        findings = json.loads((run_root / identity["secret_findings"]["path"]).read_text(encoding="utf-8"))
+        assert findings["scanner"]["tool_id"] == "tool-gitleaks"
+        assert all(item["secret_redacted"] for item in findings["findings"])
+        assert {item["source"].split("/")[0] for item in findings["findings"]} & {"syscalls", "invocation.json"}
+        # Envp was captured on every exec; the configured exact name removed the value.
+        executed = [event for event in _capture_events(run_root, command) if event["kind"] == "process_exec"]
+        assert any({"name": "DISCORD_PUBLIC_KEY", "redacted": True, "value": "<redacted>"} in event["envp"]
+                   for event in executed)
+        exact = json.loads((run_root / command["protected_argv"]["path"]).read_text(encoding="utf-8"))
+        assert SYNTHETIC_SECRET not in json.dumps(exact)
+    assert "DISCORD_PUBLIC_KEY" in receipt["capture_provenance"]["envp_redacted_names"]
+    assert {item["tool_kind"] for item in receipt["tool_invocations"]} >= {"compiler", "linker-driver"}
+    leaked = [path for path in run_root.rglob("*")
+              if path.is_file() and SYNTHETIC_SECRET.encode() in path.read_bytes()]
+    assert not leaked, leaked
+    assert (run_root / "data/build/rust/units" / receipt["build_unit_id"] / "workspace/rust/target/debug"
+            / "appsec-fixture-rust").is_file()

@@ -207,6 +207,14 @@ def test_probe_environment_supplies_writable_maven_repository_without_user_optio
         "-Dmaven.repo.local=/tmp/appsec-review-maven")
 
 
+def test_probe_environment_disables_cargo_incremental_state_the_host_cannot_read() -> None:
+    environment = _probe_environment({"build_system": "cargo", "source_dir": "rust",
+                                      "environment": {"CARGO_INCREMENTAL": "1"}})
+    assert environment["CARGO_INCREMENTAL"] == "0"
+    assert "CARGO_INCREMENTAL" not in _probe_environment({
+        "build_system": "cmake", "source_dir": "native", "environment": {}})
+
+
 def test_image_repair_accepts_only_bounded_apt_package_sets() -> None:
     proposal = {"schema": REPAIR_SCHEMA, "system_packages": ["libssl-dev", "zlib1g-dev:amd64"],
                 "reason": "missing development headers"}
