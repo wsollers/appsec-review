@@ -119,6 +119,42 @@ def test_project_image_failure_retains_bounded_diagnostics(tmp_path: Path) -> No
     assert raised.value.stderr == b"specific failure"
 
 
+def test_networked_cargo_image_supplies_a_descriptor_only_fetch_target(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "Cargo.toml").write_text(
+        "[package]\nname='fixture'\nversion='0.1.0'\n", encoding="utf-8")
+    base_id, derived_id = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+
+    def runner(argv, _timeout):
+        if argv[:3] == ("docker", "image", "inspect"):
+            return (0, (base_id if argv[3] == "rust-base:local" else derived_id).encode(), b"", False)
+        if argv[:3] == ("docker", "buildx", "build"):
+            return 0, b"built", b"", False
+        raise AssertionError(argv)
+
+    recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": "build-unit-" + "1" * 20,
+        "image_profile": "rust", "source_dir": ".", "build_dir": "target",
+        "system_packages": [], "environment": {}, "dependency_files": ["Cargo.toml"],
+        "configure_commands": [], "build_commands": [["cargo", "build"]],
+        "expected_outputs": ["target/debug/fixture"], "network_required": True,
+        "reason": "fixture", "build_system": "cargo",
+    }
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target, runner=runner)
+    resolver.resolve(recipe, BuildProfile("rust", "rust-base:local", base_id, "10001:10001"))
+    context = next((tmp_path / "metadata" / "project-images").glob("*/context"))
+    dockerfile = (context / "Dockerfile").read_text(encoding="utf-8")
+    assert (context / "cargo-placeholder.rs").read_text(encoding="utf-8") == "fn main() {}\n"
+    assert '["cargo-placeholder.rs","/opt/project/src/main.rs"]' in dockerfile
+    assert '["cargo","fetch"]' in dockerfile
+
+
+def test_maven_image_primes_clean_plugin_dependencies() -> None:
+    assert _restore_command({"build_system": "maven", "dependency_files": ["pom.xml"]}) == (
+        "mvn", "-B", "-DskipTests", "clean", "dependency:go-offline")
+
+
 def test_project_image_identity_ignores_explanatory_reason() -> None:
     profile = BuildProfile("native", "native-base:local", "sha256:" + "a" * 64, "10001:10001")
     recipe = {"schema": "appsec-review/build-recipe/1", "build_unit_id": "build-unit-" + "1" * 20,

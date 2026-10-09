@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import sys
+import time
+
+import pytest
 
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
+from appsec_review.container_runtime.build_executor import _run
 
 
 def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -> None:
@@ -33,3 +39,16 @@ def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -
     assert command[command.index("--workdir") + 1] == "/workspace/project"
     assert not {"sh", "bash", "cmd", "powershell"} & set(command)
     assert result.exit_code == 0 and result.stdout == b"built"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-session cleanup is used by the Linux deployment")
+def test_default_runner_timeout_releases_descendants_holding_capture_pipes() -> None:
+    script = (
+        "import subprocess,sys,time; "
+        "subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
+        "print('started', flush=True); time.sleep(30)"
+    )
+    started = time.monotonic()
+    code, stdout, _stderr, timed_out = _run((sys.executable, "-c", script), 1)
+    assert timed_out and code is None and b"started" in stdout
+    assert time.monotonic() - started < 8

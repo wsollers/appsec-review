@@ -14,7 +14,7 @@ from .build_executor import BuildProfile, Runner, _run
 
 
 SCHEMA = "appsec-review/project-build-image/1"
-GENERATOR_IDENTITY = "appsec-review/project-dockerfile/5"
+GENERATOR_IDENTITY = "appsec-review/project-dockerfile/6"
 
 
 class ProjectImageBuildError(RuntimeError):
@@ -80,7 +80,9 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
     if system == "go":
         return ("go", "mod", "download")
     if system == "maven":
-        return ("mvn", "-B", "dependency:go-offline", "-DskipTests")
+        # Execute the clean lifecycle while the image is writable so Maven also resolves the
+        # (occasionally very old) clean-plugin dependencies needed by the later immutable build.
+        return ("mvn", "-B", "-DskipTests", "clean", "dependency:go-offline")
     if system == "gradle":
         return ("gradle", "--no-daemon", "dependencies")
     if system == "dotnet":
@@ -176,6 +178,15 @@ class ProjectImageResolver:
         for ordinal, relative in enumerate(sorted(hashes)):
             lines.append("COPY --chown=" + profile.user + " " + json.dumps(
                 [f"inputs/{ordinal:04d}", f"/opt/project/{relative}"], separators=(",", ":")))
+        if str(recipe.get("build_system", "")) == "cargo" and bool(recipe.get("network_required")):
+            # Cargo validates that a manifest has a target before it will fetch dependencies.
+            # Project images intentionally contain descriptors only, so provide a harmless
+            # image-local target. The real source tree replaces this path in the build workspace.
+            source = str(recipe["source_dir"])
+            prefix = "" if source == "." else source + "/"
+            lines.append("COPY --chown=" + profile.user + " " + json.dumps(
+                ["cargo-placeholder.rs", f"/opt/project/{prefix}src/main.rs"],
+                separators=(",", ":")))
         lines.extend((_json_instruction("RUN", ("chown", "-R", f"{uid}:{gid}",
                                                    "/opt/project", "/opt/project-home",
                                                    "/opt/project-deps")),
@@ -235,6 +246,8 @@ class ProjectImageResolver:
                 source = _safe_dependency(self.target_root, relative)
                 staged = inputs / f"{ordinal:04d}"
                 shutil.copyfile(source, staged)
+            if str(recipe.get("build_system", "")) == "cargo" and bool(recipe.get("network_required")):
+                (context / "cargo-placeholder.rs").write_text("fn main() {}\n", encoding="utf-8")
             packages = tuple(str(value) for value in recipe.get("system_packages", ()))
             dockerfile_path = context / "Dockerfile"
             dockerfile_path.write_bytes(dockerfile)

@@ -243,6 +243,10 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
         locks = names & {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
         if "package.json" not in names or len(locks) > 1:
             errors.append("Node recipes require package.json and at most one supported lockfile")
+        commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
+        if any(isinstance(argv, list) and len(argv) >= 2 and argv[:2] == ["npm", "ci"]
+               for argv in commands) and "package-lock.json" not in locks:
+            errors.append("Node recipes may use npm ci only when package-lock.json is accepted")
     allowed = _PROFILE_COMMANDS.get(str(profile), frozenset())
     for field in ("configure_commands", "build_commands"):
         commands = recipe.get(field)

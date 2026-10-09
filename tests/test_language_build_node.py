@@ -66,7 +66,7 @@ def test_node_restore_recipes_are_lockfile_specific_and_disable_install_scripts(
                for name in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock"))
 
 
-def test_node_recipe_validation_requires_lock_and_rejects_application_execution() -> None:
+def test_node_recipe_validation_matches_restore_to_lock_and_rejects_application_execution() -> None:
     unit = {"build_unit_id": "unit", "family": "node", "root": "web", "build_system": "node",
             "markers": [{"path": "web/package.json"}],
             "descriptor_package": {"documents": [{"path": "web/package.json"},
@@ -81,6 +81,9 @@ def test_node_recipe_validation_requires_lock_and_rejects_application_execution(
     manifest_only = {**recipe, "build_commands": [["npm", "run", "build"]],
                      "dependency_files": ["web/package.json"]}
     assert validate_build_recipe(manifest_only, unit) == []
+    invalid_ci = {**manifest_only, "configure_commands": [["npm", "ci"]]}
+    assert "Node recipes may use npm ci only when package-lock.json is accepted" in validate_build_recipe(
+        invalid_ci, unit)
 
 
 def test_node_lifecycle_validation_blocks_test_runners_and_target_applications(tmp_path: Path) -> None:

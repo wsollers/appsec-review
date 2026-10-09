@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 from typing import Any
 
@@ -45,12 +46,33 @@ Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
 
 
 def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, bool]:
+    process = subprocess.Popen(
+        list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=os.name == "posix",
+    )
     try:
-        value = subprocess.run(list(argv), stdin=subprocess.DEVNULL, capture_output=True,
-                               check=False, timeout=timeout)
-        return value.returncode, value.stdout, value.stderr, False
+        stdout, stderr = process.communicate(timeout=timeout)
+        return process.returncode, stdout, stderr, False
     except subprocess.TimeoutExpired as exc:
-        return None, exc.stdout or b"", exc.stderr or b"", True
+        # Killing only the CLI can leave a descendant holding the capture pipes open forever.
+        # Build commands run in their own POSIX session so timeout cleanup releases the whole
+        # bounded command tree and `communicate` cannot wedge a Dagster worker.
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            process.kill()
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()
+            stdout, stderr = exc.stdout or b"", exc.stderr or b""
+        return None, stdout or exc.stdout or b"", stderr or exc.stderr or b"", True
 
 
 def resolve_host_bind_path(path: Path, runner: Runner) -> Path:

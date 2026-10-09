@@ -1321,8 +1321,11 @@ def build_job(*, executor_factory=None) -> Job:
                                 if dependency in dispatches]
                     runnable.append((key, {dependency: str(completed[dependency].get("fingerprint", ""))
                                            for dependency in relevant}))
-            with ThreadPoolExecutor(max_workers=min(len(runnable) or 1,
-                    int(unit.job.config.step("execute").workers))) as pool:
+            # Parallel diagnostic MSBuild runs can leave Docker Desktop clients waiting on
+            # concurrent `--rm` cleanup after the actual containers have exited. Keep .NET
+            # deterministic and bounded while retaining family-level pipeline parallelism.
+            worker_limit = 1 if family == "dotnet" else int(unit.job.config.step("execute").workers)
+            with ThreadPoolExecutor(max_workers=min(len(runnable) or 1, worker_limit)) as pool:
                 futures = {key: pool.submit(run, dispatches[key], upstream) for key, upstream in runnable}
                 for key, _upstream in runnable:
                     completed[key] = futures[key].result()
