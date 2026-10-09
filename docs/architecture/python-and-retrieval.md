@@ -36,7 +36,8 @@ catalog fingerprints exclude scanners and MCP transport, so scanner changes cann
 and transport changes rebuild nothing.
 
 The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard,
-CodeQL-observation shard, Joern-observation shard, and binary/symbol shard per accepted case. A
+Joern-observation shard, and binary/symbol shard per accepted case. The separate cross-language
+CodeQL job adds an observation shard per accepted language scope. A
 blocked producer still publishes an unavailable-coverage shard with zero observations, so absence
 cannot be mistaken for clean coverage. Compile and linker relationships that lack an exact output
 map are explicitly non-exact and carry their ambiguity reason.

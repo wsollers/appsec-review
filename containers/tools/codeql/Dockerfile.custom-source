@@ -1,0 +1,13 @@
+ARG CODEQL_SOURCE_IMAGE=audit-codeql:local
+FROM ${CODEQL_SOURCE_IMAGE}
+
+ARG CODING_STANDARDS_SHA256=775e34cb36e522c30f3c4381c0758a7fbe29e6c9a5428eb6c9ad67ebd145cb0b
+ARG RUNTIME_USER=10001:10001
+USER 0:0
+COPY coding-standards-codeql-packs.zip /tmp/coding-standards-codeql-packs.zip
+RUN echo "${CODING_STANDARDS_SHA256}  /tmp/coding-standards-codeql-packs.zip" | sha256sum -c - \
+ && python3 -c "import io,pathlib,tarfile,zipfile; z=zipfile.ZipFile('/tmp/coding-standards-codeql-packs.zip'); data=z.read('cert-cpp-coding-standards.tgz'); root=pathlib.Path('/opt/codeql/custom-queries/cert-cpp'); root.mkdir(parents=True); tarfile.open(fileobj=io.BytesIO(data),mode='r:gz').extractall(root,filter='data')" \
+ && rm -f /tmp/coding-standards-codeql-packs.zip \
+ && chown -R ${RUNTIME_USER} /opt/codeql/custom-queries
+
+USER ${RUNTIME_USER}

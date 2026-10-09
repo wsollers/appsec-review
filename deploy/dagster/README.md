@@ -87,8 +87,11 @@ command validates both directions rather than inferring success from one system 
 
 `wave1_review` shows intake and catalog units followed by the planned analysis jobs. Static evidence
 collection and project-build processing both start from the accepted target-analysis plan. Generic
-language-build execution waits for accepted project-build probes while its source and WebAssembly lanes remain independent; C++ analysis waits for its native
-receipts; and post-build security waits for the accepted C++ analysis handoff. Each evidence
+language-build execution waits for accepted project-build probes while its source and WebAssembly
+lanes remain independent; C++ analysis waits for its native receipts; and post-build security waits
+for the accepted C++ analysis handoff. Cross-language CodeQL then consumes the accepted catalog,
+language-build, artifact, C++, post-build, static-evidence, and tree-sitter publications so its
+manifest is the final composed retrieval view before OWASP. Each evidence
 branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
 truthful terminal disposition from every static branch, verifies every immutable shard, and then
 publication moves the accepted pointer. OWASP assessment waits for both the static-evidence and

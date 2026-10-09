@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from appsec_review.config import LanguageBuildSettings, load_config
+from appsec_review.config import CodeQLAnalysisSettings, LanguageBuildSettings, load_config
 
 
 def test_default_config_declares_midnight_nvd_schedule() -> None:
@@ -36,3 +36,16 @@ def test_language_build_has_typed_rust_limits_and_policy() -> None:
     assert settings.rust.offline is True
     assert settings.rust.locked is False
     assert settings.rust.diagnostic_tail_bytes == 32768
+
+
+def test_codeql_analysis_has_typed_cross_language_policy() -> None:
+    config = load_config(Path(__file__).parents[1] / "appsec-review.toml")
+    settings = config.job("job_codeql_analysis").typed_settings
+    assert isinstance(settings, CodeQLAnalysisSettings)
+    assert set(settings.languages) == {
+        "actions", "cpp", "csharp", "go", "java", "javascript", "python", "rust"}
+    assert settings.languages["java"].source_languages == ("Java", "Kotlin")
+    assert settings.languages["rust"].mode == "none"
+    assert settings.languages["cpp"].query_suite == "codeql-suites/cpp-code-scanning.qls"
+    assert [item.query_id for item in settings.languages["cpp"].custom_queries] == ["cert-cpp"]
+    assert settings.retention == "run-owned"

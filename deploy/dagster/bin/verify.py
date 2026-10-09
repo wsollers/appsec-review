@@ -154,12 +154,20 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_cpp_compiled_analysis",
             "job_post_build_security_assessment",
             "job_evidence_collection",
+            "job_codeql_analysis",
         ) if run.get("pipelineName") == "wave1_review" else ((
             "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
             "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
             "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
         )))
+        if run.get("pipelineName") == "wave1_review":
+            step_keys = {str(item.get("stepKey", "")) for item in run.get("stepStats", [])}
+            job_ids = tuple(job_id for job_id in job_ids if any(
+                step_key.startswith(f"{document['jobs'][job_id]['name']}__")
+                for step_key in step_keys))
+            if not job_ids:
+                raise SystemExit("successful Wave 1 selection did not execute an application job")
         for job_id in job_ids:
             pointer_path = run_root / "data" / "jobs" / job_id / "latest.json"
             pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
@@ -190,6 +198,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 "job_cpp_compiled_analysis": "acceptance.publish_handoff",
                 "job_post_build_security_assessment": "publication.publish_handoff",
                 "job_evidence_collection": "evidence_publication.publish_handoff",
+                "job_codeql_analysis": "acceptance.publish_handoff",
                 "job_ci_configuration_analysis": "ci_coverage.publish_handoff",
             }
             publication = result.get("outputs", {}).get(publication_units[job_id], {})
@@ -365,33 +374,6 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 cpp_shards = [item for item in manifest["indexes"]
                               if str(item.get("shard_id", "")).startswith("cpp-")]
-                branches = [value for key, value in result["units"].items()
-                            if key.split(".", 1)[0] in {"compiled", "ast", "ir", "infer", "codeql", "joern", "binary"}]
-                codeql_projects = result.get("outputs", {}).get("codeql.projects", {}).get("projects", {})
-                successful_codeql = [value for value in codeql_projects.values()
-                                      if value.get("terminal_status") == "SUCCEEDED"]
-                if run.get("pipelineName") == "wave1_review" and not successful_codeql:
-                    raise SystemExit("live Wave 1 acceptance did not complete a CodeQL C++ project")
-                codeql_observations = 0
-                codeql_sarif_results = 0
-                codeql_artifacts = 0
-                for codeql in successful_codeql:
-                    if not codeql.get("database_identity") or not codeql.get("query_identity"):
-                        raise SystemExit("CodeQL success is missing database or query identity")
-                    for artifact_name in ("database_manifest", "sarif", "image"):
-                        artifact = codeql.get(artifact_name)
-                        if not isinstance(artifact, Mapping):
-                            raise SystemExit(f"CodeQL success is missing {artifact_name} artifact")
-                        artifact_path = (run_root / str(artifact.get("path", ""))).resolve()
-                        if (run_root.resolve() not in artifact_path.parents or not artifact_path.is_file() or
-                                hashlib.sha256(artifact_path.read_bytes()).hexdigest() != artifact.get("sha256")):
-                            raise SystemExit(f"CodeQL {artifact_name} artifact does not resolve")
-                        codeql_artifacts += 1
-                    sarif = json.loads((run_root / codeql["sarif"]["path"]).read_text(encoding="utf-8"))
-                    codeql_sarif_results += sum(len(item.get("results", ())) for item in sarif.get("runs", ()))
-                    codeql_observations += int(codeql.get("observation_count", 0))
-                if run.get("pipelineName") == "wave1_review" and codeql_observations < 1:
-                    raise SystemExit("live Wave 1 CodeQL acceptance produced no indexed observations")
                 job_report["cpp_wave"] = {
                     "project_count": summary["project_count"],
                     "branch_count": summary["branch_count"],
@@ -408,18 +390,83 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     "all_physical_shards_preserved": (
                         len(manifest["indexes"]) == summary["physical_shard_count"]
                     ),
-                    "codeql": {
-                        "project_count": len(codeql_projects),
-                        "successful_project_count": len(successful_codeql),
-                        "observation_count": codeql_observations,
-                        "sarif_result_count": codeql_sarif_results,
-                        "resolved_artifact_count": codeql_artifacts,
-                        "database_reused_count": sum(bool(value.get("database_reused"))
-                                                     for value in successful_codeql),
-                        "query_reused_count": sum(bool(value.get("query_reused"))
-                                                  for value in successful_codeql),
-                        "all_run_owned_artifacts_resolved": True,
-                    },
+                }
+            if job_id == "job_codeql_analysis":
+                summary_path = run_root / publication["artifact"]["path"]
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                manifest_path = run_root / publication["index_manifest"]["path"]
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                shards = [item for item in manifest["indexes"]
+                          if str(item.get("shard_id", "")).startswith("codeql-")]
+                scopes = summary.get("scopes", [])
+                successful = [item for item in scopes if item.get("terminal_status") == "SUCCEEDED"]
+                if run.get("pipelineName") == "wave1_review" and not successful:
+                    raise SystemExit("live Wave 1 acceptance did not complete a CodeQL scope")
+                by_language = {}
+                for scope in scopes:
+                    language = str(scope["language"])
+                    report = by_language.setdefault(language, {
+                        "scope_count": 0, "successful_scope_count": 0,
+                        "sarif_result_count": 0, "observation_count": 0,
+                        "gap_count": 0, "database_reused_count": 0, "query_reused_count": 0,
+                        "profiles": {},
+                    })
+                    profile = str(scope.get("query_profile", "default"))
+                    profile_report = report["profiles"].setdefault(profile, {
+                        "scope_count": 0, "successful_scope_count": 0,
+                        "sarif_result_count": 0, "observation_count": 0,
+                        "gap_count": 0,
+                    })
+                    report["scope_count"] += 1
+                    report["successful_scope_count"] += scope.get("terminal_status") == "SUCCEEDED"
+                    report["sarif_result_count"] += int(scope.get("sarif_results", 0))
+                    report["observation_count"] += int(scope.get("normalized_observations", 0))
+                    report["gap_count"] += len(scope.get("gaps", []))
+                    report["database_reused_count"] += bool(scope.get("database_reused"))
+                    report["query_reused_count"] += bool(scope.get("query_reused"))
+                    profile_report["scope_count"] += 1
+                    profile_report["successful_scope_count"] += (
+                        scope.get("terminal_status") == "SUCCEEDED")
+                    profile_report["sarif_result_count"] += int(scope.get("sarif_results", 0))
+                    profile_report["observation_count"] += int(
+                        scope.get("normalized_observations", 0))
+                    profile_report["gap_count"] += len(scope.get("gaps", []))
+                    if scope.get("terminal_status") == "SUCCEEDED" and (
+                            not scope.get("database_identity") or not scope.get("query_identity")):
+                        raise SystemExit("successful CodeQL scope is missing database or query identity")
+                cpp_scopes = [scope for scope in scopes if scope.get("language") == "cpp"]
+                if run.get("pipelineName") == "wave1_review" and cpp_scopes:
+                    cpp_settings = document["jobs"]["job_codeql_analysis"]["settings"]["languages"]["cpp"]
+                    expected_profiles = {"default", *(item["query_id"] for item in
+                        cpp_settings.get("custom_queries", []))}
+                    cpp_scope_ids = {str(scope["scope_id"]) for scope in cpp_scopes}
+                    for scope_id in cpp_scope_ids:
+                        profile_entries = {str(scope.get("query_profile", "default")): scope
+                                           for scope in cpp_scopes
+                                           if str(scope["scope_id"]) == scope_id}
+                        if set(profile_entries) != expected_profiles:
+                            raise SystemExit(
+                                f"C/C++ CodeQL scope {scope_id} profile mismatch: "
+                                f"expected={sorted(expected_profiles)} actual={sorted(profile_entries)}")
+                        failed_profiles = sorted(name for name, scope in profile_entries.items()
+                                                 if scope.get("terminal_status") != "SUCCEEDED")
+                        if failed_profiles:
+                            raise SystemExit(
+                                f"C/C++ CodeQL scope {scope_id} did not complete profiles: "
+                                f"{failed_profiles}")
+                for shard in shards:
+                    shard_path = run_root / shard["relative_path"]
+                    if (not shard_path.is_file() or
+                            hashlib.sha256(shard_path.read_bytes()).hexdigest() != shard["sha256"]):
+                        raise SystemExit("CodeQL observation shard identity does not resolve")
+                job_report["codeql"] = {
+                    "scope_count": len(scopes), "successful_scope_count": len(successful),
+                    "observation_count": int(summary.get("observation_count", 0)),
+                    "gap_count": len(summary.get("gaps", [])),
+                    "shard_count": len(shards), "languages": dict(sorted(by_language.items())),
+                    "non_applicable": summary.get("non_applicable", []),
+                    "manifest_sha256": publication["index_manifest"]["sha256"],
+                    "all_observation_shards_resolved": True,
                 }
             if job_id == "job_post_build_security_assessment":
                 summary_path = run_root / publication["artifact"]["path"]

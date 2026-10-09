@@ -265,7 +265,7 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     job = build_job(executor_factory=lambda unit: None)
     plan = plan_jobs((job,), config)
     assert PROJECT_TASKS == ("projects",)
-    assert len(job.units) == 11
+    assert len(job.units) == 10
     assert plan.node("job_cpp_compiled_analysis.ast.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     assert plan.node("job_cpp_compiled_analysis.ir.projects").dependencies == (
@@ -273,7 +273,7 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     assert plan.node("job_cpp_compiled_analysis.infer.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     final = plan.node("job_cpp_compiled_analysis.acceptance.publish_handoff")
-    assert len(final.dependencies) == 7
+    assert len(final.dependencies) == 6
     assert not any("case001" in node.node_id for node in plan.nodes)
     assert not any(node.node_id.endswith(("configure.projects", "compile.projects")) for node in plan.nodes)
 

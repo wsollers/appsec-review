@@ -64,10 +64,11 @@ Rust, and WebAssembly. The composed retrieval manifest and an MCP query resolved
 class evidence while retaining the unrelated catalog build shard. Producer-positive live coverage
 for Rust, Go, Node, .NET, Python, PHP, and WASM remains required before the Linux vertical can be
 closed; focused executor tests cover those family contracts in this revision.
-The full Linux vertical remains open: static dispatch execution, entitled CodeQL, pinned
-loader-dependency parsing, broader MCP integration, and cross-language live acceptance are still
-required. Retained Dagster records describe only the revisions and selected target recipes they
-captured.
+The pinned cross-language CodeQL job and exact `query_codeql` MCP surface are implemented. Fresh
+cross-language Dagster acceptance is still required, along with static dispatch execution, pinned
+loader-dependency parsing, broader MCP integration, and producer-positive live coverage for the
+remaining language-build families. Retained Dagster records describe only the revisions and
+selected target recipes they captured.
 
 Probe policy must be centrally configurable per build unit as `configure`, `selected-target`, or
 `full-build`. This keeps the default test target rigorous without forcing future large repositories

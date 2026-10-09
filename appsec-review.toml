@@ -576,31 +576,6 @@ workers = 8
 [jobs.job_cpp_compiled_analysis.settings]
 lane = "cpp"
 
-[jobs.job_cpp_compiled_analysis.settings.codeql]
-enabled = true
-source_image_tag = "audit-codeql:local"
-source_image_id = "sha256:13b904d24be951043e641cd6125d4c1eb1f750040a61d005c00a94a0dee4f1b3"
-version = "2.27.0+b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
-cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
-extractor_sha256 = "ee39289ecb90ea1f2b8032d754e550fdd0f3aa2b138b445f84976a7d55ac93e6"
-license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-query_pack = "codeql/cpp-queries"
-query_pack_version = "1.8.3"
-query_suite = "codeql-suites/cpp-security-and-quality.qls"
-query_suite_sha256 = "d4efa116f3c14d801ead8a079a0a45e3c8804a0457962c8825b161815adc34c5"
-query_pack_sha256 = "9d2e02cd1c0bac83663f0699eb390c06fc4b30fc817c076b53d76552a021cb6d"
-query_lock_sha256 = "7b14e41b5c986e17294b058e3ce604fc1ac70c51de2871452bb762819bf35343"
-database_timeout_seconds = 1800
-query_timeout_seconds = 1800
-output_bytes = 8388608
-database_file_limit = 200000
-database_bytes_limit = 8589934592
-sarif_bytes_limit = 268435456
-result_limit = 100000
-threads = 2
-ram_mb = 4096
-max_paths = 4
-
 [jobs.job_cpp_compiled_analysis.steps.plan]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.plan.tasks.accepted_cpp_plan]
@@ -629,10 +604,6 @@ workers = 1
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.infer.tasks.projects]
 
-[jobs.job_cpp_compiled_analysis.steps.codeql]
-workers = 1
-[jobs.job_cpp_compiled_analysis.steps.codeql.tasks.projects]
-
 [jobs.job_cpp_compiled_analysis.steps.joern]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.joern.tasks.projects]
@@ -644,6 +615,186 @@ workers = 1
 [jobs.job_cpp_compiled_analysis.steps.acceptance]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_codeql_analysis]
+name = "codeql_analysis"
+workers = 2
+
+[jobs.job_codeql_analysis.settings]
+enabled = true
+source_image_tag = "audit-codeql:custom-2.27.0"
+source_image_id = "sha256:3239953db3f14aaa9339f60adfa778ae8beb15c5db2aa393d3f21e7254413afa"
+version = "2.27.0"
+commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
+cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
+license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
+asset_lock_sha256 = "0ebc609457aac61e934f36eb63b258ee15379b216d18ef96885ecd4bdbcb027a"
+runtime_user = "10001:10001"
+retention = "run-owned"
+concurrency = 2
+inventory_timeout_seconds = 300
+database_timeout_seconds = 1800
+query_timeout_seconds = 1800
+output_bytes = 8388608
+database_file_limit = 200000
+database_bytes_limit = 8589934592
+sarif_bytes_limit = 268435456
+result_limit = 100000
+threads = 2
+ram_mb = 4096
+max_paths = 4
+
+[jobs.job_codeql_analysis.settings.languages.cpp]
+enabled = true
+mode = "manual"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "71b5ab5175660b2526a26c43b9fde0eb4340b6eefacf03b3bfd28c2fc33763f9"
+extractor_file_count = 322
+query_pack = "codeql/cpp-queries"
+query_pack_version = "1.8.3"
+query_suite = "codeql-suites/cpp-code-scanning.qls"
+query_suite_sha256 = "5a86509d584dff204cf22024284b84cdba2ca0d81f50d6104d8bb48f09982721"
+query_pack_sha256 = "9d2e02cd1c0bac83663f0699eb390c06fc4b30fc817c076b53d76552a021cb6d"
+query_lock_sha256 = "7b14e41b5c986e17294b058e3ce604fc1ac70c51de2871452bb762819bf35343"
+source_languages = ["C", "C++", "C/C++"]
+prerequisites = []
+
+[[jobs.job_codeql_analysis.settings.languages.cpp.custom_queries]]
+query_id = "cert-cpp"
+root = "/opt/codeql/custom-queries/cert-cpp"
+query_pack = "codeql/cert-cpp-coding-standards"
+query_pack_version = "2.62.0"
+query_suite = "codeql-suites/cert-cpp-default.qls"
+query_suite_sha256 = "3a43b3f6291ac9920da046310228d16eafb9f193883377337853b559f9dd2a36"
+query_pack_sha256 = "730390d903f2fd6806569cf00e8ae4e86a84dcc5acdd1e4019510b633a222a13"
+query_lock_sha256 = "a4027ef1fb800f5c637f23acec2ac9b67177aaafa7fc7e997c40cbd64076c1b6"
+tree_sha256 = "7a30046301501b84f1abe360037ac4059039d85567da695e570bfc987433b113"
+file_count = 1971
+
+[jobs.job_codeql_analysis.settings.languages.go]
+enabled = true
+mode = "manual"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "77602bd7b6167f6fe360d6116221eaed4d723471d5309ce8b45561d7e4abdf01"
+extractor_file_count = 46
+query_pack = "codeql/go-queries"
+query_pack_version = "1.6.10"
+query_suite = "codeql-suites/go-security-and-quality.qls"
+query_suite_sha256 = "aba8a7ca74e968aae34dfc1e06294e20b59b4ac17bc8b3fff63baa8b56016455"
+query_pack_sha256 = "9b04c802e6ce094775a7704fab79c21b3854241b4e3481ead559c18607a57133"
+query_lock_sha256 = "7de43f9f44ae21e304310724c31abf8348ac4d9d093645d00e4d894ec2853783"
+source_languages = ["Go"]
+prerequisites = []
+
+[jobs.job_codeql_analysis.settings.languages.java]
+enabled = true
+mode = "manual"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "cf07d7f555508aa38615426409a7a00cfd42300c226d0685ae6bb823f12e1c4c"
+extractor_file_count = 480
+query_pack = "codeql/java-queries"
+query_pack_version = "1.11.10"
+query_suite = "codeql-suites/java-security-and-quality.qls"
+query_suite_sha256 = "1de2e489164817c9705f11b06d0ec38cdf1ab09c7d98bcc061e27ea2a65b393c"
+query_pack_sha256 = "993ad1ce6f5a2ae10fe10b80308d5647a7f5b1864bbbea7afdb12f882fcb525c"
+query_lock_sha256 = "13bcdf3fd8cba2737d918e86d3fd504112157a1a43275c7951683eb9ca184b86"
+source_languages = ["Java", "Kotlin"]
+prerequisites = []
+
+[jobs.job_codeql_analysis.settings.languages.csharp]
+enabled = true
+mode = "manual"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "4af1424f5e14a8f183fc747929fb3b65e2e29566552b3d9a3c7cbff4dbbf5c71"
+extractor_file_count = 362
+query_pack = "codeql/csharp-queries"
+query_pack_version = "1.9.3"
+query_suite = "codeql-suites/csharp-security-and-quality.qls"
+query_suite_sha256 = "cac52129e93a3e40398e6763246e05c2ebd5500f7d5f2ff117d0dd0ae8383272"
+query_pack_sha256 = "5308c7593b6203312292b91c777d71e3109942cfb8a83d30759f646932de889e"
+query_lock_sha256 = "f0a376106620edfdac5f3a0dccf3c38f62968221609ccbc21320e60775af9796"
+source_languages = ["C#"]
+prerequisites = []
+
+[jobs.job_codeql_analysis.settings.languages.javascript]
+enabled = true
+mode = "none"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "a9a554b8601a7bf6014dafc9550a5c0036e6895b6ff9c6437a9944ee627a8285"
+extractor_file_count = 300
+query_pack = "codeql/javascript-queries"
+query_pack_version = "2.4.5"
+query_suite = "codeql-suites/javascript-security-and-quality.qls"
+query_suite_sha256 = "9c1f833708becb69a4c94b6965f70f6151053c183ecf7fff87a3f1ca74e52fdf"
+query_pack_sha256 = "94bbb51ba66151f3612f35ad3d721c4c945afc07b074fc27865bef5c80360cbc"
+query_lock_sha256 = "5bb3b0d5ca96c81913ea5558e9be745b802f6e1a7f7cb85c4630ee1ddbffd537"
+source_languages = ["JavaScript", "TypeScript"]
+prerequisites = ["bundled-typescript"]
+
+[jobs.job_codeql_analysis.settings.languages.python]
+enabled = true
+mode = "none"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "2ba1d0a331633b71472ca725f788175e66354db1b079a9f0ab57fed36e689a04"
+extractor_file_count = 76
+query_pack = "codeql/python-queries"
+query_pack_version = "1.8.10"
+query_suite = "codeql-suites/python-security-and-quality.qls"
+query_suite_sha256 = "bdd029fbd4c9b7e47b0aaca0cffd46726ceaa3a39d390f45a49b145d75981d08"
+query_pack_sha256 = "bc14923f3e1e3d862a5439953411c79022bbc3545e3ab539ec47dd224ac92946"
+query_lock_sha256 = "0c6ce22fd453bb6214dd7badf393096b17af3aae76fa7bfd1a14b93effc112a3"
+source_languages = ["Python"]
+prerequisites = []
+
+[jobs.job_codeql_analysis.settings.languages.rust]
+enabled = true
+mode = "none"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "56cbdd2e8514ce13ee7a0d9839c058f996030433d463002121ab9e97c5778c50"
+extractor_file_count = 83
+query_pack = "codeql/rust-queries"
+query_pack_version = "0.1.42"
+query_suite = "codeql-suites/rust-security-and-quality.qls"
+query_suite_sha256 = "fb4ea26c10a7f72237fd5a7b10cbc08a75a33460195bbd24a2f5a2e48f3bf014"
+query_pack_sha256 = "dae1d5fb82b25f524869275cc4114218ec31d93d7bbc936e27953590305660f1"
+query_lock_sha256 = "daf1ee855889de477880b5e5235b1c8ddafca1947ed86842279f91584a4b17ea"
+source_languages = ["Rust"]
+prerequisites = ["Cargo.toml", "Cargo.lock", "bundled-rust-indexer"]
+
+[jobs.job_codeql_analysis.settings.languages.actions]
+enabled = true
+mode = "none"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "1689e88244bdd01d6820a31193031b8a45462181dfe617a8216798ba0675b3e5"
+extractor_file_count = 8
+query_pack = "codeql/actions-queries"
+query_pack_version = "0.6.35"
+query_suite = "codeql-suites/actions-security-and-quality.qls"
+query_suite_sha256 = "5dc07c26fb9c98d5a6d6c3114f3d0d09c5058359714e413025b8cd7d50dbd884"
+query_pack_sha256 = "60a4049f9d3236f17cf480833c5c588192ebee50b4b4a2555ae4ee5a5115e043"
+query_lock_sha256 = "3bd83a4bc9b94efcda2bc7f86530bd435215eafebfac1c8cc194ddb2e89975b1"
+source_languages = ["GitHub Actions"]
+prerequisites = []
+
+[jobs.job_codeql_analysis.steps.plan]
+workers = 1
+[jobs.job_codeql_analysis.steps.plan.tasks.inventory]
+
+[jobs.job_codeql_analysis.steps.database]
+workers = 2
+[jobs.job_codeql_analysis.steps.database.tasks.scopes]
+
+[jobs.job_codeql_analysis.steps.query]
+workers = 2
+[jobs.job_codeql_analysis.steps.query.tasks.scopes]
+
+[jobs.job_codeql_analysis.steps.normalize]
+workers = 2
+[jobs.job_codeql_analysis.steps.normalize.tasks.scopes]
+
+[jobs.job_codeql_analysis.steps.acceptance]
+workers = 1
+[jobs.job_codeql_analysis.steps.acceptance.tasks.publish_handoff]
 
 
 [jobs.job_post_build_security_assessment]

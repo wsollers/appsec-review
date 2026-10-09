@@ -94,5 +94,18 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},
+    {"name": "query_codeql", "description": "Query accepted CodeQL observations by exact language, scope, rule, and source facets.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "language": {"type": "string", "maxLength": 128},
+         "source_language": {"type": "string", "maxLength": 128},
+         "scope": {"type": "string", "maxLength": 128},
+         "build_unit": {"type": "string", "maxLength": 128},
+         "rule": {"type": "string", "maxLength": 4096},
+         "level": {"type": "string", "maxLength": 128},
+         "path": {"type": "string", "maxLength": 4096},
+         "shard": {"type": "string", "pattern": "^codeql-[A-Za-z0-9_.-]{1,120}$"},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
     QUERY_TOOL_SCHEMA,
 )

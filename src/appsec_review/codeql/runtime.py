@@ -5,19 +5,29 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shutil
-from typing import Any
+import time
+from typing import Any, Protocol
 
-from appsec_review.config import CodeQLSettings
 from appsec_review.container_runtime.build_executor import Runner, _run, resolve_host_bind_path
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
 
 
-IMAGE_SCHEMA = "appsec-review/codeql-derived-image/1"
-EXECUTION_SCHEMA = "appsec-review/codeql-execution/1"
+IMAGE_SCHEMA = "appsec-review/codeql-derived-image/2"
+EXECUTION_SCHEMA = "appsec-review/codeql-execution/2"
+
+
+class RuntimeSettings(Protocol):
+    source_image_tag: str
+    source_image_id: str
+    database_timeout_seconds: int
+    query_timeout_seconds: int
+    inventory_timeout_seconds: int
+    output_bytes: int
+    threads: int
+    ram_mb: int
 
 
 def _stamp() -> str:
@@ -51,76 +61,32 @@ class CodeQLExecution:
     timed_out: bool
     started_at: str
     completed_at: str
+    duration_ms: int
     stdout_path: str
     stderr_path: str
     stdout_sha256: str
     stderr_sha256: str
+    stdout_total_bytes: int
+    stderr_total_bytes: int
     stdout_truncated: bool
     stderr_truncated: bool
+    stdout_tail_bytes: int
+    stderr_tail_bytes: int
     limits: Mapping[str, Any]
 
 
-def validate_assets(repository_root: Path, settings: CodeQLSettings) -> Mapping[str, Any]:
-    path = repository_root / "containers" / "tools" / "codeql-cpp" / "assets.lock.json"
+def load_asset_lock(repository_root: Path) -> Mapping[str, Any]:
+    path = repository_root / "containers" / "tools" / "codeql" / "assets.lock.json"
     document = json.loads(path.read_text(encoding="utf-8"))
-    expected = {
-        "source_image": {"tag": settings.source_image_tag, "image_id": settings.source_image_id},
-        "codeql": {
-            "version": settings.version.split("+", 1)[0],
-            "commit": settings.version.split("+", 1)[1] if "+" in settings.version else "",
-            "cli_sha256": settings.cli_sha256,
-            "cpp_extractor_sha256": settings.extractor_sha256,
-            "license_sha256": settings.license_sha256,
-        },
-        "query_pack": {
-            "name": settings.query_pack, "version": settings.query_pack_version,
-            "suite": settings.query_suite, "suite_sha256": settings.query_suite_sha256,
-            "qlpack_sha256": settings.query_pack_sha256,
-            "lock_sha256": settings.query_lock_sha256,
-        },
-    }
-    if document.get("schema") != "appsec-review/codeql-assets-lock/1" or any(
-            document.get(key) != value for key, value in expected.items()):
-        raise ValueError("CodeQL configuration differs from the reviewed asset lock")
+    if document.get("schema") != "appsec-review/codeql-assets-lock/2":
+        raise ValueError("CodeQL asset lock schema is unsupported")
     return {**document, "path": path.as_posix(), "sha256": file_sha256(path)}
 
 
-def database_identity(settings: CodeQLSettings, *, target_snapshot: str, case_snapshot: str,
-                      replay: Mapping[str, Any], image_identity: str) -> str:
-    return hashlib.sha256(canonical_json({
-        "schema": "appsec-review/codeql-database-checkpoint/1",
-        "target_snapshot": target_snapshot, "case_snapshot": case_snapshot,
-        "recipe_identity": replay["recipe_identity"], "build_image_id": replay["build_image_id"],
-        "dependency_hashes": replay["dependency_hashes"],
-        "protected_commands": replay["protected_commands"],
-        "codeql_image_identity": image_identity, "codeql_version": settings.version,
-        "cli_sha256": settings.cli_sha256, "extractor_sha256": settings.extractor_sha256,
-        "database_limits": {"file_limit": settings.database_file_limit,
-                            "bytes_limit": settings.database_bytes_limit,
-                            "threads": settings.threads, "ram_mb": settings.ram_mb},
-    })).hexdigest()
-
-
-def query_identity(settings: CodeQLSettings, *, database_tree_sha256: str,
-                   image_id: str) -> str:
-    return hashlib.sha256(canonical_json({
-        "schema": "appsec-review/codeql-query-checkpoint/1",
-        "database_tree_sha256": database_tree_sha256,
-        "query_pack": settings.query_pack, "query_pack_version": settings.query_pack_version,
-        "query_suite": settings.query_suite, "query_suite_sha256": settings.query_suite_sha256,
-        "query_pack_sha256": settings.query_pack_sha256,
-        "query_lock_sha256": settings.query_lock_sha256, "codeql_image_id": image_id,
-        "query_limits": {"result_limit": settings.result_limit,
-                         "sarif_bytes_limit": settings.sarif_bytes_limit,
-                         "max_paths": settings.max_paths, "threads": settings.threads,
-                         "ram_mb": settings.ram_mb},
-    })).hexdigest()
-
-
 class CodeQLImageResolver:
-    """Layer the pinned CodeQL payload onto an accepted project build image, offline."""
+    """Layer the pinned CodeQL payload onto an accepted build/source environment, offline."""
 
-    def __init__(self, *, repository_root: Path, metadata_root: Path, settings: CodeQLSettings,
+    def __init__(self, *, repository_root: Path, metadata_root: Path, settings: RuntimeSettings,
                  timeout_seconds: int = 1800, output_bytes: int = 8 * 1024 * 1024,
                  runner: Runner | None = None) -> None:
         self.repository_root = repository_root
@@ -136,45 +102,25 @@ class CodeQLImageResolver:
         value = stdout.decode("utf-8", "replace").strip()
         return value if not timed_out and code == 0 and re.fullmatch(r"sha256:[0-9a-f]{64}", value) else None
 
-    def _validate_source_payload(self) -> None:
-        pack_root = f"/opt/codeql/qlpacks/codeql/cpp-queries/{self.settings.query_pack_version}"
-        expected = {
-            "/opt/codeql/codeql": self.settings.cli_sha256,
-            "/opt/codeql/cpp/tools/linux64/extractor": self.settings.extractor_sha256,
-            "/opt/codeql/LICENSE.md": self.settings.license_sha256,
-            f"{pack_root}/qlpack.yml": self.settings.query_pack_sha256,
-            f"{pack_root}/codeql-pack.lock.yml": self.settings.query_lock_sha256,
-            f"{pack_root}/{self.settings.query_suite}": self.settings.query_suite_sha256,
-        }
-        command = (
-            "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "--entrypoint", "sha256sum",
-            self.settings.source_image_id, *expected,
-        )
-        code, stdout, _stderr, timed_out = self.runner(command, 120)
-        if timed_out or code != 0:
-            raise ValueError("licensed CodeQL payload validation failed")
-        actual = {}
-        for line in stdout.decode("utf-8", "replace").splitlines():
-            parts = line.split(None, 1)
-            if len(parts) == 2:
-                actual[parts[1].lstrip("* ")] = parts[0]
-        if actual != expected:
-            raise ValueError("licensed CodeQL payload identities differ from the asset lock")
-
     def resolve(self, *, build_image_tag: str, build_image_id: str,
                 runtime_user: str) -> tuple[CodeQLImage, bytes, bytes]:
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", build_image_id):
-            raise ValueError("accepted CodeQL build image id is invalid")
+            raise ValueError("accepted CodeQL environment image id is invalid")
         if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", runtime_user):
             raise ValueError("accepted CodeQL runtime user must be numeric and non-root")
-        if self._inspect(self.settings.source_image_tag) != self.settings.source_image_id:
-            raise ValueError("licensed CodeQL source image is absent or changed")
-        self._validate_source_payload()
-        if self._inspect(build_image_tag) != build_image_id:
-            raise ValueError("accepted project build image is absent or changed")
-        tool_root = self.repository_root / "containers" / "tools" / "codeql-cpp"
-        dockerfile = tool_root / "Dockerfile"
+        source_at_tag = self._inspect(self.settings.source_image_tag)
+        if source_at_tag != self.settings.source_image_id:
+            if self._inspect(self.settings.source_image_id) is None:
+                raise RuntimeError("licensed CodeQL source image is unavailable")
+            raise ValueError("licensed CodeQL source image tag changed identity")
+        build_at_tag = self._inspect(build_image_tag)
+        if build_at_tag != build_image_id:
+            if self._inspect(build_image_id) is None:
+                raise RuntimeError("accepted CodeQL environment image is unavailable")
+            raise ValueError("accepted CodeQL environment image tag changed identity")
+        tool_root = self.repository_root / "containers" / "tools" / "codeql"
+        dockerfile = tool_root / ("Dockerfile.source" if build_image_id == self.settings.source_image_id
+                                  else "Dockerfile")
         runner_path = tool_root / "codeql_runner.py"
         identity = hashlib.sha256(canonical_json({
             "schema": IMAGE_SCHEMA, "source_image_id": self.settings.source_image_id,
@@ -183,7 +129,7 @@ class CodeQLImageResolver:
         })).hexdigest()
         root = self.metadata_root / "codeql-images" / identity
         manifest_path = root / "manifest.json"
-        image_tag = f"appsec-review-codeql-cpp:{identity[:24]}"
+        image_tag = f"appsec-review-codeql:{identity[:24]}"
         root.mkdir(parents=True, exist_ok=True)
         with FileLock(root / "build.lock"):
             image_id = self._inspect(image_tag)
@@ -205,12 +151,15 @@ class CodeQLImageResolver:
                 if timed_out or code != 0:
                     raise RuntimeError("could not bind an immutable CodeQL image input: " +
                                        stderr[:4096].decode("utf-8", "replace"))
-            command = (
+            command_values = [
                 "docker", "buildx", "build", "--load", "--pull=false", "--network", "none",
                 "--tag", image_tag, "--build-arg", f"CODEQL_SOURCE_IMAGE={source_tag}",
-                "--build-arg", f"BUILD_IMAGE={base_tag}", "--build-arg", f"RUNTIME_USER={runtime_user}",
-                "--file", str((context / "Dockerfile").resolve()), str(context.resolve()),
-            )
+            ]
+            if build_image_id != self.settings.source_image_id:
+                command_values.extend(("--build-arg", f"BUILD_IMAGE={base_tag}"))
+            command_values.extend(("--build-arg", f"RUNTIME_USER={runtime_user}",
+                "--file", str((context / "Dockerfile").resolve()), str(context.resolve())))
+            command = tuple(command_values)
             code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
             if timed_out or code != 0:
                 detail = stderr[:self.output_bytes].decode("utf-8", "replace")
@@ -229,8 +178,20 @@ class CodeQLImageResolver:
             return CodeQLImage(**value), stdout[:self.output_bytes], stderr[:self.output_bytes]
 
 
+def _bounded_stream(path: Path, value: bytes, limit: int) -> tuple[str, int, bool, int]:
+    truncated = len(value) > limit
+    if not truncated:
+        captured, tail_bytes = value, 0
+    else:
+        head = limit // 2
+        tail_bytes = limit - head
+        captured = value[:head] + value[-tail_bytes:]
+    path.write_bytes(captured)
+    return file_sha256(path), len(value), truncated, tail_bytes
+
+
 class CodeQLExecutor:
-    def __init__(self, *, image: CodeQLImage, run_root: Path, settings: CodeQLSettings,
+    def __init__(self, *, image: CodeQLImage, run_root: Path, settings: RuntimeSettings,
                  runner: Runner | None = None) -> None:
         self.image = image
         self.run_root = run_root.resolve()
@@ -238,7 +199,8 @@ class CodeQLExecutor:
         self.runner = runner or _run
 
     def execute(self, action: str, argv: Sequence[str], *, scratch_root: Path) -> CodeQLExecution:
-        if action not in {"database", "query"} or any(not isinstance(value, str) or "\0" in value for value in argv):
+        if action not in {"inventory", "database", "query"} or any(
+                not isinstance(value, str) or "\0" in value for value in argv):
             raise ValueError("CodeQL execution request is invalid")
         scratch = scratch_root.resolve()
         if scratch != self.run_root and self.run_root not in scratch.parents:
@@ -250,8 +212,9 @@ class CodeQLExecutor:
         if inspected[3] or inspected[0] != 0 or inspected[1].decode().strip() != self.image.image_id:
             raise ValueError("CodeQL derived image identity changed")
         effective = resolve_host_bind_path(scratch, self.runner)
-        timeout = (self.settings.database_timeout_seconds if action == "database" else
-                   self.settings.query_timeout_seconds)
+        timeout = ({"inventory": self.settings.inventory_timeout_seconds,
+                    "database": self.settings.database_timeout_seconds,
+                    "query": self.settings.query_timeout_seconds})[action]
         command = [
             "docker", "run", "--rm", "--network", "none", "--read-only",
             "--user", self.image.runtime_user, "--cap-drop", "ALL",
@@ -263,25 +226,26 @@ class CodeQLExecutor:
             "--env", "TZ=UTC", "--entrypoint", "python3", self.image.image_id,
             "/opt/appsec/codeql_runner.py", action, *argv,
         ]
-        started = _stamp()
+        started, monotonic = _stamp(), time.monotonic()
         code, stdout, stderr, timed_out = self.runner(command, timeout)
-        completed = _stamp()
+        duration_ms, completed = max(0, int((time.monotonic() - monotonic) * 1000)), _stamp()
         log_root = scratch / "executions" / action
         log_root.mkdir(parents=True, exist_ok=True)
         stdout_path, stderr_path = log_root / "stdout.bin", log_root / "stderr.bin"
-        stdout_path.write_bytes(stdout[:self.settings.output_bytes])
-        stderr_path.write_bytes(stderr[:self.settings.output_bytes])
+        stdout_sha, stdout_total, stdout_truncated, stdout_tail = _bounded_stream(
+            stdout_path, stdout, self.settings.output_bytes)
+        stderr_sha, stderr_total, stderr_truncated, stderr_tail = _bounded_stream(
+            stderr_path, stderr, self.settings.output_bytes)
         result = CodeQLExecution(
             EXECUTION_SCHEMA, action, self.image.image_id, self.image.image_tag,
             hashlib.sha256(canonical_json(list(argv))).hexdigest(), code, timed_out,
-            started, completed, stdout_path.relative_to(self.run_root).as_posix(),
-            stderr_path.relative_to(self.run_root).as_posix(), file_sha256(stdout_path),
-            file_sha256(stderr_path), len(stdout) > self.settings.output_bytes,
-            len(stderr) > self.settings.output_bytes,
+            started, completed, duration_ms, stdout_path.relative_to(self.run_root).as_posix(),
+            stderr_path.relative_to(self.run_root).as_posix(), stdout_sha, stderr_sha,
+            stdout_total, stderr_total, stdout_truncated, stderr_truncated, stdout_tail, stderr_tail,
             {"network": "none", "root_filesystem": "read-only", "user": self.image.runtime_user,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": self.settings.threads,
              "ram_mb": self.settings.ram_mb, "timeout_seconds": timeout,
-             "output_bytes": self.settings.output_bytes},
+             "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail"},
         )
         atomic_json(log_root / "receipt.json", asdict(result))
         return result
@@ -299,8 +263,7 @@ def tree_manifest(root: Path, *, file_limit: int, bytes_limit: int) -> Mapping[s
             continue
         if len(files) >= file_limit:
             raise ValueError("CodeQL database file count exceeds configured bound")
-        size = path.stat().st_size
-        total += size
+        total += path.stat().st_size
         if total > bytes_limit:
             raise ValueError("CodeQL database size exceeds configured bound")
         files[path.relative_to(root).as_posix()] = file_sha256(path)

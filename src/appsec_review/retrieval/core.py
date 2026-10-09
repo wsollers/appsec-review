@@ -711,6 +711,69 @@ class RetrievalCore:
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_ci_configuration", parameters, operation)
 
+    def query_codeql(
+        self, *, language: str | None = None, source_language: str | None = None,
+        scope: str | None = None, build_unit: str | None = None,
+        rule: str | None = None, level: str | None = None, path: str | None = None,
+        shard: str | None = None, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Query accepted CodeQL observations by exact bounded facets."""
+        filters = {key: value for key, value in {
+            "language": language, "scope_id": scope, "build_unit_id": build_unit,
+            "rule_id": rule, "producer_level": level,
+        }.items() if value is not None}
+        if any(not value or len(value) > 4096 for value in (*filters.values(), *(
+                [source_language] if source_language is not None else []),
+                *([path] if path is not None else []))):
+            raise ValueError("invalid CodeQL query facet")
+        if shard is not None and not re.fullmatch(r"codeql-[A-Za-z0-9_.-]{1,120}", shard):
+            raise ValueError("invalid CodeQL shard")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"language": language, "source_language": source_language, "scope": scope,
+                      "build_unit": build_unit, "rule": rule, "level": level, "path": path,
+                      "shard": shard, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_codeql", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = [item for item in self.indexes.get("observations", ())
+                          if str(item.get("shard_id", "")).startswith("codeql-")
+                          and (shard is None or str(item.get("shard_id")) == shard)]
+            if not candidates:
+                gaps.append("accepted CodeQL observation indexes are unavailable")
+            for identity in candidates:
+                self._check_deadline(deadline)
+                clauses, values = ["e.kind = 'tool_observation'",
+                                   "json_extract(e.payload_json, '$.producer') = 'codeql'"], []
+                for key, value in filters.items():
+                    clauses.append("json_extract(e.payload_json, ?) = ?")
+                    values.extend((f"$.{key}", value))
+                if source_language is not None:
+                    clauses.append("EXISTS (SELECT 1 FROM json_each(e.payload_json, '$.source_languages') "
+                                   "WHERE json_each.value = ?)")
+                    values.append(source_language)
+                if path is not None:
+                    clauses.append("l.path = ?")
+                    values.append(path)
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
+                       "WHERE " + " AND ".join(clauses) + " ORDER BY e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                shard_id = str(identity.get("shard_id", "default"))
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "observations")
+                        item["shard_id"] = shard_id
+                        found.append(item)
+                    gaps.extend(f"observations/{shard_id}: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"observations/{shard_id}: {gap}" for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["shard_id"], item["identity"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_codeql", parameters, operation)
+
     def query_build_security(
         self, *, project: str | None = None, build_root: str | None = None,
         build_action: str | None = None, configuration: str | None = None,

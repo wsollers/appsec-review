@@ -42,6 +42,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "object": LogicalIdentity.derive(EntityKind.OBJECT_FILE, snapshot, {"native": "auth.o"}).value,
         "executable": LogicalIdentity.derive(EntityKind.EXECUTABLE, snapshot, {"native": "server"}).value,
         "observation": LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {"native": "semgrep:1"}).value,
+        "codeql": LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {"native": "codeql:1"}).value,
         "artifact": LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, snapshot, {"native": "sarif:1"}).value,
         "fact": LogicalIdentity.derive(EntityKind.IR_ENTITY, snapshot, {"native": "nonnull:1"}).value,
     }
@@ -102,6 +103,14 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         RelationRecord(RelationKind.SUPPORTS, ids["observation"], ids["fact"], True, 0.95),
     ], shard_id="semgrep")
     build("observations", [], [], "gitleaks scanner was unavailable", shard_id="gitleaks")
+    build("observations", [
+        EntityRecord(LogicalIdentity.parse(ids["codeql"]), "codeql:1", "cpp/unsafe-strcat",
+                     "unsafe string concatenation", {
+                         "producer": "codeql", "language": "cpp", "source_languages": ["C", "C++"],
+                         "scope_id": "cpp-native-main", "build_unit_id": "native-main",
+                         "rule_id": "cpp/unsafe-strcat", "producer_level": "error",
+                     }, location),
+    ], [], shard_id="codeql-cpp-cpp-native-main")
 
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=snapshot, target_root=target, indexes=index_values)
@@ -154,7 +163,8 @@ def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> N
     missing = core.search(query="anything", indexes=("compiled",))
     assert missing["results"] == [] and "compiled index is unavailable" in missing["coverage_gaps"]
     coverage = core.coverage(indexes=("observations",))
-    assert {item["shard_id"] for item in coverage["results"]} == {"gitleaks", "semgrep"}
+    assert {item["shard_id"] for item in coverage["results"]} == {
+        "codeql-cpp-cpp-native-main", "gitleaks", "semgrep"}
     assert any("observations/gitleaks" in gap for gap in coverage["coverage_gaps"])
 
 
@@ -228,7 +238,11 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     adapter = RetrievalMcpAdapter(core)
     assert {item["name"] for item in TOOLS} == {
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
-        "query_artifacts", "query_build_security", "query_ci_configuration", "query_owasp_workbench"}
+        "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
+        "query_owasp_workbench"}
+    codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
+                                            "build_unit": "native-main", "path": "src/auth.c"})
+    assert [item["name"] for item in codeql["results"]] == ["cpp/unsafe-strcat"]
     via_mcp = adapter.call("find", {"identity": ids["symbol"]})
     direct = core.find(identity=ids["symbol"])
     assert {key: value for key, value in via_mcp.items() if key != "duration_ms"} == {
@@ -237,7 +251,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         ("search", {"query": "authenticate"}), ("find", {"identity": ids["symbol"]}),
         ("read_excerpt", {"identity": ids["symbol"]}), ("trace", {"identity": ids["observation"]}),
         ("resolve_evidence", {"identity": ids["observation"]}), ("coverage", {}),
-        ("query_artifacts", {}), ("query_build_security", {}), ("query_owasp_workbench", {}),
+        ("query_artifacts", {}), ("query_build_security", {}), ("query_codeql", {"language": "cpp"}),
+        ("query_owasp_workbench", {}),
     ]
     process = subprocess.Popen(
         [sys.executable, "-m", "appsec_review.mcp.stdio", "--runs-dir", str(runs), "--run-id", RUN_ID],
@@ -250,12 +265,12 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     stdout, stderr = process.communicate(payload, timeout=20)
     assert process.returncode == 0, stderr
     responses = [json.loads(line) for line in stdout.splitlines()]
-    assert len(responses) == 9
+    assert len(responses) == 10
     assert all(item["result"]["structuredContent"]["run_id"] == RUN_ID for item in responses)
     records = [json.loads(line) for line in (
         runs / RUN_ID / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()]
     completed = [item for item in records if item["event_type"] == "MCP_TOOL_COMPLETED"]
-    assert len(completed) == 10  # one direct adapter call above plus nine transport calls
-    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 10
+    assert len(completed) == 12  # two direct adapter calls above plus ten transport calls
+    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 12
     children = [item for item in records if item["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
     assert children and all(item["details"]["parent_invocation_id"] for item in children)

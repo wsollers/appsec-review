@@ -1120,9 +1120,10 @@ score dimension. It does not execute PoCs and does not require advanced personas
 
 - The active OWASP assessment must publish accepted applicability/result/coverage shards with exact
   evidence identities; abridged catalog/live-model gaps remain visible.
-- C++ compiled analysis must supply accepted build/AST/IR/binary shards. Entitled, pinned CodeQL and
-  Joern/CPG closures remain gaps; the review must work without them and lower evidence confidence
-  truthfully.
+- C++ compiled analysis must supply accepted build/AST/IR/binary shards. The separate pinned,
+  licensed cross-language CodeQL job supplies database, SARIF, and observation shards when its
+  operator-provided image is present. Joern/CPG remains a gap; unavailable language scopes lower
+  evidence confidence truthfully.
 - Post-build assessment must publish build-security shards with protected command references,
   binary identities, and gaps, without exposing exact sensitive arguments.
 - CI analysis must publish its accepted discovery, observation, correlation, and coverage shards.

@@ -166,6 +166,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
                     "job_project_build", "job_language_build", "job_artifact_indexing",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
+                    "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast",
                 }
@@ -406,6 +407,15 @@ def build_definitions(
         if "job_evidence_collection" in registered:
             wave_jobs.append(registry.build("job_evidence_collection"))
             wave_dependencies["job_evidence_collection"] = ("job_target_analysis_plan",)
+        if "job_codeql_analysis" in registered:
+            wave_jobs.append(registry.build("job_codeql_analysis"))
+            codeql_dependencies = [job_id for job_id in (
+                "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
+                "job_cpp_compiled_analysis", "job_post_build_security_assessment",
+                "job_evidence_collection", "job_tree_sitter_ast")
+                if job_id in registered]
+            wave_dependencies["job_codeql_analysis"] = tuple(codeql_dependencies or (
+                "job_target_analysis_plan",))
         if "job_owasp_control_assessment" in registered:
             wave_jobs.append(registry.build("job_owasp_control_assessment"))
             build_terminal = ("job_post_build_security_assessment" if "job_post_build_security_assessment" in registered
@@ -419,6 +429,8 @@ def build_definitions(
                 owasp_dependencies.append("job_artifact_security_analysis")
             if "job_tree_sitter_ast" in registered:
                 owasp_dependencies.append("job_tree_sitter_ast")
+            if "job_codeql_analysis" in registered:
+                owasp_dependencies.append("job_codeql_analysis")
             wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys(owasp_dependencies))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))
