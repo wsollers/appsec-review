@@ -20,6 +20,7 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
+from tests.capture_fakes import capturing_fake
 
 
 ROOT = Path(__file__).parents[1]
@@ -202,7 +203,7 @@ def _accepted_project(config, target, calls):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
         build_plan(model_client=NativeRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: NativeExecutor(calls),
+    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor(calls)),
                              image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
@@ -321,7 +322,7 @@ def _accepted_dotnet(config, target, calls):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
         build_plan(model_client=DotnetRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: DotnetExecutor(calls),
+    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor(calls)),
                              image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
@@ -382,7 +383,7 @@ def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
         target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: DotnetExecutor([]),
+    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor([])),
                              image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])

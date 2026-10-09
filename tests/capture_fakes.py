@@ -23,6 +23,13 @@ SYNTHETIC_SECRET = "e7322523fb86ed64c836a979cf8465fbd436378c653c1db38f9ae87bc62a
 Scanner = Callable[[Path, Path], tuple[int | None, bytes, bytes, bool]]
 
 
+def build_capture_toml() -> str:
+    """The repository's global `[build_capture]` table, which every loadable configuration needs."""
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    start = text.index("[build_capture]\n")
+    return text[start:text.index("\n[", start + 1)].rstrip() + "\n"
+
+
 def minimal_elf(needed: Sequence[str] = ("libc.so.6",), *, interpreter: str | None = None) -> bytes:
     """A little-endian ELF64 holding only the program headers and dynamic section a loader reads."""
     strings = b"\0" + b"".join(name.encode() + b"\0" for name in needed)
@@ -182,3 +189,39 @@ def simulated_executor(profile: BuildProfile, behavior: Behavior, *, scanner: Sc
         return code, stdout, stderr, code is None
 
     return BuildContainerExecutor(profile, timeout_seconds=90, output_bytes=output_bytes, runner=runner)
+
+
+_CONTAINER_DEFAULTS = {"HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TZ": "UTC"}
+
+
+class CapturingFake:
+    """Give a family fake that only implements `execute` a real captured execution path.
+
+    `execute_captured` runs the fake's `execute` as the simulated container, so the fake still
+    decides outputs, streams, and exit status while the real executor normalizes, scans, and
+    records the command. Uncaptured `execute` and every other attribute pass through unchanged
+    for adapters that have not been migrated to captured execution.
+    """
+
+    def __init__(self, profile: BuildProfile, fake: object) -> None:
+        self._fake = fake
+
+        def behavior(argv, workspace, working_directory, environment, container):
+            container.exec(f"/usr/bin/{argv[0]}", list(argv))
+            accepted = {key: value for key, value in environment.items()
+                        if _CONTAINER_DEFAULTS.get(key) != value}
+            result = fake.execute(argv, workspace=workspace, working_directory=working_directory,
+                                  environment=accepted)
+            return (None if result.timed_out else result.exit_code), result.stdout, result.stderr
+
+        self._captured = simulated_executor(profile, behavior)
+
+    def execute_captured(self, argv, **options):
+        return self._captured.execute_captured(argv, **options)
+
+    def __getattr__(self, name: str):
+        return getattr(self._fake, name)
+
+
+def capturing_fake(profile: BuildProfile, fake: object) -> CapturingFake:
+    return CapturingFake(profile, fake)

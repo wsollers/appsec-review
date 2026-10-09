@@ -20,6 +20,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.runtime import JobRunner
+from tests.capture_fakes import build_capture_toml
 
 
 RUN_ID = "2026-10-08-9001"
@@ -234,7 +235,7 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
     lines.extend(("[jobs.job_post_build_security_assessment.steps.publication]", "workers = 1",
                   "[jobs.job_post_build_security_assessment.steps.publication.tasks.publish_handoff]"))
     path = root / "appsec-review.toml"
-    path.write_text("\n".join(lines), encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n\n" + build_capture_toml(), encoding="utf-8")
     return path
 
 

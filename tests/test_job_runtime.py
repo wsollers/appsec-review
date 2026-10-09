@@ -10,6 +10,7 @@ import pytest
 from appsec_review.config import load_config
 from appsec_review.runtime import Job, JobRunner, Unit, UnitExecutor
 from appsec_review.runtime.runner import _accepted_retrieval_manifest
+from tests.capture_fakes import build_capture_toml
 
 
 def write_config(root: Path) -> Path:
@@ -23,7 +24,7 @@ data_dir = "data"
 [jobs.job_fixture]
 name = "fixture"
 workers = 1
-""".strip(),
+""".strip() + "\n\n" + build_capture_toml(),
         encoding="utf-8",
     )
     return path

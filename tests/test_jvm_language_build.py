@@ -24,6 +24,7 @@ from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import IndexIdentity, RetrievalCore, write_manifest
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import atomic_json, file_sha256
+from tests.capture_fakes import capturing_fake
 
 
 ROOT = Path(__file__).parents[1]
@@ -129,7 +130,7 @@ def _run_to_dispatch(config, target: Path, model: JvmRecipeModel, calls: list[tu
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(model_client=model)]).run(
         target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: JvmExecutor(calls),
+    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, JvmExecutor(calls)),
         image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])

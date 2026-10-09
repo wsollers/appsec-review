@@ -13,6 +13,7 @@ from appsec_review.orchestration.dagster import build_definitions
 from appsec_review.orchestration.dagster.adapter import _metadata_for_outcome
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.registry import JobRegistry
+from tests.capture_fakes import build_capture_toml
 
 
 def _config(root: Path, *, configured_job: str = "job_fixture") -> Path:
@@ -36,7 +37,7 @@ timezone = "UTC"
 workers = 1
 [jobs.{configured_job}.steps.work.tasks.execute]
 workers = 1
-""".strip(),
+""".strip() + "\n\n" + build_capture_toml(),
         encoding="utf-8",
     )
     return path

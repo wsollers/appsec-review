@@ -22,6 +22,7 @@ from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
+from tests.capture_fakes import capturing_fake
 
 
 ROOT = Path(__file__).parents[1]
@@ -112,7 +113,7 @@ def _run_project(config, target, executor):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
         build_plan(model_client=PythonRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
-    GraphRunner(config, [build_projects(executor_factory=lambda unit, profile: executor,
+    GraphRunner(config, [build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, executor),
         image_resolver_factory=lambda unit: ImageResolver(target))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     return upstream["run_id"], fingerprint

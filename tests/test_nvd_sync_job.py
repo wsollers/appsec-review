@@ -11,6 +11,7 @@ import pytest
 from appsec_review.config import load_config
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher, timestamp
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
+from tests.capture_fakes import build_capture_toml
 
 
 def vulnerability(identifier: str, modified: str = "2026-01-01T00:00:00.000") -> dict:
@@ -99,7 +100,7 @@ workers = 1
 
 [jobs.job_third_party_data_sync.steps.nvd_sync.tasks.build]
 workers = 1
-""".strip(),
+""".strip() + "\n\n" + build_capture_toml(),
         encoding="utf-8",
     )
     return path

@@ -23,6 +23,7 @@ from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import file_sha256
+from tests.capture_fakes import capturing_fake
 
 
 ROOT = Path(__file__).parents[1]
@@ -183,6 +184,10 @@ class _NodeExecutor:
     def resolve(self):
         return None
 
+    def prepare_node_dependencies(self, *, workspace, source_dir):
+        # The real executor links the image-owned node_modules into the writable source root.
+        self.calls.append(("prepare-node-dependencies", source_dir))
+
     def execute(self, argv, *, workspace, working_directory, environment):
         self.calls.append(tuple(argv))
         root = workspace / working_directory
@@ -219,13 +224,15 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
         build_plan(model_client=_NodeRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
     calls: list[tuple[str, ...]] = []
     GraphRunner(config, [build_projects(
-        executor_factory=lambda unit, profile: _NodeExecutor(calls),
+        executor_factory=lambda unit, profile: capturing_fake(profile, _NodeExecutor(calls)),
         image_resolver_factory=lambda unit: _ImageResolver(target))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     outcome = GraphRunner(config, [build_language(
         executor_factory=lambda unit, profile: _NodeExecutor(calls))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
+    # The probe and the build each exposed the image-owned dependencies before running npm.
+    assert calls.count(("prepare-node-dependencies", "web")) == 2
     receipt = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"][0]
     assert receipt["family"] == "node" and receipt["terminal_status"] == "SUCCEEDED"
     assert receipt["dependency_identity"]["manager"] == "npm"

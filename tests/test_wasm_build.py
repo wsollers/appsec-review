@@ -20,6 +20,7 @@ from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import file_sha256
+from tests.capture_fakes import capturing_fake
 
 
 ROOT = Path(__file__).parents[1]
@@ -101,7 +102,7 @@ def _accepted_project(config, target, calls):
         build_plan(model_client=RustWasmRecipeModel())]).run(
             target_root=target, source_fingerprint=fingerprint)
     GraphRunner(config, [build_projects(
-        executor_factory=lambda unit, profile: WasmExecutor(calls),
+        executor_factory=lambda unit, profile: capturing_fake(profile, WasmExecutor(calls)),
         image_resolver_factory=lambda unit: ImageResolver(target))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     return upstream["run_id"], fingerprint
