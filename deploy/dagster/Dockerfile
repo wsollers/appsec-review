@@ -21,6 +21,7 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==25.0.1" \
 COPY pyproject.toml appsec-review.toml ./
 COPY src ./src
 COPY containers ./containers
+COPY data ./data
 COPY pipeline ./pipeline
 COPY rules ./rules
 COPY skills ./skills
@@ -34,4 +35,5 @@ COPY deploy/dagster/dagster.yaml deploy/dagster/workspace.yaml /opt/dagster/home
 FROM runtime AS test
 RUN python -m pip install --no-cache-dir "pytest==8.4.2"
 COPY tests/orchestration/dagster ./tests/orchestration/dagster
+RUN mkdir -p /opt/app/test/tmp
 CMD ["python", "-m", "pytest", "tests/orchestration/dagster"]

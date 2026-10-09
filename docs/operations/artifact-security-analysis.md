@@ -27,6 +27,11 @@ fingerprinted by:
 - the required upstream build-index manifest; and
 - analysis limits from central configuration.
 
+The repository default sets `[tools].disable_grype = true`. In that state the Grype unit does not
+resolve an image, database, or runner and publishes `NOT_APPLICABLE` with a
+`CONFIGURED_DISABLED` coverage gap. Set the typed Boolean to `false` to restore the ordinary
+hash-verified scanner contract; this does not affect successful sibling evidence.
+
 An interrupted attempt can reuse only shards whose fingerprints and raw artifact hashes still
 match. Changing one artifact or scanner identity invalidates its dependent shards without forcing
 unrelated siblings to rerun. Scanner failure is isolated to that artifact/capability pair; successful

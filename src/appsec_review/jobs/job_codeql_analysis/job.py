@@ -29,7 +29,7 @@ from .sarif import NORMALIZER_IDENTITY, normalize_sarif
 
 
 SCHEMA = "appsec-review/codeql-analysis-handoff/1"
-DATABASE_CHECKPOINT_SCHEMA = "appsec-review/codeql-database-checkpoint/2"
+DATABASE_CHECKPOINT_SCHEMA = "appsec-review/codeql-database-checkpoint/3"
 QUERY_CHECKPOINT_SCHEMA = "appsec-review/codeql-query-checkpoint/2"
 
 
@@ -276,12 +276,11 @@ def _database_identity(unit: UnitContext, scope: CodeQLScope, *, image_identity:
                        asset_lock: Mapping[str, Any]) -> str:
     language = settings.languages[scope.language]
     return hashlib.sha256(canonical_json({
-        "schema": DATABASE_CHECKPOINT_SCHEMA, "target_snapshot": unit.job.source_fingerprint,
+        "schema": DATABASE_CHECKPOINT_SCHEMA,
         "scope": asdict(scope), "mode": scope.mode, "environment_identity": scope.environment_identity,
         "replay": replay, "codeql_image_identity": image_identity, "version": settings.version,
         "cli_sha256": settings.cli_sha256, "extractor_tree_sha256": language.extractor_tree_sha256,
-        "asset_lock_sha256": asset_lock["sha256"], "runner_schema": "codeql-runner/2",
-        "upstream_handoffs": unit.output("plan.inventory")["upstream_handoffs"],
+        "runner_schema": "codeql-runner/2", "database_producer": "codeql-database/3",
         "limits": {"file_limit": settings.database_file_limit,
                    "bytes_limit": settings.database_bytes_limit,
                    "threads": settings.threads, "ram_mb": settings.ram_mb},

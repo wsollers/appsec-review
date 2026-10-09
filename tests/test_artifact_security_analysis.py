@@ -89,9 +89,12 @@ def test_scanner_adapters_mount_artifacts_as_data() -> None:
     assert ADAPTERS["blint"].output_file == "/scratch/blint-output.json"
 
 
-def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0"):
+def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if not disable_grype:
+        text = text.replace("disable_grype = true", "disable_grype = false")
+    config_path.write_text(text, encoding="utf-8")
     config = load_config(config_path)
     run_id, run_root = RunStore(config.runtime.runs_dir).create(datetime.now(timezone.utc))
     target = tmp_path / "target"
@@ -215,3 +218,18 @@ def test_dagster_graph_exposes_independent_capability_units() -> None:
         "job_artifact_security_analysis.load.accepted_artifacts",)
     assert "job_artifact_security_analysis.analyze.wasm" in graph.node(
         "job_artifact_security_analysis.index.observations").dependencies
+
+
+def test_configured_disabled_grype_never_calls_runner_and_publishes_gap(tmp_path: Path) -> None:
+    config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path, disable_grype=True)
+    calls: list[str] = []
+    def scanner(capability, path, artifact, timeout, limit):
+        calls.append(capability)
+        return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
+                "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
+    GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    accepted = load_accepted_artifact_security_analysis(run_root)
+    assert "grype" not in calls
+    assert accepted["capabilities"]["grype"]["terminal_status"] == "NOT_APPLICABLE"
+    assert "configured disabled" in accepted["capabilities"]["grype"]["gaps"][0]

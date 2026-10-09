@@ -98,8 +98,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             time.sleep(0.5)
 
     if args.command == "metrics":
-        from appsec_review.observability import aggregate_run_metrics
-        print(json.dumps(aggregate_run_metrics(config.runtime.runs_dir / args.run_id), sort_keys=True, indent=2))
+        from appsec_review.observability import write_run_metrics
+        print(json.dumps(write_run_metrics(config.runtime.runs_dir / args.run_id), sort_keys=True, indent=2))
         return 0
 
     if args.command == "plan-tools":

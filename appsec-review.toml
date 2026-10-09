@@ -3,6 +3,10 @@ runs_dir = "runs"
 data_dir = "data"
 metadata_dir = "runs/metadata"
 
+[tools]
+# Global selection policy; disabled coverage is a named gap, never a clean result.
+disable_grype = true
+
 [orchestration.dagster]
 executor = "multiprocess"
 max_concurrent = 8
@@ -628,7 +632,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "0ebc609457aac61e934f36eb63b258ee15379b216d18ef96885ecd4bdbcb027a"
+asset_lock_sha256 = "54fd074dc6ed1c533acdf4de4c38e25fe3c159560ccfb57a1c090b2c15da8a47"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -668,7 +672,7 @@ query_suite = "codeql-suites/cert-cpp-default.qls"
 query_suite_sha256 = "3a43b3f6291ac9920da046310228d16eafb9f193883377337853b559f9dd2a36"
 query_pack_sha256 = "730390d903f2fd6806569cf00e8ae4e86a84dcc5acdd1e4019510b633a222a13"
 query_lock_sha256 = "a4027ef1fb800f5c637f23acec2ac9b67177aaafa7fc7e997c40cbd64076c1b6"
-tree_sha256 = "7a30046301501b84f1abe360037ac4059039d85567da695e570bfc987433b113"
+tree_sha256 = "f6bf41273faaaa58c43ef6825ae77090fb0dfac65eee4cfe423613153b591231"
 file_count = 1971
 
 [jobs.job_codeql_analysis.settings.languages.go]

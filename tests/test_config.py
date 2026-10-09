@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from appsec_review.config import CodeQLAnalysisSettings, LanguageBuildSettings, load_config
 
 
@@ -14,6 +16,7 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert job.schedule.cron == "0 0 * * *"
     assert job.schedule.timezone == "UTC"
     assert config.runtime.metadata_dir == config.runtime.runs_dir / "metadata"
+    assert config.tools.disable_grype is True
     assert set(job.steps) == {"nvd_sync", "osv_sync", "mitre_sync", "cve_bin_tool_db_build"}
     assert tuple(job.step("nvd_sync").tasks) == ("fetch", "process", "publish")
     assert tuple(job.step("osv_sync").tasks) == ("fetch", "index", "publish")
@@ -26,6 +29,14 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
 def test_configuration_accepts_a_file_uri() -> None:
     path = Path(__file__).parents[1] / "appsec-review.toml"
     assert load_config(path.as_uri()).source_sha256 == load_config(path).source_sha256
+
+
+def test_global_grype_policy_is_strictly_typed(tmp_path: Path) -> None:
+    source = (Path(__file__).parents[1] / "appsec-review.toml").read_text(encoding="utf-8")
+    path = tmp_path / "appsec-review.toml"
+    path.write_text(source.replace("disable_grype = true", 'disable_grype = "true"'), encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a Boolean"):
+        load_config(path)
 
 
 def test_language_build_has_typed_rust_limits_and_policy() -> None:

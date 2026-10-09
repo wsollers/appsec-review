@@ -42,6 +42,9 @@ class ProjectImage:
     dependency_hashes: Mapping[str, str]
     manifest_path: str | None = None
     dockerfile_path: str | None = None
+    cache_disposition: str = "MISS"
+    cache_rejection_reason: str | None = None
+    saved_build_count: int = 0
 
 
 def _safe_dependency(target_root: Path, relative: str) -> Path:
@@ -66,6 +69,8 @@ def project_recipe_identity(recipe: Mapping[str, Any], profile: BuildProfile,
     return hashlib.sha256(canonical_json({
         "schema": SCHEMA, "generator": GENERATOR_IDENTITY, "recipe": operational_recipe,
         "base_image_id": profile.image_id, "dependency_hashes": hashes,
+        "platform": str(recipe.get("platform", "linux")),
+        "architecture": str(recipe.get("architecture", "native")),
     })).hexdigest()
 
 
@@ -204,21 +209,34 @@ class ProjectImageResolver:
             raise ValueError(f"base build image identity changed: {profile.name}")
         if not customized:
             return ProjectImage(SCHEMA, identity, profile.name, profile.image_id, profile.tag,
-                                profile.image_id, None, False, True, hashes), b"", b""
+                                profile.image_id, None, False, True, hashes,
+                                cache_disposition="HIT", saved_build_count=1), b"", b""
         cache_root = self.metadata_root / "project-images" / identity
         manifest_path = cache_root / "manifest.json"
         tag = f"appsec-review-project-{profile.name}:{identity[:24]}"
         cache_root.mkdir(parents=True, exist_ok=True)
         with FileLock(cache_root / "build.lock"):
+            rejection_reason = None
             if manifest_path.is_file():
-                value = json.loads(manifest_path.read_text(encoding="utf-8"))
+                try:
+                    value = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    value = {}
                 image_id = self._inspect(tag)
                 retained_definition = cache_root / "context" / "Dockerfile"
                 if (value.get("schema") == SCHEMA and value.get("recipe_identity") == identity and
                         image_id == value.get("image_id") and retained_definition.is_file() and
                         not retained_definition.is_symlink() and
                         file_sha256(retained_definition) == value.get("dockerfile_sha256")):
-                    return ProjectImage(**{**value, "reused": True}), b"", b""
+                    return ProjectImage(**{**value, "reused": True,
+                                           "cache_disposition": "HIT",
+                                           "cache_rejection_reason": None,
+                                           "saved_build_count": 1}), b"", b""
+                rejection_reason = ("image_missing_or_changed" if image_id != value.get("image_id") else
+                                    "dockerfile_missing_or_changed" if not retained_definition.is_file() or
+                                    retained_definition.is_symlink() or
+                                    file_sha256(retained_definition) != value.get("dockerfile_sha256") else
+                                    "manifest_identity_mismatch")
             context = cache_root / "context"
             if context.exists():
                 shutil.rmtree(context)
@@ -257,6 +275,7 @@ class ProjectImageResolver:
                                         image_id, hashlib.sha256(dockerfile).hexdigest(), True,
                                         False, hashes,
                                         manifest_path.relative_to(self.metadata_root).as_posix(),
-                                        dockerfile_path.relative_to(self.metadata_root).as_posix()))
+                                        dockerfile_path.relative_to(self.metadata_root).as_posix(),
+                                        "REJECTED" if rejection_reason else "MISS", rejection_reason, 0))
             atomic_json(manifest_path, value)
             return ProjectImage(**value), stdout[:self.output_bytes], stderr[:self.output_bytes]

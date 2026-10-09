@@ -25,6 +25,11 @@ remains deferred because the catalog still records an unresolved GPL policy deci
 NVD-derived database lineage removes the former database blocker, but it does not resolve that
 license acceptance. The scan adapter is therefore not enabled and the contract was not weakened.
 
+The shared `[tools].disable_grype` Boolean applies to this job and produced-artifact analysis. Its
+repository default is `true`: neither a process nor container is launched, and the producer emits
+an explicit configured-disabled `NOT_APPLICABLE` gap. Setting it to `false` restores the normal
+Syft/database prerequisite and launch contract; disabled coverage is never interpreted as clean.
+
 ## Runtime boundary
 
 The application resolves tags only through `containers/catalog.toml`, inspects the local image to

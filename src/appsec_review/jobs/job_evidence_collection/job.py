@@ -309,6 +309,22 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
 def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                   executor_factory: ExecutorFactory, fail_tool: str | None,
                   planned: Applicability | None = None) -> Mapping[str, Any]:
+    if adapter.tool_id == "tool-grype" and unit.job.tools.disable_grype:
+        selection = planned if planned is not None else adapter.applicability(catalog)
+        gap = "Grype coverage was configured disabled by tools.disable_grype"
+        envelope, path = _write_evidence(
+            unit, adapter, catalog, selection,
+            tool_identity={"id": adapter.tool_id, "disposition": "configured_disabled"},
+            raw_artifacts=(), observations=[], terminal_status="NOT_APPLICABLE", gaps=(gap,),
+        )
+        unit.job.events.write("TOOL_CONFIGURED_DISABLED", unit_id=unit.unit_id,
+                              tool_id=adapter.tool_id, disposition="CONFIGURED_DISABLED",
+                              gap_count=1, gaps=[gap], checkpoint_reused=False)
+        return {"tool_id": adapter.tool_id, "capability": adapter.capability,
+                "terminal_status": "NOT_APPLICABLE", "coverage_disposition": "CONFIGURED_DISABLED",
+                "checkpoint_reused": False, "artifact": _artifact(unit.job.run_root, path),
+                "scanner_output": None, "execution": None, "record_count": 0,
+                "gaps": envelope["exclusions_and_gaps"], "retry_count": 0}
     selection, mounts, environment, blocked = _prerequisites(
         unit, adapter, planned if planned is not None else adapter.applicability(catalog))
     if not selection.applicable:

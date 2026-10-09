@@ -25,7 +25,7 @@ from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import Job, plan_jobs
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.observability import PipelineLog
+from appsec_review.observability import PipelineLog, write_run_metrics
 from appsec_review.storage import atomic_json
 
 RunnerFactory = Callable[[AppConfig], JobRunner]
@@ -183,6 +183,14 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     source_fingerprint=source_fingerprint(target) if uses_target else "none",
                     upstream_handoffs=upstream_handoffs,
                 )
+                created_at = getattr(context.dagster_run, "create_timestamp", None)
+                if isinstance(created_at, (int, float)):
+                    queue_delay_ms = max(0, int((datetime.now(timezone.utc).timestamp() - created_at) * 1000))
+                    PipelineLog(config.runtime.runs_dir / str(claim["run_id"])).write(
+                        "DAGSTER_QUEUE_DELAY", run_id=str(claim["run_id"]), job_id=selected.job_id,
+                        attempt_id=str(claim["attempt_id"]), trigger=str(claim["trigger"]),
+                        orchestrator="dagster", details={"dagster_run_id": context.run_id,
+                        "queue_delay_ms": queue_delay_ms})
                 claim = {**dict(claim),
                          "graph_started_at": upstream.get("graph_started_at") or claim["started_at"],
                          "prior_graph_completion_status": upstream.get("completion_status", "SUCCEEDED"),
@@ -272,6 +280,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                             selected.job_id: outcome["handoff_sha256"],
                         },
                     })
+                    write_run_metrics(config.runtime.runs_dir / str(outcome["status"]["run_id"]))
                 return {"run_id": outcome["status"]["run_id"],
                         "handoffs": {**dict(claim.get("upstream_handoffs", {})),
                                      selected.job_id: outcome["handoff_sha256"]},

@@ -184,6 +184,15 @@ extraction bounds, hash every published file, validate the database with the pin
 publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
 The step must fail truthfully when provenance, validation, or freshness cannot be established.
 
+## Optimize produced-artifact Grype without reducing coverage
+
+Future artifact Grype work must deduplicate accepted artifacts by content hash and cache only by
+artifact hash plus exact Grype image, vulnerability-database digest, and policy identity. It should
+reuse hash-verified accepted SBOMs, filter unsupported formats before launch, and use bounded
+concurrency with partitioned resumability. Telemetry must report artifact/byte throughput, avoided
+launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
+resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
+
 ## Extend the enabled CodeQL closure beyond C/C++
 
 The C++ job now has an enabled, hash-pinned offline CodeQL CLI, extractor, query-pack, license

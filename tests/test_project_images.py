@@ -23,11 +23,11 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     (project / "package.json").write_text('{"scripts":{"build":"tsc"}}', encoding="utf-8")
     (project / "package-lock.json").write_text('{"lockfileVersion":3}', encoding="utf-8")
     base_id, derived_id = "sha256:" + "a" * 64, "sha256:" + "b" * 64
-    built = False
+    derived_visible: str | None = None
     calls = []
 
     def runner(argv, timeout):
-        nonlocal built
+        nonlocal derived_visible
         calls.append(tuple(argv))
         if argv[:2] == ("docker", "inspect"):
             return 0, json.dumps([{"Destination": "/", "Source": "/"}]).encode(), b"", False
@@ -35,9 +35,10 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
             reference = argv[3]
             if reference == "node-base:local":
                 return 0, base_id.encode(), b"", False
-            return (0, derived_id.encode(), b"", False) if built else (1, b"", b"missing", False)
+            return ((0, derived_visible.encode(), b"", False) if derived_visible
+                    else (1, b"", b"missing", False))
         if argv[:3] == ("docker", "buildx", "build"):
-            built = True
+            derived_visible = derived_id
             return 0, b"built", b"", False
         raise AssertionError(argv)
 
@@ -54,9 +55,15 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     profile = BuildProfile("node", "node-base:local", base_id, "10001:10001")
     first, _, _ = resolver.resolve(recipe, profile)
     second, _, _ = resolver.resolve(recipe, profile)
+    derived_visible = None
+    rebuilt, _, _ = resolver.resolve(recipe, profile)
 
     assert first.customized and not first.reused
     assert second.reused and second.image_id == derived_id
+    assert first.cache_disposition == "MISS" and second.cache_disposition == "HIT"
+    assert second.saved_build_count == 1
+    assert not rebuilt.reused and rebuilt.cache_disposition == "REJECTED"
+    assert rebuilt.cache_rejection_reason == "image_missing_or_changed"
     assert first.dockerfile_path == second.dockerfile_path
     dockerfile = next((tmp_path / "metadata" / "project-images").glob("*/context/Dockerfile")).read_text()
     assert "FROM node-base:local" in dockerfile
@@ -64,7 +71,7 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert "ENV NPM_CONFIG_CACHE=/opt/project-deps/npm-cache" in dockerfile
     assert "ENV NODE_PATH=/opt/project/web/node_modules" in dockerfile
     assert "ENV PATH=/opt/project/web/node_modules/.bin:$PATH" in dockerfile
-    assert sum(call[:3] == ("docker", "buildx", "build") for call in calls) == 1
+    assert sum(call[:3] == ("docker", "buildx", "build") for call in calls) == 2
     build_call = next(call for call in calls if call[:3] == ("docker", "buildx", "build"))
     assert build_call[-1] == str(next((tmp_path / "metadata" / "project-images").glob("*/context")).resolve())
 
@@ -110,6 +117,22 @@ def test_project_image_identity_ignores_explanatory_reason() -> None:
     second = project_recipe_identity({**recipe, "reason": "different prose"}, profile,
                                      {"CMakeLists.txt": "f" * 64})
     assert first == second
+
+
+def test_project_image_identity_invalidates_only_relevant_inputs() -> None:
+    profile = BuildProfile("native", "native-base:local", "sha256:" + "a" * 64, "10001:10001")
+    recipe = {"schema": "appsec-review/build-recipe/1", "build_unit_id": "build-unit-" + "1" * 20,
+              "image_profile": "native", "source_dir": ".", "build_dir": "build",
+              "system_packages": ["cmake"], "environment": {}, "dependency_files": ["CMakeLists.txt"],
+              "configure_commands": [], "build_commands": [["cmake", "--build", "build"]],
+              "expected_outputs": ["build/app"], "network_required": False,
+              "reason": "explanation", "build_system": "cmake"}
+    base = project_recipe_identity(recipe, profile, {"CMakeLists.txt": "f" * 64})
+    assert project_recipe_identity({**recipe, "reason": "unrelated query/config prose"}, profile,
+                                   {"CMakeLists.txt": "f" * 64}) == base
+    assert project_recipe_identity(recipe, profile, {"CMakeLists.txt": "e" * 64}) != base
+    assert project_recipe_identity({**recipe, "architecture": "arm64"}, profile,
+                                   {"CMakeLists.txt": "f" * 64}) != base
 
 
 def test_project_image_builds_wait_for_shared_docker_mutation_lock(tmp_path: Path) -> None:

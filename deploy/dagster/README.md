@@ -130,8 +130,22 @@ For diagnostics:
 
 ```powershell
 python deploy/dagster/bin/lifecycle.py logs
+python deploy/dagster/bin/run_report.py --stale-seconds 3600
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml config
 ```
+
+To close specifically enumerated non-terminal records during an authorized recovery, use the
+supported Dagster GraphQL termination API and retain the default host-level recovery receipt under
+`runs/metadata/dagster-recovery/`:
+
+```powershell
+python deploy/dagster/bin/recover_runs.py --reason "authorized deployment recovery" --run-id <enumerated-id>
+```
+
+Repeat `--run-id` for each exact ID from the immediately preceding report. The command refuses
+missing or already-terminal targets so it cannot catch a run launched after enumeration.
+Use `--policy MARK_AS_CANCELED_IMMEDIATELY` only for a stale/orphaned record whose original worker
+can no longer acknowledge safe termination; the receipt records that policy.
 
 Do not use `down --volumes` during normal operation; that deletes the Dagster and PostgreSQL state.
 

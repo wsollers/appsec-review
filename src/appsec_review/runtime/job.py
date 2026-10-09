@@ -6,7 +6,7 @@ import inspect
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, TYPE_CHECKING
 
-from appsec_review.config import JobConfig
+from appsec_review.config import JobConfig, ToolCapabilityConfig
 from appsec_review.observability import EventLog
 
 if TYPE_CHECKING:
@@ -25,6 +25,7 @@ class JobContext:
     orchestration: Mapping[str, str]
     config: JobConfig
     events: EventLog
+    tools: ToolCapabilityConfig = ToolCapabilityConfig()
     target_root: Path | None = None
     source_fingerprint: str = "none"
 

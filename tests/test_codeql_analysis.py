@@ -303,6 +303,15 @@ def test_database_and_query_checkpoint_inputs_invalidate_independently() -> None
     assert _database_identity(unit, scope, image_identity="6" * 64,
                               replay={"commands": [{"argv_sha256": "4" * 64}]},
                               settings=settings, asset_lock=lock) != database
+    unrelated = SimpleNamespace(job=SimpleNamespace(source_fingerprint="0" * 64),
+                                output=lambda _name: {"upstream_handoffs": {"sibling": {"sha256": "1" * 64}}})
+    assert _database_identity(unrelated, scope, image_identity="6" * 64, replay=replay,
+                              settings=settings, asset_lock={"sha256": "0" * 64}) == database
+    extractor_changed = replace(language, extractor_tree_sha256="0" * 64)
+    extractor_settings = replace(settings, languages=MappingProxyType(
+        {**settings.languages, "go": extractor_changed}))
+    assert _database_identity(unit, scope, image_identity="6" * 64, replay=replay,
+                              settings=extractor_settings, asset_lock=lock) != database
     broken = _settings_value()
     broken["languages"]["csharp"]["source_languages"] = ["C#", "Visual Basic"]
     with pytest.raises(ValueError, match="VB"):

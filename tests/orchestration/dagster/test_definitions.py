@@ -139,14 +139,16 @@ def test_artifact_jobs_receive_target_snapshot(tmp_path: Path, monkeypatch, job_
             return {"terminal_status": "SUCCEEDED"}
 
         def finalize_attempt(self, job, claim):
-            return {"status": {"status": "SUCCEEDED"}, "handoff_sha256": "a" * 64,
+            return {"status": {"run_id": "test-run", "attempt_id": "attempt_0001",
+                               "trigger": "manual", "status": "SUCCEEDED"},
+                    "handoff_sha256": "a" * 64,
                     "handoff": {}, "attempt_root": str(tmp_path / "attempt"),
                     "result": {"steps": {}, "units": {}, "outputs": {},
                                "failed_units": [], "skipped_units": []}}
 
     definitions = build_definitions(_config(tmp_path, configured_job=job_id),
                                     registry=registry, runner_factory=Runner)
-    assert definitions.get_job_def("artifact_job").execute_in_process().success
+    assert definitions.get_job_def("fixture").execute_in_process().success
     assert begun[0]["target_root"] == target.resolve()
     assert begun[0]["source_fingerprint"] != "none"
 
@@ -336,7 +338,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert upstream("cpp_compiled_analysis__infer__projects") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
-    assert len(cpp_barrier) == 8  # claim plus seven project-batched terminal branches
+    assert len(cpp_barrier) == 7  # claim plus six project-batched terminal branches
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
     assert len(post_build_barrier) == 2  # claim plus the generic accepted-unit index barrier
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
@@ -345,6 +347,10 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "evidence_collection__vulnerability_matching__grype_index" in barrier
 
 
+@pytest.mark.skipif(
+    Path("/.dockerenv").exists() and not Path("/var/run/docker.sock").exists(),
+    reason="the deployment-test container was not given a Docker engine",
+)
 def test_wave1_dagster_path_runs_application_graph(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "target"
     target.mkdir()

@@ -32,5 +32,13 @@ Lifecycle families are:
   package, evidence identities/count, actor class, and reason/evidence hash. Scanner observations are
   evidence records; they are never counted as confirmed findings without a valid transition.
 
-`appsec-review metrics --run-id <id>` deterministically rebuilds bounded counts and duration/token
-sums from events. This view is operational convenience; mutable counters are never authoritative.
+`appsec-review metrics --run-id <id>` deterministically rebuilds and persists
+`data/telemetry/summary.json`. It separates end-to-end wall time, per-job wall spans, summed
+concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
+critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
+events remain authoritative; the summary is a regenerable operator view.
+
+For fleet/control-plane state, `python deploy/dagster/bin/run_report.py` reports the live Dagster
+run list alongside bounded slow-operation rankings collected from available summaries. It separates
+completed, queued, genuinely running, stale, and orphaned Dagster records. `--stale-seconds`
+controls classification; the command is read-only.

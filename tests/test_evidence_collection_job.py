@@ -93,6 +93,7 @@ def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoin
         executor_factory=factory, fail_tool="tool-shellcheck")]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert gapped["status"] == "COMPLETED_WITH_GAPS"
+    assert "tool-grype" not in calls
     failed_output = gapped["jobs"]["job_evidence_collection"]["result"]["outputs"][
         "evidence_publication.publish_handoff"]
     assert next(item for item in failed_output["dispositions"]
@@ -116,6 +117,9 @@ def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoin
                     if item["event_type"] == "PRODUCER_SHARD_COMPLETED"]
     assert {item["producer"] for item in shard_events} >= {"tool-cppcheck", "tool-pmd"}
     assert all("shard_identity" in item and "result_count" in item for item in shard_events)
+    disabled = next(item for item in output["dispositions"] if item["tool_id"] == "tool-grype")
+    assert disabled["terminal_status"] == "NOT_APPLICABLE"
+    assert any("configured disabled" in gap for gap in disabled["gaps"])
 
     calls_after = list(calls)
     reused = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(

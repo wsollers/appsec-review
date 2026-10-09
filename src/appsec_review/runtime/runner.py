@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from appsec_review.config import AppConfig
-from appsec_review.observability import EventLog, PipelineLog
+from appsec_review.observability import EventLog, PipelineLog, write_run_metrics
 from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
 from appsec_review.runtime.job import Job, JobContext
@@ -74,6 +74,7 @@ class JobRunner:
             trigger=str(claim["trigger"]), repository_root=self.config.runtime.repository_root,
             run_root=run_root, attempt_root=attempt_root, metadata_root=self.config.runtime.metadata_dir,
             orchestration=MappingProxyType(orchestration), config=self.config.job(job.job_id), events=events,
+            tools=self.config.tools,
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
         )
@@ -344,6 +345,7 @@ class JobRunner:
         (context.attempt_root / "logs" / "traceback.txt").write_text(traceback.format_exc(), encoding="utf-8")
         context.events.write("JOB_FAILED", job_id=context.config.job_id, run_id=context.run_id,
                              attempt_id=context.attempt_id, error_type=type(exc).__name__)
+        write_run_metrics(context.run_root)
 
     def finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
         context = self._context_from_claim(job, claim)
@@ -354,6 +356,7 @@ class JobRunner:
                 raise ValueError("reused handoff changed during Dagster execution")
             result = json.loads((context.attempt_root / "result.json").read_text(encoding="utf-8"))
             status = json.loads((context.attempt_root / "status.json").read_text(encoding="utf-8"))
+            write_run_metrics(context.run_root)
             return {"status": status, "result": result, "attempt_root": str(context.attempt_root),
                     "handoff": handoff, "handoff_sha256": claim["handoff_sha256"], "reused": True}
         receipts: dict[str, Mapping[str, Any]] = {}
@@ -394,6 +397,7 @@ class JobRunner:
                              job_id=job.job_id, run_id=context.run_id,
                              attempt_id=context.attempt_id, completion_status=completion_status,
                              duration_ms=duration_ms)
+        write_run_metrics(context.run_root)
         result_path = context.attempt_root / "result.json"
         artifacts = [{"path": result_path.relative_to(context.run_root).as_posix(),
                       "sha256": file_sha256(result_path), "size_bytes": result_path.stat().st_size}]
@@ -532,6 +536,7 @@ class JobRunner:
             orchestration=MappingProxyType(orchestration),
             config=job_config,
             events=events,
+            tools=self.config.tools,
             target_root=target_root.resolve() if target_root else None,
             source_fingerprint=source_fingerprint,
         )
@@ -652,6 +657,7 @@ class JobRunner:
                 "handoff_path": handoff_path.relative_to(run_root).as_posix(),
                 "handoff_sha256": handoff_hash,
             })
+            write_run_metrics(run_root)
             return {"status": status, "result": result, "attempt_root": str(attempt_root),
                     "handoff": handoff, "handoff_sha256": handoff_hash}
         except BaseException as exc:
@@ -671,4 +677,5 @@ class JobRunner:
             (attempt_root / "logs" / "traceback.txt").write_text(traceback.format_exc(), encoding="utf-8")
             events.write("JOB_FAILED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id,
                          error_type=type(exc).__name__)
+            write_run_metrics(run_root)
             raise

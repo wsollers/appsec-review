@@ -279,6 +279,14 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
     def analyze(capability: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
             loaded = unit.output("load.accepted_artifacts")
+            if capability == "grype" and unit.job.tools.disable_grype:
+                gap = "Grype artifact coverage was configured disabled by tools.disable_grype"
+                unit.job.events.write("TOOL_CONFIGURED_DISABLED", unit_id=unit.unit_id,
+                                      tool_id="tool-grype", disposition="CONFIGURED_DISABLED",
+                                      gap_count=1, gaps=[gap], checkpoint_reused=False)
+                return {"capability": capability, "observations": [], "observation_count": 0,
+                        "gaps": [gap], "coverage_disposition": "CONFIGURED_DISABLED",
+                        "terminal_status": "NOT_APPLICABLE"}
             effective_runner = scanner_runner or (ContainerScannerRunner(
                 unit.job.repository_root, unit.job.run_root, unit.unit_root) if capability in ADAPTERS else None)
             observations, gaps = [], []

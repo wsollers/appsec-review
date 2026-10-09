@@ -20,6 +20,13 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolCapabilityConfig:
+    """Global tool selection policy shared by every producer."""
+
+    disable_grype: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class DagsterConfig:
     executor: str = "multiprocess"
     max_concurrent: int = 8
@@ -295,6 +302,7 @@ class AppConfig:
     runtime: RuntimeConfig
     jobs: Mapping[str, JobConfig]
     dagster: DagsterConfig = DagsterConfig()
+    tools: ToolCapabilityConfig = ToolCapabilityConfig()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -328,6 +336,14 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
     repository_root = source.parent
     source_bytes = source.read_bytes()
     document = tomllib.loads(source_bytes.decode("utf-8"))
+
+    tools_value = document.get("tools", {})
+    if not isinstance(tools_value, dict):
+        raise ValueError("[tools] must be a table")
+    disable_grype = tools_value.get("disable_grype", False)
+    if not isinstance(disable_grype, bool):
+        raise ValueError("tools.disable_grype must be a Boolean")
+    tool_capabilities = ToolCapabilityConfig(disable_grype=disable_grype)
 
     runtime_value = document.get("runtime")
     if not isinstance(runtime_value, dict):
@@ -540,4 +556,5 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         dagster=DagsterConfig(executor=str(dagster_value.get("executor", "multiprocess")),
                               max_concurrent=int(dagster_value.get("max_concurrent", 8)),
                               pool_limits=MappingProxyType({str(key): int(value) for key, value in pools.items()})),
+        tools=tool_capabilities,
     )

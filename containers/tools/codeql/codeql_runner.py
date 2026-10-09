@@ -107,15 +107,15 @@ def inventory(args: argparse.Namespace) -> None:
         verified_custom_packs[language] = []
         for pack in packs:
             root = Path(str(pack["root"]))
-            suite_path = root / Path(*PurePosixPath(pack["suite"]).parts)
+            suite_path = root / Path(*PurePosixPath(pack["query_suite"]).parts)
             if (root.parent != Path("/opt/codeql/custom-queries") or not root.is_dir() or
                     root.is_symlink() or suite_path.is_symlink()):
                 raise ValueError(f"CodeQL {language} custom query root is invalid")
             digest, count = _tree(root)
             if (digest != pack["tree_sha256"] or count != pack["file_count"] or
-                    _sha256(root / "qlpack.yml") != pack["qlpack_sha256"] or
-                    _sha256(root / "codeql-pack.lock.yml") != pack["lock_sha256"] or
-                    _sha256(suite_path) != pack["suite_sha256"]):
+                    _sha256(root / "qlpack.yml") != pack["query_pack_sha256"] or
+                    _sha256(root / "codeql-pack.lock.yml") != pack["query_lock_sha256"] or
+                    _sha256(suite_path) != pack["query_suite_sha256"]):
                 raise ValueError(f"CodeQL {language} custom query identity differs from the reviewed asset lock")
             verified_custom_packs[language].append(dict(pack))
     prerequisite_paths = {

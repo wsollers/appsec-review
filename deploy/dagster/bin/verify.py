@@ -131,7 +131,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
     application_run_id = tags.get("appsec/application_run_id")
     if run.get("pipelineName") in {
         "wave1_review", "ci_configuration_review", "project_build_review", "artifact_indexing",
-        "artifact_security_analysis",
+        "artifact_security_analysis", "codeql_analysis",
     }:
         if not application_run_id:
             raise SystemExit("Dagster Wave 1 run does not contain the application run id")
@@ -145,7 +145,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
         job_ids = (("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
-        ("job_artifact_security_analysis",) if run.get("pipelineName") == "artifact_security_analysis" else (
+        ("job_artifact_security_analysis",) if run.get("pipelineName") == "artifact_security_analysis" else
+        ("job_codeql_analysis",) if run.get("pipelineName") == "codeql_analysis" else (
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
@@ -400,8 +401,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                           if str(item.get("shard_id", "")).startswith("codeql-")]
                 scopes = summary.get("scopes", [])
                 successful = [item for item in scopes if item.get("terminal_status") == "SUCCEEDED"]
-                if run.get("pipelineName") == "wave1_review" and not successful:
-                    raise SystemExit("live Wave 1 acceptance did not complete a CodeQL scope")
+                if run.get("pipelineName") in {"wave1_review", "codeql_analysis"} and not successful:
+                    raise SystemExit("live acceptance did not complete a CodeQL scope")
                 by_language = {}
                 for scope in scopes:
                     language = str(scope["language"])
@@ -435,7 +436,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                             not scope.get("database_identity") or not scope.get("query_identity")):
                         raise SystemExit("successful CodeQL scope is missing database or query identity")
                 cpp_scopes = [scope for scope in scopes if scope.get("language") == "cpp"]
-                if run.get("pipelineName") == "wave1_review" and cpp_scopes:
+                if run.get("pipelineName") in {"wave1_review", "codeql_analysis"} and cpp_scopes:
                     cpp_settings = document["jobs"]["job_codeql_analysis"]["settings"]["languages"]["cpp"]
                     expected_profiles = {"default", *(item["query_id"] for item in
                         cpp_settings.get("custom_queries", []))}

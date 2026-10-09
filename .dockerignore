@@ -2,6 +2,12 @@
 old
 runs
 data
+!data/
+data/**
+!data/reference/
+!data/reference/owasp/
+!data/reference/owasp/fixtures/
+!data/reference/owasp/fixtures/**
 targets
 scratch
 **/__pycache__

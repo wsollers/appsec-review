@@ -131,3 +131,37 @@ def test_finding_transitions_are_valid_idempotent_and_distinct_from_observations
                              evidence_identities=("observation-1",), actor_class="human", reason_hash=reason)
     metrics = aggregate_run_metrics(tmp_path)
     assert metrics["finding_states"] == {"CANDIDATE": 1, "CONFIRMED": 1}
+
+
+def test_metrics_separate_wall_concurrency_percentiles_reuse_and_running(tmp_path: Path) -> None:
+    log = PipelineLog(tmp_path)
+    events = [
+        ("RUN_STARTED", "2026-10-08T00:00:00+00:00", {}),
+        ("TASK_STARTED", "2026-10-08T00:00:01+00:00", {}),
+        ("TASK_SUCCEEDED", "2026-10-08T00:00:05+00:00", {"duration_ms": 4000,
+            "file_count": 2, "processed_bytes": 100}),
+        ("TASK_STARTED", "2026-10-08T00:00:02+00:00", {}),
+        ("TASK_COMPLETED_WITH_GAPS", "2026-10-08T00:00:08+00:00", {"duration_ms": 6000,
+            "completion_status": "COMPLETED_WITH_GAPS"}),
+        ("TASK_REUSED", "2026-10-08T00:00:08.500000+00:00", {"checkpoint_reused": True,
+            "fingerprint": "a" * 64}),
+        ("TASK_STARTED", "2026-10-08T00:00:09+00:00", {}),
+        ("DAGSTER_QUEUE_DELAY", "2026-10-08T00:00:10+00:00", {"queue_delay_ms": 250}),
+        ("RUN_CANCELLED", "2026-10-08T00:00:11+00:00", {"completion_status": "CANCELLED"}),
+    ]
+    for event, _timestamp, details in events:
+        log.write(event, run_id="run", job_id="job", attempt_id="attempt_0001",
+                  step_id="step", task_id="task", details=details)
+    records, _ = log.read()
+    for record, (_event, timestamp, _details) in zip(records, events):
+        record["timestamp"] = timestamp
+    log.path.write_text("".join(json.dumps(item, sort_keys=True) + "\n" for item in records), encoding="utf-8")
+    metrics = aggregate_run_metrics(tmp_path)
+    assert metrics["wall_time_ms"] == 11000
+    assert metrics["summed_concurrent_task_ms"] == 10000
+    assert metrics["queue_delay_ms"]["p95"] == 250
+    assert metrics["reuse"]["hits"] == 1
+    assert metrics["throughput_totals"] == {"file_count": 2, "processed_bytes": 100}
+    assert metrics["operations"][0]["p95_ms"] == 6000
+    assert metrics["genuinely_running"][0]["family"] == "TASK"
+    assert metrics["dispositions"]["CANCELLED"] == 1

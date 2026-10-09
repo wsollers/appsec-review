@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime
 import hashlib
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.observability.events import PipelineLog
-from appsec_review.storage import canonical_json
+from appsec_review.storage import atomic_json, canonical_json
 
 
 SCHEMA = "appsec-review/telemetry-event/1"
@@ -72,6 +74,21 @@ class FindingLifecycle:
         })
 
 
+def _percentile(values: list[int], percentile: float) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(max(0, int(value)) for value in values)
+    return ordered[max(0, math.ceil(percentile * len(ordered)) - 1)]
+
+
+def _operation_identity(record: Mapping[str, Any]) -> str:
+    details = record.get("details", {})
+    return "/".join(str(value or "-") for value in (
+        record.get("job_id"), record.get("step_id"), record.get("task_id"),
+        details.get("tool_id") or details.get("operation_id") or "-",
+    ))
+
+
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     records, torn = PipelineLog(run_root).read()
     for record in records:
@@ -83,6 +100,13 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     durations_ms = Counter()
     tokens = Counter()
     domain_counts = Counter()
+    throughput_counts = Counter()
+    operation_durations: dict[str, list[int]] = {}
+    task_intervals: list[tuple[datetime, datetime, str, int]] = []
+    starts: dict[tuple[str, str, str, str], list[datetime]] = {}
+    job_bounds: dict[str, list[datetime]] = {}
+    queue_delays: list[int] = []
+    reuse = Counter()
     for record in records:
         details = record.get("details", {})
         disposition = details.get("disposition") or details.get("terminal_status") or details.get("completion_status")
@@ -94,6 +118,14 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             finding_states[str(details.get("new_state"))] += 1
         if isinstance(details.get("duration_ms"), int):
             durations_ms[str(record["event_type"])] += details["duration_ms"]
+            identity = _operation_identity(record)
+            operation_durations.setdefault(identity, []).append(details["duration_ms"])
+        if isinstance(details.get("queue_delay_ms"), int):
+            queue_delays.append(max(0, details["queue_delay_ms"]))
+        if record["event_type"].endswith("REUSED") or details.get("checkpoint_reused") is True:
+            reuse["hits"] += 1
+        elif "reuse" in details and details.get("reuse") is False:
+            reuse["misses"] += 1
         for key in ("input_tokens", "output_tokens", "cache_tokens"):
             if isinstance(details.get(key), int):
                 tokens[key] += details[key]
@@ -102,14 +134,69 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                     "resumption_count"):
             if isinstance(details.get(key), int):
                 domain_counts[key] += details[key]
-    return {"schema": "appsec-review/run-metrics/1", "run_id": Path(run_root).name,
+        for key in ("file_count", "artifact_count", "shard_count", "processed_count", "size_bytes",
+                    "processed_bytes", "saved_count", "saved_bytes"):
+            if isinstance(details.get(key), int):
+                throughput_counts[key] += details[key]
+        timestamp = datetime.fromisoformat(str(record["timestamp"]))
+        job = str(record.get("job_id", "-"))
+        job_bounds.setdefault(job, []).append(timestamp)
+        event = str(record["event_type"])
+        family = event.split("_", 1)[0]
+        key = (family, job, str(record.get("step_id") or "-"), str(record.get("task_id") or "-"))
+        if event.endswith("STARTED"):
+            starts.setdefault(key, []).append(timestamp)
+        elif event.endswith(("SUCCEEDED", "FAILED", "COMPLETED", "COMPLETED_WITH_GAPS",
+                             "CANCELED", "CANCELLED", "TIMED_OUT")):
+            pending = starts.get(key, [])
+            if pending:
+                begun = pending.pop(0)
+                if family == "TASK":
+                    task_intervals.append((begun, timestamp, _operation_identity(record),
+                                           max(0, int((timestamp - begun).total_seconds() * 1000))))
+    timestamps = [datetime.fromisoformat(str(item["timestamp"])) for item in records]
+    wall_ms = max(0, int((max(timestamps) - min(timestamps)).total_seconds() * 1000)) if timestamps else 0
+    summed_task_ms = sum(item[3] for item in task_intervals)
+    operation_summaries = [{"operation": identity, "count": len(values),
+                            "p50_ms": _percentile(values, .50),
+                            "p95_ms": _percentile(values, .95), "max_ms": max(values)}
+                           for identity, values in sorted(operation_durations.items())]
+    operation_summaries.sort(key=lambda item: (-int(item["p95_ms"] or 0), item["operation"]))
+    job_spans = {job: max(0, int((max(values) - min(values)).total_seconds() * 1000))
+                 for job, values in job_bounds.items() if values}
+    genuinely_running = [{"family": key[0], "job_id": key[1], "step_id": key[2], "task_id": key[3],
+                          "started_at": value.isoformat()}
+                         for key, values in sorted(starts.items()) for value in values]
+    critical = max(task_intervals, key=lambda item: item[3], default=None)
+    return {"schema": "appsec-review/run-metrics/2", "run_id": Path(run_root).name,
             "event_count": len(records), "event_counts": dict(sorted(event_counts.items())),
             "dispositions": dict(sorted(dispositions.items())),
             "tool_calls": dict(sorted(tool_calls.items())),
             "finding_states": dict(sorted(finding_states.items())),
             "duration_ms_by_event": dict(sorted(durations_ms.items())),
             "model_tokens": dict(sorted(tokens.items())),
-            "domain_counts": dict(sorted(domain_counts.items())), "torn_tail_ignored": torn}
+            "domain_counts": dict(sorted(domain_counts.items())),
+            "throughput_totals": dict(sorted(throughput_counts.items())),
+            "wall_time_ms": wall_ms, "summed_concurrent_task_ms": summed_task_ms,
+            "job_family_wall_span_ms": dict(sorted(job_spans.items())),
+            "queue_delay_ms": {"count": len(queue_delays), "p50": _percentile(queue_delays, .50),
+                               "p95": _percentile(queue_delays, .95),
+                               "max": max(queue_delays) if queue_delays else None},
+            "reuse": dict(sorted(reuse.items())), "operations": operation_summaries[:200],
+            "critical_path_candidate": (None if critical is None else
+                {"operation": critical[2], "duration_ms": critical[3],
+                 "contribution_ratio": round(critical[3] / wall_ms, 6) if wall_ms else None}),
+            "genuinely_running": genuinely_running[:200],
+            "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
+                ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
+            "torn_tail_ignored": torn}
+
+
+def write_run_metrics(run_root: Path) -> Mapping[str, Any]:
+    """Persist a cheap, redacted, derivable summary beside the authoritative event stream."""
+    report = aggregate_run_metrics(run_root)
+    atomic_json(Path(run_root) / "data" / "telemetry" / "summary.json", report)
+    return report
 
 
 def emit_model_event(log: PipelineLog, *, event_type: str, run_id: str, invocation_id: str,

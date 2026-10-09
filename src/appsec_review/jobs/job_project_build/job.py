@@ -806,7 +806,10 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                         unit.job.events.write("PROJECT_IMAGE_REUSED" if image.reused else "PROJECT_IMAGE_BUILT",
                             unit_id=unit.unit_id, build_unit_id=action["build_unit_id"], family=family,
                             recipe_identity=image.recipe_identity, image_id=image.image_id,
-                            disposition="REUSED" if image.reused else "BUILT")
+                            disposition="REUSED" if image.reused else "BUILT",
+                            reuse_disposition=image.cache_disposition,
+                            reuse_rejection_reason=image.cache_rejection_reason,
+                            saved_count=image.saved_build_count)
                     entries.append({"action": action, "image": value,
                                     "base_recipe_identity": base_recipe_identity,
                                     "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:image",
