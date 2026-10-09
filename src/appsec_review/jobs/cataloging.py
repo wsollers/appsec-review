@@ -13,6 +13,7 @@ LANGUAGES = {
     ".h": "C/C++", ".cc": "C++", ".cpp": "C++", ".cs": "C#", ".rb": "Ruby",
     ".php": "PHP", ".swift": "Swift", ".sh": "Shell", ".ps1": "PowerShell",
 }
+SOURCE_METRICS_SEMANTICS = "appsec-review/source-counting/1"
 PROJECT_FILES = {"pyproject.toml", "package.json", "pom.xml", "build.gradle", "build.gradle.kts",
                  "go.mod", "Cargo.toml", "Gemfile", "composer.json"}
 BUILD_FILES = {"Makefile", "CMakeLists.txt", "meson.build", "BUILD", "WORKSPACE", "Dockerfile"}
@@ -41,6 +42,9 @@ def inventory(root: Path, bounds: Bounds = Bounds()) -> dict[str, Any]:
     excluded: set[str] = set()
     total = 0
     candidates: list[Path] = []
+    source_metrics: list[dict[str, Any]] = []
+    source_metric_gaps: list[dict[str, str]] = []
+    source_metric_bytes = 0
     for directory, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
         base = Path(directory)
         dirnames.sort()
@@ -61,6 +65,31 @@ def inventory(root: Path, bounds: Bounds = Bounds()) -> dict[str, Any]:
     for path in candidates:
         relative = path.relative_to(root).as_posix()
         parts = path.relative_to(root).parts
+        language = LANGUAGES.get(path.suffix.lower())
+        if language is not None and path.is_file() and not path.is_symlink():
+            try:
+                size = path.stat().st_size
+                if size > bounds.max_file_bytes:
+                    source_metric_gaps.append({"path": relative, "reason": "source_file_too_large"})
+                elif len(source_metrics) >= bounds.max_files:
+                    source_metric_gaps.append({"path": relative, "reason": "source_file_count_bound_reached"})
+                elif source_metric_bytes + size > bounds.max_total_bytes:
+                    source_metric_gaps.append({"path": relative, "reason": "source_total_bytes_bound_reached"})
+                else:
+                    text = path.read_text(encoding="utf-8")
+                    lowered = {part.lower() for part in parts}
+                    source_metrics.append({
+                        "path": relative, "sha256": sha256_file(path), "size_bytes": size,
+                        "language": language,
+                        "sloc": sum(bool(line.strip()) for line in text.splitlines()),
+                        "generated": bool(lowered & {"generated", "gen"}),
+                        "vendored": bool(lowered & {"vendor", "vendors", "third_party"}),
+                        "test": bool(lowered & {"test", "tests", "spec", "specs"}) or
+                                path.name.lower().startswith(("test_", "spec_")),
+                    })
+                    source_metric_bytes += size
+            except (OSError, UnicodeError):
+                source_metric_gaps.append({"path": relative, "reason": "source_decode_failed"})
         excluded_part = next((part for part in parts if part in {
             ".git", ".hg", ".svn", "node_modules", ".venv", "dist", "build"
         }), None)
@@ -94,11 +123,13 @@ def inventory(root: Path, bounds: Bounds = Bounds()) -> dict[str, Any]:
             continue
         digest = sha256_file(path)
         files.append({"path": relative, "size_bytes": size, "sha256": digest,
-                      "language": LANGUAGES.get(path.suffix.lower()),
+                      "language": language,
                       "generated": False})
         total += size
     snapshot = raw_snapshot(root)
     return {"files": files, "gaps": gaps, "file_count": len(files), "total_bytes": total,
+            "source_metrics_semantics": SOURCE_METRICS_SEMANTICS,
+            "source_metrics": source_metrics, "source_metric_gaps": source_metric_gaps,
             "snapshot": snapshot}
 
 

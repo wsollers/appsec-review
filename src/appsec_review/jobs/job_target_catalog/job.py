@@ -347,7 +347,13 @@ def build_job(*, fail_task: str | None = None) -> Job:
         doc = {"schema": "appsec-review/target-catalog/1", "source_fingerprint": unit.job.source_fingerprint,
                "artifacts": outputs, "validation": unit.output("publish_catalog.validate_catalog"),
                "security_findings": []}
-        return {"schema": doc["schema"], "artifact": _artifact(unit, "target-catalog.json", doc),
+        artifact = _artifact(unit, "target-catalog.json", doc)
+        unit.job.events.write("REVIEW_SCOPE_CATALOGED", unit_id=unit.unit_id,
+            source_receipt=unit.output("repository_discovery.partition_repository")["artifact"],
+            project_receipt=unit.output("repository_discovery.discover_projects")["artifact"],
+            build_target_receipt=unit.output("build_discovery.catalog_build_targets")["artifact"],
+            catalog_receipt=artifact, metrics_semantics="appsec-review/review-metrics-semantics/1")
+        return {"schema": doc["schema"], "artifact": artifact,
                 "index_manifest": _run_artifact(unit, manifest_path),
                 "gaps": doc["validation"]["gaps"] + build_gaps}
 

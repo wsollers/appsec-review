@@ -319,6 +319,11 @@ def _execution_artifact(unit: UnitContext, root: Path, action: str) -> Mapping[s
     return _artifact(unit.job.run_root, root / "executions" / action / "receipt.json")
 
 
+def _metrics_scope(scope: CodeQLScope) -> dict[str, Any]:
+    return {"scope_id": scope.scope_id, "project_root": scope.root,
+            "language": scope.language, "build_unit_id": scope.build_unit_id}
+
+
 def _database_one(unit: UnitContext, scope: CodeQLScope,
                   receipts: Mapping[str, Mapping[str, Any]]) -> Mapping[str, Any]:
     settings = _settings(unit)
@@ -350,7 +355,7 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
     existing = _checkpoint(checkpoint_path, identity, DATABASE_CHECKPOINT_SCHEMA)
     if existing is not None:
         unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
-                              language=scope.language, build_unit_id=scope.build_unit_id,
+                              **_metrics_scope(scope),
                               database_identity=identity, image_id=image.image_id,
                               checkpoint_reused=True)
         if not database_path.is_dir() or not manifest_path.is_file():
@@ -361,10 +366,11 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         if retained != actual or file_sha256(manifest_path) != existing.get("manifest_sha256"):
             raise FrameworkIntegrityError("accepted CodeQL database or manifest changed")
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
-                              language=scope.language, build_unit_id=scope.build_unit_id,
+                              **_metrics_scope(scope),
                               database_identity=identity, image_id=image.image_id,
                               disposition="SUCCEEDED", duration_ms=0, result_count=0, gap_count=0,
-                              checkpoint_reused=True, truncated=False)
+                              checkpoint_reused=True, truncated=False,
+                              metrics_receipt=_artifact(unit.job.run_root, checkpoint_path))
         return {"scope": asdict(scope), "terminal_status": "SUCCEEDED", "database_identity": identity,
                 "database_tree_sha256": actual["tree_sha256"], "database_reused": True,
                 "database_manifest": _artifact(unit.job.run_root, manifest_path), "image": image_artifact,
@@ -385,18 +391,19 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         argv[4:4] = ["--replay", "protected-replay.json"]
     executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
     unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
-                          language=scope.language, build_unit_id=scope.build_unit_id,
+                          **_metrics_scope(scope),
                           database_identity=identity, image_id=image.image_id)
     result = executor.execute("database", tuple(argv), scratch_root=root)
     status = "FAILED" if result.timed_out or result.exit_code != 0 else "SUCCEEDED"
     gaps = (["CodeQL database creation timed out"] if result.timed_out else
             [f"CodeQL database creation exited {result.exit_code}"] if result.exit_code != 0 else [])
+    execution = _execution_artifact(unit, root, "database")
     unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
-                          language=scope.language, build_unit_id=scope.build_unit_id,
+                          **_metrics_scope(scope),
                           database_identity=identity, image_id=image.image_id, disposition=status,
                           duration_ms=result.duration_ms, result_count=0, gap_count=len(gaps), gaps=gaps,
-                          checkpoint_reused=False, truncated=result.stdout_truncated or result.stderr_truncated)
-    execution = _execution_artifact(unit, root, "database")
+                          checkpoint_reused=False, truncated=result.stdout_truncated or result.stderr_truncated,
+                          metrics_receipt=execution)
     if status != "SUCCEEDED":
         return {"scope": asdict(scope), "terminal_status": status, "database_identity": identity,
                 "database_reused": False, "database_execution": execution,
@@ -438,9 +445,11 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     existing = _checkpoint(checkpoint_path, identity, QUERY_CHECKPOINT_SCHEMA)
     if existing is not None:
         unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
-                              language=scope.language, build_unit_id=scope.build_unit_id,
+                              **_metrics_scope(scope),
                               database_identity=database["database_identity"], query_identity=identity,
-                              query_profile=query_profile["query_id"],
+                              query_profile=query_profile["query_id"], query_suite=query_profile["query_suite"],
+                              query_pack=query_profile["query_pack"],
+                              query_pack_version=query_profile["query_pack_version"],
                               checkpoint_reused=True)
         if not sarif_path.is_file() or sarif_path.is_symlink() or file_sha256(sarif_path) != existing.get("sarif_sha256"):
             raise FrameworkIntegrityError("accepted CodeQL query checkpoint or SARIF changed")
@@ -448,11 +457,14 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                            result_limit=settings.result_limit)
         result_count = sum(len(run.get("results", ())) for run in sarif["runs"])
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
-                              language=scope.language, build_unit_id=scope.build_unit_id,
+                              **_metrics_scope(scope),
                               database_identity=database["database_identity"], query_identity=identity,
-                              query_profile=query_profile["query_id"],
+                              query_profile=query_profile["query_id"], query_suite=query_profile["query_suite"],
+                              query_pack=query_profile["query_pack"],
+                              query_pack_version=query_profile["query_pack_version"],
                               disposition="SUCCEEDED", duration_ms=0, result_count=result_count,
-                              gap_count=0, checkpoint_reused=True, truncated=False)
+                              gap_count=0, checkpoint_reused=True, truncated=False,
+                              metrics_receipt=_artifact(unit.job.run_root, checkpoint_path))
         return {**database, "query_profile": dict(query_profile),
                 "query_identity": identity, "query_reused": True,
                 "sarif": _artifact(unit.job.run_root, sarif_path),
@@ -469,9 +481,10 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     image = CodeQLImage(**image_value)
     executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
     unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
-                          language=scope.language, build_unit_id=scope.build_unit_id,
+                          **_metrics_scope(scope),
                           database_identity=database["database_identity"], query_identity=identity,
                           image_id=image.image_id, query_profile=query_profile["query_id"],
+                          query_suite=query_profile["query_suite"],
                           query_pack=query_profile["query_pack"],
                           query_pack_version=query_profile["query_pack_version"])
     selection = (["--pack", str(query_profile["query_pack"]),
@@ -496,18 +509,21 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
             result_count = sum(len(run.get("results", ())) for run in sarif["runs"])
         except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
             status, gaps = "FAILED", [f"CodeQL query produced invalid bounded SARIF ({type(exc).__name__})"]
+    execution = _execution_artifact(unit, root, "query")
     unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
-                          language=scope.language, build_unit_id=scope.build_unit_id,
+                          **_metrics_scope(scope),
                           database_identity=database["database_identity"], query_identity=identity,
                           image_id=image.image_id, query_profile=query_profile["query_id"],
+                          query_suite=query_profile["query_suite"],
                           query_pack=query_profile["query_pack"],
                           query_pack_version=query_profile["query_pack_version"], disposition=status,
                           duration_ms=result.duration_ms, result_count=result_count,
                           gap_count=len(gaps), gaps=gaps,
-                          checkpoint_reused=False, truncated=result.stdout_truncated or result.stderr_truncated)
+                          checkpoint_reused=False, truncated=result.stdout_truncated or result.stderr_truncated,
+                          metrics_receipt=execution)
     value = {**database, "terminal_status": status, "query_profile": dict(query_profile),
              "query_identity": identity,
-             "query_reused": False, "query_execution": _execution_artifact(unit, root, "query"),
+             "query_reused": False, "query_execution": execution,
              "sarif_result_count": result_count, "gaps": gaps}
     if status == "SUCCEEDED":
         atomic_json(checkpoint_path, {"schema": QUERY_CHECKPOINT_SCHEMA, "identity": identity,
@@ -816,7 +832,11 @@ def build_job() -> Job:
                    "non_applicable": list(plan_value.non_applicable), "gaps": gaps,
                    "observation_count": normalized["observation_count"], "security_findings": []}
         summary_path = unit.job.attempt_root / "artifacts" / "codeql" / "summary.json"
-        return {"schema": SCHEMA, "artifact": _json_artifact(unit.job.run_root, summary_path, summary),
+        artifact = _json_artifact(unit.job.run_root, summary_path, summary)
+        unit.job.events.write("CODEQL_SCOPES_RECORDED", unit_id=unit.unit_id,
+            receipt=artifact, scope_count=len(scopes), gap_count=len(gaps),
+            metrics_semantics="appsec-review/review-metrics-semantics/1")
+        return {"schema": SCHEMA, "artifact": artifact,
                 "index_manifest": _artifact(unit.job.run_root, destination),
                 "item_count": normalized["observation_count"], "scope_count": len(scopes),
                 "gaps": gaps, "non_applicable": list(plan_value.non_applicable),

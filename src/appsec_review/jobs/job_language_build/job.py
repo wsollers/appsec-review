@@ -1328,6 +1328,10 @@ def build_job(*, executor_factory=None) -> Job:
                     "gaps": list(dict.fromkeys([*unsupported_gaps,
                         *(gap for result in executions for gap in result["gaps"])]))}
         artifact = _artifact(unit, "accepted-language-builds.json", document)
+        unit.job.events.write("LANGUAGE_BUILDS_RECORDED", unit_id=unit.unit_id,
+            receipt=artifact, build_count=len(document["receipts"]),
+            gap_count=len(document["gaps"]),
+            metrics_semantics="appsec-review/review-metrics-semantics/1")
         index_manifest = _publish_build_index(unit, document["receipts"])
         return {"artifact": artifact, "build_count": len(document["receipts"]), "gaps": document["gaps"],
                 "index_manifest": index_manifest,

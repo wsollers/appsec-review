@@ -9,12 +9,14 @@ from typing import Any, Mapping
 
 from appsec_review.observability.events import PipelineLog
 from appsec_review.storage import atomic_json, canonical_json
+from appsec_review.storage import file_sha256
 
 
 SCHEMA = "appsec-review/telemetry-event/1"
 FINDING_STATES = {"CANDIDATE", "REFUTED", "CONFIRMED"}
 TERMINAL_EVENTS = {"SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "FAILED",
                    "BLOCKED", "PARTIAL", "NOT_APPLICABLE"}
+METRICS_SEMANTICS = "appsec-review/review-metrics-semantics/1"
 
 
 def validate_event(record: Mapping[str, Any]) -> None:
@@ -87,6 +89,291 @@ def _operation_identity(record: Mapping[str, Any]) -> str:
         record.get("job_id"), record.get("step_id"), record.get("task_id"),
         details.get("tool_id") or details.get("operation_id") or "-",
     ))
+
+
+def _receipt_json(run_root: Path, identity: object) -> Mapping[str, Any]:
+    if not isinstance(identity, Mapping):
+        raise ValueError("metrics receipt identity is missing")
+    relative, expected = identity.get("path"), identity.get("sha256")
+    if not isinstance(relative, str) or not isinstance(expected, str) or len(expected) != 64:
+        raise ValueError("metrics receipt identity is invalid")
+    path = (run_root / relative).resolve()
+    root = run_root.resolve()
+    if path == root or root not in path.parents or not path.is_file() or path.is_symlink():
+        raise ValueError("metrics receipt escaped the run or is unavailable")
+    if file_sha256(path) != expected:
+        raise ValueError("metrics receipt hash changed")
+    import json
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, Mapping):
+        raise ValueError("metrics receipt is not an object")
+    return value
+
+
+def _artifact_size(run_root: Path, identity: Mapping[str, Any]) -> int:
+    relative, expected = identity.get("path"), identity.get("sha256")
+    if not isinstance(relative, str) or not isinstance(expected, str) or len(expected) != 64:
+        raise ValueError("artifact identity is incomplete")
+    path = (run_root / relative).resolve()
+    root = run_root.resolve()
+    if path == root or root not in path.parents or not path.is_file() or path.is_symlink():
+        raise ValueError("artifact escaped the run or is unavailable")
+    size = path.stat().st_size
+    if file_sha256(path) != expected or int(identity.get("size_bytes", -1)) != size:
+        raise ValueError("artifact content or size changed")
+    return size
+
+
+def _new_timing_bucket() -> dict[str, Any]:
+    return {"fresh_ms": [], "reused_ms": [], "intervals": [], "gaps": 0,
+            "receipts": set(), "dispositions": Counter()}
+
+
+def _timing_summary(bucket: Mapping[str, Any]) -> dict[str, Any]:
+    fresh = list(bucket["fresh_ms"])
+    reused = list(bucket["reused_ms"])
+    values = fresh + reused
+    intervals = sorted(bucket["intervals"])
+    wall = 0
+    if intervals:
+        start, end = intervals[0]
+        for next_start, next_end in intervals[1:]:
+            if next_start <= end:
+                end = max(end, next_end)
+            else:
+                wall += max(0, int((end - start).total_seconds() * 1000))
+                start, end = next_start, next_end
+        wall += max(0, int((end - start).total_seconds() * 1000))
+    return {"count": len(values), "fresh_count": len(fresh), "reused_count": len(reused),
+            "p50_ms": _percentile(values, .50), "p95_ms": _percentile(values, .95),
+            "max_ms": max(values) if values else None, "summed_work_ms": sum(values),
+            "wall_span_ms": wall, "gap_count": int(bucket["gaps"]),
+            "receipt_count": len(bucket["receipts"]),
+            "terminal_dispositions": dict(sorted(bucket["dispositions"].items()))}
+
+
+def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    source_rows: list[Mapping[str, Any]] = []
+    source_gaps: list[object] = []
+    projects: list[Mapping[str, Any]] = []
+    targets: list[Mapping[str, Any]] = []
+    build_receipts: list[Mapping[str, Any]] = []
+    codeql_scopes: list[Mapping[str, Any]] = []
+    receipt_refs: set[tuple[str, str]] = set()
+    gaps: list[str] = []
+    seen_producers: set[str] = set()
+    for record in records:
+        details = record.get("details", {})
+        event = record.get("event_type")
+        try:
+            if event == "REVIEW_SCOPE_CATALOGED":
+                seen_producers.add("catalog")
+                partition = _receipt_json(run_root, details.get("source_receipt"))
+                project_doc = _receipt_json(run_root, details.get("project_receipt"))
+                target_doc = _receipt_json(run_root, details.get("build_target_receipt"))
+                if partition.get("source_metrics_semantics") != "appsec-review/source-counting/1":
+                    raise ValueError("source metrics semantics are unsupported")
+                source_rows = list(partition.get("source_metrics", ()))
+                source_gaps = [*partition.get("source_metric_gaps", ()), *partition.get("gaps", ())]
+                projects = list(project_doc.get("projects", ()))
+                targets = list(target_doc.get("targets", ()))
+                for key in ("source_receipt", "project_receipt", "build_target_receipt"):
+                    item = details[key]
+                    receipt_refs.add((str(item["path"]), str(item["sha256"])))
+            elif event == "LANGUAGE_BUILDS_RECORDED":
+                seen_producers.add("build")
+                document = _receipt_json(run_root, details.get("receipt"))
+                if document.get("schema") != "appsec-review/language-build-handoff/1":
+                    raise ValueError("language build metrics receipt schema is unsupported")
+                build_receipts = list(document.get("receipts", ()))
+                item = details["receipt"]
+                receipt_refs.add((str(item["path"]), str(item["sha256"])))
+            elif event == "CODEQL_SCOPES_RECORDED":
+                seen_producers.add("codeql")
+                document = _receipt_json(run_root, details.get("receipt"))
+                if document.get("schema") != "appsec-review/codeql-analysis-handoff/1":
+                    raise ValueError("CodeQL metrics receipt schema is unsupported")
+                codeql_scopes = list(document.get("scopes", ()))
+                item = details["receipt"]
+                receipt_refs.add((str(item["path"]), str(item["sha256"])))
+        except (KeyError, OSError, ValueError, UnicodeError) as exc:
+            gaps.append(f"{event}: {exc}")
+    for producer, description in (("catalog", "source/catalog"), ("build", "language-build"),
+                                  ("codeql", "CodeQL scope")):
+        if producer not in seen_producers:
+            gaps.append(f"{description} metrics producer receipt is unavailable")
+
+    source = {}
+    for row in source_rows:
+        language = str(row.get("language") or "Other")
+        value = source.setdefault(language, {"file_count": 0, "sloc": 0, "generated_files": 0,
+            "generated_sloc": 0, "vendored_files": 0, "vendored_sloc": 0,
+            "test_files": 0, "test_sloc": 0})
+        sloc = max(0, int(row.get("sloc", 0)))
+        value["file_count"] += 1
+        value["sloc"] += sloc
+        for flag in ("generated", "vendored", "test"):
+            if row.get(flag) is True:
+                value[f"{flag}_files"] += 1
+                value[f"{flag}_sloc"] += sloc
+
+    statuses: dict[str, Counter[str]] = {}
+    artifacts_by_scope: dict[str, dict[str, Any]] = {}
+    global_artifacts: dict[str, int] = {}
+    selected_projects: set[str] = set()
+    for receipt in build_receipts:
+        language = str(receipt.get("family") or "unknown")
+        unit_id = str(receipt.get("build_unit_id") or "unknown")
+        root = str(receipt.get("root") or ".")
+        selected_projects.add(root)
+        counter = statuses.setdefault(language, Counter(
+            {"success": 0, "failure": 0, "gap": 0, "not_applicable": 0, "reuse": 0}))
+        status = str(receipt.get("terminal_status") or "GAP")
+        if receipt.get("checkpoint_reused") is True:
+            counter["reuse"] += 1
+        elif status == "SUCCEEDED":
+            counter["success"] += 1
+        elif status == "NOT_APPLICABLE":
+            counter["not_applicable"] += 1
+        else:
+            counter["failure"] += 1
+        if receipt.get("gaps"):
+            counter["gap"] += 1
+        for artifact in receipt.get("artifacts", ()):
+            if not isinstance(artifact, Mapping):
+                continue
+            family = str(artifact.get("kind") or artifact.get("family") or "unknown")
+            digest = str(artifact.get("sha256") or "")
+            try:
+                size = _artifact_size(run_root, artifact)
+            except (OSError, ValueError) as exc:
+                gaps.append(f"artifact {language}/{unit_id}/{family}: {exc}")
+                continue
+            scope = f"{language}/{unit_id}/{family}"
+            bucket = artifacts_by_scope.setdefault(scope, {"language": language,
+                "build_unit_id": unit_id, "artifact_family": family, "reference_count": 0,
+                "reference_bytes": 0, "deduplicated_count": 0, "deduplicated_bytes": 0,
+                "_seen": set()})
+            bucket["reference_count"] += 1
+            bucket["reference_bytes"] += size
+            if len(digest) == 64 and digest not in bucket["_seen"]:
+                bucket["_seen"].add(digest)
+                bucket["deduplicated_count"] += 1
+                bucket["deduplicated_bytes"] += size
+                prior = global_artifacts.setdefault(digest, size)
+                if prior != size:
+                    gaps.append(f"artifact {digest} has conflicting sizes")
+    artifact_groups = []
+    for key in sorted(artifacts_by_scope):
+        value = dict(artifacts_by_scope[key])
+        value.pop("_seen")
+        artifact_groups.append(value)
+    total_statuses = Counter({"success": 0, "failure": 0, "gap": 0,
+                              "not_applicable": 0, "reuse": 0})
+    for value in statuses.values():
+        total_statuses.update(value)
+    discovered_by_language = Counter(str(item.get("family") or item.get("language") or "unknown")
+                                     for item in targets)
+    selected_by_language = Counter(str(item.get("family") or "unknown") for item in build_receipts)
+
+    timings: dict[tuple[str, str, str, str, str, str, str, str, str], dict[str, Any]] = {}
+    starts: dict[tuple[str, str], list[datetime]] = {}
+    database_images: dict[str, str] = {}
+    for record in records:
+        details = record.get("details", {})
+        if details.get("tool_id") != "codeql":
+            continue
+        action = "query" if details.get("query_identity") else "database"
+        identity = str(details.get("query_identity") or details.get("database_identity") or "")
+        database_identity = str(details.get("database_identity") or "")
+        if details.get("image_id"):
+            database_images[database_identity] = str(details["image_id"])
+        pair = (action, identity)
+        stamp = datetime.fromisoformat(str(record["timestamp"]))
+        if record.get("event_type") == "TOOL_INVOCATION_STARTED":
+            starts.setdefault(pair, []).append(stamp)
+            continue
+        if record.get("event_type") != "TOOL_INVOCATION_COMPLETED":
+            continue
+        key = (action, str(details.get("scope_id") or "-"),
+               str(details.get("language") or "unknown"), str(details.get("project_root") or "."),
+               str(details.get("build_unit_id") or "-"), str(details.get("query_profile") or "-"),
+               str(details.get("query_suite") or "-"), str(details.get("query_pack") or "-"),
+               str(details.get("image_id") or database_images.get(database_identity) or "-"))
+        bucket = timings.setdefault(key, _new_timing_bucket())
+        receipt = details.get("metrics_receipt")
+        try:
+            resolved = _receipt_json(run_root, receipt)
+            duration = max(0, int(resolved.get("duration_ms", details.get("duration_ms", 0))))
+            bucket["receipts"].add((str(receipt["path"]), str(receipt["sha256"])))
+            receipt_refs.add((str(receipt["path"]), str(receipt["sha256"])))
+            bucket["reused_ms" if details.get("checkpoint_reused") else "fresh_ms"].append(duration)
+            bucket["dispositions"][str(details.get("disposition") or "UNKNOWN")] += 1
+            pending = starts.get(pair, [])
+            if pending:
+                bucket["intervals"].append((pending.pop(0), stamp))
+            if str(details.get("disposition")) != "SUCCEEDED" or int(details.get("gap_count", 0)):
+                bucket["gaps"] += 1
+        except (KeyError, OSError, ValueError, UnicodeError) as exc:
+            bucket["gaps"] += 1
+            gaps.append(f"CodeQL {action}/{identity or '-'}: {exc}")
+    timing_rows = [{"action": key[0], "scope_id": key[1], "language": key[2], "project": key[3],
+                    "build_unit_id": key[4], "profile": key[5], "query_suite": key[6],
+                    "query_pack": key[7], "image_id": key[8],
+                    **_timing_summary(value)}
+                   for key, value in sorted(timings.items())]
+    aggregate_buckets: dict[str, dict[str, Any]] = {}
+    dimension_buckets: dict[str, dict[str, dict[str, Any]]] = {
+        "language": {}, "project": {}, "profile": {}}
+    for key, value in timings.items():
+        aggregate = aggregate_buckets.setdefault(key[0], _new_timing_bucket())
+        for field in ("fresh_ms", "reused_ms", "intervals"):
+            aggregate[field].extend(value[field])
+        aggregate["gaps"] += value["gaps"]
+        aggregate["receipts"].update(value["receipts"])
+        aggregate["dispositions"].update(value["dispositions"])
+        for dimension, position in (("language", 2), ("project", 3), ("profile", 5)):
+            dimension_key = f"{key[0]}/{key[position]}"
+            target = dimension_buckets[dimension].setdefault(dimension_key, _new_timing_bucket())
+            for field in ("fresh_ms", "reused_ms", "intervals"):
+                target[field].extend(value[field])
+            target["gaps"] += value["gaps"]
+            target["receipts"].update(value["receipts"])
+            target["dispositions"].update(value["dispositions"])
+    timed_scope_profiles = {(item["language"], item["project"], item["build_unit_id"], item["profile"])
+                            for item in timing_rows if item["action"] == "query"}
+    for scope in codeql_scopes:
+        scope_key = (str(scope.get("language") or "unknown"), str(scope.get("root") or "."),
+                     str(scope.get("build_unit_id") or "-"), str(scope.get("query_profile") or "-"))
+        if scope_key not in timed_scope_profiles or scope.get("gaps"):
+            gaps.append(f"CodeQL scope {scope.get('scope_id', '-')}/{scope_key[3]} has missing or failed producer data")
+    return {"semantics": METRICS_SEMANTICS,
+            "classification": {"source": "appsec-review/source-counting/1",
+                "sloc": "UTF-8 non-empty physical lines; comments included",
+                "generated": "path segment generated or gen; dist/build trees are excluded gaps",
+                "vendored": "path segment vendor, vendors, or third_party; node_modules trees are excluded gaps",
+                "tests": "test/tests/spec/specs segment or test_/spec_ filename",
+                "artifacts": "references count each build-unit edge; deduplicated totals use SHA-256 content identity"},
+            "source_by_language": dict(sorted(source.items())),
+            "source_gap_count": len(source_gaps), "source_gaps": source_gaps[:200],
+            "projects": {"discovered": len(projects), "selected": len(selected_projects)},
+            "build_units": {"discovered": len(targets), "selected": len(build_receipts),
+                "outcomes": dict(sorted(total_statuses.items())),
+                "discovered_by_language": dict(sorted(discovered_by_language.items())),
+                "selected_by_language": dict(sorted(selected_by_language.items())),
+                "by_language": {key: dict(sorted(value.items())) for key, value in sorted(statuses.items())}},
+            "artifacts": {"groups": artifact_groups, "reference_count": sum(
+                item["reference_count"] for item in artifact_groups),
+                "reference_bytes": sum(item["reference_bytes"] for item in artifact_groups),
+                "deduplicated_count": len(global_artifacts),
+                "deduplicated_bytes": sum(global_artifacts.values())},
+            "codeql_timings": {"groups": timing_rows,
+                "aggregate": {key: _timing_summary(value) for key, value in sorted(aggregate_buckets.items())},
+                **{f"by_{dimension}": {key: _timing_summary(value) for key, value in sorted(buckets.items())}
+                   for dimension, buckets in dimension_buckets.items()}},
+            "receipt_count": len(receipt_refs), "gaps": gaps,
+            "authoritative_findings": {"source": "FINDING_TRANSITION", "note":
+                "Raw observations are excluded; lifecycle counts are reported in finding_states."}}
 
 
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
@@ -168,7 +455,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                           "started_at": value.isoformat()}
                          for key, values in sorted(starts.items()) for value in values]
     critical = max(task_intervals, key=lambda item: item[3], default=None)
-    return {"schema": "appsec-review/run-metrics/2", "run_id": Path(run_root).name,
+    return {"schema": "appsec-review/run-metrics/3", "run_id": Path(run_root).name,
             "event_count": len(records), "event_counts": dict(sorted(event_counts.items())),
             "dispositions": dict(sorted(dispositions.items())),
             "tool_calls": dict(sorted(tool_calls.items())),
@@ -189,6 +476,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "genuinely_running": genuinely_running[:200],
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
+            "review": _review_metrics(Path(run_root), records),
             "torn_tail_ignored": torn}
 
 
