@@ -114,17 +114,22 @@ def install_capture_wrappers(workspace: Path, settings: RustBuildSettings) -> tu
     root = workspace / ".appsec-review" / "rust-capture"
     invocations = root / "invocations"
     invocations.mkdir(parents=True, exist_ok=True)
+    # The orchestration process creates this run-owned directory, but compiler wrappers execute
+    # as the pinned image's distinct non-root uid. Permit that uid to create opaque invocation
+    # records without granting directory listing or read access to other users.
+    root.chmod(0o755)
+    invocations.chmod(0o733)
 
     def wrapper(name: str, real: str, *, rustc: bool = False) -> Path:
         path = root / f"{name}-wrapper.sh"
         shift = "" if not rustc else "# RUSTC_WRAPPER receives the real compiler as argv[1].\n"
-        path.write_text(
+        script = (
             "#!/bin/sh\nset -eu\n" + shift +
             f"out=/workspace/.appsec-review/rust-capture/invocations/{name}.$$\n"
             ": > \"$out\"\nfor value in \"$@\"; do printf '%s\\0' \"$value\" >> \"$out\"; done\n"
-            + ("exec \"$@\"\n" if rustc else f"exec {real} \"$@\"\n"),
-            encoding="utf-8",
-        )
+            + ("exec \"$@\"\n" if rustc else f"exec {real} \"$@\"\n"))
+        # Bytes preserve the POSIX LF shebang even when tests prepare a Docker bind on Windows.
+        path.write_bytes(script.encode("utf-8"))
         path.chmod(0o755)
         return path
 

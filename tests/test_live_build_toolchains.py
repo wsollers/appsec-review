@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from appsec_review.config import load_config
+from appsec_review.config import RustBuildSettings, load_config
 from appsec_review.container_runtime import (
     BuildContainerExecutor,
     BuildProfile,
@@ -248,3 +248,21 @@ def test_live_maven_project_image_can_fill_old_plugin_gaps_in_writable_runtime_c
               (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
     assert not result.timed_out and result.exit_code == 0, detail
     assert (workspace / source_dir / "target" / "appsec-fixture-java-0.1.0.jar").is_file()
+
+
+def test_live_rust_capture_wrappers_are_writable_to_the_non_root_build_user(
+        tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    shutil.copytree(FIXTURE, workspace)
+    settings = RustBuildSettings("stable", None, "dev", (), False, False, True, 32768)
+    capture_environment, invocations = rust.install_capture_wrappers(workspace, settings)
+    executor = BuildContainerExecutor(_profile("rust"), timeout_seconds=900,
+                                      output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    result = executor.execute(("cargo", "build", "--verbose"), workspace=workspace,
+                              working_directory="rust",
+                              environment={"CARGO_HOME": "/tmp/cargo", **capture_environment})
+    detail = ((result.stdout_tail or result.stdout) + b"\n" +
+              (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+    assert not result.timed_out and result.exit_code == 0, detail
+    assert list(invocations.glob("rustc.*")), "the non-root wrapper emitted no compiler invocation"

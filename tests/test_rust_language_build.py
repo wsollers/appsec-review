@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import stat
 
 import pytest
 
@@ -139,6 +140,14 @@ def test_rust_option_validation_rejects_target_execution_and_accepts_bounded_cho
     assert rust.validate_dispatch(dispatch, settings) == ()
     bad = {**dispatch, "recipe": {**dispatch["recipe"], "build_commands": [["cargo", "test"]]}}
     assert any("unsupported" in gap for gap in rust.validate_dispatch(bad, settings))
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX mode contract")
+def test_rust_capture_directory_is_writable_by_the_pinned_container_user(tmp_path: Path) -> None:
+    settings = RustBuildSettings("stable", None, "dev", (), True, True, True, 32768)
+    _environment, invocations = rust.install_capture_wrappers(tmp_path, settings)
+    assert stat.S_IMODE(invocations.stat().st_mode) == 0o733
+    assert stat.S_IMODE(invocations.parent.stat().st_mode) == 0o755
 
 
 def test_rust_build_retains_streams_provenance_artifacts_metadata_and_sanitized_mcp(tmp_path: Path) -> None:
