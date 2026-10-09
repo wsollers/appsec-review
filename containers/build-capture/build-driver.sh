@@ -3,13 +3,11 @@ set -eu
 capture_root=$1
 string_limit=$2
 call_limit=$3
-stream_limit=$4
-wrapper_root=$5
-capture_envp=$6
-shift 6
+wrapper_root=$4
+capture_envp=$5
+shift 5
 export APPSEC_CAPTURE_ROOT="$capture_root"
 export APPSEC_CAPTURE_CALL_LIMIT="$call_limit"
-export APPSEC_CAPTURE_STREAM_LIMIT="$stream_limit"
 export APPSEC_CAPTURE_REAL_PATH="$PATH"
 export APPSEC_CAPTURE_ENVP="$capture_envp"
 APPSEC_CAPTURE_PYTHON=$(command -v python3)

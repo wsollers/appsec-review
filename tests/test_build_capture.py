@@ -19,7 +19,7 @@ def _recorder(tmp_path: Path, *, event_limit: int = 20) -> BuildExecutionRecorde
         tmp_path / "capture", CaptureScope(
             "2026-10-09-0001", "job_project_build", "attempt_0001", "build-unit-cpp", "native"),
         BuildCaptureConfig("ptrace", event_limit, 3, 64, True, 8, 256, ("SECRET_VALUE",),
-                           16, 10, 1024, 10),
+                           16, 10, 10),
         {"backend": "ptrace", "image_id": "sha256:" + "a" * 64,
          "event_kinds": sorted(("process_fork", "process_exec", "process_exit", "file_open", "connect"))},
     )
@@ -116,6 +116,21 @@ def test_strace_normalizer_captures_process_file_and_egress_calls(tmp_path: Path
     assert connect["port"] == 443 and connect["result"] == 0
 
 
+def test_strace_normalizer_accepts_exact_detach_metadata_but_rejects_malformed_rows(
+        tmp_path: Path) -> None:
+    recorder = _recorder(tmp_path)
+    trace = tmp_path / "trace.42"
+    trace.write_text(
+        "1700000000.000001 ???( <detached ...>\n"
+        "1700000000.000002 exit_group(0 <detached ...>\n",
+        encoding="utf-8",
+    )
+    assert record_strace_files((trace,), recorder) == ()
+    malformed = tmp_path / "trace.43"
+    malformed.write_text("1700000000.000002 ???( malformed\n", encoding="utf-8")
+    assert record_strace_files((malformed,), recorder) == ("unparsed trace row: trace.43:1",)
+
+
 def _capture(tmp_path: Path) -> tuple[Path, Path, CaptureScope]:
     run_root = tmp_path / "run"
     workspace = run_root / "workspace"
@@ -132,7 +147,7 @@ def _capture(tmp_path: Path) -> tuple[Path, Path, CaptureScope]:
     result = executor.execute_captured(
         ("rustc", "main.rs"), workspace=workspace, working_directory="unit", environment={},
         capture_directory=run_root / "capture" / "command-001",
-        capture_config=BuildCaptureConfig("ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 4096, 100),
+        capture_config=BuildCaptureConfig("ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 100),
         scope=scope)
     return run_root, result.capture_record, scope
 

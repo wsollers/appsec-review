@@ -20,7 +20,6 @@ envp_redact_names = [
 ]
 path_bytes_limit = 4096
 tool_call_count_limit = 10000
-tool_stream_bytes_limit = 1048576
 secret_finding_count_limit = 1000
 
 [tools]
@@ -297,6 +296,7 @@ workers = 8
 [jobs.job_project_build.settings]
 command_timeout_seconds = 600
 image_build_timeout_seconds = 1800
+# In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000
 force_buildability_probe = false
@@ -414,6 +414,7 @@ workers = 8
 
 [jobs.job_language_build.settings]
 command_timeout_seconds = 600
+# In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000
 
@@ -667,7 +668,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "54fd074dc6ed1c533acdf4de4c38e25fe3c159560ccfb57a1c090b2c15da8a47"
+asset_lock_sha256 = "146ee129bee7c6bba07dfdfaacb70d11b77367e682f59af5743017c311b3b060"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -754,6 +755,11 @@ query_pack_sha256 = "5308c7593b6203312292b91c777d71e3109942cfb8a83d30759f646932d
 query_lock_sha256 = "f0a376106620edfdac5f3a0dccf3c38f62968221609ccbc21320e60775af9796"
 source_languages = ["C#"]
 prerequisites = []
+
+[[jobs.job_codeql_analysis.settings.languages.csharp.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/csharp-security-extended.qls"
+query_suite_sha256 = "7abab2161fc1ffef4b8fa2462b02fb7789c70fb738dc1eee678ab09ea78f7220"
 
 [jobs.job_codeql_analysis.settings.languages.javascript]
 enabled = true

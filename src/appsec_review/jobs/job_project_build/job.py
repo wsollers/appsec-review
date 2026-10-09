@@ -172,19 +172,32 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
 
 def _probe_stream(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
     data = bytes(getattr(result, name))
-    path.write_bytes(data)
+    complete_file = getattr(result, f"{name}_file", None)
+    if isinstance(complete_file, Path):
+        if complete_file.resolve() != path.resolve():
+            shutil.copyfile(complete_file, path)
+    else:
+        path.write_bytes(data)
     try: path.chmod(0o600)
     except OSError: pass
     try: path.chmod(0o600)
     except OSError: pass
     raw_count = getattr(result, f"{name}_bytes", None)
-    count = len(data) if raw_count is None else int(raw_count)
-    truncated = bool(getattr(result, f"{name}_truncated", count > len(data)))
+    count = path.stat().st_size if isinstance(complete_file, Path) else (
+        len(data) if raw_count is None else int(raw_count))
+    truncated = False if isinstance(complete_file, Path) else bool(
+        getattr(result, f"{name}_truncated", count > len(data)))
     identity: dict[str, Any] = {
         "path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
-        "byte_count": count, "retained_byte_count": len(data), "capture_limit": limit,
+        "byte_count": count, "retained_byte_count": path.stat().st_size,
+        "capture_limit": None if isinstance(complete_file, Path) else limit,
         "truncated": truncated,
     }
+    if isinstance(complete_file, Path):
+        preview_truncated = bool(getattr(result, f"{name}_truncated", False))
+        identity.update({"storage": "complete-file",
+                         "preview_limit_bytes": len(data) if preview_truncated else limit,
+                         "preview_truncated": preview_truncated})
     tail = bytes(getattr(result, f"{name}_tail", b""))
     if truncated and tail:
         tail_path = path.with_name(path.name + ".tail")

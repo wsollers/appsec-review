@@ -203,7 +203,6 @@ class BuildExecutionRecorder:
                 "envp_redact_names": list(self.limits.envp_redact_names),
                 "path_bytes_limit": self.limits.path_bytes_limit,
                 "tool_call_count_limit": self.limits.tool_call_count_limit,
-                "tool_stream_bytes_limit": self.limits.tool_stream_bytes_limit,
                 "secret_finding_count_limit": self.limits.secret_finding_count_limit,
             },
             "started_at": self._started_at,
@@ -249,6 +248,9 @@ class BuildExecutionRecorder:
 
 
 _TRACE = re.compile(r"^(?P<time>[0-9]+(?:\.[0-9]+)?) (?P<call>[a-z0-9_]+)\((?P<body>.*)\) += (?P<result>.*)$")
+_DETACHED = re.compile(
+    r"^[0-9]+(?:\.[0-9]+)? (?:[a-z0-9_]+|\?\?\?)\(.* <detached \.\.\.>$"
+)
 _QUOTED = re.compile(r'^"((?:[^"\\]|\\.)*)"')
 
 
@@ -319,7 +321,8 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                     return tuple(errors)
                 match = _TRACE.match(line.rstrip("\n"))
                 if not match:
-                    if ("unfinished ...>" not in line and "resumed>" not in line and
+                    if (_DETACHED.fullmatch(line.rstrip("\n")) is None and
+                            "unfinished ...>" not in line and "resumed>" not in line and
                             "--- SIG" not in line and "+++ exited with" not in line):
                         errors.append(f"unparsed trace row: {path.name}:{line_number}")
                     continue

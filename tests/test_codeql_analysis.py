@@ -316,6 +316,7 @@ def _settings_value() -> dict[str, object]:
             "query_suite": pack["suite"], "query_suite_sha256": pack["suite_sha256"],
             "query_pack_sha256": pack["qlpack_sha256"], "query_lock_sha256": pack["lock_sha256"],
             "source_languages": source_languages[name], "prerequisites": prerequisites[name],
+            "additional_queries": pack.get("additional_suites", []),
             "custom_queries": lock.get("custom_query_packs", {}).get(name, [])}
     return {"enabled": True, "source_image_tag": lock["source_image"]["tag"],
         "source_image_id": lock["source_image"]["image_id"],
@@ -418,6 +419,17 @@ def test_runner_tree_identity_uses_posix_path_order(tmp_path: Path) -> None:
 
     assert runner._tree(tmp_path) == (hashlib.sha256(b"".join(rows)).hexdigest(), 2)
     assert runner._canonical(["build", "--flag"]) == canonical_json(["build", "--flag"])
+    assert runner._working_directory(tmp_path, ".") == tmp_path
+
+
+def test_csharp_default_and_extended_pack_queries_have_independent_identities() -> None:
+    settings = parse_codeql_settings(_settings_value())
+    language = settings.languages["csharp"]
+    profiles = _query_profiles(language)
+    assert [(item["query_id"], item["kind"]) for item in profiles] == [
+        ("default", "default"), ("security-extended", "pack")]
+    database = {"database_identity": "1" * 64, "database_tree_sha256": "2" * 64}
+    assert len({_query_identity(database, profile, settings) for profile in profiles}) == 2
 
 
 def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None:

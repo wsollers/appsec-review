@@ -175,7 +175,7 @@ def simulated_executor(profile: BuildProfile, behavior: Behavior, *, scanner: Sc
         entrypoint = argv.index("--entrypoint")
         if argv[entrypoint + 1] != "/bin/sh":
             raise AssertionError(f"build command ran without execution capture: {argv[entrypoint + 1]}")
-        _image, _driver, logical_capture, _strings, call_limit, _streams, _wrappers, envp, *command = \
+        _image, _driver, logical_capture, _strings, call_limit, _wrappers, envp, *command = \
             argv[entrypoint + 2:]
         workspace = bound["/workspace"]
         capture_root = bound["/capture"] if logical_capture == "/capture" else \

@@ -183,7 +183,10 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
                    "files": [{"path": relative, "sha256": hashlib.sha256(payload).hexdigest()}]}
         scratch = tmp_path / language.lower()
         scratch.mkdir()
-        atomic_json(scratch / "request.json", request)
+        request_path = scratch / "request.json"
+        atomic_json(request_path, request)
+        request_path.chmod(0o444)
+        scratch.chmod(0o733)
         subprocess.run(["docker", "run", "--rm", "--network", "none", "--read-only",
             "--user", "10001:10001", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--cpus", "2", "--memory", "1g", "--pids-limit", "256",
@@ -202,12 +205,15 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
     payload = (FIXTURE / "python/app.py").read_bytes()
     bounded = tmp_path / "bounded"
     bounded.mkdir()
-    atomic_json(bounded / "request.json", {
+    bounded_request = bounded / "request.json"
+    atomic_json(bounded_request, {
         "schema": "appsec-review/tree-sitter-request/1", "scope_id": "bounded",
         "language": "Python", "max_nodes": 1000, "max_scope_nodes": 1,
         "max_file_bytes": 1024 * 1024,
         "files": [{"path": "python/app.py", "sha256": hashlib.sha256(payload).hexdigest()}],
     })
+    bounded_request.chmod(0o444)
+    bounded.chmod(0o733)
     subprocess.run(["docker", "run", "--rm", "--network", "none", "--read-only",
         "--user", "10001:10001", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--cpus", "2", "--memory", "1g", "--pids-limit", "256",

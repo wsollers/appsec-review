@@ -67,7 +67,7 @@ _TOOL_KINDS = {
     "pack": "package-builder", "go": "build-driver", "gcc": "compiler",
 }
 _GO_TRACE_TOOLS = {"compile", "asm", "link", "cgo", "pack", "gcc", "clang", "as", "ld", "ar"}
-_CAPTURED_FAMILIES = frozenset({"rust"})
+_CAPTURED_FAMILIES = frozenset({"dotnet", "rust"})
 _CAPTURE_GAP = "execution capture command"
 
 
@@ -479,8 +479,9 @@ def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     lowered = [value.lower() for value in values[1:]]
     if executable == "dotnet":
         verb = next((value for value in lowered if not value.startswith("-")), "")
-        if verb in {"build", "publish", "pack", "msbuild"} and not any(
-                value in {"-v:diag", "--verbosity:diagnostic", "/v:diag"} for value in lowered):
+        has_verbosity = any(value in {"-v", "--verbosity"} or value.startswith(
+            ("-v:", "--verbosity:", "/v:")) for value in lowered)
+        if verb in {"build", "publish", "pack", "msbuild"} and not has_verbosity:
             values.extend(("--verbosity", "diagnostic"))
     elif executable == "msbuild" and not any(value in {"-v:diag", "/v:diag"} for value in lowered):
         values.append("/v:diag")
@@ -561,6 +562,20 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
 
 def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
     data = bytes(getattr(result, name))
+    complete_file = getattr(result, f"{name}_file", None)
+    if isinstance(complete_file, Path):
+        if complete_file.resolve() != path.resolve():
+            shutil.copyfile(complete_file, path)
+        total = path.stat().st_size
+        try: path.chmod(0o600)
+        except OSError: pass
+        preview_truncated = bool(getattr(result, f"{name}_truncated", False))
+        return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
+                "captured_bytes": total, "total_bytes": total,
+                "capture_limit_bytes": None, "truncated": False,
+                "storage": "complete-file",
+                "preview_limit_bytes": len(data) if preview_truncated else limit,
+                "preview_truncated": preview_truncated}
     total = getattr(result, f"{name}_bytes", None)
     total = len(data) if total is None else int(total)
     truncated = bool(getattr(result, f"{name}_truncated", False) or total > len(data))
@@ -1129,6 +1144,17 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                         for expected in ("linker-driver", "archiver") if expected not in kinds)
         if cargo_metadata is None:
             gaps.append("Cargo metadata was unavailable")
+    elif family == "dotnet":
+        compile_rows, capture_facts, provenance_gaps = dotnet.capture_invocations(
+            captures, workspace, str(recipe["source_dir"]))
+        gaps.extend(provenance_gaps)
+        link_rows, normalized_links = [], []
+        kinds = {str(row.get("tool_kind")) for row in compile_rows}
+        capture_facts["observed_tool_kinds"] = sorted(kinds)
+        if "compiler" not in kinds:
+            gap = ".NET compiler execution was not observed in the standardized capture"
+            gaps.append(gap)
+            provenance_gaps.append(gap)
     elif family == "python":
         streams = [stream for command in commands for stream in (
             (unit.job.run_root / command["stdout"]["path"]).read_bytes(),
@@ -1147,17 +1173,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if not any(row["tool_kind"] in {"autoload-generator", "package-builder", "code-generator",
                                         "compiler-driver", "linker", "archiver"} for row in compile_rows):
             gaps.append("PHP build exposed no autoload, package, code-generation, or native-tool invocation")
-    else:
-        compile_rows = dotnet.parse_tool_invocations(
-            [stream for command in commands for stream in (
-                (unit.job.run_root / command["stdout"]["path"]).read_bytes(),
-                (unit.job.run_root / command["stderr"]["path"]).read_bytes())], workspace)
-        link_rows, normalized_links = [], []
-        if not compile_rows:
-            gaps.append("MSBuild diagnostic streams did not expose compiler or post-compile invocations")
-    # Cargo creates `target/` as the container user; the orchestrator keeps its own Rust records
-    # beside the workspace instead of writing into a tree the build user owns.
-    link_database = (root / "link-commands.json" if family == "rust" else
+    # Captured build trees are container-owned; the orchestrator keeps its own records beside
+    # the workspace instead of writing into a tree the build user owns.
+    link_database = (root / "link-commands.json" if family in _CAPTURED_FAMILIES else
                      workspace / Path(*PurePosixPath(str(recipe["build_dir"])).parts) / ".appsec-review-link-commands.json")
     atomic_json(link_database, normalized_links)
     compile_protected = root / "protected-commands" / f"compile-database-{unit.job.attempt_id}.json"
@@ -1175,7 +1193,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 "build_unit_id": build_unit_id, "files": workspace_files})
     status = "FAILED" if any("build command" in gap for gap in gaps) else "SUCCEEDED"
     capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not (
-        family == "rust" and provenance_gaps)
+        family in _CAPTURED_FAMILIES and provenance_gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"], "build_unit_id": build_unit_id,
         "family": family, "root": dispatch["root"], "build_system": dispatch.get("recipe", {}).get("build_system", dispatch.get("build_system")),
@@ -1204,6 +1222,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["package_relationships"] = list(receipt["cargo_metadata"].get("relationships", ()))
         receipt["capture_provenance"] = {
             "schema": "appsec-review/rust-capture-provenance/1", "complete": capture_complete,
+            "command_count": len(captures), **capture_facts}
+    if family == "dotnet":
+        receipt["capture_provenance"] = {
+            "schema": "appsec-review/dotnet-capture-provenance/1", "complete": capture_complete,
             "command_count": len(captures), **capture_facts}
     if family == "python":
         receipt["package_relationships"] = python_relationships

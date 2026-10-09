@@ -213,8 +213,13 @@ def test_rust_build_retains_streams_provenance_artifacts_metadata_and_sanitized_
     assert receipt["cargo_metadata"]["proc_macro_targets"] == [{
         "package_id": "helper 0.1.0", "package_name": "helper", "target": "helper_derive"}]
     assert receipt["link_database"]["relationship_count"] >= 2
-    assert receipt["commands"][1]["stderr"]["truncated"] is True
-    assert receipt["commands"][1]["stderr"]["diagnostic_tail"]["sha256"]
+    build_stderr = receipt["commands"][1]["stderr"]
+    assert build_stderr["storage"] == "complete-file"
+    assert build_stderr["truncated"] is False and build_stderr["preview_truncated"] is True
+    assert build_stderr["capture_limit_bytes"] is None
+    assert build_stderr["preview_limit_bytes"] == 4096
+    assert build_stderr["captured_bytes"] == build_stderr["total_bytes"] > 4096
+    assert file_sha256(run_root / build_stderr["path"]) == build_stderr["sha256"]
     assert not any(command[1] in {"run", "test", "bench"} for command in calls if len(command) > 1)
 
     # Cargo metadata and the build each carry a hash-verified, correctly scoped capture identity.

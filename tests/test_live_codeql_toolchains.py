@@ -92,11 +92,11 @@ LIVE_SCOPES = (
     ("java", "java", "manual", "java", (
         ("java", ("mvn", "-Dmaven.repo.local=/tmp/m2", "-DskipTests", "package"), {}),
     )),
-    ("csharp", "dotnet", "manual", "dotnet", (
-        ("dotnet", ("dotnet", "restore", "appsec-fixture.csproj"),
-         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/dotnet/.nuget/packages"}),
-        ("dotnet", ("dotnet", "build", "appsec-fixture.csproj", "--no-restore"),
-         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/dotnet/.nuget/packages"}),
+    ("csharp", "dotnet", "manual", ".", (
+        (".", ("dotnet", "restore", "appsec-fixture.csproj"),
+         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/.nuget/packages"}),
+        (".", ("dotnet", "build", "appsec-fixture.csproj", "--no-restore"),
+         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/.nuget/packages"}),
     )),
     ("javascript", "source", "none", "typescript", ()),
     ("python", "source", "none", "python", ()),
@@ -133,7 +133,7 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
     settings, run_root, image_for = live_codeql_runtime
     scratch = run_root / f"scope-{language}"
     workspace = scratch / "workspace"
-    shutil.copytree(FIXTURE, workspace)
+    shutil.copytree(FIXTURE / "dotnet" if language == "csharp" else FIXTURE, workspace)
     database_arguments = [
         "--mode", mode, "--language", language, "--workspace", "workspace",
         "--source-subroot", source_subroot, "--database", "database",
@@ -163,6 +163,26 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
     sarif = load_sarif(scratch / output, bytes_limit=settings.sarif_bytes_limit,
                        result_limit=settings.result_limit)
     assert sarif["version"] == "2.1.0" and sarif["runs"]
+    if language == "csharp":
+        assert sum(len(run.get("results", ())) for run in sarif["runs"]) > 0
+
+    for additional in configured.additional_queries:
+        additional_output = f"queries/{additional.query_id}.sarif"
+        extended = executor.execute("query", (
+            "--database", "database", "--output", additional_output,
+            "--pack", configured.query_pack, "--pack-version", configured.query_pack_version,
+            "--suite", additional.query_suite, "--threads", str(settings.threads),
+            "--ram", str(settings.ram_mb), "--max-paths", str(settings.max_paths),
+        ), scratch_root=scratch)
+        extended_detail = (run_root / extended.stderr_path).read_text(
+            encoding="utf-8", errors="replace")
+        assert not extended.timed_out and extended.exit_code == 0, extended_detail[-12000:]
+        additional_sarif = load_sarif(
+            scratch / additional_output, bytes_limit=settings.sarif_bytes_limit,
+            result_limit=settings.result_limit)
+        assert additional_sarif["version"] == "2.1.0" and additional_sarif["runs"]
+        if language == "csharp":
+            assert sum(len(run.get("results", ())) for run in additional_sarif["runs"]) > 0
 
     if language == "cpp":
         custom = configured.custom_queries[0]
@@ -178,3 +198,7 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
         custom_sarif = load_sarif(scratch / custom_output, bytes_limit=settings.sarif_bytes_limit,
                                   result_limit=settings.result_limit)
         assert custom_sarif["version"] == "2.1.0" and custom_sarif["runs"]
+
+    # Dagster removes per-profile database copies immediately after query completion. Prove the
+    # non-root container's recursively created cache directories are removable by the run owner.
+    shutil.rmtree(scratch / "database")

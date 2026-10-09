@@ -102,6 +102,15 @@ ADAPTERS = {item.capability: item for item in (
 )}
 
 
+def _execution_token(capability: str, artifact: Mapping[str, Any]) -> str:
+    """Keep scanner receipts distinct for equal-content artifacts at different identities."""
+    canonical_identity = artifact.get("canonical_identity")
+    if not isinstance(canonical_identity, str) or not canonical_identity:
+        raise ValueError("scanner artifact canonical identity is required")
+    material = f"{canonical_identity}:{artifact.get('sha256')}:{capability}"
+    return hashlib.sha256(material.encode()).hexdigest()[:16]
+
+
 class ContainerScannerRunner:
     """Run pinned scanners with one produced artifact mounted read-only as data."""
 
@@ -147,7 +156,7 @@ class ContainerScannerRunner:
         identity = self.identity(capability, artifact)
         if identity.get("unavailable"):
             raise RuntimeError(str(identity["unavailable"]))
-        token = hashlib.sha256(f"{artifact.get('sha256')}:{capability}".encode()).hexdigest()[:16]
+        token = _execution_token(capability, artifact)
         scratch = self.scratch_root / "containers" / token
         scratch.mkdir(parents=True, exist_ok=True)
         mounts: list[Mount] = []

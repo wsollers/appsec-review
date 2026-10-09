@@ -69,10 +69,12 @@ process-exec event is never tool provenance. Capture caps, scanner failure, reda
 unreconciled tool-call records, and an unobserved compiler are named gaps; a unit with an
 incomplete capture or incomplete tool provenance is not checkpointed.
 
-Each command stream is a separate protected artifact with its SHA-256, original and retained byte
-counts, configured limit, truncation state, exit/timeout state, duration, image, command, and attempt
-identities. When a stream is truncated, a bounded diagnostic tail is retained separately. Neither
-stream bytes nor exact argv are placed in pipeline events, retrieval shards, or MCP responses.
+Each build-driver command stream is a complete run-owned protected file with its SHA-256, byte
+count, exit/timeout state, duration, image, command, and attempt identities. The configured
+`output_bytes` value limits only an in-memory parser/event preview; the receipt records that preview
+limit and whether the preview omitted bytes, while `truncated` remains false for the complete file.
+Failure handling reads a bounded diagnostic tail from the complete file on demand. Neither stream
+bytes nor exact argv are placed in pipeline events, retrieval shards, or MCP responses.
 
 The Node adapter accepts npm, pnpm, or Yarn when `package.json` is present; a single matching
 lockfile is used when available. Dependency installation may occur in the derived image or the
@@ -107,10 +109,16 @@ only hashes, outcomes, bounded stream facts, and artifact identities.
 commands may perform their normal implicit restore. The adapter never runs tests or target
 applications. It catalogs C#/VB/F# assemblies, portable PDBs, generated sources, NuGet packages,
 dependency/runtime configuration, native/AOT outputs, project/package/reference topology, and
-compiler, generator, resource, linker/trimmer, AOT, packaging, and native-tool invocations exposed
-by MSBuild diagnostic streams. Exact argv and stdout/stderr remain protected run artifacts. A
-sanitized `build` retrieval shard exposes command hashes, status, bounded stream metadata, and
-artifact identities without exposing those protected bytes.
+compiler, generator, resource, linker/trimmer, AOT, packaging, and native-tool invocations established
+by successful process-exec syscall events. Managed SDK tools hosted by `dotnet`, including Roslyn
+compiler DLLs, are classified from the argv of that observed host exec. Wrapper records add status
+and stream hashes only after reconciliation to a successful exec; diagnostic output is never tool
+provenance. Each command carries hash-verified syscall/envp/connect evidence and a gitleaks result.
+Capture loss, a redacted exec, an unmatched wrapper record, or an unobserved compiler is a named gap
+and prevents a checkpoint. Exact argv, envp values, syscall rows, and stdout/stderr remain protected
+run artifacts. A sanitized `build` retrieval shard exposes command and capture hashes, status,
+bounded stream metadata, provenance counts, and artifact identities without exposing those protected
+bytes.
 
 Rust command, artifact, Cargo-package, and dependency evidence is published through the same
 sanitized `build` shard, together with the capture record, event, and findings hashes. Raw Cargo
@@ -141,6 +149,20 @@ Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_
 counts, dispositions, gap counts, and durations—not command text or environment values.
 
 ## Live acceptance
+
+Dagster run `34cd763a-8798-4dc7-a27c-34cc6006c9e5` (application run
+`2026-10-09-0012`) is the accepted .NET/C# fixture run. All 284 selected orchestration steps
+succeeded. The .NET language receipt is `SUCCEEDED` with `gaps=[]`, 23 process-exec events, 23
+envp-bearing exec events, 184 connect events, complete compiler/build-driver provenance, two
+successful gitleaks scans with zero findings, and 23 generated artifacts. Build-driver and wrapper
+stdout/stderr are complete files; the 11,274,715-byte diagnostic build stdout verifies despite
+exceeding the optional 8 MiB in-memory preview. CodeQL created one C# database and completed both
+the pinned default and `security-extended` profiles with zero gaps and one normalized observation
+from each. The strict hash-resolving report is
+`deploy/dagster/verification/dotnet-capture-live-acceptance.json`. The application-wide completion
+status remains `COMPLETED_WITH_GAPS` because unrelated generic evidence/artifact capabilities name
+their normal scope gaps; the required project-build, language-build, and CodeQL jobs are
+`SUCCEEDED` and the .NET/CodeQL acceptance paths have no gaps.
 
 Dagster run `d51d396c-4f0f-4386-a503-859b399f1449` (application run
 `2026-10-08-0081`) completed all 248 orchestration steps successfully against

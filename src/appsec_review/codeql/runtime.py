@@ -210,7 +210,18 @@ class CodeQLExecutor:
         if scratch != self.run_root and self.run_root not in scratch.parents:
             raise ValueError("CodeQL scratch must be run-owned")
         scratch.mkdir(parents=True, exist_ok=True)
-        scratch.chmod(0o777)
+        container_uid = int(self.image.runtime_user.split(":", 1)[0])
+        for path in (scratch, *scratch.rglob("*")):
+            if path.is_symlink():
+                continue
+            mode = path.stat().st_mode
+            try:
+                path.chmod(mode | (0o007 if path.is_dir() else 0o006))
+            except PermissionError:
+                # Outputs from an earlier CodeQL action are owned by the fixed container UID and
+                # remain accessible to the next action; unrelated ownership is an integrity error.
+                if path.stat().st_uid != container_uid:
+                    raise
         inspected = self.runner(("docker", "image", "inspect", self.image.image_tag,
                                  "--format", "{{.Id}}"), 60)
         if inspected[3] or inspected[0] != 0 or inspected[1].decode().strip() != self.image.image_id:

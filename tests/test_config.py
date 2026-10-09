@@ -20,7 +20,7 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert config.build_capture == BuildCaptureConfig(
         "ptrace", 100000, 256, 16384, True, 1024, 131072,
         ("AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "NUGET_AUTH_TOKEN",
-         "PIP_INDEX_URL"), 4096, 10000, 1048576, 1000)
+         "PIP_INDEX_URL"), 4096, 10000, 1000)
     assert config.job("job_project_build").build_capture.event_count_limit == 250000
     assert config.job("job_language_build").build_capture.event_count_limit == 250000
     assert config.job("job_codeql_analysis").build_capture == config.build_capture

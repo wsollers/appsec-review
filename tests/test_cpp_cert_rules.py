@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -45,7 +46,7 @@ def _semgrep_rule_blocks() -> dict[str, str]:
 
 def test_locked_bundle_and_crosswalk_verify_offline() -> None:
     result = subprocess.run(
-        [shutil.which("python") or "python", str(BUNDLE / "verify_bundle.py")],
+        [sys.executable, str(BUNDLE / "verify_bundle.py")],
         cwd=ROOT,
         capture_output=True,
         text=True,

@@ -4,7 +4,7 @@ x-dagster-environment: &dagster-environment
   DAGSTER_HOME: /opt/dagster/home
   DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
   APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
-  APPSEC_REVIEW_TARGET: /opt/app/targets/appsec-multi-vuln
+  APPSEC_REVIEW_TARGET: ${APPSEC_REVIEW_TARGET:-/opt/app/targets/appsec-multi-vuln}
 
 x-dagster-service: &dagster-service
   image: appsec-review-dagster:local
@@ -62,6 +62,7 @@ services:
     environment:
       <<: *dagster-environment
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      HOME: /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +73,9 @@ services:
       - ../../targets:/opt/app/targets:ro
       - ../../rules:/opt/app/rules:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${APPSEC_CLAUDE_BINARY:?Run deploy/dagster/bin/bootstrap.py with the configured Claude CLI available}:/usr/local/bin/claude:ro
+      - ${APPSEC_CLAUDE_CONFIG_DIR:?Run deploy/dagster/bin/bootstrap.py with Claude authentication configured}:/tmp/.claude:ro
+      - ${APPSEC_CLAUDE_STATE_FILE:?Run deploy/dagster/bin/bootstrap.py with Claude authentication configured}:/tmp/.claude.json:ro
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "127.0.0.1", "-p", "4000"]
       interval: 5s

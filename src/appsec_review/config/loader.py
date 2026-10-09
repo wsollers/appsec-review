@@ -33,7 +33,6 @@ class BuildCaptureConfig:
     envp_redact_names: tuple[str, ...]
     path_bytes_limit: int
     tool_call_count_limit: int
-    tool_stream_bytes_limit: int
     secret_finding_count_limit: int
 
     def __post_init__(self) -> None:
@@ -60,8 +59,6 @@ class BuildCaptureConfig:
             raise ValueError("build capture path_bytes_limit is invalid")
         if not 1 <= self.tool_call_count_limit <= 1_000_000:
             raise ValueError("build capture tool_call_count_limit is invalid")
-        if not 1 <= self.tool_stream_bytes_limit <= 64 * 1024 * 1024:
-            raise ValueError("build capture tool_stream_bytes_limit is invalid")
         if not 1 <= self.secret_finding_count_limit <= 1_000_000:
             raise ValueError("build capture secret_finding_count_limit is invalid")
 
@@ -73,7 +70,7 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
     allowed = {"backend", "event_count_limit", "argv_count_limit",
                "argument_bytes_limit", "capture_envp", "envp_count_limit",
                "envp_bytes_limit", "envp_redact_names", "path_bytes_limit",
-               "tool_call_count_limit", "tool_stream_bytes_limit",
+               "tool_call_count_limit",
                "secret_finding_count_limit"}
     unknown = set(value) - allowed
     if unknown:
@@ -105,8 +102,6 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
             "path_bytes_limit", base.path_bytes_limit if base else 0)),
         tool_call_count_limit=int(value.get(
             "tool_call_count_limit", base.tool_call_count_limit if base else 0)),
-        tool_stream_bytes_limit=int(value.get(
-            "tool_stream_bytes_limit", base.tool_stream_bytes_limit if base else 0)),
         secret_finding_count_limit=int(value.get(
             "secret_finding_count_limit", base.secret_finding_count_limit if base else 0)),
     )

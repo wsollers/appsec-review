@@ -1,5 +1,13 @@
 # Dagster live verification evidence
 
+`dotnet-capture-live-acceptance.json` is the authoritative bounded .NET/C# fixture report for
+Dagster run `34cd763a-8798-4dc7-a27c-34cc6006c9e5` and application run
+`2026-10-09-0012`. The verifier required the `dotnet` family and resolved the complete command and
+wrapper streams, protected argv, syscall/envp/connect capture, gitleaks artifacts, generated
+artifacts, workspace/topology records, CodeQL database/query identities, and normalized observation
+shards. The .NET language receipt and both C# CodeQL profiles are zero-gap `SUCCEEDED`; unrelated
+application-wide scanner scope gaps remain explicitly recorded.
+
 `wave1-live-acceptance.json` is a concise, non-secret historical acceptance report for Dagster run
 `d51d396c-4f0f-4386-a503-859b399f1449` and application run `2026-10-08-0081`. It records 248
 successful Dagster steps and detailed receipts for the job publications that the verifier captured

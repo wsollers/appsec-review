@@ -9,7 +9,8 @@ from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
-from appsec_review.jobs.job_language_build.dotnet import artifact_kind, parse_tool_invocations, project_topology, validate_recipe
+from appsec_review.jobs.job_language_build.dotnet import artifact_kind, project_topology, tool_identity, validate_recipe
+from appsec_review.jobs.job_language_build.job import _dotnet_argv, _stream_identity
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp
@@ -21,10 +22,33 @@ from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
-from tests.capture_fakes import capturing_fake
+from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, simulated_executor
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_captured_stream_identity_retains_complete_file_beyond_preview_limit(
+        tmp_path: Path) -> None:
+    source = tmp_path / "capture" / "stdout"
+    source.parent.mkdir()
+    source.write_bytes(b"full-output" * 1024)
+    destination = tmp_path / "logs" / "001.stdout"
+    destination.parent.mkdir()
+    result = BuildCommandResult(
+        ("dotnet", "build"), 0, b"full-out", b"", False,
+        stdout_bytes=source.stat().st_size, stdout_truncated=True,
+        stdout_file=source,
+    )
+
+    identity = _stream_identity(tmp_path, destination, result, "stdout", 8)
+
+    assert destination.read_bytes() == source.read_bytes()
+    assert identity["storage"] == "complete-file"
+    assert identity["captured_bytes"] == identity["total_bytes"] == source.stat().st_size
+    assert identity["capture_limit_bytes"] is None
+    assert identity["truncated"] is False
+    assert identity["preview_limit_bytes"] == 8 and identity["preview_truncated"] is True
 
 
 class NativeRecipeModel:
@@ -144,6 +168,41 @@ class DotnetExecutor:
                     f'Debug/net8.0/Sample.dll /workspace/{working_directory}/Program.cs\n')
             return BuildCommandResult(tuple(argv), 0, line.encode(), b"", False)
         return BuildCommandResult(tuple(argv), 0, b"restored", b"", False)
+
+
+def dotnet_language_executor(profile, calls: list[tuple[str, ...]], *, fail: bool = False,
+                             phantom_compiler: bool = False):
+    def behavior(command, workspace, working_directory, environment, simulation):
+        calls.append(command)
+        simulation.exec("/capture/wrappers/dotnet", command)
+        simulation.exec("/usr/bin/dotnet", command)
+        simulation.tool_call("dotnet", command[1:], executable="/usr/bin/dotnet")
+        if "restore" in command:
+            simulation.connect("203.0.113.10", 443)
+            return 0, b"restored", b""
+        if "build" in command:
+            root = workspace / working_directory
+            if fail:
+                return 1, b"compile failed", b"CS1000"
+            generated = root / "obj" / "Debug" / "net8.0" / "Sample.GlobalUsings.g.cs"
+            generated.parent.mkdir(parents=True, exist_ok=True)
+            generated.write_text("global using System;\n", encoding="utf-8")
+            output = root / "bin" / "Debug" / "net8.0"
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "Sample.dll").write_bytes(b"MZmanaged")
+            (output / "Sample.pdb").write_bytes(b"portable-pdb")
+            (output / "Sample.deps.json").write_text("{}", encoding="utf-8")
+            (output / "Sample.runtimeconfig.json").write_text("{}", encoding="utf-8")
+            compiler = ("/usr/bin/dotnet", "exec", "/sdk/Roslyn/bincore/csc.dll",
+                        f"/out:/workspace/{working_directory}/bin/Debug/net8.0/Sample.dll",
+                        f"/workspace/{working_directory}/Program.cs")
+            if phantom_compiler:
+                simulation.tool_call("dotnet", compiler[1:], executable="/usr/bin/dotnet")
+            else:
+                simulation.exec("/usr/bin/dotnet", compiler)
+            return 0, b"dotnet /unobserved/csc.dll /out:/workspace/phantom.dll phantom.cs\n", b""
+        return 0, b"", b""
+    return simulated_executor(profile, behavior)
 
 
 class AnalysisExecutor:
@@ -323,7 +382,7 @@ def _accepted_dotnet(config, target, calls):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
         build_plan(infer=DotnetRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor(calls)),
+    project = build_projects(executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls),
                              image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
@@ -336,7 +395,7 @@ def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path
     calls: list[tuple[str, ...]] = []
     run_id, fingerprint = _accepted_dotnet(config, target, calls)
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: DotnetExecutor(calls))]).run(
+        executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "SUCCEEDED"
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
@@ -344,10 +403,19 @@ def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path
     assert {item["kind"] for item in receipt["artifacts"]} >= {
         "managed-assembly", "debug-information", "generated-source",
         "dependency-manifest", "runtime-configuration"}
-    assert {item["tool_kind"] for item in receipt["tool_invocations"]} == {"compiler"}
+    assert {item["tool_kind"] for item in receipt["tool_invocations"]} >= {"compiler", "build-driver"}
+    assert all(item["mapping"].startswith("syscall-process-exec")
+               for item in receipt["tool_invocations"])
+    assert receipt["capture_provenance"]["complete"] is True
+    assert receipt["capture_provenance"]["connect_events"] == 1
+    assert not any("phantom" in json.dumps(item) for item in receipt["tool_invocations"])
     assert receipt["project_topology"][0]["package_references"] == [{"name": "Example", "version": "1.0.0"}]
     command = receipt["commands"][1]
-    assert command["stdout"]["sha256"] and command["stdout"]["capture_limit_bytes"] == 8388608
+    assert command["stdout"]["sha256"]
+    assert command["stdout"]["storage"] == "complete-file"
+    assert command["stdout"]["capture_limit_bytes"] is None
+    assert command["stdout"]["preview_limit_bytes"] == 8388608
+    assert command["stdout"]["truncated"] is False
     mcp = RetrievalMcpAdapter(RetrievalCore(config.runtime.runs_dir, run_id))
     response = mcp.call("search", {"query": "managed-assembly", "indexes": ["build"], "limit": 10})
     rendered = json.dumps(response)
@@ -370,13 +438,59 @@ def test_dotnet_failed_build_retains_bounded_diagnostics_as_a_gap(tmp_path: Path
     config, target = _dotnet_fixture(tmp_path)
     run_id, fingerprint = _accepted_dotnet(config, target, [])
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: DotnetExecutor([], fail=True))]).run(
+        executor_factory=lambda unit, profile: dotnet_language_executor(profile, [], fail=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     assert receipt["terminal_status"] == "FAILED"
     assert receipt["commands"][-1]["stderr"]["sha256"]
     assert any("build command" in gap for gap in receipt["gaps"])
+
+
+def test_dotnet_wrapper_record_without_successful_exec_is_a_provenance_gap(tmp_path: Path) -> None:
+    config, target = _dotnet_fixture(tmp_path)
+    run_id, fingerprint = _accepted_dotnet(config, target, [])
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        dotnet_language_executor(profile, [], phantom_compiler=True))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    assert "compiler" not in {item["tool_kind"] for item in receipt["tool_invocations"]}
+    provenance = receipt["capture_provenance"]
+    assert provenance["unreconciled_tool_calls"] == 1 and provenance["complete"] is False
+    assert any("no matching successful process-exec" in gap for gap in receipt["gaps"])
+    assert any("compiler execution was not observed" in gap for gap in receipt["gaps"])
+    assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+
+
+def test_dotnet_envp_secret_is_redacted_scanned_and_never_retained(tmp_path: Path) -> None:
+    class SecretEnvironment:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def resolve(self):
+            return self.inner.resolve()
+
+        def execute_captured(self, argv, *, environment, **options):
+            return self.inner.execute_captured(
+                argv, environment={**environment, "GITHUB_TOKEN": SYNTHETIC_SECRET}, **options)
+
+    config, target = _dotnet_fixture(tmp_path)
+    run_id, fingerprint = _accepted_dotnet(config, target, [])
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        SecretEnvironment(dotnet_language_executor(profile, [])))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "SUCCEEDED"
+    run_root = config.runtime.runs_dir / run_id
+    receipt = load_accepted_language_build(run_root)["receipts"][0]
+    assert receipt["capture_provenance"]["redacted_exec_events"] == 0
+    assert receipt["capture_provenance"]["complete"] is True
+    assert "GITHUB_TOKEN" in receipt["capture_provenance"]["envp_redacted_names"]
+    assert all(command["execution_capture"]["secret_findings"]["count"] > 0
+               for command in receipt["commands"])
+    assert not any(SYNTHETIC_SECRET.encode() in path.read_bytes()
+                   for path in run_root.rglob("*") if path.is_file())
+    assert tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
 
 
 def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_path: Path) -> None:
@@ -403,6 +517,8 @@ def test_dotnet_recipe_and_capture_helpers_allow_restore_but_forbid_run(tmp_path
     assert validate_recipe(recipe) == ()
     assert validate_recipe({**recipe, "build_commands": [["dotnet", "run"]]}) == (
         "dotnet subcommand is unsupported: run",)
+    assert _dotnet_argv(("dotnet", "build", "Sample.csproj", "--verbosity", "diagnostic")) == (
+        "dotnet", "build", "Sample.csproj", "--verbosity", "diagnostic")
     assert artifact_kind(Path("obj/Debug/net8.0/Generated.cs")) == "generated-source"
     native_aot = tmp_path / "native-aot-app"
     native_aot.write_bytes(b"\x7fELFfixture")
@@ -414,5 +530,8 @@ def test_dotnet_recipe_and_capture_helpers_allow_restore_but_forbid_run(tmp_path
         '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework>'
         '</PropertyGroup></Project>', encoding="utf-8")
     assert {item["path"] for item in project_topology(tmp_path)[0]} == {"Library.fsproj", "Library.vbproj"}
-    stream = b'dotnet /sdk/Roslyn/bincore/csc.dll /out:/workspace/bin/Sample.dll source.cs\n'
-    assert parse_tool_invocations([stream], tmp_path)[0]["tool_kind"] == "compiler"
+    assert tool_identity("dotnet", ["dotnet", "exec", "/sdk/Roslyn/bincore/csc.dll"]) == (
+        "csc.dll", "compiler")
+    assert tool_identity("dotnet", ["dotnet", "build", "Sample.csproj"]) == (
+        "dotnet", "build-driver")
+    assert tool_identity("python3", ["python3", "tool-wrapper.py", "dotnet"]) is None

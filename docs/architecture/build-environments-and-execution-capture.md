@@ -19,7 +19,7 @@ be treated as one container lifecycle:
    gitleaks scan.
 
 Captured execution is an acceptance requirement for `job_project_build` probes and for every
-command of the Rust/Cargo adapter in `job_language_build`. The remaining `job_language_build`
+command of the Rust/Cargo and .NET SDK adapters in `job_language_build`. The remaining `job_language_build`
 adapters still use their family-specific execution and provenance paths; they must not be described
 as producing the standardized syscall/envp/secret-scan record until they are explicitly migrated
 and tested. The current capture backend is in-container
@@ -141,10 +141,19 @@ The required syscall event families are:
 
 PATH wrappers complement syscall capture for known build tools such as compilers, linkers,
 archivers, package managers, build systems, and language toolchains. A wrapper resolves the real
-executable from the saved path, runs it without a shell, tees bounded stdout and stderr, and writes
+executable from the saved path, runs it without a shell, tees complete stdout and stderr files, and writes
 an `appsec-review/build-tool-call/1` record containing argv, environment, status, stream sizes,
 truncation state, URIs, and hashes. Absolute-path tool execution can bypass a PATH wrapper, but it
 cannot bypass process-exec observation by the syscall collector.
+
+The build driver's own stdout and stderr are not storage-capped. The executor connects them
+directly to run-owned files instead of pipe-buffering the complete streams in memory, and receipts
+hash those complete files. `output_bytes` bounds only the optional in-memory preview used by
+parsers and event summaries; it is recorded as `preview_limit_bytes` and never truncates or replaces
+the retained file. Failed-build diagnostics read a bounded tail from that complete file on demand.
+Wrapper-call count remains independently capped and configurable. Every retained wrapper call keeps
+complete stream files; reaching the call-count cap is a named provenance gap rather than permission
+to treat unrecorded calls as absent.
 
 A process-exec event keeps `executable` (the path passed to the kernel, which the caller cannot
 relabel the way it can `argv[0]`) and `result`. A PATH search that misses produces failed `execve`
@@ -285,6 +294,31 @@ redacted is a gap. A unit whose capture or tool provenance is incomplete is neve
 reused checkpoint re-verifies every retained capture against the scope and hashes its receipt
 recorded and republishes the gaps that receipt named.
 
+## .NET language-build integration
+
+The .NET adapter uses the same standardized capture boundary for every accepted `dotnet restore`,
+`build`, `publish`, `pack`, or `msbuild` command. Captured .NET runs disable persistent MSBuild and
+Roslyn servers plus optional CLI telemetry and workload-advertising background work so the tracer
+owns the complete command process tree. Those settings affect capture lifecycle only; accepted
+build argv and target code are unchanged.
+
+Successful process-exec events are the sole authority for .NET tool provenance. The classifier
+recognizes the `dotnet` host and native tools directly and identifies hosted SDK tools such as
+`MSBuild.dll`, `csc.dll`, `vbc.dll`, `fsc.dll`, ILLink, Crossgen2, and NativeAOT from the argv of the
+observed host execution. PATH records enrich only a matching successful exec with status and stream
+hashes. A wrapper record without that exec is counted as unreconciled, names a gap, and never becomes
+a tool invocation. MSBuild diagnostic text remains a protected diagnostic stream and is not parsed
+or regex-matched as evidence.
+
+Each receipt includes `appsec-review/dotnet-capture-provenance/1` facts: capture completeness,
+command and exec counts, failed or redacted execs, connect and envp events, exact-name envp
+redactions, tool-call reconciliation, and observed tool kinds. The compiler is mandatory: an
+unobserved compiler makes provenance incomplete and prevents checkpoint publication. Capture caps,
+scanner/collector failures, redacted execs, and unreconciled wrapper records have the same effect.
+Assemblies, portable PDBs, generated sources, NuGet metadata/packages, dependency and runtime
+configuration, native/AOT outputs, and project/package/reference topology remain hash-bound output
+evidence. The .NET link database is stored beside the container-owned workspace.
+
 ## Configuration ownership
 
 All capture policy is typed and centralized in `appsec-review.toml`. Global settings define the
@@ -303,10 +337,10 @@ The main implementation surfaces are:
 - `src/appsec_review/container_runtime/build_capture.py` — normalization, execution record, and
   the shared record verifier;
 - `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
-- `src/appsec_review/jobs/job_language_build/job.py` and `rust.py` — Rust capture routing, receipt
-  identities, and capture-derived tool provenance; and
+- `src/appsec_review/jobs/job_language_build/job.py`, `rust.py`, and `dotnet.py` — Rust and .NET
+  capture routing, receipt identities, and capture-derived tool provenance; and
 - `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
-  `tests/test_project_build.py`, `tests/test_rust_language_build.py`, and
+  `tests/test_project_build.py`, `tests/test_rust_language_build.py`, `tests/test_language_build.py`, and
   `tests/test_live_build_toolchains.py` — unit and live contracts. `tests/capture_fakes.py` replaces
   only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.
 

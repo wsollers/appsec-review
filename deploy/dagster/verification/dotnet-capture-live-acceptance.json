@@ -1,0 +1,892 @@
+{
+  "acceptance_run": {
+    "application_run": {
+      "completion_status": "COMPLETED_WITH_GAPS",
+      "jobs": {
+        "job_artifact_indexing": {
+          "artifact_indexing": {
+            "all_artifact_shards_preserved": true,
+            "artifact_shard_count": 26,
+            "manifest_artifact_shard_count": 26,
+            "manifest_sha256": "1db693f9d2df9a02da5f45f64cf1d33ff45cd75360c4f02c32e06518ee31a416",
+            "reused_shard_count": 0
+          },
+          "attempt_id": "attempt_0001",
+          "gap_count": 23,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_artifact_indexing/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "c7f8bc2be3b2f2644dfdcefcac65127c2879d74ede7e044c9dfaceb3d3c88d42",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_artifact_indexing/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_artifact_indexing/attempts/attempt_0001/status.json",
+          "unit_count": 5,
+          "unit_status_counts": {
+            "SUCCEEDED": 5
+          }
+        },
+        "job_artifact_security_analysis": {
+          "artifact_security_analysis": {
+            "all_raw_evidence_resolved": true,
+            "artifact_count": 23,
+            "capability_statuses": {
+              "blint": "COMPLETED_WITH_GAPS",
+              "grype": "NOT_APPLICABLE",
+              "inventory": "SUCCEEDED",
+              "jvm": "NOT_APPLICABLE",
+              "native": "COMPLETED_WITH_GAPS",
+              "osv": "COMPLETED_WITH_GAPS",
+              "packages": "NOT_APPLICABLE",
+              "spotbugs": "NOT_APPLICABLE",
+              "syft": "SUCCEEDED",
+              "wasm": "NOT_APPLICABLE"
+            },
+            "gap_count": 38,
+            "manifest_sha256": "58348263e15378f0e31076a30a715d505df89603fbac3346e5c1b0a005faade2",
+            "observation_count": 83,
+            "raw_evidence_identity_count": 166
+          },
+          "attempt_id": "attempt_0001",
+          "gap_count": 38,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_artifact_security_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "6ef04112802f799a3525aa846bdc7110413123b441b6139aac61eb86f965d2b3",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_artifact_security_analysis/attempts/attempt_0001/result.json",
+          "status": "COMPLETED_WITH_GAPS",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_artifact_security_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 13,
+          "unit_status_counts": {
+            "SUCCEEDED": 13
+          }
+        },
+        "job_codeql_analysis": {
+          "attempt_id": "attempt_0001",
+          "codeql": {
+            "all_observation_shards_resolved": true,
+            "gap_count": 0,
+            "languages": {
+              "csharp": {
+                "database_reused_count": 0,
+                "gap_count": 0,
+                "observation_count": 2,
+                "profiles": {
+                  "default": {
+                    "gap_count": 0,
+                    "observation_count": 1,
+                    "sarif_result_count": 1,
+                    "scope_count": 1,
+                    "successful_scope_count": 1
+                  },
+                  "security-extended": {
+                    "gap_count": 0,
+                    "observation_count": 1,
+                    "sarif_result_count": 1,
+                    "scope_count": 1,
+                    "successful_scope_count": 1
+                  }
+                },
+                "query_reused_count": 0,
+                "sarif_result_count": 2,
+                "scope_count": 2,
+                "successful_scope_count": 2
+              }
+            },
+            "manifest_sha256": "38c46c71c48091dd63c40fedafff8a6b2f904dc5196212eee2a2c2f13c921083",
+            "non_applicable": [
+              {
+                "language": "php",
+                "reason": "PHP is not a CodeQL source language in the pinned runtime",
+                "status": "NOT_APPLICABLE"
+              },
+              {
+                "language": "wasm",
+                "reason": "raw WebAssembly bytes are not a CodeQL source language; source producers are covered separately",
+                "status": "NOT_APPLICABLE"
+              }
+            ],
+            "observation_count": 2,
+            "scope_count": 2,
+            "shard_count": 2,
+            "successful_scope_count": 2
+          },
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_codeql_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "4c8e6ac217a6cea9a4bce698e8299e826d83fb3cef6bb8cf72fdcc88d62f1811",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_codeql_analysis/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_codeql_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 5,
+          "unit_status_counts": {
+            "SUCCEEDED": 5
+          }
+        },
+        "job_cpp_compiled_analysis": {
+          "attempt_id": "attempt_0001",
+          "cpp_wave": {
+            "all_cpp_shards_preserved": true,
+            "all_physical_shards_preserved": true,
+            "branch_count": 6,
+            "cpp_shard_count": 0,
+            "disposition_counts": {},
+            "manifest_index_count": 51,
+            "manifest_sha256": "2b7453842eb164e83a418e172819c2532884be9af4cb477ba5cb1ff88e9a69b0",
+            "physical_shard_count": 51,
+            "project_count": 0,
+            "terminal_branch_count": 0
+          },
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "46a150870f4af94edae13c087e4049179d7a0d3bc9217d3e3c6a879e04c6e882",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/status.json",
+          "unit_count": 10,
+          "unit_status_counts": {
+            "SUCCEEDED": 10
+          }
+        },
+        "job_evidence_collection": {
+          "attempt_id": "attempt_0001",
+          "concurrency_proof": {
+            "latest_producer_index_completed_at": "2026-10-09T23:04:37.470061+00:00",
+            "manifest_started_at": "2026-10-09T23:04:43.494076+00:00",
+            "manifest_waited_for_all_producer_indexes": true,
+            "observed_peak_overlapping_scanners": 3,
+            "scanner_interval_count": 19
+          },
+          "gap_count": 13,
+          "gaps": [
+            "git history is not scanned; coverage is the cataloged worktree",
+            "worktree only; git history is excluded",
+            "dependency/build context may be incomplete in offline mode",
+            "not selected by accepted target analysis plan",
+            "project-specific coding standard is not inferred",
+            "Composer dependencies are not installed by the scanner",
+            "project config and installed dependency stubs may be required",
+            "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+            "security-focused ruleset only; general PMD code-quality rules are excluded",
+            "directory coverage only; no cataloged OCI/archive artifact",
+            "directory coverage is distinct from built artifact or OCI/archive coverage",
+            "Grype coverage was configured disabled by tools.disable_grype",
+            "framework selection is restricted to typed Terraform, Dockerfile, GitHub Actions, and CloudFormation inputs"
+          ],
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_evidence_collection/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "67471a56f4065f0e380c04bb9202ad1077defec8c2af433b37459a9fd61e3600",
+          "index_manifest": {
+            "path": "data/indices/manifests/evidence-attempt_0001.json",
+            "sha256": "a44144e36c5962e539b8e9eabb6b3bf5b1aea1e2997d7e0d930bd6049d63f658",
+            "size_bytes": 13074
+          },
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_evidence_collection/attempts/attempt_0001/result.json",
+          "reuse_summary": {
+            "checkpoint_reused": 0,
+            "index_reused": 0
+          },
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_evidence_collection/attempts/attempt_0001/status.json",
+          "tool_dispositions": [
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "gitleaks",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-gitleaks"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "semgrep",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-semgrep"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "gosec",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-gosec"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "mobsfscan",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-mobsfscan"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "shellcheck",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-shellcheck"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "phpcs",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-phpcs"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "phpstan",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-phpstan"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "psalm",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-psalm"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "spotbugs",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-spotbugs"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "cppcheck",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-cppcheck"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "pmd",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-pmd"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "syft",
+              "terminal_status": "SUCCEEDED",
+              "tool_id": "tool-syft"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "osv_scanner",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-osv-scanner"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "grype",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-grype"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "hadolint",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-hadolint"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "checkov",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-checkov"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "trivy",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-trivy"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "zizmor",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-zizmor"
+            },
+            {
+              "checkpoint_reused": false,
+              "index_reused": false,
+              "record_count": 0,
+              "shard_id": "blint",
+              "terminal_status": "NOT_APPLICABLE",
+              "tool_id": "tool-blint"
+            }
+          ],
+          "unit_count": 59,
+          "unit_status_counts": {
+            "SUCCEEDED": 59
+          }
+        },
+        "job_language_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_language_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "fba21a0018832fb625b67f2b5876074628987a6d73eb6e0773fee87abd8092dd",
+          "language_build": {
+            "artifact_count": 0,
+            "checkpoint_reused": 0,
+            "families": {
+              "dotnet": {
+                "artifact_count": 23,
+                "command_count": 2,
+                "disposition_counts": {
+                  "SUCCEEDED": 1
+                },
+                "gap_count": 0,
+                "receipt_count": 1
+              },
+              "go": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "java": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "native": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "node": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "php": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "python": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "rust": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              },
+              "wasm": {
+                "artifact_count": 0,
+                "command_count": 0,
+                "disposition_counts": {},
+                "gap_count": 0,
+                "receipt_count": 0
+              }
+            },
+            "gaps": [],
+            "jvm_artifact_count": 0,
+            "jvm_checkpoint_reused": 0,
+            "jvm_command_count": 0,
+            "jvm_protected_provenance_count": 0,
+            "jvm_receipt_count": 0,
+            "jvm_tool_invocation_count": 0,
+            "native_receipt_count": 0,
+            "protected_command_set_count": 0,
+            "receipt_count": 1,
+            "required_receipts": [
+              {
+                "artifact_kinds": [
+                  "build-intermediate",
+                  "debug-information",
+                  "dependency-manifest",
+                  "generated-source",
+                  "managed-assembly",
+                  "native-output",
+                  "nuget-assets",
+                  "runtime-configuration"
+                ],
+                "build_unit_id": "build-unit-305ff0e9e167a3f0da8a",
+                "capture_complete": true,
+                "connect_events": 184,
+                "envp_events": 23,
+                "gaps": [],
+                "observed_tool_kinds": [
+                  "build-driver",
+                  "compiler"
+                ],
+                "process_exec_events": 23,
+                "secret_findings": 0,
+                "terminal_status": "SUCCEEDED"
+              }
+            ],
+            "successful_jvm_count": 0,
+            "successful_native_count": 0,
+            "successful_wasm_count": 0,
+            "wasm_artifact_count": 0,
+            "wasm_checkpoint_reused": 0,
+            "wasm_producer_counts": {},
+            "wasm_receipt_count": 0
+          },
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_language_build/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_language_build/attempts/attempt_0001/status.json",
+          "unit_count": 19,
+          "unit_status_counts": {
+            "SUCCEEDED": 19
+          }
+        },
+        "job_post_build_security_assessment": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "d8d92924fd3938d0810d68758e62b2d05b9a3e328cadf6aceb07c938e146279a",
+          "post_build_security": {
+            "all_build_security_shards_preserved": true,
+            "case_count": 0,
+            "gap_count": 0,
+            "index_reused": 0,
+            "manifest_shard_count": 0,
+            "normalizer_version": "build-security-command-normalizer/1",
+            "parser_version": "build-security-binary-parser/1",
+            "rule_version": "build-security-rules/1",
+            "shard_count": 0
+          },
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_post_build_security_assessment/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_project_build": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_project_build/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "da4397e05dc3081ad7def8f8a8a8a45127537756a661bc319971b6e01cec66fa",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_project_build/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_project_build/attempts/attempt_0001/status.json",
+          "unit_count": 39,
+          "unit_status_counts": {
+            "SUCCEEDED": 39
+          }
+        },
+        "job_review_intake": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_review_intake/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "99c578fe1ac31710a1d8ba4992833cf63d783be6c3a4d27a59efc0d9d99f0d30",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_review_intake/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_review_intake/attempts/attempt_0001/status.json",
+          "unit_count": 9,
+          "unit_status_counts": {
+            "SUCCEEDED": 9
+          }
+        },
+        "job_target_analysis_plan": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 3,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_target_analysis_plan/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "540e73cfb0acdb87773f1bd73640f95ee481677435e1051f53546b26884876be",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_target_analysis_plan/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_target_analysis_plan/attempts/attempt_0001/status.json",
+          "unit_count": 7,
+          "unit_status_counts": {
+            "SUCCEEDED": 7
+          }
+        },
+        "job_target_catalog": {
+          "attempt_id": "attempt_0001",
+          "gap_count": 0,
+          "handoff_receipt": "runs/2026-10-09-0012/data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
+          "handoff_sha256": "473e0cabed653c64f2d26b93ee8894499a53f74b30f3edfa7452158f996c99ae",
+          "result_receipt": "runs/2026-10-09-0012/data/jobs/job_target_catalog/attempts/attempt_0001/result.json",
+          "status": "SUCCEEDED",
+          "status_receipt": "runs/2026-10-09-0012/data/jobs/job_target_catalog/attempts/attempt_0001/status.json",
+          "unit_count": 13,
+          "unit_status_counts": {
+            "SUCCEEDED": 13
+          }
+        }
+      },
+      "orchestration_receipt": "runs/2026-10-09-0012/data/orchestration/dagster/34cd763a-8798-4dc7-a27c-34cc6006c9e5.json",
+      "resume_decisions": [
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_cpp_compiled_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_post_build_security_assessment"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_evidence_collection"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_indexing"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_security_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_tree_sitter_ast"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_indexing"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_indexing"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_artifact_security_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_cpp_compiled_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_project_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_language_build"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_cpp_compiled_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_post_build_security_assessment"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_evidence_collection"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_review_intake"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_catalog"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_ci_configuration_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_target_analysis_plan"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_tree_sitter_ast"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_codeql_analysis"
+        },
+        {
+          "action": "execute",
+          "job_id": "job_owasp_control_assessment"
+        }
+      ],
+      "run_id": "2026-10-09-0012"
+    },
+    "dagster_run": {
+      "job": "wave1_review",
+      "run_id": "34cd763a-8798-4dc7-a27c-34cc6006c9e5",
+      "status": "SUCCESS",
+      "step_count": 284,
+      "step_status_counts": {
+        "SUCCESS": 284
+      }
+    }
+  },
+  "deployment": {
+    "code_location": "appsec_review",
+    "jobs": [
+      "artifact_indexing",
+      "artifact_security_analysis",
+      "ci_configuration_analysis",
+      "ci_configuration_review",
+      "codeql_analysis",
+      "cpp_compiled_analysis",
+      "evidence_collection",
+      "language_build",
+      "owasp_control_assessment",
+      "post_build_security_assessment",
+      "project_build",
+      "project_build_review",
+      "review_intake",
+      "target_analysis_plan",
+      "target_catalog",
+      "third_party_data_sync",
+      "tree_sitter_ast",
+      "wave1_review"
+    ],
+    "schedules": [
+      {
+        "cronSchedule": "0 0 * * *",
+        "executionTimezone": "UTC",
+        "name": "third_party_data_sync_schedule",
+        "scheduleState": {
+          "status": "RUNNING"
+        }
+      }
+    ],
+    "webserver": "healthy"
+  }
+}

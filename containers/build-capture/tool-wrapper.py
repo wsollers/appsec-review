@@ -39,22 +39,17 @@ if ordinal > limit:
 call_root = root / "tool-calls" / f"{ordinal:08d}-{tool.replace('/', '_')}"
 call_root.mkdir(parents=True)
 stdout_path, stderr_path = call_root / "stdout", call_root / "stderr"
-stream_limit = int(os.environ["APPSEC_CAPTURE_STREAM_LIMIT"])
 process = subprocess.Popen([real, *argv], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 sizes = {"stdout": 0, "stderr": 0}
 
 
 def pump(source, destination: Path, target, name: str) -> None:
-    retained = 0
     with destination.open("wb") as stream:
         while chunk := source.read(65536):
             sizes[name] += len(chunk)
             target.buffer.write(chunk)
             target.buffer.flush()
-            if retained < stream_limit:
-                selected = chunk[:stream_limit - retained]
-                stream.write(selected)
-                retained += len(selected)
+            stream.write(chunk)
 
 
 threads = (
@@ -69,7 +64,11 @@ for thread in threads:
 
 
 def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            value.update(chunk)
+    return value.hexdigest()
 
 
 redacted = set(json.loads((root / "envp-redact-names.json").read_text(encoding="utf-8")))
@@ -84,10 +83,17 @@ record = {
     "environment_redacted_names": sorted(key for key in environment if key in redacted),
     "exit_code": return_code,
     "stdout": {"uri": "stdout", "bytes": sizes["stdout"], "retained_bytes": stdout_path.stat().st_size,
-               "truncated": sizes["stdout"] > stdout_path.stat().st_size, "sha256": digest(stdout_path)},
+               "truncated": False, "storage": "complete-file", "sha256": digest(stdout_path)},
     "stderr": {"uri": "stderr", "bytes": sizes["stderr"], "retained_bytes": stderr_path.stat().st_size,
-               "truncated": sizes["stderr"] > stderr_path.stat().st_size, "sha256": digest(stderr_path)},
+               "truncated": False, "storage": "complete-file", "sha256": digest(stderr_path)},
 }
 (call_root / "record.json").write_text(
     json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+# The fixed container UID owns these files on a native Linux bind mount.  Permit the host
+# orchestrator to copy and replace the completed subtree before scanning and retention; it will
+# immediately recreate the subtree with run-owner-only permissions.
+for path in (stdout_path, stderr_path, call_root / "record.json"):
+    path.chmod(0o666)
+call_root.chmod(0o777)
+call_root.parent.chmod(0o777)
 raise SystemExit(return_code)

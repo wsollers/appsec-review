@@ -162,3 +162,24 @@ def test_dotnet_recipe_normalization_regenerates_workspace_restore_outputs() -> 
     assert normalized["build_commands"] == [[
         "dotnet", "build", "--configuration", "Release", "-p:TreatWarningsAsErrors=true",
     ]]
+
+
+def test_dotnet_recipe_with_package_reference_requires_dependency_egress() -> None:
+    unit = discover_build_units([_file("dotnet/App.csproj")])[0]
+    unit["descriptor_package"] = {"documents": [{
+        "path": "dotnet/App.csproj",
+        "content": "<Project><ItemGroup><PackageReference Include=\"Example\" /></ItemGroup></Project>",
+    }]}
+    recipe = {
+        "schema": BUILD_RECIPE_SCHEMA, "build_unit_id": unit["build_unit_id"],
+        "image_profile": "dotnet", "source_dir": "dotnet", "build_dir": "dotnet/obj",
+        "system_packages": [], "environment": {}, "dependency_files": ["dotnet/App.csproj"],
+        "configure_commands": [["dotnet", "restore", "App.csproj"]],
+        "build_commands": [["dotnet", "build", "App.csproj"]],
+        "expected_outputs": ["dotnet/bin"], "network_required": False,
+        "reason": "invalid offline proposal",
+    }
+    assert ".NET recipes with accepted package references require dependency egress" in validate_build_recipe(
+        recipe, unit)
+    recipe["network_required"] = True
+    assert validate_build_recipe(recipe, unit) == []

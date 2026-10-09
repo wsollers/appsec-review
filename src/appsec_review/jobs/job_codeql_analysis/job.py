@@ -294,8 +294,10 @@ def _query_profiles(language: Any) -> tuple[Mapping[str, Any], ...]:
         "query_lock_sha256": language.query_lock_sha256,
         "tree_sha256": None, "file_count": None,
     }
+    additional = tuple({**default, **asdict(value), "kind": "pack"}
+                       for value in language.additional_queries)
     custom = tuple({**asdict(value), "kind": "custom"} for value in language.custom_queries)
-    return (default, *custom)
+    return (default, *additional, *custom)
 
 
 def _query_identity(database: Mapping[str, Any], query_profile: Mapping[str, Any],
@@ -488,7 +490,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     selection = (["--pack", str(query_profile["query_pack"]),
                   "--pack-version", str(query_profile["query_pack_version"]),
                   "--suite", str(query_profile["query_suite"])]
-                 if query_profile["kind"] == "default" else
+                 if query_profile["kind"] in {"default", "pack"} else
                  ["--suite-path", f"{str(query_profile['root']).rstrip('/')}/{query_profile['query_suite']}"])
     result = executor.execute("query", (
         "--database", "query-database", "--output", "sarif/results.sarif",
@@ -731,6 +733,11 @@ def build_job() -> Job:
             )):
                 raise FrameworkIntegrityError(f"CodeQL {scope.language} query assets differ from the lock")
             locked_custom = lock.get("custom_query_packs", {}).get(scope.language, [])
+            locked_additional = locked.get("additional_suites", [])
+            configured_additional = [asdict(item) for item in configured.additional_queries]
+            if configured_additional != locked_additional:
+                raise FrameworkIntegrityError(
+                    f"CodeQL {scope.language} additional query assets differ from the lock")
             configured_custom = [asdict(item) for item in configured.custom_queries]
             if configured_custom != locked_custom:
                 raise FrameworkIntegrityError(

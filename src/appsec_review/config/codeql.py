@@ -15,6 +15,22 @@ _MODES = {"cpp": "manual", "go": "manual", "java": "manual", "csharp": "manual",
 
 
 @dataclass(frozen=True, slots=True)
+class CodeQLPackQuerySettings:
+    query_id: str
+    query_suite: str
+    query_suite_sha256: str
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", self.query_id):
+            raise ValueError("CodeQL pack query id is invalid")
+        suite = PurePosixPath(self.query_suite)
+        if suite.is_absolute() or ".." in suite.parts or suite.suffix != ".qls":
+            raise ValueError("CodeQL pack query suite is invalid")
+        if not _SHA.fullmatch(self.query_suite_sha256):
+            raise ValueError("CodeQL pack query suite identity is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class CodeQLCustomQuerySettings:
     query_id: str
     root: str
@@ -65,6 +81,7 @@ class CodeQLLanguageSettings:
     query_lock_sha256: str
     source_languages: tuple[str, ...]
     prerequisites: tuple[str, ...]
+    additional_queries: tuple[CodeQLPackQuerySettings, ...]
     custom_queries: tuple[CodeQLCustomQuerySettings, ...]
 
     def __post_init__(self) -> None:
@@ -86,7 +103,7 @@ class CodeQLLanguageSettings:
             raise ValueError("CodeQL query suite is invalid")
         if not self.source_languages or any(not value for value in self.source_languages):
             raise ValueError("CodeQL source language coverage is required")
-        query_ids = [item.query_id for item in self.custom_queries]
+        query_ids = [item.query_id for item in (*self.additional_queries, *self.custom_queries)]
         if len(query_ids) != len(set(query_ids)) or "default" in query_ids:
             raise ValueError("CodeQL custom query ids must be unique and cannot be default")
 
@@ -163,6 +180,10 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         if not isinstance(raw, Mapping):
             raise ValueError(f"CodeQL language configuration must be a table: {language}")
         custom_value = raw.get("custom_queries", [])
+        additional_value = raw.get("additional_queries", [])
+        if not isinstance(additional_value, list) or any(not isinstance(item, Mapping)
+                                                         for item in additional_value):
+            raise ValueError(f"CodeQL additional queries must be an array of tables: {language}")
         if not isinstance(custom_value, list) or any(not isinstance(item, Mapping)
                                                      for item in custom_value):
             raise ValueError(f"CodeQL custom queries must be an array of tables: {language}")
@@ -177,6 +198,10 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             tree_sha256=str(item.get("tree_sha256", "")),
             file_count=int(item.get("file_count", 0)),
         ) for item in custom_value)
+        additional_queries = tuple(CodeQLPackQuerySettings(
+            query_id=str(item.get("query_id", "")), query_suite=str(item.get("query_suite", "")),
+            query_suite_sha256=str(item.get("query_suite_sha256", "")),
+        ) for item in additional_value)
         languages[str(language)] = CodeQLLanguageSettings(
             enabled=raw.get("enabled") is True, mode=str(raw.get("mode", "")),
             platform=str(raw.get("platform", "")),
@@ -190,6 +215,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             query_lock_sha256=str(raw.get("query_lock_sha256", "")),
             source_languages=tuple(str(item) for item in raw.get("source_languages", ())),
             prerequisites=tuple(str(item) for item in raw.get("prerequisites", ())),
+            additional_queries=additional_queries,
             custom_queries=custom_queries,
         )
     return CodeQLAnalysisSettings(
