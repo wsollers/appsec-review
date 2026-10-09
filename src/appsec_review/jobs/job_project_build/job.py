@@ -143,12 +143,19 @@ def _normalized_argv(recipe: Mapping[str, Any], argv: list[str]) -> tuple[str, .
 
 def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
     environment = {str(key): str(value) for key, value in recipe["environment"].items()}
+    if str(recipe.get("build_system", "")) == "maven":
+        # The derived image cache is immutable at probe time. Maven's go-offline goal is not
+        # complete for every historical plugin (notably resources-plugin 2.6), so keep the
+        # actual build repository writable and let the networked build container fill any gaps.
+        options = environment.get("MAVEN_OPTS", "").strip()
+        environment["MAVEN_OPTS"] = "-Dmaven.repo.local=/tmp/appsec-review-maven" + (
+            f" {options}" if options else "")
     for key, protected in project_dependency_environment(recipe).items():
+        if key == "MAVEN_OPTS":
+            continue
         if key not in environment:
             continue  # The derived image already carries the protected value.
-        if key == "MAVEN_OPTS":
-            environment[key] = protected + " " + environment[key]
-        elif key == "PATH":
+        if key == "PATH":
             environment[key] = protected.replace("$PATH", environment[key])
         else:
             environment[key] = protected

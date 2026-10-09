@@ -16,6 +16,7 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.jobs.job_language_build import dotnet, jvm, node, php, python, rust, wasm
 from appsec_review.jobs.job_language_build.job import _catalog, _kind
+from appsec_review.jobs.job_project_build.job import _probe_environment
 
 
 ROOT = Path(__file__).parents[1]
@@ -206,3 +207,44 @@ def test_live_typescript_project_image_dependencies_are_visible_in_clean_workspa
               (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
     assert not result.timed_out and result.exit_code == 0, detail
     assert (workspace / source_dir / "dist" / "index.js").is_file()
+
+
+def test_live_maven_project_image_can_fill_old_plugin_gaps_in_writable_runtime_cache(
+        tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    source_dir = "projects/java/case"
+    project = target / source_dir
+    shutil.copytree(FIXTURE / "java", project)
+    recipe = {
+        "schema": "appsec-review/build-recipe/1",
+        "build_unit_id": "build-unit-live-maven",
+        "image_profile": "java",
+        "source_dir": source_dir,
+        "build_dir": f"{source_dir}/target",
+        "system_packages": [],
+        "environment": {},
+        "dependency_files": [f"{source_dir}/pom.xml"],
+        "configure_commands": [],
+        "build_commands": [["mvn", "-B", "-DskipTests", "package"]],
+        "expected_outputs": [f"{source_dir}/target/appsec-fixture-java-0.1.0.jar"],
+        "network_required": True,
+        "reason": "live old Maven plugin runtime-cache fixture",
+        "build_system": "maven",
+    }
+    base = _profile("java")
+    image, _stdout, _stderr = ProjectImageResolver(
+        metadata_root=tmp_path / "metadata", target_root=target, timeout_seconds=900,
+    ).resolve(recipe, base)
+    workspace = tmp_path / "workspace"
+    shutil.copytree(target, workspace)
+    executor = BuildContainerExecutor(
+        BuildProfile("java", image.image_tag, image.image_id, base.user),
+        timeout_seconds=900, output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    result = executor.execute(("mvn", "-B", "-DskipTests", "package"), workspace=workspace,
+                              working_directory=source_dir,
+                              environment=_probe_environment(recipe))
+    detail = ((result.stdout_tail or result.stdout) + b"\n" +
+              (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+    assert not result.timed_out and result.exit_code == 0, detail
+    assert (workspace / source_dir / "target" / "appsec-fixture-java-0.1.0.jar").is_file()

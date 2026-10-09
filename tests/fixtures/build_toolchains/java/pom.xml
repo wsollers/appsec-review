@@ -16,4 +16,14 @@
       <version>3.2.1</version>
     </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <!-- Deliberately old: Maven go-offline historically misses some of its transitive POMs. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>2.6</version>
+      </plugin>
+    </plugins>
+  </build>
 </project>

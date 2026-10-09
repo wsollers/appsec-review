@@ -138,11 +138,17 @@ class RepairingExecutor(FakeBuildExecutor):
                                working_directory=working_directory, environment=environment)
 
 
-def test_probe_environment_preserves_offline_maven_repository() -> None:
+def test_probe_environment_uses_writable_networked_maven_repository() -> None:
     recipe = {"build_system": "maven", "source_dir": "projects/java/sample",
               "environment": {"MAVEN_OPTS": "-Dmaven.artifact.threads=1"}}
     assert _probe_environment(recipe)["MAVEN_OPTS"] == (
-        "-Dmaven.repo.local=/opt/project-deps/maven -Dmaven.artifact.threads=1")
+        "-Dmaven.repo.local=/tmp/appsec-review-maven -Dmaven.artifact.threads=1")
+
+
+def test_probe_environment_supplies_writable_maven_repository_without_user_options() -> None:
+    recipe = {"build_system": "maven", "source_dir": ".", "environment": {}}
+    assert _probe_environment(recipe)["MAVEN_OPTS"] == (
+        "-Dmaven.repo.local=/tmp/appsec-review-maven")
 
 
 def test_image_repair_accepts_only_bounded_apt_package_sets() -> None:
