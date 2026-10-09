@@ -8,9 +8,20 @@ backend = "ptrace"
 event_count_limit = 100000
 argv_count_limit = 256
 argument_bytes_limit = 16384
+capture_envp = true
+envp_count_limit = 1024
+envp_bytes_limit = 131072
+envp_redact_names = [
+  "AWS_SECRET_ACCESS_KEY",
+  "GITHUB_TOKEN",
+  "NODE_AUTH_TOKEN",
+  "NUGET_AUTH_TOKEN",
+  "PIP_INDEX_URL",
+]
 path_bytes_limit = 4096
 tool_call_count_limit = 10000
 tool_stream_bytes_limit = 1048576
+secret_finding_count_limit = 1000
 
 [tools]
 # Global selection policy; disabled coverage is a named gap, never a clean result.

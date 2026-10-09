@@ -72,13 +72,16 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-redacted = ("TOKEN", "SECRET", "PASSWORD", "PASSWD", "AUTH", "COOKIE", "PRIVATE", "KEY")
-environment = {key: ("<redacted>" if any(part in key.upper() for part in redacted) else value)
-               for key, value in sorted(os.environ.items())
-               if not key.startswith("APPSEC_CAPTURE_")}
+redacted = set(json.loads((root / "envp-redact-names.json").read_text(encoding="utf-8")))
+environment = ({key: ("<redacted>" if key in redacted else value)
+                for key, value in sorted(os.environ.items())
+                if not key.startswith("APPSEC_CAPTURE_")}
+               if os.environ["APPSEC_CAPTURE_ENVP"] == "1" else {})
 record = {
     "schema": "appsec-review/build-tool-call/1", "ordinal": ordinal, "tool": tool,
     "executable": real, "argv": [tool, *argv], "environment": environment,
+    "environment_captured": os.environ["APPSEC_CAPTURE_ENVP"] == "1",
+    "environment_redacted_names": sorted(key for key in environment if key in redacted),
     "exit_code": return_code,
     "stdout": {"uri": "stdout", "bytes": sizes["stdout"], "retained_bytes": stdout_path.stat().st_size,
                "truncated": sizes["stdout"] > stdout_path.stat().st_size, "sha256": digest(stdout_path)},

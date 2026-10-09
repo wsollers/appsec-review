@@ -270,10 +270,30 @@ def _capture_identity(unit: UnitContext, result: Any, *, build_unit_id: str,
             raise ValueError("build execution tool-call schema is invalid")
         for name in ("stdout", "stderr"):
             _capture_member(tool_path.parent, tool.get(name))
+    secret_scan = document.get("secret_scan")
+    if not isinstance(secret_scan, Mapping) or secret_scan.get("scanner") != "tool-gitleaks":
+        raise ValueError("build execution secret scan is invalid")
+    findings_path = _capture_member(capture_root, secret_scan.get("findings"))
+    findings = json.loads(findings_path.read_text(encoding="utf-8"))
+    if (findings.get("schema") != "appsec-review/build-capture-secret-findings/1" or
+            not isinstance(findings.get("findings"), list) or
+            findings.get("retained") != len(findings["findings"])):
+        raise ValueError("build execution secret findings are invalid")
+    execution_path = _capture_member(capture_root, secret_scan.get("execution"))
+    execution = json.loads(execution_path.read_text(encoding="utf-8"))
+    if execution.get("schema") != "appsec-review/build-capture-secret-scan-execution/1":
+        raise ValueError("build execution secret scan receipt is invalid")
+    for name in ("stdout", "stderr"):
+        _capture_member(execution_path.parent, execution.get(name))
+    if execution.get("report") is not None:
+        _capture_member(execution_path.parent, execution["report"])
     identity = {"schema": document["schema"],
                 "path": path.relative_to(run_root).as_posix(),
                 "sha256": file_sha256(path), "size_bytes": path.stat().st_size,
-                "complete": complete}
+                "complete": complete,
+                "secret_findings": {"path": findings_path.relative_to(run_root).as_posix(),
+                                    "sha256": file_sha256(findings_path),
+                                    "count": len(findings["findings"])}}
     return identity, [str(gap) for gap in coverage["gaps"]]
 
 

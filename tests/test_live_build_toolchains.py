@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 from pathlib import Path
 import shutil
@@ -209,7 +209,44 @@ def test_live_cpp_build_syscalls_are_captured_in_standard_records(tmp_path: Path
         assert record["events"]["counts"]["file_open"] > 0
         assert record["tool_calls"]["retained"] > 0
         assert record["tool_calls"]["capped"] is False
+        assert record["secret_scan"]["scanner"] == "tool-gitleaks"
+        findings = record["secret_scan"]["findings"]
+        assert (result.capture_record.parent / findings["uri"]).is_file()
+        assert not tuple(result.capture_record.parent.glob("trace*"))
     assert (workspace / "native" / "build" / "fixture_native").is_file()
+
+
+def test_live_cpp_capture_scans_and_redacts_envp_secrets(tmp_path: Path) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    capture_config = config.job("job_project_build").build_capture
+    assert capture_config is not None
+    capture_config = replace(
+        capture_config,
+        envp_redact_names=(*capture_config.envp_redact_names, "DISCORD_PUBLIC_KEY"))
+    synthetic_secret = "e7322523fb86ed64c836a979cf8465fbd436378c653c1db38f9ae87bc62a6fd5"
+    workspace = tmp_path / "workspace"
+    shutil.copytree(FIXTURE / "native", workspace / "native")
+    capture = workspace / ".capture" / "secret-envp"
+    executor = BuildContainerExecutor(_profile("native"), timeout_seconds=900,
+                                      output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    result = executor.execute_captured(
+        ("cmake", "-S", ".", "-B", "build"), workspace=workspace,
+        working_directory="native", environment={"DISCORD_PUBLIC_KEY": synthetic_secret},
+        capture_directory=capture, capture_config=capture_config,
+        scope=CaptureScope("live-cpp-secret", "job_project_build", "attempt_0001",
+                           "build-unit-cpp-secret", "native"))
+    assert not result.timed_out and result.exit_code == 0
+    assert result.capture_record is not None
+    record = json.loads(result.capture_record.read_text(encoding="utf-8"))
+    assert record["coverage"] == {"complete": True, "gaps": []}
+    assert record["secret_scan"]["findings"]["count"] >= 1
+    events = (capture / record["events"]["uri"]).read_text(encoding="utf-8")
+    assert '"name":"DISCORD_PUBLIC_KEY"' in events
+    assert synthetic_secret not in "".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in capture.rglob("*") if path.is_file())
+    assert not tuple(capture.glob("trace*"))
 
 
 class _PinnedBaseImageResolver:
@@ -257,6 +294,9 @@ def test_live_cpp_project_build_accepts_hash_verified_execution_capture(tmp_path
         assert record["events"]["counts"]["process_exec"] > 0
         assert record["events"]["counts"]["file_open"] > 0
         assert record["tool_calls"]["retained"] > 0
+        findings_identity = identity["secret_findings"]
+        findings_path = run_root / findings_identity["path"]
+        assert file_sha256(findings_path) == findings_identity["sha256"]
         events_path = record_path.parent / record["events"]["uri"]
         assert file_sha256(events_path) == record["events"]["sha256"]
         for line in events_path.read_text(encoding="utf-8").splitlines():

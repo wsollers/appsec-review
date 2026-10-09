@@ -18,7 +18,9 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert config.runtime.metadata_dir == config.runtime.runs_dir / "metadata"
     assert config.tools.disable_grype is True
     assert config.build_capture == BuildCaptureConfig(
-        "ptrace", 100000, 256, 16384, 4096, 10000, 1048576)
+        "ptrace", 100000, 256, 16384, True, 1024, 131072,
+        ("AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "NUGET_AUTH_TOKEN",
+         "PIP_INDEX_URL"), 4096, 10000, 1048576, 1000)
     assert config.job("job_project_build").build_capture.event_count_limit == 250000
     assert config.job("job_language_build").build_capture.event_count_limit == 250000
     assert config.job("job_codeql_analysis").build_capture == config.build_capture

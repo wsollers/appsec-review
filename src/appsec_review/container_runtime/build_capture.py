@@ -83,6 +83,11 @@ class BuildExecutionRecorder:
         self._retained += 1
         return True
 
+    def flush(self) -> None:
+        if self._stream is None:
+            raise RuntimeError("capture recorder is already finished")
+        self._stream.flush()
+
     def _normalize(self, event: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(event, Mapping):
             raise TypeError("event must be an object")
@@ -106,7 +111,32 @@ class BuildExecutionRecorder:
             argv_truncated = len(argv) > len(values) or len(encoded) > self.limits.argument_bytes_limit
             while values and len(canonical_json(values)) > self.limits.argument_bytes_limit:
                 values.pop()
-            normalized.update(argv=values, argv_truncated=argv_truncated)
+            normalized.update(argv=values, argv_truncated=argv_truncated,
+                              envp_captured=self.limits.capture_envp)
+            if self.limits.capture_envp:
+                envp = event.get("envp", ())
+                if not isinstance(envp, Sequence) or isinstance(envp, (str, bytes)):
+                    raise ValueError("exec envp must be an array when envp capture is enabled")
+                retained: list[dict[str, Any]] = []
+                encoded_bytes = 2
+                redacted_names = set(self.limits.envp_redact_names)
+                envp_truncated = len(envp) > self.limits.envp_count_limit
+                for item in envp[:self.limits.envp_count_limit]:
+                    raw = str(item)
+                    name, separator, value = raw.partition("=")
+                    if not separator:
+                        name, value = raw, ""
+                    entry = {"name": name, "value": "<redacted>" if name in redacted_names else value,
+                             "redacted": name in redacted_names}
+                    size = len(canonical_json(entry)) + 1
+                    if encoded_bytes + size > self.limits.envp_bytes_limit:
+                        envp_truncated = True
+                        break
+                    retained.append(entry)
+                    encoded_bytes += size
+                normalized.update(envp=retained, envp_truncated=envp_truncated,
+                                  envp_redacted_names=sorted(
+                                      entry["name"] for entry in retained if entry["redacted"]))
         elif kind == "file_open":
             path = event.get("path")
             if not isinstance(path, str):
@@ -130,7 +160,8 @@ class BuildExecutionRecorder:
     def finish(self, *, argv: Sequence[str], working_directory: str,
                exit_code: int | None, timed_out: bool, stdout_path: Path,
                stderr_path: Path, collector_dropped: int = 0,
-               collector_errors: Sequence[str] = ()) -> Path:
+               collector_errors: Sequence[str] = (),
+               secret_scan: Mapping[str, Any] | None = None) -> Path:
         if self._stream is None:
             raise RuntimeError("capture recorder is already finished")
         self._stream.close()
@@ -157,9 +188,14 @@ class BuildExecutionRecorder:
                 "event_count_limit": self.limits.event_count_limit,
                 "argv_count_limit": self.limits.argv_count_limit,
                 "argument_bytes_limit": self.limits.argument_bytes_limit,
+                "capture_envp": self.limits.capture_envp,
+                "envp_count_limit": self.limits.envp_count_limit,
+                "envp_bytes_limit": self.limits.envp_bytes_limit,
+                "envp_redact_names": list(self.limits.envp_redact_names),
                 "path_bytes_limit": self.limits.path_bytes_limit,
                 "tool_call_count_limit": self.limits.tool_call_count_limit,
                 "tool_stream_bytes_limit": self.limits.tool_stream_bytes_limit,
+                "secret_finding_count_limit": self.limits.secret_finding_count_limit,
             },
             "started_at": self._started_at,
             "completed_at": datetime.now(UTC).isoformat(),
@@ -192,6 +228,12 @@ class BuildExecutionRecorder:
         if call_capped:
             record["coverage"]["complete"] = False
             record["coverage"]["gaps"].append("tool call retention limit reached")
+        if secret_scan is not None:
+            record["secret_scan"] = dict(secret_scan)
+            gap = secret_scan.get("coverage_gap")
+            if gap:
+                record["coverage"]["complete"] = False
+                record["coverage"]["gaps"].append(str(gap))
         path = self.root / "record.json"
         atomic_json(path, record)
         return path
@@ -211,18 +253,49 @@ def _trace_string(value: str) -> str:
         return match.group(1)
 
 
-def _exec_argv(body: str, executable: str) -> list[str]:
-    start = body.find("[")
-    end = body.rfind("]")
-    if start < 0 or end < start:
-        return [executable]
-    values = []
-    for match in re.finditer(r'"((?:[^"\\]|\\.)*)"', body[start:end + 1]):
+def _trace_arrays(body: str) -> list[str]:
+    arrays: list[str] = []
+    start: int | None = None
+    depth = 0
+    quoted = escaped = False
+    for index, char in enumerate(body):
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            continue
+        if char == '"':
+            quoted = True
+        elif char == "[":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "]" and depth:
+            depth -= 1
+            if depth == 0 and start is not None:
+                arrays.append(body[start:index + 1])
+                start = None
+    return arrays
+
+
+def _array_strings(value: str) -> list[str]:
+    values: list[str] = []
+    for match in re.finditer(r'"((?:[^"\\]|\\.)*)"', value):
         try:
             values.append(json.loads('"' + match.group(1) + '"'))
         except json.JSONDecodeError:
             values.append(match.group(1))
-    return values or [executable]
+    return values
+
+
+def _exec_arguments(body: str, executable: str) -> tuple[list[str], list[str]]:
+    arrays = _trace_arrays(body)
+    argv = _array_strings(arrays[0]) if arrays else []
+    envp = _array_strings(arrays[1]) if len(arrays) > 1 else []
+    return argv or [executable], envp
 
 
 def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder) -> tuple[str, ...]:
@@ -247,7 +320,8 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                         "pid": pid, "tid": pid}
                 if call in {"execve", "execveat"}:
                     executable = _trace_string(body.split(",", 1)[0] if call == "execve" else body.split(",", 2)[1])
-                    recorder.add({**base, "kind": "process_exec", "argv": _exec_argv(body, executable)})
+                    argv, envp = _exec_arguments(body, executable)
+                    recorder.add({**base, "kind": "process_exec", "argv": argv, "envp": envp})
                 elif call in {"clone", "clone3", "fork", "vfork"}:
                     child = result.split(" ", 1)[0]
                     if child.isdigit():

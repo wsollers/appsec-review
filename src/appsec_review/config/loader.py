@@ -27,9 +27,14 @@ class BuildCaptureConfig:
     event_count_limit: int
     argv_count_limit: int
     argument_bytes_limit: int
+    capture_envp: bool
+    envp_count_limit: int
+    envp_bytes_limit: int
+    envp_redact_names: tuple[str, ...]
     path_bytes_limit: int
     tool_call_count_limit: int
     tool_stream_bytes_limit: int
+    secret_finding_count_limit: int
 
     def __post_init__(self) -> None:
         if self.backend not in {"ptrace", "ebpf"}:
@@ -40,12 +45,25 @@ class BuildCaptureConfig:
             raise ValueError("build capture argv_count_limit is invalid")
         if not 1 <= self.argument_bytes_limit <= 1024 * 1024:
             raise ValueError("build capture argument_bytes_limit is invalid")
+        if not isinstance(self.capture_envp, bool):
+            raise ValueError("build capture capture_envp must be a Boolean")
+        if not 1 <= self.envp_count_limit <= 16_384:
+            raise ValueError("build capture envp_count_limit is invalid")
+        if not 1 <= self.envp_bytes_limit <= 4 * 1024 * 1024:
+            raise ValueError("build capture envp_bytes_limit is invalid")
+        if (len(self.envp_redact_names) > 256 or
+                len(set(self.envp_redact_names)) != len(self.envp_redact_names) or
+                any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,255}", name)
+                    for name in self.envp_redact_names)):
+            raise ValueError("build capture envp_redact_names is invalid")
         if not 1 <= self.path_bytes_limit <= 64 * 1024:
             raise ValueError("build capture path_bytes_limit is invalid")
         if not 1 <= self.tool_call_count_limit <= 1_000_000:
             raise ValueError("build capture tool_call_count_limit is invalid")
         if not 1 <= self.tool_stream_bytes_limit <= 64 * 1024 * 1024:
             raise ValueError("build capture tool_stream_bytes_limit is invalid")
+        if not 1 <= self.secret_finding_count_limit <= 1_000_000:
+            raise ValueError("build capture secret_finding_count_limit is invalid")
 
 
 def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
@@ -53,13 +71,22 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be a table")
     allowed = {"backend", "event_count_limit", "argv_count_limit",
-               "argument_bytes_limit", "path_bytes_limit", "tool_call_count_limit",
-               "tool_stream_bytes_limit"}
+               "argument_bytes_limit", "capture_envp", "envp_count_limit",
+               "envp_bytes_limit", "envp_redact_names", "path_bytes_limit",
+               "tool_call_count_limit", "tool_stream_bytes_limit",
+               "secret_finding_count_limit"}
     unknown = set(value) - allowed
     if unknown:
         raise ValueError(f"{field} has unknown settings: {', '.join(sorted(unknown))}")
     if base is None and set(value) != allowed:
         raise ValueError(f"{field} must define every capture setting")
+    redact_names = (value["envp_redact_names"] if "envp_redact_names" in value else
+                    list(base.envp_redact_names) if base else [])
+    if not isinstance(redact_names, list):
+        raise ValueError(f"{field}.envp_redact_names must be an array")
+    capture_envp = value.get("capture_envp", base.capture_envp if base else None)
+    if not isinstance(capture_envp, bool):
+        raise ValueError(f"{field}.capture_envp must be a Boolean")
     return BuildCaptureConfig(
         backend=str(value.get("backend", base.backend if base else "")),
         event_count_limit=int(value.get(
@@ -68,12 +95,20 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
             "argv_count_limit", base.argv_count_limit if base else 0)),
         argument_bytes_limit=int(value.get(
             "argument_bytes_limit", base.argument_bytes_limit if base else 0)),
+        capture_envp=capture_envp,
+        envp_count_limit=int(value.get(
+            "envp_count_limit", base.envp_count_limit if base else 0)),
+        envp_bytes_limit=int(value.get(
+            "envp_bytes_limit", base.envp_bytes_limit if base else 0)),
+        envp_redact_names=tuple(str(item) for item in redact_names),
         path_bytes_limit=int(value.get(
             "path_bytes_limit", base.path_bytes_limit if base else 0)),
         tool_call_count_limit=int(value.get(
             "tool_call_count_limit", base.tool_call_count_limit if base else 0)),
         tool_stream_bytes_limit=int(value.get(
             "tool_stream_bytes_limit", base.tool_stream_bytes_limit if base else 0)),
+        secret_finding_count_limit=int(value.get(
+            "secret_finding_count_limit", base.secret_finding_count_limit if base else 0)),
     )
 
 

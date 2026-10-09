@@ -77,6 +77,26 @@ class FakeBuildExecutor:
         events.write_bytes(b"")
         stdout.write_bytes(b"ok")
         stderr.write_bytes(b"")
+        secret_scan = capture_directory / "secret-scan"
+        secret_scan.mkdir()
+        scan_stdout, scan_stderr = secret_scan / "stdout", secret_scan / "stderr"
+        report, findings = secret_scan / "gitleaks.json", secret_scan / "findings.json"
+        execution = secret_scan / "execution.json"
+        scan_stdout.write_bytes(b"")
+        scan_stderr.write_bytes(b"")
+        report.write_text("[]\n", encoding="utf-8")
+        findings.write_text(json.dumps({
+            "schema": "appsec-review/build-capture-secret-findings/1",
+            "scanner": {"tool_id": "tool-gitleaks"}, "observed": 0,
+            "retained": 0, "capped": False, "findings": [],
+        }, sort_keys=True) + "\n", encoding="utf-8")
+        execution.write_text(json.dumps({
+            "schema": "appsec-review/build-capture-secret-scan-execution/1",
+            "tool_id": "tool-gitleaks", "exit_code": 0, "timed_out": False,
+            "stdout": {"uri": "stdout", "sha256": hashlib.sha256(b"").hexdigest()},
+            "stderr": {"uri": "stderr", "sha256": hashlib.sha256(b"").hexdigest()},
+            "report": {"uri": "gitleaks.json", "sha256": hashlib.sha256(b"[]\n").hexdigest()},
+        }, sort_keys=True) + "\n", encoding="utf-8")
         record = capture_directory / "record.json"
         record.write_text(json.dumps({
             "schema": "appsec-review/build-execution-record/1",
@@ -90,6 +110,14 @@ class FakeBuildExecutor:
                 "stderr": {"uri": "stderr", "sha256": hashlib.sha256(b"").hexdigest()},
             },
             "tool_calls": {"records": []},
+            "secret_scan": {
+                "scanner": "tool-gitleaks",
+                "findings": {"uri": "secret-scan/findings.json",
+                             "sha256": hashlib.sha256(findings.read_bytes()).hexdigest(),
+                             "count": 0, "capped": False},
+                "execution": {"uri": "secret-scan/execution.json",
+                              "sha256": hashlib.sha256(execution.read_bytes()).hexdigest()},
+            },
         }, sort_keys=True) + "\n", encoding="utf-8")
         return replace(result, capture_record=record)
 

@@ -12,7 +12,8 @@ def _recorder(tmp_path: Path, *, event_limit: int = 20) -> BuildExecutionRecorde
     return BuildExecutionRecorder(
         tmp_path / "capture", CaptureScope(
             "2026-10-09-0001", "job_project_build", "attempt_0001", "build-unit-cpp", "native"),
-        BuildCaptureConfig("ptrace", event_limit, 3, 64, 16, 10, 1024),
+        BuildCaptureConfig("ptrace", event_limit, 3, 64, True, 8, 256, ("SECRET_VALUE",),
+                           16, 10, 1024, 10),
         {"backend": "ptrace", "image_id": "sha256:" + "a" * 64,
          "event_kinds": sorted(("process_fork", "process_exec", "process_exit", "file_open", "connect"))},
     )
@@ -72,7 +73,8 @@ def test_strace_normalizer_captures_process_file_and_egress_calls(tmp_path: Path
     recorder = _recorder(tmp_path)
     trace = tmp_path / "trace.42"
     trace.write_text(
-        '1700000000.000001 execve("/usr/bin/clang++", ["clang++", "main.cpp"], 0x0) = 0\n'
+        '1700000000.000001 execve("/usr/bin/clang++", ["clang++", "main.cpp"], '
+        '["NORMAL=value", "SECRET_VALUE=do-not-retain"]) = 0\n'
         '1700000000.000002 openat(AT_FDCWD, "/workspace/native/main.cpp", O_RDONLY) = 3\n'
         '1700000000.000003 clone(child_stack=NULL, flags=SIGCHLD) = 43\n'
         '1700000000.000004 connect(3, {sa_family=AF_INET, sin_port=htons(443), '
@@ -90,6 +92,13 @@ def test_strace_normalizer_captures_process_file_and_egress_calls(tmp_path: Path
     event_rows = [json.loads(line) for line in (recorder.root / "events.jsonl").read_text().splitlines()]
     process_exec = next(row for row in event_rows if row["kind"] == "process_exec")
     assert process_exec["argv"] == ["clang++", "main.cpp"]
+    assert process_exec["envp"] == [
+        {"name": "NORMAL", "redacted": False, "value": "value"},
+        {"name": "SECRET_VALUE", "redacted": True, "value": "<redacted>"},
+    ]
+    assert process_exec["envp_captured"] is True
+    assert process_exec["envp_redacted_names"] == ["SECRET_VALUE"]
+    assert "do-not-retain" not in (recorder.root / "events.jsonl").read_text(encoding="utf-8")
     connect = next(row for row in event_rows if row["kind"] == "connect")
     assert connect["address_family"] == 2 and connect["address"] == "192.0.2.1"
     assert connect["port"] == 443 and connect["result"] == 0
