@@ -227,8 +227,8 @@ summary_sample_per_prefix = 20
 
 [jobs.job_target_analysis_plan.settings.model]
 enabled = true
-provider = "anthropic-api"
-model = "claude-haiku-4-5-20251001"
+provider = "claude-cli"
+model = "claude-haiku-5-5"
 reasoning = "medium"
 max_input_tokens = 32000
 max_output_tokens = 32000
@@ -298,8 +298,8 @@ event_count_limit = 250000
 
 [jobs.job_project_build.settings.model]
 enabled = true
-provider = "anthropic-api"
-model = "claude-haiku-4-5-20251001"
+provider = "claude-cli"
+model = "claude-haiku-5-5"
 reasoning = "medium"
 max_input_tokens = 16000
 max_output_tokens = 2000
@@ -833,8 +833,8 @@ workers = 8
 
 [jobs.job_post_build_security_assessment.settings.model]
 enabled = false
-provider = "openai"
-model = "gpt-5"
+provider = "claude-cli"
+model = "claude-haiku-5-5"
 reasoning = "medium"
 max_input_tokens = 32000
 max_output_tokens = 8000
@@ -1075,8 +1075,8 @@ dynamic_authorized = false
 
 [jobs.job_owasp_control_assessment.settings.model]
 enabled = false
-provider = "openai"
-model = "gpt-5"
+provider = "claude-cli"
+model = "claude-haiku-5-5"
 reasoning = "medium"
 max_input_tokens = 24000
 max_output_tokens = 6000
