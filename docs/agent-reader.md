@@ -4,6 +4,8 @@ Repository-wide authority and trust rules live only in [`../AGENTS.md`](../AGENT
 
 Relevant bounded procedures and design references:
 
+- [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
+- [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
 - [`../skills/target-analysis-planning/SKILL.md`](../skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/python-and-retrieval.md`](architecture/python-and-retrieval.md) — accepted immutable retrieval indexes.

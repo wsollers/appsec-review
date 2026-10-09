@@ -1,10 +1,10 @@
 # Deterministic static-analysis evidence collection
 
-`job_evidence_collection` is the single semantic job for the accepted narrow static tools. It runs
-after `job_target_catalog` through the generic application runner and Dagster adapter. Applicability
-comes only from the accepted target-catalog handoff: cataloged languages, manifests/projects,
-Dockerfiles, IaC files, workflows, and accepted built artifacts. The job does not walk the target to
-decide which scanners to run.
+`job_evidence_collection` is the single semantic job for the accepted narrow static tools. It
+requires both the accepted target catalog and accepted target-analysis plan. The catalog supplies
+the bounded files, languages, manifests/projects, Dockerfiles, IaC files, workflows, and accepted
+built artifacts; the plan selects scanner scopes. The job does not walk the target to decide which
+scanners to run. In Dagster's `wave1_review`, it runs after `job_target_analysis_plan`.
 
 ## Capabilities and dispositions
 
@@ -18,8 +18,9 @@ decide which scanners to run.
 | configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit Dockerfiles, typed Terraform/HCL, structurally identified CloudFormation, and GitHub workflows; arbitrary YAML is excluded |
 | binary hardening | BLint | Accepted cataloged built binaries only |
 
-Every enabled `kind = "tool"` entry in `containers/catalog.toml` must have exactly one adapter. A
-catalog/adapter mismatch fails job validation; it cannot silently omit a tool. `tool-cve-bin-tool`
+Every enabled `kind = "tool"` entry whose tool manifest does not set `static_adapter = false` must
+have exactly one adapter. The opt-out reserves tools owned by other jobs; a static catalog/adapter
+mismatch fails job validation and cannot silently omit an in-scope tool. `tool-cve-bin-tool`
 remains deferred because the catalog still records an unresolved GPL policy decision. The completed
 NVD-derived database lineage removes the former database blocker, but it does not resolve that
 license acceptance. The scan adapter is therefore not enabled and the contract was not weakened.
@@ -65,7 +66,7 @@ an already-downloaded Grype v6 database only after verifying the upstream archiv
 publishes it through the same immutable feed manifest/current-pointer contract. Neither path permits
 a scanner to update its database at scan time.
 
-Run the full graph and inspect planned applicability with:
+Run the direct CLI graph and inspect planned applicability with:
 
 ```text
 appsec-review start --target targets/appsec-multi-vuln
@@ -80,25 +81,14 @@ and validator. A failed retry reuses unrelated successful tool checkpoints and r
 plus index/handoff publication. The run-wide claim lock and per-tool checkpoint locks prevent
 duplicate concurrent execution. Central and task events continue to use the Wave 1 logging API.
 
-Deep CodeQL, native/IR/CPG analysis, language build environments, document conversion, and report
-generation remain deferred. Acceptance requires narrow licensed artifacts, typed inputs/outputs,
-offline runtime proof, deterministic fixtures, and no target-code execution.
+CodeQL, native/IR/CPG analysis, language builds, produced-artifact analysis, and post-build
+assessment are separate jobs with their own accepted handoffs; they are not capabilities of
+`job_evidence_collection`. Document conversion and report generation remain outside this job.
 
-## Live acceptance record
+## Acceptance evidence
 
-Dagster run `87fffd7b-a14f-4fd5-9cef-97b5b9862a08` completed the 94-node `wave1_review` graph for
-application run `2026-10-08-0023` against `targets/appsec-multi-vuln`. All 19 producer branches
-published immutable shards; 17 scanners executed successfully and SpotBugs/BLint were explicitly
-`NOT_APPLICABLE`. Checkov scanned typed Dockerfile and GitHub Actions inputs, returned 14 records,
-and excluded unrelated YAML. Cppcheck and PMD returned 3 and 2 records respectively.
-
-The run receipts show a peak of six overlapping scanner intervals. The manifest barrier began only
-after the last of all 19 producer indexes completed, and this correlated rerun reused all 19
-unaffected producer shards. The automated recovery test injects a
-ShellCheck-only failure and proves that the retry reruns that producer while reusing unaffected
-checkpoints and shards; the failed attempt remains an explicit gap rather than clean coverage.
-
-The bidirectional Dagster/application correlation, handoff hashes, shard dispositions, concurrency
-proof, and manifest identity are recorded in
-`deploy/dagster/verification/wave1-live-acceptance.json`. Bulk scanner output, databases, and run
-receipts remain ignored run-owned data.
+Repository reports under `deploy/dagster/verification/` are historical evidence for their recorded
+runs and code state. They are useful for resolving those claims, but they do not establish that the
+current checkout or deployment is healthy. Follow `deploy/dagster/README.md` to verify the live
+workspace and write a fresh bounded receipt when current acceptance evidence is required. Bulk
+scanner output, databases, and application run receipts remain ignored run-owned data.

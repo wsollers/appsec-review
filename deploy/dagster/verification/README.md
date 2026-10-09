@@ -1,12 +1,14 @@
 # Dagster live verification evidence
 
-`wave1-live-acceptance.json` is the current concise, non-secret acceptance report. It records live
-Dagster run `87fffd7b-a14f-4fd5-9cef-97b5b9862a08` and application run `2026-10-08-0023`, all four
-accepted job handoffs, 94 successful Dagster nodes, 19 producer dispositions and shards, the
-combined manifest identity, a peak of six overlapping scanner intervals, and proof that manifest
-assembly started after every producer index completed. The correlated rerun reused all 19 producer
-shards and truthfully completed with upstream planning gaps. It contains no target contents, raw
-scanner output, databases, logs, or secrets.
+`wave1-live-acceptance.json` is a concise, non-secret historical acceptance report for Dagster run
+`d51d396c-4f0f-4386-a503-859b399f1449` and application run `2026-10-08-0081`. It records 248
+successful Dagster steps and detailed receipts for the job publications that the verifier captured
+at that time. It contains no target contents, raw scanner output, databases, logs, or secrets.
+
+The report is retained evidence for that exact run and tree, not proof that the current checkout or
+live deployment is healthy. Its embedded deployment inventory is also historical. Run
+`python deploy/dagster/bin/verify.py` against the live stack, and use `--run-id` plus a new
+`--evidence` destination when current acceptance evidence is required.
 
 `live-acceptance.json` is the earlier third-party data-sync acceptance record. It retains the feed
 snapshot identities and resolving paths from that bounded historical run.
@@ -23,4 +25,5 @@ copied here. Receipt and snapshot paths resolve against the repository's ignored
 
 `static-analysis-live-acceptance.json` is retained as the pre-concurrency static-analysis baseline.
 Its `dispatch_wave1_review` and monolithic `build_indexes` names describe the superseded graph and
-must not be used as evidence for the current topology. The current record above replaces it.
+must not be used as evidence for the current topology. Newer historical reports provide broader
+coverage, but none replaces live verification of the current tree.

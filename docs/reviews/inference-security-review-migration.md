@@ -32,10 +32,12 @@ archived concepts map to the proposed
 
 ## Explicit gaps
 
-- The repository-local AppSec process skill files are absent from the rebuilt tree.
+- Near-terminal inference-review worker skills and guidance bundles are absent from the rebuilt
+  tree; the existing repository skills cover target planning, build-image repair, and post-build
+  assessment only.
 - The runtime job, schemas, guidance bundles, scorer plugins, PoC isolation runner, and downstream
   remediation/publication consumers do not yet exist.
-- Live full-catalog OWASP/model validation, entitled CodeQL, a pinned Joern/CPG closure, and live
-  Dagster/container acceptance remain upstream dependencies or gaps.
+- Live full-catalog OWASP/model validation, a pinned Joern/CPG closure, and live acceptance of the
+  proposed inference-review Dagster/container graph remain upstream dependencies or gaps.
 - Organization ship-blocking policy, PoC authorization workflow, evidence freshness windows, and
   final downstream job names require owner decisions.

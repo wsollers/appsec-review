@@ -13,9 +13,12 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-Wave 1 exercises this mechanism with `job_review_intake` followed by `job_target_catalog`. Both are
-registered through the same semantic registry used by the generic Dagster adapter. Later review jobs
-extend the ordered graph without changing the accepted-handoff format.
+The direct CLI currently exercises this mechanism with a ten-job linear review graph from
+`job_review_intake` through `job_evidence_collection`. Dagster builds the broader, branched
+`wave1_review` topology from the registered and configured jobs, including CI configuration,
+tree-sitter, post-build, and OWASP branches that are not in the direct graph. Both surfaces use the
+same semantic registry and accepted-handoff format. The exact operator-visible distinction is
+documented in [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the
@@ -218,11 +221,12 @@ retains framework integrity failures as hard failures. See
 ## Post-build security assessment
 
 `job_post_build_security_assessment` runs after the accepted C/C++ compiled-analysis handoff and
-before evidence-package assembly. It reads the accepted handoff and manifest rather than walking
-the target. A dynamic project set reuses the generic build's protected exact argv artifacts plus
-redacted indexed command summaries, inspects produced files as bytes without executing them, applies
+before the CodeQL and OWASP joins. Static evidence collection is a sibling branch and does not wait
+for this job. The assessment reads the accepted handoff and manifest rather than walking the target.
+A dynamic project set reuses the generic build's protected exact argv artifacts plus redacted
+indexed command summaries, inspects produced files as bytes without executing them, applies
 platform-aware deterministic hardening rules, validates bounded model observations against exact
-command or artifact identities, and publish independently fingerprinted `build_security` shards.
+command or artifact identities, and publishes independently fingerprinted `build_security` shards.
 
 The fingerprint for each shard binds its protected command artifacts, produced-binary hashes,
 tool/image identity, rule version, parser and normalizer versions, model/guidance identity, and

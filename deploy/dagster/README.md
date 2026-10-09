@@ -72,6 +72,23 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exe
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/wave1-live-acceptance.json
 ```
 
+With the current registry, the cross-job dependencies are:
+
+```text
+review_intake -> target_catalog -> ci_configuration_analysis -> target_analysis_plan
+target_analysis_plan -> tree_sitter_ast
+target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis
+language_build -> cpp_compiled_analysis -> post_build_security_assessment
+target_analysis_plan -> evidence_collection
+language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_analysis
+  + post_build_security_assessment + evidence_collection + tree_sitter_ast -> codeql_analysis
+post_build_security_assessment + evidence_collection + artifact_security_analysis
+  + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
+```
+
+This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in
+[`docs/operations/wave1-review.md`](../../docs/operations/wave1-review.md).
+
 The configured schedule and a manual launch enter the same generated semantic DAG. Schedule cron,
 time zone, and enabled state come only from
 `jobs.job_third_party_data_sync.schedule` in `appsec-review.toml`; the current declaration is

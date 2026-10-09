@@ -2,7 +2,8 @@
 
 The `post_build_security_assessment` Dagster job consumes the accepted
 `job_cpp_compiled_analysis` handoff. In `wave1_review` it is ordered after compilation and compiled
-analysis, and before evidence collection assembles its accepted manifest.
+analysis. Static evidence collection is a sibling branch; CodeQL and OWASP wait for the accepted
+post-build handoff.
 
 ## What it retains
 

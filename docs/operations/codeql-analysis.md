@@ -1,8 +1,9 @@
 # Cross-language CodeQL analysis
 
 `job_codeql_analysis` is the sole CodeQL producer. It runs after the accepted target catalog,
-language builds, artifact index, and C++ compiled-analysis handoffs. The job never discovers a
-second target snapshot: it plans from those accepted artifacts and verifies every source hash
+language build, artifact index, artifact-security analysis, C++ compiled analysis, post-build
+assessment, static-evidence, and tree-sitter handoffs in Dagster's `wave1_review`. The job never
+discovers a second target snapshot: it plans from accepted artifacts and verifies every source hash
 before use.
 
 ## Supported coverage

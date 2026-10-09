@@ -10,7 +10,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
 - [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
+- [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
+- [`windows-native-analysis-vm.md`](windows-native-analysis-vm.md) — proposed Windows-native analysis isolation.
 - [`inference-security-review.md`](inference-security-review.md) — near-terminal red/blue/verification,
   evidence-qualified adjudication, independent scoring, benign proof-of-trigger, attack-chain, and
   quorum design.

@@ -7,9 +7,10 @@ documented in `containers/tools/tree-sitter/README.md`. The build must use the t
 the job.
 
 The standalone `tree_sitter_ast` Dagster job is the manual dispatch path. In the review graph it
-runs after accepted intake/catalog planning and independently from build, CodeQL, compiled AST/IR,
-SAST, and inference branches. Dagster maps accepted scopes concurrently; application receipts,
-immutable shards, the accepted handoff, and the central run log remain authoritative.
+runs after accepted intake/catalog planning and independently from build, compiled AST/IR, SAST,
+and inference branches. CodeQL waits for its accepted handoff before composing the later retrieval
+view. Dagster maps accepted scopes concurrently; application receipts, immutable shards, the
+accepted handoff, and the central run log remain authoritative.
 
 For recovery, inspect scope dispositions in the accepted Tree-sitter artifact and central pipeline
 log. Rerunning a partial attempt reuses hash-verified successful scope shards and retries failed or

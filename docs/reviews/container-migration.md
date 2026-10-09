@@ -97,16 +97,21 @@ executor policy/digest/timeout/output-bound behavior, explicit non-applicable di
 mixed failure/resume proof that executes only the failed tool on retry. Live Docker execution is a
 separate acceptance gate and is not inferred from the earlier image build acceptance.
 
-The current live gate passed on application run `2026-10-08-0023`: all 19 adapters produced
+The live gate recorded for this migration passed on application run `2026-10-08-0023`: all 19 adapters produced
 truthful terminal dispositions and producer-owned shards against the multi-language fixture. The
 17 applicable scanners succeeded; SpotBugs and BLint were explicitly non-applicable. Checkov's
 typed selector found Dockerfile and GitHub Actions inputs without treating unrelated YAML as IaC.
 Dagster run `87fffd7b-a14f-4fd5-9cef-97b5b9862a08` executed 94 nodes, observed six overlapping
 scanner intervals, and started final manifest assembly only after all producer indexes completed.
 The correlated rerun reused all 19 producer shards while republishing the accepted manifest.
-Bidirectional orchestration and accepted-handoff linkage are captured in
-`deploy/dagster/verification/wave1-live-acceptance.json`. Scanner output and databases remain
-ignored run-owned data.
+Bidirectional orchestration and accepted-handoff linkage were retained in that run's ignored local
+receipts. The checked-in `deploy/dagster/verification/wave1-live-acceptance.json` has since been
+regenerated for a later run and does not resolve these older identifiers. Scanner output and
+databases remain ignored run-owned data.
+
+These run identifiers and counts are historical acceptance evidence for this migration, not a
+health claim about the current checkout or deployment. If the corresponding local run receipts are
+unavailable, their absence is an evidence-retention gap rather than current acceptance.
 
 `tool-cve-bin-tool` remains deferred. Its NVD-derived offline database contract is now implemented,
 but the catalog's GPL policy decision is still unresolved. Enabling its scan adapter before that

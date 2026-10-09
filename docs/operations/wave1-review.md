@@ -1,9 +1,24 @@
 # Wave 1 review operations
 
-Wave 1 runs `job_review_intake` and `job_target_catalog` through the same application graph used by
-Dagster. The application handoff is the checkpoint of record; Dagster metadata links to it but does
-not replace it. Target content, target guidance, configuration values, and generated evidence are
-data and cannot change worker authority or execution policy.
+The direct CLI and Dagster share the application-owned job lifecycle, receipts, validation, and
+accepted handoffs, but they do not currently expose the same review topology.
+
+The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
+
+```text
+review_intake -> target_catalog -> target_analysis_plan -> project_build -> language_build
+  -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
+  -> codeql_analysis -> evidence_collection
+```
+
+The direct graph does not include CI configuration analysis, tree-sitter AST production,
+post-build security assessment, or OWASP control assessment. Use Dagster's `wave1_review` when
+those branches are required. Its current dependency graph is assembled from the registered,
+configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
+
+In both surfaces, the application handoff is the checkpoint of record; Dagster metadata links to
+it but does not replace it. Target content, target guidance, configuration values, and generated
+evidence are data and cannot change worker authority or execution policy.
 
 From the repository root, with the package installed (or `PYTHONPATH=src` during development):
 
@@ -33,8 +48,9 @@ run; wait for it to finish or investigate that process rather than deleting run 
 
 For Dagster, start the documented stack in `deploy/dagster/README.md`, set
 `APPSEC_REVIEW_TARGET` when the target is not the default acceptance target, and launch
-`wave1_review`. Dagster exposes the real intake, catalog, producer scan/normalize/index, manifest,
-and publication nodes. Scanner timeout, OOM, nonzero exit, unavailable image/prerequisite, missing
+`wave1_review`. Dagster exposes each application's intake, catalog, analysis, producer,
+normalization, indexing, manifest, and publication units as nodes. Scanner timeout, OOM, nonzero
+exit, unavailable image/prerequisite, missing
 output, or parser incompatibility is persisted as a bounded producer disposition and coverage gap;
 the node succeeds after recording that truth and the review may end `COMPLETED_WITH_GAPS`.
 Configuration corruption, unsafe paths, changed handoffs, receipt persistence/locking failures,
