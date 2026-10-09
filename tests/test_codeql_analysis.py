@@ -352,6 +352,14 @@ def test_runner_tree_identity_uses_posix_path_order(tmp_path: Path) -> None:
     assert runner._tree(tmp_path) == (hashlib.sha256(b"".join(rows)).hexdigest(), 2)
 
 
+def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None:
+    lines = (ROOT / "containers" / "tools" / "codeql" / "Dockerfile").read_text(
+        encoding="utf-8").splitlines()
+
+    assert lines[:3] == ["ARG CODEQL_SOURCE_IMAGE", "ARG BUILD_IMAGE",
+                         "FROM ${CODEQL_SOURCE_IMAGE} AS codeql_source"]
+
+
 def test_bounded_logs_retain_head_tail_and_total_size(tmp_path: Path) -> None:
     path = tmp_path / "stream.bin"
     digest, total, truncated, tail = _bounded_stream(path, b"0123456789", 6)

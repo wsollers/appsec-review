@@ -202,6 +202,23 @@ normalizers without widening the C++ runtime or coupling their invalidation doma
 current selective invalidation boundary: query-pack changes must not rebuild Clang AST, LLVM IR,
 or an otherwise reusable CodeQL database.
 
+## Define and test the CodeQL checkpoint identity matrix
+
+Document a matrix of identity inputs against the derived image, database, query, normalization,
+index, and publication checkpoints. It should cover CodeQL CLI and extractor versions, source
+bytes, accepted build recipes and replay commands, compiler/toolchain identities, base and derived
+image identities, runtime policy and resource limits, query packs and suites, custom queries,
+normalizer versions, and output schemas. For each change, state the smallest affected scope and
+whether the expected action is reuse, database rebuild, query-only rerun, renormalization, or
+republication.
+
+Separate semantic execution inputs from provenance-only representation. A changed recipe or
+Dockerfile that resolves to a different compiler, toolchain, filesystem, runtime policy, or output
+image must invalidate dependent work; a textual refactor that produces the same verified effective
+environment should retain provenance without forcing unrelated databases or queries to rerun.
+Back the matrix with table-driven tests that change one dimension at a time and prove both required
+invalidation and required reuse across unrelated languages, projects, scopes, and query profiles.
+
 ## Supply a pinned Joern/c2cpg closure
 
 The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
