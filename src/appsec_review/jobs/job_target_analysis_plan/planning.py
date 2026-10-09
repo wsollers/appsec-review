@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Collection, Mapping
-from dataclasses import dataclass
 import hashlib
 from pathlib import PurePosixPath
-from typing import Any, Protocol
+from typing import Any
 
 from appsec_review.storage import canonical_json
 from appsec_review.jobs.build_discovery import BUILD_RECIPE_SCHEMA, validate_build_recipe
@@ -32,40 +31,6 @@ SOURCE_SUFFIXES = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs",
     ".c", ".h", ".cc", ".cpp", ".cs", ".rb", ".php", ".swift", ".sh",
 }
-
-
-@dataclass(frozen=True, slots=True)
-class ModelRequest:
-    schema: str
-    persona: str
-    role: str
-    guidance: str
-    summary: Mapping[str, Any]
-    allowed_scanners: tuple[str, ...]
-    allowed_build_systems: tuple[str, ...]
-    allowed_components: tuple[str, ...]
-    allowed_paths: tuple[str, ...]
-    allowed_build_units: tuple[str, ...]
-    provider: str
-    model: str
-    reasoning: str
-    max_input_tokens: int
-    max_output_tokens: int
-    repair_errors: tuple[str, ...] = ()
-    prior_response: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ModelResult:
-    proposal: Mapping[str, Any]
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    cache_tokens: int | None = None
-    raw_response: str | None = None
-
-
-class ModelClient(Protocol):
-    def complete(self, request: ModelRequest, *, timeout_seconds: int) -> ModelResult: ...
 
 
 def _under(path: str, root: str) -> bool:

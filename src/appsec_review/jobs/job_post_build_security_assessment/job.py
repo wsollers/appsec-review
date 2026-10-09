@@ -9,6 +9,7 @@ import shlex
 import time
 from typing import Any
 
+from appsec_review.inference import Infer, ModelRequest
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -20,7 +21,7 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 
 from .assessment import (
     GUIDANCE_IDENTITY, NORMALIZER_VERSION, PARSER_VERSION, PROVENANCE_SCHEMA, RULE_VERSION,
-    SCHEMA, InferenceClient, command_fingerprint, deterministic_checks, inspect_binary,
+    INFERENCE_PROPOSAL_SCHEMA, SCHEMA, command_fingerprint, deterministic_checks, inspect_binary,
     normalize_action, shard_fingerprint, validate_inference,
 )
 
@@ -164,7 +165,7 @@ def _validate_config(context, _result) -> None:
         raise ValueError("post-build model retries must be between zero and five")
 
 
-def build_job(*, inference_client: InferenceClient | None = None) -> Job:
+def build_job(*, infer: Infer | None = None) -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
         accepted = _accepted_cpp(unit.job.run_root)
         if accepted["handoff"].get("source_fingerprint") != unit.job.source_fingerprint:
@@ -492,13 +493,19 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                 result = {"observations": [], "rejections": [], "confirmed_count": 0,
                           "refuted_count": 0, "unvalidated_count": 0}
                 calls = 0
-            elif inference_client is None:
+            elif infer is None:
                 gaps.append("build-security inference model is unavailable; deterministic results remain authoritative")
                 result = {"observations": [], "rejections": [], "confirmed_count": 0,
                           "refuted_count": 0, "unvalidated_count": 0}
                 calls = 0
             else:
                 request_sha = hashlib.sha256(encoded).hexdigest()
+                model_request = ModelRequest(
+                    schema=INFERENCE_PROPOSAL_SCHEMA, persona="", role="", guidance=guidance, summary=request,
+                    allowed_scanners=(), allowed_build_systems=(), allowed_components=(), allowed_paths=(),
+                    allowed_build_units=(), provider=str(settings["provider"]), model=str(settings["model"]),
+                    reasoning=str(settings["reasoning"]), max_input_tokens=int(settings["max_input_tokens"]),
+                    max_output_tokens=int(settings["max_output_tokens"]))
                 known = {str(item.get("build_action_id")) for item in actions} | {
                     str(item.get("compile_unit_id")) for item in actions if item.get("compile_unit_id")} | {
                     str(item.get("artifact_id")) for item in records} | {str(item.get("sha256")) for item in records}
@@ -515,8 +522,8 @@ def build_job(*, inference_client: InferenceClient | None = None) -> Job:
                         case_id=_display(case_id))
                     started = time.monotonic()
                     try:
-                        proposal = inference_client.complete(request, timeout_seconds=int(settings["timeout_seconds"]))
-                        if (proposal.output_tokens > int(settings["max_output_tokens"]) or
+                        proposal = infer(model_request, timeout_seconds=int(settings["timeout_seconds"]))
+                        if ((proposal.output_tokens or 0) > int(settings["max_output_tokens"]) or
                                 len(canonical_json(proposal.proposal)) > int(settings["max_output_tokens"]) * 4):
                             raise ValueError("build-security inference output exceeded configured budget")
                         result = validate_inference(proposal.proposal, checks=deterministic_value["checks"], evidence_ids=known)

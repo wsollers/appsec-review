@@ -17,7 +17,8 @@ from appsec_review.jobs.job_post_build_security_assessment import build_job as b
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
 from tests.capture_fakes import capturing_fake
@@ -202,7 +203,7 @@ def _fixture(tmp_path: Path):
 def _accepted_project(config, target, calls):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(model_client=NativeRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
+        build_plan(infer=NativeRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor(calls)),
                              image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
@@ -321,7 +322,7 @@ def _dotnet_fixture(tmp_path: Path, *, framework: str = "net8.0"):
 def _accepted_dotnet(config, target, calls):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(model_client=DotnetRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
+        build_plan(infer=DotnetRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor(calls)),
                              image_resolver_factory=lambda unit: ImageResolver(target))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,

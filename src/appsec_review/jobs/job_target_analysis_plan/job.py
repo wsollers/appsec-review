@@ -22,8 +22,10 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
+from appsec_review.inference import Infer, ModelRequest
+
 from .planning import (
-    BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS, ModelClient, ModelRequest,
+    BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS,
     ambiguity_reasons, deterministic_plan, merge_proposal, summarize_catalog,
     validate_plan, validate_proposal,
 )
@@ -162,7 +164,7 @@ def _base_indexes(run_root: Path) -> tuple[list[IndexIdentity], Path, str]:
     return indexes, manifest_path, manifest_sha
 
 
-def build_job(*, model_client: ModelClient | None = None, fail_task: str | None = None) -> Job:
+def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Job:
     def maybe_fail(unit: UnitContext) -> None:
         if unit.unit_id == fail_task:
             raise RuntimeError(f"injected bounded failure: {fail_task}")
@@ -213,7 +215,7 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
             plan["model"] = {"status": "DISABLED", "proposal_sha256": None}
             return {"plan": plan, "gaps": [gap], "model_calls": 0, "validation_rejections": 0,
                     "terminal_status": "COMPLETED_WITH_GAPS"}
-        if model_client is None:
+        if infer is None:
             gap = "analysis planning model is unavailable; deterministic safe plan published"
             plan["coverage_gaps"] = [*plan["coverage_gaps"], gap]
             plan["model"] = {"status": "UNAVAILABLE", "proposal_sha256": None}
@@ -297,7 +299,7 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
                     attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
                 started = time.monotonic()
                 try:
-                    result = model_client.complete(request, timeout_seconds=int(model["timeout_seconds"]))
+                    result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
                     if result.raw_response is not None:
                         atomic_bytes(unit.unit_root / f"model-response-{group_slug}-{retry}.txt",
                                      result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
@@ -492,7 +494,7 @@ def build_job(*, model_client: ModelClient | None = None, fail_task: str | None 
           ("plan_acceptance.validate_plan", "plan_acceptance.index_plan", "analysis_decisions.resolve_ambiguity")),
     )
     implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name("planning.py").read_bytes() +
-                                    str(fail_task).encode() + (b"model-client" if model_client else b"no-model-client")).hexdigest()
+                                    str(fail_task).encode() + (b"model-client" if infer else b"no-model-client")).hexdigest()
     return Job("job_target_analysis_plan", "target_analysis_plan", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=PLAN_SCHEMA,
                implementation_identity=implementation,

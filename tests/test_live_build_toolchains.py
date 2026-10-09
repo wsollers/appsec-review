@@ -27,7 +27,8 @@ from appsec_review.jobs.job_project_build.job import _probe_environment
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
@@ -476,7 +477,7 @@ def _live_rust_language_build(tmp_path: Path, *, secret: bool):
     shutil.copytree(FIXTURE / "rust", target / "rust")
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
-        model_client=_RustFixtureRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
+        infer=_RustFixtureRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
     run_id = upstream["run_id"]
     # The default resolver derives the real dependency-bearing project image from the pinned
     # Rust profile, so Cargo downloads through the allowed build environment only.

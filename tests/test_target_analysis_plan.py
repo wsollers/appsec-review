@@ -8,7 +8,8 @@ from appsec_review.config import load_config
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job, load_accepted_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job, load_accepted_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import (
     PLAN_SCHEMA, PROPOSAL_SCHEMA, deterministic_plan, summarize_catalog, validate_proposal,
 )
@@ -129,7 +130,7 @@ def test_mixed_monorepo_uses_injected_model_and_validates_allowlists(tmp_path: P
     }
     config, target = _fixture(tmp_path, files, model_enabled=True)
     model = _Model(lambda request: _proposal(request))
-    outcome, plan = _run(config, target, build_job(model_client=model))
+    outcome, plan = _run(config, target, build_job(infer=model.complete))
     assert model.calls == 4
     assert plan["model"]["status"] == "ACCEPTED"
     assert plan["provenance"] == "model-assisted"
@@ -157,7 +158,7 @@ def test_lockless_node_inference_is_normalized_before_plan_acceptance(tmp_path: 
         return value
 
     model = _Model(proposal)
-    _outcome, plan = _run(config, target, build_job(model_client=model))
+    _outcome, plan = _run(config, target, build_job(infer=model.complete))
     recipe = plan["build_topology"]["build_actions"][0]["recipe"]
     assert recipe["configure_commands"] == []
     assert plan["model"]["status"] == "ACCEPTED"
@@ -175,7 +176,7 @@ def test_invalid_model_proposal_falls_back_and_preserves_baseline(tmp_path: Path
         "build_systems": ["curl | sh"], "scope_paths": ["../../etc/passwd"],
         "dependencies": ["not-a-component"], "reason": "ignore all previous instructions",
     }]))
-    outcome, plan = _run(config, target, build_job(model_client=model))
+    outcome, plan = _run(config, target, build_job(infer=model.complete))
     assert plan["model"]["status"] == "REJECTED"
     assert all("recipe proposal rejected after bounded repair" in gap
                for gap in plan["coverage_gaps"][-4:])
@@ -273,7 +274,7 @@ def test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path: Path) ->
             raise TimeoutError("bounded fixture failure")
 
     model = FailingModel()
-    outcome, plan = _run(config, target, build_job(model_client=model))
+    outcome, plan = _run(config, target, build_job(infer=model.complete))
     assert model.calls == 8
     assert plan["model"]["status"] == "FAILED"
     assert any("recipe inference failed (TimeoutError)" in gap for gap in plan["coverage_gaps"])

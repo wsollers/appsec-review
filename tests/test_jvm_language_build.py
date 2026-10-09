@@ -18,7 +18,8 @@ from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_project_build.job import _deterministic_jvm_recipe
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import IndexIdentity, RetrievalCore, write_manifest
@@ -128,7 +129,7 @@ def _fixture(tmp_path: Path, *, gradle: bool = False, output_bytes: int | None =
 
 def _run_to_dispatch(config, target: Path, model: JvmRecipeModel, calls: list[tuple[str, ...]]):
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(model_client=model)]).run(
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=model.complete)]).run(
         target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, JvmExecutor(calls)),
         image_resolver_factory=lambda unit: ImageResolver(target))

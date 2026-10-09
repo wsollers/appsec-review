@@ -21,7 +21,8 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
-from appsec_review.jobs.job_target_analysis_plan import ModelClient, ModelRequest, load_accepted_plan
+from appsec_review.inference import Infer, ModelRequest
+from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
@@ -415,7 +416,7 @@ def _repair_guidance(unit: UnitContext, family: str, model: Mapping[str, Any]) -
 
 def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mapping[str, Any],
                   dockerfile: bytes, diagnostics: Mapping[str, Any], attempts: list[Mapping[str, Any]],
-                  repair_number: int, model_client: ModelClient) -> Mapping[str, Any]:
+                  repair_number: int, infer: Infer) -> Mapping[str, Any]:
     model = unit.job.config.settings["model"]
     persona, role, guidance, guidance_sha = _repair_guidance(unit, str(action["family"]), model)
     summary = {
@@ -457,7 +458,7 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
         inference_task="build_image_repair")
     started = time.monotonic()
     try:
-        result = model_client.complete(request, timeout_seconds=int(model["timeout_seconds"]))
+        result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
         if result.raw_response is not None:
             atomic_bytes(unit.unit_root / str(action["build_unit_id"]) /
                          f"repair-{repair_number:03d}" / "model-response.txt",
@@ -486,7 +487,7 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
 
 
 def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile: BuildProfile,
-                        resolver: Any, model_client: ModelClient | None, executor_factory=None) -> dict[str, Any]:
+                        resolver: Any, infer: Infer | None, executor_factory=None) -> dict[str, Any]:
     action, image = dict(entry["action"]), entry.get("image")
     first = _probe_one(unit, entry, executor_factory, attempt_number=1)
     accepted_recipe = action.get("recipe")
@@ -505,7 +506,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                 "attempts": attempts, "repair_attempt_count": 0}
     model = unit.job.config.settings["model"]
     repair_limit = int(unit.job.config.settings["repair_attempts"])
-    if not bool(model["enabled"]) or model_client is None:
+    if not bool(model["enabled"]) or infer is None:
         gap = ("build image repair model is disabled" if not bool(model["enabled"])
                else "build image repair model is unavailable")
         return {**first, "gaps": [*first["gaps"], gap], "attempts": attempts,
@@ -523,7 +524,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
             atomic_bytes(repair_root / "Dockerfile", dockerfile)
             proposal = _infer_repair(unit, action=action, recipe=current_recipe, dockerfile=dockerfile,
                                      diagnostics=diagnostics, attempts=attempts,
-                                     repair_number=repair_number, model_client=model_client)
+                                     repair_number=repair_number, infer=infer)
             candidate = apply_repair(current_recipe, proposal)
             errors = validate_build_recipe(candidate, _repair_validation_unit(action, candidate))
             if errors:
@@ -770,7 +771,7 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
 
 
 def build_job(*, executor_factory=None, image_resolver_factory=None,
-              model_client: ModelClient | None = None) -> Job:
+              infer: Infer | None = None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
@@ -936,7 +937,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     receipts.append(_probe_one(unit, entry, executor_factory))
                 else:
                     receipts.append(_probe_with_repairs(unit, entry, profile=profiles[family],
-                                                        resolver=resolver, model_client=model_client,
+                                                        resolver=resolver, infer=infer,
                                                         executor_factory=executor_factory))
             gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value["gaps"]]
             return {"family": family, "receipts": receipts, "probe_count": len(receipts),
@@ -1011,7 +1012,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     Path(__file__).parents[2] / "container_runtime" / "build_executor.py",
                     Path(__file__).parents[2] / "container_runtime" / "project_images.py")
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) +
-                                    (b"injected" if executor_factory or image_resolver_factory or model_client
+                                    (b"injected" if executor_factory or image_resolver_factory or infer
                                      else b"docker")).hexdigest()
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, implementation_identity=implementation,

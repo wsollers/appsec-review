@@ -11,7 +11,8 @@ from appsec_review.container_runtime.project_images import dependency_hashes, pr
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
@@ -99,7 +100,7 @@ def _fixture(tmp_path: Path):
 def _accepted_project(config, target, calls):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(model_client=RustWasmRecipeModel())]).run(
+        build_plan(infer=RustWasmRecipeModel().complete)]).run(
             target_root=target, source_fingerprint=fingerprint)
     GraphRunner(config, [build_projects(
         executor_factory=lambda unit, profile: capturing_fake(profile, WasmExecutor(calls)),

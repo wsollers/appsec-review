@@ -12,7 +12,8 @@ from appsec_review.jobs.job_project_build import build_job as build_projects, lo
 from appsec_review.jobs.job_project_build.job import _probe_environment
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_project_build.repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
 from appsec_review.runtime import GraphRunner, plan_jobs
@@ -242,7 +243,7 @@ def _fixture(tmp_path: Path):
 def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]).run(
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
         target_root=target, source_fingerprint=fingerprint)
     calls = []
     job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
@@ -318,7 +319,7 @@ def test_project_build_resolves_missing_cmake_recipe_deterministically(tmp_path:
 def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]).run(
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
         target_root=target, source_fingerprint=fingerprint)
 
     class Selective(FakeBuildExecutor):
@@ -354,7 +355,7 @@ def test_unchanged_recipe_reuses_probe_across_application_runs(tmp_path: Path) -
     run_ids = []
     for _ in range(2):
         upstream = GraphRunner(
-            config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+            config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
         ).run(target_root=target, source_fingerprint=fingerprint)
         run_ids.append(upstream["run_id"])
         GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
@@ -380,7 +381,7 @@ def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
                          image_resolver_factory=lambda unit: FakeImageResolver())
     for _ in range(2):
         upstream = GraphRunner(
-            config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+            config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
         ).run(target_root=target, source_fingerprint=fingerprint)
         GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                       run_id=upstream["run_id"])
@@ -399,11 +400,11 @@ def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_pa
     job = build_projects(
         executor_factory=lambda unit, profile: RepairingExecutor(
             calls, profile, success_package="libtwo-dev"),
-        image_resolver_factory=lambda unit: resolver, model_client=model)
+        image_resolver_factory=lambda unit: resolver, infer=model.complete)
     run_ids = []
     for _ in range(2):
         upstream = GraphRunner(
-            config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+            config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
         ).run(target_root=target, source_fingerprint=fingerprint)
         run_ids.append(upstream["run_id"])
         outcome = GraphRunner(config, [job]).run(
@@ -438,13 +439,13 @@ def test_build_failure_exhausts_three_image_repair_attempts(tmp_path: Path) -> N
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(model_client=RecipeModel())]
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
     ).run(target_root=target, source_fingerprint=fingerprint)
     model = RepairModel((["libone-dev"], ["libtwo-dev"], ["libthree-dev"]))
     resolver = RepairImageResolver(tmp_path / "image-metadata")
     outcome = GraphRunner(config, [build_projects(
         executor_factory=lambda unit, profile: RepairingExecutor([], profile, success_package=None),
-        image_resolver_factory=lambda unit: resolver, model_client=model)]).run(
+        image_resolver_factory=lambda unit: resolver, infer=model.complete)]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])

@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from appsec_review.inference.anthropic_api import AnthropicApiModelClient
-from appsec_review.inference.claude_cli import ModelOutputError
-from appsec_review.jobs.job_target_analysis_plan.planning import ModelRequest, PROPOSAL_SCHEMA
+from appsec_review.inference import ModelOutputError, infer
+from appsec_review.inference import ModelRequest
+from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 
 
 class Response:
@@ -43,7 +43,7 @@ def test_anthropic_adapter_applies_model_reasoning_and_bounded_json(monkeypatch)
         allowed_build_units=(), provider="anthropic-api", model="claude-haiku-4-5-20251001",
         reasoning="medium", max_input_tokens=32000, max_output_tokens=8000,
     )
-    result = AnthropicApiModelClient().complete(request, timeout_seconds=30)
+    result = infer(request, timeout_seconds=30)
     body = json.loads(captured["request"].data)
     assert body["model"] == request.model
     assert body["system"] == "devops\n\nbuild engineer"
@@ -66,7 +66,7 @@ def test_anthropic_parse_failure_retains_bounded_raw_response(monkeypatch) -> No
         max_output_tokens=8000,
     )
     with pytest.raises(ModelOutputError) as raised:
-        AnthropicApiModelClient().complete(request, timeout_seconds=30)
+        infer(request, timeout_seconds=30)
     assert raised.value.raw_response and "not json" in raised.value.raw_response
     assert raised.value.rejected_output == "not json"
 
@@ -85,5 +85,5 @@ def test_anthropic_normalizes_only_unambiguous_missing_plan_schema(monkeypatch) 
         model="claude-haiku-4-5-20251001", reasoning="medium", max_input_tokens=32000,
         max_output_tokens=8000,
     )
-    result = AnthropicApiModelClient().complete(request, timeout_seconds=30)
+    result = infer(request, timeout_seconds=30)
     assert result.proposal == {"schema": PROPOSAL_SCHEMA, **value}

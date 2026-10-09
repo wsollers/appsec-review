@@ -16,7 +16,8 @@ from appsec_review.jobs.job_language_build import node
 from appsec_review.jobs.job_language_build.job import FrameworkIntegrityError, _validate_checkpoint_artifacts
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.jobs.job_target_analysis_plan import ModelResult, build_job as build_plan
+from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
@@ -221,7 +222,7 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
     config = load_config(config_path)
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(model_client=_NodeRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
+        build_plan(infer=_NodeRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
     calls: list[tuple[str, ...]] = []
     GraphRunner(config, [build_projects(
         executor_factory=lambda unit, profile: capturing_fake(profile, _NodeExecutor(calls)),

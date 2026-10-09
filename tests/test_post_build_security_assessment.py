@@ -7,12 +7,13 @@ import struct
 import pytest
 
 from appsec_review.jobs.job_post_build_security_assessment.assessment import (
-    InferenceResult, classify_action, deterministic_checks, inspect_binary, normalize_action,
+    INFERENCE_PROPOSAL_SCHEMA, classify_action, deterministic_checks, inspect_binary, normalize_action,
     redact_argv, sanitize_environment, shard_fingerprint, validate_inference,
 )
 from appsec_review.jobs.job_post_build_security_assessment import build_job
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.config import load_config
+from appsec_review.inference import ModelRequest, ModelResult
 from appsec_review.observability import aggregate_run_metrics
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RetrievalCore,
@@ -362,22 +363,25 @@ def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
     )
 
 
-class _ContextInferenceClient:
-    def complete(self, request, *, timeout_seconds: int) -> InferenceResult:
-        action = request["actions"][0]
-        artifact = request["artifacts"][0]
-        return InferenceResult({"observations": [
-            {"claim": "stack protection is missing", "check_id": "gnu.stack_protector",
-             "evidence_ids": [action["build_action_id"]]},
-            {"claim": "the non-PIE executable contradicts release posture", "check_id": "elf.pie",
-             "evidence_ids": [artifact["sha256"]]},
-        ]}, input_tokens=21, output_tokens=8, cache_tokens=3)
+def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
+    """Stands in for `appsec_review.inference.infer`, the job's only path to a model."""
+    assert request.schema == INFERENCE_PROPOSAL_SCHEMA
+    assert (request.provider, request.model) == ("fixture", "fixture") and timeout_seconds == 10
+    assert request.guidance and request.summary["schema"] == "appsec-review/build-security-inference-request/1"
+    action = request.summary["actions"][0]
+    artifact = request.summary["artifacts"][0]
+    return ModelResult({"observations": [
+        {"claim": "stack protection is missing", "check_id": "gnu.stack_protector",
+         "evidence_ids": [action["build_action_id"]]},
+        {"claim": "the non-PIE executable contradicts release posture", "check_id": "elf.pie",
+         "evidence_ids": [artifact["sha256"]]},
+    ]}, input_tokens=21, output_tokens=8, cache_tokens=3)
 
 
 def test_bounded_inference_records_tokens_and_validates_observations(tmp_path: Path) -> None:
     runs, target = _accepted_cpp_fixture(tmp_path)
     config = load_config(_post_build_config(tmp_path, model_enabled=True))
-    outcome = JobRunner(config).run(build_job(inference_client=_ContextInferenceClient()),
+    outcome = JobRunner(config).run(build_job(infer=_context_inference),
         run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
         upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
     inference = outcome["result"]["outputs"]["inference.native_units"]["projects"]["unit-a"]

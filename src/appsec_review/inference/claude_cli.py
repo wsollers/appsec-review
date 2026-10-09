@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from typing import Any, Mapping
 
-from appsec_review.jobs.job_target_analysis_plan.planning import ModelRequest, ModelResult
+from .request import ModelRequest, ModelResult
 
 
 class ModelOutputError(ValueError):
@@ -76,71 +76,66 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
     return next(iter(unique.values()))
 
 
-class ClaudeCliModelClient:
-    """Invoke the operator-authenticated Claude CLI without granting target tool access."""
-
-    def __init__(self, binary: str = "claude", *, auth_mode: str = "subscription") -> None:
-        self.binary = binary
-        self.auth_mode = auth_mode
-
-    def complete(self, request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
-        binary = shutil.which(self.binary)
-        if binary is None:
-            raise FileNotFoundError(f"configured Claude CLI is unavailable: {self.binary}")
-        prompt = {
-            "persona": request.persona,
-            "role": request.role,
-            "task": request.guidance,
-            "response_schema": request.schema,
-            "catalog_summary": request.summary,
-            "allowlists": {
-                "scanners": request.allowed_scanners,
-                "build_systems": request.allowed_build_systems,
-                "components": request.allowed_components,
-                "paths": request.allowed_paths,
-                "build_units": request.allowed_build_units,
-            },
-            "limits": {"max_input_tokens": request.max_input_tokens,
-                       "max_output_tokens": request.max_output_tokens},
-        }
-        if request.repair_errors:
-            prompt["repair"] = {"validation_errors": request.repair_errors,
-                                "rejected_response": request.prior_response,
-                                "instruction": ("Return only one corrected JSON object. Its top-level "
-                                                f"schema must be exactly {request.schema}. Do not reinvestigate.")}
-        environment = dict(os.environ)
-        if self.auth_mode == "subscription":
-            environment.pop("ANTHROPIC_API_KEY", None)
-            environment.pop("ANTHROPIC_AUTH_TOKEN", None)
-        argv = [binary, "-p", "--output-format", "json", "--no-session-persistence",
-                "--permission-mode", "bypassPermissions", "--model", request.model,
-                "--effort", request.reasoning, "--allowedTools", ""]
-        completed = subprocess.run(
-            argv, input=json.dumps(prompt, sort_keys=True), text=True, encoding="utf-8",
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_seconds,
-            check=False, env=environment,
-        )
-        if completed.returncode != 0:
-            error = completed.stderr.strip()[:4096]
-            raise RuntimeError(f"Claude CLI exited {completed.returncode}: {error}")
+def send(request: ModelRequest, *, timeout_seconds: int, binary: str = "claude",
+         auth_mode: str = "subscription") -> ModelResult:
+    """Operator-authenticated Claude CLI transport; the model is granted no tools."""
+    executable = shutil.which(binary)
+    if executable is None:
+        raise FileNotFoundError(f"configured Claude CLI is unavailable: {binary}")
+    prompt = {
+        "persona": request.persona,
+        "role": request.role,
+        "task": request.guidance,
+        "response_schema": request.schema,
+        "catalog_summary": request.summary,
+        "allowlists": {
+            "scanners": request.allowed_scanners,
+            "build_systems": request.allowed_build_systems,
+            "components": request.allowed_components,
+            "paths": request.allowed_paths,
+            "build_units": request.allowed_build_units,
+        },
+        "limits": {"max_input_tokens": request.max_input_tokens,
+                   "max_output_tokens": request.max_output_tokens},
+    }
+    if request.repair_errors:
+        prompt["repair"] = {"validation_errors": request.repair_errors,
+                            "rejected_response": request.prior_response,
+                            "instruction": ("Return only one corrected JSON object. Its top-level "
+                                            f"schema must be exactly {request.schema}. Do not reinvestigate.")}
+    environment = dict(os.environ)
+    if auth_mode == "subscription":
+        environment.pop("ANTHROPIC_API_KEY", None)
+        environment.pop("ANTHROPIC_AUTH_TOKEN", None)
+    argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
+            "--permission-mode", "bypassPermissions", "--model", request.model,
+            "--effort", request.reasoning, "--allowedTools", ""]
+    completed = subprocess.run(
+        argv, input=json.dumps(prompt, sort_keys=True), text=True, encoding="utf-8",
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_seconds,
+        check=False, env=environment,
+    )
+    if completed.returncode != 0:
+        error = completed.stderr.strip()[:4096]
+        raise RuntimeError(f"Claude CLI exited {completed.returncode}: {error}")
+    try:
+        proposal = parse_model_payload(completed.stdout, request.schema)
+    except ModelOutputError as exc:
+        raw = completed.stdout[:2 * 1024 * 1024]
         try:
-            proposal = parse_model_payload(completed.stdout, request.schema)
-        except ModelOutputError as exc:
-            raw = completed.stdout[:2 * 1024 * 1024]
-            try:
-                rejected = _text_from_envelope(json.loads(raw))
-            except (json.JSONDecodeError, ModelOutputError):
-                rejected = raw
-            raise ModelOutputError(str(exc), raw_response=raw,
-                                   rejected_output=rejected[:131072]) from exc
-        usage = {}
-        try:
-            envelope = json.loads(completed.stdout)
-            usage = envelope.get("usage", {}) if isinstance(envelope, Mapping) else {}
-        except json.JSONDecodeError:
-            pass
-        return ModelResult(
-            proposal=proposal,
-            input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
-            cache_tokens=usage.get("cache_read_input_tokens"), raw_response=completed.stdout,
-        )
+            rejected = _text_from_envelope(json.loads(raw))
+        except (json.JSONDecodeError, ModelOutputError):
+            rejected = raw
+        raise ModelOutputError(str(exc), raw_response=raw,
+                               rejected_output=rejected[:131072]) from exc
+    usage = {}
+    try:
+        envelope = json.loads(completed.stdout)
+        usage = envelope.get("usage", {}) if isinstance(envelope, Mapping) else {}
+    except json.JSONDecodeError:
+        pass
+    return ModelResult(
+        proposal=proposal,
+        input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
+        cache_tokens=usage.get("cache_read_input_tokens"), raw_response=completed.stdout,
+    )

@@ -32,7 +32,7 @@ class JobRegistry:
 
 
 def builtin_registry() -> JobRegistry:
-    from appsec_review.inference import ConfiguredClaudeModelClient
+    from appsec_review.inference import infer
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
@@ -53,10 +53,10 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_review_intake", build_intake)
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_target_analysis_plan",
-                      lambda: build_analysis_plan(model_client=ConfiguredClaudeModelClient()))
+                      lambda: build_analysis_plan(infer=infer))
     registry.register("job_tree_sitter_ast", build_tree_sitter_ast)
     registry.register("job_project_build",
-                      lambda: build_project_build(model_client=ConfiguredClaudeModelClient()))
+                      lambda: build_project_build(infer=infer))
     registry.register("job_language_build", build_language_build)
     registry.register("job_artifact_indexing", build_artifact_indexing)
     registry.register("job_artifact_security_analysis", build_artifact_security_analysis)
@@ -65,6 +65,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_ci_configuration_analysis", build_ci_configuration_analysis)
     registry.register("job_cpp_compiled_analysis", build_cpp_compiled)
     registry.register("job_codeql_analysis", build_codeql_analysis)
-    registry.register("job_post_build_security_assessment", build_post_build_security)
+    registry.register("job_post_build_security_assessment",
+                      lambda: build_post_build_security(infer=infer))
     registry.register("job_owasp_control_assessment", build_owasp_control_assessment)
     return registry

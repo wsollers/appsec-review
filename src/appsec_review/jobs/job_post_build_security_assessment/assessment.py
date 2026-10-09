@@ -7,14 +7,13 @@ target artifact and never returns unredacted command or environment text for log
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
 import shlex
 import struct
-from typing import Any, Iterable, Mapping, Protocol
+from typing import Any, Iterable, Mapping
 
 from appsec_review.storage import canonical_json, file_sha256
 
@@ -26,6 +25,7 @@ RULE_VERSION = "build-security-rules/1"
 PARSER_VERSION = "build-security-binary-parser/1"
 NORMALIZER_VERSION = "build-security-command-normalizer/1"
 GUIDANCE_IDENTITY = "build-security-inference-guidance/1"
+INFERENCE_PROPOSAL_SCHEMA = "appsec-review/build-security-inference-proposal/1"
 MAX_ARGV = 4096
 MAX_ARG_BYTES = 1024 * 1024
 MAX_BINARY_BYTES = 512 * 1024 * 1024
@@ -789,18 +789,6 @@ def validate_inference(proposal: Mapping[str, Any], *, checks: Iterable[Mapping[
             "confirmed_count": sum(item["validation"] == "CONFIRMED" for item in accepted),
             "refuted_count": sum(item["validation"] == "REFUTED" for item in accepted),
             "unvalidated_count": sum(item["validation"] == "UNVALIDATED" for item in accepted)}
-
-
-@dataclass(frozen=True, slots=True)
-class InferenceResult:
-    proposal: Mapping[str, Any]
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_tokens: int = 0
-
-
-class InferenceClient(Protocol):
-    def complete(self, request: Mapping[str, Any], *, timeout_seconds: int) -> InferenceResult: ...
 
 
 def shard_fingerprint(*, command_artifacts: Iterable[Mapping[str, Any]], binary_hashes: Iterable[str],
