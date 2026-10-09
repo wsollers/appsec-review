@@ -34,10 +34,9 @@ _INVOCATION = re.compile(
 
 
 def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None) -> tuple[str, ...]:
-    """Validate the .NET-specific offline and no-execution contract."""
+    """Validate the .NET-specific build-only contract."""
     errors: list[str] = []
     commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
-    saw_restore = False
     for argv in commands:
         if not isinstance(argv, list) or not argv:
             continue
@@ -47,44 +46,6 @@ def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None) ->
             verb = next((value for value in words if not value.startswith("-")), "")
             if verb not in {"restore", "build", "publish", "pack", "msbuild"}:
                 errors.append(f"dotnet subcommand is unsupported: {verb or '<missing>'}")
-            if verb == "restore":
-                saw_restore = True
-                if "--locked-mode" not in words and not any(
-                        value.lower() == "/p:restorelockedmode=true" for value in words):
-                    errors.append("dotnet restore must use a locked dependency graph")
-            if verb in {"build", "publish", "pack"} and "--no-restore" not in words:
-                errors.append(f"dotnet {verb} must not perform an implicit restore")
-            if verb == "msbuild":
-                restore_requested = any(value in {"/restore", "-restore", "/t:restore", "-t:restore",
-                                                  "/target:restore", "-target:restore"}
-                                        for value in words)
-                if restore_requested:
-                    saw_restore = True
-                    if "/p:restorelockedmode=true" not in words:
-                        errors.append("dotnet msbuild restore must use RestoreLockedMode=true")
-                elif "/p:restoreduringbuild=false" not in words:
-                    errors.append("dotnet msbuild must explicitly disable restore during build")
-            if verb in {"build", "publish", "pack", "msbuild"} and not (
-                    any(value in {"-v:diag", "--verbosity:diagnostic", "/v:diag"} for value in words)
-                    or any(words[offset:offset + 2] == ["--verbosity", "diagnostic"]
-                           for offset in range(max(0, len(words) - 1)))):
-                errors.append(f"dotnet {verb} must enable diagnostic build provenance")
-        elif executable == "msbuild":
-            if any(value in {"/restore", "-restore", "/t:restore", "-t:restore",
-                             "/target:restore", "-target:restore"} for value in words):
-                saw_restore = True
-                if not any(value == "/p:restorelockedmode=true" for value in words):
-                    errors.append("MSBuild restore must use RestoreLockedMode=true")
-            elif not any(value == "/p:restoreduringbuild=false" for value in words):
-                errors.append("MSBuild must explicitly disable restore during build")
-            if not any(value in {"-v:diag", "/v:diag"} for value in words):
-                errors.append("MSBuild must enable diagnostic build provenance")
-    dependencies = {PurePosixPath(str(value)).name.lower() for value in recipe.get("dependency_files", ())}
-    if saw_restore and "packages.lock.json" not in dependencies:
-        errors.append("locked restore requires packages.lock.json in accepted dependency inputs")
-    if workspace is not None and saw_restore and not any(
-            path.name.lower() == "packages.lock.json" for path in workspace.rglob("packages.lock.json")):
-        errors.append("accepted packages.lock.json is absent from the build workspace")
     return tuple(dict.fromkeys(errors))
 
 

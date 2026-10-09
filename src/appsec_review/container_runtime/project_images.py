@@ -87,28 +87,37 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
         return ("dotnet", "restore")
     if system == "node":
         locks = files & {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
-        if len(locks) != 1:
-            raise ValueError("Node dependency restore requires exactly one supported lockfile")
+        if len(locks) > 1:
+            raise ValueError("Node dependency restore accepts at most one supported lockfile")
+        if not locks:
+            commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
+            managers = {PurePosixPath(str(argv[0])).name for argv in commands
+                        if isinstance(argv, list) and argv} & {"npm", "pnpm", "yarn"}
+            if len(managers) > 1:
+                raise ValueError("Node dependency restore accepts one package manager")
+            manager = next(iter(managers), "npm")
+            if manager == "pnpm":
+                return ("pnpm", "install", "--no-frozen-lockfile", "--ignore-scripts")
+            if manager == "yarn":
+                return ("yarn", "install", "--ignore-scripts", "--non-interactive")
+            return ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund")
         if "package-lock.json" in locks:
             return ("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund")
         if "pnpm-lock.yaml" in locks:
             return ("pnpm", "install", "--frozen-lockfile", "--ignore-scripts")
         return ("yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive")
     if system == "composer":
-        files = {PurePosixPath(str(value)).name for value in recipe.get("dependency_files", ())}
-        if "composer.lock" not in files:
-            raise ValueError("Composer dependency restore requires composer.lock")
         return ("composer", "install", "--no-interaction", "--no-scripts", "--no-plugins",
                 "--prefer-dist", "--no-progress")
     requirements = sorted(name for name in files if name.startswith("requirements") and name.endswith(".txt"))
     if system == "python" and requirements:
-        return ("python", "-m", "pip", "install", "--require-hashes", "--target",
+        return ("python", "-m", "pip", "install", "--target",
                 "/opt/project-deps", "-r", requirements[0])
     return None
 
 
 def project_dependency_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
-    """Expose immutable dependency caches to later network-disabled build containers."""
+    """Expose dependency caches to later build containers."""
     system = str(recipe.get("build_system", ""))
     source = f"/opt/project/{recipe['source_dir']}"
     environments = {
@@ -234,14 +243,13 @@ class ProjectImageResolver:
             # container's namespace rather than being translated into the daemon host's
             # namespace.
             build_context = context.resolve()
-            network = "default" if recipe.get("network_required") or packages else "none"
             # Docker Desktop may expose only the legacy builder inside the code location.
             # Its layer commits are not reliably concurrent, so serialize only this narrow
             # daemon mutation while the surrounding family DAG remains parallel.
             with bounded_file_lock(self.metadata_root / "project-images" / "docker-build.lock",
                                    self.timeout_seconds):
                 code, stdout, stderr, timed_out = self.runner((
-                    "docker", "buildx", "build", "--load", "--pull=false", "--network", network, "--tag", tag,
+                    "docker", "buildx", "build", "--load", "--pull=false", "--network", "default", "--tag", tag,
                     "--file", str(build_context / "Dockerfile"), str(build_context)), self.timeout_seconds)
             if timed_out or code != 0:
                 raise ProjectImageBuildError(

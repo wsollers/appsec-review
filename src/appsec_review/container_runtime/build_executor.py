@@ -76,7 +76,7 @@ def resolve_host_bind_path(path: Path, runner: Runner) -> Path:
 
 
 class BuildContainerExecutor:
-    """Run already-validated argv in an immutable, network-disabled build image."""
+    """Run already-validated argv in an immutable build image with dependency egress."""
 
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
                  runner: Runner | None = None) -> None:
@@ -107,7 +107,7 @@ class BuildContainerExecutor:
             raise ValueError("build working directory escaped the run-owned workspace")
         bind_source = self._bind_source(root)
         command = [
-            "docker", "run", "--rm", "--network", "none", "--read-only",
+            "docker", "run", "--rm", "--network", "bridge", "--read-only",
             "--user", self.profile.user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
             "--pids-limit", "1024", "--tmpfs", "/tmp:rw,noexec,nosuid,size=1g",

@@ -330,7 +330,7 @@ def _accepted_dotnet(config, target, calls):
 
 def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path)
-    assert config.job("job_language_build").typed_settings.dotnet.require_locked_restore is True
+    assert config.job("job_language_build").typed_settings.dotnet.require_locked_restore is False
     calls: list[tuple[str, ...]] = []
     run_id, fingerprint = _accepted_dotnet(config, target, calls)
     outcome = GraphRunner(config, [build_language(
@@ -395,13 +395,12 @@ def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_
     assert "validated inference build recipe is unavailable" in receipt["gaps"]
 
 
-def test_dotnet_recipe_and_capture_helpers_enforce_locked_no_run_contract(tmp_path: Path) -> None:
+def test_dotnet_recipe_and_capture_helpers_allow_restore_but_forbid_run(tmp_path: Path) -> None:
     recipe = {"dependency_files": ["Sample.csproj"], "configure_commands": [["dotnet", "restore", "."]],
               "build_commands": [["dotnet", "build", "."]]}
-    assert {"dotnet restore must use a locked dependency graph",
-            "locked restore requires packages.lock.json in accepted dependency inputs",
-            "dotnet build must not perform an implicit restore",
-            "dotnet build must enable diagnostic build provenance"} <= set(validate_recipe(recipe))
+    assert validate_recipe(recipe) == ()
+    assert validate_recipe({**recipe, "build_commands": [["dotnet", "run"]]}) == (
+        "dotnet subcommand is unsupported: run",)
     assert artifact_kind(Path("obj/Debug/net8.0/Generated.cs")) == "generated-source"
     native_aot = tmp_path / "native-aot-app"
     native_aot.write_bytes(b"\x7fELFfixture")

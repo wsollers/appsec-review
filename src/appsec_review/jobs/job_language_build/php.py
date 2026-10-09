@@ -22,10 +22,6 @@ def validate_php_dispatch(dispatch: Mapping[str, Any]) -> list[str]:
     gaps: list[str] = []
     if "composer.json" not in dependencies:
         gaps.append("Composer project metadata is unavailable")
-    if "composer.lock" not in dependencies:
-        gaps.append("Composer lockfile is required for a lockfile-bound build")
-    if recipe.get("network_required") is not True:
-        gaps.append("Composer dependencies were not resolved into the pinned project image")
     return gaps
 
 
@@ -40,8 +36,8 @@ def composer_policy(settings: Mapping[str, Any]) -> dict[str, Any]:
         "composer_plugins": plugins,
         "composer_scripts": scripts,
         "require_lockfile": value.get("require_lockfile") is True,
-        "dependency_mode": "derived-image-offline",
-        "network": "disabled",
+        "dependency_mode": "declared-dependencies-online",
+        "network": "allowed",
         "application_execution": "forbidden",
         "test_execution": "forbidden",
     }

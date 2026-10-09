@@ -42,11 +42,11 @@ planning; it does not wait for compiled analysis.
 
 A project image is derived from the hash-pinned language baseline. Its identity covers the recipe,
 baseline image, generator contract, and dependency-file hashes. Supported dependency restoration
-occurs only while building that image; the actual probe has no network, uses direct argv, a read-only
-container root, a non-root user, dropped capabilities, and bounded resources. Images are reused only
-when both their manifest and runtime image identity still match. Language-specific dependency cache
-locations are embedded in the derived image so a no-network probe consumes the restored Cargo, Go,
-Maven/Gradle, NuGet, npm, Composer, or Python dependencies. Project images use a digest-pinned
+can occur while building that image and again during the actual probe, which has dependency egress,
+uses direct argv, a read-only container root, a non-root user, dropped capabilities, and bounded
+resources. Images are reused only when both their manifest and runtime image identity still match.
+Language-specific dependency cache locations embedded in the derived image accelerate Cargo, Go,
+Maven/Gradle, NuGet, npm, Composer, or Python dependency use. Project images use a digest-pinned
 Buildx/BuildKit client and load the result into the local engine. Docker image mutation is narrowly
 serialized as an additional engine-safety boundary; the language DAG and static dispatch remain
 parallel.

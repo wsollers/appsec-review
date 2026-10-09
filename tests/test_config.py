@@ -44,7 +44,11 @@ def test_language_build_has_typed_rust_limits_and_policy() -> None:
     settings = config.job("job_language_build").typed_settings
     assert isinstance(settings, LanguageBuildSettings)
     assert settings.rust.toolchain == "stable"
-    assert settings.rust.offline is True
+    assert settings.rust.offline is False
+    assert settings.go.offline is False
+    assert settings.node.network == "allowed" and settings.node.require_lockfile is False
+    assert settings.python.offline is False and settings.python.require_locked_dependencies is False
+    assert settings.dotnet.require_locked_restore is False
     assert settings.rust.locked is False
     assert settings.rust.diagnostic_tail_bytes == 32768
 

@@ -17,6 +17,8 @@ from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan, r
 from appsec_review.jobs.job_codeql_analysis.sarif import map_location, normalize_sarif
 from appsec_review.config.codeql import parse_codeql_settings
 from appsec_review.codeql.runtime import (
+    CodeQLExecutor,
+    CodeQLImage,
     CodeQLImageResolver,
     _bounded_stream,
     load_asset_lock,
@@ -32,6 +34,27 @@ from appsec_review.storage import canonical_json
 
 IMAGE = "sha256:" + "1" * 64
 ROOT = Path(__file__).parents[1]
+
+
+def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def runner(argv, _timeout):
+        calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, (IMAGE + "\n").encode(), b"", False
+        return 0, b"ok", b"", False
+
+    image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, IMAGE, IMAGE,
+                        "build:local", IMAGE, "codeql:local", "10001:10001",
+                        "b" * 64, "c" * 64, False, "manifest.json")
+    settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
+                               query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
+    result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
+        "database", ("--language", "csharp"), scratch_root=tmp_path / "scratch")
+    command = next(call for call in calls if call[:2] == ("docker", "run"))
+    assert command[command.index("--network") + 1] == "bridge"
+    assert result.limits["network"] == "bridge"
 
 
 def source(path: str, digest: str = "a" * 64) -> dict[str, object]:

@@ -32,10 +32,11 @@ image; it does not install them.
 
 `source_dir`, `build_dir`, every `dependency_files` value, and every `expected_outputs` value are
 repository-relative paths. They must equal or remain beneath the exact build-unit root. In
-particular, do not emit an output such as `bin/app`; emit `<build-unit-root>/bin/app`. Set
-`network_required` to true only when the descriptor package proves that the build commands must
-download an external dependency. Do not infer that standard SDK or compiler use itself requires a
-network.
+particular, do not emit an output such as `bin/app`; emit `<build-unit-root>/bin/app`. Build and
+CodeQL containers have network access so declared package-manager dependencies can be restored.
+Set `network_required` to true only when the descriptor package proves that project-image
+preparation must download an external dependency; the field does not control build-container
+network access. Do not infer an external dependency from standard SDK or compiler use alone.
 
 The executor uses `source_dir` as the working directory for every configure and build command.
 `build_dir` identifies the intended output directory and may be the source root or a child such as

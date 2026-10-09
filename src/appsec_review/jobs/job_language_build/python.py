@@ -25,7 +25,7 @@ _NATIVE_TOOLS = {
 
 
 def validate_dispatch(dispatch: Mapping[str, Any], workspace: Path | None = None) -> list[str]:
-    """Enforce a package-only, offline Python build without importing target code."""
+    """Enforce a package-only Python build without importing target code."""
     recipe = dispatch.get("recipe")
     if not isinstance(recipe, Mapping) or dispatch.get("family") != "python":
         return ["Python execution requires an accepted Python recipe"]
@@ -33,16 +33,6 @@ def validate_dispatch(dispatch: Mapping[str, Any], workspace: Path | None = None
     dependencies = {PurePosixPath(str(value)).name for value in recipe.get("dependency_files", ())}
     if not dependencies & {"pyproject.toml", "setup.py", "setup.cfg"}:
         errors.append("Python package metadata is unavailable")
-    locked = bool(dependencies & {"poetry.lock", "Pipfile.lock", "pylock.toml"})
-    requirements = [value for value in recipe.get("dependency_files", ())
-                    if PurePosixPath(str(value)).name.startswith("requirements")]
-    if requirements and workspace is not None:
-        for relative in requirements:
-            path = workspace / Path(*PurePosixPath(str(relative)).parts)
-            text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
-            locked = locked or "--hash=sha256:" in text
-    if recipe.get("network_required") is True and not locked:
-        errors.append("network dependency resolution requires a hash-locked Python dependency input")
     for argv in [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]:
         if not isinstance(argv, list) or not argv:
             continue
@@ -54,10 +44,6 @@ def validate_dispatch(dispatch: Mapping[str, Any], workspace: Path | None = None
                 module = words[1]
                 if module not in _PACKAGE_MODULES:
                     errors.append(f"Python module execution is outside the package-build allowlist: {module}")
-                if module == "build" and "--no-isolation" not in lower:
-                    errors.append("PEP 517 builds must use the dependency-bearing image with --no-isolation")
-                if module == "pip" and "--no-index" not in lower:
-                    errors.append("pip commands must explicitly disable indexes")
             elif words and PurePosixPath(words[0]).name == "setup.py":
                 verbs = {value for value in lower[1:] if not value.startswith("-")}
                 if not verbs or not verbs <= {"build", "build_py", "build_ext", "sdist", "bdist_wheel"}:
@@ -65,8 +51,6 @@ def validate_dispatch(dispatch: Mapping[str, Any], workspace: Path | None = None
             else:
                 errors.append("Python may execute only approved package-builder modules or setup.py")
         elif executable in {"pip", "pip3"}:
-            if "--no-index" not in lower:
-                errors.append("pip commands must explicitly disable indexes")
             verb = next((value for value in lower if not value.startswith("-")), "")
             if verb not in {"wheel", "install"}:
                 errors.append(f"pip subcommand is outside the package-build allowlist: {verb or '<missing>'}")
@@ -75,8 +59,7 @@ def validate_dispatch(dispatch: Mapping[str, Any], workspace: Path | None = None
 
 def environment(recipe: Mapping[str, Any]) -> dict[str, str]:
     return {
-        "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-        "PIP_FIND_LINKS": "/opt/project-deps", "PYTHONDONTWRITEBYTECODE": "0",
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PYTHONDONTWRITEBYTECODE": "0",
         "PYTHONHASHSEED": "0", "SOURCE_DATE_EPOCH": "0",
     }
 

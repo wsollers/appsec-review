@@ -190,7 +190,7 @@ class NodeBuildSettings:
     def __post_init__(self) -> None:
         if self.package_managers != ("npm", "pnpm", "yarn"):
             raise ValueError("Node package-manager selection is invalid")
-        if not self.require_lockfile or self.network != "denied" or self.lifecycle_scripts != "sandboxed":
+        if self.require_lockfile or self.network != "allowed" or self.lifecycle_scripts != "sandboxed":
             raise ValueError("Node build isolation policy is invalid")
         if not self.capture_source_maps or not 0 <= self.diagnostic_tail_bytes <= 1024 * 1024:
             raise ValueError("Node capture settings are invalid")
@@ -206,7 +206,7 @@ class DotnetBuildSettings:
     allow_aot: bool
 
     def __post_init__(self) -> None:
-        if not self.require_locked_restore or not self.capture_msbuild_diagnostics or not self.generated_sources:
+        if self.require_locked_restore or not self.capture_msbuild_diagnostics or not self.generated_sources:
             raise ValueError(".NET restore and capture policy is invalid")
 
 

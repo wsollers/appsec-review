@@ -53,7 +53,7 @@ def test_node_dependency_identity_binds_npm_pnpm_and_yarn_lockfiles() -> None:
         "image": {"dependency_hashes": {"web/package.json": "1" * 64}},
         "recipe": {"configure_commands": [], "build_commands": [["npm", "run", "build"]]},
     })
-    assert selected is None and gaps == ["Node build is not lockfile-bound: no supported lockfile"]
+    assert selected == "npm" and not gaps and _identity["lockfile"] is None
 
 
 def test_node_restore_recipes_are_lockfile_specific_and_disable_install_scripts() -> None:
@@ -61,6 +61,7 @@ def test_node_restore_recipes_are_lockfile_specific_and_disable_install_scripts(
     assert _restore_command({**base, "dependency_files": ["web/package-lock.json"]})[:2] == ("npm", "ci")
     assert _restore_command({**base, "dependency_files": ["web/pnpm-lock.yaml"]})[:2] == ("pnpm", "install")
     assert _restore_command({**base, "dependency_files": ["web/yarn.lock"]})[:2] == ("yarn", "install")
+    assert _restore_command({**base, "dependency_files": ["web/package.json"]})[:2] == ("npm", "install")
     assert all("--ignore-scripts" in _restore_command({**base, "dependency_files": [f"web/{name}"]})
                for name in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock"))
 
@@ -77,9 +78,9 @@ def test_node_recipe_validation_requires_lock_and_rejects_application_execution(
               "configure_commands": [], "build_commands": [["node", "web/index.js"]],
               "expected_outputs": ["web/dist"], "network_required": True, "reason": "fixture"}
     assert "build_commands[0] may execute a target application" in validate_build_recipe(recipe, unit)
-    missing = {**recipe, "build_commands": [["npm", "run", "build"]],
-               "dependency_files": ["web/package.json"]}
-    assert "Node recipes require package.json and exactly one supported lockfile" in validate_build_recipe(missing, unit)
+    manifest_only = {**recipe, "build_commands": [["npm", "run", "build"]],
+                     "dependency_files": ["web/package.json"]}
+    assert validate_build_recipe(manifest_only, unit) == []
 
 
 def test_node_lifecycle_validation_blocks_test_runners_and_target_applications(tmp_path: Path) -> None:

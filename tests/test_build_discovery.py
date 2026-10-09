@@ -110,4 +110,3 @@ def test_recipe_validation_forbids_target_execution_and_tool_installation() -> N
     }
     assert any("execution, tests, or tool installation" in error
                for error in validate_build_recipe(recipe, unit))
-    assert any("resolve dependencies" in error for error in validate_build_recipe(recipe, unit))

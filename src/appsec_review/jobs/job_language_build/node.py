@@ -49,27 +49,29 @@ def dependency_identity(dispatch: Mapping[str, Any]) -> tuple[str | None, dict[s
     locks = [(name, *by_name[name]) for name in sorted(LOCKFILES) if name in by_name]
     package = by_name.get("package.json")
     if package is None:
-        return None, {}, ["Node build is not lockfile-bound: package.json identity is unavailable"]
-    if len(locks) != 1:
-        detail = "no supported lockfile" if not locks else "multiple package-manager lockfiles"
-        return None, {}, [f"Node build is not lockfile-bound: {detail}"]
-    lock_name, lock_path, lock_sha = locks[0]
-    manager = LOCKFILES[lock_name]
-    identity = {
-        "manager": manager,
-        "package_manifest": {"path": package[0], "sha256": package[1]},
-        "lockfile": {"path": lock_path, "sha256": lock_sha},
-        "sha256": hashlib.sha256(canonical_json({
-            "manager": manager, "package": package, "lock": (lock_path, lock_sha),
-        })).hexdigest(),
-    }
+        return None, {}, ["Node build package.json identity is unavailable"]
+    if len(locks) > 1:
+        return None, {}, ["Node build declares multiple package-manager lockfiles"]
     commands = [*dispatch.get("recipe", {}).get("configure_commands", ()),
                 *dispatch.get("recipe", {}).get("build_commands", ())]
     invoked = {Path(str(argv[0])).name for argv in commands if isinstance(argv, list) and argv}
     managers = invoked & set(LOCKFILES.values())
+    if len(managers) > 1:
+        return None, {}, ["accepted Node commands use multiple package managers"]
+    lock_name, lock_path, lock_sha = locks[0] if locks else (None, None, None)
+    manager = LOCKFILES[str(lock_name)] if lock_name else next(iter(managers), "npm")
+    identity = {
+        "manager": manager,
+        "package_manifest": {"path": package[0], "sha256": package[1]},
+        "lockfile": ({"path": lock_path, "sha256": lock_sha} if lock_name else None),
+        "sha256": hashlib.sha256(canonical_json({
+            "manager": manager, "package": package,
+            "lock": ((lock_path, lock_sha) if lock_name else None),
+        })).hexdigest(),
+    }
     if managers and managers != {manager}:
         return None, identity, [f"accepted Node commands use {', '.join(sorted(managers))}, "
-                                f"but {lock_name} binds the build to {manager}"]
+                                f"but the dependency inputs bind the build to {manager}"]
     return manager, identity, []
 
 

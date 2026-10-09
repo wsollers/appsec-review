@@ -6,7 +6,7 @@ language or publish a separate handoff. Instead, centrally configured
 producer rules select accepted Rust, native C/C++, Node/AssemblyScript, WAT, or other explicitly
 enabled source-family recipes whose commands and outputs establish WebAssembly intent.
 
-Each selected unit runs in dependency order through the same pinned, non-root, no-network,
+Each selected unit runs in dependency order through the same pinned, non-root, dependency-egress,
 read-only container boundary used by project-build probing. Independent ready units share the
 configured worker pool. The executor may add diagnostic-only verbosity flags to accepted build
 drivers (`cargo`, CMake, Make, or Ninja); it never adds target execution or tests and never

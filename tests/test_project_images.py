@@ -14,6 +14,20 @@ from appsec_review.container_runtime import (
     ProjectImageResolver,
     project_recipe_identity,
 )
+from appsec_review.container_runtime.project_images import _restore_command
+
+
+@pytest.mark.parametrize(("manager", "expected"), (
+    ("npm", ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund")),
+    ("pnpm", ("pnpm", "install", "--no-frozen-lockfile", "--ignore-scripts")),
+    ("yarn", ("yarn", "install", "--ignore-scripts", "--non-interactive")),
+))
+def test_lockless_node_restore_uses_the_accepted_package_manager(
+        manager: str, expected: tuple[str, ...]) -> None:
+    assert _restore_command({
+        "build_system": "node", "dependency_files": ["web/package.json"],
+        "configure_commands": [], "build_commands": [[manager, "run", "build"]],
+    }) == expected
 
 
 def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None:
@@ -73,6 +87,7 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert "ENV PATH=/opt/project/web/node_modules/.bin:$PATH" in dockerfile
     assert sum(call[:3] == ("docker", "buildx", "build") for call in calls) == 2
     build_call = next(call for call in calls if call[:3] == ("docker", "buildx", "build"))
+    assert build_call[build_call.index("--network") + 1] == "default"
     assert build_call[-1] == str(next((tmp_path / "metadata" / "project-images").glob("*/context")).resolve())
 
 

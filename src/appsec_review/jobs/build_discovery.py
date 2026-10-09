@@ -241,8 +241,8 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     if profile == "node" and isinstance(dependencies, list):
         names = {PurePosixPath(item).name for item in dependencies if isinstance(item, str)}
         locks = names & {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
-        if "package.json" not in names or len(locks) != 1:
-            errors.append("Node recipes require package.json and exactly one supported lockfile")
+        if "package.json" not in names or len(locks) > 1:
+            errors.append("Node recipes require package.json and at most one supported lockfile")
     allowed = _PROFILE_COMMANDS.get(str(profile), frozenset())
     for field in ("configure_commands", "build_commands"):
         commands = recipe.get(field)
@@ -294,9 +294,6 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
         errors.append("expected_outputs must stay within the accepted build-unit root")
     if type(recipe.get("network_required")) is not bool:
         errors.append("network_required must be boolean")
-    dependency_managers = {"cargo", "go", "maven", "gradle", "dotnet", "node", "composer", "python"}
-    if unit.get("build_system") in dependency_managers and dependencies and recipe.get("network_required") is not True:
-        errors.append("dependency-managed build recipes must resolve dependencies in the project image")
     reason = recipe.get("reason")
     if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:
         errors.append("reason is missing or exceeds the bound")

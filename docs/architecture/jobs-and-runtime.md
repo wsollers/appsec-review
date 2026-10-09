@@ -156,17 +156,17 @@ reused.
 accepted dispatch, probe receipt, recipe, dependency files, source snapshot, and exact derived
 image before executing accepted argv in a fresh run-owned workspace. Native builds, Rust/Cargo, JVM Java/Kotlin
 projects, Go modules and
-workspaces, lockfile-bound Node/JavaScript/TypeScript projects, and Linux-capable .NET SDK projects
+workspaces, manifest-declared Node/JavaScript/TypeScript projects, and Linux-capable .NET SDK projects
 are implemented; Windows-only and .NET Framework units publish
 explicit platform gaps. Families without an executor publish a named unsupported gap. Build dependencies form topological layers, while unrelated units share the configured
 worker pool. Receipts bind command, compile-database, link, artifact, workspace-manifest, image,
 and checkpoint identities. The Go capture derives actual compiler/assembler/linker/cgo/package
-invocations from the toolchain trace and catalogs offline package relationships and build IDs.
+invocations from the toolchain trace and catalogs package relationships and build IDs.
 The Rust capture binds Cargo metadata and accepted workspace/package/target/profile/feature choices
 to protected rustc/linker/archiver/build-script provenance, Rust artifact identities, and exact
 package dependency relationships without executing examples, benchmarks, tests, or binaries.
-The Node capture binds npm, pnpm, or Yarn to its accepted lockfile identity, executes lifecycle
-scripts as untrusted no-network build code, catalogs generated/bundled/package/native outputs and
+The Node capture binds npm, pnpm, or Yarn to its accepted dependency identity, executes lifecycle
+scripts as untrusted build code with dependency egress available, catalogs generated/bundled/package/native outputs and
 source maps, and records only actually observed or successful package-script tool provenance.
 Exact argv remains in protected run-owned artifacts; central logs and
 retrieval-visible records contain hashes and sanitized facts only. See
@@ -179,8 +179,8 @@ classes, JVM metadata, and JAR/WAR/EAR packages, and publishes sanitized command
 to the composable `build` index while exact argv and streams remain protected.
 
 Python is a first-class parallel family node rather than a repository-specific lane. It consumes
-the same accepted dispatch/probe contract, binds checkpoints to locked dependency inputs and typed
-offline policy, executes packaging hooks only inside the generic sandbox, and publishes wheel,
+the same accepted dispatch/probe contract, binds checkpoints to declared dependency inputs and typed
+network policy, executes packaging hooks only inside the generic sandbox, and publishes wheel,
 sdist, metadata, generated-source, bytecode, native-extension, invocation, and package-relationship
 evidence through the shared receipt and retrieval contracts.
 

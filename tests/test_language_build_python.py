@@ -146,7 +146,7 @@ def test_python_build_catalogs_packages_provenance_streams_and_mcp(tmp_path: Pat
     assert graph.node("job_language_build.execute.python").dependencies == ("job_language_build.load.python",)
 
 
-def test_python_recipe_validation_is_package_only_locked_and_offline(tmp_path: Path) -> None:
+def test_python_recipe_validation_is_package_only_and_allows_dependency_download(tmp_path: Path) -> None:
     setup = tmp_path / "setup.py"
     setup.write_text("from setuptools import setup\nsetup(name='sample')\n", encoding="utf-8")
     base = {"family": "python", "recipe": {"dependency_files": ["setup.py"],
@@ -157,7 +157,7 @@ def test_python_recipe_validation_is_package_only_locked_and_offline(tmp_path: P
         "build_commands": [["python", "-m", "pytest"]]}}
     assert any("allowlist" in gap for gap in python_adapter.validate_dispatch(unsafe, tmp_path))
     unlocked = {"family": "python", "recipe": {**base["recipe"], "network_required": True}}
-    assert any("hash-locked" in gap for gap in python_adapter.validate_dispatch(unlocked, tmp_path))
+    assert python_adapter.validate_dispatch(unlocked, tmp_path) == []
 
 
 def test_python_failure_is_gap_and_checkpoint_tamper_stops_reuse(tmp_path: Path) -> None:

@@ -131,7 +131,7 @@ def test_php_composer_executor_catalogs_lock_packages_autoload_archives_and_prot
         "distributable-archive", "native-extension"}
     assert receipt["composer"]["packages"][0]["name"] == "vendor/runtime"
     assert receipt["package_relationships"]
-    assert receipt["composer_policy"]["network"] == "disabled"
+    assert receipt["composer_policy"]["network"] == "allowed"
     assert all("argv" not in command for command in receipt["commands"])
     assert receipt["commands"][0]["stdout"]["truncated"] is True
     assert receipt["commands"][0]["stdout"]["total_bytes"] == 32
@@ -167,10 +167,10 @@ def test_php_sibling_failure_isolated_checkpoint_reuse_and_dag_family_lane(tmp_p
     assert graph.node("job_language_build.execute.php").dependencies == ("job_language_build.load.php",)
 
 
-def test_php_policy_and_lockfile_validation_are_explicit(tmp_path: Path) -> None:
+def test_php_policy_allows_manifest_only_dependency_resolution(tmp_path: Path) -> None:
     assert php.policy_argv(("composer", "archive"), {
         "composer_plugins": "disabled", "composer_scripts": "disabled"})[-3:] == (
             "--no-plugins", "--no-scripts", "--no-interaction")
     dispatch = {"build_system": "composer", "recipe": {
         "dependency_files": ["composer.json"], "network_required": True}}
-    assert php.validate_php_dispatch(dispatch) == ["Composer lockfile is required for a lockfile-bound build"]
+    assert php.validate_php_dispatch(dispatch) == []

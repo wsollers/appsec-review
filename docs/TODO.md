@@ -30,23 +30,23 @@ The Linux vertical is complete only when:
 - unit tests, failure/resume tests, MCP integration tests, and a live Dagster acceptance run prove
   dispatch, execution, provenance capture, indexing, gaps, and selective reuse end to end.
 
-Current status: the generic Linux native/CMake, Rust/Cargo, JVM Java/Kotlin (Maven, Gradle, and direct compiler), Go, lockfile-bound Node/JavaScript/TypeScript, lockfile-bound PHP/Composer, Linux-capable .NET SDK, and WebAssembly output-family adapters now cover
+Current status: the generic Linux native/CMake, Rust/Cargo, JVM Java/Kotlin (Maven, Gradle, and direct compiler), Go, manifest-declared Node/JavaScript/TypeScript, manifest-declared PHP/Composer, Linux-capable .NET SDK, and WebAssembly output-family adapters now cover
 accepted dispatch validation, real build execution, protected compiler/link provenance, artifact catalogs, dependency ordering,
 failure isolation, checkpoint reuse, default-image-first probing, three bounded inference-guided
 dependency-image repairs, successful Dockerfile/image reuse, and dynamic C++/post-build
 consumption. The Go adapter supports accepted modules/workspaces, vendor mode, package targets,
 build tags, and cgo; retains bounded `go -x` provenance and stream artifacts; and catalogs modules,
 packages, generated sources, binaries, build IDs, and sanitized retrieval records. The .NET adapter
-additionally enforces locked restore, catalogs MSBuild/Roslyn and
+allows declared dependency restore, catalogs MSBuild/Roslyn and
 managed/native outputs, and reports Windows-only/.NET Framework units as explicit platform gaps.
-The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/features/locked/offline
+The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/features/lock
 choices; retains rustc, linker, archiver, build-script, and proc-macro provenance; catalogs Cargo
 metadata and resolve edges plus generated sources, rlib/rmeta, native libraries, binaries, and debug
 metadata; and publishes sanitized build evidence without executing tests or produced programs.
-The Node adapter accepts npm, pnpm, and Yarn identities; denies network and application/test
+The Node adapter accepts npm, pnpm, and Yarn identities; allows dependency egress while denying application/test
 execution; treats lifecycle scripts as sandboxed target code; and catalogs generated code, bundles,
 maps, packages, and native addons with protected command/stream evidence and sanitized retrieval.
-The PHP adapter requires `composer.lock`, prepares dependencies in the pinned derived image with
+The PHP adapter accepts `composer.json` with an optional lockfile, prepares dependencies in the pinned derived image with
 plugins/scripts disabled, applies explicit sandbox policy to real Composer build work, catalogs
 package and dependency metadata, generated autoload/code, archives, and native extensions, and
 keeps exact argv and streams out of retrieval-visible evidence.

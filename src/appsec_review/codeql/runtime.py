@@ -220,7 +220,7 @@ class CodeQLExecutor:
                     "database": self.settings.database_timeout_seconds,
                     "query": self.settings.query_timeout_seconds})[action]
         command = [
-            "docker", "run", "--rm", "--network", "none", "--read-only",
+            "docker", "run", "--rm", "--network", "bridge", "--read-only",
             "--user", self.image.runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", str(self.settings.threads),
             "--memory", f"{self.settings.ram_mb + 1024}m", "--pids-limit", "2048",
@@ -246,7 +246,7 @@ class CodeQLExecutor:
             started, completed, duration_ms, stdout_path.relative_to(self.run_root).as_posix(),
             stderr_path.relative_to(self.run_root).as_posix(), stdout_sha, stderr_sha,
             stdout_total, stderr_total, stdout_truncated, stderr_truncated, stdout_tail, stderr_tail,
-            {"network": "none", "root_filesystem": "read-only", "user": self.image.runtime_user,
+            {"network": "bridge", "root_filesystem": "read-only", "user": self.image.runtime_user,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": self.settings.threads,
              "ram_mb": self.settings.ram_mb, "timeout_seconds": timeout,
              "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail"},

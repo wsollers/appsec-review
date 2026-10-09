@@ -386,20 +386,20 @@ output_bytes = 8388608
 artifact_count_limit = 10000
 
 [jobs.job_language_build.settings.go]
-offline = true
+offline = false
 capture_trace = true
 package_catalog = true
 diagnostic_tail_bytes = 32768
 
 [jobs.job_language_build.settings.python]
 frontend = "build"
-require_locked_dependencies = true
-offline = true
+require_locked_dependencies = false
+offline = false
 capture_native_tools = true
 diagnostic_tail_bytes = 32768
 
 [jobs.job_language_build.settings.dotnet]
-require_locked_restore = true
+require_locked_restore = false
 capture_msbuild_diagnostics = true
 generated_sources = true
 allow_publish = true
@@ -411,20 +411,20 @@ toolchain = "stable"
 profile = "dev"
 features = []
 locked = false
-offline = true
+offline = false
 capture_linker = true
 diagnostic_tail_bytes = 32768
 
 [jobs.job_language_build.settings.php]
 composer_plugins = "disabled"
 composer_scripts = "sandboxed"
-require_lockfile = true
+require_lockfile = false
 diagnostic_tail_bytes = 32768
 
 [jobs.job_language_build.settings.node]
 package_managers = ["npm", "pnpm", "yarn"]
-require_lockfile = true
-network = "denied"
+require_lockfile = false
+network = "allowed"
 lifecycle_scripts = "sandboxed"
 capture_source_maps = true
 diagnostic_tail_bytes = 32768

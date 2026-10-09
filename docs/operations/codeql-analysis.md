@@ -33,7 +33,7 @@ The licensed base image is operator-provided. No proprietary payload is committe
 that base. The reviewed asset lock pins the CLI, license, complete extractor trees,
 TypeScript/Rust analyzer prerequisites, default query packs, custom query trees, pack locks, and
 suites. A derived image layers that payload onto each accepted build image and runs as a distinct
-non-root user with no network,
+non-root user on Docker's bridge network so manual builds can restore declared dependencies,
 read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bounded head/tail
 logs.
 

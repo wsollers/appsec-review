@@ -408,8 +408,6 @@ def _go_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
 
 def _go_environment(recipe: Mapping[str, Any], workspace: Path) -> dict[str, str]:
     environment = _probe_environment(recipe)
-    environment["GOPROXY"] = "off"
-    environment["GOSUMDB"] = "off"
     environment.setdefault("GOCACHE", "/tmp/appsec-go-cache")
     source = workspace / Path(*PurePosixPath(str(recipe["source_dir"])).parts)
     if (source / "vendor").is_dir():
@@ -451,6 +449,20 @@ def _go_trace_rows(workspace: Path, data: bytes) -> list[dict[str, Any]]:
                      "outputs": _mapped_files(workspace, directory, outputs),
                      "mapping": "go-x-trace", "mapping_confidence": 1.0})
     return rows
+
+
+def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
+    values = list(argv)
+    executable = Path(values[0]).name.lower() if values else ""
+    lowered = [value.lower() for value in values[1:]]
+    if executable == "dotnet":
+        verb = next((value for value in lowered if not value.startswith("-")), "")
+        if verb in {"build", "publish", "pack", "msbuild"} and not any(
+                value in {"-v:diag", "--verbosity:diagnostic", "/v:diag"} for value in lowered):
+            values.extend(("--verbosity", "diagnostic"))
+    elif executable == "msbuild" and not any(value in {"-v:diag", "/v:diag"} for value in lowered):
+        values.append("/v:diag")
+    return tuple(values)
 
 
 def _go_module_metadata(workspace: Path, source_dir: str) -> list[dict[str, Any]]:
@@ -756,6 +768,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         argv = tuple(raw) if role == "metadata" else _normalized_argv(recipe, list(raw))
         if family == "go":
             argv = _go_argv(argv)
+        elif family == "dotnet":
+            argv = _dotnet_argv(argv)
         elif family == "rust" and rust_settings is not None:
             argv = rust.build_argv(argv, rust_settings)
         elif family == "php":
@@ -763,9 +777,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         environment = (_go_environment(operational_recipe, workspace) if family == "go"
                        else _probe_environment(operational_recipe))
         if family == "node":
-            environment.update({"NPM_CONFIG_OFFLINE": "true", "NPM_CONFIG_AUDIT": "false",
-                                "NPM_CONFIG_FUND": "false", "YARN_ENABLE_NETWORK": "0",
-                                "YARN_ENABLE_IMMUTABLE_INSTALLS": "true",
+            environment.update({"NPM_CONFIG_AUDIT": "false",
+                                "NPM_CONFIG_FUND": "false",
+                                "YARN_ENABLE_IMMUTABLE_INSTALLS": "false",
                                 "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0", "V": "1",
                                 "MAKEFLAGS": "V=1", "npm_config_loglevel": "verbose"})
         elif family == "rust":
@@ -777,7 +791,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         elif family == "python":
             environment.update(python.environment(operational_recipe))
         elif family == "php":
-            environment.update({"COMPOSER_NO_INTERACTION": "1", "COMPOSER_DISABLE_NETWORK": "1",
+            environment.update({"COMPOSER_NO_INTERACTION": "1",
                                 "COMPOSER_PROCESS_TIMEOUT": str(unit.job.config.settings["command_timeout_seconds"])})
         command_before = (_snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
                           if family == "node" else {})
@@ -1086,8 +1100,8 @@ def _validate_config(context, _result) -> None:
             "offline", "capture_trace", "package_catalog", "diagnostic_tail_bytes"} or
             any(type(go_settings.get(key)) is not bool for key in
                 ("offline", "capture_trace", "package_catalog")) or
-            any(go_settings.get(key) is not True for key in
-                ("offline", "capture_trace", "package_catalog")) or
+            go_settings.get("offline") is not False or
+            any(go_settings.get(key) is not True for key in ("capture_trace", "package_catalog")) or
             type(go_settings.get("diagnostic_tail_bytes")) is not int or
             not 1 <= go_settings["diagnostic_tail_bytes"] <= 1024 * 1024):
         raise ValueError("language-build Go settings are invalid")
@@ -1103,8 +1117,8 @@ def _validate_config(context, _result) -> None:
             "package_managers", "require_lockfile", "network", "lifecycle_scripts",
             "capture_source_maps", "diagnostic_tail_bytes"} or
             node_settings.get("package_managers") != ["npm", "pnpm", "yarn"] or
-            node_settings.get("require_lockfile") is not True or
-            node_settings.get("network") != "denied" or
+            node_settings.get("require_lockfile") is not False or
+            node_settings.get("network") != "allowed" or
             node_settings.get("lifecycle_scripts") != "sandboxed" or
             node_settings.get("capture_source_maps") is not True or
             type(node_settings.get("diagnostic_tail_bytes")) is not int or
@@ -1114,8 +1128,8 @@ def _validate_config(context, _result) -> None:
     if (not isinstance(python_settings, Mapping) or set(python_settings) != {
             "frontend", "require_locked_dependencies", "offline", "capture_native_tools",
             "diagnostic_tail_bytes"} or python_settings.get("frontend") not in {"build", "pip", "setuptools"} or
-            python_settings.get("require_locked_dependencies") is not True or
-            python_settings.get("offline") is not True or python_settings.get("capture_native_tools") is not True or
+            python_settings.get("require_locked_dependencies") is not False or
+            python_settings.get("offline") is not False or python_settings.get("capture_native_tools") is not True or
             type(python_settings.get("diagnostic_tail_bytes")) is not int or
             python_settings["diagnostic_tail_bytes"] < 1):
         raise ValueError("language-build Python settings are invalid")

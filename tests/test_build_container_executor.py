@@ -27,7 +27,7 @@ def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -
                               working_directory="project",
                               environment={"RUSTFLAGS": "-C debuginfo=2"})
     command = calls[-1][0]
-    assert ("--network", "none") == command[command.index("--network"):command.index("--network") + 2]
+    assert ("--network", "bridge") == command[command.index("--network"):command.index("--network") + 2]
     assert command[command.index("--entrypoint") + 1:] == (
         "cargo", image_id, "build", "--locked")
     assert command[command.index("--workdir") + 1] == "/workspace/project"
