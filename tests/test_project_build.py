@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import hashlib
 from pathlib import Path
@@ -64,6 +65,33 @@ class FakeBuildExecutor:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(b"\x7fELFfixture")
         return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
+
+    def execute_captured(self, argv, *, workspace, working_directory, environment,
+                         capture_directory, capture_config, scope):
+        result = self.execute(argv, workspace=workspace, working_directory=working_directory,
+                              environment=environment)
+        capture_directory.mkdir(parents=True)
+        events = capture_directory / "events.jsonl"
+        stdout = capture_directory / "stdout"
+        stderr = capture_directory / "stderr"
+        events.write_bytes(b"")
+        stdout.write_bytes(b"ok")
+        stderr.write_bytes(b"")
+        record = capture_directory / "record.json"
+        record.write_text(json.dumps({
+            "schema": "appsec-review/build-execution-record/1",
+            "scope": {"run_id": scope.run_id, "job_id": scope.job_id,
+                      "attempt_id": scope.attempt_id, "build_unit_id": scope.build_unit_id,
+                      "family": scope.family},
+            "coverage": {"complete": True, "gaps": []},
+            "events": {"uri": "events.jsonl", "sha256": hashlib.sha256(b"").hexdigest()},
+            "streams": {
+                "stdout": {"uri": "stdout", "sha256": hashlib.sha256(b"ok").hexdigest()},
+                "stderr": {"uri": "stderr", "sha256": hashlib.sha256(b"").hexdigest()},
+            },
+            "tool_calls": {"records": []},
+        }, sort_keys=True) + "\n", encoding="utf-8")
+        return replace(result, capture_record=record)
 
 
 class FakeImageResolver:
@@ -196,6 +224,11 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
                for item in accepted["probe_receipts"])
     assert all((config.runtime.runs_dir / upstream["run_id"] / artifact["path"]).is_file()
                for build in accepted["probe_receipts"] for artifact in build["artifacts"])
+    for build in accepted["probe_receipts"]:
+        assert all(command["execution_capture"]["complete"] for command in build["commands"])
+        assert all((config.runtime.runs_dir / upstream["run_id"] /
+                    command["execution_capture"]["path"]).is_file()
+                   for command in build["commands"])
     for family in ("native", "rust"):
         image_entry = accepted["images"][family]["entries"][0]
         assert image_entry["attempt_identity"] and image_entry["command_identity"]

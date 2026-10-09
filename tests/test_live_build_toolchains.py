@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,12 +13,21 @@ from appsec_review.config import RustBuildSettings, load_config
 from appsec_review.container_runtime import (
     BuildContainerExecutor, CaptureScope,
     BuildProfile,
+    ProjectImage,
     ProjectImageResolver,
     profiles_from_settings,
 )
 from appsec_review.jobs.job_language_build import dotnet, jvm, node, php, python, rust, wasm
 from appsec_review.jobs.job_language_build.job import _catalog, _kind
 from appsec_review.jobs.job_project_build.job import _probe_environment
+from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
+from appsec_review.jobs.job_review_intake import build_job as build_intake
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
+from appsec_review.jobs.job_target_catalog import build_job as build_catalog
+from appsec_review.runtime import GraphRunner
+from appsec_review.storage import file_sha256
+
 
 
 ROOT = Path(__file__).parents[1]
@@ -200,6 +210,62 @@ def test_live_cpp_build_syscalls_are_captured_in_standard_records(tmp_path: Path
         assert record["tool_calls"]["retained"] > 0
         assert record["tool_calls"]["capped"] is False
     assert (workspace / "native" / "build" / "fixture_native").is_file()
+
+
+class _PinnedBaseImageResolver:
+    def resolve(self, recipe, profile):
+        identity = hashlib.sha256(
+            json.dumps(recipe, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return ProjectImage(
+            "appsec-review/project-build-image/1", identity, profile.name, profile.image_id,
+            profile.tag, profile.image_id, None, False, True, {}), b"", b""
+
+
+def test_live_cpp_project_build_accepts_hash_verified_execution_capture(tmp_path: Path) -> None:
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+                           encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "native", target / "native")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    outcome = GraphRunner(config, [build_projects(
+        image_resolver_factory=lambda _unit: _PinnedBaseImageResolver())]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "SUCCEEDED"
+
+    run_root = config.runtime.runs_dir / upstream["run_id"]
+    accepted = load_accepted_builds(run_root)
+    receipt = next(item for item in accepted["probe_receipts"] if item["family"] == "native")
+    assert receipt["terminal_status"] == "SUCCEEDED"
+    assert len(receipt["commands"]) == 2
+    assert all(command["execution_capture"]["complete"] for command in receipt["commands"])
+    assert all("execution-capture" not in artifact["path"] for artifact in receipt["artifacts"])
+    assert any(artifact["path"].endswith("build/fixture_native")
+               for artifact in receipt["artifacts"])
+
+    compiler_seen = False
+    for command in receipt["commands"]:
+        identity = command["execution_capture"]
+        record_path = run_root / identity["path"]
+        assert record_path.is_file() and file_sha256(record_path) == identity["sha256"]
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        assert record["coverage"] == {"complete": True, "gaps": []}
+        assert "connect" in record["collector"]["event_kinds"]
+        assert record["events"]["counts"]["process_exec"] > 0
+        assert record["events"]["counts"]["file_open"] > 0
+        assert record["tool_calls"]["retained"] > 0
+        events_path = record_path.parent / record["events"]["uri"]
+        assert file_sha256(events_path) == record["events"]["sha256"]
+        for line in events_path.read_text(encoding="utf-8").splitlines():
+            event = json.loads(line)
+            if event["kind"] == "process_exec" and event.get("argv") and any(
+                    name in Path(event["argv"][0]).name
+                    for name in ("clang", "c++", "g++")):
+                compiler_seen = True
+    assert compiler_seen, "no C++ compiler argv was retained in syscall evidence"
 
 
 @pytest.mark.parametrize("case", CASES[1:], ids=lambda case: f"captured-{case.family}")

@@ -11,6 +11,7 @@ from typing import Any
 
 from appsec_review.container_runtime import (
     BuildContainerExecutor,
+    CaptureScope,
     BuildProfile,
     ProjectImageBuildError,
     ProjectImageResolver,
@@ -211,6 +212,71 @@ def _retained_stream(run_root: Path, path: Path, data: bytes, limit: int) -> dic
     return value
 
 
+def _capture_member(root: Path, value: object) -> Path:
+    if not isinstance(value, Mapping):
+        raise ValueError("build execution capture member is invalid")
+    uri = value.get("uri")
+    if not isinstance(uri, str):
+        raise ValueError("build execution capture member URI is invalid")
+    logical = PurePosixPath(uri)
+    if not logical.parts or logical.is_absolute() or ".." in logical.parts:
+        raise ValueError("build execution capture member URI is not normalized")
+    path = (root / Path(*logical.parts)).resolve(strict=True)
+    resolved_root = root.resolve(strict=True)
+    if resolved_root not in path.parents or not path.is_file() or path.is_symlink():
+        raise ValueError("build execution capture member escaped its root")
+    if file_sha256(path) != value.get("sha256"):
+        raise ValueError("build execution capture member identity changed")
+    return path
+
+
+def _capture_identity(unit: UnitContext, result: Any, *, build_unit_id: str,
+                      family: str) -> tuple[dict[str, Any], list[str]]:
+    value = getattr(result, "capture_record", None)
+    if not isinstance(value, Path):
+        raise RuntimeError("build execution capture record is required")
+    path = value.resolve(strict=True)
+    run_root = unit.job.run_root.resolve(strict=True)
+    if run_root not in path.parents or path.is_symlink():
+        raise ValueError("build execution capture record escaped the run")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    scope = document.get("scope")
+    if (document.get("schema") != "appsec-review/build-execution-record/1" or
+            not isinstance(scope, Mapping) or scope.get("run_id") != unit.job.run_id or
+            scope.get("job_id") != "job_project_build" or
+            scope.get("attempt_id") != unit.job.attempt_id or
+            scope.get("build_unit_id") != build_unit_id or scope.get("family") != family):
+        raise ValueError("build execution capture record identity is invalid")
+    coverage = document.get("coverage")
+    if not isinstance(coverage, Mapping) or not isinstance(coverage.get("gaps"), list):
+        raise ValueError("build execution capture coverage is invalid")
+    complete = coverage.get("complete")
+    if not isinstance(complete, bool) or complete == bool(coverage["gaps"]):
+        raise ValueError("build execution capture coverage disposition is inconsistent")
+    capture_root = path.parent
+    _capture_member(capture_root, document.get("events"))
+    streams = document.get("streams")
+    if not isinstance(streams, Mapping) or set(streams) != {"stdout", "stderr"}:
+        raise ValueError("build execution capture streams are invalid")
+    for stream in streams.values():
+        _capture_member(capture_root, stream)
+    tool_calls = document.get("tool_calls")
+    if not isinstance(tool_calls, Mapping) or not isinstance(tool_calls.get("records"), list):
+        raise ValueError("build execution tool calls are invalid")
+    for member in tool_calls["records"]:
+        tool_path = _capture_member(capture_root, member)
+        tool = json.loads(tool_path.read_text(encoding="utf-8"))
+        if tool.get("schema") != "appsec-review/build-tool-call/1":
+            raise ValueError("build execution tool-call schema is invalid")
+        for name in ("stdout", "stderr"):
+            _capture_member(tool_path.parent, tool.get(name))
+    identity = {"schema": document["schema"],
+                "path": path.relative_to(run_root).as_posix(),
+                "sha256": file_sha256(path), "size_bytes": path.stat().st_size,
+                "complete": complete}
+    return identity, [str(gap) for gap in coverage["gaps"]]
+
+
 def _probe_cache(unit: UnitContext, recipe_identity: str) -> Path:
     return unit.job.metadata_root / "project-probes" / recipe_identity / "accepted.json"
 
@@ -268,8 +334,19 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             tool_identity={"family": action["family"], "image_id": image["image_id"]},
             input_identities={"recipe_identity": recipe_identity,
                               "argv_sha256": hashlib.sha256(canonical_json(list(command))).hexdigest()})
-        result = executor.execute(command, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                  environment=_probe_environment({**recipe, "build_system": action["build_system"]}))
+        captured = getattr(executor, "execute_captured", None)
+        if not callable(captured) or unit.job.config.build_capture is None:
+            raise RuntimeError("project builds require execution capture")
+        result = captured(
+            command, workspace=workspace, working_directory=str(recipe["source_dir"]),
+            environment=_probe_environment({**recipe, "build_system": action["build_system"]}),
+            capture_directory=root / "execution-capture" / f"command-{ordinal:03d}",
+            capture_config=unit.job.config.build_capture,
+            scope=CaptureScope(unit.job.run_id, "job_project_build", unit.job.attempt_id,
+                               build_unit_id, str(action["family"])))
+        capture_identity, capture_gaps = _capture_identity(
+            unit, result, build_unit_id=build_unit_id, family=str(action["family"]))
+        gaps.extend(f"build command {ordinal} capture: {gap}" for gap in capture_gaps)
         logs = root / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         stdout, stderr = logs / f"command-{ordinal:03d}.stdout", logs / f"command-{ordinal:03d}.stderr"
@@ -296,8 +373,9 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
                                   if not _SECRET_KEY.search(str(key))},
             "stdout": stdout_identity, "stderr": stderr_identity,
             "protected_argv": {"path": protected.relative_to(unit.job.run_root).as_posix(),
-                               "sha256": file_sha256(protected), "size_bytes": protected.stat().st_size}})
-        failed = result.timed_out or result.exit_code != 0
+                               "sha256": file_sha256(protected), "size_bytes": protected.stat().st_size},
+            "execution_capture": capture_identity})
+        failed = result.timed_out or result.exit_code != 0 or bool(capture_gaps)
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_invocation_id=invocation,
             tool_id="build-probe", retry_count=attempt_number - 1,
             tool_identity={"family": action["family"], "image_id": image["image_id"]},
@@ -305,7 +383,9 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
             duration_ms=int((time.monotonic() - started) * 1000))
         if failed:
-            gaps.append(f"build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
+            if result.timed_out or result.exit_code != 0:
+                gaps.append(
+                    f"build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
             break
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed during isolated probe execution")

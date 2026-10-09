@@ -128,6 +128,22 @@ class BuildContainerExecutor:
     def _bind_source(self, path: Path) -> Path:
         return resolve_host_bind_path(path, self.runner)
 
+    def _make_workspace_writable(self, root: Path) -> None:
+        """Grant the fixed non-root container identity access to the run-owned source copy."""
+        container_uid = int(self.profile.user.split(":", 1)[0])
+        for path in (root, *root.rglob("*")):
+            if path.is_symlink():
+                continue
+            mode = path.stat().st_mode
+            try:
+                if path.is_dir():
+                    path.chmod(mode | 0o007)
+                elif path.is_file():
+                    path.chmod(mode | 0o006)
+            except PermissionError:
+                if path.stat().st_uid != container_uid:
+                    raise
+
     def _prepare(self, *, workspace: Path, working_directory: str,
                  environment: Mapping[str, str]) -> tuple[Path, list[str]]:
         root = workspace.resolve(strict=True)
@@ -135,6 +151,7 @@ class BuildContainerExecutor:
         resolved_workdir = (root / relative_workdir).resolve(strict=True)
         if root != resolved_workdir and root not in resolved_workdir.parents:
             raise ValueError("build working directory escaped the run-owned workspace")
+        self._make_workspace_writable(root)
         bind_source = self._bind_source(root)
         command = [
             "docker", "run", "--rm", "--network", "bridge", "--read-only",
@@ -188,10 +205,6 @@ class BuildContainerExecutor:
             workspace=workspace, working_directory=working_directory,
             environment=capture_environment)
         capture_root = capture_directory.resolve()
-        try:
-            relative_capture = capture_root.relative_to(root)
-        except ValueError as exc:
-            raise ValueError("capture directory must be inside the run-owned workspace") from exc
         recorder = BuildExecutionRecorder(
             capture_root, scope, capture_config,
             {"backend": "ptrace", "tool": "strace", "image_id": self.profile.image_id,
@@ -199,6 +212,9 @@ class BuildContainerExecutor:
                                     "file_open", "connect"))},
         )
         driver = capture_root / "build-driver.sh"
+        # Host and non-root container IDs differ; only this new run-owned leaf is shared.
+        capture_root.chmod(0o733)
+
         source_driver = Path(__file__).resolve().parents[3] / "containers" / "build-capture" / "build-driver.sh"
         driver.write_bytes(source_driver.read_bytes())
         wrapper = capture_root / "tool-wrapper.py"
@@ -212,7 +228,14 @@ class BuildContainerExecutor:
                 "#!/bin/sh\nexec \"$APPSEC_CAPTURE_PYTHON\" \"$APPSEC_CAPTURE_ROOT/tool-wrapper.py\" " +
                 tool + " \"$@\"\n", encoding="utf-8", newline="\n")
             launcher.chmod(0o755)
-        logical_capture = "/workspace/" + relative_capture.as_posix()
+        try:
+            relative_capture = capture_root.relative_to(root)
+        except ValueError:
+            command.extend(("--mount",
+                            f"type=bind,src={self._bind_source(capture_root)},dst=/capture"))
+            logical_capture = "/capture"
+        else:
+            logical_capture = "/workspace/" + relative_capture.as_posix()
         logical_driver = logical_capture + "/build-driver.sh"
         logical_wrappers = logical_capture + "/wrappers"
         command.extend(("--entrypoint", "/bin/sh", self.profile.image_id, logical_driver,
