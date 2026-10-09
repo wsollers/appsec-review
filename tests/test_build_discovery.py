@@ -138,3 +138,27 @@ def test_java_recipe_normalization_removes_host_specific_java_home() -> None:
     }
     normalized = normalize_build_recipe(recipe)
     assert normalized["environment"] == {"MAVEN_OPTS": "-Xmx1g"}
+
+
+def test_teamcity_kotlin_dsl_is_not_a_java_build_unit() -> None:
+    units = discover_build_units([
+        _file(".teamcity/settings.kts"),
+        _file("projects/java/sample/src/Main.java"),
+    ])
+    assert [(unit["root"], unit["family"]) for unit in units] == [
+        ("projects/java/sample", "java")]
+
+
+def test_dotnet_recipe_normalization_regenerates_workspace_restore_outputs() -> None:
+    recipe = {
+        "image_profile": "dotnet",
+        "configure_commands": [],
+        "build_commands": [[
+            "dotnet", "build", "--configuration", "Release", "--no-restore",
+            "-p:TreatWarningsAsErrors=true",
+        ]],
+    }
+    normalized = normalize_build_recipe(recipe)
+    assert normalized["build_commands"] == [[
+        "dotnet", "build", "--configuration", "Release", "-p:TreatWarningsAsErrors=true",
+    ]]

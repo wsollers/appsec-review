@@ -113,6 +113,10 @@ def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, A
         fallback = _SOURCE_MARKERS.get(path.suffix.lower())
         if fallback is None:
             continue
+        if ".teamcity" in path.parts:
+            # TeamCity Kotlin DSL is CI configuration, not an independently compilable JVM
+            # source tree. It is cataloged and analyzed by the CI lanes instead.
+            continue
         family, system = fallback
         if any(existing_family == family and
                (root.as_posix() == "." or path == root or root in path.parents)
@@ -201,6 +205,18 @@ def normalize_build_recipe(recipe: Mapping[str, Any]) -> dict[str, Any]:
         environment = dict(value["environment"])
         environment.pop("JAVA_HOME", None)
         value["environment"] = environment
+    if value.get("image_profile") == "dotnet":
+        for field in ("configure_commands", "build_commands"):
+            commands = value.get(field)
+            if isinstance(commands, list):
+                # Restore-generated obj/project.assets.json lives beside the target source and is
+                # intentionally not retained in the descriptor-only dependency image. Let the
+                # workspace build regenerate it, reusing the image-owned NuGet package cache.
+                value[field] = [
+                    [argument for argument in command if argument != "--no-restore"]
+                    if isinstance(command, list) else command
+                    for command in commands
+                ]
     dependencies = value.get("dependency_files")
     names = ({PurePosixPath(item).name for item in dependencies if isinstance(item, str)}
              if isinstance(dependencies, list) else set())
