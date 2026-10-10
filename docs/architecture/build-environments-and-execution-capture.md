@@ -19,8 +19,9 @@ be treated as one container lifecycle:
    gitleaks scan.
 
 Captured execution is an acceptance requirement for `job_project_build` probes and for every
-command of the native C/C++, Rust/Cargo, and .NET SDK adapters in `job_language_build`. The remaining `job_language_build`
-adapters still use their family-specific execution and provenance paths; they must not be described
+command of the native C/C++, Rust/Cargo, Go, and .NET SDK adapters in `job_language_build`. The
+remaining `job_language_build` adapters still use their family-specific execution and provenance
+paths; they must not be described
 as producing the standardized syscall/envp/secret-scan record until they are explicitly migrated
 and tested. The current capture backend is in-container
 `ptrace` through `strace`. Configuration reserves `ebpf` as a future backend, but the executor
@@ -229,6 +230,29 @@ probes dropped, 429 image files identified without hashing) and hashed 27 worksp
 
 The Python PATH wrapper costs about 40 ms per wrapped tool call. `docs/TODO.md` tracks replacing it
 with a static Go binary.
+
+`strace` closes a still-open row with ` <detached ...>` when it drops a tracee that vanished
+because its thread group exited or exec'd underneath it. Multi-threaded toolchains such as Go
+produce several on every build. Such a row holds what strace decoded at syscall entry, sometimes
+from the stale registers of a thread that never ran, and never a result. What it establishes
+depends only on the call:
+
+- `exit`/`exit_group` never has a result and becomes a process-exit event.
+- `execve`/`execveat`: a successful exec leaves the process alive as a tracee, and strace then
+  reports its result. A row that never got one did not start a program. It is retained as a
+  process-exec event marked `unfinished` with a failing `result`, so it can never be provenance.
+- `openat`/`openat2`: a file-open event retains the requested path and no result, so the row is
+  the same observation, marked `unfinished`.
+- `clone`/`clone3` with `CLONE_THREAD`: the new thread, if any, joins the group being killed and
+  never reaches user mode. Nothing is recorded.
+- A call outside the traced set (`???`, `syscall_0x...`, or any other name) is not one of the
+  required event kinds whether or not it completed. Nothing is recorded.
+- `connect`, and `fork`, `vfork`, or a `clone` that creates a process: the connection may have been
+  made and the child outlives its parent. The outcome is lost, so the row remains an
+  `unparsed trace row` collector error and the capture is incomplete.
+
+Rows that record nothing are counted in `events.thread_teardown_rows`. A row that is not exactly a
+detached call is not interpreted and is likewise a collector error.
 
 ## Envp capture and configured redaction
 
@@ -561,6 +585,51 @@ Assemblies, portable PDBs, generated sources, NuGet metadata/packages, dependenc
 configuration, native/AOT outputs, and project/package/reference topology remain hash-bound output
 evidence. The .NET link database is stored beside the container-owned workspace.
 
+## Go language-build integration
+
+`job_language_build` runs every accepted `go` configure/build command and the bounded
+`go list -deps -json` package catalog through `execute_captured` with a `CaptureScope` naming the
+`go` family. Nothing in the Go adapter runs outside capture: the former uncaptured
+`go tool buildid` inspection and the `go build -x` stderr parser were removed. `-x` is still added
+so the retained stderr carries the toolchain trace, but that stream is diagnostic output and is
+never parsed for provenance. Captures are stored beside the workspace under
+`data/build/go/units/<build-unit-id>/attempts/<attempt-id>/execution-capture/command-NNN/`.
+
+Go tool provenance has one authority: a successful process-exec event whose kernel-resolved
+`executable` is an image-owned path. The build container's root filesystem is read-only, so the
+only places a build can write an executable are its mounts. An exec path that is relative, not
+normalized, or below `/workspace`, `/capture`, `/tmp`, `/dev`, `/proc`, `/run`, or `/var/tmp` is
+target-controlled: it is counted as `untrusted_location_exec_events` and never classified,
+whatever its name or `argv[0]` claims. That rule also excludes the PATH wrapper launchers, so a
+wrapper that started is not evidence that the real tool did. `compile`, `asm`, `link`, `cgo`,
+`pack`, and `buildid` are recognized only inside a `pkg/tool/<os>_<arch>/` toolchain directory,
+`go` only as `.../bin/go`, and the C driver, assembler, linker, and archiver by name at an
+image-owned path. A recipe that would substitute the toolchain or the tree it builds
+(`-toolexec`, `-exec`, `-overlay`, `-C`, `-modfile`, including through `GOFLAGS`), write its output
+outside the build unit, or run a subcommand other than `build`, `generate`, or
+`mod download|verify|vendor` is refused before execution.
+
+PATH tool-call records are reconciled onto an invocation the collector observed. A record with no
+matching successful exec, an exec redacted by the secret scan, a redacted tool-call record, and a
+toolchain exec whose argv was truncated at the capture limit are each a named gap; none becomes
+an invocation. `compile` must be observed, and a cataloged executable requires an observed `link`.
+Any of these gaps makes `capture_provenance.complete` false, and such a unit is never
+checkpointed. The package catalog only enriches authoritative events: the directory it reports
+for a package resolves the relative source arguments of that package's observed compiler event.
+
+Build outputs are parsed as hostile input by in-repository readers that execute nothing.
+`elf.loader_facts` validates the ELF header, program header table, segment bounds, and the
+dynamic section, and reads each dynamic string only from inside `DT_STRTAB`/`DT_STRSZ` within the
+file bytes of one loadable segment. `go.build_facts` validates the section header table and reads
+the Go build ID from `.note.go.buildid`, the toolchain version, main module, dependency modules
+and fixed platform settings from `.go.buildinfo` (Go 1.18+ inline layout), and the presence of
+DWARF, a symbol table, and the PC-line table. `go.parse_package_catalog` accepts only a complete,
+well-typed `go list` stream. A structure that is truncated, overlapping, inconsistent, or out of
+range leaves the artifact `unparsed` with a named gap; nothing is published from a partial read.
+
+Go module checksum files (`go.sum`, `go.work.sum`) are accepted build descriptors, so a recipe can
+bind them as dependency inputs and the derived project image restores modules against them.
+
 ## Configuration ownership
 
 All implemented capture configuration is typed and centralized in `appsec-review.toml`. Global
@@ -586,10 +655,13 @@ The main implementation surfaces are:
   successful-exec reconciliation algorithm;
 - `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`, and
   `dotnet.py` — shared routing plus language-specific recipes, classification, artifacts, and
-  metadata; and
+  metadata;
+- `src/appsec_review/jobs/job_language_build/elf.py` and `go.py` — bounded ELF, Go build-fact, and
+  package-catalog readers; and
 - `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
   `tests/test_captured_build_reconciliation.py`, `tests/test_project_build.py`,
   `tests/test_go_language_build.py`, `tests/test_rust_language_build.py`,
+  `tests/test_go_build_facts.py`, `tests/test_elf_loader_facts.py`,
   `tests/test_language_build.py`, and `tests/test_live_build_toolchains.py` — unit and live
   contracts. `tests/capture_fakes.py` replaces
   only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.

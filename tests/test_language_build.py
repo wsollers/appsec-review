@@ -272,6 +272,7 @@ def dotnet_language_executor(profile, calls: list[tuple[str, ...]], *, fail: boo
                 simulation.tool_call("dotnet", compiler[1:], executable="/usr/bin/dotnet")
             else:
                 simulation.exec("/usr/bin/dotnet", compiler)
+            # A hostile diagnostic line must never create provenance on its own.
             return 0, b"dotnet /unobserved/csc.dll /out:/workspace/phantom.dll phantom.cs\n", b""
         return 0, b"", b""
     return simulated_executor(profile, behavior)

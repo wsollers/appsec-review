@@ -54,7 +54,7 @@ _CONTEXT_NAMES = {
     "poetry.lock", "Pipfile.lock", "pylock.toml", "setup.cfg",
     "rust-toolchain", "rust-toolchain.toml", "Directory.Build.props", "global.json",
     "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
-    "binding.gyp", "config.m4",
+    "binding.gyp", "config.m4", "go.sum", "go.work.sum",
 }
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++", "gcc", "g++",
@@ -238,6 +238,49 @@ def normalize_build_recipe(recipe: Mapping[str, Any]) -> dict[str, Any]:
     return value
 
 
+_GO_SUBCOMMANDS = {"build", "generate", "mod"}
+_GO_MOD_SUBCOMMANDS = {"download", "verify", "vendor"}
+# These options replace the toolchain, the working directory, or the source tree the accepted
+# recipe names, so observed tool identities would no longer describe the accepted build.
+_GO_FORBIDDEN_OPTIONS = ("-toolexec", "-exec", "-overlay", "-C", "-modfile")
+
+
+def _go_option_errors(values: Sequence[str]) -> list[str]:
+    return [f"go option is forbidden: {option}" for option in _GO_FORBIDDEN_OPTIONS
+            if any(value == option or value.startswith(option + "=") or
+                   value == "-" + option or value.startswith("-" + option + "=") for value in values)]
+
+
+def go_recipe_errors(recipe: Mapping[str, Any]) -> tuple[str, ...]:
+    """The Go build-only command contract: bounded subcommands, no toolchain or tree substitution."""
+    errors: list[str] = []
+    builds = 0
+    for argv in [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]:
+        if not isinstance(argv, list) or len(argv) < 2 or argv[0] != "go":
+            errors.append("Go recipes may execute go commands only")
+            continue
+        values = [str(value) for value in argv[1:]]
+        subcommand = values[0]
+        if subcommand not in _GO_SUBCOMMANDS:
+            errors.append(f"go subcommand is unsupported: {subcommand}")
+            continue
+        if subcommand == "mod" and (len(values) < 2 or values[1] not in _GO_MOD_SUBCOMMANDS):
+            errors.append("go mod subcommand is unsupported: " + (values[1] if len(values) > 1 else "<missing>"))
+        builds += subcommand == "build"
+        errors.extend(_go_option_errors(values[1:]))
+        for index, value in enumerate(values):
+            output = (values[index + 1] if value == "-o" and index + 1 < len(values) else
+                      value[3:] if value.startswith("-o=") else None)
+            if output is not None and (output.startswith("/") or ".." in PurePosixPath(output).parts):
+                errors.append("go build output must stay inside the accepted build unit")
+    if builds < 1:
+        errors.append("Go recipe must contain a go build command")
+    environment = recipe.get("environment")
+    flags = str(environment.get("GOFLAGS", "")).split() if isinstance(environment, Mapping) else []
+    errors.extend(_go_option_errors(flags))
+    return tuple(dict.fromkeys(errors))
+
+
 def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     required = {"schema", "build_unit_id", "image_profile", "source_dir", "build_dir",
@@ -357,4 +400,6 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     reason = recipe.get("reason")
     if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:
         errors.append("reason is missing or exceeds the bound")
+    if profile == "go":
+        errors.extend(go_recipe_errors(recipe))
     return errors

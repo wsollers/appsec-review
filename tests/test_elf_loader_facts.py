@@ -189,3 +189,118 @@ def test_catalog_resolves_loader_dependencies_and_names_unparseable_outputs(tmp_
     assert by_path["app"]["loader_parser"] == elf.PARSER_IDENTITY
     assert by_path["broken"]["loader_dependency_status"] == "unparsed"
     assert len(gaps) == 1 and gaps[0].startswith("broken: loader dependencies were not parseable")
+
+
+# Layout of `minimal_elf(("libc.so.6",))`: ELF header, PT_LOAD and PT_DYNAMIC program headers,
+# then DT_NEEDED, DT_STRTAB, DT_STRSZ, DT_NULL, then the 11-byte string table.
+_LOAD, _DYNAMIC_HEADER = 64, 120
+_NEEDED, _STRTAB, _STRSZ, _NULL, _STRINGS = 176, 192, 208, 224, 240
+
+
+def _patched(data: bytes, *patches: tuple[int, str, int]) -> bytes:
+    mutable = bytearray(data)
+    for offset, fmt, value in patches:
+        struct.pack_into(fmt, mutable, offset, value)
+    return bytes(mutable)
+
+
+def _facts(tmp_path: Path, data: bytes) -> dict:
+    path = tmp_path / "candidate"
+    path.write_bytes(data)
+    return elf.loader_facts(path)
+
+
+def test_loader_facts_rejects_a_string_outside_the_declared_string_table(tmp_path: Path) -> None:
+    # The appended name is terminated, inside the file, and inside the loadable segment, but it
+    # lies past DT_STRSZ: it is not part of the dynamic string table and must not be published.
+    base = minimal_elf()
+    data = base + b"libevil.so\0"
+    data = _patched(data, (_LOAD + 32, "<Q", len(data)), (_LOAD + 40, "<Q", len(data)),
+                    (_NEEDED + 8, "<Q", len(base) - _STRINGS))
+    with pytest.raises(ValueError, match="lies outside DT_STRTAB/DT_STRSZ"):
+        _facts(tmp_path, data)
+    # The same bytes are accepted only when DT_STRSZ actually declares them.
+    declared = _patched(data, (_STRSZ + 8, "<Q", len(data) - _STRINGS))
+    assert _facts(tmp_path, declared)["needed"] == ["libevil.so"]
+
+
+def test_loader_facts_rejects_a_string_that_runs_past_the_declared_table_size(tmp_path: Path) -> None:
+    # "libc.so.6\0" continues in the file, but DT_STRSZ ends the table after "libc".
+    with pytest.raises(ValueError, match="dynamic string is unterminated inside its owning structure"):
+        _facts(tmp_path, _patched(minimal_elf(), (_STRSZ + 8, "<Q", 5)))
+
+
+@pytest.mark.parametrize(("patches", "message"), [
+    (((_STRSZ, "<q", 11),), "exactly one DT_STRTAB and one DT_STRSZ"),
+    (((_STRSZ, "<q", 5),), "exactly one DT_STRTAB and one DT_STRSZ"),
+    (((_STRSZ + 8, "<Q", 0),), "string table is empty"),
+    (((_STRTAB + 8, "<Q", 0x10000),), "not backed by the file bytes of one loadable segment"),
+    (((_STRSZ + 8, "<Q", 4096),), "not backed by the file bytes of one loadable segment"),
+    (((_STRTAB + 8, "<Q", (1 << 64) - 4),), "not backed by the file bytes of one loadable segment"),
+    (((_NEEDED + 8, "<Q", 0),), "library name is empty"),
+    (((_NEEDED + 8, "<Q", (1 << 64) - 1),), "lies outside DT_STRTAB/DT_STRSZ"),
+    (((_NULL, "<q", 21),), "no DT_NULL terminator"),
+    (((_DYNAMIC_HEADER + 32, "<Q", 60),), "not a whole number of entries"),
+    (((_DYNAMIC_HEADER + 32, "<Q", 0),), "not a whole number of entries"),
+    (((_DYNAMIC_HEADER + 8, "<Q", 1 << 32),), "segment extends past the end of the file"),
+    (((_DYNAMIC_HEADER + 8, "<Q", (1 << 64) - 8),), "segment extends past the end of the file"),
+    (((_LOAD + 32, "<Q", 200),), "dynamic section is not contained in a loadable segment"),
+    (((_LOAD + 40, "<Q", 1),), "file size exceeds its memory size"),
+    (((_LOAD, "<I", 2),), "more than one dynamic segment"),
+    (((_DYNAMIC_HEADER, "<I", 1), (_DYNAMIC_HEADER + 40, "<Q", 64)), "loadable segments overlap"),
+    (((0x36, "<H", 64),), "program header table is invalid"),
+    (((0x20, "<Q", 8),), "program header table is invalid"),
+    (((0x20, "<Q", 1 << 40),), "past the end of the file"),
+    (((0x34, "<H", 52),), "header size is inconsistent"),
+    (((0x06, "<B", 0),), "identification is invalid"),
+], ids=["no-strsz", "duplicate-strtab", "empty-table", "table-unmapped", "table-overruns-segment",
+        "table-address-overflow", "empty-name", "offset-overflow", "no-terminator", "partial-entry",
+        "empty-dynamic", "dynamic-past-file", "dynamic-offset-overflow", "dynamic-outside-load",
+        "load-sizes", "duplicate-dynamic", "overlapping-loads", "entry-size", "table-in-header",
+        "table-past-file", "header-size", "ident-version"])
+def test_loader_facts_rejects_inconsistent_dynamic_structures(
+        tmp_path: Path, patches: tuple[tuple[int, str, int], ...], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _facts(tmp_path, _patched(minimal_elf(), *patches))
+
+
+def test_loader_facts_bounds_the_interpreter_to_its_segment(tmp_path: Path) -> None:
+    # Re-purpose the second program header as PT_INTERP over the "libc.so.6\0" bytes.
+    def interpreter(size: int) -> bytes:
+        return _patched(minimal_elf(), (_DYNAMIC_HEADER, "<I", 3), (_DYNAMIC_HEADER + 8, "<Q", _STRINGS + 1),
+                        (_DYNAMIC_HEADER + 32, "<Q", size))
+
+    assert _facts(tmp_path, interpreter(10)) == {"needed": [], "interpreter": "libc.so.6", "soname": None,
+                                                 "run_paths": [], "linkage": "static"}
+    # One byte shorter and the terminator lies outside the segment, although it is in the file.
+    with pytest.raises(ValueError, match="interpreter path is unterminated inside its owning structure"):
+        _facts(tmp_path, interpreter(9))
+    with pytest.raises(ValueError, match="interpreter segment size is invalid"):
+        _facts(tmp_path, interpreter(1))
+    with pytest.raises(ValueError, match="interpreter segment size is invalid"):
+        _facts(tmp_path, _patched(interpreter(10), (_LOAD + 32, "<Q", 8192), (_LOAD + 40, "<Q", 8192),
+                                  (_DYNAMIC_HEADER + 32, "<Q", 4097)) + bytes(8192))
+    with pytest.raises(ValueError, match="interpreter path is empty"):
+        _facts(tmp_path, _patched(interpreter(10), (_DYNAMIC_HEADER + 8, "<Q", _STRINGS)))
+
+
+def test_loader_facts_reads_a_32_bit_big_endian_file(tmp_path: Path) -> None:
+    strings = b"\0libz.so.1\0/opt/lib\0"
+    header, program = 52, 32
+    dynamic_offset = header + 2 * program
+    string_offset = dynamic_offset + 5 * 8
+    dynamic = (struct.pack(">iI", 1, 1) + struct.pack(">iI", 29, 11) + struct.pack(">iI", 5, string_offset) +
+               struct.pack(">iI", 10, len(strings)) + struct.pack(">iI", 0, 0))
+    size = string_offset + len(strings)
+    ident = b"\x7fELF" + bytes([1, 2, 1, 0]) + bytes(8)
+    elf_header = ident + struct.pack(">HHIIIIIHHHHHH", 3, 8, 1, 0, header, 0, 0, header, program, 2, 0, 0, 0)
+    load = struct.pack(">IIIIIIII", 1, 0, 0, 0, size, size, 5, 4096)
+    segment = struct.pack(">IIIIIIII", 2, dynamic_offset, dynamic_offset, dynamic_offset,
+                          len(dynamic), len(dynamic), 6, 4)
+    data = elf_header + load + segment + dynamic + strings
+    assert _facts(tmp_path, data) == {"needed": ["libz.so.1"], "interpreter": None, "soname": None,
+                                      "run_paths": ["/opt/lib"], "linkage": "dynamic"}
+    with pytest.raises(ValueError, match="lies outside DT_STRTAB/DT_STRSZ"):
+        _facts(tmp_path, _patched(data, (dynamic_offset + 4, ">I", len(strings))))
+    with pytest.raises(ValueError):
+        _facts(tmp_path, _patched(data, (string_offset + 1, ">B", 0xFF)))

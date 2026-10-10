@@ -108,7 +108,7 @@ class FakeBuildExecutor:
             "tool_id": "tool-gitleaks", "exit_code": 0, "timed_out": False,
             "stdout": {"uri": "stdout", "sha256": hashlib.sha256(b"").hexdigest()},
             "stderr": {"uri": "stderr", "sha256": hashlib.sha256(b"").hexdigest()},
-            "report": {"uri": "gitleaks.json", "sha256": hashlib.sha256(b"[]\n").hexdigest()},
+            "report": {"uri": "gitleaks.json", "sha256": hashlib.sha256(report.read_bytes()).hexdigest()},
         }, sort_keys=True) + "\n", encoding="utf-8")
         record = capture_directory / "record.json"
         record.write_text(json.dumps({

@@ -173,6 +173,11 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
             environment[key] = protected.replace("$PATH", environment[key])
         else:
             environment[key] = protected
+    if str(recipe.get("build_system", "")) == "go" and not recipe.get("network_required"):
+        # Only a dependency-bearing project image carries a populated module cache. Otherwise
+        # the cache would be the read-only image root, so declared modules resolve into the
+        # build container's writable scratch instead.
+        environment["GOMODCACHE"] = "/tmp/appsec-go-mod"
     return environment
 
 

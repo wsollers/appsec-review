@@ -22,7 +22,9 @@ repeat those decisions.
 Each recipe uses schema `appsec-review/build-recipe/1` and contains only: `schema`,
 `build_unit_id`, `image_profile`, `source_dir`, `build_dir`, `system_packages`, `environment`,
 `dependency_files`, `configure_commands`, `build_commands`, `expected_outputs`,
-`network_required`, and `reason`. Commands are argv arrays, never shell text. Use only the supplied
+`network_required`, and `reason`. `system_packages`, `dependency_files`, `configure_commands`,
+`build_commands`, and `expected_outputs` are JSON arrays, written `[]` when empty; `environment`
+is a JSON object, written `{}` when empty. Commands are argv arrays, never shell text. Use only the supplied
 build-unit ids and their exact family as `image_profile`; normalized repository-relative paths;
 ordinary non-secret environment variables; and executables appropriate to that family. Include
 every supplied build marker in `dependency_files`. Do not emit URLs, credentials, secret names,

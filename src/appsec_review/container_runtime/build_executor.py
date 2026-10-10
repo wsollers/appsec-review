@@ -36,6 +36,11 @@ def _application_root(required_path: str) -> Path:
     raise FileNotFoundError(f"application file is unavailable: {required_path}")
 
 
+def repository_root() -> Path:
+    """Return the deployment root that owns the container asset catalog."""
+    return _application_root("containers/catalog.toml")
+
+
 def _capture_asset(name: str) -> Path:
     """Resolve capture assets in both a source checkout and the installed Dagster image."""
     relative = f"containers/build-capture/{name}"
@@ -385,10 +390,14 @@ class BuildContainerExecutor:
         tool_root = capture_root / "tool-calls"
         if not tool_root.is_dir():
             return
-        staging = capture_root / ".tool-calls-host"
+        # This copy is disposable and can live above the deep command directory. Keeping it
+        # here also leaves enough path budget for compiler names on Windows hosts.
+        staging = capture_root.parent.parent / f".host-{capture_root.name}"
         shutil.copytree(tool_root, staging)
         shutil.rmtree(tool_root)
-        staging.replace(tool_root)
+        staging.chmod(0o700)
+        shutil.copytree(staging, tool_root)
+        shutil.rmtree(staging)
         for path in (tool_root, *tool_root.rglob("*")):
             path.chmod(0o700 if path.is_dir() else 0o600)
 
@@ -404,7 +413,10 @@ class BuildContainerExecutor:
                               finding_limit: int, argv: Sequence[str],
                               environment: Mapping[str, str]) -> dict[str, Any]:
         """Scan raw argv/envp and retained streams, then remove raw syscall material."""
-        scan_input = capture_root / ".secret-scan-input"
+        # Keep the disposable mirror beside ``execution-capture`` rather than beneath the
+        # already-deep command directory.  Language-build paths can otherwise cross the
+        # legacy Windows MAX_PATH limit before a tool-call filename is appended.
+        scan_input = capture_root.parent.parent / f".scan-{capture_root.name}"
         scan_root = capture_root / "secret-scan"
         scan_input.mkdir()
         scan_root.mkdir()
@@ -555,6 +567,9 @@ class BuildContainerExecutor:
                 redact_source(source, max(1, int(item.get("StartLine") or 1)))
             if capped:
                 gap = "gitleaks capture finding retention limit reached"
+            # The scanner's native report is not itself trusted to honor redaction flags.
+            # Retain only the bounded, normalized finding metadata below.
+            atomic_json(report, findings)
             atomic_json(findings_path, {
                 "schema": "appsec-review/build-capture-secret-findings/1",
                 "scanner": {"tool_id": tool.tool_id, "version": tool.version,
@@ -579,6 +594,8 @@ class BuildContainerExecutor:
                 redact_source(source)
             stdout_path.touch(exist_ok=True)
             stderr_path.touch(exist_ok=True)
+            if report.exists():
+                atomic_json(report, [])
             atomic_json(findings_path, {
                 "schema": "appsec-review/build-capture-secret-findings/1",
                 "scanner": {"tool_id": "tool-gitleaks"}, "observed": 0,

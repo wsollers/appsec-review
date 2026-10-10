@@ -57,6 +57,83 @@ def minimal_elf(needed: Sequence[str] = ("libc.so.6",), *, interpreter: str | No
     return elf_header + headers + dynamic + strings + interp
 
 
+GO_MODINFO_START = bytes.fromhex("3077af0c9274080241e1c107e6d618e6")
+GO_MODINFO_END = bytes.fromhex("f932433186182072008242104116d8f2")
+GO_BUILD_ID = "aB3dE6gH9jK2mN5pQ8sT/uV1xY4zA7cD0fG3iJ6lM/oP9rS2uV5xY8aB1dE4gH/jK7mN0pQ3sT6vW9yZ2bC"
+GO_MODULE_SUM = "h1:" + "A" * 43 + "="
+
+
+def _uvarint(value: int) -> bytes:
+    encoded = bytearray()
+    while value >= 0x80:
+        encoded.append(value & 0x7F | 0x80)
+        value >>= 7
+    encoded.append(value)
+    return bytes(encoded)
+
+
+def go_build_info(version: str = "go1.23.12", module_text: str | None = None) -> bytes:
+    """A `.go.buildinfo` section in the Go 1.18+ inline layout the linker writes."""
+    text = module_text if module_text is not None else (
+        "path\texample.test/app/cmd/app\nmod\texample.test/app\t(devel)\t\n"
+        f"dep\tgithub.com/google/uuid\tv1.6.0\t{GO_MODULE_SUM}\n"
+        "build\t-buildmode=exe\nbuild\t-compiler=gc\nbuild\t-ldflags=\"-X main.build=release\"\n"
+        "build\tCGO_ENABLED=1\nbuild\tGOARCH=amd64\nbuild\tGOOS=linux\n")
+    module = (GO_MODINFO_START + text.encode() + GO_MODINFO_END) if text else b""
+    data = b"\xff Go buildinf:" + bytes([8, 2]) + bytes(16)
+    data += _uvarint(len(version)) + version.encode() + _uvarint(len(module)) + module
+    return data + bytes(-len(data) % 16)
+
+
+def go_build_id_note(build_id: str = GO_BUILD_ID) -> bytes:
+    description = build_id.encode()
+    return struct.pack("<III", 4, len(description), 4) + b"Go\0\0" + description + bytes(-len(description) % 4)
+
+
+def go_elf(*, note: bytes | None = None, build_info: bytes | None = None,
+           dwarf: bool = True) -> tuple[bytes, dict[str, dict[str, int]]]:
+    """A static little-endian ELF64 with the sections the Go build-facts reader consumes.
+
+    Returns the file and, for each section, its file offset, size, and section-header offset so
+    adversarial tests can corrupt one exact field.
+    """
+    contents = [(".note.go.buildid", 7, go_build_id_note() if note is None else note),
+                (".go.buildinfo", 1, go_build_info() if build_info is None else build_info)]
+    if dwarf:
+        contents.append((".debug_info", 1, b"\x01\x02\x03\x04" * 4))
+    contents.append((".gopclntab", 1, b"\xf1\xff\xff\xff" + bytes(12)))
+    names = b"\0"
+    name_offsets = {}
+    for name in [item[0] for item in contents] + [".shstrtab"]:
+        name_offsets[name] = len(names)
+        names += name.encode() + b"\0"
+    contents.append((".shstrtab", 3, names))
+    cursor = 64 + 56
+    body = b""
+    layout: dict[str, dict[str, int]] = {}
+    for name, _kind, data in contents:
+        layout[name] = {"offset": cursor, "size": len(data)}
+        body += data
+        cursor += len(data)
+    section_offset = cursor
+    table = bytes(64)
+    for index, (name, kind, data) in enumerate(contents, 1):
+        layout[name]["header"] = section_offset + index * 64
+        table += struct.pack("<IIQQQQIIQQ", name_offsets[name], kind, 0, 0,
+                             layout[name]["offset"], len(data), 0, 0, 1, 0)
+    size = section_offset + len(table)
+    ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + bytes(8)
+    header = ident + struct.pack("<HHIQQQIHHHHHH", 2, 62, 1, 0, 64, section_offset, 0, 64, 56, 1,
+                                 64, len(contents) + 1, len(contents))
+    load = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, size, size, 4096)
+    layout["section_table"] = {"offset": section_offset, "size": len(table), "header": 0}
+    return header + load + body + table, layout
+
+
+def minimal_go_elf() -> bytes:
+    return go_elf()[0]
+
+
 def _quoted(value: str) -> str:
     return json.dumps(value)
 

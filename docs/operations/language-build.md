@@ -94,13 +94,26 @@ exit/timeout state, duration, image, command, and attempt identities.
 
 The Go adapter preserves the accepted module/workspace root, package targets, build tags, and cgo
 choice. It prefers an existing vendor tree when present and otherwise permits module resolution.
-The shared syscall collector—not `go -x` text—establishes compiler, assembler, linker, cgo,
-package-builder, native-tool, generator, and post-link execution. The generic reconciler retains
-exact argv in protected artifacts and publishes only hashes plus sanitized facts. A bounded
-captured `go list -deps -json` command records package/module relationships without running
-packages or tests. Module/workspace files, vendored metadata, generated Go/assembly sources,
-archives, ELF outputs, build IDs, and embedded-debug-data status are hash-bound to the workspace
-manifest.
+Recipes may run `go build`, `go generate`, and `go mod download|verify|vendor`; toolchain or tree
+substitution (`-toolexec`, `-exec`, `-overlay`, `-C`, `-modfile`, also through `GOFLAGS`) and an
+output path outside the build unit are refused before execution. Every accepted command and the
+bounded `go list -deps -json` package catalog run under the standardized execution capture
+described in
+[`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md);
+each command receipt carries a hash-verified `execution_capture` identity and its gitleaks findings
+identity. Successful process-exec syscall events at image-owned paths, reconciled with PATH
+tool-call records, are the only evidence for compiler, assembler, linker, cgo, C-driver, and
+package-builder execution. `-x` is still added, but its stderr trace is a retained diagnostic
+stream and is not parsed for provenance. Exact argv stays in protected artifacts; receipts and
+retrieval keep hashes plus sanitized facts. The package catalog records package/module
+relationships without running packages or tests. The Go build ID, toolchain version, module
+dependencies, and the status of embedded debug data are read from each ELF output by a bounded
+in-repository parser; no produced file is executed or handed to a toolchain command. Module and
+workspace files, vendored metadata, generated Go/assembly sources, archives, and ELF outputs are
+hash-bound to the workspace manifest. Capture caps, scanner failure, redacted or argv-truncated
+exec events, unreconciled tool-call records, an unobserved compiler, an executable without an
+observed linker, an unparseable catalog, and an unparseable output are named gaps; a unit with an
+incomplete capture or incomplete tool provenance is not checkpointed.
 
 The Rust adapter accepts bounded Cargo workspace/package, target triple, profile, feature,
 `--locked`, and `--offline` choices. Central policy permits dependency download and can still

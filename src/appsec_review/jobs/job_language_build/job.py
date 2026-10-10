@@ -48,12 +48,11 @@ RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/1"
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (
-        dotnet.CAPTURE_DESCRIPTOR, go.CAPTURE_DESCRIPTOR,
-        native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
+        dotnet.CAPTURE_DESCRIPTOR, native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
     )
 }
 CAPTURE_IDENTITIES = {"native": native.CAPTURE_DESCRIPTOR.capture_identity,
-                      "go": go.CAPTURE_DESCRIPTOR.capture_identity,
+                      "go": go.CAPTURE_IDENTITY,
                       "dotnet": dotnet.CAPTURE_DESCRIPTOR.capture_identity,
                       "java": jvm.JVM_CAPTURE_IDENTITY,
                       "node": node.CAPTURE_IDENTITY,
@@ -79,7 +78,7 @@ _TOOL_KINDS = {
     "compile": "compiler", "asm": "assembler", "link": "linker", "cgo": "cgo",
     "pack": "package-builder", "go": "build-driver", "gcc": "compiler",
 }
-_CAPTURED_FAMILIES = frozenset(CAPTURE_DESCRIPTORS)
+_CAPTURED_FAMILIES = frozenset({*CAPTURE_DESCRIPTORS, "go"})
 _CAPTURE_GAP = "execution capture command"
 
 
@@ -457,17 +456,6 @@ def _stream_artifact(run_root: Path, path: Path, *, result, stream: str, limit: 
     return value
 
 
-def _go_environment(recipe: Mapping[str, Any], workspace: Path) -> dict[str, str]:
-    environment = _probe_environment(recipe)
-    environment.setdefault("GOCACHE", "/tmp/appsec-go-cache")
-    source = workspace / Path(*PurePosixPath(str(recipe["source_dir"])).parts)
-    if (source / "vendor").is_dir():
-        flags = environment.get("GOFLAGS", "").split()
-        if not any(value.startswith("-mod=") for value in flags):
-            environment["GOFLAGS"] = " ".join([*flags, "-mod=vendor"]).strip()
-    return environment
-
-
 def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     values = list(argv)
     executable = Path(values[0]).name.lower() if values else ""
@@ -481,19 +469,6 @@ def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     elif executable == "msbuild" and not any(value in {"-v:diag", "/v:diag"} for value in lowered):
         values.append("/v:diag")
     return tuple(values)
-
-
-def _go_module_metadata(workspace: Path, source_dir: str) -> list[dict[str, Any]]:
-    root = workspace / Path(*PurePosixPath(source_dir).parts)
-    names = {"go.mod", "go.sum", "go.work", "go.work.sum", "modules.txt"}
-    values = []
-    for path in sorted(root.rglob("*")):
-        if path.is_file() and not path.is_symlink() and (path.name in names or
-                path.as_posix().endswith("/vendor/modules.txt")):
-            values.append({"workspace_path": path.relative_to(workspace).as_posix(),
-                           "sha256": file_sha256(path), "size_bytes": path.stat().st_size,
-                           "kind": "go-module-metadata"})
-    return values
 
 
 def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> str:
@@ -855,6 +830,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     protected = root / "protected-commands"
     protected.mkdir(parents=True, exist_ok=True)
     commands, gaps, node_rows = [], [], []
+    package_relationships: list[dict[str, Any]] = []
+    go_package_directories: dict[str, str] = {}
     cargo_metadata: dict[str, Any] | None = None
     provenance_gaps: list[str] = []
     captures: list[tuple[int, VerifiedCapture]] = []
@@ -869,11 +846,15 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         command_plan.append(("metadata", rust.metadata_argv(recipe, rust_settings)))
     command_plan.extend(("configure", raw) for raw in recipe["configure_commands"])
     command_plan.extend(("build", raw) for raw in recipe["build_commands"])
+    if family == "go":
+        # The bounded package catalog runs under the same capture as every other go command.
+        command_plan.append(("catalog", go.list_argv(
+            [_normalized_argv(recipe, list(raw)) for raw in recipe["build_commands"]])))
     unit.job.events.write("LANGUAGE_BUILD_STARTED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
                           family=family, recipe_identity=dispatch["recipe_identity"],
                           image_id=image["image_id"], command_count=len(command_plan))
     for ordinal, (role, raw) in enumerate(command_plan, 1):
-        argv = tuple(raw) if role == "metadata" else _normalized_argv(recipe, list(raw))
+        argv = tuple(raw) if role in {"metadata", "catalog"} else _normalized_argv(recipe, list(raw))
         if family == "go" and go_settings is not None:
             argv = go.build_argv(argv, go_settings)
         elif family == "dotnet":
@@ -882,8 +863,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             argv = rust.build_argv(argv, rust_settings)
         elif family == "php":
             argv = php.policy_argv(argv, php_policy)
-        environment = (_go_environment(operational_recipe, workspace) if family == "go"
-                       else _probe_environment(operational_recipe))
+        environment = _probe_environment(operational_recipe)
+        if family == "go":
+            environment = go.environment(environment, workspace, str(recipe["source_dir"]))
         if family == "node":
             environment.update({"NPM_CONFIG_AUDIT": "false",
                                 "NPM_CONFIG_FUND": "false",
@@ -940,6 +922,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         commands.append({"command_id": command_id, "attempt_identity": unit.job.attempt_id,
             "ordinal": ordinal, "tool": Path(argv[0]).name,
             "tool_kind": (php.invocation_kind(Path(argv[0]).name, argv) if family == "php" else
+                          "package-catalog" if role == "catalog" else
                           _TOOL_KINDS.get(Path(argv[0]).name, "build-driver")),
             "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
             "working_directory": str(recipe["source_dir"]),
@@ -954,7 +937,17 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "module": (argv[2] if len(argv) > 2 and argv[1] == "-m" else None)})
         if capture_identity is not None:
             commands[-1]["execution_capture"] = capture_identity
-        if family == "node":
+        if role == "catalog":
+            if failed:
+                gaps.append("go package relationship catalog was unavailable")
+            else:
+                try:
+                    if stdout_identity["truncated"]:
+                        raise ValueError("truncated")
+                    package_relationships, go_package_directories = go.parse_package_catalog(result.stdout)
+                except (ValueError, UnicodeDecodeError):
+                    gaps.append("go package relationship catalog was truncated, redacted, or not parseable")
+        elif family == "node":
             command_after = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
             observed, observed_gaps = node.invocation_rows(
                 workspace, str(recipe["source_dir"]), result.argv, success=not failed,
@@ -974,69 +967,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
             duration_ms=commands[-1]["duration_ms"])
         if failed:
-            gaps.append(f"build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
+            if role != "catalog":
+                gaps.append(f"build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
             break
-    package_relationships: list[dict[str, Any]] = []
-    if family == "go" and not any(command["timed_out"] or command["exit_code"] != 0 for command in commands):
-        ordinal = len(commands) + 1
-        argv = _normalized_argv(recipe, list(go.catalog_argv(list(recipe["build_commands"]))))
-        environment = _go_environment(operational_recipe, workspace)
-        command_started = time.monotonic()
-        result, verified, capture_identity = _captured_command(
-            unit, executor, argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-            environment=environment, capture_directory=capture_root / f"command-{ordinal:03d}",
-            build_unit_id=build_unit_id, family=family)
-        captures.append((ordinal, verified))
-        capture_gaps = [f"{_CAPTURE_GAP} {ordinal}: {gap}" for gap in verified.gaps]
-        if not capture_identity["envp_captured"]:
-            capture_gaps.append(f"{_CAPTURE_GAP} {ordinal}: envp capture is disabled")
-        gaps.extend(capture_gaps)
-        command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
-                                                    "unit": build_unit_id, "ordinal": ordinal,
-                                                    "argv": list(argv)})).hexdigest()
-        stdout, stderr = root / "logs" / f"{ordinal:03d}.stdout", root / "logs" / f"{ordinal:03d}.stderr"
-        stdout.parent.mkdir(parents=True, exist_ok=True)
-        stdout.write_bytes(result.stdout); stderr.write_bytes(result.stderr)
-        exact = protected / f"{command_id}.json"
-        recorded_argv = [str(value) for value in verified.document.get("command", {}).get("argv", ())]
-        redacted = bool(recorded_argv[:1] and recorded_argv[0].startswith("<redacted"))
-        protected_json(exact, {"schema": "appsec-review/protected-build-command/2",
-            "argv": recorded_argv if redacted else list(result.argv),
-            "working_directory": str(recipe["source_dir"]),
-            "environment": ({key: "<redacted: secret scan disposition>" for key in environment}
-                            if redacted else dict(environment)),
-            "access": "run-owned-protected"})
-        try: exact.chmod(0o600)
-        except OSError: pass
-        limit = int(unit.job.config.settings["output_bytes"])
-        stdout_identity = _stream_identity(unit.job.run_root, stdout, result, "stdout", limit)
-        stderr_identity = _stream_identity(unit.job.run_root, stderr, result, "stderr", limit)
-        commands.append({"command_id": command_id, "attempt_identity": unit.job.attempt_id,
-            "ordinal": ordinal, "tool": "go", "tool_kind": "package-catalog", "role": "catalog",
-            "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
-            "working_directory": str(recipe["source_dir"]),
-            "environment_facts": {key: "set" for key in sorted(environment) if not _SECRET_KEY.search(key)},
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "duration_ms": int((time.monotonic() - command_started) * 1000),
-            "exit_code": result.exit_code, "timed_out": result.timed_out,
-            "stdout": stdout_identity, "stderr": stderr_identity,
-            "protected_argv": {"path": exact.relative_to(unit.job.run_root).as_posix(),
-                               "sha256": file_sha256(exact)},
-            "image_id": image["image_id"], "build_unit_id": build_unit_id,
-            "execution_capture": capture_identity})
-        try:
-            package_relationships = (go.parse_package_catalog(stdout.read_bytes())
-                                     if result.exit_code == 0 and not result.timed_out else [])
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
-            package_relationships = []
-            gaps.append("go package relationship catalog was malformed or exceeded its bound")
-        if not package_relationships:
-            gaps.append("go package relationship catalog was unavailable")
-        unit.job.events.write("BUILD_COMMAND_COMPLETED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
-            command_id=command_id, tool="go", disposition=("SUCCEEDED" if package_relationships else "FAILED"),
-            result_count=len(package_relationships), gap_count=(0 if package_relationships else 1) + len(capture_gaps),
-            truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
-            duration_ms=commands[-1]["duration_ms"])
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise FrameworkIntegrityError("target changed during generic language-build execution")
     if family == "php":
@@ -1048,65 +981,21 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     gaps.extend([*python_metadata_gaps, *catalog_gaps])
     build_metadata: list[dict[str, Any]] = []
     if family == "go":
-        source_prefix = PurePosixPath(str(recipe["source_dir"]))
-        for artifact in [value for value in artifacts if value.get("kind") == "executable"]:
-            workspace_path = PurePosixPath(str(artifact["workspace_path"]))
+        # Build facts are read by the bounded in-repository parser; no produced file is executed
+        # or handed to a toolchain command.
+        for artifact in artifacts:
+            if artifact.get("kind") != "executable":
+                continue
             try:
-                inspected_path = workspace_path.relative_to(source_prefix).as_posix()
-            except ValueError:
-                inspected_path = workspace_path.as_posix()
-            ordinal = len(commands) + 1
-            argv = ("go", "tool", "buildid", inspected_path)
-            environment = _go_environment(operational_recipe, workspace)
-            command_started = time.monotonic()
-            result, verified, capture_identity = _captured_command(
-                unit, executor, argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                environment=environment, capture_directory=capture_root / f"command-{ordinal:03d}",
-                build_unit_id=build_unit_id, family=family)
-            captures.append((ordinal, verified))
-            capture_gaps = [f"{_CAPTURE_GAP} {ordinal}: {gap}" for gap in verified.gaps]
-            if not capture_identity["envp_captured"]:
-                capture_gaps.append(f"{_CAPTURE_GAP} {ordinal}: envp capture is disabled")
-            gaps.extend(capture_gaps)
-            command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
-                                                        "unit": build_unit_id, "ordinal": ordinal,
-                                                        "argv": list(argv)})).hexdigest()
-            stdout, stderr = root / "logs" / f"{ordinal:03d}.stdout", root / "logs" / f"{ordinal:03d}.stderr"
-            stdout.parent.mkdir(parents=True, exist_ok=True)
-            stdout.write_bytes(result.stdout); stderr.write_bytes(result.stderr)
-            exact = protected / f"{command_id}.json"
-            recorded_argv = [str(value) for value in verified.document.get("command", {}).get("argv", ())]
-            redacted = bool(recorded_argv[:1] and recorded_argv[0].startswith("<redacted"))
-            protected_json(exact, {"schema": "appsec-review/protected-build-command/2",
-                "argv": recorded_argv if redacted else list(result.argv),
-                "working_directory": str(recipe["source_dir"]),
-                "environment": ({key: "<redacted: secret scan disposition>" for key in environment}
-                                if redacted else dict(environment)),
-                "access": "run-owned-protected"})
-            limit = int(unit.job.config.settings["output_bytes"])
-            stdout_identity = _stream_identity(unit.job.run_root, stdout, result, "stdout", limit)
-            stderr_identity = _stream_identity(unit.job.run_root, stderr, result, "stderr", limit)
-            commands.append({"command_id": command_id, "attempt_identity": unit.job.attempt_id,
-                "ordinal": ordinal, "tool": "go", "tool_kind": "post-link", "role": "inspect",
-                "argv_sha256": hashlib.sha256(canonical_json(list(result.argv))).hexdigest(),
-                "working_directory": str(recipe["source_dir"]),
-                "environment_facts": {key: "set" for key in sorted(environment) if not _SECRET_KEY.search(key)},
-                "started_at": datetime.now(timezone.utc).isoformat(),
-                "duration_ms": int((time.monotonic() - command_started) * 1000),
-                "exit_code": result.exit_code, "timed_out": result.timed_out,
-                "stdout": stdout_identity, "stderr": stderr_identity,
-                "protected_argv": {"path": exact.relative_to(unit.job.run_root).as_posix(),
-                                   "sha256": file_sha256(exact)},
-                "image_id": image["image_id"], "build_unit_id": build_unit_id,
-                "execution_capture": capture_identity})
-            build_id = result.stdout.decode("utf-8", "replace").strip() if result.exit_code == 0 else ""
-            if build_id:
-                artifact["build_id_sha256"] = hashlib.sha256(build_id.encode()).hexdigest()
-                build_metadata.append({"workspace_path": artifact["workspace_path"],
-                                       "build_id_sha256": artifact["build_id_sha256"],
-                                       "debug_data": "embedded-go-debug-data-unparsed"})
-            else:
-                gaps.append(f"{artifact['workspace_path']}: Go build ID was unavailable")
+                facts = go.build_facts(unit.job.run_root / str(artifact["path"]))
+            except (OSError, ValueError, struct.error) as exc:
+                artifact["go_build_status"] = "unparsed"
+                gaps.append(f"{artifact['workspace_path']}: Go build metadata was not parseable: {exc}")
+                continue
+            artifact.update(go_build_status="resolved", build_id_sha256=facts["build_id_sha256"],
+                            go_build_parser=facts["parser"])
+            build_metadata.append({"workspace_path": artifact["workspace_path"],
+                                   "sha256": artifact["sha256"], **facts})
     package_members: list[dict[str, Any]] = []
     if family == "python":
         for artifact in artifacts:
@@ -1163,6 +1052,21 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     for expected in ("linker-driver", "archiver") if expected not in kinds)
             if cargo_metadata is None:
                 gaps.append("Cargo metadata was unavailable")
+    elif family == "go":
+        compile_rows, capture_facts, provenance_gaps = go.capture_invocations(
+            captures, workspace, go_package_directories)
+        link_rows, normalized_links = [], []
+        capture_facts["observed_tool_kinds"] = sorted({str(row.get("tool_kind")) for row in compile_rows})
+        # cmd/go also starts each tool with `-V=full` to fingerprint it; only an invocation
+        # that names a package or an output is a compilation or a link.
+        if not any(row["tool"] == "compile" and "-p" in row["argv"] for row in compile_rows):
+            provenance_gaps.append("Go compiler execution was not observed in the standardized capture")
+        # A cataloged executable was linked by something; a capture that saw no linker cannot
+        # account for it.
+        if (not any(row["tool"] == "link" and "-o" in row["argv"] for row in compile_rows) and
+                 any(item.get("kind") == "executable" for item in artifacts)):
+            provenance_gaps.append("Go linker execution was not observed for a cataloged executable")
+        gaps.extend(provenance_gaps)
     elif family == "node":
         compile_rows, link_rows, normalized_links = node_rows, [], []
         if not compile_rows:
@@ -1225,9 +1129,12 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "completed_at": datetime.now(timezone.utc).isoformat(), "duration_ms": int((time.monotonic()-started)*1000),
         "executor_identity": EXECUTOR_IDENTITY, "capture_identity": CAPTURE_IDENTITIES[family]}
     if family == "go":
-        receipt["module_metadata"] = _go_module_metadata(workspace, str(recipe["source_dir"]))
+        receipt["module_metadata"] = go.module_metadata(workspace, str(recipe["source_dir"]))
         receipt["package_relationships"] = package_relationships
         receipt["build_metadata"] = build_metadata
+        receipt["capture_provenance"] = {
+            "schema": "appsec-review/go-capture-provenance/1", "complete": capture_complete,
+            "command_count": len(captures), **capture_facts}
     if family == "rust":
         receipt["cargo_metadata"] = cargo_metadata or {
             "schema": "appsec-review/rust-cargo-metadata/1", "packages": [], "relationships": []}
@@ -1235,6 +1142,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     if descriptor is not None:
         receipt["capture_provenance"] = {
             "schema": descriptor.provenance_schema, "complete": capture_complete,
+            "command_count": len(captures), **capture_facts}
+    if family == "dotnet":
+        receipt["capture_provenance"] = {
+            "schema": "appsec-review/dotnet-capture-provenance/1", "complete": capture_complete,
             "command_count": len(captures), **capture_facts}
     if family == "python":
         receipt["package_relationships"] = python_relationships

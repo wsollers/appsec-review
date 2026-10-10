@@ -71,6 +71,21 @@ def test_descriptor_package_is_bounded_and_hash_identified(tmp_path: Path) -> No
     assert package["gaps"] == []
 
 
+def test_go_checksum_files_are_accepted_dependency_descriptors(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    (target / "svc").mkdir(parents=True)
+    values = {"svc/go.mod": "module example.test/svc\n", "svc/go.sum": "example.test/dep v1.0.0 h1:x=\n",
+              "svc/go.work.sum": "example.test/dep v1.0.0/go.mod h1:y=\n", "svc/main.go": "package main\n"}
+    files = []
+    for relative, content in values.items():
+        (target / relative).write_text(content, encoding="utf-8")
+        files.append(_file(relative, content))
+    unit = next(item for item in discover_build_units(files) if item["family"] == "go")
+    package = descriptor_package(target, unit, files)
+    # Without go.sum a recipe cannot pin the module checksums its dependency image restores.
+    assert [item["path"] for item in package["documents"]] == ["svc/go.mod", "svc/go.sum", "svc/go.work.sum"]
+
+
 def _recipe(unit: dict[str, object]) -> dict[str, object]:
     return {
         "schema": BUILD_RECIPE_SCHEMA, "build_unit_id": unit["build_unit_id"],

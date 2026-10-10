@@ -549,7 +549,9 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                                       for item in provenance_value.get("actions", ())})},
                 model_identity=inference_value["model_identity"], upstream_manifest_sha256=upstream["sha256"])
             shard_id = f"build-security-{case_id}"
-            path = unit.job.run_root / "data" / "indices" / "build_security" / f"{fingerprint}-{shard_id}.sqlite"
+            shard_suffix = hashlib.sha256(shard_id.encode()).hexdigest()[:16]
+            path = (unit.job.run_root / "data" / "indices" / "build_security" /
+                    f"{fingerprint}-{shard_suffix}.sqlite")
             reused = path.exists()
             if not reused:
                 path.parent.mkdir(parents=True, exist_ok=True)

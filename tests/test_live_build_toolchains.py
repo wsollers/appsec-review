@@ -1042,3 +1042,361 @@ def test_live_rust_language_build_detects_and_removes_an_envp_secret(tmp_path: P
     assert not leaked, leaked
     assert (run_root / "data/build/rust/units" / receipt["build_unit_id"] / "workspace/rust/target/debug"
             / "appsec-fixture-rust").is_file()
+
+
+GO_TOOLS = "/usr/local/go/pkg/tool/linux_amd64"
+
+
+class _GoFixtureRecipeModel:
+    """The fixed, reviewed recipe for the Go fixture; capture tests never ask a model for one."""
+
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            if unit["family"] != "go":
+                continue
+            root = unit["root"]
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "go", "source_dir": root, "build_dir": f"{root}/bin",
+                "system_packages": [], "environment": {"CGO_ENABLED": "1"},
+                "dependency_files": [f"{root}/go.mod", f"{root}/go.sum"],
+                "configure_commands": [],
+                "build_commands": [["go", "build", "-o", f"{root}/bin/appsec-fixture-go", "."]],
+                "expected_outputs": [f"{root}/bin/appsec-fixture-go"], "network_required": True,
+                "reason": "fixed live Go capture fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+def test_live_go_capture_records_toolchain_execs_envp_and_dependency_egress(tmp_path: Path) -> None:
+    """The executor alone: a cold module cache forces a real download inside the capture."""
+    config = load_config(ROOT / "appsec-review.toml")
+    capture_config = config.job("job_language_build").build_capture
+    assert capture_config is not None and capture_config.backend == "ptrace"
+    workspace = tmp_path / "workspace"
+    shutil.copytree(FIXTURE / "go", workspace / "go")
+    capture = tmp_path / "capture" / "command-001"
+    capture.parent.mkdir()
+    executor = BuildContainerExecutor(_profile("go"), timeout_seconds=900, output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    result = executor.execute_captured(
+        ("go", "build", "-o", "bin/appsec-fixture-go", "."), workspace=workspace, working_directory="go",
+        environment={"GOCACHE": "/tmp/go-cache", "GOMODCACHE": "/tmp/go-mod", "CGO_ENABLED": "1"},
+        capture_directory=capture, capture_config=capture_config,
+        scope=CaptureScope("live-go-capture", "job_language_build", "attempt_0001",
+                           "build-unit-go-egress", "go"))
+    detail = ((result.stdout_tail or result.stdout) + b"\n" +
+              (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+    assert not result.timed_out and result.exit_code == 0, detail
+    assert (workspace / "go/bin/appsec-fixture-go").read_bytes()[:4] == b"\x7fELF"
+    record = json.loads(result.capture_record.read_text(encoding="utf-8"))
+    assert record["coverage"] == {"complete": True, "gaps": []}
+    assert set(record["collector"]["event_kinds"]) == {
+        "connect", "file_open", "process_exec", "process_exit", "process_fork"}
+    assert record["events"]["capped"] is False and record["tool_calls"]["capped"] is False
+    events = [json.loads(line) for line in (capture / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    executed = [event for event in events if event["kind"] == "process_exec" and event["result"] == 0]
+    by_path: dict[str, list[dict]] = {}
+    for event in executed:
+        by_path.setdefault(event["executable"], []).append(event)
+    # The toolchain is started by absolute path; no PATH wrapper could have recorded these.
+    for tool in ("compile", "asm", "link", "cgo"):
+        assert by_path.get(f"{GO_TOOLS}/{tool}"), f"no successful exec of the Go {tool} tool was captured"
+    assert by_path.get("/usr/local/go/bin/go") and by_path.get("/usr/bin/gcc")
+    main_compile = [event for event in by_path[f"{GO_TOOLS}/compile"]
+                    if "-p" in event["argv"] and event["argv"][event["argv"].index("-p") + 1] == "main"]
+    assert len(main_compile) == 1 and main_compile[0]["argv_truncated"] is False
+    assert any(value.endswith("main.go") for value in main_compile[0]["argv"])
+    # Envp belongs to each exec: cmd/go exports variables the top-level driver never received.
+    for event in (*by_path[f"{GO_TOOLS}/compile"], *by_path[f"{GO_TOOLS}/link"], *by_path["/usr/bin/gcc"]):
+        assert event["envp_captured"] is True and event["envp_truncated"] is False
+        names = {entry["name"] for entry in event["envp"]}
+        assert {"GOCACHE", "GOMODCACHE", "CGO_ENABLED", "PATH"} <= names
+    assert any("TOOLEXEC_IMPORTPATH" in {entry["name"] for entry in event["envp"]}
+               for event in by_path[f"{GO_TOOLS}/compile"])
+    # The cold module cache made cmd/go download the declared dependency over TLS.
+    connects = [event for event in events if event["kind"] == "connect"]
+    assert record["events"]["counts"]["connect"] == len(connects) > 0
+    assert any(event["port"] == 443 and event["address_family"] in {2, 10} for event in connects)
+    # PATH-resolved tools also left reconciling tool-call records.
+    tools = {json.loads((capture / item["uri"]).read_text(encoding="utf-8"))["tool"]
+             for item in record["tool_calls"]["records"]}
+    assert {"go", "gcc"} <= tools
+    execution = json.loads((capture / record["secret_scan"]["execution"]["uri"]).read_text(encoding="utf-8"))
+    assert execution["tool_id"] == "tool-gitleaks" and execution["exit_code"] in {0, 1}
+    assert not tuple(capture.glob("trace*")) and not (capture / ".secret-scan-input").exists()
+
+
+def _live_go_language_build(tmp_path: Path, shallow_root: Path, *, secret: bool):
+    _profile("go")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    # Docker Desktop on Windows rejects a bind-mount source more than 16 path components deep,
+    # and the per-command scan input sits ten components below the run root. Runs are therefore
+    # allocated directly below the pytest base directory instead of below this test's own one.
+    runtime = 'runs_dir = "runs"\ndata_dir = "data"\nmetadata_dir = "runs/metadata"\n'
+    assert text.count(runtime) == 1
+    text = text.replace(runtime, 'runs_dir = "."\ndata_dir = "data"\nmetadata_dir = "metadata"\n')
+    if secret:
+        names = '  "PIP_INDEX_URL",\n]'
+        assert text.count(names) == 1
+        text = text.replace(names, '  "PIP_INDEX_URL",\n  "DISCORD_PUBLIC_KEY",\n]')
+    config_path = shallow_root / f"appsec-review-{tmp_path.name}.toml"
+    config_path.write_text(text, encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "go", target / "go")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        model_client=_GoFixtureRecipeModel())]).run(target_root=target, source_fingerprint=fingerprint)
+    run_id = upstream["run_id"]
+    # The default resolver derives the real dependency-bearing project image from the pinned Go
+    # profile, so the declared module is downloaded through the allowed build environment only.
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert project["status"] == "SUCCEEDED", project
+    settings = config.job("job_language_build").settings
+    factory = (lambda unit, profile: _SecretEnvironmentExecutor(
+        profile, timeout_seconds=int(settings["command_timeout_seconds"]),
+        output_bytes=int(settings["output_bytes"]))) if secret else None
+    outcome = GraphRunner(config, [build_language(executor_factory=factory)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    run_root = config.runtime.runs_dir / run_id
+    receipt = next(item for item in load_accepted_language_build(run_root)["receipts"]
+                   if item["family"] == "go")
+    return config, run_root, outcome, receipt
+
+
+def _hashed_members(value, found: list[dict]) -> list[dict]:
+    """Every object in a receipt that names a run-relative path together with its SHA-256."""
+    if isinstance(value, dict):
+        if isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
+            found.append(value)
+        for item in value.values():
+            _hashed_members(item, found)
+    elif isinstance(value, list):
+        for item in value:
+            _hashed_members(item, found)
+    return found
+
+
+def _assert_live_go_capture(run_root: Path, receipt) -> None:
+    """Every Go command carries a complete, hash-valid standardized capture with a real scan."""
+    assert receipt["terminal_status"] == "SUCCEEDED", receipt["gaps"]
+    assert receipt["gaps"] == []
+    assert receipt["capture_identity"] == go.CAPTURE_IDENTITY
+    assert [command["role"] for command in receipt["commands"]] == ["build", "catalog"]
+    gitleaks = load_catalog(ROOT).tool("tool-gitleaks")
+    for ordinal, command in enumerate(receipt["commands"], 1):
+        assert command["exit_code"] == 0 and command["timed_out"] is False
+        identity = command["execution_capture"]
+        assert identity["scope"] == {
+            "run_id": run_root.name, "job_id": "job_language_build",
+            "attempt_id": identity["scope"]["attempt_id"], "build_unit_id": receipt["build_unit_id"],
+            "family": "go"}
+        assert identity["path"] == (
+            f"data/build/go/units/{receipt['build_unit_id']}/attempts/{identity['scope']['attempt_id']}/"
+            f"execution-capture/command-{ordinal:03d}/record.json")
+        assert identity["complete"] is True and identity["envp_captured"] is True
+        assert set(identity["collector"]["event_kinds"]) == {
+            "connect", "file_open", "process_exec", "process_exit", "process_fork"}
+        assert identity["events"]["capped"] is False and identity["tool_calls"]["capped"] is False
+        assert identity["events"]["observed"] == identity["events"]["retained"] > 0
+        assert identity["events"]["counts"]["process_exec"] > 0
+        assert identity["events"]["counts"]["file_open"] > 0
+        assert identity["tool_calls"]["retained"] > 0
+        record_path = run_root / identity["path"]
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        assert record["coverage"] == {"complete": True, "gaps": []}
+        for call in record["tool_calls"]["records"]:
+            assert file_sha256(record_path.parent / call["uri"]) == call["sha256"]
+        # gitleaks really ran from the cataloged image and left a parseable report.
+        execution = json.loads((run_root / identity["secret_scan"]["execution"]["path"]).read_text())
+        assert execution["tool_id"] == "tool-gitleaks" and execution["version"] == gitleaks.version
+        assert execution["exit_code"] in {0, 1} and execution["timed_out"] is False
+        assert execution["exit_code"] == identity["secret_scan"]["exit_code"]
+        assert re.fullmatch(r"sha256:[0-9a-f]{64}", execution["image_id"])
+        assert gitleaks.expected_image_id in {None, execution["image_id"]}
+        assert identity["secret_scan"]["coverage_gap"] is False
+        report = json.loads((run_root / identity["secret_scan"]["report"]["path"]).read_text())
+        findings = json.loads((run_root / identity["secret_findings"]["path"]).read_text())
+        assert isinstance(report, list) and len(report) == findings["observed"]
+        assert findings["retained"] == identity["secret_findings"]["count"] and findings["capped"] is False
+        capture_root = record_path.parent
+        assert not tuple(capture_root.glob("trace*")) and not (capture_root / ".secret-scan-input").exists()
+    # Every path and SHA-256 the receipt publishes resolves below the run root and verifies.
+    members = _hashed_members(receipt, [])
+    assert len(members) >= 16
+    for member in members:
+        path = (run_root / member["path"]).resolve()
+        assert run_root.resolve() in path.parents and path.is_file(), member["path"]
+        assert file_sha256(path) == member["sha256"], member["path"]
+    assert not tuple(run_root.rglob("trace.[0-9]*")) and not tuple(run_root.rglob(".secret-scan-input"))
+
+
+def test_live_go_language_build_accepts_syscall_authoritative_capture(
+        tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    config, run_root, outcome, receipt = _live_go_language_build(
+        tmp_path, tmp_path_factory.getbasetemp(), secret=False)
+    assert outcome["status"] == "SUCCEEDED", outcome
+    _assert_live_go_capture(run_root, receipt)
+    assert all(command["execution_capture"]["secret_findings"]["count"] == 0
+               for command in receipt["commands"])
+
+    # The real toolchain is observed as successful execve events at image-owned paths.
+    build, _catalog_command = receipt["commands"]
+    executed = [event for event in _capture_events(run_root, build)
+                if event["kind"] == "process_exec" and event["result"] == 0]
+    compilers = [event for event in executed if event["executable"] == f"{GO_TOOLS}/compile"]
+    linkers = [event for event in executed if event["executable"] == f"{GO_TOOLS}/link"]
+    assert any("-p" in event["argv"] and event["argv"][event["argv"].index("-p") + 1] == "main"
+               for event in compilers)
+    assert any("-o" in event["argv"] for event in linkers)
+    assert any(event["executable"] == f"{GO_TOOLS}/cgo" for event in executed)
+    assert any(event["executable"] == "/usr/bin/gcc" for event in executed)
+    assert all(event["envp_captured"] and event["envp"] and not event["argv_truncated"]
+               for event in (*compilers, *linkers))
+    rows = receipt["tool_invocations"]
+    assert {item["tool_kind"] for item in rows} >= {
+        "build-driver", "compiler", "assembler", "cgo", "compiler-driver", "linker", "linker-driver"}
+    assert {"go", "compile", "asm", "link", "cgo", "gcc"} <= {item["tool"] for item in rows}
+    # Every published invocation is backed by a successful syscall event that is really there.
+    events_by_command = {index: {event["ordinal"]: event for event in _capture_events(run_root, command)}
+                         for index, command in enumerate(receipt["commands"], 1)}
+    records = {command["execution_capture"]["sha256"]: index
+               for index, command in enumerate(receipt["commands"], 1)}
+    for item in rows:
+        assert item["mapping"] in {"syscall-process-exec", "syscall-process-exec+tool-call"}
+        assert "argv" not in item and len(item["argv_sha256"]) == 64
+        observed = item["evidence"]["process_exec"]
+        assert observed["count"] >= 1 and observed["event_ordinals"]
+        assert go.image_owned(observed["executable"])
+        command_events = events_by_command[records[item["evidence"]["capture_record_sha256"]]]
+        for ordinal in observed["event_ordinals"]:
+            event = command_events[ordinal]
+            assert event["kind"] == "process_exec" and event["result"] == 0
+            assert event["executable"] == observed["executable"]
+    main_compile = next(item for item in rows if item["tool"] == "compile" and item.get("package") == "main")
+    assert {entry["workspace_path"] for entry in main_compile["inputs"]} >= {"go/main.go"}
+    assert all(entry["mapping"] == "exact-workspace-path" for entry in main_compile["inputs"])
+    provenance = receipt["capture_provenance"]
+    assert provenance["complete"] is True and provenance["command_count"] == 2
+    assert provenance["observed_tool_kinds"] == sorted({item["tool_kind"] for item in rows})
+    assert provenance["redacted_exec_events"] == 0 and provenance["redacted_tool_calls"] == 0
+    assert provenance["unreconciled_tool_calls"] == 0 and provenance["truncated_tool_exec_events"] == 0
+    assert provenance["envp_events"] > 0 and provenance["file_open_events"] > 0
+    assert provenance["connect_events"] == sum(
+        command["execution_capture"]["events"]["counts"].get("connect", 0) for command in receipt["commands"])
+    assert not any(command["tool"] != "go" for command in receipt["commands"])
+
+    # Artifacts and metadata are backed by the validated in-repository parsers.
+    artifacts = {item["workspace_path"]: item for item in receipt["artifacts"]}
+    executable = artifacts["go/bin/appsec-fixture-go"]
+    binary = run_root / executable["path"]
+    assert executable["kind"] == "executable" and file_sha256(binary) == executable["sha256"]
+    assert executable["loader_dependency_status"] == "resolved" and executable["loader_linkage"] == "dynamic"
+    assert executable["loader_dependencies"] == ["libc.so.6"]
+    assert executable["loader_interpreter"] == "/lib64/ld-linux-x86-64.so.2"
+    assert executable["go_build_status"] == "resolved"
+    assert not any("execution-capture" in item["path"] for item in receipt["artifacts"])
+    metadata, = receipt["build_metadata"]
+    sums = dict(line.rsplit(" ", 1) for line in (FIXTURE / "go/go.sum").read_text().splitlines())
+    assert metadata["sha256"] == executable["sha256"] and metadata["parser"] == go.BUILD_FACTS_PARSER
+    assert metadata["go_version"].startswith("go1.") and metadata["main_module"]["path"] == "appsecfixture"
+    assert metadata["dependency_modules"] == [{"path": "github.com/google/uuid", "version": "v1.6.0",
+                                               "sum": sums["github.com/google/uuid v1.6.0"]}]
+    assert metadata["build_settings"]["CGO_ENABLED"] == "1" and metadata["build_settings"]["GOOS"] == "linux"
+    assert metadata["debug_data"]["dwarf"] == "embedded" and metadata["debug_data"]["pc_line_table"] is True
+    # The toolchain's own reader agrees with the in-repository build ID parser.
+    reader = BuildContainerExecutor(_profile("go"), timeout_seconds=120, output_bytes=1024 * 1024)
+    independent = reader.execute(("go", "tool", "buildid", "bin/appsec-fixture-go"),
+                                 workspace=binary.parents[2], working_directory="go", environment={})
+    assert independent.exit_code == 0
+    assert hashlib.sha256(independent.stdout.strip()).hexdigest() == metadata["build_id_sha256"]
+    packages = {item["import_path"]: item for item in receipt["package_relationships"]}
+    assert {"fmt", "github.com/google/uuid"} <= set(packages["appsecfixture"]["dependencies"])
+    assert packages["github.com/google/uuid"]["module_path"] == "github.com/google/uuid"
+    assert packages["fmt"]["standard"] is True and packages["appsecfixture"]["cgo_files"] == ["native.go"]
+    assert {item["workspace_path"] for item in receipt["module_metadata"]} == {"go/go.mod", "go/go.sum"}
+
+    # A complete, gap-free unit is checkpointed.
+    checkpoints = [json.loads(path.read_text(encoding="utf-8")) for path in
+                   (config.runtime.metadata_dir / "language-builds").glob("*/accepted.json")]
+    assert [item["fingerprint"] for item in checkpoints].count(receipt["fingerprint"]) == 1
+
+
+def test_live_go_language_build_detects_and_removes_an_envp_secret(
+        tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    _config, run_root, outcome, receipt = _live_go_language_build(
+        tmp_path, tmp_path_factory.getbasetemp(), secret=True)
+    assert outcome["status"] == "SUCCEEDED", outcome
+    _assert_live_go_capture(run_root, receipt)
+    for command in receipt["commands"]:
+        identity = command["execution_capture"]
+        assert identity["secret_findings"]["count"] >= 1
+        assert identity["secret_scan"]["exit_code"] == 1
+        findings = json.loads((run_root / identity["secret_findings"]["path"]).read_text(encoding="utf-8"))
+        assert findings["scanner"]["tool_id"] == "tool-gitleaks"
+        assert all(item["secret_redacted"] for item in findings["findings"])
+        assert {item["source"].split("/")[0] for item in findings["findings"]} & {"syscalls", "invocation.json"}
+        # Envp was captured on every exec; the configured exact name removed the value.
+        executed = [event for event in _capture_events(run_root, command) if event["kind"] == "process_exec"]
+        assert any({"name": "DISCORD_PUBLIC_KEY", "redacted": True, "value": "<redacted>"} in event["envp"]
+                   for event in executed)
+        exact = json.loads((run_root / command["protected_argv"]["path"]).read_text(encoding="utf-8"))
+        assert SYNTHETIC_SECRET not in json.dumps(exact)
+    assert "DISCORD_PUBLIC_KEY" in receipt["capture_provenance"]["envp_redacted_names"]
+    assert {item["tool_kind"] for item in receipt["tool_invocations"]} >= {"compiler", "linker", "cgo"}
+    leaked = [path for path in run_root.rglob("*")
+              if path.is_file() and SYNTHETIC_SECRET.encode() in path.read_bytes()]
+    assert not leaked, leaked
+    assert (run_root / "data/build/go/units" / receipt["build_unit_id"] / "workspace/go/bin"
+            / "appsec-fixture-go").is_file()
+
+
+def test_live_go_recipe_inference_is_validated_and_builds_the_fixture(
+        tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Inference only: the configured model proposes the recipe; no capture claim is made here.
+
+    Each assertion names its stage so an inference, validation, or build-execution failure is
+    never mistaken for another stage being unavailable.
+    """
+    _profile("go")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("inference stage: the configured provider credential is unavailable")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    runtime = 'runs_dir = "runs"\ndata_dir = "data"\nmetadata_dir = "runs/metadata"\n'
+    assert text.count(runtime) == 1
+    config_path = tmp_path_factory.getbasetemp() / f"appsec-review-{tmp_path.name}.toml"
+    config_path.write_text(text.replace(
+        runtime, 'runs_dir = "."\ndata_dir = "data"\nmetadata_dir = "metadata"\n'), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "go", target / "go")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        infer=infer)]).run(target_root=target, source_fingerprint=fingerprint)
+    run_root = config.runtime.runs_dir / upstream["run_id"]
+
+    plan = load_accepted_plan(run_root)
+    action = next(item for item in plan["build_topology"]["build_actions"] if item["family"] == "go")
+    recipe = action["recipe"]
+    assert plan["model"]["status"] == "ACCEPTED" and isinstance(recipe, dict), (
+        f"inference stage: no Go recipe was accepted: {plan['model']}; {plan['coverage_gaps']}")
+    assert plan["model"]["proposal_sha256"], "inference stage: the accepted proposal has no identity"
+
+    # The plan job accepts a proposal only after the shared recipe validator passes; the Go
+    # adapter's own build-only command policy must accept the same recipe.
+    assert action["requires_inference"] is False and recipe["image_profile"] == "go", "recipe validation stage"
+    assert go.validate_dispatch({"recipe": recipe}) == (), "recipe validation stage"
+    assert all(argv[0] == "go" for argv in [*recipe["configure_commands"], *recipe["build_commands"]]),         "recipe validation stage"
+
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert project["status"] == "SUCCEEDED", f"build execution stage: {project}"
+    probe = next(item for item in load_accepted_builds(run_root)["probe_receipts"] if item["family"] == "go")
+    assert probe["terminal_status"] == "SUCCEEDED" and probe["gaps"] == [], f"build execution stage: {probe['gaps']}"
+    assert all(command["exit_code"] == 0 for command in probe["commands"]), "build execution stage"
+    dispatch = next(item for item in load_accepted_builds(run_root)["build_dispatches"] if item["family"] == "go")
+    assert dispatch["recipe_identity"] == probe["recipe_identity"]

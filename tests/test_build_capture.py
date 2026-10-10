@@ -190,6 +190,84 @@ def test_strace_normalizer_accepts_exact_detach_metadata_but_rejects_malformed_r
     assert record_strace_files((malformed,), recorder) == ("unparsed trace row: trace.43:1",)
 
 
+def test_strace_normalizer_records_what_a_detached_row_establishes(tmp_path: Path) -> None:
+    recorder = _recorder(tmp_path)
+    trace = tmp_path / "trace.50"
+    trace.write_text(
+        # An exit never has a result.
+        "1700000000.000001 exit_group(3 <detached ...>\n"
+        "1700000000.000002 exit(0 <detached ...>\n"
+        # An exec that never reported a result did not start a program: a successful exec keeps
+        # the process alive as a tracee. Stale-register rows of a dying thread look the same.
+        '1700000000.000003 execve("/usr/bin/cc", ["cc", "main.c"], ["A=b"] <detached ...>\n'
+        '1700000000.000004 execve("", [], [] <detached ...>\n'
+        '1700000000.000005 execve("", 0xc0009a0078, [0xa1b00000a16, "\\r", 0x8074e04] <detached ...>\n'
+        '1700000000.000006 execveat(3, "tool", ["tool"], ["A=b"], AT_EMPTY_PATH <detached ...>\n'
+        # A file-open event retains the requested path and never a result.
+        '1700000000.000007 openat(AT_FDCWD, "/w/main.c", O_RDONLY <detached ...>\n'
+        '1700000000.000008 openat(AT_FDCWD, "", O_RDONLY|O_CLOEXEC <detached ...>\n'
+        # A thread created into a thread group that is being killed never reaches user mode.
+        "1700000000.000009 clone(child_stack=0xc00009c000, flags=CLONE_VM|CLONE_FS|CLONE_FILES|"
+        "CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS <detached ...>\n"
+        "1700000000.000010 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD|CLONE_SETTLS, "
+        "child_tid=0x7f00, stack=0x7f00, stack_size=0x7fff00}, 88 <detached ...>\n"
+        # Calls outside the traced set are not one of the required event kinds.
+        "1700000000.000011 ???( <detached ...>\n"
+        "1700000000.000012 syscall_0xfffffffffffffffe(0xc000027f01, 0, 0, 0x7008a0f80010, 0, 0x2 <detached ...>\n"
+        "1700000000.000013 syscall_0x2f0(0x200, 0x2e6, 0x17, 0x734056651010, 0x5, 0x734056652010 <detached ...>\n"
+        "1700000000.000014 futex(0xc000080148, FUTEX_WAIT_PRIVATE, 0, NULL <detached ...>\n",
+        encoding="utf-8")
+    assert record_strace_files((trace,), recorder) == ()
+    stdout, stderr = recorder.root / "stdout", recorder.root / "stderr"
+    stdout.write_bytes(b"")
+    stderr.write_bytes(b"")
+    path = recorder.finish(argv=("go", "build"), working_directory=".", exit_code=0, timed_out=False,
+                           stdout_path=stdout, stderr_path=stderr)
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["coverage"] == {"complete": True, "gaps": []}
+    assert record["events"]["counts"] == {"file_open": 2, "process_exec": 4, "process_exit": 2}
+    assert record["events"]["thread_teardown_rows"] == 6
+    rows = [json.loads(line) for line in (recorder.root / "events.jsonl").read_text().splitlines()]
+    assert [row["exit_code"] for row in rows if row["kind"] == "process_exit"] == [3, 0]
+    executed = [row for row in rows if row["kind"] == "process_exec"]
+    # No unfinished exec can be read as a successful one, and its decoded identity is retained.
+    assert all(row["result"] == -1 and row["unfinished"] is True for row in executed)
+    assert [row["executable"] for row in executed] == ["/usr/bin/cc", "", "", "tool"]
+    assert executed[0]["argv"] == ["cc", "main.c"] and executed[0]["envp"][0]["name"] == "A"
+    opened = [row for row in rows if row["kind"] == "file_open"]
+    assert [(row["path"], row["unfinished"]) for row in opened] == [("/w/main.c", True), ("", True)]
+
+
+def test_strace_normalizer_keeps_lost_outcomes_as_collector_errors(tmp_path: Path) -> None:
+    recorder = _recorder(tmp_path)
+    lost = tmp_path / "trace.52"
+    lost.write_text(
+        # The connection may have been made before the thread died.
+        '1700000000.000001 connect(3, {sa_family=AF_INET, sin_port=htons(443), '
+        'sin_addr=inet_addr("192.0.2.1")}, 16 <detached ...>\n'
+        # A clone that creates a process leaves a child that outlives its parent's thread group.
+        "1700000000.000002 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD"
+        " <detached ...>\n"
+        "1700000000.000003 clone3({flags=CLONE_VM|CLONE_VFORK, exit_signal=SIGCHLD}, 88 <detached ...>\n"
+        "1700000000.000004 vfork( <detached ...>\n"
+        "1700000000.000005 fork( <detached ...>\n"
+        # A row that is not exactly a detached call is not interpreted at all.
+        "1700000000.000006 exit_group(? <detached ...>\n"
+        "1700000000.000007 ???( <detached ...> trailing\n"
+        '1700000000.000008 execve("/usr/bin/cc", ["cc"], [] <unknown ...>\n'
+        "exit_group(0 <detached ...>\n", encoding="utf-8")
+    errors = record_strace_files((lost,), recorder)
+    assert errors == tuple(f"unparsed trace row: trace.52:{line}" for line in range(7, 10))
+    stdout, stderr = recorder.root / "stdout", recorder.root / "stderr"
+    stdout.write_bytes(b"")
+    stderr.write_bytes(b"")
+    path = recorder.finish(argv=("go", "build"), working_directory=".", exit_code=0, timed_out=False,
+                           stdout_path=stdout, stderr_path=stderr, collector_errors=errors)
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["events"]["observed"] == 0 and record["events"]["thread_teardown_rows"] == 0
+    assert record["coverage"]["complete"] is False and record["coverage"]["gaps"] == list(errors)
+
+
 def _capture(tmp_path: Path) -> tuple[Path, Path, CaptureScope]:
     run_root = tmp_path / "run"
     workspace = run_root / "workspace"
@@ -247,7 +325,10 @@ def _tamper_event_symlink(record: Path) -> None:
     events = record.parent / "events.jsonl"
     outside = record.parent.parent / "outside-events.jsonl"
     events.rename(outside)
-    events.symlink_to(outside)
+    try:
+        events.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
 
 
 def _tamper_tool_schema(record: Path) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import errno
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -65,6 +66,8 @@ class BuildExecutionRecorder:
     _invalid: int = field(init=False, default=0)
     _counts: dict[str, int] = field(init=False, default_factory=dict)
     _started_at: str = field(init=False)
+    # Detached collector rows that are not one of the required event kinds; counted, never events.
+    thread_teardown_rows: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
         self.root.mkdir(parents=True, exist_ok=False)
@@ -123,6 +126,8 @@ class BuildExecutionRecorder:
             normalized.update(argv=values, argv_truncated=argv_truncated,
                               envp_captured=self.limits.capture_envp,
                               result=int(event.get("result", 0)))
+            if event.get("unfinished"):
+                normalized["unfinished"] = True
             executable = event.get("executable")
             if isinstance(executable, str):
                 # argv[0] is chosen by the caller; the exec path is what the kernel resolved.
@@ -185,6 +190,8 @@ class BuildExecutionRecorder:
                                   creates="O_CREAT" in names or "O_TMPFILE" in names)
             elif kind == "file_unlink":
                 normalized["directory_removal"] = bool(event.get("directory_removal", False))
+            if event.get("unfinished"):
+                normalized["unfinished"] = True
         elif kind == "connect":
             normalized.update(
                 address_family=int(event.get("address_family", -1)),
@@ -248,6 +255,7 @@ class BuildExecutionRecorder:
                 "observed": self._observed, "retained": self._retained,
                 "invalid": self._invalid, "collector_dropped": collector_dropped,
                 "capped": capped, "counts": dict(sorted(self._counts.items())),
+                "thread_teardown_rows": self.thread_teardown_rows,
             },
             "streams": {
                 "stdout": {"uri": stdout_path.name, "sha256": _sha256(stdout_path),
@@ -300,10 +308,25 @@ class BuildExecutionRecorder:
 
 
 _TRACE = re.compile(r"^(?P<time>[0-9]+(?:\.[0-9]+)?) (?P<call>[a-z0-9_]+)\((?P<body>.*)\) += (?P<result>.*)$")
-_DETACHED = re.compile(
-    r"^[0-9]+(?:\.[0-9]+)? (?:[a-z0-9_]+|\?\?\?)\(.* <detached \.\.\.>$"
-)
 _QUOTED = re.compile(r'^"((?:[^"\\]|\\.)*)"')
+# strace closes a still-open row with ` <detached ...>` when it drops a tracee that vanished:
+# a thread group exited or exec'd underneath one of its threads. The row holds what strace
+# decoded at syscall entry, sometimes from the stale registers of a thread that never ran, and
+# never a result. What such a row can and cannot establish depends only on the call:
+# - `exit`/`exit_group` never has a result: it is a process-exit event.
+# - `execve`/`execveat`: a successful exec leaves the process alive as a tracee, and strace then
+#   reports its result. A row that never got one did not start a program; it is retained as an
+#   unfinished process-exec event with a failing result, so it can never be tool provenance.
+# - `openat`/`openat2`: a file-open event retains the requested path and no result, so the row
+#   is the same observation, marked unfinished.
+# - `clone`/`clone3` with CLONE_THREAD: the new thread, if any, joins the group being killed and
+#   never reaches user mode. Nothing is recorded.
+# - A call outside the traced set (`???`, `syscall_0x...`, or any other name) is not one of the
+#   required event kinds whether or not it completed. Nothing is recorded.
+# - `connect`, and `fork`/`vfork`/`clone` creating a process: the connection may have been made
+#   and the child outlives its parent. The outcome is lost, so the row stays a collector error.
+_DETACHED = re.compile(r"^(?P<time>[0-9]+(?:\.[0-9]+)?) (?P<call>[a-z0-9_]+|\?\?\?)\((?P<body>.*) <detached \.\.\.>$")
+_LOST_WHEN_DETACHED = frozenset({"connect", "fork", "vfork"})
 
 
 def _trace_string(value: str) -> str:
@@ -470,6 +493,38 @@ def _file_event(call: str, body: str, result: str) -> dict[str, Any]:
     return event
 
 
+def _record_detached(row: re.Match[str], pid: int, recorder: BuildExecutionRecorder) -> bool:
+    """Record what one detached row establishes; False when its outcome is lost evidence."""
+    call, body = row.group("call"), row.group("body")
+    timestamp_ns = int(float(row.group("time")) * 1_000_000_000)
+    base = {"timestamp_ns": timestamp_ns, "monotonic_ns": timestamp_ns, "pid": pid, "tid": pid,
+            "unfinished": True}
+    if call in {"exit", "exit_group"}:
+        code = body.split(",", 1)[0].strip()
+        if not code.lstrip("-").isdigit():
+            return False
+        recorder.add({**base, "kind": "process_exit", "exit_code": int(code)})
+    elif call in {"execve", "execveat"}:
+        parts = body.split(",", 2)
+        executable = _trace_string(parts[0] if call == "execve" else parts[1] if len(parts) > 1 else "")
+        argv, envp = _exec_arguments(body, executable)
+        recorder.add({**base, "kind": "process_exec", "argv": argv, "envp": envp,
+                      "executable": executable, "result": -1})
+    elif call in {"openat", "openat2"}:
+        parts = body.split(",", 2)
+        recorder.add({**base, "kind": "file_open", "path": _trace_string(parts[1]) if len(parts) > 1 else "",
+                      "flags": "", "result": -1})
+    elif call in {"clone", "clone3"}:
+        if not re.search(r"\bCLONE_THREAD\b", body):
+            return False
+        recorder.thread_teardown_rows += 1
+    elif call in _LOST_WHEN_DETACHED:
+        return False
+    else:
+        recorder.thread_teardown_rows += 1
+    return True
+
+
 def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder) -> tuple[str, ...]:
     """Normalize bounded strace output; malformed rows become explicit collector errors."""
     errors: list[str] = []
@@ -481,6 +536,9 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                 if recorder._observed >= recorder.limits.event_count_limit + 1:
                     return tuple(errors)
                 match = _TRACE.match(line.rstrip("\n"))
+                detached = None if match else _DETACHED.match(line.rstrip("\n"))
+                if detached and _record_detached(detached, pid, recorder):
+                    continue
                 if not match:
                     if (_DETACHED.fullmatch(line.rstrip("\n")) is None and
                             "unfinished ...>" not in line and "resumed>" not in line and
@@ -590,8 +648,10 @@ def verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureSc
     except CaptureIntegrityError:
         raise
     except (OSError, ValueError, TypeError) as exc:
+        # The errno separates a host filesystem fault from a malformed or missing member.
+        detail = errno.errorcode.get(exc.errno or 0, str(exc.errno)) if isinstance(exc, OSError) else ""
         raise CaptureIntegrityError(
-            f"build execution capture is unreadable: {type(exc).__name__}") from exc
+            f"build execution capture is unreadable: {type(exc).__name__} {detail}".rstrip()) from exc
 
 
 def _verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureScope) -> VerifiedCapture:

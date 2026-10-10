@@ -17,6 +17,7 @@ from appsec_review.container_runtime.build_executor import _application_root, _c
 from tests.capture_fakes import SYNTHETIC_SECRET, secret_scanner, simulated_executor
 
 
+@pytest.mark.skipif(os.name == "nt", reason="fixture executable is a POSIX shell script")
 def test_tool_wrapper_retains_complete_stream_files_beyond_legacy_limit(
         tmp_path: Path) -> None:
     capture = tmp_path / "capture"
@@ -325,3 +326,24 @@ def test_default_runner_timeout_releases_descendants_holding_capture_pipes() -> 
     code, stdout, _stderr, timed_out = _run((sys.executable, "-c", script), 1)
     assert timed_out and code is None and b"started" in stdout
     assert time.monotonic() - started < 8
+
+
+def test_capture_assets_resolve_from_the_deployment_root_when_the_package_is_installed(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from appsec_review.container_runtime import build_executor
+
+    root = Path(__file__).parents[1]
+    assert build_executor.repository_root() == root
+    # An installed package has no `containers/` beside it; the deployment root is the directory
+    # that holds the resolved configuration.
+    installed = tmp_path / "lib" / "python" / "site-packages" / "appsec_review" / "container_runtime"
+    installed.mkdir(parents=True)
+    monkeypatch.setattr(build_executor, "__file__", str(installed / "build_executor.py"))
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(root / "appsec-review.toml"))
+    assert build_executor.repository_root() == root
+    # The deployment image must actually carry the driver, wrapper, and catalog it resolves.
+    ignored = (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert {"!containers/build-capture/", "!containers/build-capture/**", "!containers/catalog.toml"} <= set(ignored)
+    assert ignored.index("containers/**") < ignored.index("!containers/build-capture/**")
+    for name in ("build-driver.sh", "tool-wrapper.py"):
+        assert (build_executor.repository_root() / "containers" / "build-capture" / name).is_file()
