@@ -31,6 +31,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from .planning import CodeQLPlan, CodeQLScope, build_codeql_plan, replay_commands
 from .sarif import NORMALIZER_IDENTITY, normalize_sarif
+from appsec_review.jobs.job_codeql_analysis.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/codeql-analysis-handoff/1"
@@ -898,4 +899,5 @@ def build_job() -> Job:
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_codeql_analysis", "codeql_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=implementation, validation_identity=validation, units=units)
+               implementation_identity=implementation, validation_identity=validation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

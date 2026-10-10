@@ -22,6 +22,8 @@ INDEX_NAMES = (
     "tags",
     "priority",
     "precomputed",
+    "inventory",
+    "links",
 )
 
 

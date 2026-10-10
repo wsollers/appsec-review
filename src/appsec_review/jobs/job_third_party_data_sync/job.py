@@ -13,6 +13,7 @@ from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import Nvd
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
 from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv_feed
 from appsec_review.runtime import Job, JobContext, Unit, UnitContext, UnitExecutor
+from appsec_review.jobs.job_third_party_data_sync.datasets import CONSUMES, DATASETS
 
 
 TOPOLOGY = {
@@ -208,4 +209,5 @@ def build_job(
             raise ValueError("third-party data sync omitted unit receipts")
 
     return Job("job_third_party_data_sync", "third_party_data_sync", executor.execute,
-               (validate_input,), (validate_output,), units=units, result_transform=transform)
+               (validate_input,), (validate_output,), units=units, result_transform=transform,
+               datasets=DATASETS, consumes=CONSUMES)

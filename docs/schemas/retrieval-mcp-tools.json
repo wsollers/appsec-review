@@ -182,6 +182,41 @@
       ]
     },
     {
+      "name": "query_observations",
+      "required": [],
+      "properties": [
+        "scanner",
+        "rule",
+        "severity",
+        "observation_class",
+        "suppressed",
+        "duplicate",
+        "source",
+        "artifact",
+        "path",
+        "start_line",
+        "end_line",
+        "shard",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_dataset_inventory",
+      "required": [],
+      "properties": [
+        "record_type",
+        "job",
+        "family",
+        "disposition",
+        "coverage_state",
+        "sensitivity",
+        "cell_type",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
       "name": "query_owasp_workbench",
       "required": [],
       "properties": [

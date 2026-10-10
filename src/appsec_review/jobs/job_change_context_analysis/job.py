@@ -33,6 +33,7 @@ from .sources import (
     deployments_from_export, identity_hash, load_export, normalize_review_record, organization_from_export,
     review_records_from_export,
 )
+from appsec_review.jobs.job_change_context_analysis.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/change-context-analysis/1"
@@ -826,4 +827,5 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources) +
                                     (b"custom-executor" if executor_factory else b"container-only")).hexdigest()
     return Job(PRODUCER, "change_context_analysis", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=SCHEMA, implementation_identity=implementation, units=units)
+               schema_identity=SCHEMA, implementation_identity=implementation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

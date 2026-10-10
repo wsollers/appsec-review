@@ -79,10 +79,26 @@ location. It reports absent or partial priority coverage as a gap.
 `query_precomputed` reads only accepted `precomputed` shards for an allowlisted query set. The
 sets cover code graphs, builds, artifacts, advisories, scanner correlation, CI, history, controls,
 reference intelligence, and review packages; the complete list and product contracts are in
-[`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md). The producer jobs for
-these sets are planned separately; until a set has an accepted shard, the tool returns an
-unavailable gap. It never executes analyzers or target code during retrieval.
+[`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
+`job_review_data_indexing` publishes the nine stage-1 sets (`build_provenance`,
+`artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`,
+`history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`); graph and
+review-context sets return an unavailable gap until the graph batch publishes them. It never
+executes analyzers or target code during retrieval.
 
-`coverage` now pages accepted shards and reports each shard's sanitized producer, entity and
-relation counts by kind, and coverage rows. It inventories what is already indexed. The planned
-dataset audit will add explicit dispositions for emitted data that has no index yet.
+`query_observations` filters accepted observation shards by exact scanner, rule, normalized
+reported severity (`critical`, `high`, `medium`, `low`, `info`, `unknown`), observation class,
+suppression and duplicate state, source-file or artifact identity, and exact path with an optional
+line range. Each result carries the native severity, normalized value, normalization basis and
+rule (`appsec-review/reported-severity/1`) and its lead state. Results order by reported severity
+and are tool observations, never confirmed findings. Non-complete scanner coverage is returned as
+gaps; suppression and duplicate filters need the accepted `scanner_correlation` shard.
+
+`query_dataset_inventory` is the bounded catalog of the accepted dataset inventory: one record per
+dataset (disposition, query route, exception reason, producer attempt and coverage), the
+publication audit, and coverage cells for languages, build units, producer/consumer edges, the
+input-source matrix, query sets, graph-batch follow-ups and offline FTS validation. Operation
+details are in [`review-data-indexing.md`](review-data-indexing.md).
+
+`coverage` pages accepted shards and reports each shard's sanitized producer, entity and
+relation counts by kind, and coverage rows.

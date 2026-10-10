@@ -31,6 +31,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.rulepacks.sei_cert.pack import LOCK_NAME as SEI_CERT_LOCK, tree_digest
+from appsec_review.jobs.job_evidence_collection.datasets import CONSUMES, DATASETS
 
 
 CAPABILITIES: Mapping[str, tuple[str, ...]] = {
@@ -842,4 +843,5 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                input_validators=(validate,), schema_identity="appsec-review/evidence-collection-job/1",
                implementation_identity=implementation,
                validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
-               runtime_identity=runtime_identity, units=tuple(units))
+               runtime_identity=runtime_identity, units=tuple(units),
+               datasets=DATASETS, consumes=CONSUMES)

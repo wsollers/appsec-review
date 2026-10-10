@@ -41,6 +41,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 
 from . import capture as captured_build, dotnet, elf, go, jvm, native, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
+from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
@@ -1542,4 +1543,5 @@ def build_job(*, executor_factory=None) -> Job:
         (b"injected" if executor_factory else b"container")).hexdigest()
     return Job("job_language_build", "language_build", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=implementation, validation_identity=implementation, units=units)
+               implementation_identity=implementation, validation_identity=implementation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

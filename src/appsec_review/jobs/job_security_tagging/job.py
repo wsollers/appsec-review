@@ -27,6 +27,7 @@ from .taxonomy import (
     CapabilityRules, TaxonomyError, Vocabulary, assignment, load_capability_rules, load_vocabulary,
     merge_assignments, validate_assignment,
 )
+from appsec_review.jobs.job_security_tagging.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/security-tagging-handoff/1"
@@ -369,4 +370,5 @@ def build_job() -> Job:
     identity = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job("job_security_tagging", "security_tagging", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=identity, validation_identity=identity, units=units)
+               implementation_identity=identity, validation_identity=identity, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

@@ -1,8 +1,10 @@
 # Review data indexing and reusable retrieval products
 
-Status: design and current-state inventory. The MCP query contract in this document is
-implemented; the dataset audit, additional index producers, and precomputation jobs are separate
-work. A missing product is reported as unavailable.
+Status: design plus first-batch implementation. The dataset inventory and audit, cross-domain links,
+stage-1 precomputed sets, `query_observations` and `query_dataset_inventory` are implemented by
+`job_review_data_indexing` (see [First indexing batch](#first-indexing-batch-implemented-coverage));
+graph exports, graph products and review packages remain the dependent batch. A missing product
+is reported as unavailable.
 This document describes review-worker evidence, not instructions to review workers.
 
 ## Goal and authority
@@ -93,7 +95,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Compile/link/archive commands, file accesses, env and toolchains; `job_language_build` | Reproduce source→artifact provenance and security flags | Current `build`/`build_security`; extend ordered redacted argv facts and allowlisted env classes; exact argv/env protected | `build_provenance`, `ci_trust`, `review_package` | `query_build_security`, `QP`; no worker skill |
 | Language package-manager metadata and SBOM inputs; `job_language_build`/artifact jobs | Dependency identity and lock resolution | Current build/artifact/package facets; audit each ecosystem and version resolution | `artifact_inventory`, `dependency_advisories` | `query_artifacts`, `QP`; no skill |
 | Files produced by builds: native, archives, packages, bytecode, assemblies, WASM; `job_artifact_indexing` | Artifact membership and source/build binding | Current `artifacts`; extend member/symbol/action links | `artifact_inventory`, `build_provenance` | `query_artifacts`, `QP`; no skill |
-| Artifact security scans, format and vulnerability observations; `job_artifact_security_analysis` | Binary/package leads | Current `observations`/`artifacts`; extend dedup and advisory evidence | `scanner_correlation`, `dependency_advisories` | `query_artifacts`, planned `query_observations`, `QP`; no skill |
+| Artifact security scans, format and vulnerability observations; `job_artifact_security_analysis` | Binary/package leads | Current `observations`/`artifacts`; extend dedup and advisory evidence | `scanner_correlation`, `dependency_advisories` | `query_artifacts`, `query_observations`, `QP`; no skill |
 | Clang AST and compile-unit diagnostics; `job_cpp_compiled_analysis` | Resolved C/C++ types, definitions, macro/template context | Current partial `analysis`/`compiled`; extend origin and symbol links | `symbol_links`, `ast_ir_cpg_mapping` | `core`, `QP`; no skill |
 | LLVM IR, binary symbols, Infer output; `job_cpp_compiled_analysis` | Compiled calls, CFG/def-use, hardening and leads | Current partial IR and observations; extend CFG, memory, guards, source maps | `call_graph`, `control_flow`, `dataflow`, `guards_ranges` | `core`, `query_build_security`, `QP`; no skill |
 | clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; bridge to source/AST/IR/CPG | `symbol_links`, `call_graph`, `ast_ir_cpg_mapping` | `core`, `QP`; no skill |
@@ -101,12 +103,12 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | CodeQL database and SARIF paths; `job_codeql_analysis` | Analyzer leads and ordered flows | Current `observations`, priority flow steps; DB protected; extend graph correlation | `sarif_correlation`, `dataflow`, `scanner_correlation` | `query_codeql`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
-| Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | Planned `query_observations`, `QP`; no skill |
-| Source SAST: Semgrep, Opengrep, gosec, mobsfscan, ShellCheck, phpcs, PHPStan, Psalm, SpotBugs, cppcheck, PMD; `job_evidence_collection` | Candidate defects, including High/Critical lead menu | Current observations; extend native/normalized severity, suppression, duplicate and membership audit | `scanner_correlation`, `review_package`, `hotspot_context` | Planned `query_observations` for exact severity/scanner filters; `QP`; no skill |
+| Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | `query_observations`, `QP`; no skill |
+| Source SAST: Semgrep, Opengrep, gosec, mobsfscan, ShellCheck, phpcs, PHPStan, Psalm, SpotBugs, cppcheck, PMD; `job_evidence_collection` | Candidate defects, including High/Critical lead menu | Current observations; extend native/normalized severity, suppression, duplicate and membership audit | `scanner_correlation`, `review_package`, `hotspot_context` | `query_observations` for exact severity/scanner filters; `QP`; no skill |
 | Syft software inventory; `job_evidence_collection` | SBOM/package identities | Current observations/components; extend package→artifact links | `artifact_inventory`, `dependency_advisories` | `query_artifacts`, `QP`; no skill |
-| OSV-Scanner and Grype matches; `job_evidence_collection` | Dependency vulnerability leads | Current observations when enabled; retain feed/version identity and uncertainty | `dependency_advisories`, `scanner_correlation` | Planned `query_observations`, `query_artifacts`, `QP`; no skill |
-| Hadolint, Checkov, Trivy and Zizmor config scans; `job_evidence_collection` | IaC/container/workflow leads | Current observations; link to declared deployment/CI identity when possible | `scanner_correlation`, `ci_trust`, `deployment_exposure` | Planned `query_observations`, `QP`; no skill |
-| Blint binary scan; `job_evidence_collection` | Binary hardening leads | Current observations; link exact produced artifact | `scanner_correlation`, `artifact_inventory` | `query_artifacts`, planned `query_observations`; no skill |
+| OSV-Scanner and Grype matches; `job_evidence_collection` | Dependency vulnerability leads | Current observations when enabled; retain feed/version identity and uncertainty | `dependency_advisories`, `scanner_correlation` | `query_observations`, `query_artifacts`, `QP`; no skill |
+| Hadolint, Checkov, Trivy and Zizmor config scans; `job_evidence_collection` | IaC/container/workflow leads | Current observations; link to declared deployment/CI identity when possible | `scanner_correlation`, `ci_trust`, `deployment_exposure` | `query_observations`, `QP`; no skill |
+| Blint binary scan; `job_evidence_collection` | Binary hardening leads | Current observations; link exact produced artifact | `scanner_correlation`, `artifact_inventory` | `query_artifacts`, `query_observations`; no skill |
 | OWASP catalogs, applicability, validators and assessments; `job_owasp_control_assessment` | Control coverage and evidence obligations | Current workbench shards; extend links to findings/tests | `control_evidence`, `review_package` | `query_owasp_workbench`, `QP`; no skill |
 | Taxonomy, crosswalk and assignments; `job_security_tagging` | Security facets and review routing | Current `tags`; retain assignment basis and gaps | `scanner_correlation`, `hotspot_context` | `core`, `QP`; no skill |
 | NVD feed; `job_third_party_data_sync.nvd_sync` | CVE/CVSS/advisory reference | Current global snapshot; pin version per run and join to packages | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query if exact filters exceed it; no skill |
@@ -118,7 +120,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Tests and fixtures; planned `job_test_and_doc_indexing` | Developer intent and negative cases | Planned `tests`; link assertions to symbols; never claim enforcement | `test_intent`, `review_package` | Planned `query_tests` if intent filters exceed `QP`; no skill |
 | Docs, ADRs, README and threat models; planned `job_test_and_doc_indexing` | Declared architecture and trust boundaries | Planned `docs` bounded chunks; untrusted text quarantined | `review_package` nominations only | `search`, `find`; no skill |
 | Target-owned agent guidance; planned doc index | Owner statements only, never instructions | Planned `docs` with `target_guidance` flag and quarantine | None beyond nomination | `search` only if scope permits; no skill |
-| Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; optional SQLite FTS image | Nominate exact identities for later resolution | Current in-process FTS5; image-backed offline build/validation is a candidate after image discovery and capability registration | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
+| Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; `tool-sqlite-fts` image | Nominate exact identities for later resolution | Current in-process FTS5; registered image can build/validate bounded FTS5 document shards when a producer is wired | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
 | Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `dataflow`, `entrypoint_paths`, `review_package` | Planned `query_observations`/typed trace query if acquired; no skill |
 | Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
 | Normalized claims, reviews, adjudication, PoC receipts and final finding packages; future inference/publication | Review decisions and final evidence | Planned typed ledgers; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
@@ -190,15 +192,16 @@ The protected-artifact exception still requires queryable sanitized metadata and
 ### SQLite FTS tool-image reuse
 
 The current `IndexBuilder` already creates SQLite FTS5 tables inside immutable index shards and
-MCP opens accepted shards read-only. A dedicated SQLite FTS tool image, if located or built, is a
-candidate **offline index-build and validation worker** for larger bounded text/facet sets
-(source symbols, SAST rule/message summaries, contracts, docs, test intent and reference descriptions). It is
-not a new inference-time search server and does not replace the accepted manifest or MCP access
-checks. Git history, the current container catalog and the WSL Docker image list did not reveal
-a dedicated image during this design review. Before wiring a job, locate or build the image and
-record its exact image digest, SQLite/FTS5 version, tokenizer/extension set,
-license/provenance and runtime policy in the container catalog and typed configuration. Do not
-invent an image ID or silently use a floating tag.
+MCP opens accepted shards read-only. The registered `tool-sqlite-fts:1.0.0` image is an
+**offline index-build and validation worker** for bounded sanitized text streams. It builds the
+same `search_fts(identity, name, path, text)` FTS5 table and `unicode61` tokenizer used by the
+in-process builder. It also stores input SHA-256, record count, schema and SQLite version in
+metadata. The tested image ID is pinned in `containers/catalog.toml`; the image uses the pinned
+`base-python` runtime with SQLite 3.40.1 and built-in FTS5. Its manifest records provenance and
+the no-network runtime policy with a read-only root and target mount. The image is not a search server and does not replace
+the accepted manifest or MCP access checks. The tool currently produces an FTS-only database;
+no production indexing job consumes it yet. A producer must be wired through typed configuration
+and a versioned shard publisher before its output can be accepted for MCP retrieval.
 
 The producer first emits a bounded, sanitized document stream with stable entity IDs, safe text,
 facets, source/artifact location and upstream hashes. The tool image builds or validates the FTS
@@ -210,10 +213,10 @@ hashes enter the shard fingerprint. FTS is a **nomination** layer; exact `find`/
 source/artifact resolution still establish facts. FTS never indexes raw secrets, exact env/argv,
 protected logs, model transcripts or target guidance as instructions.
 
-Reuse this image only when capability and fixture tests prove it can create the same bounded,
-deterministic FTS5 schema across runs. Until then, the existing in-process builder remains
-the current path. The absent optional image is an implementation opportunity, not a gap in
-existing FTS5 retrieval coverage. Precompute corpus statistics, safe term/facet dictionaries and exact
+The image passed a live FTS5 build/verify fixture and catalog startup/security checks. Verify
+schema compatibility and deterministic outputs at the producer boundary when wiring it into a
+job; until then, the in-process builder remains the current path. Precompute corpus statistics,
+safe term/facet dictionaries and exact
 entity-to-document links where they improve candidate retrieval; do not precompute LLM answers
 or treat a search rank as evidence.
 
@@ -394,6 +397,59 @@ The existing domain queries (`query_artifacts`, `query_build_security`,
 discoverable through a bounded catalog query or an enriched `coverage` result; it must not require
 the model to guess index names or inspect raw run directories.
 
+## First indexing batch: implemented coverage
+
+`job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
+closes the review graph. Implemented:
+
+- **Inventory and audit.** All 22 registered jobs declare datasets in their own `datasets.py`.
+  The audit compares declarations with the resolved configuration, accepted handoffs, every
+  accepted shard (recomputed counts) and the run-owned `data/` tree, plus runtime receipts,
+  configuration, telemetry, guidance and manifests. Violations block acceptance. Shards a producer
+  published but a later manifest rewrite dropped are restored and recorded as repairs. Inventory
+  rows, the audit record and coverage cells are indexed in `inventory/dataset-inventory` and
+  queried through `query_dataset_inventory`.
+- **Input-source matrix.** `appsec_review.indexing.input_matrix` encodes every row of the matrix
+  above. The job reconciles it with the registry and the run's inventory rows and publishes one
+  `input_source` cell per row; a registered job absent from the matrix, or a matrix producer
+  absent from the registry, is a published discrepancy. A test pins the table row count.
+- **Links.** `links-representation`, `links-finding-source`, `links-package-advisory`,
+  `links-symbol-syntax` and `links-history-code` shards. Exact links require equal identity, hash or
+  byte span; other joins are separate ambiguous relations.
+- **Stage-1 products.** All nine stage-1 sets publish independent shards keyed by rule version,
+  upstream shard identities, pinned feed/OWASP identities and dependent settings.
+  `scanner_correlation` is the complete High/Critical and unknown-severity lead menu with a
+  membership audit. `history_context` adds schema-conformant metric vectors (churn, revisions,
+  author entropy, fix-on-fix, SII and tier, cyclomatic, cognitive, density, high-risk share,
+  parser coverage), with an `unavailable` status and gap id, never zero, for a missing value.
+  `build_provenance` adds safe ordered command and environment facts per build action.
+- **Language and build-unit matrices** are published as coverage cells: source and Tree-sitter per
+  catalogued language; compiled/clangd only for C/C++ with accepted shards (partial extraction);
+  Joern always `unavailable` (binary artifact only); CodeQL only where an accepted shard exists.
+- **SQLite FTS image.** The in-process FTS5 builder remains the only producer of accepted shards.
+  `fts.image_validation` rebuilds this job's link and product shard text with the pinned
+  `tool-sqlite-fts:1.0.0` image (image ID verified against the catalog pin, FTS5 probe, record
+  count, input hash and probe-term equality) and keeps the result as a validation receipt only.
+
+Remaining gaps after this batch:
+
+- Graph products (`call_graph`, `control_flow`, `dataflow`, `sarif_correlation`,
+  `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths`), `hotspot_context`,
+  `redacted_secret_exposure` and `review_package` are not produced; the matrix publishes them as
+  `pending_graph_batch` follow-ups with their missing prerequisite.
+- Joern CPG remains a binary artifact; no CPG graph coverage is claimed.
+- Source-to-build-action mapping exists only through captured compile commands (`source_input`
+  tokens) and C/C++ compile databases; captured file-access inventories are protected and not
+  normalized.
+- CI facts carry no build-unit, artifact or deployment identity, so `ci_trust` cannot link CI to
+  build or deployment; dynamic expressions and external workflows are unresolved.
+- Reference feeds are pinned per run only when a verified `current.json` snapshot exists under the
+  configured feed root; CAPEC/ATT&CK relationships are not normalized.
+- Inline suppression state comes from accepted prioritization syntax facts (bounded per file); a
+  suppression directive with block or declaration scope is reported as `possibly_suppressed`.
+- `cyclomatic_mean` is not produced by `job_review_prioritization` and is always `unavailable`.
+- `IndexBuilder` sanitizes payloads but not FTS `text`; the FTS validation receipt counts
+  secret-pattern documents as a gap against the producing shard.
 ## Acceptance checks across both batches
 
 - Every supported language has a catalog-to-source-to-AST route; compiled/CPG coverage is scoped

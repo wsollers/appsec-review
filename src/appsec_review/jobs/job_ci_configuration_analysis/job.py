@@ -24,6 +24,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from .discovery import PROVIDERS, discover
 from .static_rules import RULESET_IDENTITY, hierarchy, scan_text
+from appsec_review.jobs.job_ci_configuration_analysis.datasets import CONSUMES, DATASETS
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,4 +539,5 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                input_validators=(validate,), schema_identity="appsec-review/ci-configuration-analysis-job/1",
                implementation_identity=implementation,
                validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
-               runtime_identity=runtime_identity, units=tuple(units))
+               runtime_identity=runtime_identity, units=tuple(units),
+               datasets=DATASETS, consumes=CONSUMES)
