@@ -54,10 +54,10 @@ reused; a new copy of the same evidence is unnecessary.
 |---|---|---|---|
 | Resolved configuration, intake, target validation, tool and guidance identities | review intake and runtime | accepted run artifacts and handoffs | index sanitized provenance, enabled/disabled lanes, and reasons; keep secrets and prompt text protected |
 | Repository partitions, languages, projects, components, declared dependencies | target catalog and analysis plan | `source`, `components`, `analysis`, `build` | verify all accepted project/build-unit edges and language coverage resolve |
-| Build plans, captured actions, file accesses, compile/link flags, repair outcomes | project/language build and post-build assessment | `build`, `build_security` | index safe normalized facts and provenance; expose repair decisions and failed scopes; keep exact argv/env protected |
+| Build plans, captured actions, file accesses, compile/link flags, repair outcomes | project/language build and post-build assessment | `build`, `build_security` | index safe normalized ordered command facts, security-relevant environment classes and provenance; expose repair decisions and failed scopes; keep exact argv/env protected |
 | Produced packages, archives, binaries, bytecode, WASM, symbols, SBOMs | artifact indexing and compiled analysis | `artifacts`, `compiled`, `build_security` | link member/package/symbol to producing action, source unit, and scanner observations |
 | Artifact vulnerabilities, dependency advisories, license and secret leads | artifact security and evidence collection | `observations`, `artifacts`, `evidence` | normalize scanner-specific facts, deduplicate findings, link package/advisory/version evidence; keep secret values redacted |
-| SAST, CodeQL SARIF, fuzz or dynamic evidence when present | evidence collection and CodeQL | `observations`, `priority` flow steps | retain rule identity, result location, ordered flows, suppressions, coverage, and artifact hash; correlate duplicate leads |
+| SAST, CodeQL SARIF, fuzz or dynamic evidence when present | evidence collection and CodeQL | `observations`, `priority` flow steps | retain native and normalized severity, rule identity, result location, ordered flows, suppressions, coverage, and artifact hash; correlate duplicate leads; include every High/Critical SAST lead in review-package nomination |
 | CI workflows, steps, permissions, secrets usage and canonical findings | CI configuration analysis | `observations` and `evidence` CI shards; `query_ci_configuration` | connect workflow trust edges to build/deployment artifacts and source revisions |
 | Commits, diffs, blame, reviews, deployments, ownership, SII, change context | history and change-context jobs | `history`, `priority`; `query_change_context` | index bounded review-unit links, exact fixes and ownership; leave raw diffs protected when large |
 | OWASP applicability, controls, validators, dispositions | OWASP workbench | accepted workbench shards; `query_owasp_workbench` | cross-link controls to accepted findings, tests and source evidence without duplicating the workbench |
@@ -212,6 +212,61 @@ Within a stage, implement one complete producer→shard→manifest→MCP vertica
 replicating the pattern. `review_package` is a compact composition of accepted identities,
 counts, paths and gaps, never a copy of every source excerpt or graph. A query may filter a
 product by exact subject/path but cannot cause product generation.
+
+## Review input packages for hunters and red-team analysts
+
+The machine-readable contract is
+[`review-input-package.schema.json`](../schemas/review-input-package.schema.json), version
+`appsec-review/review-input-package/1`. It describes the **input** to
+`assemble_review_packages` and to the `hypothesis_hunter` / `red_team_analyst` roles in
+[`inference-security-review.md`](inference-security-review.md). It is distinct from the
+post-adjudication `appsec-review/finding-package/1` used for final findings. The `review_package`
+precomputed set carries bounded package records; the package assembler validates them against
+the schema, fingerprints them from accepted identities, and emits one `finding_lead` package per
+upstream lead and one `hunt` package per component or trust boundary. Stable partition keys and
+configured size limits split oversized hunts without silently dropping leads.
+
+| Field | Required content |
+|---|---|
+| Identity and authority | package ID/kind, run, accepted manifest and snapshot, producer/rule version, component/trust-boundary scope, source and artifact identities |
+| Lead menu | observation IDs, provider, rule, category, native and normalized reported severity, suppression/duplicate state, exact or ambiguous location, flow IDs |
+| Review priority | LPS/SII rank and metric vector, each value's producer and availability; never technical finding severity |
+| Code and flow context | symbols, ingress/sinks, ordered path IDs, typed graph edges, guards, source-excerpt references and unresolved mappings |
+| Build and deployment context | build-action/artifact IDs, safe ordered command facts, safe environment classes, hardening, dependency/CI/deployment links and unavailable scopes |
+| Evidence and questions | supporting/contradicting evidence IDs, provenance, proof obligations, allowed retrieval scope and available typed MCP queries |
+| Bounds | source-specific coverage gaps, omitted counts, truncation reason, next cursor/partition |
+
+**SAST High/Critical inclusion invariant:** every accepted source-SAST observation whose
+normalized *reported* severity is High or Critical is reachable from a finding-lead package and
+appears in at least one hunt menu for its component/trust boundary. Preserve the scanner's
+native severity, normalization rule, suppression status and duplicate relationship. A suppressed
+or duplicate lead remains traceable and marked; it is not silently discarded. Unknown/unmapped
+severity stays queryable in a separate menu and is never interpreted as Low. Scanner severity
+only orders attention; it does not become adjudicated technical severity or proof of a defect.
+The package audit compares accepted observations with package membership and fails on an
+unaccounted High/Critical lead. Disabled or failed scanners produce coverage gaps rather than
+an empty clean menu.
+
+Packages carry the exact history and complexity features that support ranking: added/deleted
+lines, relative churn, revision count, author count/entropy, fix-on-fix cadence, SII and tier;
+per-function/file cyclomatic score, complexity density, mean, high-risk tail, cognitive score
+and parser coverage. Each metric names its scope, window, language, algorithm/version, producer,
+source hash and availability. The authoritative definitions remain in
+[`source-history-analysis.md`](source-history-analysis.md) and
+[`review-prioritization.md`](review-prioritization.md). A missing history/AST lane is `unknown`
+with a gap, not zero. Packages contain bounded metric vectors and references, not raw diffs or
+whole ASTs.
+
+Build actions are linked to the accepted source, compile unit and produced artifact. Safe
+retrieval preserves command-token **order** and classification (tool identity, source/output
+roles, include/library paths as logical identities, security-relevant flags, defines with
+redacted/allowlisted values, linker and hardening settings) plus working-directory identity,
+toolchain version and the protected exact-command artifact hash. Environment retrieval exposes
+allowlisted non-secret values and classified names/presence for security-relevant
+variables; credentials, tokens, arbitrary values and exact `argv`/`envp` remain protected
+run-owned artifacts. The normalization rule and redaction status travel with each fact. A
+reviewer can ask whether a flag or environment class was present and which artifact it affected;
+the LLM cannot request the raw command or environment through MCP.
 
 ## Fact and MCP contract
 

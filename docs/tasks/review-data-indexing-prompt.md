@@ -33,7 +33,10 @@ record the later product as pending; do not claim full CFG/dataflow coverage fro
    domain shards and MCP queries; avoid duplicate copies of evidence. Link source→build→artifact,
    package→advisory, CI→build/deployment, finding→source/artifact, history→symbol, and
    control→evidence where identities support it. Keep exact argv/env, secret values, raw logs,
-   and model transcripts protected; index sanitized metadata only.
+   and model transcripts protected. Index ordered, classified compile/link command facts and
+   security-relevant environment names/classes, allowlisted non-secret values, redaction state,
+   and exact protected-artifact hashes. Preserve source/build-action/artifact links and command
+   order without exposing raw credentials or arbitrary environment values.
 3. Inventory existing source, Tree-sitter, Clang, LLVM, clangd, Joern and CodeQL outputs and
    their current graph coverage. Produce a per-language and per-build-unit matrix. Preserve the
    CPG binary as an artifact and mark graph extraction unavailable until a pinned exporter
@@ -50,11 +53,21 @@ record the later product as pending; do not claim full CFG/dataflow coverage fro
    `symbol_links` where accepted symbols exist. If a family lacks a producer or accepted input,
    publish a scoped unavailable row. Use `precomputed_fact` records with the versioned contract
    in the design doc. Changing one rule should rebuild only dependent products.
-6. Make the dataset inventory discoverable through a bounded MCP catalog query or enhanced
+   Preserve added/deleted/relative churn, revision count, author entropy, fix-on-fix, SII/tier,
+   cyclomatic density/mean/tail and cognitive complexity with producer, window, language,
+   algorithm and availability in hotspot/history context. Missing metrics must be `unknown`,
+   not zero.
+6. Index every source-SAST observation with native and normalized reported severity, rule,
+   location, suppression/duplicate state and coverage. Precompute a complete High/Critical
+   observation menu for later package assembly. Audit membership against accepted observations;
+   a High/Critical result cannot disappear because of deduplication, suppression or a package
+   size limit. Keep unknown severity separately queryable. Scanner severity remains a triage
+   signal, not an adjudicated finding severity.
+7. Make the dataset inventory discoverable through a bounded MCP catalog query or enhanced
    `coverage`. Exercise `query_precomputed`, `query_hotspots`, existing domain queries, `find`,
    `trace`, and `read_excerpt`. Add another typed MCP query only where these cannot safely expose
    a product. Never accept caller SQL, shell, regex, graph programs, or target filesystem paths.
-7. Update the design and operations docs with actual indexed coverage, query-set semantics,
+8. Update the design and operations docs with actual indexed coverage, query-set semantics,
    per-language availability, reuse keys, protected exceptions, and remaining gaps.
 
 ## Implementation sequence and handoff
@@ -88,6 +101,9 @@ implementing, rather than copying a partial merge workspace.
 - One accepted fixture demonstrates a source→build→artifact→observation link and a
   package→advisory link. Another demonstrates an exact or explicitly ambiguous
   source→AST→symbol link. No graph-coverage claim is inferred from an artifact alone.
+- A fixture with High/Critical SAST, suppressed/duplicate High, and unknown native severity
+  proves complete, traceable lead menus. A captured build fixture proves safe ordered command
+  facts and environment classes are queryable while exact argv/env remain protected.
 - A multi-language CodeQL path retains all ordered steps in existing priority retrieval;
   this batch records the identities that the dependent graph batch will correlate.
 - Missing/failed coverage, unsupported languages, truncation, stale source hashes, and conflicting

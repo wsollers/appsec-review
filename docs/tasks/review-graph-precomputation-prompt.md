@@ -38,8 +38,16 @@ raw target trees, IR, SARIF or CPG files.
    paths, truncation counts and scoped coverage. Path answers show intermediate nodes, edge
    types, branch polarity and source/artifact resolution, not only endpoint line numbers.
 5. Build `hotspot_context` and `review_package` from accepted priority items, first-stage
-   products and graph products. A package is a compact menu of facts and evidence identities;
-   source excerpts remain on-demand through `read_excerpt`. Add
+   products and graph products. Validate each input package against
+   [`review-input-package.schema.json`](../schemas/review-input-package.schema.json), creating
+   one `finding_lead` package per observation and deterministic bounded `hunt` partitions per
+   component/trust boundary. Every accepted High/Critical source-SAST observation must be
+   reachable from its finding-lead package and at least one hunt menu, including suppressed and
+   duplicate leads with those states marked. Carry churn/SII, cyclomatic and cognitive
+   complexity, safe ordered build-command facts, security-relevant environment classes, graph
+   paths, evidence links and coverage gaps into the package by accepted identity. Keep scanner
+   reported severity separate from adjudicated technical severity. A package is a compact menu
+   of facts and evidence identities; source excerpts remain on-demand through `read_excerpt`. Add
    `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure` and `test_intent`
    only when their actual input producers exist; otherwise publish `unavailable` with the
    missing prerequisite. Never infer enforcement from a declaration or test intent.
@@ -64,6 +72,9 @@ raw target trees, IR, SARIF or CPG files.
 - A ranked hotspot resolves to source, metric vector, ordered graph context and supporting
   artifact/evidence identities through accepted indices. Every missing lane is named in the
   response. Report exact tests, tool versions and unavailable scopes in the PR.
+- Package tests validate schema, deterministic partitions and membership completeness for
+  High/Critical SAST observations, plus the absence of raw argv, environment secrets and
+  unbounded source/graph dumps. The package assembler rejects a missing accepted lead.
 
 Open a separate reviewable PR. Do not merge it automatically; request review of the diff and
 evidence after Claude completes the work.
