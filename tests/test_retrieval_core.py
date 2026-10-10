@@ -144,7 +144,8 @@ def test_identity_and_location_contracts_reject_unsafe_or_ambiguous_values() -> 
     assert "do-not-return" not in json.dumps(sanitized) and sanitized["environment"]["API_TOKEN"] == "<redacted>"
     assert set(RelationKind) == {RelationKind(value) for value in (
         "DECLARES", "DEFINES", "REFERENCES", "CALLS", "CONTAINS", "GENERATED_FROM", "COMPILES_TO",
-        "LINKS_INTO", "DEPENDS_ON", "OBSERVED_AT", "DERIVED_FROM", "SUPPORTS", "CONTRADICTS")}
+        "LINKS_INTO", "DEPENDS_ON", "OBSERVED_AT", "DERIVED_FROM", "SUPPORTS", "CONTRADICTS",
+        "FLOWS_TO")}
 
 
 def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> None:
