@@ -20,6 +20,19 @@
     "confidence": {"enum": ["high", "medium", "low"]},
     "contradictions": {"type": "array", "items": {"type": "string"}},
     "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+    "history_priority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reason", "handoff_sha256", "history_identity", "ranking", "components", "files"],
+      "properties": {
+        "status": {"enum": ["AVAILABLE", "UNAVAILABLE"]},
+        "reason": {"type": ["string", "null"]},
+        "handoff_sha256": {"type": ["string", "null"]},
+        "history_identity": {"type": ["string", "null"]},
+        "ranking": {"type": ["string", "null"]},
+        "components": {"type": "array"},
+        "files": {"type": "array"}
+      }
+    },
     "model": {
       "type": "object", "additionalProperties": false,
       "required": ["status", "proposal_sha256"],

@@ -392,6 +392,21 @@ build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline bounded Tree-sitter concrete-syntax-tree production for accepted source scopes."
 
 [[images]]
+id = "tool-git"
+state = "enabled"
+kind = "tool"
+version = "2.43.0"
+tag = "appsec-review/tool-git:2.43.0"
+context = "containers/tools/git"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/git/tool.toml"
+assets_lock = "containers/tools/git/assets.lock.json"
+build_args = { TOOL_VERSION = "2.43.0" }
+purpose = "Read-only Git history queries over a sanitized repository view for source history analysis."
+
+[[images]]
 id = "tool-gitleaks"
 state = "enabled"
 kind = "tool"

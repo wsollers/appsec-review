@@ -124,6 +124,7 @@ class JobRunner:
             "target_root": str(target_root.resolve()) if target_root else None,
             "source_fingerprint": source_fingerprint,
             "upstream_handoffs": dict(upstream_handoffs or {}),
+            "input_identity": job.probe_input_identity(target_root),
             "started_at": instant.isoformat(),
         }
         atomic_json(attempt_root / "claim.json", claim)
@@ -155,7 +156,8 @@ class JobRunner:
         if run_id is not None:
             run_root = self.runs.resolve(str(run_id))
             reasons, handoff_hash = ResumePlanner(
-                self.config, run_root, (job,), source_fingerprint).accepted(job, upstream)
+                self.config, run_root, (job,), source_fingerprint,
+                target_root=kwargs.get("target_root")).accepted(job, upstream)
             if not reasons and handoff_hash is not None:
                 pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
                 handoff_path = (run_root / pointer["handoff_path"]).resolve()
@@ -445,7 +447,8 @@ class JobRunner:
                    "started_at": claim["started_at"], "completed_at": completed,
                    "resolving_paths": {"attempt": context.attempt_root.relative_to(context.run_root).as_posix(),
                                        "result": result_path.relative_to(context.run_root).as_posix()},
-                   "tool_identity": {"python": os.sys.version.split()[0]}}
+                   "tool_identity": {"python": os.sys.version.split()[0]},
+                   "input_identity": claim.get("input_identity")}
         handoff_path = context.attempt_root / "handoff.json"
         atomic_json(handoff_path, handoff)
         handoff_hash = file_sha256(handoff_path)
@@ -558,6 +561,7 @@ class JobRunner:
         events.write("JOB_STARTED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id,
                      trigger=trigger, orchestration=orchestration)
         try:
+            input_identity = job.probe_input_identity(context.target_root)
             result = dict(job.execute(context))
             atomic_json(attempt_root / "result.json", result)
             if result.get("status") == "FAILED":
@@ -636,6 +640,7 @@ class JobRunner:
                 "resolving_paths": {"attempt": attempt_root.relative_to(run_root).as_posix(),
                                     "result": result_path.relative_to(run_root).as_posix()},
                 "tool_identity": {"python": os.sys.version.split()[0]},
+                "input_identity": input_identity,
             }
             handoff_path = attempt_root / "handoff.json"
             atomic_json(handoff_path, handoff)

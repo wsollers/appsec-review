@@ -168,7 +168,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
-                    "job_ci_configuration_analysis", "job_tree_sitter_ast",
+                    "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -382,9 +382,13 @@ def build_definitions(
         if "job_ci_configuration_analysis" in registered:
             wave_jobs.append(registry.build("job_ci_configuration_analysis"))
             wave_dependencies["job_ci_configuration_analysis"] = ("job_target_catalog",)
+        if "job_source_history_analysis" in registered:
+            wave_jobs.append(registry.build("job_source_history_analysis"))
+            wave_dependencies["job_source_history_analysis"] = ("job_target_catalog",)
         wave_jobs.append(registry.build("job_target_analysis_plan"))
-        wave_dependencies["job_target_analysis_plan"] = (("job_ci_configuration_analysis",)
-            if "job_ci_configuration_analysis" in registered else ("job_target_catalog",))
+        wave_dependencies["job_target_analysis_plan"] = tuple(job_id for job_id in (
+            "job_ci_configuration_analysis", "job_source_history_analysis") if job_id in registered) or (
+            "job_target_catalog",)
         if "job_tree_sitter_ast" in registered:
             wave_jobs.append(registry.build("job_tree_sitter_ast"))
             wave_dependencies["job_tree_sitter_ast"] = ("job_target_analysis_plan",)

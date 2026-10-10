@@ -24,9 +24,11 @@ class GraphRunner:
         if len({job.job_id for job in jobs}) != len(jobs):
             raise ValueError("graph job ids must be unique")
 
-    def plan(self, run_id: str, source_fingerprint: str, *, force_from: str | None = None):
+    def plan(self, run_id: str, source_fingerprint: str, *, force_from: str | None = None,
+             target_root: Path | None = None):
         run_root = JobRunner(self.config).runs.resolve(run_id)
-        return ResumePlanner(self.config, run_root, self.jobs, source_fingerprint).plan(force_from=force_from)
+        return ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
+                             target_root=target_root).plan(force_from=force_from)
 
     def run(
         self,
@@ -57,7 +59,8 @@ class GraphRunner:
             PipelineLog(run_root).write("GRAPH_STARTED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
                 details={"source_fingerprint": source_fingerprint})
-            decisions = ResumePlanner(self.config, run_root, self.jobs, source_fingerprint).plan(force_from=force_from)
+            decisions = ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
+                                      target_root=target_root).plan(force_from=force_from)
             upstream: dict[str, str] = {}
             outcomes: dict[str, Any] = {}
             execute = False

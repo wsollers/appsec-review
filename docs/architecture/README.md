@@ -16,6 +16,10 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — proposed faceted, basis-qualified security
   tag vocabulary covering application code, cloud, containers, IaC, CI/CD, and supply chain.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
+- [`source-history-analysis.md`](source-history-analysis.md) — Git and GitHub history instability
+  signals for churn-led review prioritization; Perforce remains planned.
+- [`../operations/source-history-analysis.md`](../operations/source-history-analysis.md) — history
+  job configuration, GitHub enrichment, image build, and recovery.
 - [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
 - [`../SEI-CERT.md`](../SEI-CERT.md) — SEI CERT coverage overview, official-standard links, and status totals.
 - [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md) — SEI CERT Semgrep/OpenGrep rule pack, CERT
