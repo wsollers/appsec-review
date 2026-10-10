@@ -13,7 +13,7 @@ from appsec_review.storage import canonical_json, file_sha256
 from .capture import CapturedBuildDescriptor, ToolIdentity
 
 
-CAPTURE_IDENTITY = "appsec-review/go-build-capture/2"
+CAPTURE_IDENTITY = "appsec-review/go-build-capture/3"
 _GO_TOOLS = {
     "compile": "compiler",
     "asm": "assembler",

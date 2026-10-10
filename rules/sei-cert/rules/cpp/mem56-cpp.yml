@@ -1,0 +1,29 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.mem56-cpp.unrelated-smart-pointer-owner
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      MEM56-CPP: a new smart pointer takes ownership of a raw pointer that $OWNER already owns, so
+      the two owners have independent control blocks and the object is released twice. Copy or
+      move the existing owner instead.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: MEM56-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem56-cpp
+      cwe: [CWE-415, CWE-416]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library-memory]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.mem56-unrelated-shared-owner and extended. Matches std::shared_ptr or std::unique_ptr constructed, declared, or reset from another owner's get() result. Raw pointers obtained earlier and stored in variables are not tracked.
+      license: MIT
+    pattern-either:
+      - pattern: std::shared_ptr<$T>($OWNER.get())
+      - pattern: std::unique_ptr<$T>($OWNER.get())
+      - pattern: std::shared_ptr<$T> $NEW = $OWNER.get();
+      - pattern: std::unique_ptr<$T> $NEW = $OWNER.get();
+      - pattern: $NEW.reset($OWNER.get())

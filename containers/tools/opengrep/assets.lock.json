@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-opengrep",
+  "tool_version": "1.30.2",
+  "project": "https://github.com/opengrep/opengrep",
+  "license": "LGPL-2.1",
+  "architecture": "linux/amd64",
+  "generated_from": "sei-cert-rule-pack-2026-10-10",
+  "artifacts": [
+    {
+      "name": "opengrep",
+      "url": "https://github.com/opengrep/opengrep/releases/download/v1.30.2/opengrep_manylinux_x86",
+      "path": "downloads/opengrep",
+      "sha256": "a66aa3278457f02b287b985a45b6762aebcaba5000f2689245fd1ed86d1456c7",
+      "bytes": 46468496,
+      "version": "1.30.2",
+      "license": "LGPL-2.1",
+      "license_source": "authoritative upstream project license",
+      "provenance": "fixed upstream release asset",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "Upstream publishes a Sigstore signature and certificate (opengrep_manylinux_x86.sig/.cert); this build does not consume them. Immutable source, byte size, and SHA-256 are enforced."
+      }
+    }
+  ]
+}

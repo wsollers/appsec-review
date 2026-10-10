@@ -1,0 +1,78 @@
+rules:
+  - id: appsec-review.sei-cert.c.str31-c.gets-call
+    languages: [c]
+    severity: ERROR
+    message: >-
+      STR31-C: gets() cannot bound the number of characters written to its destination. Use fgets() with
+      the destination size, or getline().
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: STR31-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/characters-and-strings-str/str31-c
+      cwe: [CWE-120, CWE-676]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [c-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        gets() can never be used safely, so any call violates the rule. Size reasoning for strcpy, sprintf,
+        and manual copies requires bounds analysis and is not detected.
+      license: MIT
+    pattern: gets($BUF)
+  - id: appsec-review.sei-cert.c.str31-c.unbounded-scanf-string
+    languages: [c]
+    severity: ERROR
+    message: >-
+      STR31-C: a %s or %[ conversion without a field width can write past the destination. Give every string
+      conversion a maximum width smaller than the destination size.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: STR31-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/characters-and-strings-str/str31-c
+      cwe: [CWE-120, CWE-676]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [c-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches scanf, fscanf, and sscanf whose literal format contains %s or %[ with no field width. Formats
+        built at run time and widths larger than the buffer are not analyzed.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: scanf($FMT, ...)
+      - pattern: sscanf($SRC, $FMT, ...)
+      - pattern: fscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: ^".*%(l)?(s|\[).*"$
+  - id: appsec-review.sei-cert.cpp.str31-c.gets-call
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      STR31-C (applies to C++): gets() cannot bound the number of characters written. Use std::fgets with
+      the destination size, or std::getline into a std::string.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: STR31-C
+      cert_standard: c
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/characters-and-strings-str/str31-c
+      cwe: [CWE-120, CWE-676]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        C++ form of the C rule, which the CERT C++ standard lists as applying to C++.
+      license: MIT
+    pattern-either:
+    - pattern: gets($BUF)
+    - pattern: std::gets($BUF)

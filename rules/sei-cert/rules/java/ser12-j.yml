@@ -1,0 +1,42 @@
+rules:
+  - id: appsec-review.sei-cert.java.ser12-j.unfiltered-object-deserialization
+    languages: [java]
+    severity: ERROR
+    message: >-
+      SER12-J: objects are deserialized from an ObjectInputStream that has no class filter, so
+      the stream can instantiate any serializable class on the class path. Install an
+      allowlisting ObjectInputFilter or override resolveClass before reading.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: SER12-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/serialization-ser/ser12-j
+      cwe: [CWE-502]
+      confidence: HIGH
+      precision: medium
+      coverage: PARTIAL
+      technology: [java-serialization]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches readObject/readUnshared on an ObjectInputStream constructed in the same method (declaration or try-with-resources) when no setObjectInputFilter call on that stream precedes the read and the stream is not an anonymous subclass. A JVM-wide filter set elsewhere, filters installed in helper methods, and custom subclasses declared elsewhere are not recognized. SER12-EX0 (documented trusted source) cannot be verified syntactically and is reported for review.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              ObjectInputStream $IN = new ObjectInputStream(...);
+              ...
+          - pattern-inside: |
+              java.io.ObjectInputStream $IN = new java.io.ObjectInputStream(...);
+              ...
+          - pattern-inside: |
+              try (ObjectInputStream $IN = new ObjectInputStream(...)) { ... }
+      - pattern-not-inside: |
+          ObjectInputStream $IN = new ObjectInputStream(...) { ... };
+          ...
+      - pattern-not-inside: |
+          $IN.setObjectInputFilter(...);
+          ...
+      - pattern-either:
+          - pattern: $IN.readObject()
+          - pattern: $IN.readUnshared()

@@ -16,7 +16,7 @@ SUMMARY_SCHEMA = "appsec-review/target-analysis-summary/1"
 
 SCANNERS = (
     "tool-blint", "tool-checkov", "tool-cppcheck", "tool-gitleaks", "tool-gosec", "tool-grype",
-    "tool-hadolint", "tool-mobsfscan", "tool-osv-scanner", "tool-phpcs",
+    "tool-hadolint", "tool-mobsfscan", "tool-opengrep", "tool-osv-scanner", "tool-phpcs",
     "tool-phpstan", "tool-pmd", "tool-psalm", "tool-semgrep", "tool-shellcheck",
     "tool-spotbugs", "tool-syft", "tool-trivy", "tool-zizmor",
 )
@@ -29,7 +29,7 @@ BUILD_SYSTEMS = frozenset({
 
 SOURCE_SUFFIXES = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs",
-    ".c", ".h", ".cc", ".cpp", ".cs", ".rb", ".php", ".swift", ".sh",
+    ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".cs", ".rb", ".php", ".swift", ".sh",
 }
 
 
@@ -169,6 +169,10 @@ def _scanner_scope(tool_id: str, files: tuple[Mapping[str, Any], ...], artifacts
         return tuple(str(item["path"]) for item in files)
     if tool_id == "tool-semgrep":
         return paths(lambda path, item: path.suffix.lower() in SOURCE_SUFFIXES)
+    if tool_id == "tool-opengrep":
+        # OpenGrep runs only the SEI CERT rule pack (C, C++, and Java).
+        return paths(lambda path, item: path.suffix.lower() in {
+            ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".java"})
     if tool_id == "tool-gosec":
         return paths(lambda path, item: path.suffix.lower() == ".go")
     if tool_id == "tool-cppcheck":

@@ -1,0 +1,37 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.con50-cpp.destroy-locked-mutex
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      CON50-CPP: this mutex is destroyed on a path where it was locked and not unlocked. Unlock it
+      before destruction, or use a scoped lock whose lifetime ends first.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: CON50-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con50-cpp
+      cwe: [CWE-667]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.con50-destroy-locked-pthread-mutex, which ran on both C and C++. The CERT C++ standard states CON31-C does not apply to C++, so C files now use the CON31-C rule and this rule covers C++ files. Matches same-function POSIX lock then destroy with no intervening unlock; std::mutex lifetime ending while locked requires lifetime analysis.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              pthread_mutex_lock(&$M);
+              ...
+          - pattern-inside: |
+              if (<... pthread_mutex_lock(&$M) ...>) $BODY;
+              ...
+          - pattern-inside: |
+              $RC = pthread_mutex_lock(&$M);
+              ...
+      - pattern-not-inside: |
+          pthread_mutex_unlock(&$M);
+          ...
+      - pattern: pthread_mutex_destroy(&$M)

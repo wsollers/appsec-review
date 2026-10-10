@@ -1,0 +1,87 @@
+rules:
+  - id: appsec-review.sei-cert.java.ser01-j.serialization-hook-signature
+    languages: [java]
+    severity: ERROR
+    message: >-
+      SER01-J: serialization hook $METHOD does not have the exact private, non-static signature
+      the serialization runtime looks for, so it is silently ignored or exposed. Declare it
+      private, non-static, and void with the required parameter.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: SER01-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/serialization-ser/ser01-j
+      cwe: [CWE-502]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [java-serialization]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches writeObject(ObjectOutputStream), readObject(ObjectInputStream), and readObjectNoData() declared non-private, static, or with a non-void return. Methods are matched by name and parameter type without checking that the class is Serializable; misspelled hook names are not detected.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: $RET $METHOD($TYPE $STREAM) { ... }
+                  - pattern: $RET $METHOD(final $TYPE $STREAM) { ... }
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: ^(readObject|writeObject)$
+              - metavariable-regex:
+                  metavariable: $TYPE
+                  regex: ^(java\.io\.)?Object(Input|Output)Stream$
+              - pattern-not: private void $METHOD($TYPE $STREAM) { ... }
+              - pattern-not: private void $METHOD(final $TYPE $STREAM) { ... }
+          - patterns:
+              - pattern-either:
+                  - pattern: static $RET $METHOD($TYPE $STREAM) { ... }
+                  - pattern: static $RET $METHOD(final $TYPE $STREAM) { ... }
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: ^(readObject|writeObject)$
+              - metavariable-regex:
+                  metavariable: $TYPE
+                  regex: ^(java\.io\.)?Object(Input|Output)Stream$
+          - patterns:
+              - pattern: $RET $METHOD() { ... }
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: ^readObjectNoData$
+              - pattern-not: private void $METHOD() { ... }
+          - patterns:
+              - pattern: static $RET $METHOD() { ... }
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: ^readObjectNoData$
+      - focus-metavariable: $METHOD
+
+  - id: appsec-review.sei-cert.java.ser01-j.static-replacement-hook
+    languages: [java]
+    severity: ERROR
+    message: >-
+      SER01-J: $METHOD is declared static, so the serialization runtime never calls it. Declare
+      it as a non-static instance method returning Object.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: SER01-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/serialization-ser/ser01-j
+      cwe: [CWE-502]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [java-serialization]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches static readResolve() and writeReplace() declarations. Private replacement hooks in extensible classes, which subclasses cannot inherit, require class-hierarchy information and are not reported.
+      license: MIT
+    patterns:
+      - pattern: static $RET $METHOD() { ... }
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(readResolve|writeReplace)$
+      - focus-metavariable: $METHOD

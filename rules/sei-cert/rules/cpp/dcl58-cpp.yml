@@ -1,0 +1,37 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.dcl58-cpp.standard-namespace-declaration
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      DCL58-CPP: this declaration adds a new entity to namespace std, which has undefined
+      behavior. Declare it in a project namespace; only qualifying template specializations may
+      be added to std.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: DCL58-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl58-cpp
+      cwe: []
+      confidence: MEDIUM
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-language]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches variable and function declarations or definitions inside a namespace std or namespace posix block whose braces nest at most four levels deep. Members of explicit class-template specializations are excluded; new class definitions and specializations that involve only standard types are not detected because that requires type resolution.
+      license: MIT
+    patterns:
+      # Both engines report "namespace std { ... }" as enclosing declarations in later sibling
+      # namespaces, so the std/posix block is scoped with a bounded balanced-brace expression
+      # (four nesting levels) instead of pattern-inside.
+      - pattern-regex: namespace\s+(std|posix)\s*\{(?:[^{}]|\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})*\}
+      - pattern-either:
+          - pattern: $T $X = $E;
+          - pattern: $T $X;
+          - pattern: $R $F(...) { ... }
+          - pattern: $R $F(...);
+      # Class or template-specialization patterns do not parse for C++ in either engine, so members
+      # of an explicit specialization (permitted for program-defined types) are excluded with a
+      # bounded expression covering the specialization body to three brace levels.
+      - pattern-not-regex: template\s*<\s*>\s*(struct|class)\s+\w+\s*<[^>{;]*>\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}\s*;

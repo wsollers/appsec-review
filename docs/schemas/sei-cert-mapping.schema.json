@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/sei-cert-mapping.schema.json",
+  "title": "SEI CERT rule-pack mapping for one standard",
+  "type": "object",
+  "required": [
+    "schema",
+    "language",
+    "source_index",
+    "classification_basis",
+    "rules"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/sei-cert-mapping/1"
+    },
+    "language": {
+      "enum": [
+        "c",
+        "cpp",
+        "java",
+        "android"
+      ]
+    },
+    "source_index": {
+      "const": "sources/cert-source-index.json"
+    },
+    "classification_basis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "id",
+        "language",
+        "category",
+        "title",
+        "source",
+        "summary",
+        "noncompliant_concept",
+        "compliant_concept",
+        "cwe",
+        "analysis_class",
+        "status",
+        "confidence",
+        "exceptions",
+        "false_positive_risks",
+        "false_negative_risks",
+        "implementation",
+        "delegation"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}[0-9]{2}(-[A-Z]+)?(@[A-Z]{3})?$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}[0-9]{2}(-[A-Z]+)?$"
+        },
+        "language": {
+          "enum": [
+            "c",
+            "cpp",
+            "java",
+            "android"
+          ]
+        },
+        "category": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "retrieved",
+            "revision",
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://cmu-sei\\.github\\.io/secure-coding-standards/"
+            },
+            "retrieved": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "noncompliant_concept": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compliant_concept": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cwe": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^CWE-[0-9]+$"
+          },
+          "uniqueItems": true
+        },
+        "applies_to_cpp": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "development_status": {
+          "enum": [
+            "published",
+            "work-in-progress"
+          ]
+        },
+        "artifact": {
+          "type": "string"
+        },
+        "page_completeness": {
+          "enum": [
+            "complete",
+            "incomplete-or-draft"
+          ]
+        },
+        "source_identifier_conflict": {
+          "const": true
+        },
+        "analysis_class": {
+          "enum": [
+            "construct-use",
+            "local-syntactic",
+            "type-semantic",
+            "intraprocedural-dataflow",
+            "interprocedural-dataflow",
+            "concurrency-semantic",
+            "build-or-whole-program",
+            "design-or-manual"
+          ]
+        },
+        "status": {
+          "enum": [
+            "SUPPORTED",
+            "PARTIAL",
+            "UNSUPPORTED_SEMANTIC",
+            "UNSUPPORTED_LANGUAGE",
+            "DUPLICATE_EXISTING_RULE",
+            "REQUIRES_DATAFLOW",
+            "REQUIRES_COMPILER_OR_IR",
+            "REQUIRES_CODEQL",
+            "REQUIRES_MANUAL_REVIEW"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "HIGH",
+            "MEDIUM",
+            "LOW"
+          ]
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "summary",
+              "handling"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}[0-9]{2}(-[A-Z]+)?-EX[0-9]+$"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "handling": {
+                "enum": [
+                  "excluded-by-rule",
+                  "reported-for-review",
+                  "outside-implemented-subset",
+                  "not-implemented"
+                ]
+              }
+            }
+          }
+        },
+        "false_positive_risks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "false_negative_risks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "implementation": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "semgrep_rule_ids",
+                "opengrep_rule_ids",
+                "engine_versions",
+                "rule_files",
+                "fixtures",
+                "coverage_note"
+              ],
+              "properties": {
+                "semgrep_rule_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^appsec-review\\.sei-cert\\.(c|cpp|java)\\.[a-z]{3}[0-9]{2}-(c|cpp|j)\\.[a-z0-9]+(-[a-z0-9]+)*$"
+                  },
+                  "minItems": 1
+                },
+                "opengrep_rule_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^appsec-review\\.sei-cert\\.(c|cpp|java)\\.[a-z]{3}[0-9]{2}-(c|cpp|j)\\.[a-z0-9]+(-[a-z0-9]+)*$"
+                  },
+                  "minItems": 1
+                },
+                "engine_versions": {
+                  "type": "object",
+                  "required": [
+                    "semgrep",
+                    "opengrep"
+                  ],
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "rule_files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "fixtures": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "coverage_note": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "engine_differences": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "delegation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "recommended"
+          ],
+          "properties": {
+            "recommended": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            },
+            "codeql_queries": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "pattern_candidate": {
+          "type": "boolean"
+        },
+        "duplicate_of": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

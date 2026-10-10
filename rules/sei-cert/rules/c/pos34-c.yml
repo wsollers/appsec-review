@@ -1,0 +1,51 @@
+rules:
+  - id: appsec-review.sei-cert.c.pos34-c.putenv-automatic-array
+    languages: [c]
+    severity: ERROR
+    message: >-
+      POS34-C: putenv() keeps the pointer it is given, but $BUF is an automatic array that ends
+      its lifetime when this function returns. Use setenv(), or pass static or heap storage.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: POS34-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/posix-pos/pos34-c
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches putenv() applied directly to a character array declared without static storage
+        in the enclosing function. Automatic storage reached through pointers or helpers is not
+        tracked.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RET $FUNC(...) {
+                ...
+                char $BUF[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(...) {
+                ...
+                char $BUF[$SIZE] = $INIT;
+                ...
+              }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static char $BUF[$SIZE];
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static char $BUF[$SIZE] = $INIT;
+            ...
+          }
+      - pattern: putenv($BUF)

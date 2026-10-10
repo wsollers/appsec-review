@@ -60,7 +60,7 @@ CAPTURE_IDENTITIES = {"native": native.CAPTURE_DESCRIPTOR.capture_identity,
                       "php": php.CAPTURE_IDENTITY,
                       "python": python.CAPTURE_IDENTITY,
                       "rust": rust.CAPTURE_DESCRIPTOR.capture_identity,
-                      "wasm": "appsec-review/protected-build-capture/2"}
+                      "wasm": "appsec-review/protected-build-capture/3"}
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm", ".h", ".hh", ".hpp", ".hxx", ".go", ".s"}
 _OBJECT_SUFFIXES = {".o", ".obj"}

@@ -298,6 +298,11 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     workspace = root / "workspace"
     _copy_source(unit, action, workspace)
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
+    # The pre-build hashes double as the capture's snapshot: unchanged files are never rehashed.
+    snapshot_files = {}
+    for relative, digest in before.items():
+        stat = (workspace / relative).stat()
+        snapshot_files[relative] = {"sha256": digest, "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
     profile = BuildProfile(str(action["family"]), str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
@@ -328,7 +333,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             capture_directory=root / "execution-capture" / f"command-{ordinal:03d}",
             capture_config=unit.job.config.build_capture,
             scope=CaptureScope(unit.job.run_id, "job_project_build", unit.job.attempt_id,
-                               build_unit_id, str(action["family"])))
+                               build_unit_id, str(action["family"])),
+            snapshot_files=snapshot_files)
         capture_identity, capture_gaps = _capture_identity(
             unit, result, build_unit_id=build_unit_id, family=str(action["family"]))
         gaps.extend(f"build command {ordinal} capture: {gap}" for gap in capture_gaps)

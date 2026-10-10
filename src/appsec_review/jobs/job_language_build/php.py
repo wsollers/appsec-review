@@ -9,7 +9,7 @@ from typing import Any
 from appsec_review.storage import canonical_json, file_sha256
 
 
-CAPTURE_IDENTITY = "appsec-review/php-composer-build-capture/1"
+CAPTURE_IDENTITY = "appsec-review/php-composer-build-capture/2"
 _ARCHIVE_SUFFIXES = (".phar", ".zip", ".tar", ".tar.gz", ".tgz")
 
 

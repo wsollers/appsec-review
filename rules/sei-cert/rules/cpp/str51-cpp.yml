@@ -1,0 +1,35 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.str51-cpp.string-from-null-pointer
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      STR51-CPP: a std::string is constructed from a pointer that is null or may be null, which
+      has undefined behavior. Check the pointer before constructing the string.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: STR51-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/characters-and-strings-str/str51-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches std::string objects or temporaries constructed directly from a null pointer literal or from an unchecked std::getenv() result. Null pointers reaching the constructor through variables are not tracked.
+      license: MIT
+    pattern-either:
+      - pattern: std::string $S(nullptr);
+      - pattern: std::string $S(NULL);
+      - pattern: std::string $S(std::getenv($NAME));
+      - pattern: std::string $S(getenv($NAME));
+      - pattern: std::string $S = nullptr;
+      - pattern: std::string $S = NULL;
+      - pattern: std::string(nullptr)
+      - pattern: std::string(NULL)
+      - pattern: std::string $S = std::getenv($NAME);
+      - pattern: std::string $S = getenv($NAME);
+      - pattern: std::string(std::getenv($NAME))
+      - pattern: std::string(getenv($NAME))

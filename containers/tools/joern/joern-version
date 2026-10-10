@@ -1,0 +1,11 @@
+#!/bin/sh
+# Deterministic offline version probe for the reviewed Joern/c2cpg closure. It starts the real
+# c2cpg JVM entry point without input, so no target is read or executed, then prints the
+# implementation identities recorded at build time from the hash-pinned JAR manifests.
+set -eu
+root=/opt/joern
+if ! "$root/joern-cli/frontends/c2cpg/bin/c2cpg" --help >/dev/null 2>&1; then
+    echo "joern-version: c2cpg JVM entry point failed" >&2
+    exit 1
+fi
+cat "$root/VERSION"

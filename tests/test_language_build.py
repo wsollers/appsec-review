@@ -285,6 +285,11 @@ class AnalysisExecutor:
         root = request.scratch_root
         root.mkdir(parents=True, exist_ok=True)
         mode = "infer" if request.tool_id == "tool-infer" else request.argv[1]
+        # Tools run as uid 10001; the inputs the C++ job writes for them must be readable by others.
+        tool_input = (root / "compile_commands.json" if mode == "infer" else
+                      root / "normalized-compile-commands.json" if mode in {"ast", "ir"} else None)
+        if tool_input is not None:
+            assert tool_input.stat().st_mode & 0o004, f"{tool_input.name} is unreadable by the tool user"
         if mode in {"ast", "ir"}:
             destination = root / "analysis" / mode
             destination.mkdir(parents=True, exist_ok=True)
@@ -463,7 +468,8 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
     outcome = GraphRunner(config, [build_cpp(
         executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # Joern is unavailable in the fixture.
+    # Joern runs in the independent job_cpg_analysis, so the compiled analysis itself is complete.
+    assert outcome["status"] == "SUCCEEDED"
     result_path = Path(outcome["jobs"]["job_cpp_compiled_analysis"]["attempt_root"]) / "result.json"
     outputs = json.loads(result_path.read_text(encoding="utf-8"))["outputs"]
     assert outputs["catalog.projects"]["project_count"] == 1

@@ -35,12 +35,12 @@
       "use": "Identifier and canonical-link authority only; no standard prose or examples copied."
     },
     {
-      "name": "appsec-review original gap rules",
+      "name": "appsec-review SEI CERT rule pack",
       "repository": "this repository",
-      "revision": "working tree at lock generation",
+      "revision": "rules/sei-cert/pack.lock.json",
       "license": "MIT",
-      "license_path": "LICENSE.local-rules.md",
-      "use": "Original Semgrep/OpenGrep-compatible rules and fixtures."
+      "license_path": "../sei-cert/LICENSE.md",
+      "use": "The former local Semgrep gap rules and fixtures moved to rules/sei-cert; coverage.json references those rule IDs only."
     }
   ],
   "artifacts": [
@@ -64,12 +64,8 @@
     {"path": "mappings/codechecker/clang-tidy.json", "kind": "file", "sha256": "0a364548e35c6583644c2635561296a352b83e972d22f6a2bf11e27e2da8abb1"},
     {"path": "mappings/codechecker/clangsa.json", "kind": "file", "sha256": "df081a11f8fed5812d299da7c180ab136d19d8fff65707f3d5084bb6c778c325"},
     {"path": "mappings/codechecker/LICENSE.TXT", "kind": "file", "sha256": "b78bd0e20d08af5dd2603980367b28dfe82b08345524c1944913cdaa7d6ffcbe"},
-    {"path": "semgrep/cpp-cert-gap-rules.yml", "kind": "file", "sha256": "8a57f0d4c53239dc82a8c7bf382c32736573632a15b785fc36f735d2195ce8fb"},
-    {"path": "tests/semgrep/positive.cpp", "kind": "file", "sha256": "d408cf5c300a1f2a0c63e30a248ac9f32b2049dbf857e2727868b157fe2b5f2f"},
-    {"path": "tests/semgrep/clean.cpp", "kind": "file", "sha256": "4901a577a67cd8cef7fb2897d106f2c9cc5793f7e75c719a4c59b9fa433131f4"},
-    {"path": "LICENSE.local-rules.md", "kind": "file", "sha256": "89b3bae1985d6ad984aae4b8ace0289c298cf7a3e53dddb6234fde28ea2935b4"},
-    {"path": "coverage.json", "kind": "file", "sha256": "a6cb6fee562dbf9704a1d22e89841addecc4fee8fca6268b83885c88ba94891f"},
-    {"path": "coverage.schema.json", "kind": "file", "sha256": "7e183895abc454d433a80a665d148a42f309b7cb96c03072b81aef2726f63710"}
+    {"path": "coverage.json", "kind": "file", "sha256": "e9ac139265999b6540a7c221e4140fb250382435a03a04cc1db9073a38aa820c"},
+    {"path": "coverage.schema.json", "kind": "file", "sha256": "fc5b28b6fe3af0b8cecb6e216c7ef4bebc226d68fcfd48d7e339dddda4452945"}
   ],
   "excluded_sources": [
     {

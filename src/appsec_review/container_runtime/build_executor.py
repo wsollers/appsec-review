@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -15,7 +16,10 @@ from typing import Any
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.storage import atomic_json, canonical_json
 from .catalog import load_catalog
-from .build_capture import BuildExecutionRecorder, CaptureScope, record_strace_files
+from .build_capture import (
+    PATH_FIELDS, REQUIRED_EVENT_KINDS, BuildExecutionRecorder, CaptureScope, record_strace_files,
+)
+from .capture_files import CaptureRoots, build_file_inventory, read_events, snapshot_response_files
 
 
 def _application_root(required_path: str) -> Path:
@@ -240,8 +244,14 @@ class BuildContainerExecutor:
     def execute_captured(self, argv: Sequence[str], *, workspace: Path,
                          working_directory: str, environment: Mapping[str, str],
                          capture_directory: Path, capture_config: BuildCaptureConfig,
-                         scope: CaptureScope) -> BuildCommandResult:
-        """Run a build under a process-tree-local syscall catcher and emit its JSON record."""
+                         scope: CaptureScope,
+                         snapshot_files: Mapping[str, Mapping[str, Any]] | None = None,
+                         ) -> BuildCommandResult:
+        """Run a build under a process-tree-local syscall catcher and emit its JSON record.
+
+        ``snapshot_files`` maps workspace-relative paths to pre-build ``sha256``, ``size_bytes``
+        and ``mtime_ns``; unchanged files reuse those hashes in the post-build file inventory.
+        """
         if capture_config.backend != "ptrace":
             raise ValueError("this executor supports the ptrace build-capture backend")
         if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
@@ -265,8 +275,8 @@ class BuildContainerExecutor:
         recorder = BuildExecutionRecorder(
             capture_root, scope, capture_config,
             {"backend": "ptrace", "tool": "strace", "image_id": self.profile.image_id,
-             "event_kinds": sorted(("process_fork", "process_exec", "process_exit",
-                                    "file_open", "connect"))},
+             "event_kinds": sorted(REQUIRED_EVENT_KINDS),
+             "trace_options": ["--seccomp-bpf", "-y"]},
         )
         driver = capture_root / "build-driver.sh"
         # Host and non-root container IDs differ; only this new run-owned leaf is shared.
@@ -314,16 +324,39 @@ class BuildContainerExecutor:
         trace_paths = tuple(capture_root.glob("trace*"))
         parse_errors = record_strace_files(trace_paths, recorder)
         recorder.flush()
+        roots = CaptureRoots("/workspace", root, logical_capture, self.profile.image_id,
+                             posixpath.normpath(f"/workspace/{working_directory}"))
+        # Response files are copied before the secret scan so the scan covers their contents.
+        response_files, response_gaps = snapshot_response_files(
+            list(read_events(capture_root / "events.jsonl")), roots, capture_root,
+            count_limit=capture_config.response_file_count_limit,
+            bytes_limit=capture_config.response_file_bytes_limit)
         secret_scan = self._scan_capture_secrets(
             capture_root, trace_paths=trace_paths,
             finding_limit=capture_config.secret_finding_count_limit,
             argv=argv, environment=capture_environment)
         record_argv = (["<redacted: secret detected by gitleaks>"]
                        if secret_scan.pop("redact_invocation", False) else argv)
+        # The inventory reads the sanitized events, so redacted paths never reach it.
+        current_snapshot = None
+        if snapshot_files is not None:
+            current_snapshot = {}
+            for relative, known in snapshot_files.items():
+                host = root / Path(*PurePosixPath(relative).parts)
+                try:
+                    stat = host.stat()
+                except OSError:
+                    continue
+                if stat.st_size == known.get("size_bytes") and stat.st_mtime_ns == known.get("mtime_ns"):
+                    current_snapshot[relative] = known
+        inventory = build_file_inventory(
+            read_events(capture_root / "events.jsonl"), roots, capture_root / "files.jsonl",
+            snapshot=current_snapshot, count_limit=capture_config.file_inventory_count_limit)
         record = recorder.finish(
             argv=record_argv, working_directory=working_directory, exit_code=code, timed_out=timed_out,
             stdout_path=stdout_path, stderr_path=stderr_path, collector_errors=parse_errors,
-            secret_scan=secret_scan)
+            secret_scan=secret_scan, file_inventory=inventory,
+            response_files=(response_files, response_gaps))
         stdout_size, stderr_size = stdout_path.stat().st_size, stderr_path.stat().st_size
         with stdout_path.open("rb") as stream:
             retained_stdout = stream.read(self.output_bytes)
@@ -394,6 +427,11 @@ class BuildContainerExecutor:
         atomic_json(scan_input / "invocation.json",
                     {"argv": list(argv), "environment": dict(environment)})
         (scan_input / "invocation.json").chmod(0o644)
+        response_root = capture_root / "response-files"
+        if response_root.is_dir():
+            for source in sorted(response_root.iterdir()):
+                if source.is_file():
+                    retain(source, f"response-files/{source.name}", sanitize=True)
         tool_root = capture_root / "tool-calls"
         if tool_root.is_dir():
             for source in tool_root.rglob("*"):
@@ -420,8 +458,10 @@ class BuildContainerExecutor:
                             else range(len(rows)))
                 for index in selected:
                     event = json.loads(rows[index])
-                    if event.get("kind") == "file_open":
-                        event["path"] = "<redacted: secret scan disposition>"
+                    if event.get("kind") != "process_exec":
+                        for name in PATH_FIELDS:
+                            if name in event:
+                                event[name] = "<redacted: secret scan disposition>"
                         rows[index] = canonical_json(event).decode().rstrip("\n")
                         continue
                     if event.get("kind") != "process_exec":

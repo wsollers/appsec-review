@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/sei-cert-rule-pack.schema.json",
+  "title": "SEI CERT rule-pack manifest (rules/sei-cert/pack.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "license",
+    "license_file",
+    "rule_id_prefix",
+    "description",
+    "standards",
+    "source_index",
+    "multivuln",
+    "rule_files",
+    "fixture_root",
+    "engines",
+    "portable_syntax",
+    "severity_values",
+    "confidence_values",
+    "precision_values",
+    "statuses",
+    "global_limitations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/sei-cert-rule-pack/1"
+    },
+    "id": {
+      "const": "appsec-review/sei-cert"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "license": {
+      "const": "MIT"
+    },
+    "license_file": {
+      "type": "string"
+    },
+    "rule_id_prefix": {
+      "const": "appsec-review.sei-cert."
+    },
+    "description": {
+      "type": "string"
+    },
+    "standards": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "mapping",
+          "engine_languages"
+        ],
+        "properties": {
+          "mapping": {
+            "type": "string"
+          },
+          "engine_languages": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "c",
+                "cpp",
+                "java"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "source_index": {
+      "type": "string"
+    },
+    "multivuln": {
+      "type": "string"
+    },
+    "rule_files": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^rules/(c|cpp|java)/[a-z]{3}[0-9]{2}-(c|cpp|j)\\.yml$"
+      },
+      "uniqueItems": true
+    },
+    "fixture_root": {
+      "const": "fixtures"
+    },
+    "engines": {
+      "type": "object",
+      "required": [
+        "semgrep",
+        "opengrep"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "semgrep": {
+          "type": "object",
+          "required": [
+            "version",
+            "catalog_tool"
+          ]
+        },
+        "opengrep": {
+          "type": "object",
+          "required": [
+            "version",
+            "artifact_url",
+            "artifact_sha256",
+            "catalog_tool"
+          ],
+          "properties": {
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "portable_syntax": {
+      "type": "object",
+      "required": [
+        "rule_keys",
+        "operators",
+        "modes",
+        "forbidden_keys"
+      ]
+    },
+    "severity_values": {
+      "const": [
+        "ERROR",
+        "WARNING",
+        "INFO"
+      ]
+    },
+    "confidence_values": {
+      "const": [
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "precision_values": {
+      "const": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "statuses": {
+      "const": [
+        "SUPPORTED",
+        "PARTIAL",
+        "UNSUPPORTED_SEMANTIC",
+        "UNSUPPORTED_LANGUAGE",
+        "DUPLICATE_EXISTING_RULE",
+        "REQUIRES_DATAFLOW",
+        "REQUIRES_COMPILER_OR_IR",
+        "REQUIRES_CODEQL",
+        "REQUIRES_MANUAL_REVIEW"
+      ]
+    },
+    "global_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    }
+  }
+}

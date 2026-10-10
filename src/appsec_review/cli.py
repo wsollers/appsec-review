@@ -34,7 +34,8 @@ def parser() -> argparse.ArgumentParser:
                      "job_target_analysis_plan",
                      "job_project_build", "job_language_build", "job_artifact_indexing",
                      "job_artifact_security_analysis",
-                     "job_cpp_compiled_analysis", "job_codeql_analysis", "job_evidence_collection")
+                     "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
+                     "job_codeql_analysis", "job_evidence_collection")
     plan.add_argument("--force-from", choices=graph_job_ids)
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
@@ -118,6 +119,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 registry.build("job_artifact_indexing"),
                 registry.build("job_artifact_security_analysis"),
                 registry.build("job_cpp_compiled_analysis"),
+                registry.build("job_cpp_symbol_index"),
+                registry.build("job_cpg_analysis"),
                 registry.build("job_codeql_analysis"),
                 registry.build("job_evidence_collection")]
         fingerprint = source_fingerprint(args.target)
