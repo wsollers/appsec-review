@@ -404,7 +404,8 @@ def test_github_enrichment_records_review_bypass_without_identities(tmp_path: Pa
     result = enrich(GitHubClient(settings, transport), head, [head, merged, direct])
     assert result["facts"][head] == {"pull_request": 7, "direct_push": False, "labels": ["securityscript"],
                                      "approved_by_other": False, "approval_stale": False, "self_merged": True,
-                                     "review_bypass": True}
+                                     "review_bypass": True, "created_at": None, "merged_at": None,
+                                     "head_sha": None, "head_committed_at": None, "approvals": []}
     assert result["facts"][merged]["review_bypass"] is False
     assert result["facts"][direct] == {"pull_request": None, "direct_push": True, "review_bypass": True, "labels": []}
     assert all(auth == "Bearer secret-token" for _, auth in seen)
