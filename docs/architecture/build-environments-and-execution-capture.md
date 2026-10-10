@@ -128,16 +128,33 @@ copy. Produced applications and test suites are not executed.
 
 For captured execution, the container entrypoint is the thin
 `containers/build-capture/build-driver.sh`. The driver prepends generated wrappers to `PATH`, saves
-the original tool path, and runs the command under `strace -ff`. Capture is process-tree-local: it
-observes descendants of the authorized build command rather than unrelated host processes.
+the original tool path, and runs the command under `strace --seccomp-bpf -ff -y`. Capture is
+process-tree-local: it observes descendants of the authorized build command rather than unrelated
+host processes.
+
+`--seccomp-bpf` makes the kernel stop the tracee only on traced syscalls instead of on every
+syscall. On the benchmark below it cut capture overhead by more than half while recording identical
+exec, fork and open events. `-y` makes strace print the path behind every file descriptor,
+including `AT_FDCWD` (the process's current directory) and the descriptor a successful open
+returns, so relative paths resolve without guessing.
 
 The required syscall event families are:
 
 - `clone`, `clone3`, `fork`, and `vfork` for process creation;
 - `execve` and `execveat` for the kernel-resolved executable path, argv, envp, and result;
 - `exit` and `exit_group` for process completion;
-- `openat` and `openat2` for file-open evidence; and
+- `open`, `openat`, `openat2`, and `creat` for file-open evidence (`file_open`), with the
+  requested path, the base directory, the resolved path of a successful open, the open flags with
+  derived `access` (`read`, `write` or `read-write`) and `creates`, and the result and errno;
+- `chdir` and `fchdir` for working-directory changes (`directory_change`);
+- `rename`, `renameat`, and `renameat2` (`file_rename`), `link` and `linkat` (`file_link`), and
+  `unlink` and `unlinkat` (`file_unlink`), so temp-then-rename outputs and deleted inputs are
+  visible; and
 - `connect` for mandatory egress evidence.
+
+Docker's default seccomp profile rejects `clone3` with `ENOSYS`; glibc then falls back to `clone`.
+With `--seccomp-bpf`, those rejected attempts are no longer printed. They never produced
+process-fork events, and the successful `clone`/`vfork` events are unchanged.
 
 PATH wrappers complement syscall capture for known build tools such as compilers, linkers,
 archivers, package managers, build systems, and language toolchains. A wrapper resolves the real
@@ -158,6 +175,57 @@ to treat unrecorded calls as absent.
 A process-exec event keeps `executable` (the path passed to the kernel, which the caller cannot
 relabel the way it can `argv[0]`) and `result`. A PATH search that misses produces failed `execve`
 rows; only an event with `result` zero is evidence that a tool ran.
+
+## Post-build file evidence
+
+Nothing is hashed during the build. After the traced command exits, the executor derives file
+evidence from the normalized events (`container_runtime/capture_files.py`):
+
+1. **Path resolution.** Each file event resolves to an absolute container path. It uses strace's
+   directory annotation when present, otherwise the process's working directory reconstructed
+   from fork inheritance and successful directory changes, starting from the command's working
+   directory. A successful open uses the resolved path strace printed for the returned descriptor.
+2. **Response files.** For every successful exec, an `@file` argument that the same process then
+   opened for reading is copied into `response-files/` in the capture *before* the secret scan, so
+   the scan covers its contents. A response file outside the workspace, removed before the
+   snapshot, or over `response_file_bytes_limit` is a named coverage gap, as is reaching
+   `response_file_count_limit`.
+3. **File inventory** (`files.jsonl`, schema `appsec-review/build-file-inventory/1`), built *after*
+   the secret scan from sanitized events, so redacted paths never enter it:
+   - successful file events are deduplicated by path; failed opens (include-path probes) are
+     counted and never listed;
+   - workspace files are keyed by workspace-relative path, because every review builds in a new
+     directory. A file the build did not write, whose size and mtime still match the pre-build
+     workspace snapshot that `job_project_build` already hashes, reuses that SHA-256. Every other
+     workspace file is hashed once;
+   - files on the read-only image filesystem are identified by image ID plus path and never
+     hashed. Ephemeral tmpfs paths are listed without hashes; capture-own and virtual
+     (`/proc`, `/sys`, `/dev`) paths are only counted;
+   - a workspace file modified after a process read it is flagged `modified_after_read` and
+     counted. Build systems routinely rewrite files they read, so this is not a coverage gap, but
+     consumers must not treat its post-build hash as what was read;
+   - counts, hashed bytes, and `resolve`/`hash`/`total` timings are recorded in the execution
+     record's `file_inventory`, so the real cost is visible on large builds. Reaching
+     `file_inventory_count_limit` is a named coverage gap.
+
+`verify_capture_record` hash-verifies `files.jsonl` and every retained response file like any other
+capture member. Changing this format bumped every family's capture identity, so earlier captures
+invalidate build checkpoints instead of being reused.
+
+The benchmark behind these choices runs the repository's own driver and wrapper inside the
+executor's container flags. Medians of 3 runs:
+
+| Workload | Plain build | PATH wrappers only | Previous capture | `--seccomp-bpf` | Current capture (`--seccomp-bpf -y`, extended syscalls) |
+| --- | --- | --- | --- | --- | --- |
+| Repository native fixture (CMake, 2 TUs) | 0.6 s | 2.6 s | 7.3 s | 3.3 s | 3.5 s |
+| zstd 1.5.7 static library (CMake + Ninja) | 17.9 s | 26.5 s | 48.3 s | 30.8 s | 31.8 s |
+
+The extended syscall set and `-y` annotation add about 3% over `--seccomp-bpf` alone. On a real
+capture of the fixture, the post-build pass resolved 6,311 opens to 553 unique paths (1,135 failed
+probes dropped, 429 image files identified without hashing) and hashed 27 workspace files in 7 ms.
+
+The Python PATH wrapper costs about 40 ms per wrapped tool call. `docs/TODO.md` tracks replacing it
+with a static Go binary.
 
 ## Envp capture and configured redaction
 
@@ -185,7 +253,8 @@ temporary scan corpus containing:
 - a raw top-level invocation object containing argv and supplied environment;
 - normalized `events.jsonl`;
 - top-level stdout and stderr; and
-- retained tool-call records plus their stdout and stderr.
+- retained tool-call records plus their stdout and stderr; and
+- retained response-file snapshots.
 
 The cataloged gitleaks image is resolved to an immutable local image ID before execution. It runs in
 a second container with no network, a read-only input mount, a writable run-owned scratch mount,
@@ -196,7 +265,8 @@ limits. Gitleaks scans in directory mode with JSON output, exit code `1` meaning
 The full gitleaks result set drives sanitization even when the configured finding-retention cap is
 reached. The cap limits stored normalized findings; it never limits secret removal. A finding in a
 retained process-exec event redacts that event's executable path, argv, and envp values while
-preserving valid JSONL; a finding in a file-open event redacts its path.
+preserving valid JSONL; a finding in any file event (open, rename, link, unlink, directory change)
+redacts all of its path fields. A finding in a retained response file replaces its contents.
 A finding in a tool-call record redacts argv and environment. A finding in a retained stream
 replaces its contents and repairs the owning stream hash and retained-byte metadata. A finding in
 the top invocation redacts the command argv stored in the execution record. The executor returns

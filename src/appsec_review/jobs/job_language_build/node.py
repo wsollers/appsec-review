@@ -11,7 +11,7 @@ from typing import Any
 from appsec_review.storage import canonical_json, file_sha256
 
 
-CAPTURE_IDENTITY = "appsec-review/node-build-capture/1"
+CAPTURE_IDENTITY = "appsec-review/node-build-capture/2"
 LOCKFILES = {"package-lock.json": "npm", "pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn"}
 TOOL_KINDS = {
     "tsc": "typescript-compiler", "babel": "transpiler", "babeljs": "transpiler",

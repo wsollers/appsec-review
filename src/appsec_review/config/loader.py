@@ -55,6 +55,9 @@ class BuildCaptureConfig:
     tool_call_count_limit: int
     secret_finding_count_limit: int
     mode: ProcessingMode = ProcessingMode.REQUIRED
+    file_inventory_count_limit: int = 1_000_000
+    response_file_count_limit: int = 10_000
+    response_file_bytes_limit: int = 1024 * 1024
 
     def __post_init__(self) -> None:
         if self.backend not in {"ptrace", "ebpf"}:
@@ -84,6 +87,12 @@ class BuildCaptureConfig:
             raise ValueError("build capture tool_call_count_limit is invalid")
         if not 1 <= self.secret_finding_count_limit <= 1_000_000:
             raise ValueError("build capture secret_finding_count_limit is invalid")
+        if not 1 <= self.file_inventory_count_limit <= 10_000_000:
+            raise ValueError("build capture file_inventory_count_limit is invalid")
+        if not 1 <= self.response_file_count_limit <= 1_000_000:
+            raise ValueError("build capture response_file_count_limit is invalid")
+        if not 1 <= self.response_file_bytes_limit <= 64 * 1024 * 1024:
+            raise ValueError("build capture response_file_bytes_limit is invalid")
 
 
 def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
@@ -94,7 +103,8 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
                "argument_bytes_limit", "capture_envp", "envp_count_limit",
                "envp_bytes_limit", "envp_redact_names", "path_bytes_limit",
                "tool_call_count_limit",
-               "secret_finding_count_limit"}
+               "secret_finding_count_limit", "file_inventory_count_limit",
+               "response_file_count_limit", "response_file_bytes_limit"}
     unknown = set(value) - allowed
     if unknown:
         raise ValueError(f"{field} has unknown settings: {', '.join(sorted(unknown))}")
@@ -129,6 +139,10 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
             "secret_finding_count_limit", base.secret_finding_count_limit if base else 0)),
         mode=_processing_mode(value.get(
             "mode", base.mode.value if base else ProcessingMode.REQUIRED.value), f"{field}.mode"),
+        **{name: int(value[name]) if name in value else getattr(base, name)
+           for name in ("file_inventory_count_limit", "response_file_count_limit",
+                        "response_file_bytes_limit")
+           if name in value or base is not None},
     )
 
 

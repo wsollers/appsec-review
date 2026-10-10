@@ -331,3 +331,32 @@ clang-cl compile commands. Remaining work:
 
 Resolve the open items in `containers/tools/clangd-indexer/LICENSE.md` first: confirming the LLVM
 source ref, and an advisory match for the LLVM binary.
+
+## Replace the Python build-capture tool wrapper with a static Go binary
+
+`containers/build-capture/tool-wrapper.py` runs for every `PATH`-resolved build tool (cc, c++, ld,
+ar, ninja, cmake and others). Measured cost, inside the executor's container boundary with
+`--seccomp-bpf` capture:
+
+- about 40 ms per call;
+- 45 calls added about 1.8 s to a 0.65 s fixture build;
+- about +9 s (+49%) on an 18 s zstd build.
+
+At AAA scale (tens of thousands of compiler and linker calls) that is tens of CPU-minutes per
+build. The wrapper also forces `python3` into every build image.
+
+1. First confirm the wrapper still earns its place. strace already records every exec's argv,
+   resolved executable and environment authoritatively. The wrapper's unique outputs are per-tool
+   stdout/stderr and tool-call records, which reconciliation treats as optional secondary
+   evidence. It also misses compilers invoked by absolute path, which Unreal's build tool does.
+2. If it stays, reimplement it as a static Go binary (`CGO_ENABLED=0`) with byte-identical
+   behaviour:
+   - call ordinal locking and the call limit;
+   - per-call record, stdout/stderr retention and envp redaction;
+   - `exec` of the real tool.
+3. Build it offline from a pinned Go toolchain image with locked modules (standard library only,
+   if possible). Install it through the capture assets; never commit a binary.
+4. Keep the tool-call record schema stable, and bump the capture identities so that changed
+   captures invalidate build checkpoints.
+5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
+   after.

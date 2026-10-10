@@ -20,6 +20,10 @@ envp_redact_names = [
   "PIP_INDEX_URL",
 ]
 path_bytes_limit = 4096
+# Post-build file inventory and response-file snapshot bounds (no hashing happens during the build).
+file_inventory_count_limit = 1000000
+response_file_count_limit = 10000
+response_file_bytes_limit = 1048576
 tool_call_count_limit = 10000
 secret_finding_count_limit = 1000
 

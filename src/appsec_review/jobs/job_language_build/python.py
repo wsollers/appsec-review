@@ -14,7 +14,7 @@ import zipfile
 from appsec_review.storage import canonical_json, file_sha256
 
 
-CAPTURE_IDENTITY = "appsec-review/python-package-build-capture/1"
+CAPTURE_IDENTITY = "appsec-review/python-package-build-capture/2"
 _PACKAGE_MODULES = {"build", "pip", "compileall"}
 _NATIVE_TOOLS = {
     "cc": "compiler-driver", "c++": "compiler-driver", "gcc": "compiler-driver",
