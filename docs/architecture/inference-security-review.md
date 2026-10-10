@@ -188,6 +188,9 @@ The red discovery pool maps over hunt packages. `hypothesis_hunter` searches for
 `red_team_analyst` develops the attacker-controlled preconditions and explicit evidence requests
 for normalized leads. Both emit only `proposed` claims and evidence requests. They cannot set
 confirmation, severity, priority, exploitability, PoC eligibility, or chain state.
+Package construction does not prove a scanner lead. For C/C++ claims, accepted source-mapped
+post-macro and template-expanded Clang artifacts can help these pools assess the compiled construct;
+blue and blind verification still challenge the relevant predicates before adjudication.
 
 Normalization resolves locations and evidence identities, canonicalizes statements and
 preconditions, calculates identities, and merges exact duplicates. Semantic similarity may nominate

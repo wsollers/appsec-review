@@ -32,8 +32,11 @@ The schema carries typed metric vectors, evidence provenance, safe ordered build
 classified environment facts. The assembler joins accepted metric vectors and safe build-action
 facts by exact source path. A missing source match becomes a named gap; empty vectors must not be
 interpreted as zero measurements or a safe build. The package carries bounded retrieval grants,
-not raw source, argv, environment values or scanner output. The current join is path-scoped and
-does not prove a build action caused a particular observation.
+not raw source, argv, environment values or scanner output. The current build-fact join is
+path-scoped context. It does not assert that a build action compiled the exact observed construct.
+Where accepted Clang artifacts have source mappings, post-macro and template-expanded views can
+help the review pools test that question. They are evidence to inspect, not a package-admission
+condition or a confirmed finding.
 
 ## Worker access
 
@@ -45,6 +48,9 @@ bind the capability and query, so a cursor cannot be reused across packages or q
 with an entity identity outside the grant are rejected. The unrestricted
 `RetrievalMcpAdapter` remains an operator interface and must not be given to review workers.
 
-The current slice does not start red, blue or verifier workers. A later inference handoff must
-project separate role views, seal blind-verifier output, and independently verify consequential
-claims before adjudication. It must refine build-action links beyond exact source-path matching.
+The current slice does not start red, blue or verifier workers. Package assembly preserves
+suspicions, context and open proof obligations; it does not resolve whether a suspected issue is
+real. The red, blue and blind-verifier pools gather and challenge evidence, including applicable
+compiled views. Evidence-qualified adjudication then decides the claim state. A later inference
+handoff must project separate role views, grant bounded access to accepted compiled evidence,
+and seal blind-verifier output before adjudication.
