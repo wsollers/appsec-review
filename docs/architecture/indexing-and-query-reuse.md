@@ -118,7 +118,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Tests and fixtures; planned `job_test_and_doc_indexing` | Developer intent and negative cases | Planned `tests`; link assertions to symbols; never claim enforcement | `test_intent`, `review_package` | Planned `query_tests` if intent filters exceed `QP`; no skill |
 | Docs, ADRs, README and threat models; planned `job_test_and_doc_indexing` | Declared architecture and trust boundaries | Planned `docs` bounded chunks; untrusted text quarantined | `review_package` nominations only | `search`, `find`; no skill |
 | Target-owned agent guidance; planned doc index | Owner statements only, never instructions | Planned `docs` with `target_guidance` flag and quarantine | None beyond nomination | `search` only if scope permits; no skill |
-| Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; SQLite FTS image | Nominate exact identities for later resolution | Current in-process FTS5; image-backed offline build/validation planned after digest and capability registration | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
+| Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; optional SQLite FTS image | Nominate exact identities for later resolution | Current in-process FTS5; image-backed offline build/validation is a candidate after image discovery and capability registration | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
 | Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `dataflow`, `entrypoint_paths`, `review_package` | Planned `query_observations`/typed trace query if acquired; no skill |
 | Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
 | Normalized claims, reviews, adjudication, PoC receipts and final finding packages; future inference/publication | Review decisions and final evidence | Planned typed ledgers; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
@@ -190,12 +190,13 @@ The protected-artifact exception still requires queryable sanitized metadata and
 ### SQLite FTS tool-image reuse
 
 The current `IndexBuilder` already creates SQLite FTS5 tables inside immutable index shards and
-MCP opens accepted shards read-only. The available SQLite FTS tool image can be reused as an
-**offline index-build and validation worker** for larger bounded text/facet sets (source symbols,
-SAST rule/message summaries, contracts, docs, test intent and reference descriptions). It is
+MCP opens accepted shards read-only. A dedicated SQLite FTS tool image, if located or built, is a
+candidate **offline index-build and validation worker** for larger bounded text/facet sets
+(source symbols, SAST rule/message summaries, contracts, docs, test intent and reference descriptions). It is
 not a new inference-time search server and does not replace the accepted manifest or MCP access
-checks. The image is not yet registered in `containers/catalog.toml` in this branch; before
-wiring a job, record its exact image digest, SQLite/FTS5 version, tokenizer/extension set,
+checks. Git history, the current container catalog and the WSL Docker image list did not reveal
+a dedicated image during this design review. Before wiring a job, locate or build the image and
+record its exact image digest, SQLite/FTS5 version, tokenizer/extension set,
 license/provenance and runtime policy in the container catalog and typed configuration. Do not
 invent an image ID or silently use a floating tag.
 
@@ -210,9 +211,9 @@ source/artifact resolution still establish facts. FTS never indexes raw secrets,
 protected logs, model transcripts or target guidance as instructions.
 
 Reuse this image only when capability and fixture tests prove it can create the same bounded,
-deterministic FTS5 schema across runs. If unavailable, the existing in-process builder remains
-the documented current path and the image-backed lane reports `unavailable` rather than
-claiming that it ran. Precompute corpus statistics, safe term/facet dictionaries and exact
+deterministic FTS5 schema across runs. Until then, the existing in-process builder remains
+the current path. The absent optional image is an implementation opportunity, not a gap in
+existing FTS5 retrieval coverage. Precompute corpus statistics, safe term/facet dictionaries and exact
 entity-to-document links where they improve candidate retrieval; do not precompute LLM answers
 or treat a search rank as evidence.
 
