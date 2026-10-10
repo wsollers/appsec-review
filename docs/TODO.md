@@ -288,3 +288,29 @@ blocked disposition. Remaining work:
 Resolve the open items in `containers/tools/joern/LICENSE.md` first: the `noexec` `/tmp` JNI
 extraction, the per-tool resource profile, and license attribution for the JARs without embedded
 metadata. Do not put the full CPG into MCP responses.
+
+## Evaluate additional Joern language frontends
+
+The pinned `v4.0.630` archive is verified whole, but `tool-joern` installs only the core and
+`c2cpg`. The other thirteen frontend directories are excluded until a job needs them: `javasrc2cpg`,
+`jimple2cpg`, `kotlin2cpg`, `jssrc2cpg`, `pysrc2cpg`, `php2cpg`, `rubysrc2cpg`, `gosrc2cpg`,
+`csharpsrc2cpg`, `swiftsrc2cpg`, `rust2cpg`, `abap2cpg`, and `ghidra2cpg`. For each language that a
+job will consume:
+
+1. State the job and coverage the frontend serves, and why CodeQL or an existing producer does not
+   already cover it.
+2. Review the frontend's added JARs and any native AST generator, recording provenance, licenses,
+   and advisories in `containers/tools/joern/LICENSE.md`. The native AST generators are
+   `astgen-linux`, `SwiftAstGen-linux`, `goastgen-linux`, `dotnetastgen-linux`,
+   `rust_ast_gen-linux`, and `abapgen-linux`; `php2cpg` also bundles a PHP parser `.phar`.
+3. Prove that native AST generators and any interpreter dependency, such as a PHP runtime, run
+   offline as uid 10001 under the read-only, no-network, drop-all policy without writing outside
+   scratch.
+4. Add the paths to `[closure].include` in `containers/tools/joern/tool.toml`, regenerate
+   `inventory.json`, and update `tests/test_joern_tool.py`, which currently asserts that no other
+   frontend or ELF binary is installed.
+5. Add bounded-export fixtures and keep each language's coverage `unavailable` until they pass.
+
+Do not enable all frontends wholesale: that adds about 2 GB and six unreviewed native binaries.
+`ghidra2cpg` is binary analysis and belongs with the binary-analysis decomposition decision, not
+source CPG coverage.
