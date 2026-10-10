@@ -1316,3 +1316,47 @@ workers = 1
 workers = 1
 [jobs.job_owasp_control_assessment.steps.publication.tasks.publish_indexes]
 [jobs.job_owasp_control_assessment.steps.publication.tasks.publish_handoff]
+
+[jobs.job_security_tagging]
+name = "security_tagging"
+workers = 4
+
+[jobs.job_security_tagging.settings]
+max_entities_per_shard = 50000
+max_assignments = 500000
+
+[jobs.job_security_tagging.settings.taxonomy]
+vocabulary_path = "data/reference/taxonomy/vocabulary.json"
+vocabulary_sha256 = "fc2873c832b843bdbdb9607e1609ef6eb3258f59a6fa29b3e0141fce98e29239"
+capability_rules_path = "data/reference/taxonomy/capability-rules.json"
+capability_rules_sha256 = "7065cfaca14bea9a68b38e7853aefbb5e02e4cc59aa32d92e99d5acf7673df28"
+crosswalk_path = "data/reference/taxonomy/crosswalk.json"
+crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
+
+[jobs.job_security_tagging.steps.taxonomy]
+workers = 1
+[jobs.job_security_tagging.steps.taxonomy.tasks.load_taxonomy]
+
+[jobs.job_security_tagging.steps.scope]
+workers = 1
+[jobs.job_security_tagging.steps.scope.tasks.resolve_inputs]
+
+[jobs.job_security_tagging.steps.collection]
+workers = 3
+[jobs.job_security_tagging.steps.collection.tasks.source_facts]
+[jobs.job_security_tagging.steps.collection.tasks.observation_facts]
+[jobs.job_security_tagging.steps.collection.tasks.coverage_gaps]
+
+[jobs.job_security_tagging.steps.crosswalk]
+workers = 1
+[jobs.job_security_tagging.steps.crosswalk.tasks.apply_crosswalk]
+
+[jobs.job_security_tagging.steps.integrity]
+workers = 1
+[jobs.job_security_tagging.steps.integrity.tasks.validate_assignments]
+
+[jobs.job_security_tagging.steps.publication]
+workers = 2
+[jobs.job_security_tagging.steps.publication.tasks.publish_index]
+[jobs.job_security_tagging.steps.publication.tasks.publish_tag_cloud]
+[jobs.job_security_tagging.steps.publication.tasks.publish_handoff]

@@ -1,0 +1,219 @@
+{
+  "schema": "appsec-review/tag-vocabulary/1",
+  "version": "1",
+  "design": "docs/architecture/security-tag-taxonomy.md",
+  "bases": ["derived", "declared", "invoked", "reported", "confirmed"],
+  "flow_roles": ["source", "sink", "sanitizer", "guard", "none"],
+  "families": {
+    "code_facts": "Code facts",
+    "controls": "Assurance controls",
+    "routing": "Routing and checks",
+    "weakness": "Weaknesses",
+    "threat": "Threats",
+    "gap": "Coverage gaps"
+  },
+  "namespaces": {
+    "func": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "reported"], "flow_role": true, "rollup": "domain",
+      "terms": [
+        "func:authn:password", "func:authn:mfa", "func:authn:webauthn", "func:authn:oauth2-client",
+        "func:authn:oauth2-server", "func:authn:oidc", "func:authn:saml", "func:authn:jwt",
+        "func:authn:api-key", "func:authn:mtls-client", "func:authn:credential-recovery",
+        "func:session:cookie", "func:session:server-store", "func:session:token-refresh",
+        "func:session:csrf-token",
+        "func:authz:rbac", "func:authz:abac", "func:authz:object-ownership", "func:authz:policy-engine",
+        "func:authz:tenant-scope",
+        "func:net:http-route", "func:net:http-client", "func:net:graphql", "func:net:grpc",
+        "func:net:websocket", "func:net:tls-server", "func:net:tls-client", "func:net:redirect",
+        "func:net:cors", "func:net:raw-socket", "func:net:dns",
+        "func:crypto:symmetric", "func:crypto:asymmetric-sign", "func:crypto:asymmetric-encrypt",
+        "func:crypto:hash", "func:crypto:password-hash", "func:crypto:mac", "func:crypto:rng",
+        "func:crypto:key-mgmt", "func:crypto:cert-validation",
+        "func:data:parse-json", "func:data:parse-xml", "func:data:parse-yaml",
+        "func:data:deserialize-native", "func:data:sql-query", "func:data:orm", "func:data:nosql-query",
+        "func:data:ldap-query", "func:data:template-render", "func:data:regex",
+        "func:data:archive-extract", "func:data:file-upload",
+        "func:exec:process-spawn", "func:exec:shell", "func:exec:dynamic-eval", "func:exec:dynamic-load",
+        "func:exec:ffi", "func:exec:unmanaged-memory", "func:exec:ipc", "func:exec:concurrency",
+        "func:fs:read", "func:fs:write", "func:fs:path-build", "func:fs:temp-file", "func:fs:permissions",
+        "func:secrets:env-read", "func:secrets:config-read", "func:secrets:vault-client",
+        "func:telemetry:audit-log", "func:telemetry:app-log", "func:telemetry:tracing",
+        "func:telemetry:metrics", "func:telemetry:error-report",
+        "func:ai:llm-call", "func:ai:tool-execution", "func:ai:vector-store", "func:ai:model-load",
+        "func:mobile:webview", "func:mobile:deeplink", "func:mobile:intent-ipc",
+        "func:mobile:local-storage", "func:mobile:keystore"
+      ]
+    },
+    "infra": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "reported"], "rollup": "domain",
+      "terms": [
+        "infra:container:image-build", "infra:container:base-image", "infra:container:multi-stage",
+        "infra:container:user-directive", "infra:container:remote-fetch",
+        "infra:container:package-install", "infra:container:build-secret",
+        "infra:container:exposed-port", "infra:container:healthcheck",
+        "infra:container:runtime-socket-mount",
+        "infra:kube:workload", "infra:kube:security-context", "infra:kube:service-account",
+        "infra:kube:rbac-role", "infra:kube:rbac-binding", "infra:kube:network-policy",
+        "infra:kube:ingress", "infra:kube:service-exposure", "infra:kube:secret-object",
+        "infra:kube:host-namespace", "infra:kube:host-path", "infra:kube:capabilities",
+        "infra:kube:admission-policy", "infra:kube:helm-chart", "infra:kube:kustomization",
+        "infra:kube:crd-operator",
+        "infra:iac:terraform", "infra:iac:cloudformation", "infra:iac:bicep-arm", "infra:iac:pulumi",
+        "infra:iac:cdk", "infra:iac:ansible", "infra:iac:serverless-framework",
+        "infra:iac:remote-module", "infra:iac:state-backend",
+        "infra:cloud:iam-policy", "infra:cloud:iam-trust", "infra:cloud:workload-identity",
+        "infra:cloud:object-storage", "infra:cloud:database", "infra:cloud:kms-key",
+        "infra:cloud:secret-store", "infra:cloud:network-acl", "infra:cloud:load-balancer",
+        "infra:cloud:compute", "infra:cloud:function", "infra:cloud:queue-topic", "infra:cloud:registry",
+        "infra:cloud:managed-k8s", "infra:cloud:instance-metadata", "infra:cloud:audit-log",
+        "infra:cloud:encryption-config",
+        "infra:ci:workflow", "infra:ci:trigger-untrusted", "infra:ci:permissions", "infra:ci:secret-use",
+        "infra:ci:oidc-token", "infra:ci:self-hosted-runner", "infra:ci:third-party-action",
+        "infra:ci:script-step", "infra:ci:cache", "infra:ci:artifact-publish", "infra:ci:deploy-step",
+        "infra:ci:environment-gate",
+        "infra:supply:dependency-manifest", "infra:supply:lockfile", "infra:supply:registry-config",
+        "infra:supply:install-script", "infra:supply:vendored-code", "infra:supply:git-dependency",
+        "infra:supply:submodule", "infra:supply:checked-in-binary", "infra:supply:sbom",
+        "infra:supply:signature", "infra:supply:provenance", "infra:supply:update-bot"
+      ]
+    },
+    "platform": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared"], "rollup": "self",
+      "terms": [
+        "platform:aws", "platform:azure", "platform:gcp", "platform:oci", "platform:kubernetes",
+        "platform:docker", "platform:github-actions", "platform:gitlab-ci", "platform:azure-pipelines",
+        "platform:jenkins"
+      ]
+    },
+    "data": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked"], "rollup": "self",
+      "terms": [
+        "data:credential", "data:key-material", "data:session-token", "data:pii", "data:financial",
+        "data:health"
+      ]
+    },
+    "surface": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived"], "rollup": "domain",
+      "derived_prefixes": ["surface:boundary:"],
+      "terms": [
+        "surface:entry:http-public", "surface:entry:http-internal", "surface:entry:rpc",
+        "surface:entry:message-consumer", "surface:entry:cli", "surface:entry:env-config",
+        "surface:entry:file-input", "surface:entry:local-ipc", "surface:entry:mobile-deeplink",
+        "surface:entry:cloud-public", "surface:entry:ci-untrusted",
+        "surface:priv:elevated", "surface:priv:sandboxed", "surface:priv:host",
+        "surface:priv:cluster-admin", "surface:priv:cloud-admin", "surface:priv:ci-write",
+        "surface:boundary:tenant", "surface:boundary:egress", "surface:boundary:cluster",
+        "surface:boundary:cloud-account", "surface:boundary:ci-trust"
+      ]
+    },
+    "component": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared"], "rollup": "self",
+      "note": "owasp_workbench.engine.COMPONENT_ROLES with '_' written as '-' to satisfy the tag grammar.",
+      "terms": [
+        "component:application-api-server", "component:web-frontend", "component:android-mobile",
+        "component:ios-mobile", "component:authentication-identity",
+        "component:cryptography-data-protection", "component:storage", "component:network",
+        "component:platform-integration", "component:build-supply-chain",
+        "component:deployment-operations", "component:administrative-tooling",
+        "component:test-development-only"
+      ]
+    },
+    "lang": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared"], "rollup": "self",
+      "terms": [
+        "lang:python", "lang:javascript", "lang:typescript", "lang:java", "lang:kotlin", "lang:go",
+        "lang:rust", "lang:c", "lang:c-cpp-header", "lang:cpp", "lang:csharp", "lang:ruby", "lang:php",
+        "lang:swift", "lang:shell", "lang:powershell"
+      ]
+    },
+    "gap": {
+      "family": "gap", "status": "active", "catalog": "local",
+      "bases": ["reported"], "rollup": "domain",
+      "note": "A gap is reported by a producer or by this job; it is never evidence that a property is absent.",
+      "parameterized": ["no-ast", "no-build", "no-sast", "framework-disabled", "unrendered", "offline"],
+      "terms": [
+        "gap:scope-failed", "gap:crosswalk-unmapped", "gap:catalog-fixture", "gap:deployed-state",
+        "gap:no-lockfile-coverage"
+      ]
+    },
+    "asvs5": {
+      "family": "controls", "status": "active", "catalog": "OWASP ASVS 5.0.0",
+      "catalog_pin": "jobs.job_owasp_control_assessment.settings.standards.ASVS", "catalog_fixture": true,
+      "bases": ["derived"], "rollup": "chapter",
+      "pattern": "^asvs5:v(?:[1-9]|1[0-7])(?:\\.[1-9][0-9]?)?$"
+    },
+    "masvs2": {
+      "family": "controls", "status": "active", "catalog": "OWASP MASVS 2.1.0",
+      "catalog_pin": "jobs.job_owasp_control_assessment.settings.standards.MASVS", "catalog_fixture": true,
+      "bases": ["derived"], "rollup": "self",
+      "terms": [
+        "masvs2:storage", "masvs2:crypto", "masvs2:auth", "masvs2:network", "masvs2:platform",
+        "masvs2:code", "masvs2:resilience", "masvs2:privacy"
+      ]
+    },
+    "nist53r5": {"family": "controls", "status": "proposed", "catalog": "NIST SP 800-53 Rev. 5 OSCAL", "bases": ["derived"], "rollup": "family"},
+    "ssdf": {"family": "controls", "status": "proposed", "catalog": "NIST SP 800-218 SSDF 1.1", "bases": ["derived"], "rollup": "family"},
+    "k8s-pss": {"family": "controls", "status": "proposed", "catalog": "Kubernetes Pod Security Standards", "bases": ["derived"], "rollup": "self"},
+    "slsa1": {"family": "controls", "status": "proposed", "catalog": "SLSA v1.0 Build track", "bases": ["derived"], "rollup": "self"},
+    "top10-2025": {
+      "family": "routing", "status": "active", "catalog": "OWASP Top 10 2025",
+      "catalog_pin": "jobs.job_owasp_control_assessment.settings.standards.OWASP_TOP_10", "catalog_fixture": true,
+      "bases": ["derived"], "rollup": "self", "pattern": "^top10-2025:a(?:0[1-9]|10)$"
+    },
+    "api-top10-2023": {
+      "family": "routing", "status": "active", "catalog": "OWASP API Security Top 10 2023",
+      "catalog_pin": "jobs.job_owasp_control_assessment.settings.standards.OWASP_API_TOP_10", "catalog_fixture": true,
+      "bases": ["derived"], "rollup": "self", "pattern": "^api-top10-2023:api(?:[1-9]|10)$"
+    },
+    "cicd-top10": {"family": "routing", "status": "proposed", "catalog": "OWASP Top 10 CI/CD Security Risks", "bases": ["derived"], "rollup": "self"},
+    "k8s-top10-2022": {"family": "routing", "status": "proposed", "catalog": "OWASP Kubernetes Top 10 (2022)", "bases": ["derived"], "rollup": "self"},
+    "scorecard": {"family": "routing", "status": "proposed", "catalog": "OpenSSF Scorecard checks", "bases": ["reported", "derived"], "rollup": "self"},
+    "cwe": {
+      "family": "weakness", "status": "active", "catalog": "MITRE CWE 4.20",
+      "bases": ["reported", "confirmed", "derived"], "rollup": "self",
+      "rollup_gap": "CWE-1003 rollup requires the CWE feed pinned into the run",
+      "pattern": "^cwe:[1-9][0-9]{0,4}$"
+    },
+    "cert-c": {
+      "family": "weakness", "status": "active", "catalog": "SEI CERT C rule identifiers",
+      "bases": ["reported", "confirmed"], "rollup": "cert-category",
+      "pattern": "^cert-c:[a-z]{3}[0-9]{2}-c$"
+    },
+    "cert-cpp": {
+      "family": "weakness", "status": "active", "catalog": "SEI CERT C++ rule identifiers",
+      "bases": ["reported", "confirmed"], "rollup": "cert-category",
+      "pattern": "^cert-cpp:[a-z]{3}[0-9]{2}-cpp$"
+    },
+    "misra-c2012": {"family": "weakness", "status": "proposed", "catalog": "MISRA C:2012 rule identifiers", "bases": ["reported", "confirmed"], "rollup": "self"},
+    "misra-cpp2023": {"family": "weakness", "status": "proposed", "catalog": "MISRA C++:2023 rule identifiers", "bases": ["reported", "confirmed"], "rollup": "self"},
+    "vuln": {
+      "family": "weakness", "status": "active", "catalog": "local",
+      "bases": ["reported", "confirmed"], "rollup": "self",
+      "confirmed_only": ["vuln:reachable"],
+      "proposed_terms": ["vuln:kev"],
+      "terms": [
+        "vuln:severity:critical", "vuln:severity:high", "vuln:severity:medium", "vuln:severity:low",
+        "vuln:severity:unknown", "vuln:kev", "vuln:fix-available", "vuln:reachable"
+      ]
+    },
+    "capec": {
+      "family": "threat", "status": "active", "catalog": "MITRE CAPEC 3.9",
+      "bases": ["confirmed", "derived"], "rollup": "self",
+      "rollup_gap": "CAPEC mechanism-of-attack rollup requires the CAPEC feed pinned into the run",
+      "pattern": "^capec:[1-9][0-9]{0,3}$"
+    },
+    "attack": {
+      "family": "threat", "status": "active", "catalog": "MITRE ATT&CK Enterprise 19.2",
+      "bases": ["confirmed", "derived"], "rollup": "self",
+      "rollup_gap": "ATT&CK tactic rollup requires the ATT&CK feed pinned into the run",
+      "pattern": "^attack:t[0-9]{4}(?:\\.[0-9]{3})?$"
+    }
+  }
+}

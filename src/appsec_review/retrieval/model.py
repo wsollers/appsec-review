@@ -45,6 +45,7 @@ class EntityKind(StrEnum):
     FINDING_PACKAGE = "finding_package"
     CHANGE = "change"
     HISTORY_SIGNAL = "history_signal"
+    TAG_ASSIGNMENT = "tag_assignment"
 
 
 class RelationKind(StrEnum):

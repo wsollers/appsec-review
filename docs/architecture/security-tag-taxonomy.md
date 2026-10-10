@@ -1,7 +1,9 @@
 # Security tag taxonomy
 
-Status: proposed design. Nothing in this page is implemented yet. It defines a finite, versioned
-vocabulary for tagging code subjects. The tags feed a tag cloud and faceted retrieval filters.
+Status: first vertical slice implemented by `job_security_tagging` (see
+[Implementation status](#implementation-status)); the rest of this page is the target design. It
+defines a finite, versioned vocabulary for tagging code subjects. The tags feed a tag cloud and
+faceted retrieval filters.
 
 Flat keyword matching does not work for this. Implementation facts, assurance controls, weakness
 classes, and adversary techniques sit at different levels of abstraction. They also differ in how
@@ -657,19 +659,37 @@ Rendering rules:
 
 ## Placement in the pipeline
 
-The proposed producer is a `job_security_tagging` stage. It consumes the accepted catalog,
-evidence-collection, AST, CodeQL, CI-configuration, and artifact-security handoffs, and publishes immutable `tags` retrieval shards. A
-shard's fingerprint covers:
+`job_security_tagging` runs after the last retrieval-manifest publisher in `wave1_review` (CodeQL
+analysis when it is registered) and closes the wave after the OWASP control assessment. It reads only the accepted, hash-verified retrieval manifest and
+publishes immutable `tags` retrieval shards, one per display family. A shard's fingerprint covers:
 
-- its upstream manifests;
+- its upstream manifest;
 - the vocabulary hash;
 - the crosswalk hash;
-- the capability-rule identity;
-- the pinned catalog hashes.
+- the capability-rule hash;
+- the assignment content.
 
-Assignments are queried through the existing bounded `search`, `find`, and `coverage` filters, so
-no new MCP tool is needed. The vocabulary file and the crosswalk file live under
-`data/reference/taxonomy/` and are hash-pinned in `appsec-review.toml`.
+Assignments are queried through the existing bounded `search`, `find`, and `coverage` filters with
+`indexes=["tags"]` and `kinds=["tag_assignment"]`, so no new MCP tool is needed. The vocabulary,
+capability-rule, and crosswalk files live under `data/reference/taxonomy/` and are hash-pinned in
+`appsec-review.toml`.
 
 Before any `proposed` namespace can be emitted at runtime, its catalog must be pinned: NIST 800-53
 OSCAL, SSDF, MISRA IDs, and the CTID mappings.
+
+## Implementation status
+
+The first slice implements the contract end to end for the inputs the accepted indexes already
+carry:
+
+| Area | Implemented | Not yet implemented (reported as named gaps) |
+| --- | --- | --- |
+| Vocabulary | Namespace registry, grammar, ID normalizers, namespace/basis table, `proposed` rejection | Pinned NIST, SSDF, MISRA, PSS, SLSA, CI/CD and Kubernetes Top 10, Scorecard, and KEV catalogs |
+| Code facts | `lang` from the source inventory; `infra`/`platform` from configuration-file paths (`declared`); `func` from inventory package names (`declared`); `infra:ci:*` from CI static rules (`reported`) | `invoked` capability detection from AST or taint models; `data`, `surface` entry and privilege facts; `component` roles |
+| Weaknesses | `cwe` from CodeQL SARIF rule tags, Gitleaks (`cwe:798`), and CI rules; `cert-*` from CERT rule IDs; `vuln:severity:*` and `cwe:1395` from advisory matches; `gap:crosswalk-unmapped` for unmapped findings | Semgrep, Checkov, and Trivy declared CWEs (the evidence normalizer does not retain them yet) |
+| Crosswalk | Curated one-hop rules with `same_subject`, `component`, `ci_job`, and `project` scopes; conflict and proposed-namespace rejection at assembly | `upstream` CWE→CAPEC→ATT&CK rules from a run-pinned MITRE feed; `taint_path`, `iac_resource`, `k8s_object`, and `container_stage` scopes |
+| Gaps | Per-shard coverage gaps, absent required indexes, `gap:catalog-fixture` for fixture-only control catalogs | Infrastructure gaps (`unrendered`, `deployed-state`, `offline`) |
+| Rendering | `tag-cloud.json` rollup sized by distinct subjects and components, fill by strongest basis, red/blue lens membership | CWE-1003, CAPEC category, and ATT&CK tactic rollups (need the pinned feeds) |
+
+Gap tags carry basis `reported`: a producer or the tagging job reported the missing coverage.
+Curated crosswalk rules carry `reviewer: pending-human-review` until a reviewer signs them off.

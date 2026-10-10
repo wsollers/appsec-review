@@ -18,6 +18,7 @@ MANIFEST_SCHEMA = "appsec-review/index-manifest/1"
 INDEX_NAMES = (
     "source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence",
     "history",
+    "tags",
 )
 
 
