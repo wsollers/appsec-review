@@ -39,6 +39,13 @@ containers.
 Run these commands from the repository root. Bootstrap creates an ignored `.env` once and preserves
 its secret on later calls. On native Linux it also records the invoking operator's uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees.
+When central configuration selects `claude-cli`, bootstrap also records the resolved local CLI,
+configuration-directory, and state-file paths. Compose mounts those three paths read-only only into
+the code-location container and sets an isolated container home; subscription credentials are not
+copied into the image, repository, or `.env`.
+For a bounded acceptance target already beneath the read-only `targets/` mount, set
+`APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
+deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
 
 ```powershell
 python deploy/dagster/bin/bootstrap.py

@@ -155,7 +155,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     if not isinstance(resolved_tool_identity, Mapping):
         raise FrameworkIntegrityError("scanner identity provider returned an invalid identity")
     fingerprint = hashlib.sha256(canonical_json({"schema": OBSERVATION_SCHEMA,
-        "artifact_sha256": artifact["sha256"], "format": classification,
+        "artifact_sha256": artifact["sha256"],
+        "artifact_identity": artifact["canonical_identity"], "format": classification,
         "producer": artifact["producer"], "language_build_handoff": unit.output("load.accepted_artifacts")["language_build_handoff_sha256"],
         "artifact_index": unit.output("load.accepted_artifacts")["artifact_index"]["sha256"],
         "scanner": scanner_identity, "resolved_tool_identity": resolved_tool_identity,

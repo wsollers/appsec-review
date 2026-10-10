@@ -233,7 +233,7 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
             counter["reuse"] += 1
         elif status == "SUCCEEDED":
             counter["success"] += 1
-        elif status == "NOT_APPLICABLE":
+        elif status in {"NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}:
             counter["not_applicable"] += 1
         else:
             counter["failure"] += 1

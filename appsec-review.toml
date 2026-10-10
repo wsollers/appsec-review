@@ -4,6 +4,7 @@ data_dir = "data"
 metadata_dir = "runs/metadata"
 
 [build_capture]
+mode = "required"
 backend = "ptrace"
 event_count_limit = 100000
 argv_count_limit = 256
@@ -19,8 +20,11 @@ envp_redact_names = [
   "PIP_INDEX_URL",
 ]
 path_bytes_limit = 4096
+# Post-build file inventory and response-file snapshot bounds (no hashing happens during the build).
+file_inventory_count_limit = 1000000
+response_file_count_limit = 10000
+response_file_bytes_limit = 1048576
 tool_call_count_limit = 10000
-tool_stream_bytes_limit = 1048576
 secret_finding_count_limit = 1000
 
 [tools]
@@ -297,6 +301,7 @@ workers = 8
 [jobs.job_project_build.settings]
 command_timeout_seconds = 600
 image_build_timeout_seconds = 1800
+# In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000
 force_buildability_probe = false
@@ -414,16 +419,25 @@ workers = 8
 
 [jobs.job_language_build.settings]
 command_timeout_seconds = 600
+# In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000
+compiler_artifact_collection_mode = "required"
+
+# Bounded language-family overrides. Omitted families inherit the required default above.
+[jobs.job_language_build.settings.compiler_artifact_collection_overrides]
+native = "required"
+go = "required"
+dotnet = "required"
+rust = "required"
 
 [jobs.job_language_build.settings.build_capture]
 event_count_limit = 250000
 
 [jobs.job_language_build.settings.go]
 offline = false
-capture_trace = true
 package_catalog = true
+inspect_build_id = true
 diagnostic_tail_bytes = 32768
 
 [jobs.job_language_build.settings.python]
@@ -643,10 +657,6 @@ workers = 1
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.infer.tasks.projects]
 
-[jobs.job_cpp_compiled_analysis.steps.joern]
-workers = 1
-[jobs.job_cpp_compiled_analysis.steps.joern.tasks.projects]
-
 [jobs.job_cpp_compiled_analysis.steps.binary]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.binary.tasks.projects]
@@ -661,13 +671,14 @@ workers = 2
 
 [jobs.job_codeql_analysis.settings]
 enabled = true
+execution_mode = "auto"
 source_image_tag = "audit-codeql:custom-2.27.0"
 source_image_id = "sha256:3239953db3f14aaa9339f60adfa778ae8beb15c5db2aa393d3f21e7254413afa"
 version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "54fd074dc6ed1c533acdf4de4c38e25fe3c159560ccfb57a1c090b2c15da8a47"
+asset_lock_sha256 = "146ee129bee7c6bba07dfdfaacb70d11b77367e682f59af5743017c311b3b060"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -685,7 +696,7 @@ max_paths = 4
 
 [jobs.job_codeql_analysis.settings.languages.cpp]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "71b5ab5175660b2526a26c43b9fde0eb4340b6eefacf03b3bfd28c2fc33763f9"
 extractor_file_count = 322
@@ -712,7 +723,7 @@ file_count = 1971
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "77602bd7b6167f6fe360d6116221eaed4d723471d5309ce8b45561d7e4abdf01"
 extractor_file_count = 46
@@ -725,9 +736,14 @@ query_lock_sha256 = "7de43f9f44ae21e304310724c31abf8348ac4d9d093645d00e4d894ec28
 source_languages = ["Go"]
 prerequisites = []
 
+[[jobs.job_codeql_analysis.settings.languages.go.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/go-security-extended.qls"
+query_suite_sha256 = "8970c08e48221cc8cfd89b6ac9c8cd1e56f143a740b613da67d835f3cabf7c29"
+
 [jobs.job_codeql_analysis.settings.languages.java]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "cf07d7f555508aa38615426409a7a00cfd42300c226d0685ae6bb823f12e1c4c"
 extractor_file_count = 480
@@ -742,7 +758,7 @@ prerequisites = []
 
 [jobs.job_codeql_analysis.settings.languages.csharp]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "4af1424f5e14a8f183fc747929fb3b65e2e29566552b3d9a3c7cbff4dbbf5c71"
 extractor_file_count = 362
@@ -755,9 +771,14 @@ query_lock_sha256 = "f0a376106620edfdac5f3a0dccf3c38f62968221609ccbc21320e60775a
 source_languages = ["C#"]
 prerequisites = []
 
+[[jobs.job_codeql_analysis.settings.languages.csharp.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/csharp-security-extended.qls"
+query_suite_sha256 = "7abab2161fc1ffef4b8fa2462b02fb7789c70fb738dc1eee678ab09ea78f7220"
+
 [jobs.job_codeql_analysis.settings.languages.javascript]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "a9a554b8601a7bf6014dafc9550a5c0036e6895b6ff9c6437a9944ee627a8285"
 extractor_file_count = 300
@@ -772,7 +793,7 @@ prerequisites = ["bundled-typescript"]
 
 [jobs.job_codeql_analysis.settings.languages.python]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "2ba1d0a331633b71472ca725f788175e66354db1b079a9f0ab57fed36e689a04"
 extractor_file_count = 76
@@ -787,7 +808,7 @@ prerequisites = []
 
 [jobs.job_codeql_analysis.settings.languages.rust]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "56cbdd2e8514ce13ee7a0d9839c058f996030433d463002121ab9e97c5778c50"
 extractor_file_count = 83
@@ -800,9 +821,14 @@ query_lock_sha256 = "daf1ee855889de477880b5e5235b1c8ddafca1947ed86842279f91584a4
 source_languages = ["Rust"]
 prerequisites = ["Cargo.toml", "Cargo.lock", "bundled-rust-indexer"]
 
+[[jobs.job_codeql_analysis.settings.languages.rust.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/rust-security-extended.qls"
+query_suite_sha256 = "73f133b0f0028e7721488a4ea95784d2b78b3acfb8cbf1668d2900d3ac1030c0"
+
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "1689e88244bdd01d6820a31193031b8a45462181dfe617a8216798ba0675b3e5"
 extractor_file_count = 8
@@ -835,6 +861,51 @@ workers = 2
 workers = 1
 [jobs.job_codeql_analysis.steps.acceptance.tasks.publish_handoff]
 
+
+[jobs.job_cpp_symbol_index]
+name = "cpp_symbol_index"
+workers = 2
+
+[jobs.job_cpp_symbol_index.settings]
+# Concurrent project scopes; each scope is one clangd-indexer container under the central policy.
+workers = 2
+max_documents_per_scope = 2000000
+max_symbols_per_scope = 500000
+max_relations_per_scope = 2000000
+locations_per_relation = 8
+
+[jobs.job_cpp_symbol_index.steps.load]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.load.tasks.accepted_cpp]
+
+[jobs.job_cpp_symbol_index.steps.index]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.index.tasks.scopes]
+
+[jobs.job_cpp_symbol_index.steps.acceptance]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_cpg_analysis]
+name = "cpg_analysis"
+workers = 1
+
+[jobs.job_cpg_analysis.settings]
+# Joern is memory-heavy; scopes run one at a time until a per-tool resource profile is reviewed.
+workers = 1
+max_cpg_bytes = 2147483648
+
+[jobs.job_cpg_analysis.steps.load]
+workers = 1
+[jobs.job_cpg_analysis.steps.load.tasks.accepted_cpp]
+
+[jobs.job_cpg_analysis.steps.generate]
+workers = 1
+[jobs.job_cpg_analysis.steps.generate.tasks.scopes]
+
+[jobs.job_cpg_analysis.steps.acceptance]
+workers = 1
+[jobs.job_cpg_analysis.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_post_build_security_assessment]
 name = "post_build_security_assessment"
@@ -1103,7 +1174,7 @@ result_validator = "1"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
 catalog_path = "data/reference/owasp/fixtures/asvs-5.0.0.json"
-catalog_sha256 = "81e598b97836a8195bdd9ad890c2ae607530452f5c9cf5da6e32c1740d6d0450"
+catalog_sha256 = "841724424177d187f85a1128f30b432e2598316d215e99314cf8f87a5771b4e9"
 version = "5.0.0"
 repository = "https://github.com/OWASP/ASVS"
 ref = "v5.0.0_release"

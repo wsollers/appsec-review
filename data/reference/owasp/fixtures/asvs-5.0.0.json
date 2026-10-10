@@ -12,9 +12,9 @@
   },
   "records": [
     {
-      "id": "V2.1.1",
-      "title": "Password security",
-      "text": "Fixture control: verify password security behavior using admissible evidence.",
+      "id": "V6.2.1",
+      "title": "Minimum password length",
+      "text": "Fixture control: verify the minimum length enforced for user-set passwords using admissible evidence.",
       "domain": "authentication_session",
       "levels": [1, 2, 3],
       "component_roles": ["application_api_server", "authentication_identity"],
@@ -22,9 +22,9 @@
       "required_tools": ["source_retrieval"]
     },
     {
-      "id": "V4.1.1",
-      "title": "Access-control enforcement",
-      "text": "Fixture control: verify access-control enforcement at a trusted boundary.",
+      "id": "V8.2.1",
+      "title": "Function-level authorization",
+      "text": "Fixture control: verify function-level access is restricted to explicitly permitted consumers at a trusted boundary.",
       "domain": "authorization_access_control",
       "levels": [1, 2, 3],
       "component_roles": ["application_api_server", "web_frontend", "administrative_tooling"],
@@ -32,9 +32,9 @@
       "required_tools": ["source_retrieval", "route_index"]
     },
     {
-      "id": "V8.2.1",
-      "title": "Protected sensitive data",
-      "text": "Fixture control: verify sensitive data receives required protection.",
+      "id": "V14.2.4",
+      "title": "Sensitive data protection controls",
+      "text": "Fixture control: verify sensitive data receives the protection controls defined for its protection level.",
       "domain": "cryptography_data_protection",
       "levels": [2, 3],
       "component_roles": ["application_api_server", "cryptography_data_protection", "storage"],
@@ -42,11 +42,31 @@
       "required_tools": ["evidence_retrieval"]
     },
     {
-      "id": "V14.2.1",
-      "title": "Dependency integrity",
-      "text": "Fixture control: verify dependency integrity and update evidence.",
+      "id": "V15.2.1",
+      "title": "Dependency remediation time frames",
+      "text": "Fixture control: verify components are within documented update and remediation time frames.",
+      "domain": "build_supply_chain",
+      "levels": [1, 2, 3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
+    },
+    {
+      "id": "V15.1.2",
+      "title": "Third-party component inventory",
+      "text": "Fixture control: verify an inventory such as an SBOM covers all third-party libraries and that components come from trusted, maintained repositories.",
       "domain": "build_supply_chain",
       "levels": [2, 3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
+    },
+    {
+      "id": "V15.2.4",
+      "title": "Dependency source integrity",
+      "text": "Fixture control: verify components and their transitive dependencies resolve from the expected repository without dependency-confusion risk.",
+      "domain": "build_supply_chain",
+      "levels": [3],
       "component_roles": ["application_api_server", "build_supply_chain"],
       "evidence_mode": "artifact_configuration",
       "required_tools": ["dependency_index"]

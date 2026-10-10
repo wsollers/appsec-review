@@ -28,7 +28,7 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.rulepacks.sei_cert.pack import LOCK_NAME as SEI_CERT_LOCK, tree_digest
 
@@ -243,7 +243,7 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
             return selection, (), {}, "compile database contained no cataloged C/C++ translation units"
         compile_database = unit.unit_root / "inputs" / "compile_commands.json"
         compile_database.parent.mkdir(parents=True, exist_ok=True)
-        atomic_json(compile_database, sanitized)
+        tool_input_json(compile_database, sanitized)
         mounts.append(Mount(compile_database, "/scratch/compile_commands.json", True))
     if adapter.tool_id == "tool-osv-scanner":
         try:

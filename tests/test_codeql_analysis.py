@@ -15,7 +15,7 @@ import pytest
 
 from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan, replay_commands
 from appsec_review.jobs.job_codeql_analysis.sarif import map_location, normalize_sarif
-from appsec_review.config.codeql import parse_codeql_settings
+from appsec_review.config.codeql import CodeQLExecutionMode, parse_codeql_settings
 from appsec_review.codeql.runtime import (
     CodeQLExecutor,
     CodeQLImage,
@@ -106,7 +106,8 @@ def test_routes_every_supported_mode_and_keeps_kotlin_and_typescript_visible() -
     assert by_language["javascript"].source_languages == ("JavaScript", "TypeScript")
     assert all(not by_language[name].commands_permitted
                for name in ("javascript", "python", "rust", "actions"))
-    assert [item["status"] for item in plan.non_applicable] == ["NOT_APPLICABLE", "NOT_APPLICABLE"]
+    assert [item["status"] for item in plan.non_applicable] == ["SKIPPED_NA"]
+    assert plan.non_applicable[0]["language"] == "php"
 
 
 def test_failed_sibling_is_a_gap_without_erasing_successful_scope() -> None:
@@ -316,6 +317,7 @@ def _settings_value() -> dict[str, object]:
             "query_suite": pack["suite"], "query_suite_sha256": pack["suite_sha256"],
             "query_pack_sha256": pack["qlpack_sha256"], "query_lock_sha256": pack["lock_sha256"],
             "source_languages": source_languages[name], "prerequisites": prerequisites[name],
+            "additional_queries": pack.get("additional_suites", []),
             "custom_queries": lock.get("custom_query_packs", {}).get(name, [])}
     return {"enabled": True, "source_image_tag": lock["source_image"]["tag"],
         "source_image_id": lock["source_image"]["image_id"],
@@ -333,7 +335,7 @@ def test_typed_codeql_configuration_enforces_language_contracts() -> None:
     value = _settings_value()
     settings = parse_codeql_settings(value)
     assert settings.languages["java"].source_languages == ("Java", "Kotlin")
-    assert settings.languages["rust"].mode == "none"
+    assert settings.languages["rust"].mode == "source"
     assert settings.languages["cpp"].query_suite == "codeql-suites/cpp-code-scanning.qls"
     assert [(item.query_id, item.query_suite) for item in settings.languages["cpp"].custom_queries] == [
         ("cert-cpp", "codeql-suites/cert-cpp-default.qls")]
@@ -379,6 +381,11 @@ def test_database_and_query_checkpoint_inputs_invalidate_independently() -> None
         {**settings.languages, "go": extractor_changed}))
     assert _database_identity(unit, scope, image_identity="6" * 64, replay=replay,
                               settings=extractor_settings, asset_lock=lock) != database
+    mode_language = replace(language, mode=CodeQLExecutionMode.SOURCE)
+    mode_settings = replace(settings, languages=MappingProxyType(
+        {**settings.languages, "go": mode_language}))
+    assert _database_identity(unit, scope, image_identity="6" * 64, replay=replay,
+                              settings=mode_settings, asset_lock=lock) != database
     broken = _settings_value()
     broken["languages"]["csharp"]["source_languages"] = ["C#", "Visual Basic"]
     with pytest.raises(ValueError, match="VB"):
@@ -418,6 +425,27 @@ def test_runner_tree_identity_uses_posix_path_order(tmp_path: Path) -> None:
 
     assert runner._tree(tmp_path) == (hashlib.sha256(b"".join(rows)).hexdigest(), 2)
     assert runner._canonical(["build", "--flag"]) == canonical_json(["build", "--flag"])
+    assert runner._working_directory(tmp_path, ".") == tmp_path
+
+
+def test_csharp_default_and_extended_pack_queries_have_independent_identities() -> None:
+    settings = parse_codeql_settings(_settings_value())
+    language = settings.languages["csharp"]
+    profiles = _query_profiles(language)
+    assert [(item["query_id"], item["kind"]) for item in profiles] == [
+        ("default", "default"), ("security-extended", "pack")]
+    database = {"database_identity": "1" * 64, "database_tree_sha256": "2" * 64}
+    assert len({_query_identity(database, profile, settings) for profile in profiles}) == 2
+
+
+def test_rust_default_and_extended_pack_queries_have_independent_identities() -> None:
+    settings = parse_codeql_settings(_settings_value())
+    language = settings.languages["rust"]
+    profiles = _query_profiles(language)
+    assert [(item["query_id"], item["kind"]) for item in profiles] == [
+        ("default", "default"), ("security-extended", "pack")]
+    database = {"database_identity": "1" * 64, "database_tree_sha256": "2" * 64}
+    assert len({_query_identity(database, profile, settings) for profile in profiles}) == 2
 
 
 def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None:

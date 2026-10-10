@@ -9,6 +9,11 @@ from pathlib import Path, PurePosixPath
 import shutil
 from typing import Any
 
+import appsec_review.applicability as applicability_contract
+from appsec_review.applicability import (
+    ApplicabilityAction, decision_from_mapping, finalize_processing,
+    resolved_configuration_identity,
+)
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql.runtime import load_asset_lock
 from appsec_review.config import CodeQLAnalysisSettings
@@ -114,7 +119,8 @@ def _plan_from(unit: UnitContext) -> CodeQLPlan:
     return CodeQLPlan(value["schema"], value["source_fingerprint"],
                       tuple(value["extractor_inventory"]),
                       tuple(_scope_from(item) for item in value["scopes"]),
-                      tuple(value.get("gaps", ())), tuple(value.get("non_applicable", ())))
+                      tuple(value.get("gaps", ())), tuple(value.get("non_applicable", ())),
+                      tuple(value.get("decisions", ())))
 
 
 def _receipt_map(unit: UnitContext) -> Mapping[str, Mapping[str, Any]]:
@@ -275,7 +281,9 @@ def _database_identity(unit: UnitContext, scope: CodeQLScope, *, image_identity:
     language = settings.languages[scope.language]
     return hashlib.sha256(canonical_json({
         "schema": DATABASE_CHECKPOINT_SCHEMA,
-        "scope": asdict(scope), "mode": scope.mode, "environment_identity": scope.environment_identity,
+        "scope": asdict(scope), "mode": scope.mode,
+        "configured_execution_mode": language.mode.value,
+        "environment_identity": scope.environment_identity,
         "replay": replay, "codeql_image_identity": image_identity, "version": settings.version,
         "cli_sha256": settings.cli_sha256, "extractor_tree_sha256": language.extractor_tree_sha256,
         "runner_schema": "codeql-runner/2", "database_producer": "codeql-database/3",
@@ -294,8 +302,10 @@ def _query_profiles(language: Any) -> tuple[Mapping[str, Any], ...]:
         "query_lock_sha256": language.query_lock_sha256,
         "tree_sha256": None, "file_count": None,
     }
+    additional = tuple({**default, **asdict(value), "kind": "pack"}
+                       for value in language.additional_queries)
     custom = tuple({**asdict(value), "kind": "custom"} for value in language.custom_queries)
-    return (default, *custom)
+    return (default, *additional, *custom)
 
 
 def _query_identity(database: Mapping[str, Any], query_profile: Mapping[str, Any],
@@ -488,7 +498,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     selection = (["--pack", str(query_profile["query_pack"]),
                   "--pack-version", str(query_profile["query_pack_version"]),
                   "--suite", str(query_profile["query_suite"])]
-                 if query_profile["kind"] == "default" else
+                 if query_profile["kind"] in {"default", "pack"} else
                  ["--suite-path", f"{str(query_profile['root']).rstrip('/')}/{query_profile['query_suite']}"])
     result = executor.execute("query", (
         "--database", "query-database", "--output", "sarif/results.sarif",
@@ -711,14 +721,18 @@ def build_job() -> Job:
         planned = build_codeql_plan(source_fingerprint=unit.job.source_fingerprint,
             files=catalog.files, receipts=accepted.get("receipts", ()),
             supported_extractors=inventory["languages"], source_image_id=settings.source_image_id,
-            projects=catalog.projects)
+            projects=catalog.projects,
+            language_modes={language: value.mode.value for language, value in settings.languages.items()},
+            configuration_sha256=resolved_configuration_identity(unit.job.run_root))
         if runtime_gaps:
             planned = CodeQLPlan(planned.schema, planned.source_fingerprint,
                 planned.extractor_inventory, planned.scopes,
-                tuple(dict.fromkeys([*runtime_gaps, *planned.gaps])), planned.non_applicable)
+                tuple(dict.fromkeys([*runtime_gaps, *planned.gaps])), planned.non_applicable,
+                planned.decisions)
         for scope in planned.scopes:
             configured = settings.languages.get(scope.language)
-            if configured is None or configured.mode != scope.mode:
+            if (configured is None or
+                    configured.runtime_mode is not None and configured.runtime_mode != scope.mode):
                 raise FrameworkIntegrityError(f"CodeQL {scope.language} mode differs from central configuration")
             locked = lock["query_packs"].get(scope.language)
             if not isinstance(locked, Mapping) or any((
@@ -731,6 +745,11 @@ def build_job() -> Job:
             )):
                 raise FrameworkIntegrityError(f"CodeQL {scope.language} query assets differ from the lock")
             locked_custom = lock.get("custom_query_packs", {}).get(scope.language, [])
+            locked_additional = locked.get("additional_suites", [])
+            configured_additional = [asdict(item) for item in configured.additional_queries]
+            if configured_additional != locked_additional:
+                raise FrameworkIntegrityError(
+                    f"CodeQL {scope.language} additional query assets differ from the lock")
             configured_custom = [asdict(item) for item in configured.custom_queries]
             if configured_custom != locked_custom:
                 raise FrameworkIntegrityError(
@@ -746,7 +765,8 @@ def build_job() -> Job:
         # Compose every accepted sibling that exists so a final CodeQL publication cannot replace
         # unrelated static, post-build, AST, or artifact-security evidence.
         for job_id in ("job_artifact_security_analysis", "job_post_build_security_assessment",
-                       "job_evidence_collection", "job_tree_sitter_ast"):
+                       "job_evidence_collection", "job_tree_sitter_ast", "job_cpp_symbol_index",
+                       "job_cpg_analysis"):
             identity = _optional_accepted_handoff_identity(unit.job.run_root, job_id)
             if identity is None:
                 continue
@@ -758,6 +778,7 @@ def build_job() -> Job:
                                "sha256": lock["sha256"]},
                 "scope_count": len(planned.scopes), "gaps": list(planned.gaps),
                 "non_applicable": list(planned.non_applicable),
+                "processing_decisions": list(planned.decisions),
                 "upstream_handoffs": upstream_handoffs,
                 "upstream_manifests": list({(item["path"], item["sha256"]): item
                                              for item in upstream_manifests}.values())}
@@ -825,9 +846,28 @@ def build_job() -> Job:
                 "normalized_observations": item.get("observation_count", 0),
                 "gaps": item.get("gaps", [])})
         gaps = list(dict.fromkeys([*plan_value.gaps, *normalized["gaps"]]))
+        processing_decisions = []
+        for raw in plan_value.decisions:
+            decision = decision_from_mapping(raw)
+            if decision.action is ApplicabilityAction.RUN:
+                matching = [item for item in scopes if item["language"] == decision.language and
+                            ((decision.project_id.startswith("source:") and item["build_unit_id"] is None) or
+                             item["build_unit_id"] == decision.project_id)]
+                decision = finalize_processing(
+                    decision, succeeded=bool(matching) and all(
+                        item["terminal_status"] == "SUCCEEDED" for item in matching),
+                    evidence_complete=bool(matching) and not any(
+                        item.get("gaps") for item in matching),
+                    toolchain_available=bool(plan_value.extractor_inventory),
+                )
+            processing_decisions.append(decision.as_dict())
+        gaps.extend(f"{item['project_id']}: {item['reason_code']}"
+                    for item in processing_decisions if item.get("disposition") == "GAP")
+        gaps = list(dict.fromkeys(gaps))
         summary = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                    "scopes": scopes, "extractor_inventory": list(plan_value.extractor_inventory),
                    "non_applicable": list(plan_value.non_applicable), "gaps": gaps,
+                   "processing_decisions": processing_decisions,
                    "observation_count": normalized["observation_count"], "security_findings": []}
         summary_path = unit.job.attempt_root / "artifacts" / "codeql" / "summary.json"
         artifact = _json_artifact(unit.job.run_root, summary_path, summary)
@@ -838,8 +878,10 @@ def build_job() -> Job:
                 "index_manifest": _artifact(unit.job.run_root, destination),
                 "item_count": normalized["observation_count"], "scope_count": len(scopes),
                 "gaps": gaps, "non_applicable": list(plan_value.non_applicable),
-                "dispositions": {f"{item['scope_id']}:{item['query_profile']}": item["terminal_status"]
-                                 for item in scopes}}
+                "processing_decisions": processing_decisions,
+                "dispositions": processing_decisions,
+                "scope_dispositions": {f"{item['scope_id']}:{item['query_profile']}": item["terminal_status"]
+                                       for item in scopes}}
 
     units = (
         Unit("plan.inventory", plan),
@@ -849,7 +891,8 @@ def build_job() -> Job:
         Unit("acceptance.publish_handoff", publish, ("normalize.scopes",)),
     )
     implementation = hashlib.sha256(
-        Path(__file__).read_bytes() + Path(__file__).with_name("planning.py").read_bytes() +
+        Path(__file__).read_bytes() + Path(applicability_contract.__file__).read_bytes() +
+        Path(__file__).with_name("planning.py").read_bytes() +
         Path(__file__).with_name("sarif.py").read_bytes() +
         Path(__file__).parents[2].joinpath("codeql", "runtime.py").read_bytes()).hexdigest()
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()

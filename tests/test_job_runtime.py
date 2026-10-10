@@ -56,7 +56,13 @@ def test_job_composes_validators_around_handler(tmp_path: Path) -> None:
     assert outcome["status"]["run_id"] == "2026-10-08-0001"
     configuration = tmp_path / "runs" / "2026-10-08-0001" / "data" / "configuration"
     assert (configuration / "appsec-review.toml").read_bytes() == (tmp_path / "appsec-review.toml").read_bytes()
-    assert json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))["source_sha256"]
+    manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
+    resolved = configuration / "resolved.json"
+    assert manifest["schema"] == "appsec-review/run-configuration/2"
+    assert manifest["source_sha256"]
+    assert resolved.read_bytes() == load_config(tmp_path / "appsec-review.toml").resolved_json
+    assert manifest["resolved"] == {"path": "resolved.json",
+                                     "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest()}
 
 
 def test_specialized_manifest_does_not_replace_global_retrieval_manifest(tmp_path: Path) -> None:

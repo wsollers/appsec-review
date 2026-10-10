@@ -1,0 +1,2312 @@
+{
+ "archive": {
+  "bytes": 1858333634,
+  "name": "joern-cli-linux-x86_64.zip",
+  "sha256": "92ee27a948b273b83499a8e63c33b604d0abf531ffc43343683492489af41e8d"
+ },
+ "files": [
+  {
+   "bytes": 0,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/.installation_root",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "bytes": 10129,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-cli",
+   "sha256": "f0c4cb6ed520eaf6f79b79ec68f73a133758bea5c43fcc56ca7304e0f4bb3706"
+  },
+  {
+   "bytes": 5573,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-cli.bat",
+   "sha256": "bee756e399979f79aa345660420532de1c937619b3279f9cac24fd5a5c4dd75b"
+  },
+  {
+   "bytes": 10158,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-export",
+   "sha256": "70617c4acccade65452ff5562966780ee8e7cd3fe0d4e6cec9b4f571a9dd377b"
+  },
+  {
+   "bytes": 5602,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-export.bat",
+   "sha256": "4007a54adbb3ecd8a59a29b4e7f959bee10fc06812868180535dbd0e56fe8c0d"
+  },
+  {
+   "bytes": 10156,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-flow",
+   "sha256": "77954f5fe8767a8b27bbf5ac0c60c5d84258eb8287a4094ba22d9c11e296faec"
+  },
+  {
+   "bytes": 5600,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-flow.bat",
+   "sha256": "b93d458329f97f5b8326fc46a3a3a5451157749a5acfec284cd3e1f068eda3ba"
+  },
+  {
+   "bytes": 10157,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-parse",
+   "sha256": "09cffbd63342f1dd954905266080b8430057d4bd1a0ab9a7cf6e75f9307a2ff0"
+  },
+  {
+   "bytes": 5601,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-parse.bat",
+   "sha256": "8b9240d14f61d0ea2084850569e658175035a65e34bc1ee1073a91c3c22821d3"
+  },
+  {
+   "bytes": 10156,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-scan",
+   "sha256": "d160d88efd893c9d39eee1dff05b66f6883d0bd06ebb7c5fa10e2f936728865d"
+  },
+  {
+   "bytes": 5600,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-scan.bat",
+   "sha256": "5bc77dc815eb2af1cb316dcd53e99ca2cc26322b93915d1857e02dd7492081fa"
+  },
+  {
+   "bytes": 10157,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-slice",
+   "sha256": "b2343bf23394ee810b56f11e83a955a57bf02c43fe19d45f473be4820adf550d"
+  },
+  {
+   "bytes": 5601,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-slice.bat",
+   "sha256": "7300840ad9c48cea1194db88c68eff0567ca03da63aeaf10a815e7caff5fa113"
+  },
+  {
+   "bytes": 10159,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/joern-vectors",
+   "sha256": "8369ada8b4c7fab09a91f721e72569a0235804861e73b77926c28cbc2c0e7dfa"
+  },
+  {
+   "bytes": 5603,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/joern-vectors.bat",
+   "sha256": "476051a02bb6f1175fa2abab7ebf4e62f8b6076a9d4937050e3d85a4a4f2eb10"
+  },
+  {
+   "bytes": 10165,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/bin/repl-bridge",
+   "sha256": "4506312bb53bcc5eb9c93b982fda29cabe2777297ec30e4c65a006bb5759ecc7"
+  },
+  {
+   "bytes": 5609,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/bin/repl-bridge.bat",
+   "sha256": "d997903a5eaf7df9faef665a07ad27fac399cf4108e540d7081d73d3214a9f2b"
+  },
+  {
+   "bytes": 486,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/c2cpg.sh",
+   "sha256": "7ae79dee9bb9dc918631f11854d71a0f3a50657e84e8740527c28bb9eae0514b"
+  },
+  {
+   "bytes": 439,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/conf/log4j-ghidra.xml",
+   "sha256": "0370f5b3f5b1be5a940c3462ab09c92825aff0fa460cc7d79d3aa0d219c5f4c4"
+  },
+  {
+   "bytes": 747,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/conf/log4j2.xml",
+   "sha256": "0e9979589d21531e5ca427a0c431de7ab216dadb5a071154906483f668dfde4f"
+  },
+  {
+   "bytes": 9970,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/frontends/c2cpg/bin/c2cpg",
+   "sha256": "fa51223014f51d21d5fee9dd8f9fcb0f441715fd6ec49a5745c68c1462428d68"
+  },
+  {
+   "bytes": 5578,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/frontends/c2cpg/bin/c2cpg.bat",
+   "sha256": "69cbfe28c23d05577db2b1ad65a724dbb2dc873b2d31b1d5089c6fd3e3c12a33"
+  },
+  {
+   "bytes": 436,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/frontends/c2cpg/bin/c2cpg.sh",
+   "sha256": "60ee8c3bedbfa08b418faa4bd773cf7d7ff4c3f9105bc001e67e533608d3cf43"
+  },
+  {
+   "bytes": 1364,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/frontends/c2cpg/bin/main",
+   "sha256": "cb08cae27587795cedca8cb58808c7639fb466221ba6c17b6dcad97f59404678"
+  },
+  {
+   "bytes": 80,
+   "executable": false,
+   "kind": "data",
+   "path": "joern-cli/frontends/c2cpg/bin/main.bat",
+   "sha256": "917527fe8becd54fb9e5387849365305ef2c18878fa921bc693e9601d9b2e717"
+  },
+  {
+   "bytes": 581927,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.fasterxml.jackson.core:jackson-core:2.17.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.fasterxml.jackson.core.jackson-core-2.17.2.jar",
+   "sha256": "721a189241dab0525d9e858e5cb604d3ecc0ede081e2de77d6f34fa5779a5b46"
+  },
+  {
+   "bytes": 7569993,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [
+    "aix/ppc64/libzstd-jni-1.5.7-11.so",
+    "darwin/aarch64/libzstd-jni-1.5.7-11.dylib",
+    "darwin/x86_64/libzstd-jni-1.5.7-11.dylib",
+    "freebsd/amd64/libzstd-jni-1.5.7-11.so",
+    "freebsd/i386/libzstd-jni-1.5.7-11.so",
+    "linux/aarch64/libzstd-jni-1.5.7-11.so",
+    "linux/amd64/libzstd-jni-1.5.7-11.so",
+    "linux/arm/libzstd-jni-1.5.7-11.so",
+    "linux/i386/libzstd-jni-1.5.7-11.so",
+    "linux/loongarch64/libzstd-jni-1.5.7-11.so",
+    "linux/mips64/libzstd-jni-1.5.7-11.so",
+    "linux/ppc64/libzstd-jni-1.5.7-11.so",
+    "linux/ppc64le/libzstd-jni-1.5.7-11.so",
+    "linux/riscv64/libzstd-jni-1.5.7-11.so",
+    "linux/s390x/libzstd-jni-1.5.7-11.so",
+    "win/aarch64/libzstd-jni-1.5.7-11.dll",
+    "win/amd64/libzstd-jni-1.5.7-11.dll",
+    "win/x86/libzstd-jni-1.5.7-11.dll"
+   ],
+   "path": "joern-cli/frontends/c2cpg/lib/com.github.luben.zstd-jni-1.5.7-11.jar",
+   "sha256": "e45c18832293934924e4f2f1dd97ee2083a74def46caeeea1346cf817a37cea4"
+  },
+  {
+   "bytes": 321335,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.github.pathikrit.better-files_3-3.9.2.jar",
+   "sha256": "136c1770a63aa33b2710745bf7f8441cbbe0eeef0cab6b832bd0a46804158989"
+  },
+  {
+   "bytes": 171963,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.github.scopt.scopt_3-4.1.0.jar",
+   "sha256": "7cfb80743b761b3df8630a818265eb91fd93cd77b32ed5ebd6fba1bb7cff6a3f"
+  },
+  {
+   "bytes": 60826,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.github.tototoshi.scala-csv_3-2.0.0.jar",
+   "sha256": "8f8cf4ddc9665ec76ac3b51c641a215d8485830dd15f355369bc14f9ea95ca70"
+  },
+  {
+   "bytes": 1692592,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.google.protobuf:protobuf-java:3.20.1"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.google.protobuf.protobuf-java-3.20.1.jar",
+   "sha256": "dcbc32c81c8689c39e6672896258f76e660d781bb2526c6c069d5c91055ef153"
+  },
+  {
+   "bytes": 301338,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.h2database.h2-mvstore-1.4.200.jar",
+   "sha256": "961c5e4498d7046a85c1507263a0bac227930edeb28c92f8f929437114d46030"
+  },
+  {
+   "bytes": 105124,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.fansi_3-0.5.1.jar",
+   "sha256": "df4b447704664563cb0fba9cf52d3fc7509654ab592824d5c2eb4647e6701ac4"
+  },
+  {
+   "bytes": 102389,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.geny_3-1.1.1.jar",
+   "sha256": "39658649f90b631a4fd63187724f16ba8a045e1b10a513528f34517fb2edf98b"
+  },
+  {
+   "bytes": 162779,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.pprint_3-0.9.3.jar",
+   "sha256": "2c06448522447fc7fb5707f9c7d28151f5da50c078b0ed0895617b6789427bdb"
+  },
+  {
+   "bytes": 115781,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.sourcecode_3-0.4.4.jar",
+   "sha256": "40cc148f8baab769de72892443476a05eed7471a9b5cd2cbc2a47bf22cad30d3"
+  },
+  {
+   "bytes": 265322,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.ujson_3-4.1.0.jar",
+   "sha256": "6a6fc2c9c8643cedb0ebd02e957b4c50dc09d1aef6573ca1e15a8a424c4fa535"
+  },
+  {
+   "bytes": 139746,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.upack_3-4.0.2.jar",
+   "sha256": "294b2cf0a4ba6a2803412f0b9a3dbbc2dc1dc420a48c3746d582c7f3f16a4181"
+  },
+  {
+   "bytes": 353146,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.upickle-core_3-4.1.0.jar",
+   "sha256": "3d4dbd23edca088a83d722998472c1c5c27678bd01f13572c36627d7061cf596"
+  },
+  {
+   "bytes": 288681,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.upickle-implicits_3-4.0.2.jar",
+   "sha256": "58bea28a70561054701074ca2f7fcc7a4b1abbe2ef7cb5017708e995b61d36ba"
+  },
+  {
+   "bytes": 106552,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.lihaoyi.upickle_3-4.0.2.jar",
+   "sha256": "b19a95c92c2d104ab2feb8ce68dacca1271adce6dcf90d8a40488af3f03dfdfd"
+  },
+  {
+   "bytes": 1359117,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.michaelpollmeier.scala-repl-pp-shaded-libs_3-0.6.4.jar",
+   "sha256": "f468f56871383b3060f5107f328c3cbadd656c159a52c757490b8784f7582d08"
+  },
+  {
+   "bytes": 338138,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.michaelpollmeier.scala-repl-pp_3.8.3-0.6.4.jar",
+   "sha256": "1a45099a3061e31072ba15591caa34361c02946e86f5b7041d06d9532b4bd41a"
+  },
+  {
+   "bytes": 1096,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.michaelpollmeier.versionsort-1.0.11.jar",
+   "sha256": "fe58e64378601e07cb95b8c4d75e5f6a8a991ede55c0653ddb1d8d3885d82146"
+  },
+  {
+   "bytes": 34654,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.thoughtworks.paranamer:paranamer:2.8"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.thoughtworks.paranamer.paranamer-2.8.jar",
+   "sha256": "688cb118a6021d819138e855208c956031688be4b47a24bb615becc63acedf07"
+  },
+  {
+   "bytes": 296029,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/com.typesafe.config-1.4.3.jar",
+   "sha256": "8ada4c185ce72416712d63e0b5afdc5f009c0cdf405e5f26efecdf156aa5dfb6"
+  },
+  {
+   "bytes": 609182,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "commons-io:commons-io:2.22.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/commons-io.commons-io-2.22.0.jar",
+   "sha256": "2b9a7b1f726fb86216dbd2c8321eabe0221dbd5b1be81c18e1cb53811b104758"
+  },
+  {
+   "bytes": 11106161,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [
+    "META-INF/native/windows64/csjniutils-0.3.3.dll",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/FreeBSD/x86/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/FreeBSD/x86_64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/arm/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/arm64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/armv6/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/armv7/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/ppc64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/x86/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/x86_64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Mac/arm64/libjansi.jnilib",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Mac/x86/libjansi.jnilib",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Mac/x86_64/libjansi.jnilib",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Windows/arm64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Windows/x86/jansi.dll",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Windows/x86_64/jansi.dll",
+    "darwin/aarch64/libzstd-jni-1.5.6-3.dylib",
+    "darwin/x86_64/libzstd-jni-1.5.6-3.dylib",
+    "freebsd/amd64/libzstd-jni-1.5.6-3.so",
+    "freebsd/i386/libzstd-jni-1.5.6-3.so",
+    "linux/aarch64/libzstd-jni-1.5.6-3.so",
+    "linux/amd64/libzstd-jni-1.5.6-3.so",
+    "linux/arm/libzstd-jni-1.5.6-3.so",
+    "linux/i386/libzstd-jni-1.5.6-3.so",
+    "linux/loongarch64/libzstd-jni-1.5.6-3.so",
+    "linux/mips64/libzstd-jni-1.5.6-3.so",
+    "linux/ppc64/libzstd-jni-1.5.6-3.so",
+    "linux/ppc64le/libzstd-jni-1.5.6-3.so",
+    "linux/riscv64/libzstd-jni-1.5.6-3.so",
+    "linux/s390x/libzstd-jni-1.5.6-3.so",
+    "win/aarch64/libzstd-jni-1.5.6-3.dll",
+    "win/amd64/libzstd-jni-1.5.6-3.dll",
+    "win/x86/libzstd-jni-1.5.6-3.dll"
+   ],
+   "path": "joern-cli/frontends/c2cpg/lib/io.get-coursier.interface-1.0.28.jar",
+   "sha256": "7592fe49c789b55429483185ac22ac6da43680a39c53b818c50bca0fb7dd6a78"
+  },
+  {
+   "bytes": 1528,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.c2cpg-4.0.630-launcher.jar",
+   "sha256": "455476c4a0aafa75172a45200dabe78c00d0a715bbbaaad84489c2795a83b01f"
+  },
+  {
+   "bytes": 628970,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.c2cpg-4.0.630.jar",
+   "sha256": "269c1b65bf092a8132a153edc1d692833385ff8cc6ef7917f4a2c954e6550865"
+  },
+  {
+   "bytes": 5881511,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "io.joern:eclipse-cdt-core:9.2.100.202507101054+1",
+    "org.eclipse.cdt:org.eclipse.cdt.core:9.2.100-SNAPSHOT"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.eclipse-cdt-core-9.2.100.202507101054+1.jar",
+   "sha256": "14f94a408d2e780378e7d4c9c431dd44f408d56704fd58a216c620abd5aed250"
+  },
+  {
+   "bytes": 611916,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.flatgraph-core_3-0.1.34.jar",
+   "sha256": "c14dd8e8510f6762078005d747ae8b5e87047db74f94d51bfd18c158a9623699"
+  },
+  {
+   "bytes": 345490,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.flatgraph-formats_3-0.1.34.jar",
+   "sha256": "017dc4cfd37b99131c8506ace929f1943e25c9f3c22d2947a0aa5d67792b09aa"
+  },
+  {
+   "bytes": 35756,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.flatgraph-help_3-0.1.34.jar",
+   "sha256": "9b50d84a9959bbc739ae3d7a2d423c97f6b862705831ce04c9bcc6096450b596"
+  },
+  {
+   "bytes": 45190,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.flatgraph-odb-convert_3-0.1.34.jar",
+   "sha256": "6cc159d5a4714b353ebb7325c3af1807cacaeaca18393ccbd1b1b5fd511ad966"
+  },
+  {
+   "bytes": 1270418,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.semanticcpg-4.0.630.jar",
+   "sha256": "1ff10c13c28d515d2fb755f7b391451b86f1b0653d70b4be051214b1bc696b3f"
+  },
+  {
+   "bytes": 1795718,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.joern.x2cpg-4.0.630.jar",
+   "sha256": "fc827c4fa50f66aa982fdf8178667536f63b1c1bf122aa08d70bd9741fe8976b"
+  },
+  {
+   "bytes": 4733340,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.shiftleft.codepropertygraph-domain-classes_3-1.7.74.jar",
+   "sha256": "9c6c0865db78ce3d40c98c64c8d76cab935257cb213873902515664d17a80230"
+  },
+  {
+   "bytes": 316819,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.shiftleft.codepropertygraph-protos_3-1.7.74.jar",
+   "sha256": "7a1f931175bc205124b4949dbaab566eab7e54045ce5eaafd3e15c20be3e0fd4"
+  },
+  {
+   "bytes": 120707,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.shiftleft.codepropertygraph_3-1.7.74.jar",
+   "sha256": "d4982e3bf459da75e94fdd1389f4a85d49b0917912ea914cde11ce89a1bc2e45"
+  },
+  {
+   "bytes": 119891,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.shiftleft.overflowdb-core_3-1.194.jar",
+   "sha256": "aacc7f470528ccf44555e0a60cba54f601531b1b551d92cbdf2d6a0ee1899884"
+  },
+  {
+   "bytes": 368491,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/io.spray.spray-json_3-1.3.6.jar",
+   "sha256": "b92a3ad0ad4a39f1f59c94e8583d078a7335f744ae467812f9bf29f10b774fb7"
+  },
+  {
+   "bytes": 2002589,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [
+    "com/sun/jna/darwin-aarch64/libjnidispatch.jnilib",
+    "com/sun/jna/darwin-x86-64/libjnidispatch.jnilib",
+    "com/sun/jna/dragonflybsd-x86-64/libjnidispatch.so",
+    "com/sun/jna/freebsd-aarch64/libjnidispatch.so",
+    "com/sun/jna/freebsd-x86-64/libjnidispatch.so",
+    "com/sun/jna/freebsd-x86/libjnidispatch.so",
+    "com/sun/jna/linux-aarch64/libjnidispatch.so",
+    "com/sun/jna/linux-arm/libjnidispatch.so",
+    "com/sun/jna/linux-armel/libjnidispatch.so",
+    "com/sun/jna/linux-loongarch64/libjnidispatch.so",
+    "com/sun/jna/linux-mips64el/libjnidispatch.so",
+    "com/sun/jna/linux-ppc/libjnidispatch.so",
+    "com/sun/jna/linux-ppc64le/libjnidispatch.so",
+    "com/sun/jna/linux-riscv64/libjnidispatch.so",
+    "com/sun/jna/linux-s390x/libjnidispatch.so",
+    "com/sun/jna/linux-x86-64/libjnidispatch.so",
+    "com/sun/jna/linux-x86/libjnidispatch.so",
+    "com/sun/jna/openbsd-x86-64/libjnidispatch.so",
+    "com/sun/jna/openbsd-x86/libjnidispatch.so",
+    "com/sun/jna/sunos-sparc/libjnidispatch.so",
+    "com/sun/jna/sunos-sparcv9/libjnidispatch.so",
+    "com/sun/jna/sunos-x86-64/libjnidispatch.so",
+    "com/sun/jna/sunos-x86/libjnidispatch.so",
+    "com/sun/jna/win32-aarch64/jnidispatch.dll",
+    "com/sun/jna/win32-x86-64/jnidispatch.dll",
+    "com/sun/jna/win32-x86/jnidispatch.dll"
+   ],
+   "path": "joern-cli/frontends/c2cpg/lib/net.java.dev.jna.jna-5.17.0.jar",
+   "sha256": "b3a9408e7c51e08ef0e3bfcc08f443f6ec0f6191ba8cd7c18d53d2b22e5bdbc0"
+  },
+  {
+   "bytes": 1378617,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/net.java.dev.jna.jna-platform-5.17.0.jar",
+   "sha256": "b7e3d46c87bad2eb409b0e704916bcd81206168e357312dfddd0e253679cd9e0"
+  },
+  {
+   "bytes": 145616,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "net.oneandone.reflections8:reflections8:0.11.7"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/net.oneandone.reflections8.reflections8-0.11.7.jar",
+   "sha256": "721477456f75acab46e1b737ca84627c9d531831e33b54303c6a5bd071bafc22"
+  },
+  {
+   "bytes": 2560395,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/net.sf.trove4j.core-3.1.0.jar",
+   "sha256": "e1fed4d718a86d27c5ebb427810550fa5c03260e350e41a85ef2c2db6eac0856"
+  },
+  {
+   "bytes": 65863,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-exec:1.4.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.commons.commons-exec-1.4.0.jar",
+   "sha256": "f51cf8bee467efe2be76e46fc08078d96afa280a794283364291beda892a67ef"
+  },
+  {
+   "bytes": 673587,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-lang3:3.17.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.commons.commons-lang3-3.17.0.jar",
+   "sha256": "6ee731df5c8e5a2976a1ca023b6bb320ea8d3539fbe64c8a1d5cb765127c33b4"
+  },
+  {
+   "bytes": 257863,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-text:1.13.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.commons.commons-text-1.13.0.jar",
+   "sha256": "1e323a501127df78ed0987f345d69d65d0ea7fa3d4fb5b3f84aaeba3a8b20f38"
+  },
+  {
+   "bytes": 317566,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.logging.log4j:log4j-api:2.19.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.logging.log4j.log4j-api-2.19.0.jar",
+   "sha256": "5ccb24ad9f92e768d0bc456d3061a737951262df803e004d2cad096b75a88d60"
+  },
+  {
+   "bytes": 1864386,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.logging.log4j:log4j-core:2.19.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.logging.log4j.log4j-core-2.19.0.jar",
+   "sha256": "b4a1796fab7bfc36df015c1b4052459147997e8d215a7199d71d05f9e747e4f4"
+  },
+  {
+   "bytes": 27721,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.logging.log4j:log4j-slf4j2-impl:2.19.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.logging.log4j.log4j-slf4j2-impl-2.19.0.jar",
+   "sha256": "825605eacb2d5605b105c53d4108c18125e0f82f62960d0be583278b9c524f3c"
+  },
+  {
+   "bytes": 58857,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.maven:maven-artifact:3.9.16"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.apache.maven.maven-artifact-3.9.16.jar",
+   "sha256": "54cc1c1ef932e3d4a903352111b42b4d3c3ed8e7a1d0de73b625309d9c3ad3e8"
+  },
+  {
+   "bytes": 272101,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.codehaus.plexus:plexus-utils:3.6.1"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.codehaus.plexus.plexus-utils-3.6.1.jar",
+   "sha256": "05a63effd67e2d6b9d610cc82e2bd7473289d34802e57a529b28110f28af5679"
+  },
+  {
+   "bytes": 122116,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.commands-3.12.400.jar",
+   "sha256": "d0838fc451335237203145ed5c08e7931236c351f0b86ee0bed418fe8b83fb1b"
+  },
+  {
+   "bytes": 107931,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.contenttype-3.9.700.jar",
+   "sha256": "5109ea9a787184f57ff829635b9dfd62d736c391d481e7eb28baa3d278fdc006"
+  },
+  {
+   "bytes": 99192,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.expressions-3.9.500.jar",
+   "sha256": "8444b5de90c9b4ab528c8ea5c341c7e872d0dbe8241ab79085551086d96e7c9e"
+  },
+  {
+   "bytes": 79065,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.filesystem-1.11.300.jar",
+   "sha256": "eb32494babae0a210662e161abcbc4df7057748e003326a156ea67783ca8acee"
+  },
+  {
+   "bytes": 120879,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.jobs-3.15.700.jar",
+   "sha256": "37015179a7b9b90d16cb92f4b1be6083a1a6dad25428fa8f6b89626f0cc2da79"
+  },
+  {
+   "bytes": 961349,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.resources-3.23.0.jar",
+   "sha256": "2e58abe00e35c99b85aaad8d738c2a8771036be2f4a22b65d90bc144a8067270"
+  },
+  {
+   "bytes": 83305,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.core.runtime-3.34.0.jar",
+   "sha256": "076b3bf915d3ce037b7877c87d17d1d2442135dd3e78c5f2ee610f5d88379301"
+  },
+  {
+   "bytes": 93221,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.equinox.app-1.7.500.jar",
+   "sha256": "19f2e3611347db6433a48a62187c9f6bd46886d0d56836697dafffe985ea93ef"
+  },
+  {
+   "bytes": 164829,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.equinox.common-3.20.200.jar",
+   "sha256": "9b8b5c8a342e7f5be5f95154e9faefae686f3987e776dce030f37bd847cd7f35"
+  },
+  {
+   "bytes": 130373,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.equinox.preferences-3.12.0.jar",
+   "sha256": "d4c9ea5c4cd808b97f15490bbbd7dd8f58c767c685b6d059194757e66d6eef35"
+  },
+  {
+   "bytes": 206143,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.equinox.registry-3.12.500.jar",
+   "sha256": "4e5effd37e3f6e2732a1e788c769f6ebb49d4ad60e9e5d91c57a24cffbc2fafe"
+  },
+  {
+   "bytes": 1609191,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.osgi-3.23.200.jar",
+   "sha256": "8d94058ead3f4651900166924a677c3beb6e996f072fabf385ffdd70510bc493"
+  },
+  {
+   "bytes": 360963,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.eclipse.platform.org.eclipse.text-3.14.400.jar",
+   "sha256": "04845c661327f7005ed96033cf33822d4f60b01189bc3e9e864e512f57096213"
+  },
+  {
+   "bytes": 739582,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.javassist:javassist:3.22.0-GA"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.javassist.javassist-3.22.0-GA.jar",
+   "sha256": "59531c00f3e3aa1ff48b3a8cf4ead47d203ab0e2fd9e0ad401f764e05947e252"
+  },
+  {
+   "bytes": 190157,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-native:3.29.0"
+   ],
+   "native_libraries": [
+    "org/jline/nativ/FreeBSD/x86/libjlinenative.so",
+    "org/jline/nativ/FreeBSD/x86_64/libjlinenative.so",
+    "org/jline/nativ/Linux/arm/libjlinenative.so",
+    "org/jline/nativ/Linux/arm64/libjlinenative.so",
+    "org/jline/nativ/Linux/armv6/libjlinenative.so",
+    "org/jline/nativ/Linux/armv7/libjlinenative.so",
+    "org/jline/nativ/Linux/ppc64/libjlinenative.so",
+    "org/jline/nativ/Linux/x86/libjlinenative.so",
+    "org/jline/nativ/Linux/x86_64/libjlinenative.so",
+    "org/jline/nativ/Mac/arm64/libjlinenative.jnilib",
+    "org/jline/nativ/Mac/x86/libjlinenative.jnilib",
+    "org/jline/nativ/Mac/x86_64/libjlinenative.jnilib",
+    "org/jline/nativ/Windows/arm64/jlinenative.dll",
+    "org/jline/nativ/Windows/x86/jlinenative.dll",
+    "org/jline/nativ/Windows/x86_64/jlinenative.dll"
+   ],
+   "path": "joern-cli/frontends/c2cpg/lib/org.jline.jline-native-3.29.0.jar",
+   "sha256": "19cfcc9d3c78a1c6cfe4c6c9599f16a657e4bf8da43940fc4b875373236dc258"
+  },
+  {
+   "bytes": 184808,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-reader:3.29.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.jline.jline-reader-3.29.0.jar",
+   "sha256": "a4cb0a5fde9289f2f1b614e04f94b202f6ff5c9c96476425837b1184c92ef81d"
+  },
+  {
+   "bytes": 264973,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-terminal:3.29.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.jline.jline-terminal-3.29.0.jar",
+   "sha256": "fd68a98b32b1132035c62102e5df0b0fdc358e7c87a9f876ce7071450b4d10da"
+  },
+  {
+   "bytes": 49066,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-terminal-jni:3.29.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.jline.jline-terminal-jni-3.29.0.jar",
+   "sha256": "13fef8bcc0e4788c8e192dc76c33758683c6bfdbaef6f67b41445eb8986773ad"
+  },
+  {
+   "bytes": 706444,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.json4s.json4s-ast_3-4.0.7.jar",
+   "sha256": "6140e538e53c2c55db445645a65ffe26f73577d0000f0890076b066ca55f2b25"
+  },
+  {
+   "bytes": 405716,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.json4s.json4s-core_3-4.0.7.jar",
+   "sha256": "bdb869db56d60c10a0760a98a3d53ecb632841fa8f1a5001e7c1a0d91877493a"
+  },
+  {
+   "bytes": 108350,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.json4s.json4s-native-core_3-4.0.7.jar",
+   "sha256": "d79432d86ab353840807cbcc8a7e9e48160efa67680db1fe26db6765b778362e"
+  },
+  {
+   "bytes": 13319,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.json4s.json4s-native_3-4.0.7.jar",
+   "sha256": "bd2222e623f020b6d036f1328b306f983365527d2d93eab7c205db223e5c09bf"
+  },
+  {
+   "bytes": 428143,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.json4s.json4s-scalap_3-4.0.7.jar",
+   "sha256": "dc2269e32e3d9cdd296151deb5f61d108d3d4fe99e220de5679dbaf6fb8e140a"
+  },
+  {
+   "bytes": 125098,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.msgpack.msgpack-core-0.9.1.jar",
+   "sha256": "183abb2b7c604a8b13d5f76af487ccddd003b6f0404aef52021dcb20a4358524"
+  },
+  {
+   "bytes": 20165,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.osgi:org.osgi.service.prefs:1.1.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.osgi.org.osgi.service.prefs-1.1.2.jar",
+   "sha256": "43c7c870710e363405d422da653cce0d798a4537f76e4930f79bceadd3a55345"
+  },
+  {
+   "bytes": 36875,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.osgi:osgi.annotation:8.0.1"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.osgi.osgi.annotation-8.0.1.jar",
+   "sha256": "a0e8a4c362bd3600812f37b0ea45fba966c7bc049d01fed56a09ecc74082759e"
+  },
+  {
+   "bytes": 323674,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.modules.scala-asm-9.9.0-scala-1.jar",
+   "sha256": "75ac366e8ecb691e06a7e85041eed0f67919a646e5262fa0901225698c104375"
+  },
+  {
+   "bytes": 1293006,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.modules.scala-parallel-collections_3-1.0.4.jar",
+   "sha256": "c3bf0d4d057942a78389fa9675823db5e3179f1b503f2df212b74e784da57050"
+  },
+  {
+   "bytes": 740520,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.modules.scala-xml_3-2.3.0.jar",
+   "sha256": "3220723238102107ab83182468e5dbe351b081a0601386710ef46c81a95d38d0"
+  },
+  {
+   "bytes": 9184481,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.scala-library-3.8.3.jar",
+   "sha256": "8b5164c4be2d7a86635966b419a08b393e58b3c7bc0cafb502e0f34248722b4e"
+  },
+  {
+   "bytes": 24620536,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.scala3-compiler_3-3.8.3.jar",
+   "sha256": "cd5e5aa54b610e37522deea19344a9d9614d5fbc9cf052de08a66ceb7c1a8974"
+  },
+  {
+   "bytes": 3949,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.scala3-interfaces-3.8.3.jar",
+   "sha256": "98bb43395ad33b65b7ea59ed3705fc14174b6179f4d21d561ae96ef97be563c0"
+  },
+  {
+   "bytes": 318,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.scala3-library_3-3.8.3.jar",
+   "sha256": "740c79f7fc3dae2c5eef48e85f777d679a1f0f53fdbb780bf84dea0370220a61"
+  },
+  {
+   "bytes": 361901,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.scala3-repl_3-3.8.3.jar",
+   "sha256": "d00e3ab80898f3f0b221535f251f51b21b9d4db50539e6ceec54183a13ae7a01"
+  },
+  {
+   "bytes": 97055,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-lang.tasty-core_3-3.8.3.jar",
+   "sha256": "1c771f2416b4e455b269981a17c0804b237eed120c8807af808f192085c3e516"
+  },
+  {
+   "bytes": 113853,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-sbt.compiler-interface-1.10.7.jar",
+   "sha256": "2bacc5761e03920a228e5c9d20b33d9c51d43aaf2f52e8f839ece630966eb880"
+  },
+  {
+   "bytes": 4371,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.scala-sbt.util-interface-1.10.7.jar",
+   "sha256": "1d6b91efa42b70fc064caed6d62962374e13b27737f885a87c84c667b30be625"
+  },
+  {
+   "bytes": 69908,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.slf4j:slf4j-api:2.0.17"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.slf4j.slf4j-api-2.0.17.jar",
+   "sha256": "7b751d952061954d5abfed7181c1f645d336091b679891591d63329c622eb832"
+  },
+  {
+   "bytes": 53161,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/frontends/c2cpg/lib/org.virtuslab.using_directives-1.1.4.jar",
+   "sha256": "f905fd8fd0d50e76bcaca3a9ef631a49587159f14cd5cc405fd3ade97c72c555"
+  },
+  {
+   "bytes": 501,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/joern",
+   "sha256": "0df7e8db4282ef2c6fc37998917aca694176e23192de5f0c631511d993e99736"
+  },
+  {
+   "bytes": 471,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/joern-export",
+   "sha256": "2cfa7b0323a70858bbbfb12be67c7d0e744f8b00907039578a7ad9d16639230f"
+  },
+  {
+   "bytes": 470,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/joern-parse",
+   "sha256": "93e88d1b810383e3b1bccc1350501129a28f1ae80a44c0a34179673fd76fd4cd"
+  },
+  {
+   "bytes": 470,
+   "executable": true,
+   "kind": "script",
+   "path": "joern-cli/joern-slice",
+   "sha256": "77a425324c04c2f7c7541d54e0e1d00ef7ae6a0301d71b90f36a8a389b7076f8"
+  },
+  {
+   "bytes": 581927,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.fasterxml.jackson.core:jackson-core:2.17.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.fasterxml.jackson.core.jackson-core-2.17.2.jar",
+   "sha256": "721a189241dab0525d9e858e5cb604d3ecc0ede081e2de77d6f34fa5779a5b46"
+  },
+  {
+   "bytes": 7570466,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [
+    "aix/ppc64/libzstd-jni-1.5.7-11.so",
+    "darwin/aarch64/libzstd-jni-1.5.7-11.dylib",
+    "darwin/x86_64/libzstd-jni-1.5.7-11.dylib",
+    "freebsd/amd64/libzstd-jni-1.5.7-11.so",
+    "freebsd/i386/libzstd-jni-1.5.7-11.so",
+    "linux/aarch64/libzstd-jni-1.5.7-11.so",
+    "linux/amd64/libzstd-jni-1.5.7-11.so",
+    "linux/arm/libzstd-jni-1.5.7-11.so",
+    "linux/i386/libzstd-jni-1.5.7-11.so",
+    "linux/loongarch64/libzstd-jni-1.5.7-11.so",
+    "linux/mips64/libzstd-jni-1.5.7-11.so",
+    "linux/ppc64/libzstd-jni-1.5.7-11.so",
+    "linux/ppc64le/libzstd-jni-1.5.7-11.so",
+    "linux/riscv64/libzstd-jni-1.5.7-11.so",
+    "linux/s390x/libzstd-jni-1.5.7-11.so",
+    "win/aarch64/libzstd-jni-1.5.7-11.dll",
+    "win/amd64/libzstd-jni-1.5.7-11.dll",
+    "win/x86/libzstd-jni-1.5.7-11.dll"
+   ],
+   "path": "joern-cli/lib/com.github.luben.zstd-jni-1.5.7-11.jar",
+   "sha256": "a11e7427c57364053c9c94eb7e4e867355f18d017328119e319370050c10554a"
+  },
+  {
+   "bytes": 321335,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.github.pathikrit.better-files_3-3.9.2.jar",
+   "sha256": "136c1770a63aa33b2710745bf7f8441cbbe0eeef0cab6b832bd0a46804158989"
+  },
+  {
+   "bytes": 171963,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.github.scopt.scopt_3-4.1.0.jar",
+   "sha256": "7cfb80743b761b3df8630a818265eb91fd93cd77b32ed5ebd6fba1bb7cff6a3f"
+  },
+  {
+   "bytes": 60826,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.github.tototoshi.scala-csv_3-2.0.0.jar",
+   "sha256": "8f8cf4ddc9665ec76ac3b51c641a215d8485830dd15f355369bc14f9ea95ca70"
+  },
+  {
+   "bytes": 19936,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.google.code.findbugs:jsr305:3.0.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.google.code.findbugs.jsr305-3.0.2.jar",
+   "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7"
+  },
+  {
+   "bytes": 1692592,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.google.protobuf:protobuf-java:3.20.1"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.google.protobuf.protobuf-java-3.20.1.jar",
+   "sha256": "dcbc32c81c8689c39e6672896258f76e660d781bb2526c6c069d5c91055ef153"
+  },
+  {
+   "bytes": 301338,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.h2database.h2-mvstore-1.4.200.jar",
+   "sha256": "961c5e4498d7046a85c1507263a0bac227930edeb28c92f8f929437114d46030"
+  },
+  {
+   "bytes": 12328871,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.ibm.icu.icu4j-61.1.jar",
+   "sha256": "55c98eb1838b2a4bb9a07dc36bd378532d64d0cdcb7ceee914236866a7de4464"
+  },
+  {
+   "bytes": 47920,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.cask-util_3-0.9.5.jar",
+   "sha256": "16aeac8e03fab7f1920c353913cd723dca8b99a65df9574feb07c4470549b3ae"
+  },
+  {
+   "bytes": 522904,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.cask_3-0.9.5.jar",
+   "sha256": "4f9df14c02a1288c27e5a7bbbf1f326fc220cd67597805e9f48f388926ef5bb2"
+  },
+  {
+   "bytes": 65532,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.castor_3-0.3.0.jar",
+   "sha256": "202cd24b2299f9f41361d6f1ae92b2e5dd2a578b0b735ae1f1b1a1c29e1772d4"
+  },
+  {
+   "bytes": 105124,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.fansi_3-0.5.1.jar",
+   "sha256": "df4b447704664563cb0fba9cf52d3fc7509654ab592824d5c2eb4647e6701ac4"
+  },
+  {
+   "bytes": 102389,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.geny_3-1.1.1.jar",
+   "sha256": "39658649f90b631a4fd63187724f16ba8a045e1b10a513528f34517fb2edf98b"
+  },
+  {
+   "bytes": 502059,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.os-lib_3-0.10.1.jar",
+   "sha256": "8b36a17ba2e1ed31e48dffba19eadba4e67dd452e25691038e69127e134dd607"
+  },
+  {
+   "bytes": 162779,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.pprint_3-0.9.3.jar",
+   "sha256": "2c06448522447fc7fb5707f9c7d28151f5da50c078b0ed0895617b6789427bdb"
+  },
+  {
+   "bytes": 160538,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.requests_3-0.8.0.jar",
+   "sha256": "b7b62f7320a94d94895f169b4151a73aed2cf3925790aa3082360052cb22a955"
+  },
+  {
+   "bytes": 115781,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.sourcecode_3-0.4.4.jar",
+   "sha256": "40cc148f8baab769de72892443476a05eed7471a9b5cd2cbc2a47bf22cad30d3"
+  },
+  {
+   "bytes": 265322,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.ujson_3-4.1.0.jar",
+   "sha256": "6a6fc2c9c8643cedb0ebd02e957b4c50dc09d1aef6573ca1e15a8a424c4fa535"
+  },
+  {
+   "bytes": 139746,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.upack_3-4.0.2.jar",
+   "sha256": "294b2cf0a4ba6a2803412f0b9a3dbbc2dc1dc420a48c3746d582c7f3f16a4181"
+  },
+  {
+   "bytes": 353146,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.upickle-core_3-4.1.0.jar",
+   "sha256": "3d4dbd23edca088a83d722998472c1c5c27678bd01f13572c36627d7061cf596"
+  },
+  {
+   "bytes": 288681,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.upickle-implicits_3-4.0.2.jar",
+   "sha256": "58bea28a70561054701074ca2f7fcc7a4b1abbe2ef7cb5017708e995b61d36ba"
+  },
+  {
+   "bytes": 106552,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.lihaoyi.upickle_3-4.0.2.jar",
+   "sha256": "b19a95c92c2d104ab2feb8ce68dacca1271adce6dcf90d8a40488af3f03dfdfd"
+  },
+  {
+   "bytes": 77599,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.michaelpollmeier.scala-repl-pp-server_3.8.3-0.6.4.jar",
+   "sha256": "764948892bad57aa950dd1c888aa73ca83efc6420a2b53bf7087c6d988232ffa"
+  },
+  {
+   "bytes": 1359117,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.michaelpollmeier.scala-repl-pp-shaded-libs_3-0.6.4.jar",
+   "sha256": "f468f56871383b3060f5107f328c3cbadd656c159a52c757490b8784f7582d08"
+  },
+  {
+   "bytes": 338138,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.michaelpollmeier.scala-repl-pp_3.8.3-0.6.4.jar",
+   "sha256": "1a45099a3061e31072ba15591caa34361c02946e86f5b7041d06d9532b4bd41a"
+  },
+  {
+   "bytes": 1096,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.michaelpollmeier.versionsort-1.0.11.jar",
+   "sha256": "fe58e64378601e07cb95b8c4d75e5f6a8a991ede55c0653ddb1d8d3885d82146"
+  },
+  {
+   "bytes": 34654,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.thoughtworks.paranamer:paranamer:2.8"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.thoughtworks.paranamer.paranamer-2.8.jar",
+   "sha256": "688cb118a6021d819138e855208c956031688be4b47a24bb615becc63acedf07"
+  },
+  {
+   "bytes": 296029,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/com.typesafe.config-1.4.3.jar",
+   "sha256": "8ada4c185ce72416712d63e0b5afdc5f009c0cdf405e5f26efecdf156aa5dfb6"
+  },
+  {
+   "bytes": 372608,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "commons-codec:commons-codec:1.17.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/commons-codec.commons-codec-1.17.0.jar",
+   "sha256": "f700de80ac270d0344fdea7468201d8b9c805e5c648331c3619f2ee067ccfc59"
+  },
+  {
+   "bytes": 609182,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "commons-io:commons-io:2.22.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/commons-io.commons-io-2.22.0.jar",
+   "sha256": "2b9a7b1f726fb86216dbd2c8321eabe0221dbd5b1be81c18e1cb53811b104758"
+  },
+  {
+   "bytes": 11106161,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [
+    "META-INF/native/windows64/csjniutils-0.3.3.dll",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/FreeBSD/x86/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/FreeBSD/x86_64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/arm/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/arm64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/armv6/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/armv7/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/ppc64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/x86/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Linux/x86_64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Mac/arm64/libjansi.jnilib",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Mac/x86/libjansi.jnilib",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Mac/x86_64/libjansi.jnilib",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Windows/arm64/libjansi.so",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Windows/x86/jansi.dll",
+    "coursierapi/shaded/org/fusesource/jansi/internal/native/Windows/x86_64/jansi.dll",
+    "darwin/aarch64/libzstd-jni-1.5.6-3.dylib",
+    "darwin/x86_64/libzstd-jni-1.5.6-3.dylib",
+    "freebsd/amd64/libzstd-jni-1.5.6-3.so",
+    "freebsd/i386/libzstd-jni-1.5.6-3.so",
+    "linux/aarch64/libzstd-jni-1.5.6-3.so",
+    "linux/amd64/libzstd-jni-1.5.6-3.so",
+    "linux/arm/libzstd-jni-1.5.6-3.so",
+    "linux/i386/libzstd-jni-1.5.6-3.so",
+    "linux/loongarch64/libzstd-jni-1.5.6-3.so",
+    "linux/mips64/libzstd-jni-1.5.6-3.so",
+    "linux/ppc64/libzstd-jni-1.5.6-3.so",
+    "linux/ppc64le/libzstd-jni-1.5.6-3.so",
+    "linux/riscv64/libzstd-jni-1.5.6-3.so",
+    "linux/s390x/libzstd-jni-1.5.6-3.so",
+    "win/aarch64/libzstd-jni-1.5.6-3.dll",
+    "win/amd64/libzstd-jni-1.5.6-3.dll",
+    "win/x86/libzstd-jni-1.5.6-3.dll"
+   ],
+   "path": "joern-cli/lib/io.get-coursier.interface-1.0.28.jar",
+   "sha256": "7592fe49c789b55429483185ac22ac6da43680a39c53b818c50bca0fb7dd6a78"
+  },
+  {
+   "bytes": 467483,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.console-4.0.630.jar",
+   "sha256": "8f80dddd4d564a713bb7117812190344480681eae3a232d45c0cc1fb202ee63c"
+  },
+  {
+   "bytes": 873786,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.dataflowengineoss-4.0.630.jar",
+   "sha256": "78a034ea1369f15f93efd00b2e29d0829b3fec0c017c1e8b9537b88fd1454705"
+  },
+  {
+   "bytes": 611916,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.flatgraph-core_3-0.1.34.jar",
+   "sha256": "c14dd8e8510f6762078005d747ae8b5e87047db74f94d51bfd18c158a9623699"
+  },
+  {
+   "bytes": 345490,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.flatgraph-formats_3-0.1.34.jar",
+   "sha256": "017dc4cfd37b99131c8506ace929f1943e25c9f3c22d2947a0aa5d67792b09aa"
+  },
+  {
+   "bytes": 35756,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.flatgraph-help_3-0.1.34.jar",
+   "sha256": "9b50d84a9959bbc739ae3d7a2d423c97f6b862705831ce04c9bcc6096450b596"
+  },
+  {
+   "bytes": 45190,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.flatgraph-odb-convert_3-0.1.34.jar",
+   "sha256": "6cc159d5a4714b353ebb7325c3af1807cacaeaca18393ccbd1b1b5fd511ad966"
+  },
+  {
+   "bytes": 255712,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.joern-cli-4.0.630.jar",
+   "sha256": "e8f699f467c729577042a129693b4c6846a9db4c27983d8889dcee6ad8de6487"
+  },
+  {
+   "bytes": 50404,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.macros-4.0.630.jar",
+   "sha256": "525816025a177570f77253a27ff63e5930a7c59c10c8fa3ac6d947327a458cdd"
+  },
+  {
+   "bytes": 7039283,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [
+    "ruby_ast_gen/vendor/bundle/jruby/3.1.0/gems/prism-1.9.0/build/libprism.so"
+   ],
+   "path": "joern-cli/lib/io.joern.rubysrc2cpg-4.0.630.jar",
+   "sha256": "9f83601aa58408fc3b2f48d32eb02c657daf49fea21546dcbb3acbabc01d7f9e"
+  },
+  {
+   "bytes": 1270418,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.semanticcpg-4.0.630.jar",
+   "sha256": "1ff10c13c28d515d2fb755f7b391451b86f1b0653d70b4be051214b1bc696b3f"
+  },
+  {
+   "bytes": 1795718,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.joern.x2cpg-4.0.630.jar",
+   "sha256": "fc827c4fa50f66aa982fdf8178667536f63b1c1bf122aa08d70bd9741fe8976b"
+  },
+  {
+   "bytes": 4733340,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.shiftleft.codepropertygraph-domain-classes_3-1.7.74.jar",
+   "sha256": "9c6c0865db78ce3d40c98c64c8d76cab935257cb213873902515664d17a80230"
+  },
+  {
+   "bytes": 316819,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.shiftleft.codepropertygraph-protos_3-1.7.74.jar",
+   "sha256": "7a1f931175bc205124b4949dbaab566eab7e54045ce5eaafd3e15c20be3e0fd4"
+  },
+  {
+   "bytes": 120707,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.shiftleft.codepropertygraph_3-1.7.74.jar",
+   "sha256": "d4982e3bf459da75e94fdd1389f4a85d49b0917912ea914cde11ce89a1bc2e45"
+  },
+  {
+   "bytes": 119891,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.shiftleft.overflowdb-core_3-1.194.jar",
+   "sha256": "aacc7f470528ccf44555e0a60cba54f601531b1b551d92cbdf2d6a0ee1899884"
+  },
+  {
+   "bytes": 368491,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.spray.spray-json_3-1.3.6.jar",
+   "sha256": "b92a3ad0ad4a39f1f59c94e8583d078a7335f744ae467812f9bf29f10b774fb7"
+  },
+  {
+   "bytes": 2330081,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "io.undertow:undertow-core:2.3.18.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/io.undertow.undertow-core-2.3.18.Final.jar",
+   "sha256": "7dabc02f846910d72591055df33913959130262b1071477ef3f25db45058110e"
+  },
+  {
+   "bytes": 145616,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "net.oneandone.reflections8:reflections8:0.11.7"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/net.oneandone.reflections8.reflections8-0.11.7.jar",
+   "sha256": "721477456f75acab46e1b737ca84627c9d531831e33b54303c6a5bd071bafc22"
+  },
+  {
+   "bytes": 2560395,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/net.sf.trove4j.core-3.1.0.jar",
+   "sha256": "e1fed4d718a86d27c5ebb427810550fa5c03260e350e41a85ef2c2db6eac0856"
+  },
+  {
+   "bytes": 26773,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.abego.treelayout:org.abego.treelayout.core:1.0.3"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.abego.treelayout.org.abego.treelayout.core-1.0.3.jar",
+   "sha256": "fa5e31395c39c2e7d46aca0f81f72060931607b2fa41bd36038eb2cb6fb93326"
+  },
+  {
+   "bytes": 253043,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.antlr:ST4:4.1"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.antlr.ST4-4.1.jar",
+   "sha256": "8b1ccaed9edc55cd255d9c19c4d8da4756d9b6fcb435671292b43470b16d75d8"
+  },
+  {
+   "bytes": 167761,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.antlr:antlr-runtime:3.5.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.antlr.antlr-runtime-3.5.2.jar",
+   "sha256": "ce3fc8ecb10f39e9a3cddcbb2ce350d272d9cd3d0b1e18e6fe73c3b9389c8734"
+  },
+  {
+   "bytes": 1208785,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.antlr:antlr4:4.7.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.antlr.antlr4-4.7.2.jar",
+   "sha256": "a3811fad1e4cb6dde62c189c204cf931c5fa40e06e43839ead4a9f2e188f2fe5"
+  },
+  {
+   "bytes": 337904,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.antlr:antlr4-runtime:4.7.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.antlr.antlr4-runtime-4.7.2.jar",
+   "sha256": "4c518b87d4bdff8b44cd8cbc1af816e944b62a3fe5b80b781501cf1f4759bbc4"
+  },
+  {
+   "bytes": 1083634,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-compress:1.26.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.commons.commons-compress-1.26.2.jar",
+   "sha256": "9168a03141d8fc7eda21a2360d83cc0412bcbb1d6204d992bd48c2573cb3c6b8"
+  },
+  {
+   "bytes": 65863,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-exec:1.4.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.commons.commons-exec-1.4.0.jar",
+   "sha256": "f51cf8bee467efe2be76e46fc08078d96afa280a794283364291beda892a67ef"
+  },
+  {
+   "bytes": 673587,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-lang3:3.17.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.commons.commons-lang3-3.17.0.jar",
+   "sha256": "6ee731df5c8e5a2976a1ca023b6bb320ea8d3539fbe64c8a1d5cb765127c33b4"
+  },
+  {
+   "bytes": 257863,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.commons:commons-text:1.13.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.commons.commons-text-1.13.0.jar",
+   "sha256": "1e323a501127df78ed0987f345d69d65d0ea7fa3d4fb5b3f84aaeba3a8b20f38"
+  },
+  {
+   "bytes": 313296,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.logging.log4j:log4j-api:2.20.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.logging.log4j.log4j-api-2.20.0.jar",
+   "sha256": "2f43eea679ea66f14ca0f13fec2a8600ac124f5a5231dcb4df8393eddcb97550"
+  },
+  {
+   "bytes": 1847550,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.logging.log4j:log4j-core:2.20.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.logging.log4j.log4j-core-2.20.0.jar",
+   "sha256": "6137df848cdaed9f4d5076f75513c6c85da80b953f4e7acca38098b770763f55"
+  },
+  {
+   "bytes": 26430,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.logging.log4j:log4j-slf4j2-impl:2.20.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.logging.log4j.log4j-slf4j2-impl-2.20.0.jar",
+   "sha256": "b8dd3e4ea9cffa18db5f301cd8c539158662e691efd4701aa87b4d09961bd8b0"
+  },
+  {
+   "bytes": 58857,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.apache.maven:maven-artifact:3.9.16"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.apache.maven.maven-artifact-3.9.16.jar",
+   "sha256": "54cc1c1ef932e3d4a903352111b42b4d3c3ed8e7a1d0de73b625309d9c3ad3e8"
+  },
+  {
+   "bytes": 272101,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.codehaus.plexus:plexus-utils:3.6.1"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.codehaus.plexus.plexus-utils-3.6.1.jar",
+   "sha256": "05a63effd67e2d6b9d610cc82e2bd7473289d34802e57a529b28110f28af5679"
+  },
+  {
+   "bytes": 85147,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.glassfish:javax.json:1.0.4"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.glassfish.javax.json-1.0.4.jar",
+   "sha256": "0e1dec40a1ede965941251eda968aeee052cc4f50378bc316cc48e8159bdbeb4"
+  },
+  {
+   "bytes": 134209,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.java-websocket:Java-WebSocket:1.5.3"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.java-websocket.Java-WebSocket-1.5.3.jar",
+   "sha256": "4d6fc21dc9b657e76dcd74969079d18f30e7796a563f34c9a61e659a485e7a3f"
+  },
+  {
+   "bytes": 851531,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.javassist:javassist:3.28.0-GA"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.javassist.javassist-3.28.0-GA.jar",
+   "sha256": "57d0a9e9286f82f4eaa851125186997f811befce0e2060ff0a15a77f5a9dd9a7"
+  },
+  {
+   "bytes": 60782,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jboss.logging:jboss-logging:3.4.3.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jboss.logging.jboss-logging-3.4.3.Final.jar",
+   "sha256": "0b324cca4d550060e51e70cc0045a6cce62f264278ec1f5082aafeb670fcac49"
+  },
+  {
+   "bytes": 122607,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jboss.threads:jboss-threads:3.5.0.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jboss.threads.jboss-threads-3.5.0.Final.jar",
+   "sha256": "e150b67a7f528525fe68dd60841520c22d59e0a831ea237c45a704de48b990b1"
+  },
+  {
+   "bytes": 588677,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jboss.xnio:xnio-api:3.8.16.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jboss.xnio.xnio-api-3.8.16.Final.jar",
+   "sha256": "3572098fe1687dabd90f0222080fb158f63ca771c42ef1d39974434849f78bc4"
+  },
+  {
+   "bytes": 111648,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jboss.xnio:xnio-nio:3.8.16.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jboss.xnio.xnio-nio-3.8.16.Final.jar",
+   "sha256": "cee1ad9674ff4615f492a314a986c77b7c223ae03255c77aacc60c6cea62d59c"
+  },
+  {
+   "bytes": 190157,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-native:3.29.0"
+   ],
+   "native_libraries": [
+    "org/jline/nativ/FreeBSD/x86/libjlinenative.so",
+    "org/jline/nativ/FreeBSD/x86_64/libjlinenative.so",
+    "org/jline/nativ/Linux/arm/libjlinenative.so",
+    "org/jline/nativ/Linux/arm64/libjlinenative.so",
+    "org/jline/nativ/Linux/armv6/libjlinenative.so",
+    "org/jline/nativ/Linux/armv7/libjlinenative.so",
+    "org/jline/nativ/Linux/ppc64/libjlinenative.so",
+    "org/jline/nativ/Linux/x86/libjlinenative.so",
+    "org/jline/nativ/Linux/x86_64/libjlinenative.so",
+    "org/jline/nativ/Mac/arm64/libjlinenative.jnilib",
+    "org/jline/nativ/Mac/x86/libjlinenative.jnilib",
+    "org/jline/nativ/Mac/x86_64/libjlinenative.jnilib",
+    "org/jline/nativ/Windows/arm64/jlinenative.dll",
+    "org/jline/nativ/Windows/x86/jlinenative.dll",
+    "org/jline/nativ/Windows/x86_64/jlinenative.dll"
+   ],
+   "path": "joern-cli/lib/org.jline.jline-native-3.29.0.jar",
+   "sha256": "19cfcc9d3c78a1c6cfe4c6c9599f16a657e4bf8da43940fc4b875373236dc258"
+  },
+  {
+   "bytes": 184808,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-reader:3.29.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jline.jline-reader-3.29.0.jar",
+   "sha256": "a4cb0a5fde9289f2f1b614e04f94b202f6ff5c9c96476425837b1184c92ef81d"
+  },
+  {
+   "bytes": 264973,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-terminal:3.29.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jline.jline-terminal-3.29.0.jar",
+   "sha256": "fd68a98b32b1132035c62102e5df0b0fdc358e7c87a9f876ce7071450b4d10da"
+  },
+  {
+   "bytes": 49066,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.jline:jline-terminal-jni:3.29.0"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.jline.jline-terminal-jni-3.29.0.jar",
+   "sha256": "13fef8bcc0e4788c8e192dc76c33758683c6bfdbaef6f67b41445eb8986773ad"
+  },
+  {
+   "bytes": 34375288,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "com.github.jnr:jffi:1.3.15",
+    "com.github.jnr:jnr-a64asm:1.0.0",
+    "com.github.jnr:jnr-constants:0.10.4",
+    "com.github.jnr:jnr-enxio:0.32.20",
+    "com.github.jnr:jnr-ffi:2.2.19",
+    "com.github.jnr:jnr-netdb:1.2.0",
+    "com.github.jnr:jnr-posix:3.1.22",
+    "com.github.jnr:jnr-unixsocket:0.38.25",
+    "com.github.jnr:jnr-x86asm:1.0.2",
+    "com.headius:backport9:1.13",
+    "com.headius:invokebinder:1.13",
+    "com.headius:options:1.6",
+    "joda-time:joda-time:2.12.7",
+    "me.qmx.jitescript:jitescript:0.4.1",
+    "org.crac:crac:1.5.0",
+    "org.jruby.jcodings:jcodings:1.0.63",
+    "org.jruby.joni:joni:2.2.5",
+    "org.jruby:dirgra:0.3",
+    "org.jruby:jruby-base:9.4.15.0",
+    "org.jruby:jruby-complete:9.4.15.0",
+    "org.jruby:jruby-core:9.4.15.0",
+    "org.jruby:jruby-stdlib:9.4.15.0",
+    "org.jruby:jzlib:1.1.5"
+   ],
+   "native_libraries": [
+    "META-INF/jruby.home/bin/jruby.dll",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/arm64-darwin/libfixposix.dylib",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/arm64-linux/libfixposix.so",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/armv6-linux/libfixposix.so",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/armv7-linux/libfixposix.so",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/x86-freebsd/libfixposix.so",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/x86-linux/libfixposix.so",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/x86_64-darwin/libfixposix.dylib",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/x86_64-freebsd/libfixposix.so",
+    "META-INF/jruby.home/lib/ruby/stdlib/libfixposix/binary/x86_64-linux/libfixposix.so",
+    "jni/Darwin/libjffi-1.2.jnilib",
+    "jni/aarch64-FreeBSD/libjffi-1.2.so",
+    "jni/aarch64-Linux/libjffi-1.2.so",
+    "jni/aarch64-Windows/jffi-1.2.dll",
+    "jni/arm-Linux/libjffi-1.2.so",
+    "jni/i386-Linux/libjffi-1.2.so",
+    "jni/i386-SunOS/libjffi-1.2.so",
+    "jni/i386-Windows/jffi-1.2.dll",
+    "jni/loongarch64-Linux/libjffi-1.2.so",
+    "jni/mips64el-Linux/libjffi-1.2.so",
+    "jni/ppc64-Linux/libjffi-1.2.so",
+    "jni/ppc64le-Linux/libjffi-1.2.so",
+    "jni/riscv64-Linux/libjffi-1.2.so",
+    "jni/s390x-Linux/libjffi-1.2.so",
+    "jni/sparcv9-Linux/libjffi-1.2.so",
+    "jni/sparcv9-SunOS/libjffi-1.2.so",
+    "jni/x86_64-DragonFlyBSD/libjffi-1.2.so",
+    "jni/x86_64-FreeBSD/libjffi-1.2.so",
+    "jni/x86_64-Linux/libjffi-1.2.so",
+    "jni/x86_64-OpenBSD/libjffi-1.2.so",
+    "jni/x86_64-SunOS/libjffi-1.2.so",
+    "jni/x86_64-Windows/jffi-1.2.dll"
+   ],
+   "path": "joern-cli/lib/org.jruby.jruby-complete-9.4.15.0.jar",
+   "sha256": "e8a461c48da851d839b8deb8b67b1987542ba5e23b8febfa0e60f0065e2639d2"
+  },
+  {
+   "bytes": 706444,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.json4s.json4s-ast_3-4.0.7.jar",
+   "sha256": "6140e538e53c2c55db445645a65ffe26f73577d0000f0890076b066ca55f2b25"
+  },
+  {
+   "bytes": 405716,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.json4s.json4s-core_3-4.0.7.jar",
+   "sha256": "bdb869db56d60c10a0760a98a3d53ecb632841fa8f1a5001e7c1a0d91877493a"
+  },
+  {
+   "bytes": 108350,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.json4s.json4s-native-core_3-4.0.7.jar",
+   "sha256": "d79432d86ab353840807cbcc8a7e9e48160efa67680db1fe26db6765b778362e"
+  },
+  {
+   "bytes": 13319,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.json4s.json4s-native_3-4.0.7.jar",
+   "sha256": "bd2222e623f020b6d036f1328b306f983365527d2d93eab7c205db223e5c09bf"
+  },
+  {
+   "bytes": 428143,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.json4s.json4s-scalap_3-4.0.7.jar",
+   "sha256": "dc2269e32e3d9cdd296151deb5f61d108d3d4fe99e220de5679dbaf6fb8e140a"
+  },
+  {
+   "bytes": 125098,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.msgpack.msgpack-core-0.9.1.jar",
+   "sha256": "183abb2b7c604a8b13d5f76af487ccddd003b6f0404aef52021dcb20a4358524"
+  },
+  {
+   "bytes": 130398,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.reflections:reflections:0.10.2"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.reflections.reflections-0.10.2.jar",
+   "sha256": "938a2d08fe54050d7610b944d8ddc3a09355710d9e6be0aac838dbc04e9a2825"
+  },
+  {
+   "bytes": 323674,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.modules.scala-asm-9.9.0-scala-1.jar",
+   "sha256": "75ac366e8ecb691e06a7e85041eed0f67919a646e5262fa0901225698c104375"
+  },
+  {
+   "bytes": 1293006,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.modules.scala-parallel-collections_3-1.0.4.jar",
+   "sha256": "c3bf0d4d057942a78389fa9675823db5e3179f1b503f2df212b74e784da57050"
+  },
+  {
+   "bytes": 740520,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.modules.scala-xml_3-2.3.0.jar",
+   "sha256": "3220723238102107ab83182468e5dbe351b081a0601386710ef46c81a95d38d0"
+  },
+  {
+   "bytes": 9184481,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.scala-library-3.8.3.jar",
+   "sha256": "8b5164c4be2d7a86635966b419a08b393e58b3c7bc0cafb502e0f34248722b4e"
+  },
+  {
+   "bytes": 24620536,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.scala3-compiler_3-3.8.3.jar",
+   "sha256": "cd5e5aa54b610e37522deea19344a9d9614d5fbc9cf052de08a66ceb7c1a8974"
+  },
+  {
+   "bytes": 3949,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.scala3-interfaces-3.8.3.jar",
+   "sha256": "98bb43395ad33b65b7ea59ed3705fc14174b6179f4d21d561ae96ef97be563c0"
+  },
+  {
+   "bytes": 318,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.scala3-library_3-3.8.3.jar",
+   "sha256": "740c79f7fc3dae2c5eef48e85f777d679a1f0f53fdbb780bf84dea0370220a61"
+  },
+  {
+   "bytes": 361901,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.scala3-repl_3-3.8.3.jar",
+   "sha256": "d00e3ab80898f3f0b221535f251f51b21b9d4db50539e6ceec54183a13ae7a01"
+  },
+  {
+   "bytes": 97055,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-lang.tasty-core_3-3.8.3.jar",
+   "sha256": "1c771f2416b4e455b269981a17c0804b237eed120c8807af808f192085c3e516"
+  },
+  {
+   "bytes": 113853,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-sbt.compiler-interface-1.10.7.jar",
+   "sha256": "2bacc5761e03920a228e5c9d20b33d9c51d43aaf2f52e8f839ece630966eb880"
+  },
+  {
+   "bytes": 4371,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.scala-sbt.util-interface-1.10.7.jar",
+   "sha256": "1d6b91efa42b70fc064caed6d62962374e13b27737f885a87c84c667b30be625"
+  },
+  {
+   "bytes": 69908,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.slf4j:slf4j-api:2.0.17"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.slf4j.slf4j-api-2.0.17.jar",
+   "sha256": "7b751d952061954d5abfed7181c1f645d336091b679891591d63329c622eb832"
+  },
+  {
+   "bytes": 6806814,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.typelevel.cats-core_3-2.9.0.jar",
+   "sha256": "158fe49b9d83ce1530c394c701054c91f78328b774064dc33bfd4c39252bedcd"
+  },
+  {
+   "bytes": 1283984,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.typelevel.cats-effect-kernel_3-3.5.4.jar",
+   "sha256": "03375636fdd1086417531e0305b4b7fba3e2f62bd7b241587df05b5cb95aa5c7"
+  },
+  {
+   "bytes": 688710,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.typelevel.cats-effect-std_3-3.5.4.jar",
+   "sha256": "748eb2ef8d015c75e96842280c2c648782a5b0fec7cc4a4b3a80a2f26f6a2baa"
+  },
+  {
+   "bytes": 759453,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.typelevel.cats-effect_3-3.5.4.jar",
+   "sha256": "ac62797add23b03c9185f5742039246712aad2dda4c2b2d19d0564d23dab2c97"
+  },
+  {
+   "bytes": 1589002,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.typelevel.cats-kernel_3-2.9.0.jar",
+   "sha256": "2a362c36c835b922a2d88cede8be5dd9bc434dbafc1052a252dfed96da9c5a76"
+  },
+  {
+   "bytes": 53161,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.virtuslab.using_directives-1.1.4.jar",
+   "sha256": "f905fd8fd0d50e76bcaca3a9ef631a49587159f14cd5cc405fd3ade97c72c555"
+  },
+  {
+   "bytes": 47396,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.wildfly.client:wildfly-client-config:1.0.1.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.wildfly.client.wildfly-client-config-1.0.1.Final.jar",
+   "sha256": "80a4e963ce94ebb043ecb0f2c0e77d327f23dc87d81350b863752eedfa2c3bb3"
+  },
+  {
+   "bytes": 284642,
+   "executable": false,
+   "kind": "jar",
+   "maven": [
+    "org.wildfly.common:wildfly-common:1.5.4.Final"
+   ],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.wildfly.common.wildfly-common-1.5.4.Final.jar",
+   "sha256": "9fda3caf8bd528dec56ebc70daf78f5a9ff5d0bfcea8b3e41ab7ae838747e46a"
+  },
+  {
+   "bytes": 111592,
+   "executable": false,
+   "kind": "jar",
+   "maven": [],
+   "native_libraries": [],
+   "path": "joern-cli/lib/org.zeroturnaround.zt-zip-1.17.jar",
+   "sha256": "fec7e33c4bea6ce42a427e3fbf21a3aad33878289dfd06a849282ce33e7f8de3"
+  }
+ ],
+ "include": [
+  "joern-cli/.installation_root",
+  "joern-cli/bin",
+  "joern-cli/c2cpg.sh",
+  "joern-cli/conf",
+  "joern-cli/frontends/c2cpg",
+  "joern-cli/joern",
+  "joern-cli/joern-export",
+  "joern-cli/joern-parse",
+  "joern-cli/joern-slice",
+  "joern-cli/lib"
+ ],
+ "schema": "appsec-review/tool-closure-inventory/1",
+ "totals": {
+  "bytes": 254046742,
+  "elf": 0,
+  "files": 222,
+  "jars": 193,
+  "scripts": 16
+ }
+}

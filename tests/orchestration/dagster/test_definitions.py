@@ -394,7 +394,7 @@ workers = 1
 workers = 1
 [jobs.job_fixture.steps.publication.tasks.assemble]
 [jobs.job_fixture.steps.publication.tasks.publish]
-""".strip(), encoding="utf-8")
+""".strip() + "\n\n" + build_capture_toml(), encoding="utf-8")
     target = tmp_path / "target"
     target.mkdir()
     (target / "main.py").write_text("pass\n", encoding="utf-8")

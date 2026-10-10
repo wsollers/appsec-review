@@ -53,7 +53,8 @@ _CONTEXT_NAMES = {
     "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "composer.lock", "requirements.txt",
     "poetry.lock", "Pipfile.lock", "pylock.toml", "setup.cfg",
     "rust-toolchain", "rust-toolchain.toml", "Directory.Build.props", "global.json",
-    "packages.lock.json", "Directory.Packages.props", "NuGet.Config",
+    "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
+    "binding.gyp", "config.m4",
 }
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++", "gcc", "g++",
@@ -343,6 +344,16 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
         errors.append("expected_outputs must stay within the accepted build-unit root")
     if type(recipe.get("network_required")) is not bool:
         errors.append("network_required must be boolean")
+    if profile == "dotnet" and recipe.get("network_required") is False:
+        documents = unit.get("descriptor_package", {}).get("documents", ())
+        remote_references = any(
+            isinstance(item, Mapping) and isinstance(item.get("content"), str) and
+            ("<packagereference" in item["content"].lower() or
+             "<packagedownload" in item["content"].lower())
+            for item in documents
+        )
+        if remote_references:
+            errors.append(".NET recipes with accepted package references require dependency egress")
     reason = recipe.get("reason")
     if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:
         errors.append("reason is missing or exceeds the bound")

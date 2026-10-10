@@ -24,7 +24,7 @@ MANDATORY_BASELINE = frozenset({"tool-gitleaks", "tool-semgrep", "tool-syft"})
 BUILD_SYSTEMS = frozenset({
     "autotools", "bazel", "cargo", "cmake", "composer", "container", "direct-native",
     "dotnet", "go", "gradle", "javac", "make", "maven", "meson", "msbuild", "node",
-    "python", "rustc", "typescript", "wasm",
+    "node-gyp", "php-extension", "python", "rustc", "typescript", "wasm",
 })
 
 SOURCE_SUFFIXES = {
@@ -265,6 +265,8 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
             "build_actions": [{"action": "configure-and-build", "root": item["root"],
                                "family": item["family"], "build_system": item["build_system"],
                                "build_unit_id": item["build_unit_id"],
+                               "markers": list(item.get("markers", ())),
+                               "descriptor_package": dict(item.get("descriptor_package", {})),
                                "recipe": None, "requires_inference": True, "executable": False}
                               for item in catalog.get("build_units", ())],
             "compile_databases": compile_databases,
@@ -450,6 +452,13 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
         unit_id = str(action.get("build_unit_id", ""))
         if unit_id not in units:
             raise ValueError("analysis plan build action is not an accepted build unit")
+        accepted_unit = units[unit_id]
+        if (action.get("markers") != accepted_unit.get("markers") or
+                action.get("descriptor_package") != accepted_unit.get("descriptor_package") or
+                action.get("family") != accepted_unit.get("family") or
+                action.get("build_system") != accepted_unit.get("build_system") or
+                action.get("root") != accepted_unit.get("root")):
+            raise ValueError("analysis plan build action facts differ from the accepted catalog")
         recipe = action.get("recipe")
         if recipe is not None:
             errors = validate_build_recipe(recipe, units[unit_id])

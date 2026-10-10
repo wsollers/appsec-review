@@ -117,7 +117,133 @@ def _relative(repository: Path, path: Path) -> str:
         return str(path.resolve())
 
 
-def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
+def _sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_file_identity(run_root: Path, identity: Mapping, *, base: Path | None = None) -> None:
+    relative = identity.get("path", identity.get("uri"))
+    expected = identity.get("sha256")
+    if not isinstance(relative, str) or not isinstance(expected, str):
+        raise SystemExit(f"file identity is incomplete: {identity}")
+    path = (base if base is not None else run_root) / relative
+    if not path.is_file() or _sha256_path(path) != expected:
+        raise SystemExit(f"file identity does not resolve: {relative}")
+
+
+def _verify_required_language_receipt(run_root: Path, receipt: Mapping) -> dict:
+    family = str(receipt.get("family", "unknown"))
+    capture = receipt.get("capture_provenance", {})
+    if not isinstance(capture, Mapping) or not capture.get("complete"):
+        raise SystemExit(f"{family} build capture provenance is incomplete")
+    zero_fields = (
+        "failed_exec_events", "redacted_exec_events", "redacted_tool_calls",
+        "unreconciled_tool_calls",
+    )
+    if any(int(capture.get(field, 0)) != 0 for field in zero_fields):
+        raise SystemExit(f"{family} build capture contains failed, redacted, or unmatched evidence")
+    if int(capture.get("process_exec_events", 0)) < 1 or int(capture.get("envp_events", 0)) < 1:
+        raise SystemExit(f"{family} build capture is missing process-exec or envp evidence")
+    required_tool_kinds = {"dotnet": {"build-driver", "compiler"}}
+    observed_tool_kinds = set(capture.get("observed_tool_kinds", ()))
+    if not required_tool_kinds.get(family, set()).issubset(observed_tool_kinds):
+        raise SystemExit(f"{family} build capture is missing required observed tool kinds")
+
+    invocations = list(receipt.get("tool_invocations", ()))
+    if not invocations or any(
+        int(item.get("evidence", {}).get("process_exec", {}).get("count", 0)) < 1
+        for item in invocations
+    ):
+        raise SystemExit(f"{family} published tool invocation lacks successful process-exec evidence")
+
+    commands = list(receipt.get("commands", ()))
+    if not commands:
+        raise SystemExit(f"{family} receipt does not contain a captured build command")
+    command_capture_hashes = {
+        str(command.get("execution_capture", {}).get("sha256", "")) for command in commands
+    }
+    if any(str(item.get("evidence", {}).get("capture_record_sha256", ""))
+           not in command_capture_hashes for item in invocations):
+        raise SystemExit(f"{family} tool invocation does not resolve to a captured command")
+    secret_findings = 0
+    connect_events = 0
+    for command in commands:
+        if command.get("exit_code") != 0 or command.get("timed_out"):
+            raise SystemExit(f"{family} captured build command was not successful")
+        for stream in ("stdout", "stderr"):
+            stream_identity = command.get(stream, {})
+            if stream_identity.get("truncated"):
+                raise SystemExit(f"{family} captured build {stream} was truncated")
+            _verify_file_identity(run_root, stream_identity)
+            if isinstance(stream_identity.get("diagnostic_tail"), Mapping):
+                _verify_file_identity(run_root, stream_identity["diagnostic_tail"])
+        _verify_file_identity(run_root, command.get("protected_argv", {}))
+        execution = command.get("execution_capture", {})
+        if (not execution.get("complete") or not execution.get("envp_captured") or
+                execution.get("events", {}).get("capped") or
+                execution.get("tool_calls", {}).get("capped")):
+            raise SystemExit(f"{family} execution capture is incomplete or capped")
+        _verify_file_identity(run_root, execution)
+        _verify_file_identity(run_root, execution.get("events", {}))
+        scan = execution.get("secret_scan", {})
+        if scan.get("scanner") != "tool-gitleaks" or scan.get("coverage_gap") or scan.get("exit_code") != 0:
+            raise SystemExit(f"{family} execution-capture secret scan did not succeed")
+        _verify_file_identity(run_root, scan.get("execution", {}))
+        _verify_file_identity(run_root, scan.get("report", {}))
+        findings = execution.get("secret_findings", {})
+        _verify_file_identity(run_root, findings)
+        secret_findings += int(findings.get("count", 0))
+        connect_events += int(execution.get("events", {}).get("counts", {}).get("connect", 0))
+        capture_base = run_root / Path(str(execution["path"])).parent
+        for invocation in invocations:
+            if (str(invocation.get("evidence", {}).get("capture_record_sha256", "")) !=
+                    str(execution.get("sha256", ""))):
+                continue
+            tool_call = invocation.get("evidence", {}).get("tool_call")
+            if isinstance(tool_call, Mapping):
+                _verify_file_identity(run_root, tool_call, base=capture_base)
+                tool_record_path = capture_base / str(tool_call["uri"])
+                tool_record = json.loads(tool_record_path.read_text(encoding="utf-8"))
+                for stream_name in ("stdout", "stderr"):
+                    stream = tool_record.get(stream_name, {})
+                    if (stream.get("truncated") or stream.get("storage") != "complete-file" or
+                            int(stream.get("retained_bytes", -1)) != int(stream.get("bytes", -2))):
+                        raise SystemExit(
+                            f"{family} tool-call {stream_name} is not a complete retained file")
+                    _verify_file_identity(run_root, stream, base=tool_record_path.parent)
+    if secret_findings:
+        raise SystemExit(f"{family} execution capture contains secret findings")
+    if connect_events < 1:
+        raise SystemExit(f"{family} execution capture did not observe expected egress connects")
+
+    for artifact in receipt.get("artifacts", ()):
+        _verify_file_identity(run_root, artifact)
+    for identity_name in ("workspace_manifest", "link_database"):
+        _verify_file_identity(run_root, receipt.get(identity_name, {}))
+    workspace = run_root / str(receipt.get("workspace", ""))
+    for project in receipt.get("project_topology", ()):
+        _verify_file_identity(run_root, project, base=workspace)
+
+    return {
+        "build_unit_id": receipt.get("build_unit_id"),
+        "terminal_status": receipt.get("terminal_status"),
+        "gaps": receipt.get("gaps", []),
+        "capture_complete": True,
+        "observed_tool_kinds": sorted(observed_tool_kinds),
+        "process_exec_events": int(capture.get("process_exec_events", 0)),
+        "envp_events": int(capture.get("envp_events", 0)),
+        "connect_events": int(capture.get("connect_events", 0)),
+        "secret_findings": secret_findings,
+        "artifact_kinds": sorted({str(item.get("kind")) for item in receipt.get("artifacts", ())}),
+    }
+
+
+def _run(url: str, run_id: str, repository: Path, document: dict,
+         required_families: tuple[str, ...]) -> dict:
     payload = request_json(
         f"{url}/graphql",
         {"query": RUN_QUERY, "variables": {"runId": run_id}},
@@ -157,6 +283,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
             "job_target_analysis_plan",
             "job_project_build",
             "job_language_build",
+            "job_artifact_indexing",
+            "job_artifact_security_analysis",
             "job_cpp_compiled_analysis",
             "job_post_build_security_assessment",
             "job_evidence_collection",
@@ -270,10 +398,19 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                 successful_jvm = [item for item in jvm if item.get("terminal_status") == "SUCCEEDED"]
                 wasm = [item for item in receipts if item.get("producer")]
                 successful_wasm = [item for item in wasm if item.get("terminal_status") == "SUCCEEDED"]
-                if run.get("pipelineName") == "wave1_review" and not successful:
-                    raise SystemExit("live Wave 1 acceptance did not produce a successful native build receipt")
-                if run.get("pipelineName") == "wave1_review" and not successful_jvm:
-                    raise SystemExit("live Wave 1 acceptance did not produce a successful JVM build receipt")
+                required_receipt_reports = []
+                if run.get("pipelineName") == "wave1_review":
+                    for required_family in required_families:
+                        matching = [item for item in receipts
+                                    if item.get("family") == required_family]
+                        if not matching or any(item.get("terminal_status") != "SUCCEEDED" or
+                                               item.get("gaps") for item in matching):
+                            raise SystemExit(
+                                "live Wave 1 acceptance did not produce zero-gap successful "
+                                f"{required_family} build receipts")
+                        required_receipt_reports.extend(
+                            _verify_required_language_receipt(run_root, item) for item in matching
+                        )
                 family_status = {}
                 for family in ("native", "rust", "go", "java", "node", "dotnet", "python", "php"):
                     values = [item for item in receipts if item.get("family") == family]
@@ -316,6 +453,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                         str(item.get("producer", "unknown")) for item in wasm).items())),
                     "wasm_artifact_count": sum(len(item.get("artifacts", ())) for item in wasm),
                     "wasm_checkpoint_reused": sum(bool(item.get("checkpoint_reused")) for item in successful_wasm),
+                    "required_receipts": required_receipt_reports,
                     "gaps": receipt_set.get("gaps", []),
                 }
             if job_id == "job_artifact_indexing":
@@ -440,26 +578,34 @@ def _run(url: str, run_id: str, repository: Path, document: dict) -> dict:
                     if scope.get("terminal_status") == "SUCCEEDED" and (
                             not scope.get("database_identity") or not scope.get("query_identity")):
                         raise SystemExit("successful CodeQL scope is missing database or query identity")
-                cpp_scopes = [scope for scope in scopes if scope.get("language") == "cpp"]
-                if run.get("pipelineName") in {"wave1_review", "codeql_analysis"} and cpp_scopes:
-                    cpp_settings = document["jobs"]["job_codeql_analysis"]["settings"]["languages"]["cpp"]
-                    expected_profiles = {"default", *(item["query_id"] for item in
-                        cpp_settings.get("custom_queries", []))}
-                    cpp_scope_ids = {str(scope["scope_id"]) for scope in cpp_scopes}
-                    for scope_id in cpp_scope_ids:
-                        profile_entries = {str(scope.get("query_profile", "default")): scope
-                                           for scope in cpp_scopes
-                                           if str(scope["scope_id"]) == scope_id}
-                        if set(profile_entries) != expected_profiles:
-                            raise SystemExit(
-                                f"C/C++ CodeQL scope {scope_id} profile mismatch: "
-                                f"expected={sorted(expected_profiles)} actual={sorted(profile_entries)}")
-                        failed_profiles = sorted(name for name, scope in profile_entries.items()
-                                                 if scope.get("terminal_status") != "SUCCEEDED")
-                        if failed_profiles:
-                            raise SystemExit(
-                                f"C/C++ CodeQL scope {scope_id} did not complete profiles: "
-                                f"{failed_profiles}")
+                if run.get("pipelineName") in {"wave1_review", "codeql_analysis"}:
+                    configured_languages = document["jobs"]["job_codeql_analysis"]["settings"]["languages"]
+                    for language, language_scopes in ((name, [scope for scope in scopes
+                                                              if scope.get("language") == name])
+                                                      for name in sorted(configured_languages)):
+                        if not language_scopes:
+                            continue
+                        language_settings = configured_languages[language]
+                        expected_profiles = {"default", *(item["query_id"] for item in
+                            language_settings.get("additional_queries", [])), *(item["query_id"] for item in
+                            language_settings.get("custom_queries", []))}
+                        scope_ids = {str(scope["scope_id"]) for scope in language_scopes}
+                        for scope_id in scope_ids:
+                            profile_entries = {str(scope.get("query_profile", "default")): scope
+                                               for scope in language_scopes
+                                               if str(scope["scope_id"]) == scope_id}
+                            if set(profile_entries) != expected_profiles:
+                                raise SystemExit(
+                                    f"{language} CodeQL scope {scope_id} profile mismatch: "
+                                    f"expected={sorted(expected_profiles)} "
+                                    f"actual={sorted(profile_entries)}")
+                            failed_profiles = sorted(
+                                name for name, scope in profile_entries.items()
+                                if scope.get("terminal_status") != "SUCCEEDED" or scope.get("gaps"))
+                            if failed_profiles:
+                                raise SystemExit(
+                                    f"{language} CodeQL scope {scope_id} did not complete "
+                                    f"zero-gap profiles: {failed_profiles}")
                 for shard in shards:
                     shard_path = run_root / shard["relative_path"]
                     if (not shard_path.is_file() or
@@ -619,6 +765,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:3000")
     parser.add_argument("--run-id", help="also verify this completed Dagster run and its application receipts")
+    parser.add_argument("--required-family", action="append", default=[],
+                        help="require zero-gap successful language-build receipts for this family")
     parser.add_argument("--evidence", type=Path, help="write the concise verification report to this path")
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[3]
@@ -626,7 +774,8 @@ def main() -> int:
     document = tomllib.loads(config_path.read_text(encoding="utf-8"))
     report = {"deployment": _workspace(args.url, document)}
     if args.run_id:
-        report["acceptance_run"] = _run(args.url, args.run_id, repository, document)
+        report["acceptance_run"] = _run(
+            args.url, args.run_id, repository, document, tuple(args.required_family))
     if args.evidence:
         args.evidence.parent.mkdir(parents=True, exist_ok=True)
         with args.evidence.open("w", encoding="utf-8", newline="\n") as stream:

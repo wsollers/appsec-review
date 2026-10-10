@@ -17,6 +17,8 @@ deploy/dagster/.env
 containers/**
 !containers/catalog.toml
 !containers/runtime-policy.toml
+!containers/build-capture/
+!containers/build-capture/**
 !containers/tools/
 !containers/tools/*/
 containers/tools/*/**

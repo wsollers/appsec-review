@@ -35,14 +35,30 @@ accepted dispatch validation, real build execution, protected compiler/link prov
 failure isolation, checkpoint reuse, default-image-first probing, three bounded inference-guided
 dependency-image repairs, successful Dockerfile/image reuse, and dynamic C++/post-build
 consumption. The Go adapter supports accepted modules/workspaces, vendor mode, package targets,
-build tags, and cgo; retains bounded `go -x` provenance and stream artifacts; and catalogs modules,
-packages, generated sources, binaries, build IDs, and sanitized retrieval records. The .NET adapter
+build tags, and cgo; uses the same syscall-authoritative capture and generic reconciliation as
+native, Rust, and .NET; and catalogs modules, packages, generated sources, binaries, build IDs, and
+sanitized retrieval records. One parameterized contract now checks successful/failed/redacted exec,
+envp/connect facts, wrapper reconciliation, malformed input, and cap/loss behavior across all four
+descriptors; adding another compiled language must extend that descriptor contract rather than copy
+capture orchestration. The .NET adapter
 allows declared dependency restore, catalogs MSBuild/Roslyn and
 managed/native outputs, and reports Windows-only/.NET Framework units as explicit platform gaps.
 The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/features/lock
 choices; retains rustc, linker, archiver, build-script, and proc-macro provenance; catalogs Cargo
 metadata and resolve edges plus generated sources, rlib/rmeta, native libraries, binaries, and debug
 metadata; and publishes sanitized build evidence without executing tests or produced programs.
+Its current Docker fixture gate verifies dependency egress, standardized syscall/envp/connect
+records, exact-name redaction, gitleaks findings, complete output files, Cargo dependency and
+intermediate artifacts, loader facts, default plus security-extended CodeQL profiles, and truthful
+zero-result SARIF. Recipe inference is a separate opt-in model gate and never contributes capture
+authority. Rust compiler-native AST and IR producers remain unimplemented; tree-sitter and CodeQL
+must not be described as substitutes for those missing branches.
+The native adapter now uses the same syscall/envp/connect/gitleaks boundary as Rust and .NET.
+Successful exec events alone establish tool provenance; compile databases and CMake link records are
+exact-match enrichment only. Docker-backed fixture acceptance covers complete streams,
+compiler/linker/archiver provenance, compile database, objects, static library, executable, split
+debug data, link map, loader facts, Clang AST, LLVM IR, secret removal, and raw-trace cleanup. This
+lower-level acceptance has not been promoted to a Dagster run while language work remains batched.
 The Node adapter accepts npm, pnpm, and Yarn identities; allows dependency egress while denying application/test
 execution; treats lifecycle scripts as sandboxed target code; and catalogs generated code, bundles,
 maps, packages, and native addons with protected command/stream evidence and sanitized retrieval.
@@ -61,9 +77,9 @@ and is not acceptance evidence for the current tree. A fresh integrated Dagster 
 orchestration steps and accepted the shared language-build handoff with one native and seven JVM
 successes, nine explicit .NET recipe gaps, and truthful non-selection for Go, Node, Python, PHP,
 Rust, and WebAssembly. The composed retrieval manifest and an MCP query resolved sanitized JVM
-class evidence while retaining the unrelated catalog build shard. Producer-positive live coverage
-for Rust, Go, Node, .NET, Python, PHP, and WASM remains required before the Linux vertical can be
-closed; focused executor tests cover those family contracts in this revision.
+class evidence while retaining the unrelated catalog build shard. Producer-positive fixture and
+live-record coverage is tracked per language; a new integrated Dagster run remains required before
+the Linux vertical can be closed.
 The pinned cross-language CodeQL job and exact `query_codeql` MCP surface are implemented and have
 fresh live acceptance on `appsec-multi-vuln`: producer Dagster run
 `e596f2f0-3b47-4263-973e-e0bc0362fe5a`, application run `2026-10-09-0007`, and CodeQL attempt
@@ -82,6 +98,33 @@ and selected target recipes they captured.
 Probe policy must be centrally configurable per build unit as `configure`, `selected-target`, or
 `full-build`. This keeps the default test target rigorous without forcing future large repositories
 through an unnecessary full probe before every instrumented or traced build.
+
+## Implement conditional build-capture controls
+
+The agreed semantics and the 18-row `appsec-multi-vuln` fixture mapping are documented in
+[`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md),
+using nested corpus commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. Current status:
+
+- implemented: independent typed central controls for build execution capture and
+  compiler-artifact collection with `required`, `auto`, and `disabled` values;
+- implemented: canonical immutable per-run resolution and binding into handoff, job-configuration,
+  and resume identities;
+- implemented: one deterministic descriptor-backed applicability evaluator and canonical
+  `SUCCEEDED`, `SKIPPED_NA`, `SKIPPED_POLICY`, and `GAP` processing dispositions, without another
+  syscall parser or reconciliation loop;
+- implemented: CodeQL's typed capability model accepts `build`, `source`, `auto`, and `disabled`,
+  with one-way load-time normalization of legacy `manual`/`none` values; executor receipts retain
+  `manual`/`none` after deterministic capability selection;
+- implemented: parameterized schema/path/applicability coverage for every matrix row and focused
+  transitions for syntax-only versus material lifecycles, mixed native facts, missing inventory,
+  unsupported capability, failed processing, and incomplete evidence; and
+- remaining: specialized live Kotlin, Android SDK, Composer lifecycle, phpize, mixed-language
+  CodeQL, and WebAssembly toolchain acceptance. Their absence is a validation gap, not a changed
+  applicability decision.
+
+Conditional policy dispatch and dispositions are implemented. Do not describe specialized live
+toolchain acceptance as complete until the remaining gates above run. Executor-level CodeQL
+receipts continue to use `manual`/`none` after the canonical decision selects build/source.
 
 ## Scale native acceptance from fixtures to a game-sized build
 
@@ -246,8 +289,110 @@ environment should retain provenance without forcing unrelated databases or quer
 Back the matrix with table-driven tests that change one dimension at a time and prove both required
 invalidation and required reuse across unrelated languages, projects, scopes, and query profiles.
 
-## Supply a pinned Joern/c2cpg closure
+## Joern bounded export and acceptance
 
-The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
-only after reviewing and locking one platform archive and its complete JDK/dependency closure, then
-add bounded CPG export fixtures and security probes. Do not put the full CPG into MCP responses.
+Done:
+
+- the pinned, reviewed, offline Joern/c2cpg runtime closure (`tool-joern`);
+- the independent `job_cpg_analysis`, which runs c2cpg per accepted C/C++ scope over the exact
+  accepted compile commands and retains each CPG as hash-identified, run-owned evidence;
+- the `noexec` `/tmp` zstd JNI fix in the image.
+
+The job still publishes a `BLOCKED` shard with zero observations per scope. Remaining work:
+
+- a bounded CPG/PDG exporter (a repository-owned `joern --script`; scripts compile and run fully
+  offline in the image);
+- the index contract and source mapping;
+- slicing;
+- exporter security probes;
+- live functional fixtures.
+
+Then replace the blocked shard with real observations. Also resolve the per-tool resource profile
+(Joern needs far more than 1 GiB at scale) and license attribution for JARs without embedded
+metadata. Do not put the full CPG into MCP responses.
+
+## Evaluate additional Joern language frontends
+
+The pinned `v4.0.630` archive is verified whole, but `tool-joern` installs only the core and
+`c2cpg`. The other thirteen frontend directories are excluded until a job needs them: `javasrc2cpg`,
+`jimple2cpg`, `kotlin2cpg`, `jssrc2cpg`, `pysrc2cpg`, `php2cpg`, `rubysrc2cpg`, `gosrc2cpg`,
+`csharpsrc2cpg`, `swiftsrc2cpg`, `rust2cpg`, `abap2cpg`, and `ghidra2cpg`. For each language that a
+job will consume:
+
+1. State the job and coverage the frontend serves, and why CodeQL or an existing producer does not
+   already cover it.
+2. Review the frontend's added JARs and any native AST generator, recording provenance, licenses,
+   and advisories in `containers/tools/joern/LICENSE.md`. The native AST generators are
+   `astgen-linux`, `SwiftAstGen-linux`, `goastgen-linux`, `dotnetastgen-linux`,
+   `rust_ast_gen-linux`, and `abapgen-linux`; `php2cpg` also bundles a PHP parser `.phar`.
+3. Prove that native AST generators and any interpreter dependency, such as a PHP runtime, run
+   offline as uid 10001 under the read-only, no-network, drop-all policy without writing outside
+   scratch.
+4. Add the paths to `[closure].include` in `containers/tools/joern/tool.toml`, regenerate
+   `inventory.json`, and update `tests/test_joern_tool.py`, which currently asserts that no other
+   frontend or ELF binary is installed.
+5. Add bounded-export fixtures and keep each language's coverage `unavailable` until they pass.
+
+Do not enable all frontends wholesale: that adds about 2 GB and six unreviewed native binaries.
+`ghidra2cpg` is binary analysis and belongs with the binary-analysis decomposition decision, not
+source CPG coverage.
+
+## Scale the clangd symbol index
+
+Done: the pinned `tool-clangd-indexer` closure, and the independent `job_cpp_symbol_index`. Per
+accepted C/C++ scope it runs clangd-indexer over the exact accepted compile commands. It then
+normalizes symbols with exact source locations, and aggregated call/reference edges between
+accepted symbols, into `analysis` shards with per-scope coverage and verified checkpoints. A live
+run against the real image indexed the fixture completely. Remaining work:
+
+- content-keyed, bounded TU batches with per-TU checkpoints, so Unreal-scale scopes fit the tool
+  output bound (index output above it is currently a named truncation gap);
+- symbols declared only in headers outside the accepted sources (SDK, engine, system) are counted,
+  not indexed; decide how header-only symbols are emitted once across scopes;
+- mount licensed MSVC and Windows SDK headers read-only for clang-cl commands;
+- a reviewed per-tool resource profile for large compilation databases.
+
+Resolve the open items in `containers/tools/clangd-indexer/LICENSE.md` first: confirming the LLVM
+source ref, and an advisory match for the LLVM binary.
+
+## Replace the Python build-capture tool wrapper with a static Go binary
+
+`containers/build-capture/tool-wrapper.py` runs for every `PATH`-resolved build tool (cc, c++, ld,
+ar, ninja, cmake and others). Measured cost, inside the executor's container boundary with
+`--seccomp-bpf` capture:
+
+- about 40 ms per call;
+- 45 calls added about 1.8 s to a 0.65 s fixture build;
+- about +9 s (+49%) on an 18 s zstd build.
+
+At AAA scale (tens of thousands of compiler and linker calls) that is tens of CPU-minutes per
+build. The wrapper also forces `python3` into every build image.
+
+1. First confirm the wrapper still earns its place. strace already records every exec's argv,
+   resolved executable and environment authoritatively. The wrapper's unique outputs are per-tool
+   stdout/stderr and tool-call records, which reconciliation treats as optional secondary
+   evidence. It also misses compilers invoked by absolute path, which Unreal's build tool does.
+2. If it stays, reimplement it as a static Go binary (`CGO_ENABLED=0`) with byte-identical
+   behaviour:
+   - call ordinal locking and the call limit;
+   - per-call record, stdout/stderr retention and envp redaction;
+   - `exec` of the real tool.
+3. Build it offline from a pinned Go toolchain image with locked modules (standard library only,
+   if possible). Install it through the capture assets; never commit a binary.
+4. Keep the tool-call record schema stable, and bump the capture identities so that changed
+   captures invalidate build checkpoints.
+5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
+   after.
+## Build the dataflow, contract, and deployment evidence lanes
+
+Implement the planned jobs and queries in
+[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
+starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
+calls, unmodeled externals, and path/depth limits must be published as gaps.
+
+## Acquire dynamic execution evidence
+
+Coverage profiles, sanitizer logs, fuzz corpora, and IAST traces are not yet available. Define
+either a hash-verified import of externally produced artifacts or a separately authorized,
+isolated execution job. Positive traces may support reachability; zero coverage is a gap and never
+refutes a claim.

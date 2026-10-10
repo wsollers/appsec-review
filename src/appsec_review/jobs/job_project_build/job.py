@@ -9,6 +9,12 @@ import shutil
 import time
 from typing import Any
 
+import appsec_review.applicability as applicability_contract
+from appsec_review.applicability import (
+    ApplicabilityAction, ProcessingFeature, decision_from_mapping,
+    evaluate_applicability, facts_from_build_unit, finalize_processing,
+    resolved_configuration_identity,
+)
 from appsec_review.container_runtime import (
     BuildContainerExecutor,
     CaptureScope,
@@ -172,19 +178,32 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
 
 def _probe_stream(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
     data = bytes(getattr(result, name))
-    path.write_bytes(data)
+    complete_file = getattr(result, f"{name}_file", None)
+    if isinstance(complete_file, Path):
+        if complete_file.resolve() != path.resolve():
+            shutil.copyfile(complete_file, path)
+    else:
+        path.write_bytes(data)
     try: path.chmod(0o600)
     except OSError: pass
     try: path.chmod(0o600)
     except OSError: pass
     raw_count = getattr(result, f"{name}_bytes", None)
-    count = len(data) if raw_count is None else int(raw_count)
-    truncated = bool(getattr(result, f"{name}_truncated", count > len(data)))
+    count = path.stat().st_size if isinstance(complete_file, Path) else (
+        len(data) if raw_count is None else int(raw_count))
+    truncated = False if isinstance(complete_file, Path) else bool(
+        getattr(result, f"{name}_truncated", count > len(data)))
     identity: dict[str, Any] = {
         "path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
-        "byte_count": count, "retained_byte_count": len(data), "capture_limit": limit,
+        "byte_count": count, "retained_byte_count": path.stat().st_size,
+        "capture_limit": None if isinstance(complete_file, Path) else limit,
         "truncated": truncated,
     }
+    if isinstance(complete_file, Path):
+        preview_truncated = bool(getattr(result, f"{name}_truncated", False))
+        identity.update({"storage": "complete-file",
+                         "preview_limit_bytes": len(data) if preview_truncated else limit,
+                         "preview_truncated": preview_truncated})
     tail = bytes(getattr(result, f"{name}_tail", b""))
     if truncated and tail:
         tail_path = path.with_name(path.name + ".tail")
@@ -231,8 +250,16 @@ def _capture_identity(unit: UnitContext, result: Any, *, build_unit_id: str,
     return dict(verified.identity), list(verified.gaps)
 
 
-def _probe_cache(unit: UnitContext, recipe_identity: str) -> Path:
-    return unit.job.metadata_root / "project-probes" / recipe_identity / "accepted.json"
+def _probe_cache(unit: UnitContext, recipe_identity: str,
+                 applicability: Mapping[str, Any] | None = None) -> Path:
+    capture_mode = (unit.job.config.build_capture.mode.value
+                    if unit.job.config.build_capture is not None else "required")
+    identity = hashlib.sha256(canonical_json({
+        "recipe_identity": recipe_identity,
+        "build_execution_capture": capture_mode,
+        "applicability": dict(applicability or {}),
+    })).hexdigest()
+    return unit.job.metadata_root / "project-probes" / identity / "accepted.json"
 
 
 def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=None,
@@ -247,7 +274,11 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     if not isinstance(image, Mapping) or image.get("terminal_status") != "SUCCEEDED":
         return {**base, "terminal_status": "BLOCKED", "probe_disposition": "BLOCKED",
                 "gaps": list(entry.get("gaps", ())) or ["project build image is unavailable"]}
-    recipe_identity, cache = str(image["recipe_identity"]), _probe_cache(unit, str(image["recipe_identity"]))
+    recipe_identity = str(image["recipe_identity"])
+    cache = _probe_cache(unit, recipe_identity, {
+        "facts": action.get("processing_facts"),
+        "decision": action.get("build_capture_decision"),
+    })
     with FileLock(cache.parent / "probe.lock"):
         if cache.is_file() and not bool(unit.job.config.settings["force_buildability_probe"]):
             prior = json.loads(cache.read_text(encoding="utf-8"))
@@ -267,6 +298,11 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     workspace = root / "workspace"
     _copy_source(unit, action, workspace)
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
+    # The pre-build hashes double as the capture's snapshot: unchanged files are never rehashed.
+    snapshot_files = {}
+    for relative, digest in before.items():
+        stat = (workspace / relative).stat()
+        snapshot_files[relative] = {"sha256": digest, "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
     profile = BuildProfile(str(action["family"]), str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
@@ -297,7 +333,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             capture_directory=root / "execution-capture" / f"command-{ordinal:03d}",
             capture_config=unit.job.config.build_capture,
             scope=CaptureScope(unit.job.run_id, "job_project_build", unit.job.attempt_id,
-                               build_unit_id, str(action["family"])))
+                               build_unit_id, str(action["family"])),
+            snapshot_files=snapshot_files)
         capture_identity, capture_gaps = _capture_identity(
             unit, result, build_unit_id=build_unit_id, family=str(action["family"]))
         gaps.extend(f"build command {ordinal} capture: {gap}" for gap in capture_gaps)
@@ -775,6 +812,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
+        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
         components = {str(item["component_id"]): str(item["root"])
                       for item in accepted.get("components", ())}
         action_by_component: dict[str, str] = {}
@@ -809,9 +847,24 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                 }
             resolved_actions.append({**dict(item), **recipe_fields,
                 "build_dependencies": sorted(dependencies[str(item["build_unit_id"])])})
-        actions = resolved_actions
-        return {"actions": actions, "scanner_selections": accepted["scanner_selections"], "action_count": len(actions),
-                "terminal_status": "SUCCEEDED" if actions else "NOT_APPLICABLE", "gaps": []}
+        decisions = []
+        actions = []
+        gaps = []
+        policy = unit.job.config.build_capture.mode.value
+        for action in resolved_actions:
+            facts = facts_from_build_unit(action)
+            decision = evaluate_applicability(
+                feature=ProcessingFeature.BUILD_CAPTURE, policy=policy, facts=facts,
+                configuration_sha256=configuration_sha256)
+            decisions.append(decision.as_dict())
+            if decision.action is ApplicabilityAction.RUN:
+                actions.append({**action, "processing_facts": facts.as_dict(),
+                                "build_capture_decision": decision.as_dict()})
+            elif decision.action is ApplicabilityAction.GAP:
+                gaps.append(f"{decision.project_id}: {decision.reason_code.value}")
+        return {"actions": actions, "scanner_selections": accepted["scanner_selections"],
+                "action_count": len(actions), "processing_decisions": decisions,
+                "terminal_status": "GAP" if gaps else "SUCCEEDED", "gaps": gaps}
 
     def image_handler(family: str):
         def execute(unit: UnitContext) -> Mapping[str, Any]:
@@ -968,6 +1021,10 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                          "probe_identity": hashlib.sha256(canonical_json(receipt)).hexdigest(),
                          "build_dependencies": list(entry["action"].get("build_dependencies", ())),
                          "probe_disposition": receipt["probe_disposition"],
+                         "markers": list(entry["action"].get("markers", ())),
+                         "descriptor_package": dict(entry["action"].get("descriptor_package", {})),
+                         "processing_facts": dict(entry["action"].get("processing_facts", {})),
+                         "build_capture_decision": dict(entry["action"].get("build_capture_decision", {})),
                          "capabilities": list(_BUILD_CAPABILITIES[family])}
                 dispatches.append(value)
                 unit.job.events.write("LANGUAGE_BUILD_WORKFLOW_DISPATCHED", unit_id=unit.unit_id, family=family,
@@ -986,17 +1043,35 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
         builds = {family: unit.output(f"build_dispatch.{family}") for family in BUILD_FAMILIES}
         receipts = [value for family in BUILD_FAMILIES for value in probes[family]["receipts"]]
         gaps = [gap for collection in (images, probes, builds) for value in collection.values() for gap in value["gaps"]]
+        planned_decisions = [decision_from_mapping(item) for item in
+                             unit.output("plan.load_recipes")["processing_decisions"]]
+        receipts_by_unit = {str(item.get("build_unit_id")): item for item in receipts}
+        processing_decisions = []
+        for decision in planned_decisions:
+            receipt = receipts_by_unit.get(decision.project_id)
+            if decision.action is ApplicabilityAction.RUN:
+                successful = bool(receipt and receipt.get("terminal_status") == "SUCCEEDED")
+                decision = finalize_processing(
+                    decision, succeeded=successful,
+                    evidence_complete=bool(receipt and not receipt.get("gaps")),
+                    toolchain_available=bool(receipt))
+            processing_decisions.append(decision.as_dict())
+        processing_gaps = [f"{item['project_id']}: {item['reason_code']}"
+                           for item in processing_decisions if item.get("disposition") == "GAP"]
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint, "images": images,
                     "probes": probes, "probe_receipts": receipts,
                     "static_dispatches": [item for value in static.values() for item in value["dispatches"]],
                     "build_dispatches": [item for value in builds.values() for item in value["dispatches"]],
                     "probe_artifact_count": sum(len(item["artifacts"]) for item in receipts),
-                    "gaps": list(dict.fromkeys(gaps))}
+                    "processing_decisions": processing_decisions,
+                    "gaps": list(dict.fromkeys([*gaps, *processing_gaps]))}
         artifact = _artifact(unit, "accepted-project-build-dispatch.json", document)
         return {"artifact": artifact, "probe_count": len(receipts),
                 "probe_reused_count": sum(item.get("probe_disposition") == "REUSED" for item in receipts),
                 "static_dispatch_count": len(document["static_dispatches"]),
                 "build_dispatch_count": len(document["build_dispatches"]), "gaps": document["gaps"],
+                "processing_decisions": processing_decisions,
+                "dispositions": processing_decisions,
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
     units: list[Unit] = [Unit("plan.load_recipes", plan)]
@@ -1012,6 +1087,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     Path(__file__).parents[2] / "container_runtime" / "build_executor.py",
                     Path(__file__).parents[2] / "container_runtime" / "project_images.py")
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) +
+                                    Path(applicability_contract.__file__).read_bytes() +
                                     (b"injected" if executor_factory or image_resolver_factory or infer
                                      else b"docker")).hexdigest()
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,

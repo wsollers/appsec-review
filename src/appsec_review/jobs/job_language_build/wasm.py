@@ -23,7 +23,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 
 RECEIPT_SCHEMA = "appsec-review/wasm-build-receipt/1"
 EXECUTOR_IDENTITY = "appsec-review/wasm-output-family-executor/1"
-CAPTURE_IDENTITY = "appsec-review/protected-build-capture/2"
+CAPTURE_IDENTITY = "appsec-review/protected-build-capture/3"
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _WASM_MAGIC = b"\x00asm"
 _TOOL_KINDS = {
@@ -51,12 +51,20 @@ def _runtime_settings(unit: UnitContext) -> dict[str, Any]:
     wasm = unit.job.config.settings.get("wasm")
     if not isinstance(wasm, Mapping):
         raise WasmIntegrityError("language-build WASM settings are unavailable")
+    overrides = unit.job.config.settings.get("compiler_artifact_collection_overrides", {})
+    capture = unit.job.config.settings.get("build_capture", {})
     return {
         "command_timeout_seconds": unit.job.config.settings["command_timeout_seconds"],
         "stream_limit_bytes": unit.job.config.settings["output_bytes"],
         "artifact_count_limit": unit.job.config.settings["artifact_count_limit"],
         "workspace_file_limit": wasm["workspace_file_limit"],
         "producers": wasm["producers"],
+        "processing_modes": {
+            "build_execution_capture": capture.get("mode", "required"),
+            "compiler_artifact_collection": overrides.get(
+                "wasm", unit.job.config.settings.get(
+                    "compiler_artifact_collection_mode", "required")),
+        },
     }
 
 
@@ -242,6 +250,7 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], produ
                       "image_id": image["image_id"]},
         "executor": EXECUTOR_IDENTITY, "capture": CAPTURE_IDENTITY,
         "capture_limit": settings["stream_limit_bytes"], "artifact_limit": settings["artifact_count_limit"],
+        "processing_modes": settings["processing_modes"],
         "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"],
     })).hexdigest()
 

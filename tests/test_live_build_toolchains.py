@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import hashlib
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,15 +21,17 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.jobs.job_language_build import (
-    build_job as build_language, dotnet, jvm, load_accepted_language_build, node, php, python, rust, wasm,
+    build_job as build_language, dotnet, go, jvm, load_accepted_language_build, native, node, php,
+    python, rust, wasm,
 )
 from appsec_review.jobs.job_language_build.job import _catalog, _kind
-from appsec_review.jobs.job_project_build.job import _probe_environment
+from appsec_review.jobs.job_project_build.job import _normalized_argv, _probe_environment
+from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.inference import ModelResult
-from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
+from appsec_review.inference import ModelResult, check_models, infer
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
@@ -53,8 +56,10 @@ CASES = (
     LiveBuildCase("native", "native", (
         ("cmake", "-S", ".", "-B", "build", "-DCMAKE_BUILD_TYPE=Debug"),
         ("cmake", "--build", "build", "--verbose"),
+        ("clang++", "-emit-ast", "-c", "main.cpp", "-o", "build/main.ast"),
         ("clang++", "-S", "-emit-llvm", "main.cpp", "-o", "build/main.ll"),
-    ), {}, ("build/compile_commands.json", "build/libfixture_helper.a", "build/fixture_native", "build/main.ll")),
+    ), {}, ("build/compile_commands.json", "build/libfixture_helper.a", "build/fixture_native",
+            "build/main.ast", "build/main.ll", "build/fixture_native.map")),
     LiveBuildCase("rust", "rust", (("cargo", "build", "--verbose"),),
                   {"CARGO_HOME": "/tmp/cargo", "CARGO_INCREMENTAL": "0"},
                   ("target/debug/appsec-fixture-rust", "Cargo.lock")),
@@ -111,10 +116,12 @@ def _assert_catalog_contract(case: LiveBuildCase, root: Path) -> None:
         assert _kind(root / "build/compile_commands.json") == "compile-database"
         assert _kind(root / "build/libfixture_helper.a") == "static-library"
         assert _kind(root / "build/fixture_native") == "executable"
+        assert _kind(root / "build/main.ast") == "clang-ast"
         assert _kind(root / "build/main.ll") == "llvm-bitcode"
         artifacts, _gaps = _catalog(root, root, {}, 10000, build_unit_id)
         assert {item["kind"] for item in artifacts} >= {
-            "compile-database", "static-library", "executable", "llvm-bitcode"}
+            "compile-database", "static-library", "executable", "clang-ast", "llvm-bitcode",
+            "debug-information", "link-map"}
     elif case.family == "rust":
         executable = root / "target/debug/appsec-fixture-rust"
         assert rust.artifact_kind(executable, executable.relative_to(root).as_posix(), {}) == "executable"
@@ -314,7 +321,7 @@ def test_live_cpp_project_build_accepts_hash_verified_execution_capture(tmp_path
     assert compiler_seen, "no C++ compiler argv was retained in syscall evidence"
 
 
-@pytest.mark.parametrize("case", CASES[1:], ids=lambda case: f"captured-{case.family}")
+@pytest.mark.parametrize("case", CASES, ids=lambda case: f"captured-{case.family}")
 def test_live_language_build_syscalls_are_captured_in_standard_records(
         tmp_path: Path, case: LiveBuildCase) -> None:
     config = load_config(ROOT / "appsec-review.toml")
@@ -346,6 +353,8 @@ def test_live_language_build_syscalls_are_captured_in_standard_records(
         assert record["events"]["counts"]["process_exec"] > 0
         assert record["tool_calls"]["retained"] > 0
         assert record["tool_calls"]["capped"] is False
+        if case.family == "dotnet" and ordinal == 1:
+            assert record["events"]["counts"]["connect"] > 0
     for relative in case.expected:
         artifact = project / relative
         assert artifact.is_file() and artifact.stat().st_size > 0
@@ -437,6 +446,373 @@ def test_live_maven_project_image_can_fill_old_plugin_gaps_in_writable_runtime_c
 SYNTHETIC_SECRET = "e7322523fb86ed64c836a979cf8465fbd436378c653c1db38f9ae87bc62a6fd5"
 
 
+class _NativeFixtureRecipeModel:
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            if unit["family"] != "native":
+                continue
+            root = unit["root"]
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "native", "source_dir": root, "build_dir": f"{root}/build",
+                "system_packages": [], "environment": {},
+                "dependency_files": [f"{root}/CMakeLists.txt"],
+                "configure_commands": [["cmake", "-S", ".", "-B", "build",
+                                        "-DCMAKE_BUILD_TYPE=Debug",
+                                        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]],
+                "build_commands": [
+                    ["cmake", "--build", "build", "--verbose"],
+                    ["clang++", "-emit-ast", "-c", "main.cpp", "-o", "build/main.ast"],
+                    ["clang++", "-S", "-emit-llvm", "main.cpp", "-o", "build/main.ll"],
+                ],
+                "expected_outputs": [f"{root}/build"], "network_required": False,
+                "reason": "fixed reviewed native capture fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+@pytest.mark.skipif(
+    os.environ.get("APPSEC_RUN_LIVE_INFERENCE") != "1",
+    reason="requires the configured authenticated model transport",
+)
+def test_live_configured_model_infers_valid_native_recipe_that_builds(tmp_path: Path) -> None:
+    """Inference is verified separately; captured acceptance always uses the fixed recipe above."""
+    _profile("native")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "native", target / "native")
+    fingerprint = source_fingerprint(target)
+    planned = GraphRunner(config, [build_intake(check_models=check_models), build_catalog(),
+        build_plan(infer=infer)]).run(target_root=target, source_fingerprint=fingerprint)
+    assert planned["status"] == "SUCCEEDED", planned
+    run_id = planned["run_id"]
+    plan = load_accepted_plan(config.runtime.runs_dir / run_id)
+    action = next(item for item in plan["build_topology"]["build_actions"]
+                  if item["family"] == "native")
+    recipe = action["recipe"]
+    unit = {"build_unit_id": action["build_unit_id"], "family": action["family"],
+            "root": action["root"], "build_system": action["build_system"],
+            "markers": [{"path": path} for path in recipe["dependency_files"]],
+            "descriptor_package": {"documents": [
+                {"path": path} for path in recipe["dependency_files"]]}}
+    assert validate_build_recipe(recipe, unit) == []
+
+    base = _profile("native")
+    image, _stdout, _stderr = ProjectImageResolver(
+        metadata_root=tmp_path / "metadata", target_root=target, timeout_seconds=900,
+    ).resolve({**recipe, "build_system": action["build_system"]}, base)
+    workspace = tmp_path / "workspace"
+    shutil.copytree(target, workspace)
+    executor = BuildContainerExecutor(
+        BuildProfile("native", image.image_tag, image.image_id, base.user),
+        timeout_seconds=900, output_bytes=8 * 1024 * 1024)
+    executor.resolve()
+    for raw in [*recipe["configure_commands"], *recipe["build_commands"]]:
+        result = executor.execute(
+            _normalized_argv(recipe, raw), workspace=workspace,
+            working_directory=recipe["source_dir"], environment=_probe_environment(recipe))
+        detail = ((result.stdout_tail or result.stdout) + b"\n" +
+                  (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+        assert not result.timed_out and result.exit_code == 0, detail
+    assert any(path.is_file() and path.name == "fixture_native"
+               for path in workspace.rglob("fixture_native"))
+
+
+def test_live_native_language_build_accepts_syscall_authoritative_capture(tmp_path: Path) -> None:
+    _profile("native")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "native", target / "native")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        infer=_NativeFixtureRecipeModel().complete)]).run(
+            target_root=target, source_fingerprint=fingerprint)
+    run_id = upstream["run_id"]
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert project["status"] == "SUCCEEDED", project
+    outcome = GraphRunner(config, [build_language()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "SUCCEEDED", outcome
+
+    run_root = config.runtime.runs_dir / run_id
+    receipt = next(item for item in load_accepted_language_build(run_root)["receipts"]
+                   if item["family"] == "native")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["capture_identity"] == native.CAPTURE_IDENTITY
+    provenance = receipt["capture_provenance"]
+    assert provenance["complete"] is True and provenance["unreconciled_tool_calls"] == 0
+    assert provenance["envp_events"] > 0
+    assert set(provenance["observed_tool_kinds"]) >= {
+        "build-driver", "compiler", "linker-driver", "archiver"}
+
+    kinds = {item["kind"] for item in receipt["artifacts"]}
+    assert kinds >= {"compile-database", "object", "static-library", "executable",
+                     "debug-information", "link-map"}
+    executable = next(item for item in receipt["artifacts"] if item["kind"] == "executable")
+    assert executable["loader_dependency_status"] == "resolved"
+    assert executable["loader_dependencies"] and executable["loader_interpreter"]
+    assert receipt["link_database"]["relationship_count"] >= 1
+    assert all(item["mapping"].startswith("syscall-process-exec")
+               for item in receipt["tool_invocations"])
+    assert all(item["evidence"]["process_exec"]["count"] >= 1
+               for item in receipt["tool_invocations"])
+
+    gitleaks = load_catalog(ROOT).tool("tool-gitleaks")
+    for ordinal, command in enumerate(receipt["commands"], 1):
+        identity = command["execution_capture"]
+        assert identity["complete"] is True and identity["envp_captured"] is True
+        assert "connect" in identity["collector"]["event_kinds"]
+        assert identity["events"]["counts"]["process_exec"] > 0
+        for member in (identity, identity["events"], identity["secret_findings"],
+                       identity["secret_scan"]["execution"], identity["secret_scan"]["report"]):
+            assert file_sha256(run_root / member["path"]) == member["sha256"]
+        execution = json.loads((run_root / identity["secret_scan"]["execution"]["path"]).read_text())
+        assert execution["tool_id"] == "tool-gitleaks" and execution["version"] == gitleaks.version
+        record_path = run_root / identity["path"]
+        assert not tuple(record_path.parent.glob("trace*"))
+        assert not (record_path.parent / ".secret-scan-input").exists()
+        for stream_name in ("stdout", "stderr"):
+            stream = command[stream_name]
+            path = run_root / stream["path"]
+            assert stream["storage"] == "complete-file" and stream["truncated"] is False
+            assert stream["capture_limit_bytes"] is None
+            assert stream["captured_bytes"] == stream["total_bytes"] == path.stat().st_size
+            assert file_sha256(path) == stream["sha256"]
+    assert not tuple(run_root.rglob("trace.[0-9]*"))
+
+
+class _GoFixtureRecipeModel:
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            if unit["family"] != "go":
+                continue
+            root = unit["root"]
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1",
+                "build_unit_id": unit["build_unit_id"],
+                "image_profile": "go",
+                "source_dir": root,
+                "build_dir": f"{root}/build",
+                "system_packages": [],
+                "environment": {},
+                "dependency_files": [f"{root}/go.mod"],
+                "configure_commands": [],
+                "build_commands": [["go", "build", "-o", "build/appsec-fixture-go", "."]],
+                "expected_outputs": [f"{root}/build/appsec-fixture-go"],
+                "network_required": False,
+                "reason": "fixed live Go capture fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+def test_live_go_language_build_accepts_syscall_authoritative_capture(tmp_path: Path) -> None:
+    _profile("go")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+                           encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "go", target / "go")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        infer=_GoFixtureRecipeModel().complete)]).run(
+            target_root=target, source_fingerprint=fingerprint)
+    run_id = upstream["run_id"]
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert project["status"] == "SUCCEEDED", project
+    outcome = GraphRunner(config, [build_language()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "SUCCEEDED", outcome
+
+    run_root = config.runtime.runs_dir / run_id
+    receipt = next(item for item in load_accepted_language_build(run_root)["receipts"]
+                   if item["family"] == "go")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["capture_identity"] == go.CAPTURE_IDENTITY
+    provenance = receipt["capture_provenance"]
+    assert provenance["complete"] is True and provenance["unreconciled_tool_calls"] == 0
+    assert provenance["envp_events"] > 0
+    assert set(provenance["observed_tool_kinds"]) >= {"build-driver", "compiler", "linker"}
+    assert receipt["package_relationships"]
+    assert receipt["build_metadata"]
+    assert {item["kind"] for item in receipt["artifacts"]} >= {"executable"}
+    assert all(item["mapping"].startswith("syscall-process-exec")
+               for item in receipt["tool_invocations"])
+    assert all(item["evidence"]["process_exec"]["count"] >= 1
+               for item in receipt["tool_invocations"])
+    for command in receipt["commands"]:
+        identity = command["execution_capture"]
+        assert identity["complete"] is True and identity["envp_captured"] is True
+        assert identity["scope"]["family"] == "go"
+        assert file_sha256(run_root / identity["path"]) == identity["sha256"]
+        for stream_name in ("stdout", "stderr"):
+            stream = command[stream_name]
+            retained = run_root / stream["path"]
+            assert stream["storage"] == "complete-file" and stream["truncated"] is False
+            assert stream["captured_bytes"] == stream["total_bytes"] == retained.stat().st_size
+            assert file_sha256(retained) == stream["sha256"]
+        assert not tuple((run_root / identity["path"]).parent.glob("trace*"))
+
+
+class _DotnetFixtureRecipeModel:
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            if unit["family"] != "dotnet":
+                continue
+            root = unit["root"]
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "dotnet", "source_dir": root, "build_dir": f"{root}/obj",
+                "system_packages": [], "environment": {"DOTNET_NOLOGO": "1"},
+                "dependency_files": [f"{root}/appsec-fixture.csproj"],
+                "configure_commands": [["dotnet", "restore", "appsec-fixture.csproj"]],
+                "build_commands": [["dotnet", "build", "appsec-fixture.csproj", "--no-restore",
+                                    "--verbosity", "diagnostic"]],
+                "expected_outputs": [f"{root}/bin", f"{root}/obj"], "network_required": True,
+                "reason": "fixed live .NET capture fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+@pytest.mark.skipif(
+    os.environ.get("APPSEC_RUN_LIVE_INFERENCE") != "1",
+    reason="requires the configured authenticated model transport",
+)
+def test_live_configured_model_infers_valid_dotnet_recipe_that_builds(tmp_path: Path) -> None:
+    """Keep recipe inference independent from build interception and language capture."""
+    _profile("dotnet")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "dotnet", target / "dotnet")
+    fingerprint = source_fingerprint(target)
+
+    planned = GraphRunner(
+        config,
+        [build_intake(check_models=check_models), build_catalog(), build_plan(infer=infer)],
+    ).run(
+        target_root=target, source_fingerprint=fingerprint)
+    assert planned["status"] == "SUCCEEDED", planned
+    run_id = planned["run_id"]
+    plan_path = config.runtime.runs_dir / run_id
+    from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
+    plan = load_accepted_plan(plan_path)
+    assert plan["model"]["status"] == "ACCEPTED", plan["coverage_gaps"]
+    actions = [item for item in plan["build_topology"]["build_actions"]
+               if item["family"] == "dotnet"]
+    assert len(actions) == 1
+    # Planning publishes a validated recipe but never grants execution authority itself.
+    assert actions[0]["executable"] is False and actions[0]["requires_inference"] is False
+    recipe = actions[0]["recipe"]
+    assert recipe["image_profile"] == "dotnet" and recipe["network_required"] is True
+    assert recipe["build_commands"] and all(command[0] == "dotnet"
+                                               for command in recipe["build_commands"])
+
+    built = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert built["status"] == "SUCCEEDED", built
+    accepted = load_accepted_builds(plan_path)
+    receipt = next(item for item in accepted["probe_receipts"] if item["family"] == "dotnet")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["probe_disposition"] == "PROBED"
+    dispatch = next(item for item in accepted["build_dispatches"] if item["family"] == "dotnet")
+    assert dispatch["recipe_provenance"] == "accepted-inference-default-image"
+    assert any(item["path"].endswith("appsec-fixture.dll") for item in receipt["artifacts"])
+
+
+def test_live_dotnet_language_build_accepts_syscall_authoritative_capture(tmp_path: Path) -> None:
+    _profile("dotnet")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "dotnet", target / "dotnet")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        infer=_DotnetFixtureRecipeModel().complete)]).run(
+            target_root=target, source_fingerprint=fingerprint)
+    run_id = upstream["run_id"]
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert project["status"] == "SUCCEEDED", project
+    outcome = GraphRunner(config, [build_language()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "SUCCEEDED", outcome
+
+    run_root = config.runtime.runs_dir / run_id
+    receipt = next(item for item in load_accepted_language_build(run_root)["receipts"]
+                   if item["family"] == "dotnet")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["capture_identity"] == dotnet.CAPTURE_IDENTITY
+    assert receipt["capture_provenance"]["complete"] is True
+    assert receipt["capture_provenance"]["unreconciled_tool_calls"] == 0
+    assert receipt["capture_provenance"]["envp_events"] > 0
+    assert set(receipt["capture_provenance"]["observed_tool_kinds"]) >= {"build-driver", "compiler"}
+    assert receipt["project_topology"][0]["package_references"] == [
+        {"name": "Newtonsoft.Json", "version": "12.0.1"}]
+
+    artifacts = {item["workspace_path"]: item for item in receipt["artifacts"]}
+    for relative, kind in (
+        ("dotnet/bin/Debug/net8.0/appsec-fixture.dll", "managed-assembly"),
+        ("dotnet/bin/Debug/net8.0/appsec-fixture.pdb", "debug-information"),
+        ("dotnet/bin/Debug/net8.0/appsec-fixture.deps.json", "dependency-manifest"),
+        ("dotnet/bin/Debug/net8.0/appsec-fixture.runtimeconfig.json", "runtime-configuration"),
+    ):
+        assert artifacts[relative]["kind"] == kind
+        assert file_sha256(run_root / artifacts[relative]["path"]) == artifacts[relative]["sha256"]
+    assert any(item["kind"] == "generated-source" for item in receipt["artifacts"])
+    assert not any("execution-capture" in item["path"] for item in receipt["artifacts"])
+
+    compiler_events = []
+    gitleaks = load_catalog(ROOT).tool("tool-gitleaks")
+    for ordinal, command in enumerate(receipt["commands"], 1):
+        assert command["exit_code"] == 0 and command["timed_out"] is False
+        identity = command["execution_capture"]
+        assert identity["complete"] is True and identity["envp_captured"] is True
+        assert identity["scope"]["family"] == "dotnet"
+        assert identity["path"].endswith(f"execution-capture/command-{ordinal:03d}/record.json")
+        for member in (identity, identity["events"], identity["secret_findings"],
+                       identity["secret_scan"]["execution"], identity["secret_scan"]["report"]):
+            assert file_sha256(run_root / member["path"]) == member["sha256"]
+        execution = json.loads((run_root / identity["secret_scan"]["execution"]["path"]).read_text())
+        assert execution["tool_id"] == "tool-gitleaks" and execution["version"] == gitleaks.version
+        record_path = run_root / identity["path"]
+        assert json.loads(record_path.read_text())["coverage"] == {"complete": True, "gaps": []}
+        assert not tuple(record_path.parent.glob("trace*"))
+        for stream_name in ("stdout", "stderr"):
+            stream = command[stream_name]
+            retained = run_root / stream["path"]
+            assert stream["storage"] == "complete-file" and stream["truncated"] is False
+            assert stream["capture_limit_bytes"] is None
+            assert stream["captured_bytes"] == stream["total_bytes"] == retained.stat().st_size
+            assert file_sha256(retained) == stream["sha256"]
+            assert retained.read_bytes() == (record_path.parent / stream_name).read_bytes()
+        compiler_events.extend(event for event in _capture_events(run_root, command)
+                               if event["kind"] == "process_exec" and event["result"] == 0 and
+                               any(Path(value).name.lower() == "csc.dll"
+                                   for value in event.get("argv", ())))
+    assert compiler_events and all(event["envp_captured"] and event["envp"] for event in compiler_events)
+    rows = receipt["tool_invocations"]
+    assert {item["tool_kind"] for item in rows} >= {"build-driver", "compiler"}
+    assert all(item["mapping"].startswith("syscall-process-exec") for item in rows)
+    assert all(item["evidence"]["process_exec"]["count"] >= 1 for item in rows)
+    assert all("argv" not in item and len(item["argv_sha256"]) == 64 for item in rows)
+    assert not tuple(run_root.rglob("trace.[0-9]*"))
+
+
 class _RustFixtureRecipeModel:
     def complete(self, request, *, timeout_seconds):
         recipes = []
@@ -453,6 +829,56 @@ class _RustFixtureRecipeModel:
             })
         return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
                             "build_recipes": recipes})
+
+
+@pytest.mark.skipif(
+    os.environ.get("APPSEC_RUN_LIVE_INFERENCE") != "1",
+    reason="requires the configured authenticated model transport",
+)
+def test_live_configured_model_infers_valid_rust_recipe_that_builds(tmp_path: Path) -> None:
+    """Recipe inference is an independent gate and never supplies capture evidence."""
+    _profile("rust")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "rust", target / "rust")
+    fingerprint = source_fingerprint(target)
+
+    planned = GraphRunner(
+        config,
+        [build_intake(check_models=check_models), build_catalog(), build_plan(infer=infer)],
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    assert planned["status"] == "SUCCEEDED", planned
+    run_id = planned["run_id"]
+    run_root = config.runtime.runs_dir / run_id
+    plan = load_accepted_plan(run_root)
+    assert plan["model"]["status"] == "ACCEPTED", plan["coverage_gaps"]
+    actions = [item for item in plan["build_topology"]["build_actions"]
+               if item["family"] == "rust"]
+    assert len(actions) == 1
+    assert actions[0]["executable"] is False and actions[0]["requires_inference"] is False
+    recipe = actions[0]["recipe"]
+    unit = {"build_unit_id": actions[0]["build_unit_id"], "family": "rust",
+            "root": actions[0]["root"], "build_system": actions[0]["build_system"],
+            "markers": [{"path": path} for path in recipe["dependency_files"]],
+            "descriptor_package": {"documents": [
+                {"path": path} for path in recipe["dependency_files"]]}}
+    assert validate_build_recipe(recipe, unit) == []
+    assert recipe["image_profile"] == "rust" and recipe["network_required"] is True
+    assert recipe["build_commands"] and all(command[:2] == ["cargo", "build"]
+                                               for command in recipe["build_commands"])
+
+    built = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert built["status"] == "SUCCEEDED", built
+    accepted = load_accepted_builds(run_root)
+    receipt = next(item for item in accepted["probe_receipts"] if item["family"] == "rust")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["probe_disposition"] == "PROBED"
+    dispatch = next(item for item in accepted["build_dispatches"] if item["family"] == "rust")
+    assert dispatch["recipe_provenance"] == "accepted-inference-default-image"
+    assert any(item["path"].endswith("appsec-fixture-rust") for item in receipt["artifacts"])
 
 
 class _SecretEnvironmentExecutor(BuildContainerExecutor):

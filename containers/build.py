@@ -106,6 +106,12 @@ def validate(catalog: dict[str, Any]) -> list[str]:
             if not SHA256.fullmatch(digest) or digest != item.get("upstream_manifest_sha256"):
                 errors.append(f"{image_id}: base manifest digest mismatch")
         context = safe_path(item["context"])
+        for name, extra in sorted(item.get("build_contexts", {}).items()):
+            try:
+                if not SAFE_ID.fullmatch(name) or not safe_path(extra).is_dir():
+                    errors.append(f"{image_id}: build context {name!r} must be a repository directory")
+            except ValueError:
+                errors.append(f"{image_id}: build context {name!r} escapes repository")
         dockerfile = context / item["dockerfile"]
         if not dockerfile.is_file():
             errors.append(f"{image_id}: missing {dockerfile.relative_to(ROOT)}")
@@ -128,6 +134,8 @@ def validate(catalog: dict[str, Any]) -> list[str]:
                     prefix = f"{image_id}: artifact {index}"
                     if not str(artifact.get("url", "")).startswith("https://"):
                         errors.append(f"{prefix} needs an HTTPS source")
+                    if "/latest/" in str(artifact.get("url", "")):
+                        errors.append(f"{prefix} must not use a moving latest URL")
                     if not SHA256.fullmatch(str(artifact.get("sha256", ""))):
                         errors.append(f"{prefix} needs sha256")
                     if not isinstance(artifact.get("bytes"), int) or artifact["bytes"] <= 0:
@@ -168,6 +176,47 @@ def selected_ids(args: argparse.Namespace, catalog: dict[str, Any]) -> list[str]
     return ids
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def fetch_artifact(artifact: dict[str, Any], context: Path, log, opener=urllib.request.urlopen) -> str:
+    """Fetch one locked artifact into the build context, accepting it only at its exact size and SHA-256."""
+    target = (context / artifact["path"]).resolve()
+    target.relative_to(context.resolve())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    expected_hash = artifact["sha256"]
+    expected_size = artifact["bytes"]
+    if target.is_file() and target.stat().st_size == expected_size and file_sha256(target) == expected_hash:
+        log.write(f"CURRENT {artifact['path']}\n")
+        return "current"
+    temporary = target.with_suffix(target.suffix + ".partial")
+    temporary.unlink(missing_ok=True)
+    request = urllib.request.Request(artifact["url"], headers={"User-Agent": "appsec-review-container-builder/1"})
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with opener(request, timeout=120) as response, temporary.open("wb") as stream:
+            while chunk := response.read(1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+                if size > expected_size:
+                    break
+                stream.write(chunk)
+        if size != expected_size or digest.hexdigest() != expected_hash:
+            raise RuntimeError(f"asset verification failed: {artifact['url']}")
+        temporary.replace(target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    log.write(f"FETCHED {artifact['path']} {size} {expected_hash}\n")
+    return "fetched"
+
+
 def fetch_one(item: dict[str, Any], log) -> None:
     lock_name = item.get("assets_lock")
     if not lock_name:
@@ -175,31 +224,7 @@ def fetch_one(item: dict[str, Any], log) -> None:
     context = safe_path(item["context"])
     lock = json.loads(safe_path(lock_name).read_text(encoding="utf-8"))
     for artifact in lock.get("artifacts", []):
-        target = (context / artifact["path"]).resolve()
-        target.relative_to(context.resolve())
-        target.parent.mkdir(parents=True, exist_ok=True)
-        expected_hash = artifact["sha256"]
-        expected_size = artifact["bytes"]
-        if target.is_file() and target.stat().st_size == expected_size:
-            actual = hashlib.sha256(target.read_bytes()).hexdigest()
-            if actual == expected_hash:
-                log.write(f"CURRENT {artifact['path']}\n")
-                continue
-        temporary = target.with_suffix(target.suffix + ".partial")
-        temporary.unlink(missing_ok=True)
-        request = urllib.request.Request(artifact["url"], headers={"User-Agent": "appsec-review-container-builder/1"})
-        digest = hashlib.sha256()
-        size = 0
-        with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as stream:
-            while chunk := response.read(1024 * 1024):
-                digest.update(chunk)
-                size += len(chunk)
-                stream.write(chunk)
-        if size != expected_size or digest.hexdigest() != expected_hash:
-            temporary.unlink(missing_ok=True)
-            raise RuntimeError(f"asset verification failed: {artifact['url']}")
-        temporary.replace(target)
-        log.write(f"FETCHED {artifact['path']} {size} {expected_hash}\n")
+        fetch_artifact(artifact, context, log)
 
 
 def docker_binary() -> str:
@@ -233,6 +258,8 @@ def build_one(item: dict[str, Any], run_dir: Path) -> dict[str, Any]:
                 str(context / item["dockerfile"]), "--tag", item["tag"]]
         for key, value in sorted(item.get("build_args", {}).items()):
             argv += ["--build-arg", f"{key}={value}"]
+        for name, extra in sorted(item.get("build_contexts", {}).items()):
+            argv += ["--build-context", f"{name}={safe_path(extra)}"]
         argv.append(str(context))
         completed = run_logged(argv, build_log, 1800)
         if completed.returncode != 0:
@@ -444,6 +471,10 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
         "tool-cppcheck": ("cppcheck", ["/opt/cppcheck/bin/cppcheck", "--enable=warning,style,performance,portability",
                               "--xml", "--xml-version=2", "/workspace/vulnerable.cpp"],
                              {0}, None, "arrayIndexOutOfBounds"),
+        "tool-clangd-indexer": ("clangd-indexer", ["/opt/clangd/clangd_23.1.0/bin/clangd-indexer",
+                                   "--executor=all-TUs", "--format=yaml",
+                                   "/workspace/compile_commands.json"],
+                                  {0}, None, "Name:            clang_cl_entry"),
         "tool-pmd": ("pmd", ["/opt/pmd/bin/pmd", "check", "--no-cache", "--no-progress",
                        "--format", "json", "--report-file", "/scratch/result.json", "--rulesets",
                        "/rules/java-security.xml", "--dir", "/workspace/Vulnerable.java"],

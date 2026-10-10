@@ -88,6 +88,10 @@ class ContainerSimulation:
             self._write(self._pid, "exit_group(0)", "?")
         return self._pid
 
+    def syscall(self, call: str, result: str, *, pid: int | None = None) -> None:
+        """Record one raw syscall row exactly as ``strace -y`` prints it."""
+        self._write(self._pid if pid is None else pid, call, result)
+
     def open(self, path: str) -> None:
         self._write(self._pid, f"openat(AT_FDCWD, {_quoted(path)}, O_RDONLY|O_CLOEXEC)", "3")
 
@@ -175,7 +179,7 @@ def simulated_executor(profile: BuildProfile, behavior: Behavior, *, scanner: Sc
         entrypoint = argv.index("--entrypoint")
         if argv[entrypoint + 1] != "/bin/sh":
             raise AssertionError(f"build command ran without execution capture: {argv[entrypoint + 1]}")
-        _image, _driver, logical_capture, _strings, call_limit, _streams, _wrappers, envp, *command = \
+        _image, _driver, logical_capture, _strings, call_limit, _wrappers, envp, *command = \
             argv[entrypoint + 2:]
         workspace = bound["/workspace"]
         capture_root = bound["/capture"] if logical_capture == "/capture" else \

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -15,7 +16,30 @@ from typing import Any
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.storage import atomic_json, canonical_json
 from .catalog import load_catalog
-from .build_capture import BuildExecutionRecorder, CaptureScope, record_strace_files
+from .build_capture import (
+    PATH_FIELDS, REQUIRED_EVENT_KINDS, BuildExecutionRecorder, CaptureScope, record_strace_files,
+)
+from .capture_files import CaptureRoots, build_file_inventory, read_events, snapshot_response_files
+
+
+def _application_root(required_path: str) -> Path:
+    """Resolve a required application file in source and installed-image layouts."""
+    candidates: list[Path] = []
+    configured = os.environ.get("APPSEC_REVIEW_CONFIG")
+    if configured:
+        candidates.append(Path(configured).resolve().parent)
+    candidates.append(Path(__file__).resolve().parents[3])
+    for root in candidates:
+        path = root / required_path
+        if path.is_file() and not path.is_symlink():
+            return root
+    raise FileNotFoundError(f"application file is unavailable: {required_path}")
+
+
+def _capture_asset(name: str) -> Path:
+    """Resolve capture assets in both a source checkout and the installed Dagster image."""
+    relative = f"containers/build-capture/{name}"
+    return _application_root(relative) / relative
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +72,8 @@ class BuildCommandResult:
     stdout_tail: bytes = b""
     stderr_tail: bytes = b""
     capture_record: Path | None = None
+    stdout_file: Path | None = None
+    stderr_file: Path | None = None
 
 
 Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
@@ -81,6 +107,32 @@ def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, b
                 process.stderr.close()
             stdout, stderr = exc.stdout or b"", exc.stderr or b""
         return None, stdout or exc.stdout or b"", stderr or exc.stderr or b"", True
+
+
+def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
+                  stderr_path: Path) -> tuple[int | None, bool]:
+    """Run without pipe buffering and retain both diagnostic streams in full."""
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        process = subprocess.Popen(
+            list(argv), stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
+            start_new_session=os.name == "posix",
+        )
+        try:
+            return process.wait(timeout=timeout), False
+        except subprocess.TimeoutExpired:
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.kill()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            return None, True
 
 
 def resolve_host_bind_path(path: Path, runner: Runner) -> Path:
@@ -192,8 +244,14 @@ class BuildContainerExecutor:
     def execute_captured(self, argv: Sequence[str], *, workspace: Path,
                          working_directory: str, environment: Mapping[str, str],
                          capture_directory: Path, capture_config: BuildCaptureConfig,
-                         scope: CaptureScope) -> BuildCommandResult:
-        """Run a build under a process-tree-local syscall catcher and emit its JSON record."""
+                         scope: CaptureScope,
+                         snapshot_files: Mapping[str, Mapping[str, Any]] | None = None,
+                         ) -> BuildCommandResult:
+        """Run a build under a process-tree-local syscall catcher and emit its JSON record.
+
+        ``snapshot_files`` maps workspace-relative paths to pre-build ``sha256``, ``size_bytes``
+        and ``mtime_ns``; unchanged files reuse those hashes in the post-build file inventory.
+        """
         if capture_config.backend != "ptrace":
             raise ValueError("this executor supports the ptrace build-capture backend")
         if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
@@ -201,8 +259,13 @@ class BuildContainerExecutor:
         capture_environment = dict(environment)
         if scope.family == "dotnet":
             # Persistent MSBuild/Roslyn servers outlive the requested command and would keep a
-            # process-tree tracer attached after a successful build.
+            # process-tree tracer attached after a successful build.  Workload advertising and
+            # telemetry also start optional background work whose detached threads would make
+            # the syscall capture incomplete even though compilation itself finished.
             capture_environment.setdefault("DOTNET_CLI_USE_MSBUILD_SERVER", "0")
+            capture_environment.setdefault("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+            capture_environment.setdefault("DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE", "true")
+            capture_environment.setdefault("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
             capture_environment.setdefault("MSBUILDDISABLENODEREUSE", "1")
             capture_environment.setdefault("UseSharedCompilation", "false")
         root, command = self._prepare(
@@ -212,17 +275,17 @@ class BuildContainerExecutor:
         recorder = BuildExecutionRecorder(
             capture_root, scope, capture_config,
             {"backend": "ptrace", "tool": "strace", "image_id": self.profile.image_id,
-             "event_kinds": sorted(("process_fork", "process_exec", "process_exit",
-                                    "file_open", "connect"))},
+             "event_kinds": sorted(REQUIRED_EVENT_KINDS),
+             "trace_options": ["--seccomp-bpf", "-y"]},
         )
         driver = capture_root / "build-driver.sh"
         # Host and non-root container IDs differ; only this new run-owned leaf is shared.
         capture_root.chmod(0o733)
 
-        source_driver = Path(__file__).resolve().parents[3] / "containers" / "build-capture" / "build-driver.sh"
+        source_driver = _capture_asset("build-driver.sh")
         driver.write_bytes(source_driver.read_bytes())
         wrapper = capture_root / "tool-wrapper.py"
-        source_wrapper = source_driver.with_name("tool-wrapper.py")
+        source_wrapper = _capture_asset("tool-wrapper.py")
         wrapper.write_bytes(source_wrapper.read_bytes())
         redaction_config = capture_root / "envp-redact-names.json"
         atomic_json(redaction_config, list(capture_config.envp_redact_names))
@@ -247,37 +310,87 @@ class BuildContainerExecutor:
         logical_wrappers = logical_capture + "/wrappers"
         command.extend(("--entrypoint", "/bin/sh", self.profile.image_id, logical_driver,
                         logical_capture, str(capture_config.argument_bytes_limit),
-                        str(capture_config.tool_call_count_limit),
-                        str(capture_config.tool_stream_bytes_limit), logical_wrappers,
+                        str(capture_config.tool_call_count_limit), logical_wrappers,
                         "1" if capture_config.capture_envp else "0", *argv))
-        code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
         stdout_path, stderr_path = capture_root / "stdout", capture_root / "stderr"
-        stdout_path.write_bytes(stdout)
-        stderr_path.write_bytes(stderr)
+        if self.runner is _run:
+            code, timed_out = _run_to_files(
+                command, self.timeout_seconds, stdout_path, stderr_path)
+        else:
+            code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+            stdout_path.write_bytes(stdout)
+            stderr_path.write_bytes(stderr)
+        self._take_tool_call_ownership(capture_root)
         trace_paths = tuple(capture_root.glob("trace*"))
         parse_errors = record_strace_files(trace_paths, recorder)
         recorder.flush()
+        roots = CaptureRoots("/workspace", root, logical_capture, self.profile.image_id,
+                             posixpath.normpath(f"/workspace/{working_directory}"))
+        # Response files are copied before the secret scan so the scan covers their contents.
+        response_files, response_gaps = snapshot_response_files(
+            list(read_events(capture_root / "events.jsonl")), roots, capture_root,
+            count_limit=capture_config.response_file_count_limit,
+            bytes_limit=capture_config.response_file_bytes_limit)
         secret_scan = self._scan_capture_secrets(
             capture_root, trace_paths=trace_paths,
             finding_limit=capture_config.secret_finding_count_limit,
             argv=argv, environment=capture_environment)
         record_argv = (["<redacted: secret detected by gitleaks>"]
                        if secret_scan.pop("redact_invocation", False) else argv)
+        # The inventory reads the sanitized events, so redacted paths never reach it.
+        current_snapshot = None
+        if snapshot_files is not None:
+            current_snapshot = {}
+            for relative, known in snapshot_files.items():
+                host = root / Path(*PurePosixPath(relative).parts)
+                try:
+                    stat = host.stat()
+                except OSError:
+                    continue
+                if stat.st_size == known.get("size_bytes") and stat.st_mtime_ns == known.get("mtime_ns"):
+                    current_snapshot[relative] = known
+        inventory = build_file_inventory(
+            read_events(capture_root / "events.jsonl"), roots, capture_root / "files.jsonl",
+            snapshot=current_snapshot, count_limit=capture_config.file_inventory_count_limit)
         record = recorder.finish(
             argv=record_argv, working_directory=working_directory, exit_code=code, timed_out=timed_out,
             stdout_path=stdout_path, stderr_path=stderr_path, collector_errors=parse_errors,
-            secret_scan=secret_scan)
-        retained_stdout, retained_stderr = stdout_path.read_bytes(), stderr_path.read_bytes()
-        stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
+            secret_scan=secret_scan, file_inventory=inventory,
+            response_files=(response_files, response_gaps))
+        stdout_size, stderr_size = stdout_path.stat().st_size, stderr_path.stat().st_size
+        with stdout_path.open("rb") as stream:
+            retained_stdout = stream.read(self.output_bytes)
+        with stderr_path.open("rb") as stream:
+            retained_stderr = stream.read(self.output_bytes)
+        stdout_truncated, stderr_truncated = stdout_size > len(retained_stdout), stderr_size > len(retained_stderr)
         tail_bytes = min(32768, self.output_bytes)
+        def tail(path: Path, size: int) -> bytes:
+            if size <= 0:
+                return b""
+            with path.open("rb") as stream:
+                stream.seek(max(0, path.stat().st_size - size))
+                return stream.read()
         return BuildCommandResult(
-            tuple(argv), code, retained_stdout[:self.output_bytes], retained_stderr[:self.output_bytes], timed_out,
-            stdout_bytes=len(stdout), stderr_bytes=len(stderr),
+            tuple(argv), code, retained_stdout, retained_stderr, timed_out,
+            stdout_bytes=stdout_size, stderr_bytes=stderr_size,
             stdout_truncated=stdout_truncated, stderr_truncated=stderr_truncated,
-            stdout_tail=retained_stdout[-tail_bytes:] if stdout_truncated else b"",
-            stderr_tail=retained_stderr[-tail_bytes:] if stderr_truncated else b"",
-            capture_record=record,
+            stdout_tail=tail(stdout_path, tail_bytes) if stdout_truncated else b"",
+            stderr_tail=tail(stderr_path, tail_bytes) if stderr_truncated else b"",
+            capture_record=record, stdout_file=stdout_path, stderr_file=stderr_path,
         )
+
+    @staticmethod
+    def _take_tool_call_ownership(capture_root: Path) -> None:
+        """Replace the completed container-owned wrapper subtree with a host-owned copy."""
+        tool_root = capture_root / "tool-calls"
+        if not tool_root.is_dir():
+            return
+        staging = capture_root / ".tool-calls-host"
+        shutil.copytree(tool_root, staging)
+        shutil.rmtree(tool_root)
+        staging.replace(tool_root)
+        for path in (tool_root, *tool_root.rglob("*")):
+            path.chmod(0o700 if path.is_dir() else 0o600)
 
     @staticmethod
     def _digest(path: Path) -> str:
@@ -314,6 +427,11 @@ class BuildContainerExecutor:
         atomic_json(scan_input / "invocation.json",
                     {"argv": list(argv), "environment": dict(environment)})
         (scan_input / "invocation.json").chmod(0o644)
+        response_root = capture_root / "response-files"
+        if response_root.is_dir():
+            for source in sorted(response_root.iterdir()):
+                if source.is_file():
+                    retain(source, f"response-files/{source.name}", sanitize=True)
         tool_root = capture_root / "tool-calls"
         if tool_root.is_dir():
             for source in tool_root.rglob("*"):
@@ -321,7 +439,7 @@ class BuildContainerExecutor:
                     relative = "tool-calls/" + source.relative_to(tool_root).as_posix()
                     retain(source, relative, sanitize=True)
 
-        repository_root = Path(__file__).resolve().parents[3]
+        repository_root = _application_root("containers/catalog.toml")
         tool = load_catalog(repository_root).tool("tool-gitleaks")
         report = scan_root / "gitleaks.json"
         stdout_path, stderr_path = scan_root / "stdout", scan_root / "stderr"
@@ -340,8 +458,10 @@ class BuildContainerExecutor:
                             else range(len(rows)))
                 for index in selected:
                     event = json.loads(rows[index])
-                    if event.get("kind") == "file_open":
-                        event["path"] = "<redacted: secret scan disposition>"
+                    if event.get("kind") != "process_exec":
+                        for name in PATH_FIELDS:
+                            if name in event:
+                                event[name] = "<redacted: secret scan disposition>"
                         rows[index] = canonical_json(event).decode().rstrip("\n")
                         continue
                     if event.get("kind") != "process_exec":

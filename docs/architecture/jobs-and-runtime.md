@@ -71,6 +71,60 @@ Step/task overrides use
 `[jobs.<job_name>.steps.<step_name>.tasks.<task_name>]`; for example, the NVD step declares
 `fetch`, `process`, and `publish` tasks.
 
+## Processing-mode configuration reference
+
+Three independently typed controls are resolved by the central TOML loader:
+
+```toml
+[build_capture]
+mode = "required" # required | auto | disabled
+
+[jobs.job_language_build.settings]
+compiler_artifact_collection_mode = "required" # required | auto | disabled
+
+[jobs.job_language_build.settings.compiler_artifact_collection_overrides]
+native = "required"
+go = "required"
+dotnet = "required"
+rust = "required"
+
+[jobs.job_codeql_analysis.settings]
+enabled = true
+execution_mode = "auto" # build | source | auto | disabled
+
+[jobs.job_codeql_analysis.settings.languages.cpp]
+enabled = true
+mode = "build" # build | source | auto | disabled
+```
+
+`build_capture.mode` defaults to `required`. Only `job_project_build` and
+`job_language_build` may override it through their existing `settings.build_capture` table; all
+other job targets are rejected. `compiler_artifact_collection_mode` defaults to `required`, and
+its override table accepts only the configured language-build families: `native`, `go`, `dotnet`,
+`node`, `python`, `rust`, `php`, `java`, and `wasm`. An omitted family inherits the default.
+
+CodeQL `execution_mode` defaults to `auto`; each of the fixed CodeQL language entries can override
+it with `build`, `source`, `auto`, or `disabled`. The checked-in configuration preserves verified
+behavior explicitly: C/C++, Go, Java/Kotlin, and C# use `build`, while JavaScript/TypeScript,
+Python, Rust, and Actions use `source`. The old per-language spellings normalize only at load time:
+`manual` becomes `build` and `none` becomes `source`. The typed object and resolved configuration
+never retain the legacy spelling. A legacy `enabled` Boolean that conflicts with `disabled` is
+rejected rather than guessed.
+
+Every run retains both the exact source TOML and canonical `resolved.json` under
+`runs/<run-id>/data/configuration/`. The version 2 configuration manifest hashes both. Canonical
+JSON and its SHA-256 include defaults, overrides, and normalized CodeQL values; accepted handoffs,
+job configuration hashes, and resume planning use the resolved hash. Changing any processing mode
+therefore invalidates reuse deterministically.
+
+The generic deterministic evaluator makes these controls operational. Its immutable decision binds
+resolved policy and configuration hash to the accepted project/language identity, bounded facts,
+selected capability, descriptor source path/hash identities, reason code, and one of `SUCCEEDED`,
+`SKIPPED_NA`, `SKIPPED_POLICY`, or `GAP`. Decisions are retained in project-build,
+language-build, and CodeQL artifacts and handoffs. They are checkpoint inputs, participate in
+resume invalidation, and feed completeness accounting; `GAP` is retriable and blocks clean claims,
+while either skip remains explicit without becoming a gap or evidence of security.
+
 ## NVD synchronization
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official
@@ -229,8 +283,14 @@ configuration, hash, checkpoint, and manifest failures stop publication. See
 language-build handoff. It does not configure or compile projects. Its graph is repository-independent:
 one task per stage batches an arbitrary project
 set while retaining per-project checkpoints, terminal states, and shard identities. Once a project
-catalog is terminal, compiled indexing, Clang AST, LLVM IR, Infer, Joern, and binary/symbol branches
+catalog is terminal, compiled indexing, Clang AST, LLVM IR, Infer, and binary/symbol branches
 can be produced without encoding project names or counts in the graph.
+
+`job_cpp_symbol_index` (clangd) and `job_cpg_analysis` (Joern) are independent consumers of the
+accepted C++ handoff. Each derives the same generic index scopes (accepted, hash-verified files plus
+their exact compile commands) from that handoff, runs one pinned tool per scope, and publishes its
+own shards. Neither depends on the other; both compose the accepted manifest without dropping
+sibling producers' shards, and CodeQL composes both.
 
 `job_codeql_analysis` is a separate cross-language consumer of the accepted catalog, language-build,
 artifact-index, and C++ handoffs. It owns C/C++, Go, Java/Kotlin, C#, JavaScript/TypeScript, Python,

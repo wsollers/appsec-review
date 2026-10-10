@@ -21,7 +21,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 
 
 JVM_EXECUTOR_IDENTITY = "appsec-review/jvm-language-build-executor/1"
-JVM_CAPTURE_IDENTITY = "appsec-review/jvm-build-capture/1"
+JVM_CAPTURE_IDENTITY = "appsec-review/jvm-build-capture/2"
 JVM_RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 _SECRET = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _TOOLS = {
@@ -325,7 +325,17 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
 
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = unit.job.config.settings["jvm"]
-    fingerprint = _fingerprint(dispatch, accepted, settings)
+    artifact_overrides = unit.job.config.settings.get("compiler_artifact_collection_overrides", {})
+    capture = unit.job.config.settings.get("build_capture", {})
+    fingerprint = _fingerprint(dispatch, accepted, {
+        **settings,
+        "processing_modes": {
+            "build_execution_capture": capture.get("mode", "required"),
+            "compiler_artifact_collection": artifact_overrides.get(
+                "java", unit.job.config.settings.get(
+                    "compiler_artifact_collection_mode", "required")),
+        },
+    })
     root = unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id
     workspace = root / "workspace"
     cache = unit.job.metadata_root / "language-builds" / "jvm" / fingerprint / "accepted.json"

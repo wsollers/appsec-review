@@ -3,15 +3,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import hashlib
 from pathlib import Path, PurePosixPath
-import re
-import shlex
 import xml.etree.ElementTree as ET
 from typing import Any
 
 from appsec_review.storage import canonical_json, file_sha256
 
+from .capture import CapturedBuildDescriptor, ToolIdentity
 
-CAPTURE_IDENTITY = "appsec-review/dotnet-build-capture/1"
+
+CAPTURE_IDENTITY = "appsec-review/dotnet-build-capture/3"
 _PROJECT_SUFFIXES = {".csproj", ".vbproj", ".fsproj"}
 _ASSEMBLY_SUFFIXES = {".dll", ".exe", ".netmodule", ".winmd"}
 _PACKAGE_SUFFIXES = {".nupkg", ".snupkg"}
@@ -19,18 +19,15 @@ _NATIVE_SUFFIXES = {".so", ".a", ".o", ".dylib"}
 _SOURCE_SUFFIXES = {".cs", ".vb", ".fs", ".fsi", ".fsx"}
 _TOOL_KINDS = {
     "csc": "compiler", "csc.dll": "compiler", "vbc": "compiler", "vbc.dll": "compiler",
-    "fsc": "compiler", "fsc.dll": "compiler", "resgen": "resource-compiler",
+    "fsc": "compiler", "fsc.dll": "compiler", "vbccompiler.dll": "compiler",
+    "resgen": "resource-compiler", "resgen.dll": "resource-compiler",
     "al": "assembler", "ilasm": "assembler", "crossgen2": "aot-compiler",
-    "ilc": "aot-compiler", "dotnet-illink": "linker-trimmer", "illink": "linker-trimmer",
+    "crossgen2.dll": "aot-compiler", "ilc": "aot-compiler", "ilc.dll": "aot-compiler",
+    "dotnet-illink": "linker-trimmer", "illink": "linker-trimmer", "illink.dll": "linker-trimmer",
     "link": "linker", "ld": "linker", "clang": "linker-driver", "clang++": "linker-driver",
     "ar": "archiver", "nuget": "package-builder", "msbuild": "build-driver",
-    "dotnet": "build-driver",
+    "msbuild.dll": "build-driver", "dotnet": "build-driver",
 }
-_INVOCATION = re.compile(
-    r"(?P<cmd>(?:\"[^\"]+\"|\S+)*(?:csc|vbc|fsc|resgen|ilasm|crossgen2|ilc|illink|dotnet-illink|"
-    r"clang\+\+|clang|\bar\b|\bld\b|nuget)(?:\.dll|\.exe)?(?:\s+(?:\"[^\"]*\"|\S+))*)",
-    re.IGNORECASE,
-)
 
 
 def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None) -> tuple[str, ...]:
@@ -133,41 +130,89 @@ def artifact_kind(path: Path) -> str | None:
     return None
 
 
-def parse_tool_invocations(streams: Sequence[bytes], workspace: Path) -> list[dict[str, Any]]:
-    """Extract sanitized tool provenance from MSBuild diagnostic output."""
-    rows: list[dict[str, Any]] = []
-    for stream_index, stream in enumerate(streams):
-        for line_number, line in enumerate(stream.decode("utf-8", "replace").splitlines(), 1):
-            match = _INVOCATION.search(line)
-            if match is None:
-                continue
-            try:
-                argv = shlex.split(match.group("cmd"), posix=True)
-            except ValueError:
-                continue
-            if not argv:
-                continue
-            tool = Path(argv[0]).name.lower()
-            if tool == "dotnet" and len(argv) > 1 and Path(argv[1]).name.lower() in _TOOL_KINDS:
-                tool = Path(argv[1]).name.lower()
-            tool_kind = _TOOL_KINDS.get(tool)
-            if tool_kind is None:
-                continue
-            paths = []
-            for value in argv[1:]:
-                candidate = value.split(":", 1)[-1] if value.startswith(("/out:", "-out:")) else value
-                logical = candidate.replace("\\", "/")
-                if logical.startswith("/workspace/"):
-                    logical = logical[len("/workspace/"):]
-                path = (workspace / Path(*PurePosixPath(logical).parts)).resolve()
-                if (workspace.resolve() == path or workspace.resolve() in path.parents) and path.is_file():
-                    paths.append({"workspace_path": path.relative_to(workspace).as_posix(),
-                                  "sha256": file_sha256(path), "size_bytes": path.stat().st_size})
-            rows.append({"ordinal": len(rows) + 1, "tool": tool, "tool_kind": tool_kind,
-                         "argv": argv,
-                         "argv_sha256": hashlib.sha256(canonical_json(argv)).hexdigest(),
-                         "origin": {"stream": "stdout" if stream_index % 2 == 0 else "stderr",
-                                    "line": line_number},
-                         "input_output_identities": paths, "mapping": "msbuild-diagnostic-stream",
-                         "mapping_confidence": 0.8})
-    return rows[:4096]
+def tool_identity(name: str, argv: Sequence[str]) -> tuple[str, str] | None:
+    """Classify the executable a successful syscall event actually started.
+
+    Roslyn and several SDK tools are managed DLLs hosted by ``dotnet``.  In that case the
+    hosted DLL, rather than the generic host, is the meaningful build tool identity.
+    """
+    normalized = PurePosixPath(name).name.lower()
+    if normalized == "dotnet":
+        for value in argv[1:]:
+            candidate = PurePosixPath(str(value).replace("\\", "/")).name.lower()
+            if candidate in _TOOL_KINDS and candidate != "dotnet":
+                return candidate, _TOOL_KINDS[candidate]
+    kind = _TOOL_KINDS.get(normalized)
+    return (normalized, kind) if kind is not None else None
+
+
+def _mapped(workspace: Path, directory: str, value: str) -> dict[str, Any] | None:
+    normalized = value.replace("\\", "/")
+    if normalized.startswith("/workspace/"):
+        logical = PurePosixPath(normalized[len("/workspace/"):])
+    elif normalized.startswith("/"):
+        return None
+    else:
+        logical = PurePosixPath(directory) / normalized
+    if ".." in logical.parts:
+        return None
+    root = workspace.resolve()
+    candidate = (root / Path(*logical.parts)).resolve()
+    if root != candidate and root not in candidate.parents:
+        return None
+    result: dict[str, Any] = {"workspace_path": candidate.relative_to(root).as_posix()}
+    if candidate.is_file() and not candidate.is_symlink():
+        result.update(sha256=file_sha256(candidate), size_bytes=candidate.stat().st_size,
+                      mapping="exact-workspace-path", mapping_confidence=1.0)
+    else:
+        result.update(mapping="declared-path-unresolved", mapping_confidence=0.5)
+    return result
+
+
+def _argument_path(value: str) -> tuple[str, bool]:
+    lowered = value.lower()
+    for prefix in ("/out:", "-out:", "/doc:", "-doc:", "/pdb:", "-pdb:"):
+        if lowered.startswith(prefix):
+            return value[len(prefix):], True
+    for prefix in ("/reference:", "-reference:", "/r:", "-r:", "/resource:", "-resource:"):
+        if lowered.startswith(prefix):
+            candidate = value[len(prefix):].split(",", 1)[0]
+            if "=" in candidate:
+                candidate = candidate.split("=", 1)[1]
+            return candidate, False
+    return value, False
+
+
+def _row(tool: str, kind: str, argv: Sequence[str], workspace: Path, directory: str,
+         origin: str) -> dict[str, Any]:
+    values = [str(value) for value in argv]
+    inputs: list[str] = []
+    outputs: list[str] = []
+    for value in values[1:]:
+        candidate, output = _argument_path(value)
+        suffix = PurePosixPath(candidate.replace("\\", "/")).suffix.lower()
+        if output:
+            outputs.append(candidate)
+        elif suffix in _SOURCE_SUFFIXES | _ASSEMBLY_SUFFIXES | {".resources", ".resx", ".json"}:
+            inputs.append(candidate)
+    return {"tool": tool, "tool_kind": kind, "argv": values,
+            "argv_sha256": hashlib.sha256(canonical_json(values)).hexdigest(),
+            "inputs": [item for item in (_mapped(workspace, directory, value) for value in inputs) if item],
+            "outputs": [item for item in (_mapped(workspace, directory, value) for value in outputs) if item],
+            "origin": origin, "mapping_confidence": 1.0}
+
+
+def _classify_tool(name: str, argv: Sequence[str]) -> ToolIdentity | None:
+    identity = tool_identity(name, argv)
+    return ToolIdentity(*identity) if identity is not None else None
+
+
+CAPTURE_DESCRIPTOR = CapturedBuildDescriptor(
+    family="dotnet",
+    capture_identity=CAPTURE_IDENTITY,
+    provenance_schema="appsec-review/dotnet-capture-provenance/1",
+    catalog_label=".NET",
+    classify_tool=_classify_tool,
+    build_invocation=_row,
+    missing_tool_gap=".NET compiler execution was not observed in the standardized capture",
+)

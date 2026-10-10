@@ -36,6 +36,16 @@ def atomic_json(path: Path, value: Any) -> None:
     atomic_bytes(path, canonical_json(value))
 
 
+def tool_input_json(path: Path, value: Any) -> None:
+    """Atomically write JSON that a tool container reads as its non-root runtime user.
+
+    ``atomic_json`` inherits ``mkstemp``'s owner-only ``0600`` mode, which the container user
+    (uid 10001) cannot read when the run directory belongs to another host user.
+    """
+    atomic_json(path, value)
+    Path(path).chmod(0o644)
+
+
 def protected_json(path: Path, value: Any) -> None:
     """Create an immutable attempt-owned JSON artifact without a long temporary path."""
     path = Path(path)

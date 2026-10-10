@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,7 +19,9 @@ from appsec_review.codeql.runtime import (
 )
 from appsec_review.config import load_config
 from appsec_review.container_runtime import profiles_from_settings
-from appsec_review.storage import atomic_json, canonical_json
+from appsec_review.jobs.job_codeql_analysis.sarif import normalize_sarif
+from appsec_review.jobs.job_codeql_analysis.job import _accepted_replay
+from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 
 ROOT = Path(__file__).parents[1]
@@ -67,17 +70,33 @@ def live_codeql_runtime(tmp_path_factory: pytest.TempPathFactory):
     return settings, run_root, image_for
 
 
-def _write_replay(path: Path, commands: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]) -> None:
-    rows = []
+def _write_replay(path: Path, run_root: Path, build_image_id: str,
+                  commands: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]) -> None:
+    rows, configure, build = [], [], []
+    protected = path.parent / "accepted-build-commands"
+    protected.mkdir(parents=True, exist_ok=True)
     for ordinal, (working_directory, argv, environment) in enumerate(commands, 1):
+        role = "configure" if len(commands) > 1 and ordinal == 1 else "build"
+        (configure if role == "configure" else build).append(list(argv))
+        command_path = protected / f"command-{ordinal:03d}.json"
+        atomic_json(command_path, {"schema": "appsec-review/protected-build-command/2",
+                                  "argv": list(argv), "working_directory": working_directory,
+                                  "environment": environment, "access": "run-owned-protected"})
+        argv_sha256 = hashlib.sha256(canonical_json(list(argv))).hexdigest()
         rows.append({
-            "ordinal": ordinal,
-            "argv": list(argv),
-            "argv_sha256": hashlib.sha256(canonical_json(list(argv))).hexdigest(),
-            "working_directory": working_directory,
-            "environment": environment,
+            "ordinal": ordinal, "role": role, "argv_sha256": argv_sha256,
+            "working_directory": working_directory, "image_id": build_image_id,
+            "protected_argv": {"path": command_path.relative_to(run_root).as_posix(),
+                               "sha256": file_sha256(command_path)},
         })
-    atomic_json(path, {"schema": "appsec-review/codeql-build-replay/1", "commands": rows})
+    receipt = {"schema": "appsec-review/language-build-receipt/1", "terminal_status": "SUCCEEDED",
+               "recipe_identity": "1" * 64,
+               "recipe": {"configure_commands": configure, "build_commands": build},
+               "image": {"image_id": build_image_id, "dependency_hashes": {}},
+               "commands": rows}
+    replay = _accepted_replay(SimpleNamespace(job=SimpleNamespace(run_root=run_root)), receipt)
+    assert [tuple(item["argv"]) for item in replay["commands"]] == [item[1] for item in commands]
+    atomic_json(path, replay)
 
 
 LIVE_SCOPES = (
@@ -92,15 +111,15 @@ LIVE_SCOPES = (
     ("java", "java", "manual", "java", (
         ("java", ("mvn", "-Dmaven.repo.local=/tmp/m2", "-DskipTests", "package"), {}),
     )),
-    ("csharp", "dotnet", "manual", "dotnet", (
-        ("dotnet", ("dotnet", "restore", "appsec-fixture.csproj"),
-         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/dotnet/.nuget/packages"}),
-        ("dotnet", ("dotnet", "build", "appsec-fixture.csproj", "--no-restore"),
-         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/dotnet/.nuget/packages"}),
+    ("csharp", "dotnet", "manual", ".", (
+        (".", ("dotnet", "restore", "appsec-fixture.csproj"),
+         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/.nuget/packages"}),
+        (".", ("dotnet", "build", "appsec-fixture.csproj", "--no-restore"),
+         {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/.nuget/packages"}),
     )),
     ("javascript", "source", "none", "typescript", ()),
     ("python", "source", "none", "python", ()),
-    ("rust", "source", "none", "rust", ()),
+    ("rust", "rust", "none", "rust", ()),
     ("actions", "source", "none", ".", ()),
 )
 
@@ -126,29 +145,49 @@ def test_live_codeql_inventory_matches_the_pinned_extractors_and_query_packs(
     ("language", "profile", "mode", "source_subroot", "commands"),
     LIVE_SCOPES, ids=[value[0] for value in LIVE_SCOPES],
 )
-def test_live_codeql_database_default_queries_and_cpp_extended_queries(
+def test_live_codeql_database_default_and_applicable_extended_queries(
         live_codeql_runtime, language: str, profile: str, mode: str,
         source_subroot: str,
         commands: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]) -> None:
     settings, run_root, image_for = live_codeql_runtime
     scratch = run_root / f"scope-{language}"
     workspace = scratch / "workspace"
-    shutil.copytree(FIXTURE, workspace)
+    shutil.copytree(FIXTURE / "dotnet" if language == "csharp" else FIXTURE, workspace)
     database_arguments = [
         "--mode", mode, "--language", language, "--workspace", "workspace",
         "--source-subroot", source_subroot, "--database", "database",
         "--threads", str(settings.threads), "--ram", str(settings.ram_mb),
     ]
     if commands:
-        _write_replay(scratch / "replay.json", commands)
+        codeql_image = image_for(profile)
+        _write_replay(scratch / "replay.json", run_root, codeql_image.build_image_id, commands)
         database_arguments[4:4] = ["--replay", "replay.json"]
-    executor = CodeQLExecutor(image=image_for(profile), run_root=run_root, settings=settings)
+    else:
+        codeql_image = image_for(profile)
+    executor = CodeQLExecutor(image=codeql_image, run_root=run_root, settings=settings)
     database = executor.execute("database", tuple(database_arguments), scratch_root=scratch)
     database_detail = (run_root / database.stderr_path).read_text(encoding="utf-8", errors="replace")
     assert not database.timed_out and database.exit_code == 0, database_detail[-12000:]
     manifest = tree_manifest(scratch / "database", file_limit=settings.database_file_limit,
                              bytes_limit=settings.database_bytes_limit)
     assert manifest["file_count"] > 0 and manifest["tree_sha256"]
+
+    source_files = [{"path": path.relative_to(workspace).as_posix(),
+                     "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
+                    for path in workspace.rglob("*") if path.is_file() and
+                    path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".rs"}]
+
+    def assert_observation_identity(sarif_value, relative: str, query_id: str) -> None:
+        sarif_path = scratch / relative
+        query_identity = file_sha256(sarif_path)
+        records, gaps = normalize_sarif(
+            sarif_value, files=source_files, root=source_subroot,
+            query_identity=query_identity, result_limit=settings.result_limit)
+        observation_path = sarif_path.with_suffix(".observations.json")
+        atomic_json(observation_path, {"query_identity": query_identity, "query_id": query_id,
+                                      "observations": records, "gaps": gaps})
+        digest = file_sha256(observation_path)
+        assert len(digest) == 64 and file_sha256(sarif_path) == query_identity
 
     configured = settings.languages[language]
     output = "queries/default.sarif"
@@ -163,6 +202,37 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
     sarif = load_sarif(scratch / output, bytes_limit=settings.sarif_bytes_limit,
                        result_limit=settings.result_limit)
     assert sarif["version"] == "2.1.0" and sarif["runs"]
+    assert_observation_identity(sarif, output, "default")
+    if language == "csharp":
+        assert sum(len(run.get("results", ())) for run in sarif["runs"]) > 0
+    if language == "rust":
+        notifications = [
+            str(item.get("message", {}).get("text", ""))
+            for run in sarif["runs"]
+            for invocation in run.get("invocations", ())
+            for item in invocation.get("toolExecutionNotifications", ())
+        ]
+        assert "File successfully extracted." in notifications
+        assert not any("semantic analyzer unavailable" in item for item in notifications)
+
+    for additional in configured.additional_queries:
+        additional_output = f"queries/{additional.query_id}.sarif"
+        extended = executor.execute("query", (
+            "--database", "database", "--output", additional_output,
+            "--pack", configured.query_pack, "--pack-version", configured.query_pack_version,
+            "--suite", additional.query_suite, "--threads", str(settings.threads),
+            "--ram", str(settings.ram_mb), "--max-paths", str(settings.max_paths),
+        ), scratch_root=scratch)
+        extended_detail = (run_root / extended.stderr_path).read_text(
+            encoding="utf-8", errors="replace")
+        assert not extended.timed_out and extended.exit_code == 0, extended_detail[-12000:]
+        additional_sarif = load_sarif(
+            scratch / additional_output, bytes_limit=settings.sarif_bytes_limit,
+            result_limit=settings.result_limit)
+        assert additional_sarif["version"] == "2.1.0" and additional_sarif["runs"]
+        assert_observation_identity(additional_sarif, additional_output, additional.query_id)
+        if language == "csharp":
+            assert sum(len(run.get("results", ())) for run in additional_sarif["runs"]) > 0
 
     if language == "cpp":
         custom = configured.custom_queries[0]
@@ -178,3 +248,8 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
         custom_sarif = load_sarif(scratch / custom_output, bytes_limit=settings.sarif_bytes_limit,
                                   result_limit=settings.result_limit)
         assert custom_sarif["version"] == "2.1.0" and custom_sarif["runs"]
+        assert_observation_identity(custom_sarif, custom_output, custom.query_id)
+
+    # Dagster removes per-profile database copies immediately after query completion. Prove the
+    # non-root container's recursively created cache directories are removable by the run owner.
+    shutil.rmtree(scratch / "database")

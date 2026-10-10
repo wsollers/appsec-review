@@ -148,7 +148,7 @@ class UnitExecutor:
                 receipts[unit.unit_id] = receipt
                 disposition = result.get("terminal_status")
                 terminal_event = ("TASK_COMPLETED_WITH_GAPS"
-                                  if disposition not in {None, "SUCCEEDED", "NOT_APPLICABLE"}
+                                  if disposition not in {None, "SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}
                                   else "TASK_SUCCEEDED")
                 context.events.write(terminal_event, unit_id=unit.unit_id,
                                      disposition=disposition)
@@ -175,7 +175,7 @@ class UnitExecutor:
                                 outputs[item.unit_id].get("terminal_status") is not None]
                 if "FAILED" in states or "SKIPPED" in states:
                     terminal = "FAILED"
-                elif any(value not in {"SUCCEEDED", "NOT_APPLICABLE"} for value in dispositions):
+                elif any(value not in {"SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"} for value in dispositions):
                     terminal = "COMPLETED_WITH_GAPS"
                 else:
                     terminal = "SUCCEEDED"
@@ -194,7 +194,7 @@ class UnitExecutor:
         completion = "FAILED" if failed or skipped else "SUCCEEDED"
         dispositions = [str(output.get("terminal_status")) for output in outputs.values()
                         if output.get("terminal_status") is not None]
-        if completion == "SUCCEEDED" and any(value not in {"SUCCEEDED", "NOT_APPLICABLE"}
+        if completion == "SUCCEEDED" and any(value not in {"SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}
                                                for value in dispositions):
             completion = "COMPLETED_WITH_GAPS"
         return {
@@ -221,7 +221,7 @@ class UnitExecutor:
         completion = "FAILED" if failed or skipped else "SUCCEEDED"
         dispositions = [str(output.get("terminal_status")) for output in outputs.values()
                         if output.get("terminal_status") is not None]
-        if completion == "SUCCEEDED" and any(value not in {"SUCCEEDED", "NOT_APPLICABLE"}
+        if completion == "SUCCEEDED" and any(value not in {"SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}
                                                for value in dispositions):
             completion = "COMPLETED_WITH_GAPS"
         return {

@@ -10,7 +10,7 @@ from appsec_review.config import BuildCaptureConfig
 from appsec_review.container_runtime import (
     BuildExecutionRecorder, BuildProfile, CaptureIntegrityError, CaptureScope, verify_capture_record,
 )
-from appsec_review.container_runtime.build_capture import record_strace_files
+from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS, record_strace_files
 from tests.capture_fakes import simulated_executor
 
 
@@ -19,9 +19,9 @@ def _recorder(tmp_path: Path, *, event_limit: int = 20) -> BuildExecutionRecorde
         tmp_path / "capture", CaptureScope(
             "2026-10-09-0001", "job_project_build", "attempt_0001", "build-unit-cpp", "native"),
         BuildCaptureConfig("ptrace", event_limit, 3, 64, True, 8, 256, ("SECRET_VALUE",),
-                           16, 10, 1024, 10),
+                           16, 10, 10),
         {"backend": "ptrace", "image_id": "sha256:" + "a" * 64,
-         "event_kinds": sorted(("process_fork", "process_exec", "process_exit", "file_open", "connect"))},
+         "event_kinds": sorted(REQUIRED_EVENT_KINDS)},
     )
 
 
@@ -81,7 +81,8 @@ def test_strace_normalizer_captures_process_file_and_egress_calls(tmp_path: Path
     trace.write_text(
         '1700000000.000001 execve("/usr/bin/clang++", ["clang++", "main.cpp"], '
         '["NORMAL=value", "SECRET_VALUE=do-not-retain"]) = 0\n'
-        '1700000000.000002 openat(AT_FDCWD, "/workspace/native/main.cpp", O_RDONLY) = 3\n'
+        '1700000000.000002 openat(AT_FDCWD</workspace/native>, "/workspace/native/main.cpp", O_RDONLY) '
+        '= 3</workspace/native/main.cpp>\n'
         '1700000000.000003 clone(child_stack=NULL, flags=SIGCHLD) = 43\n'
         '1700000000.000004 connect(3, {sa_family=AF_INET, sin_port=htons(443), '
         'sin_addr=inet_addr("192.0.2.1")}, 16) = 0\n'
@@ -111,9 +112,82 @@ def test_strace_normalizer_captures_process_file_and_egress_calls(tmp_path: Path
     assert process_exec["envp_captured"] is True
     assert process_exec["envp_redacted_names"] == ["SECRET_VALUE"]
     assert "do-not-retain" not in (recorder.root / "events.jsonl").read_text(encoding="utf-8")
+    opened = next(row for row in event_rows if row["kind"] == "file_open")
+    # The fixture limits paths to 16 bytes; every path field is clipped and flagged.
+    assert opened["resolved"] == "/workspace/nativ" and opened["path_truncated"] is True
+    assert opened["access"] == "read" and opened["result"] == 3
     connect = next(row for row in event_rows if row["kind"] == "connect")
     assert connect["address_family"] == 2 and connect["address"] == "192.0.2.1"
     assert connect["port"] == 443 and connect["result"] == 0
+
+
+def test_strace_normalizer_records_open_outcomes_directory_changes_renames_and_unlinks(
+        tmp_path: Path) -> None:
+    recorder = _recorder(tmp_path)
+    trace = tmp_path / "trace.50"
+    trace.write_text(
+        '1700000000.000001 openat(AT_FDCWD</ws/b>, "a.h", O_RDONLY|O_CLOEXEC) = 4</ws/b/a.h>\n'
+        '1700000000.000002 openat(AT_FDCWD</ws/b>, "inc/x.h", O_RDONLY) = -1 ENOENT (No such file or directory)\n'
+        '1700000000.000003 openat(AT_FDCWD</ws/b>, "out.o.tmp", O_WRONLY|O_CREAT|O_TRUNC, 0666) '
+        '= 5</ws/b/out.o.tmp>\n'
+        '1700000000.000004 openat2(7</ws/c>, "d.txt", {flags=O_RDWR|O_CLOEXEC, resolve=0}, 24) = 6</ws/c/d.txt>\n'
+        '1700000000.000005 open("r, c.c", O_RDONLY) = 8</ws/b/r, c.c>\n'
+        '1700000000.000006 creat("/ws/new.bin", 0644) = 9</ws/new.bin>\n'
+        '1700000000.000007 chdir("/ws/sub") = 0\n'
+        '1700000000.000008 fchdir(3</ws/other>) = 0\n'
+        '1700000000.000009 renameat2(AT_FDCWD</ws/b>, "out.o.tmp", AT_FDCWD</ws/b>, "out.o", RENAME_NOREPLACE) = 0\n'
+        '1700000000.000010 rename("x", "y") = -1 EXDEV (Invalid cross-device link)\n'
+        '1700000000.000011 linkat(AT_FDCWD</ws>, "a", AT_FDCWD</ws>, "b", 0) = 0\n'
+        '1700000000.000012 unlinkat(AT_FDCWD</ws/b>, "dir", AT_REMOVEDIR) = 0\n'
+        '1700000000.000013 unlink("/ws/gone.rsp") = 0\n'
+        '1700000000.000014 openat(AT_FDCWD</ws>, "very-long-name"..., O_RDONLY) = -1 ENOENT (No such file or directory)\n',
+        encoding="utf-8")
+    assert record_strace_files((trace,), recorder) == ()
+    recorder.flush()
+    rows = [json.loads(line) for line in (recorder.root / "events.jsonl").read_text().splitlines()]
+    opens = [row for row in rows if row["kind"] == "file_open"]
+    assert [(row["path"], row["access"], row["creates"], row["result"]) for row in opens] == [
+        ("a.h", "read", False, 4), ("inc/x.h", "read", False, -1),
+        ("out.o.tmp", "write", True, 5), ("d.txt", "read-write", False, 6),
+        ("r, c.c", "read", False, 8), ("/ws/new.bin", "write", True, 9),
+        ("very-long-name", "read", False, -1)]
+    assert opens[0]["resolved"] == "/ws/b/a.h" and opens[0]["directory"] == "/ws/b"
+    assert opens[1]["errno"] == "ENOENT" and "resolved" not in opens[1]
+    assert opens[3]["directory"] == "/ws/c" and opens[4]["resolved"] == "/ws/b/r, c.c"
+    assert "directory" not in opens[4] and opens[6]["path_truncated"] is True
+    changes = [row for row in rows if row["kind"] == "directory_change"]
+    assert [(row["path"], row["result"]) for row in changes] == [("/ws/sub", 0), ("/ws/other", 0)]
+    renames = [row for row in rows if row["kind"] == "file_rename"]
+    assert renames[0] == {**renames[0], "source": "out.o.tmp", "target": "out.o",
+                          "source_directory": "/ws/b", "target_directory": "/ws/b", "result": 0}
+    assert renames[1]["errno"] == "EXDEV" and "source_directory" not in renames[1]
+    (link,) = [row for row in rows if row["kind"] == "file_link"]
+    assert (link["source"], link["target"], link["target_directory"]) == ("a", "b", "/ws")
+    unlinks = [row for row in rows if row["kind"] == "file_unlink"]
+    assert [(row["path"], row.get("directory"), row["directory_removal"]) for row in unlinks] == [
+        ("dir", "/ws/b", True), ("/ws/gone.rsp", None, False)]
+
+
+def test_strace_normalizer_reports_unparseable_file_rows(tmp_path: Path) -> None:
+    recorder = _recorder(tmp_path)
+    trace = tmp_path / "trace.51"
+    trace.write_text('1700000000.000001 openat(AT_FDCWD, 0x1234, O_RDONLY) = 3\n', encoding="utf-8")
+    assert record_strace_files((trace,), recorder) == ("unparsed openat row: trace.51:1",)
+
+
+def test_strace_normalizer_accepts_exact_detach_metadata_but_rejects_malformed_rows(
+        tmp_path: Path) -> None:
+    recorder = _recorder(tmp_path)
+    trace = tmp_path / "trace.42"
+    trace.write_text(
+        "1700000000.000001 ???( <detached ...>\n"
+        "1700000000.000002 exit_group(0 <detached ...>\n",
+        encoding="utf-8",
+    )
+    assert record_strace_files((trace,), recorder) == ()
+    malformed = tmp_path / "trace.43"
+    malformed.write_text("1700000000.000002 ???( malformed\n", encoding="utf-8")
+    assert record_strace_files((malformed,), recorder) == ("unparsed trace row: trace.43:1",)
 
 
 def _capture(tmp_path: Path) -> tuple[Path, Path, CaptureScope]:
@@ -132,7 +206,7 @@ def _capture(tmp_path: Path) -> tuple[Path, Path, CaptureScope]:
     result = executor.execute_captured(
         ("rustc", "main.rs"), workspace=workspace, working_directory="unit", environment={},
         capture_directory=run_root / "capture" / "command-001",
-        capture_config=BuildCaptureConfig("ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 4096, 100),
+        capture_config=BuildCaptureConfig("ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 100),
         scope=scope)
     return run_root, result.capture_record, scope
 
@@ -165,7 +239,7 @@ def test_capture_verification_returns_hash_bound_identity_and_parsed_members(tmp
 def _tamper_event_schema(record: Path) -> None:
     events = record.parent / "events.jsonl"
     events.write_text(events.read_text(encoding="utf-8").replace(
-        "appsec-review/build-syscall-event/1", "appsec-review/build-syscall-event/0"), encoding="utf-8")
+        "appsec-review/build-syscall-event/2", "appsec-review/build-syscall-event/0"), encoding="utf-8")
     _rewrite(record, lambda document: document["events"].update(sha256=_digest(events)))
 
 
@@ -242,3 +316,13 @@ def test_capture_verification_binds_the_callers_scope_and_run(tmp_path: Path) ->
     elsewhere.mkdir()
     with pytest.raises(CaptureIntegrityError, match="escaped the run"):
         verify_capture_record(record, run_root=elsewhere, scope=scope)
+
+
+def test_tool_input_json_is_readable_by_the_container_user(tmp_path: Path) -> None:
+    from appsec_review.storage import atomic_json, tool_input_json
+
+    atomic_json(tmp_path / "private.json", {"a": 1})
+    tool_input_json(tmp_path / "input.json", {"a": 1})
+    assert (tmp_path / "private.json").stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "input.json").stat().st_mode & 0o777 == 0o644
+    assert json.loads((tmp_path / "input.json").read_text(encoding="utf-8")) == {"a": 1}

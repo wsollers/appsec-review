@@ -8,7 +8,7 @@ from appsec_review.config import GoBuildSettings, LanguageBuildSettings, load_co
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
+from appsec_review.jobs.job_language_build import build_job as build_language, go, load_accepted_language_build
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.inference import ModelResult
@@ -18,7 +18,8 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
-from tests.capture_fakes import capturing_fake
+from appsec_review.storage import file_sha256
+from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, minimal_elf, simulated_executor
 
 
 ROOT = Path(__file__).parents[1]
@@ -86,15 +87,70 @@ class GoExecutor:
         return BuildCommandResult(tuple(argv), 0, b"", b"", False)
 
 
-def _fixture(tmp_path: Path):
+def go_container(calls: list[tuple[str, ...]], *, phantom_linker: bool = False,
+                 leak: str | None = None, fail_roots: set[str] | None = None):
+    """A Go build as the syscall collector and wrappers would observe it."""
+    def behavior(argv, workspace, working_directory, environment, container):
+        calls.append(argv)
+        container.exec("/capture/wrappers/go", ["go", *argv[1:]])
+        container.exec("/usr/local/go/bin/go", ["/usr/local/go/bin/go", *argv[1:]])
+        container.tool_call("go", argv[1:], executable="/usr/local/go/bin/go")
+        container.connect("192.0.2.44", 443)
+        if working_directory in (fail_roots or set()) and argv[:2] == ("go", "build"):
+            return 2, b"", b"compile failed"
+        logical = f"/workspace/{working_directory}"
+        if argv[:4] == ("go", "list", "-deps", "-json"):
+            payload = json.dumps({"ImportPath": "example.test/app/cmd/app", "GoFiles": ["main.go"],
+                                  "CgoFiles": [], "CompiledGoFiles": ["main.go"],
+                                  "Imports": ["fmt"],
+                                  "Module": {"Path": "example.test/app"}}).encode()
+            return 0, payload, b""
+        if argv[:3] == ("go", "tool", "buildid"):
+            return 0, b"fixture-build-id\n", b""
+        output = Path(argv[argv.index("-o") + 1])
+        path = workspace / working_directory / output
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(minimal_elf())
+        generated = workspace / working_directory / "cmd" / "app" / "generated.go"
+        generated.write_text("package main\nconst Generated = true\n", encoding="utf-8")
+        compiler = ["compile", "-o", "/tmp/go-build/main.a", f"{logical}/cmd/app/main.go"]
+        container.exec("/usr/local/go/pkg/tool/linux_amd64/compile", compiler,
+                       envp=[*[f"{key}={value}" for key, value in sorted(environment.items())],
+                             *([f"GITHUB_TOKEN={leak}"] if leak else [])])
+        container.exec("/usr/local/go/pkg/tool/linux_amd64/cgo", ["cgo", "shim.go"])
+        native = ["gcc", "-c", "shim.c", "-o", "/tmp/go-build/shim.o"]
+        container.exec("/capture/wrappers/gcc", native)
+        container.exec("/usr/bin/gcc", ["/usr/bin/gcc", *native[1:]])
+        container.tool_call("gcc", native[1:], executable="/usr/bin/gcc")
+        linker = ["link", "-o", f"{logical}/bin/app", "/tmp/go-build/main.a"]
+        container.exec("/usr/local/go/pkg/tool/linux_amd64/link", linker,
+                       succeeded=not phantom_linker)
+        if phantom_linker:
+            container.tool_call("link", linker[1:],
+                                executable="/usr/local/go/pkg/tool/linux_amd64/link")
+        stderr = (f"signing with {leak}\n".encode() if leak else b"")
+        return 0, b"built\n" * 2_000_000, stderr
+    return behavior
+
+
+def _fixture(tmp_path: Path, *, capture: str = "event_count_limit = 250000"):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    section = "[jobs.job_language_build.settings.build_capture]\nevent_count_limit = 250000\n"
+    assert section in text
+    config_path.write_text(text.replace(
+        section, f"[jobs.job_language_build.settings.build_capture]\n{capture}\n"), encoding="utf-8")
     target = tmp_path / "target"
     (target / "go" / "cmd" / "app").mkdir(parents=True)
     (target / "go" / "go.mod").write_text("module example.test/app\n\ngo 1.23\n", encoding="utf-8")
     (target / "go" / "cmd" / "app" / "main.go").write_text(
         "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"ok\") }\n", encoding="utf-8")
     return load_config(config_path), target
+
+
+def _retained_text(root: Path) -> str:
+    return "".join(path.read_text(encoding="utf-8", errors="replace")
+                   for path in root.rglob("*") if path.is_file())
 
 
 def _accepted(config, target, calls):
@@ -120,18 +176,24 @@ def test_go_build_retains_streams_provenance_packages_artifacts_and_sanitized_mc
     calls: list[tuple[str, ...]] = []
     run_id, fingerprint = _accepted(config, target, calls)
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: GoExecutor(calls))]).run(
+        executor_factory=lambda unit, profile: simulated_executor(
+            profile, go_container(calls), output_bytes=4096))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
-    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    assert outcome["status"] == "SUCCEEDED"
+    run_root = config.runtime.runs_dir / run_id
+    receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["family"] == "go" and receipt["terminal_status"] == "SUCCEEDED"
     assert {value["tool_kind"] for value in receipt["tool_invocations"]} >= {"compiler", "linker"}
     assert receipt["module_metadata"][0]["kind"] == "go-module-metadata"
     assert receipt["package_relationships"][0]["dependencies"] == ["fmt"]
     assert receipt["build_metadata"][0]["build_id_sha256"]
     build = next(value for value in receipt["commands"] if value["role"] == "build")
-    assert build["stdout"]["truncated"] is True and build["stdout"]["total_bytes"] == 9000000
-    assert "diagnostic_tail" in build["stdout"]
+    assert build["stdout"]["truncated"] is False and build["stdout"]["preview_truncated"] is True
+    assert build["stdout"]["captured_bytes"] == build["stdout"]["total_bytes"] > 4096
+    assert file_sha256(run_root / build["stdout"]["path"]) == build["stdout"]["sha256"]
+    assert all(command["execution_capture"]["complete"] for command in receipt["commands"])
+    assert receipt["capture_provenance"]["complete"] is True
+    assert receipt["capture_provenance"]["connect_events"] == len(receipt["commands"])
     serialized = json.dumps(receipt["tool_invocations"])
     assert '"argv"' not in serialized and "useful-tail" not in serialized
 
@@ -151,7 +213,7 @@ def test_go_failed_sibling_does_not_discard_successful_unit(tmp_path: Path) -> N
     (sibling / "main.go").write_text("package main\nfunc main() {}\n", encoding="utf-8")
     run_id, fingerprint = _accepted(config, target, [])
     GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        GoExecutor([], fail_roots={"broken"}))]).run(
+        simulated_executor(profile, go_container([], fail_roots={"broken"})))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     assert {value["root"]: value["terminal_status"] for value in receipts} == {
@@ -161,7 +223,8 @@ def test_go_failed_sibling_does_not_discard_successful_unit(tmp_path: Path) -> N
 def test_go_resume_reuses_checkpoint_and_stream_tamper_stops_publication(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     run_id, fingerprint = _accepted(config, target, [])
-    job = build_language(executor_factory=lambda unit, profile: GoExecutor([]))
+    job = build_language(executor_factory=lambda unit, profile: simulated_executor(
+        profile, go_container([])))
     GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     resumed = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                              run_id=run_id, force_from="job_language_build")
@@ -174,3 +237,85 @@ def test_go_resume_reuses_checkpoint_and_stream_tamper_stops_publication(tmp_pat
     with pytest.raises(RuntimeError, match="job reported partial failure: execute.go"):
         GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=run_id, force_from="job_language_build")
+
+
+@pytest.mark.parametrize("payload", [
+    b"{",
+    b"[]",
+    b'{"ImportPath":"x","Imports":"not-a-list"}',
+    b'{"ImportPath":"x","Module":{"Path":7}}',
+    b'{"ImportPath":"x","Imports":[]} trailing',
+])
+def test_go_package_catalog_rejects_hostile_or_malformed_input(payload: bytes) -> None:
+    with pytest.raises((UnicodeDecodeError, json.JSONDecodeError, ValueError)):
+        go.parse_package_catalog(payload)
+    with pytest.raises(ValueError, match="byte bound"):
+        go.parse_package_catalog(b" " * 11, byte_limit=10)
+    two = (b'{"ImportPath":"a","Imports":[],"GoFiles":[],"CgoFiles":[],"CompiledGoFiles":[]}'
+           b'{"ImportPath":"b","Imports":[],"GoFiles":[],"CgoFiles":[],"CompiledGoFiles":[]}')
+    with pytest.raises(ValueError, match="entry bound"):
+        go.parse_package_catalog(two, package_limit=1)
+
+
+def test_go_tool_classification_uses_observed_executable_and_argv() -> None:
+    assert go.tool_kind("compile", ["compile", "main.go"]) == "compiler"
+    assert go.tool_kind("link", ["link", "main.a"]) == "linker"
+    assert go.tool_kind("cgo", ["cgo", "main.go"]) == "cgo"
+    assert go.tool_kind("gcc", ["gcc", "-c", "shim.c"]) == "compiler-driver"
+    assert go.tool_kind("go", ["go", "mod", "download"]) == "package-manager"
+    assert go.tool_kind("python3", ["python3", "tool-wrapper.py", "go"]) is None
+
+
+def test_go_package_catalog_ignores_build_output_path() -> None:
+    assert go.catalog_argv([["go", "build", "-o", "build/app", "."]]) == (
+        "go", "list", "-deps", "-json", ".")
+
+
+def test_go_wrapper_and_text_without_successful_exec_never_claim_tool_execution(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _accepted(config, target, [])
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        simulated_executor(profile, go_container([], phantom_linker=True)))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    assert "linker" not in {item["tool_kind"] for item in receipt["tool_invocations"]}
+    provenance = receipt["capture_provenance"]
+    assert provenance["unreconciled_tool_calls"] == 1 and provenance["complete"] is False
+    assert any("no matching successful process-exec" in gap for gap in receipt["gaps"])
+    assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+
+
+def test_go_envp_secret_is_redacted_scanned_and_absent_from_run_root(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _accepted(config, target, [])
+    GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        simulated_executor(profile, go_container([], leak=SYNTHETIC_SECRET)))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    run_root = config.runtime.runs_dir / run_id
+    receipt = load_accepted_language_build(run_root)["receipts"][0]
+    build = next(command for command in receipt["commands"] if command["role"] == "build")
+    assert build["execution_capture"]["secret_findings"]["count"] >= 2
+    assert build["execution_capture"]["secret_scan"]["exit_code"] == 1
+    assert "GITHUB_TOKEN" in receipt["capture_provenance"]["envp_redacted_names"]
+    assert receipt["capture_provenance"]["complete"] is True
+    assert SYNTHETIC_SECRET not in _retained_text(run_root)
+    assert tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+
+
+@pytest.mark.parametrize(("capture", "expected"), [
+    ("event_count_limit = 3", "syscall event retention limit reached"),
+    ("event_count_limit = 250000\ntool_call_count_limit = 1", "tool call retention limit reached"),
+])
+def test_go_capture_caps_are_explicit_gaps_and_prevent_checkpointing(
+        tmp_path: Path, capture: str, expected: str) -> None:
+    config, target = _fixture(tmp_path, capture=capture)
+    run_id, fingerprint = _accepted(config, target, [])
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        simulated_executor(profile, go_container([])))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    assert any(expected in gap for gap in receipt["gaps"])
+    assert receipt["capture_provenance"]["complete"] is False
+    assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))

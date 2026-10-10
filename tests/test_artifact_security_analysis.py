@@ -14,7 +14,7 @@ from appsec_review.jobs.job_artifact_security_analysis import (
     build_job, load_accepted_artifact_security_analysis)
 from appsec_review.jobs.job_artifact_security_analysis.formats import (
     ArchiveLimits, classify, inspect_archive, parse_wasm)
-from appsec_review.jobs.job_artifact_security_analysis.scanners import ADAPTERS
+from appsec_review.jobs.job_artifact_security_analysis.scanners import ADAPTERS, _execution_token
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, RetrievalCore, write_manifest
 from appsec_review.retrieval.index import INDEX_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
@@ -89,7 +89,15 @@ def test_scanner_adapters_mount_artifacts_as_data() -> None:
     assert ADAPTERS["blint"].output_file == "/scratch/blint-output.json"
 
 
-def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False):
+def test_scanner_execution_tokens_distinguish_equal_content_artifacts() -> None:
+    shared = {"sha256": "a" * 64}
+    first = _execution_token("syft", {**shared, "canonical_identity": "asr:managed_assembly:first"})
+    second = _execution_token("syft", {**shared, "canonical_identity": "asr:managed_assembly:second"})
+    assert first != second
+
+
+def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
+             duplicate_artifact: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if not disable_grype:
@@ -105,6 +113,12 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     artifact = {"path": produced.relative_to(run_root).as_posix(), "workspace_path": "build/module.wasm",
         "sha256": file_sha256(produced), "size_bytes": produced.stat().st_size, "kind": "wasm-module",
         "build_unit_id": "build-unit-fixture", "mapping": "exact-workspace-path", "mapping_confidence": 1.0}
+    artifacts = [artifact]
+    if duplicate_artifact:
+        duplicate = run_root / "data" / "build" / "wasm" / "module-copy.wasm"
+        duplicate.write_bytes(payload)
+        artifacts.append({**artifact, "path": duplicate.relative_to(run_root).as_posix(),
+                          "workspace_path": "build/module-copy.wasm"})
     fingerprint = "a" * 64
     index_path = run_root / "data" / "indices" / "artifacts" / "fixture.sqlite"
     builder = IndexBuilder(index_path, name="artifacts", fingerprint="b" * 64,
@@ -122,7 +136,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/1",
         "source_fingerprint": fingerprint, "upstream_project_build_handoff_sha256": "c" * 64,
         "receipts": [{"build_unit_id": "build-unit-fixture", "family": "wasm", "fingerprint": "d" * 64,
-                      "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": [artifact]}],
+                      "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": artifacts}],
         "gaps": []})
     accepted = {"path": accepted_path.relative_to(run_root).as_posix(), "sha256": file_sha256(accepted_path),
                 "size_bytes": accepted_path.stat().st_size}
@@ -137,7 +151,8 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     indexing_summary_path = run_root / "data" / "upstream" / "accepted-artifact-index.json"
     atomic_json(indexing_summary_path, {"schema": "appsec-review/artifact-indexing/1",
         "source_fingerprint": fingerprint, "language_build_handoff_sha256": file_sha256(handoff_path),
-        "artifact_shard_count": 1, "reused_shard_count": 0, "artifact_count": 1, "gaps": [],
+        "artifact_shard_count": 1, "reused_shard_count": 0,
+        "artifact_count": len(artifacts), "gaps": [],
         "index_manifest": manifest})
     indexing_summary = {"path": indexing_summary_path.relative_to(run_root).as_posix(),
         "sha256": file_sha256(indexing_summary_path), "size_bytes": indexing_summary_path.stat().st_size}
@@ -209,6 +224,25 @@ def test_resume_reuses_verified_artifact_capability_shards(tmp_path: Path) -> No
     GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id,
                                    force_from="job_artifact_security_analysis")
     assert first_calls == []
+
+
+def test_equal_content_artifacts_have_distinct_observation_checkpoints(tmp_path: Path) -> None:
+    config, run_id, run_root, target, fingerprint, _ = _fixture(
+        tmp_path, duplicate_artifact=True)
+
+    def scanner(capability, path, artifact, timeout, limit):
+        return {"stdout": b"{}", "stderr": b"", "exit_code": 0, "observation": {},
+                "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
+
+    outcome = GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_artifact_security_analysis(run_root)
+    assert accepted["artifact_count"] == 2
+    assert accepted["capabilities"]["syft"]["observation_count"] == 2
+    shards = list((run_root / "data" / "artifact-security" / "shards" / "syft").glob(
+        "*/result.json"))
+    assert len(shards) == 2
 
 
 def test_dagster_graph_exposes_independent_capability_units() -> None:

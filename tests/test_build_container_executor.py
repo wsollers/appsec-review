@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -12,8 +13,70 @@ import pytest
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile, CaptureScope
 from appsec_review.container_runtime.catalog import load_catalog
-from appsec_review.container_runtime.build_executor import _run
+from appsec_review.container_runtime.build_executor import _application_root, _capture_asset, _run
 from tests.capture_fakes import SYNTHETIC_SECRET, secret_scanner, simulated_executor
+
+
+def test_tool_wrapper_retains_complete_stream_files_beyond_legacy_limit(
+        tmp_path: Path) -> None:
+    capture = tmp_path / "capture"
+    capture.mkdir()
+    (capture / "envp-redact-names.json").write_text("[]\n", encoding="utf-8")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    noisy = tools / "noisy"
+    noisy.write_text(
+        "#!/bin/sh\nprintf 'abcdefghijklmnop'\nprintf 'qrstuvwxyz' >&2\n",
+        encoding="utf-8",
+    )
+    noisy.chmod(0o755)
+    wrapper = Path(__file__).parents[1] / "containers" / "build-capture" / "tool-wrapper.py"
+    environment = {
+        **os.environ,
+        "APPSEC_CAPTURE_ROOT": str(capture),
+        "APPSEC_CAPTURE_CALL_LIMIT": "10",
+        "APPSEC_CAPTURE_STREAM_LIMIT": "8",
+        "APPSEC_CAPTURE_REAL_PATH": str(tools),
+        "APPSEC_CAPTURE_ENVP": "1",
+    }
+
+    completed = subprocess.run(
+        [sys.executable, str(wrapper), "noisy"], env=environment,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+    )
+
+    call = capture / "tool-calls" / "00000001-noisy"
+    assert completed.stdout == (call / "stdout").read_bytes() == b"abcdefghijklmnop"
+    assert completed.stderr == (call / "stderr").read_bytes() == b"qrstuvwxyz"
+    record = json.loads((call / "record.json").read_text(encoding="utf-8"))
+    assert record["stdout"]["retained_bytes"] == record["stdout"]["bytes"] == 16
+    assert record["stderr"]["retained_bytes"] == record["stderr"]["bytes"] == 10
+    assert record["stdout"]["storage"] == record["stderr"]["storage"] == "complete-file"
+    assert record["stdout"]["truncated"] is record["stderr"]["truncated"] is False
+
+
+def test_capture_assets_resolve_from_configured_installed_application_root(
+        tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "installed-app"
+    asset = root / "containers" / "build-capture" / "build-driver.sh"
+    asset.parent.mkdir(parents=True)
+    asset.write_text("#!/bin/sh\n", encoding="utf-8")
+    config = root / "appsec-review.toml"
+    config.write_text("", encoding="utf-8")
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(config))
+    assert _capture_asset("build-driver.sh") == asset
+
+
+def test_container_catalog_resolves_from_configured_installed_application_root(
+        tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "installed-app"
+    catalog = root / "containers" / "catalog.toml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("schema_version = 1\n", encoding="utf-8")
+    config = root / "appsec-review.toml"
+    config.write_text("", encoding="utf-8")
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(config))
+    assert _application_root("containers/catalog.toml") == root
 
 
 def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -> None:
@@ -102,7 +165,7 @@ def test_build_executor_uses_in_container_driver_for_bounded_syscall_capture(tmp
             f'1700000000.0 execve("/usr/bin/clang++", ["clang++"], '
             f'["SECRET_INPUT={synthetic_secret}"]) = 0\n'
             '1700000000.1 exit_group(0) = ?\n', encoding="utf-8")
-        return 0, b"built", b"", False
+        return 0, b"b" * 2048, b"", False
 
     executor = BuildContainerExecutor(
         BuildProfile("native", "build-native:local", image_id, "10001:10001"),
@@ -112,7 +175,7 @@ def test_build_executor_uses_in_container_driver_for_bounded_syscall_capture(tmp
         working_directory="native", environment={"SECRET_INPUT": synthetic_secret},
         capture_directory=capture,
         capture_config=BuildCaptureConfig(
-            "ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 4096, 100),
+            "ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 100),
         scope=CaptureScope("2026-10-09-0001", "job_project_build", "attempt_0001",
                            "build-unit-cpp", "native"))
     command = next(call[0] for call in calls if "/bin/sh" in call[0])
@@ -120,6 +183,9 @@ def test_build_executor_uses_in_container_driver_for_bounded_syscall_capture(tmp
     assert command[command.index("--entrypoint") + 1] == "/bin/sh"
     assert command[-4:] == ("clang++", "main.cpp", "-o", "app")
     assert result.capture_record == capture / "record.json"
+    assert result.stdout == b"b" * 1024 and result.stdout_truncated is True
+    assert result.stdout_file == capture / "stdout"
+    assert result.stdout_file.read_bytes() == b"b" * 2048
     record = json.loads(result.capture_record.read_text())
     assert record["collector"]["backend"] == "ptrace"
     assert record["secret_scan"]["scanner"] == "tool-gitleaks"
@@ -196,7 +262,7 @@ def _leaking_capture(tmp_path: Path, scanner, *, finding_limit: int = 100):
         ("cargo", "build"), workspace=workspace, working_directory="unit",
         environment={"UNLISTED_NAME": SYNTHETIC_SECRET}, capture_directory=capture,
         capture_config=BuildCaptureConfig(
-            "ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 4096, finding_limit),
+            "ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, finding_limit),
         scope=CaptureScope("2026-10-09-0001", "job_language_build", "attempt_0001",
                            "build-unit-rust", "rust"))
     return capture, result, json.loads(result.capture_record.read_text(encoding="utf-8"))

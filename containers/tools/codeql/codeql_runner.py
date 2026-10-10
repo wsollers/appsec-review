@@ -28,6 +28,14 @@ def _safe_relative(value: str) -> Path:
     return Path(*logical.parts)
 
 
+def _working_directory(workspace: Path, value: str) -> Path:
+    """Resolve a replay working directory, including the workspace root marker."""
+    working = workspace if value == "." else (workspace / _safe_relative(value)).resolve(strict=True)
+    if workspace != working and workspace not in working.parents:
+        raise ValueError("CodeQL replay command escaped workspace")
+    return working
+
+
 def _run(argv: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
     completed = subprocess.run(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
                                check=False)
@@ -96,10 +104,16 @@ def inventory(args: argparse.Namespace) -> None:
         if (_sha256(qlpack) != pack["qlpack_sha256"] or _sha256(pack_lock) != pack["lock_sha256"] or
                 _sha256(suite_path) != pack["suite_sha256"]):
             raise ValueError(f"CodeQL {language} query pack identity differs from the reviewed asset lock")
+        for additional in pack.get("additional_suites", []):
+            additional_path = root / Path(*PurePosixPath(additional["query_suite"]).parts)
+            if (additional_path.is_symlink() or
+                    _sha256(additional_path) != additional["query_suite_sha256"]):
+                raise ValueError(f"CodeQL {language} additional suite differs from the reviewed asset lock")
         verified_packs[language] = {"name": pack["name"], "version": pack["version"],
                                     "suite": pack["suite"], "suite_sha256": pack["suite_sha256"],
                                     "qlpack_sha256": pack["qlpack_sha256"],
-                                    "lock_sha256": pack["lock_sha256"]}
+                                    "lock_sha256": pack["lock_sha256"],
+                                    "additional_suites": pack.get("additional_suites", [])}
     verified_custom_packs = {}
     for language, packs in sorted(lock.get("custom_query_packs", {}).items()):
         if not isinstance(packs, list):
@@ -178,9 +192,7 @@ def database(args: argparse.Namespace) -> None:
             digest = hashlib.sha256(_canonical(argv)).hexdigest()
             if digest != command.get("argv_sha256"):
                 raise ValueError("CodeQL replay command identity changed")
-            working = (workspace / _safe_relative(str(command.get("working_directory", "")))).resolve(strict=True)
-            if workspace != working and workspace not in working.parents:
-                raise ValueError("CodeQL replay command escaped workspace")
+            working = _working_directory(workspace, str(command.get("working_directory", "")))
             child_environment = dict(environment)
             child_environment.update(command_environment)
             _run([CODEQL, "database", "trace-command", "--threads", str(args.threads),
@@ -251,10 +263,29 @@ def parser() -> argparse.ArgumentParser:
     return value
 
 
+def _make_host_accessible() -> None:
+    """Expose and make disposable non-root CodeQL outputs removable by the run owner."""
+    scratch = Path("/scratch")
+    for path in (scratch, *scratch.rglob("*")):
+        if path.is_symlink():
+            continue
+        try:
+            mode = path.stat().st_mode
+            path.chmod(mode | (0o007 if path.is_dir() else 0o004))
+        except (FileNotFoundError, PermissionError):
+            # Host-owned inputs need no ownership change; concurrent tool cleanup can remove
+            # transient files while the final permission pass walks the completed tree.
+            continue
+
+
 if __name__ == "__main__":
+    exit_code = 0
     try:
         parsed = parser().parse_args()
         {"inventory": inventory, "database": database, "query": query}[parsed.action](parsed)
     except Exception as exc:
         print(f"codeql-runner: {type(exc).__name__}: {exc}", file=sys.stderr)
-        raise SystemExit(2)
+        exit_code = 2
+    finally:
+        _make_host_accessible()
+    raise SystemExit(exit_code)

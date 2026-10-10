@@ -32,6 +32,9 @@ class FakeExecutor:
 
     def execute(self, request):
         self.calls.append(request.tool_id)
+        for mount in request.extra_mounts:  # tools run as uid 10001 and must read mounted inputs
+            if mount.source.is_file():
+                assert mount.source.stat().st_mode & 0o004, f"{mount.source} is unreadable by the tool user"
         request.scratch_root.mkdir(parents=True, exist_ok=True)
         stdout = request.scratch_root / "raw" / "stdout.bin"
         stderr = request.scratch_root / "raw" / "stderr.bin"

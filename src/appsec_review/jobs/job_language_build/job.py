@@ -13,6 +13,12 @@ import struct
 import time
 from typing import Any
 
+import appsec_review.applicability as applicability_contract
+from appsec_review.applicability import (
+    ApplicabilityAction, ProcessingFeature, decision_from_mapping,
+    evaluate_applicability, facts_from_build_unit, finalize_processing,
+    resolved_configuration_identity,
+)
 from appsec_review.config import LanguageBuildSettings
 from appsec_review.container_runtime import (
     BuildContainerExecutor, BuildProfile, CaptureIntegrityError, CaptureScope, VerifiedCapture,
@@ -33,21 +39,28 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 
-from . import dotnet, elf, jvm, node, php, python, rust
+from . import capture as captured_build, dotnet, elf, go, jvm, native, node, php, python, rust
+from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
 RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/1"
-CAPTURE_IDENTITIES = {"native": "appsec-review/native-build-capture/1",
-                      "go": "appsec-review/go-build-capture/1",
-                      "dotnet": dotnet.CAPTURE_IDENTITY,
+CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
+    descriptor.family: descriptor for descriptor in (
+        dotnet.CAPTURE_DESCRIPTOR, go.CAPTURE_DESCRIPTOR,
+        native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
+    )
+}
+CAPTURE_IDENTITIES = {"native": native.CAPTURE_DESCRIPTOR.capture_identity,
+                      "go": go.CAPTURE_DESCRIPTOR.capture_identity,
+                      "dotnet": dotnet.CAPTURE_DESCRIPTOR.capture_identity,
                       "java": jvm.JVM_CAPTURE_IDENTITY,
                       "node": node.CAPTURE_IDENTITY,
                       "php": php.CAPTURE_IDENTITY,
                       "python": python.CAPTURE_IDENTITY,
-                      "rust": rust.CAPTURE_IDENTITY,
-                      "wasm": "appsec-review/protected-build-capture/2"}
+                      "rust": rust.CAPTURE_DESCRIPTOR.capture_identity,
+                      "wasm": "appsec-review/protected-build-capture/3"}
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm", ".h", ".hh", ".hpp", ".hxx", ".go", ".s"}
 _OBJECT_SUFFIXES = {".o", ".obj"}
@@ -66,8 +79,7 @@ _TOOL_KINDS = {
     "compile": "compiler", "asm": "assembler", "link": "linker", "cgo": "cgo",
     "pack": "package-builder", "go": "build-driver", "gcc": "compiler",
 }
-_GO_TRACE_TOOLS = {"compile", "asm", "link", "cgo", "pack", "gcc", "clang", "as", "ld", "ar"}
-_CAPTURED_FAMILIES = frozenset({"rust"})
+_CAPTURED_FAMILIES = frozenset(CAPTURE_DESCRIPTORS)
 _CAPTURE_GAP = "execution capture command"
 
 
@@ -216,6 +228,7 @@ def _kind(path: Path, family: str = "native", *, relative: str = "",
     if suffix in _STATIC_SUFFIXES: return "static-library"
     if suffix in _SHARED_SUFFIXES: return "shared-library"
     if suffix in _BITCODE_SUFFIXES: return "llvm-bitcode"
+    if suffix == ".ast": return "clang-ast"
     if suffix in _DEBUG_SUFFIXES: return "debug-information"
     if suffix in _MAP_SUFFIXES: return "link-map"
     try:
@@ -270,30 +283,39 @@ def _compile_rows(workspace: Path, source_dir: str, build_dir: str) -> tuple[lis
         return [], ["compile database was not emitted; compiler-to-artifact mappings are unavailable"]
     if path.stat().st_size > 16 * 1024 * 1024:
         return [], ["compile database exceeded the 16 MiB provenance bound"]
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, list) or len(raw) > 4096:
-        raise ValueError("emitted compile database is invalid or exceeds its row bound")
-    rows = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, Mapping):
-            raise ValueError("emitted compile database row is invalid")
-        argv = item.get("arguments")
-        if argv is None and isinstance(item.get("command"), str):
-            argv = shlex.split(item["command"])
-        if not isinstance(argv, list) or not argv or any(not isinstance(v, str) or "\0" in v for v in argv):
-            raise ValueError("emitted compile database argv is invalid")
-        directory = str(item.get("directory", ""))
-        declared_output = item.get("output")
-        if not declared_output and "-o" in argv and argv.index("-o") + 1 < len(argv):
-            declared_output = argv[argv.index("-o") + 1]
-        inputs = _mapped_files(workspace, directory, [item.get("file")])
-        outputs = _mapped_files(workspace, directory, [declared_output])
-        rows.append({"ordinal": index + 1, "tool_kind": _TOOL_KINDS.get(Path(argv[0]).name, "compiler-driver"),
-                     "tool": Path(argv[0]).name, "argv": argv, "directory": str(item.get("directory", "")),
-                     "input": item.get("file"), "output": declared_output,
-                     "inputs": inputs, "outputs": outputs,
-                     "mapping": "compile-database", "mapping_confidence": 1.0})
-    return rows, []
+    try:
+        raw = json.loads(path.read_bytes().decode("utf-8"))
+        if not isinstance(raw, list) or len(raw) > 4096:
+            raise ValueError("top-level value is not a bounded row list")
+        rows = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, Mapping):
+                raise ValueError(f"row {index + 1} is not an object")
+            argv = item.get("arguments")
+            if argv is None and isinstance(item.get("command"), str):
+                argv = shlex.split(item["command"])
+            if (not isinstance(argv, list) or not argv or len(argv) > 16384 or
+                    any(not isinstance(value, str) or "\0" in value for value in argv)):
+                raise ValueError(f"row {index + 1} argv is invalid")
+            directory, source, declared_output = item.get("directory"), item.get("file"), item.get("output")
+            if (not isinstance(directory, str) or "\0" in directory or
+                    not isinstance(source, str) or not source or "\0" in source or
+                    declared_output is not None and
+                    (not isinstance(declared_output, str) or "\0" in declared_output)):
+                raise ValueError(f"row {index + 1} paths are invalid")
+            if not declared_output and "-o" in argv and argv.index("-o") + 1 < len(argv):
+                declared_output = argv[argv.index("-o") + 1]
+            inputs = _mapped_files(workspace, directory, [source])
+            outputs = _mapped_files(workspace, directory, [declared_output])
+            rows.append({"ordinal": index + 1,
+                         "tool_kind": _TOOL_KINDS.get(Path(argv[0]).name, "compiler-driver"),
+                         "tool": Path(argv[0]).name, "argv": argv, "directory": directory,
+                         "input": source, "output": declared_output,
+                         "inputs": inputs, "outputs": outputs,
+                         "mapping": "compile-database", "mapping_confidence": 1.0})
+        return rows, []
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        return [], [f"compile database was not parseable: {exc}"]
 
 
 def _workspace_path(workspace: Path, directory: str, value: Any) -> Path | None:
@@ -348,34 +370,47 @@ def _mapped_files(workspace: Path, directory: str, values: list[Any]) -> list[di
 def _link_rows(workspace: Path, build_dir: str) -> tuple[list[dict[str, Any]], list[str]]:
     root = workspace / Path(*PurePosixPath(build_dir).parts)
     rows: list[dict[str, Any]] = []
-    for path in sorted(root.rglob("link.txt"))[:4096] if root.is_dir() else ():
-        if path.is_symlink() or path.stat().st_size > 1024 * 1024:
-            continue
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[:100]:
-            if not line.strip():
-                continue
-            argv = shlex.split(line)
-            if not argv:
-                continue
-            tool = Path(argv[0]).name
-            kind = _TOOL_KINDS.get(tool, "compiler-driver-link")
-            output_values: list[str] = []
-            for index, value in enumerate(argv[:-1]):
-                if value == "-o":
-                    output_values.append(argv[index + 1])
-            if kind == "archiver":
-                candidates = [value for value in argv[1:] if value.endswith(tuple(_STATIC_SUFFIXES))]
-                output_values.extend(candidates[:1])
-            input_values = [value for value in argv[1:] if value.endswith(
-                tuple(_OBJECT_SUFFIXES | _STATIC_SUFFIXES | _SHARED_SUFFIXES | _BITCODE_SUFFIXES)) and
-                value not in output_values]
-            directory = path.parent.relative_to(workspace).as_posix()
-            rows.append({"tool_kind": "compiler-driver-link" if kind == "compiler-driver" else kind, "tool": tool,
-                         "argv": argv, "directory": directory,
-                         "origin": path.relative_to(workspace).as_posix(),
-                         "inputs": _mapped_files(workspace, directory, input_values),
-                         "outputs": _mapped_files(workspace, directory, output_values),
-                         "mapping": "build-system-link-receipt", "mapping_confidence": 1.0})
+    paths = sorted(root.rglob("link.txt")) if root.is_dir() else []
+    if len(paths) > 4096:
+        return [], ["build-system link metadata exceeded its file-count bound"]
+    try:
+        for path in paths:
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+                raise ValueError(f"{path.relative_to(workspace).as_posix()}: invalid link metadata file")
+            lines = path.read_bytes().decode("utf-8").splitlines()
+            if len(lines) > 100:
+                raise ValueError(f"{path.relative_to(workspace).as_posix()}: link row count exceeds its bound")
+            for line in lines:
+                if "\0" in line:
+                    raise ValueError(f"{path.relative_to(workspace).as_posix()}: link row contains NUL")
+                if not line.strip():
+                    continue
+                argv = shlex.split(line)
+                if not argv or len(argv) > 16384:
+                    raise ValueError(f"{path.relative_to(workspace).as_posix()}: link argv is invalid")
+                tool = Path(argv[0]).name
+                kind = _TOOL_KINDS.get(tool, "compiler-driver-link")
+                output_values: list[str] = []
+                for index, value in enumerate(argv[:-1]):
+                    if value == "-o":
+                        output_values.append(argv[index + 1])
+                if kind == "archiver":
+                    candidates = [value for value in argv[1:] if value.endswith(tuple(_STATIC_SUFFIXES))]
+                    output_values.extend(candidates[:1])
+                input_values = [value for value in argv[1:] if value.endswith(
+                    tuple(_OBJECT_SUFFIXES | _STATIC_SUFFIXES | _SHARED_SUFFIXES | _BITCODE_SUFFIXES)) and
+                    value not in output_values]
+                # CMake stores link.txt below CMakeFiles/<target>.dir but executes its row from
+                # the configured build directory, which is the root being scanned here.
+                directory = root.relative_to(workspace).as_posix()
+                rows.append({"tool_kind": "compiler-driver-link" if kind == "compiler-driver" else kind,
+                             "tool": tool, "argv": argv, "directory": directory,
+                             "origin": path.relative_to(workspace).as_posix(),
+                             "inputs": _mapped_files(workspace, directory, input_values),
+                             "outputs": _mapped_files(workspace, directory, output_values),
+                             "mapping": "build-system-link-receipt", "mapping_confidence": 1.0})
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        return [], [f"build-system link metadata was not parseable: {exc}"]
     return rows, ([] if rows else
                   ["exact linker/archiver provenance was not emitted; link relationships remain ambiguous"])
 
@@ -422,12 +457,6 @@ def _stream_artifact(run_root: Path, path: Path, *, result, stream: str, limit: 
     return value
 
 
-def _go_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
-    if len(argv) > 1 and argv[0] == "go" and argv[1] in {"build", "generate"} and "-x" not in argv[2:]:
-        return (argv[0], argv[1], "-x", *argv[2:])
-    return argv
-
-
 def _go_environment(recipe: Mapping[str, Any], workspace: Path) -> dict[str, str]:
     environment = _probe_environment(recipe)
     environment.setdefault("GOCACHE", "/tmp/appsec-go-cache")
@@ -439,48 +468,15 @@ def _go_environment(recipe: Mapping[str, Any], workspace: Path) -> dict[str, str
     return environment
 
 
-def _go_trace_rows(workspace: Path, data: bytes) -> list[dict[str, Any]]:
-    rows, directory = [], "/workspace"
-    for line in data.decode("utf-8", "replace").splitlines():
-        text = line.strip()
-        if text.startswith("cd "):
-            directory = text[3:].strip()
-            continue
-        if not text or text.startswith(("WORK=", "mkdir ", "cat ", "cp ")):
-            continue
-        try:
-            argv = shlex.split(text)
-        except ValueError:
-            continue
-        while argv and "=" in argv[0] and not argv[0].startswith(("/", ".")):
-            argv.pop(0)
-        if not argv:
-            continue
-        tool = Path(argv[0]).name
-        if tool not in _GO_TRACE_TOOLS:
-            continue
-        outputs: list[str] = []
-        for index, value in enumerate(argv[:-1]):
-            if value == "-o":
-                outputs.append(argv[index + 1])
-        inputs = [value for value in argv[1:] if value not in outputs and
-                  Path(value).suffix.lower() in (_SOURCE_SUFFIXES | _OBJECT_SUFFIXES | _STATIC_SUFFIXES)]
-        rows.append({"ordinal": len(rows) + 1, "tool_kind": _TOOL_KINDS.get(tool, "compiler"),
-                     "tool": tool, "argv": argv, "directory": directory,
-                     "inputs": _mapped_files(workspace, directory, inputs),
-                     "outputs": _mapped_files(workspace, directory, outputs),
-                     "mapping": "go-x-trace", "mapping_confidence": 1.0})
-    return rows
-
-
 def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     values = list(argv)
     executable = Path(values[0]).name.lower() if values else ""
     lowered = [value.lower() for value in values[1:]]
     if executable == "dotnet":
         verb = next((value for value in lowered if not value.startswith("-")), "")
-        if verb in {"build", "publish", "pack", "msbuild"} and not any(
-                value in {"-v:diag", "--verbosity:diagnostic", "/v:diag"} for value in lowered):
+        has_verbosity = any(value in {"-v", "--verbosity"} or value.startswith(
+            ("-v:", "--verbosity:", "/v:")) for value in lowered)
+        if verb in {"build", "publish", "pack", "msbuild"} and not has_verbosity:
             values.extend(("--verbosity", "diagnostic"))
     elif executable == "msbuild" and not any(value in {"-v:diag", "/v:diag"} for value in lowered):
         values.append("/v:diag")
@@ -500,53 +496,14 @@ def _go_module_metadata(workspace: Path, source_dir: str) -> list[dict[str, Any]
     return values
 
 
-def _go_package_rows(data: bytes) -> list[dict[str, Any]]:
-    text = data.decode("utf-8", "replace")
-    decoder, offset, rows = json.JSONDecoder(), 0, []
-    while offset < len(text):
-        while offset < len(text) and text[offset].isspace():
-            offset += 1
-        if offset >= len(text):
-            break
-        try:
-            value, offset = decoder.raw_decode(text, offset)
-        except json.JSONDecodeError:
-            break
-        if not isinstance(value, Mapping) or not isinstance(value.get("ImportPath"), str):
-            continue
-        rows.append({"import_path": value["ImportPath"], "module_path":
-                     value.get("Module", {}).get("Path") if isinstance(value.get("Module"), Mapping) else None,
-                     "dependencies": sorted(str(item) for item in value.get("Imports", ()) if isinstance(item, str)),
-                     "standard": bool(value.get("Standard", False)), "cgo_files": sorted(value.get("CgoFiles", ())),
-                     "go_files": sorted(value.get("GoFiles", ())), "compiled_go_files": sorted(value.get("CompiledGoFiles", ()))})
-    return rows
-
-
-def _go_list_argv(commands: list[list[str]]) -> tuple[str, ...]:
-    packages: list[str] = []
-    forwarded: list[str] = []
-    takes_value = {"-tags", "-mod", "-modfile", "-overlay"}
-    for raw in commands:
-        if len(raw) < 2 or raw[0] != "go" or raw[1] != "build":
-            continue
-        index = 2
-        while index < len(raw):
-            value = str(raw[index])
-            if value in takes_value and index + 1 < len(raw):
-                forwarded.extend((value, str(raw[index + 1])))
-                index += 2
-                continue
-            if any(value.startswith(prefix + "=") for prefix in takes_value):
-                forwarded.append(value)
-            elif not value.startswith("-"):
-                packages.append(value)
-            index += 1
-        break
-    return ("go", "list", "-deps", "-json", *forwarded, *(packages or ["./..."]))
-
-
 def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> str:
     image = dispatch["image"]
+    family = str(dispatch["family"])
+    artifact_overrides = settings.get("compiler_artifact_collection_overrides", {}) if settings else {}
+    artifact_mode = (artifact_overrides.get(
+        family, settings.get("compiler_artifact_collection_mode", "required"))
+        if isinstance(artifact_overrides, Mapping) and settings else "required")
+    capture = settings.get("build_capture", {}) if settings else {}
     return hashlib.sha256(canonical_json({"schema": RECEIPT_SCHEMA, "target": dispatch["source_fingerprint"],
         "recipe": dispatch["recipe_identity"], "dependencies": image["dependency_hashes"],
         "image": image["image_id"], "executor": EXECUTOR_IDENTITY,
@@ -556,11 +513,35 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
         "limits": ({key: settings[key] for key in
                     ("command_timeout_seconds", "output_bytes", "artifact_count_limit")}
                    if settings is not None else {}),
+        "processing_modes": {
+            "build_execution_capture": capture.get("mode", "required")
+            if isinstance(capture, Mapping) else "required",
+            "compiler_artifact_collection": artifact_mode,
+        },
+        "applicability": {
+            "facts": dispatch.get("processing_facts"),
+            "decisions": dispatch.get("processing_decisions"),
+            "build_capture_decision": dispatch.get("build_capture_decision"),
+        },
         "family_options": (settings.get(str(dispatch["family"]), {}) if settings is not None else {})})).hexdigest()
 
 
 def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
     data = bytes(getattr(result, name))
+    complete_file = getattr(result, f"{name}_file", None)
+    if isinstance(complete_file, Path):
+        if complete_file.resolve() != path.resolve():
+            shutil.copyfile(complete_file, path)
+        total = path.stat().st_size
+        try: path.chmod(0o600)
+        except OSError: pass
+        preview_truncated = bool(getattr(result, f"{name}_truncated", False))
+        return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
+                "captured_bytes": total, "total_bytes": total,
+                "capture_limit_bytes": None, "truncated": False,
+                "storage": "complete-file",
+                "preview_limit_bytes": len(data) if preview_truncated else limit,
+                "preview_truncated": preview_truncated}
     total = getattr(result, f"{name}_bytes", None)
     total = len(data) if total is None else int(total)
     truncated = bool(getattr(result, f"{name}_truncated", False) or total > len(data))
@@ -796,6 +777,15 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 return receipt
     _copy_source(unit, dispatch, workspace)
     projects: list[dict[str, Any]] = []
+    go_settings = None
+    if family == "go":
+        typed = unit.job.config.typed_settings
+        if not isinstance(typed, LanguageBuildSettings):
+            raise ValueError("typed language-build settings are unavailable")
+        go_settings = typed.go
+        go_errors = go.validate_dispatch(dispatch, go_settings)
+        if go_errors:
+            raise ValueError("accepted Go dispatch is invalid: " + "; ".join(go_errors))
     rust_settings = None
     if family == "rust":
         typed = unit.job.config.typed_settings
@@ -864,7 +854,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         prepare(workspace=workspace, source_dir=str(recipe["source_dir"]))
     protected = root / "protected-commands"
     protected.mkdir(parents=True, exist_ok=True)
-    commands, gaps, go_trace_rows, node_rows = [], [], [], []
+    commands, gaps, node_rows = [], [], []
     cargo_metadata: dict[str, Any] | None = None
     provenance_gaps: list[str] = []
     captures: list[tuple[int, VerifiedCapture]] = []
@@ -884,8 +874,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                           image_id=image["image_id"], command_count=len(command_plan))
     for ordinal, (role, raw) in enumerate(command_plan, 1):
         argv = tuple(raw) if role == "metadata" else _normalized_argv(recipe, list(raw))
-        if family == "go":
-            argv = _go_argv(argv)
+        if family == "go" and go_settings is not None:
+            argv = go.build_argv(argv, go_settings)
         elif family == "dotnet":
             argv = _dotnet_argv(argv)
         elif family == "rust" and rust_settings is not None:
@@ -964,9 +954,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "module": (argv[2] if len(argv) > 2 and argv[1] == "-m" else None)})
         if capture_identity is not None:
             commands[-1]["execution_capture"] = capture_identity
-        if family == "go":
-            go_trace_rows.extend(_go_trace_rows(workspace, result.stderr))
-        elif family == "node":
+        if family == "node":
             command_after = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
             observed, observed_gaps = node.invocation_rows(
                 workspace, str(recipe["source_dir"]), result.argv, success=not failed,
@@ -991,11 +979,18 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     package_relationships: list[dict[str, Any]] = []
     if family == "go" and not any(command["timed_out"] or command["exit_code"] != 0 for command in commands):
         ordinal = len(commands) + 1
-        argv = _normalized_argv(recipe, list(_go_list_argv(list(recipe["build_commands"]))))
+        argv = _normalized_argv(recipe, list(go.catalog_argv(list(recipe["build_commands"]))))
         environment = _go_environment(operational_recipe, workspace)
         command_started = time.monotonic()
-        result = executor.execute(argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                  environment=environment)
+        result, verified, capture_identity = _captured_command(
+            unit, executor, argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
+            environment=environment, capture_directory=capture_root / f"command-{ordinal:03d}",
+            build_unit_id=build_unit_id, family=family)
+        captures.append((ordinal, verified))
+        capture_gaps = [f"{_CAPTURE_GAP} {ordinal}: {gap}" for gap in verified.gaps]
+        if not capture_identity["envp_captured"]:
+            capture_gaps.append(f"{_CAPTURE_GAP} {ordinal}: envp capture is disabled")
+        gaps.extend(capture_gaps)
         command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
                                                     "unit": build_unit_id, "ordinal": ordinal,
                                                     "argv": list(argv)})).hexdigest()
@@ -1003,8 +998,13 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         stdout.parent.mkdir(parents=True, exist_ok=True)
         stdout.write_bytes(result.stdout); stderr.write_bytes(result.stderr)
         exact = protected / f"{command_id}.json"
-        protected_json(exact, {"schema": "appsec-review/protected-build-command/2", "argv": list(result.argv),
-            "working_directory": str(recipe["source_dir"]), "environment": dict(environment),
+        recorded_argv = [str(value) for value in verified.document.get("command", {}).get("argv", ())]
+        redacted = bool(recorded_argv[:1] and recorded_argv[0].startswith("<redacted"))
+        protected_json(exact, {"schema": "appsec-review/protected-build-command/2",
+            "argv": recorded_argv if redacted else list(result.argv),
+            "working_directory": str(recipe["source_dir"]),
+            "environment": ({key: "<redacted: secret scan disposition>" for key in environment}
+                            if redacted else dict(environment)),
             "access": "run-owned-protected"})
         try: exact.chmod(0o600)
         except OSError: pass
@@ -1022,13 +1022,19 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "stdout": stdout_identity, "stderr": stderr_identity,
             "protected_argv": {"path": exact.relative_to(unit.job.run_root).as_posix(),
                                "sha256": file_sha256(exact)},
-            "image_id": image["image_id"], "build_unit_id": build_unit_id})
-        package_relationships = _go_package_rows(result.stdout) if result.exit_code == 0 and not result.timed_out else []
+            "image_id": image["image_id"], "build_unit_id": build_unit_id,
+            "execution_capture": capture_identity})
+        try:
+            package_relationships = (go.parse_package_catalog(stdout.read_bytes())
+                                     if result.exit_code == 0 and not result.timed_out else [])
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            package_relationships = []
+            gaps.append("go package relationship catalog was malformed or exceeded its bound")
         if not package_relationships:
             gaps.append("go package relationship catalog was unavailable")
         unit.job.events.write("BUILD_COMMAND_COMPLETED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
             command_id=command_id, tool="go", disposition=("SUCCEEDED" if package_relationships else "FAILED"),
-            result_count=len(package_relationships), gap_count=0 if package_relationships else 1,
+            result_count=len(package_relationships), gap_count=(0 if package_relationships else 1) + len(capture_gaps),
             truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
             duration_ms=commands[-1]["duration_ms"])
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
@@ -1053,8 +1059,15 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             argv = ("go", "tool", "buildid", inspected_path)
             environment = _go_environment(operational_recipe, workspace)
             command_started = time.monotonic()
-            result = executor.execute(argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                      environment=environment)
+            result, verified, capture_identity = _captured_command(
+                unit, executor, argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
+                environment=environment, capture_directory=capture_root / f"command-{ordinal:03d}",
+                build_unit_id=build_unit_id, family=family)
+            captures.append((ordinal, verified))
+            capture_gaps = [f"{_CAPTURE_GAP} {ordinal}: {gap}" for gap in verified.gaps]
+            if not capture_identity["envp_captured"]:
+                capture_gaps.append(f"{_CAPTURE_GAP} {ordinal}: envp capture is disabled")
+            gaps.extend(capture_gaps)
             command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
                                                         "unit": build_unit_id, "ordinal": ordinal,
                                                         "argv": list(argv)})).hexdigest()
@@ -1062,8 +1075,13 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             stdout.parent.mkdir(parents=True, exist_ok=True)
             stdout.write_bytes(result.stdout); stderr.write_bytes(result.stderr)
             exact = protected / f"{command_id}.json"
-            protected_json(exact, {"schema": "appsec-review/protected-build-command/2", "argv": list(result.argv),
-                "working_directory": str(recipe["source_dir"]), "environment": dict(environment),
+            recorded_argv = [str(value) for value in verified.document.get("command", {}).get("argv", ())]
+            redacted = bool(recorded_argv[:1] and recorded_argv[0].startswith("<redacted"))
+            protected_json(exact, {"schema": "appsec-review/protected-build-command/2",
+                "argv": recorded_argv if redacted else list(result.argv),
+                "working_directory": str(recipe["source_dir"]),
+                "environment": ({key: "<redacted: secret scan disposition>" for key in environment}
+                                if redacted else dict(environment)),
                 "access": "run-owned-protected"})
             limit = int(unit.job.config.settings["output_bytes"])
             stdout_identity = _stream_identity(unit.job.run_root, stdout, result, "stdout", limit)
@@ -1079,7 +1097,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 "stdout": stdout_identity, "stderr": stderr_identity,
                 "protected_argv": {"path": exact.relative_to(unit.job.run_root).as_posix(),
                                    "sha256": file_sha256(exact)},
-                "image_id": image["image_id"], "build_unit_id": build_unit_id})
+                "image_id": image["image_id"], "build_unit_id": build_unit_id,
+                "execution_capture": capture_identity})
             build_id = result.stdout.decode("utf-8", "replace").strip() if result.exit_code == 0 else ""
             if build_id:
                 artifact["build_id_sha256"] = hashlib.sha256(build_id.encode()).hexdigest()
@@ -1096,39 +1115,58 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             rows, archive_gaps = python.package_contents(unit.job.run_root / artifact["path"], workspace)
             package_members.extend(rows)
             gaps.extend(archive_gaps)
-    if family == "native":
-        compile_rows, compile_gaps = _compile_rows(workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
-        gaps.extend(compile_gaps)
-        link_rows, link_gaps = _link_rows(workspace, str(recipe["build_dir"]))
-        gaps.extend(link_gaps)
-        normalized_links = _normalized_links(link_rows, str(recipe["build_dir"]))
-    elif family == "go":
-        compile_rows, link_rows, normalized_links = go_trace_rows, [], []
-        if not compile_rows:
-            gaps.append("go -x did not expose compiler, assembler, linker, cgo, or package-builder invocations")
+    descriptor = CAPTURE_DESCRIPTORS.get(family)
+    if descriptor is not None:
+        reconciled = reconcile_captured_build(
+            captures, workspace, str(recipe["source_dir"]), descriptor)
+        compile_rows = list(reconciled.rows)
+        capture_facts = dict(reconciled.facts)
+        provenance_gaps = list(reconciled.gaps)
+        gaps.extend(provenance_gaps)
+        link_rows = []
+        normalized_links = _normalized_links(
+            captured_link_rows(compile_rows, descriptor), str(recipe["build_dir"]))
+        kinds = {str(row.get("tool_kind")) for row in compile_rows}
+        capture_facts["observed_tool_kinds"] = sorted(kinds)
+        if descriptor.required_tool_kind and descriptor.required_tool_kind not in kinds:
+            gap = str(descriptor.missing_tool_gap)
+            gaps.append(gap)
+            provenance_gaps.append(gap)
+
+        if family == "native":
+            # Build-system metadata is exact-match enrichment, never execution authority.
+            _compile_metadata, compile_gaps = _compile_rows(
+                workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
+            _link_metadata, link_gaps = _link_rows(workspace, str(recipe["build_dir"]))
+            gaps.extend([*compile_gaps, *link_gaps])
+            link_metadata_by_argv = {
+                (Path(str(row["argv"][0])).name,
+                 tuple(str(value) for value in row["argv"][1:])): row
+                for row in _link_metadata
+            }
+            for row in compile_rows:
+                argv = row.get("argv", ())
+                if not argv:
+                    continue
+                metadata = link_metadata_by_argv.get(
+                    (Path(str(argv[0])).name, tuple(str(value) for value in argv[1:])))
+                if metadata is not None:
+                    row["inputs"] = list(metadata["inputs"])
+                    row["outputs"] = list(metadata["outputs"])
+                    row["metadata_origin"] = metadata["origin"]
+        elif family == "rust":
+            # When evidence was lost, expected optional link stages remain explicitly unknown.
+            if (any(gap.startswith(_CAPTURE_GAP) for gap in gaps) or provenance_gaps) and \
+                    rust_settings is not None and rust_settings.capture_linker:
+                gaps.extend(
+                    f"Rust {expected} execution could not be established from an incomplete capture"
+                    for expected in ("linker-driver", "archiver") if expected not in kinds)
+            if cargo_metadata is None:
+                gaps.append("Cargo metadata was unavailable")
     elif family == "node":
         compile_rows, link_rows, normalized_links = node_rows, [], []
         if not compile_rows:
             gaps.append("Node build did not expose compiler, transpiler, generator, bundler, or package invocations")
-    elif family == "rust":
-        compile_rows, capture_facts, provenance_gaps = rust.capture_invocations(
-            captures, workspace, str(recipe["source_dir"]))
-        gaps.extend(provenance_gaps)
-        link_rows = []
-        normalized_links = _normalized_links(rust.link_rows(compile_rows), str(recipe["build_dir"]))
-        kinds = {str(row.get("tool_kind")) for row in compile_rows}
-        capture_facts["observed_tool_kinds"] = sorted(kinds)
-        if "compiler" not in kinds:
-            gaps.append("Rust compiler execution was not observed in the standardized capture")
-        # A complete syscall capture is also the authority for what did not run: rustc writes
-        # rlibs in-process and a library-only build never links. Absence is unknown, and so a
-        # gap, only when the capture itself lost evidence.
-        if (any(gap.startswith(_CAPTURE_GAP) for gap in gaps) or provenance_gaps) and \
-                rust_settings is not None and rust_settings.capture_linker:
-            gaps.extend(f"Rust {expected} execution could not be established from an incomplete capture"
-                        for expected in ("linker-driver", "archiver") if expected not in kinds)
-        if cargo_metadata is None:
-            gaps.append("Cargo metadata was unavailable")
     elif family == "python":
         streams = [stream for command in commands for stream in (
             (unit.job.run_root / command["stdout"]["path"]).read_bytes(),
@@ -1147,17 +1185,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if not any(row["tool_kind"] in {"autoload-generator", "package-builder", "code-generator",
                                         "compiler-driver", "linker", "archiver"} for row in compile_rows):
             gaps.append("PHP build exposed no autoload, package, code-generation, or native-tool invocation")
-    else:
-        compile_rows = dotnet.parse_tool_invocations(
-            [stream for command in commands for stream in (
-                (unit.job.run_root / command["stdout"]["path"]).read_bytes(),
-                (unit.job.run_root / command["stderr"]["path"]).read_bytes())], workspace)
-        link_rows, normalized_links = [], []
-        if not compile_rows:
-            gaps.append("MSBuild diagnostic streams did not expose compiler or post-compile invocations")
-    # Cargo creates `target/` as the container user; the orchestrator keeps its own Rust records
-    # beside the workspace instead of writing into a tree the build user owns.
-    link_database = (root / "link-commands.json" if family == "rust" else
+    # Captured build trees are container-owned; the orchestrator keeps its own records beside
+    # the workspace instead of writing into a tree the build user owns.
+    link_database = (root / "link-commands.json" if family in _CAPTURED_FAMILIES else
                      workspace / Path(*PurePosixPath(str(recipe["build_dir"])).parts) / ".appsec-review-link-commands.json")
     atomic_json(link_database, normalized_links)
     compile_protected = root / "protected-commands" / f"compile-database-{unit.job.attempt_id}.json"
@@ -1175,7 +1205,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 "build_unit_id": build_unit_id, "files": workspace_files})
     status = "FAILED" if any("build command" in gap for gap in gaps) else "SUCCEEDED"
     capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not (
-        family == "rust" and provenance_gaps)
+        family in _CAPTURED_FAMILIES and provenance_gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
         "upstream_handoff_sha256": accepted["project_build_handoff_sha256"], "build_unit_id": build_unit_id,
         "family": family, "root": dispatch["root"], "build_system": dispatch.get("recipe", {}).get("build_system", dispatch.get("build_system")),
@@ -1202,8 +1232,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["cargo_metadata"] = cargo_metadata or {
             "schema": "appsec-review/rust-cargo-metadata/1", "packages": [], "relationships": []}
         receipt["package_relationships"] = list(receipt["cargo_metadata"].get("relationships", ()))
+    if descriptor is not None:
         receipt["capture_provenance"] = {
-            "schema": "appsec-review/rust-capture-provenance/1", "complete": capture_complete,
+            "schema": descriptor.provenance_schema, "complete": capture_complete,
             "command_count": len(captures), **capture_facts}
     if family == "python":
         receipt["package_relationships"] = python_relationships
@@ -1247,16 +1278,16 @@ def _validate_config(context, _result) -> None:
             any(type(dotnet_settings[key]) is not bool for key in expected_dotnet)):
         raise ValueError("language-build dotnet settings are invalid")
     go_settings = context.config.settings.get("go")
-    if (not isinstance(go_settings, Mapping) or set(go_settings) != {
-            "offline", "capture_trace", "package_catalog", "diagnostic_tail_bytes"} or
+    typed = context.config.typed_settings
+    if (not isinstance(typed, LanguageBuildSettings) or not isinstance(go_settings, Mapping) or set(go_settings) != {
+            "offline", "package_catalog", "inspect_build_id", "diagnostic_tail_bytes"} or
             any(type(go_settings.get(key)) is not bool for key in
-                ("offline", "capture_trace", "package_catalog")) or
+                ("offline", "package_catalog", "inspect_build_id")) or
             go_settings.get("offline") is not False or
-            any(go_settings.get(key) is not True for key in ("capture_trace", "package_catalog")) or
+            any(go_settings.get(key) is not True for key in ("package_catalog", "inspect_build_id")) or
             type(go_settings.get("diagnostic_tail_bytes")) is not int or
             not 1 <= go_settings["diagnostic_tail_bytes"] <= 1024 * 1024):
         raise ValueError("language-build Go settings are invalid")
-    typed = context.config.typed_settings
     rust_value = context.config.settings.get("rust")
     if (not isinstance(typed, LanguageBuildSettings) or not isinstance(rust_value, Mapping) or
             set(rust_value) - {"toolchain", "target", "profile", "features", "locked", "offline",
@@ -1381,6 +1412,10 @@ def build_job(*, executor_factory=None) -> Job:
     def load_family(family: str):
       def load(unit: UnitContext) -> Mapping[str, Any]:
         dispatches, accepted = _dispatches(unit)
+        typed = unit.job.config.typed_settings
+        if not isinstance(typed, LanguageBuildSettings):
+            raise ValueError("typed language-build settings are unavailable")
+        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
         wasm_rules = wasm._producer_rules(unit.job.config.settings["wasm"])
         wasm_selected = [(item, wasm._select_producer(item, wasm_rules)) for item in dispatches]
         if family == "wasm":
@@ -1394,13 +1429,43 @@ def build_job(*, executor_factory=None) -> Job:
                         and str(item.get("build_unit_id")) not in selected_ids]
                        if family == "dotnet" else [])
         if family == "rust":
-            typed = unit.job.config.typed_settings
-            if not isinstance(typed, LanguageBuildSettings):
-                raise ValueError("typed language-build settings are unavailable")
             for dispatch in selected:
                 errors = rust.validate_dispatch(dispatch, typed.rust)
                 if errors:
                     raise ValueError("accepted Rust dispatch is invalid: " + "; ".join(errors))
+        if family == "go":
+            for dispatch in selected:
+                errors = go.validate_dispatch(dispatch, typed.go)
+                if errors:
+                    raise ValueError("accepted Go dispatch is invalid: " + "; ".join(errors))
+        decisions = []
+        runnable = []
+        non_run_receipts = []
+        for dispatch in selected:
+            facts = facts_from_build_unit(dispatch)
+            build_decision = evaluate_applicability(
+                feature=ProcessingFeature.BUILD_CAPTURE,
+                policy=unit.job.config.build_capture.mode.value,
+                facts=facts, configuration_sha256=configuration_sha256)
+            artifact_decision = evaluate_applicability(
+                feature=ProcessingFeature.COMPILER_ARTIFACTS,
+                policy=typed.compiler_artifact_mode(family).value,
+                facts=facts, configuration_sha256=configuration_sha256)
+            pair = [build_decision.as_dict(), artifact_decision.as_dict()]
+            decisions.extend(pair)
+            if build_decision.action is ApplicabilityAction.RUN:
+                runnable.append({**dispatch, "processing_facts": facts.as_dict(),
+                                 "processing_decisions": pair})
+            else:
+                terminal = build_decision.disposition.value if build_decision.disposition else "GAP"
+                non_run_receipts.append({
+                    "schema": RECEIPT_SCHEMA, "build_unit_id": dispatch["build_unit_id"],
+                    "family": family, "root": dispatch["root"], "artifacts": [], "commands": [],
+                    "processing_decisions": pair, "terminal_status": terminal,
+                    "gaps": ([] if terminal in {"SKIPPED_NA", "SKIPPED_POLICY"} else
+                             [f"{build_decision.reason_code.value}: build execution was not available"]),
+                })
+        selected = runnable
         gaps = [f"{item.get('build_unit_id')}: " + "; ".join(item.get("gaps", ()))
                 for item in unavailable]
         if family == "wasm":
@@ -1408,10 +1473,12 @@ def build_job(*, executor_factory=None) -> Job:
                         for item, producer in wasm_selected if producer is None and
                         (item["family"] == "wasm" or any(str(value).lower().endswith(".wasm")
                          for value in item["recipe"].get("expected_outputs", ()))))
+        gaps.extend(f"{item['build_unit_id']}: {gap}" for item in non_run_receipts
+                    for gap in item.get("gaps", ()))
         return {"dispatches": selected, "unavailable": unavailable, "accepted": accepted,
-                "gaps": gaps,
+                "non_run_receipts": non_run_receipts, "processing_decisions": decisions, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
-                                   "SUCCEEDED" if selected else "NOT_APPLICABLE"}
+                                   "SUCCEEDED"}
       return load
 
     def execute_family(family: str):
@@ -1423,9 +1490,11 @@ def build_job(*, executor_factory=None) -> Job:
                for dependency in item.get("build_dependencies", ())):
             raise ValueError("accepted build dispatch references an unknown dependency")
         pending = set(dispatches)
-        completed = {str(item.get("build_unit_id")): _unavailable_dotnet_receipt(
+        completed = {str(item.get("build_unit_id")): dict(item)
+                     for item in loaded.get("non_run_receipts", ())}
+        completed.update({str(item.get("build_unit_id")): _unavailable_dotnet_receipt(
                          unit, item, loaded["accepted"])
-                     for item in loaded.get("unavailable", ())}
+                     for item in loaded.get("unavailable", ())})
 
         def run(dispatch, upstream):
             try:
@@ -1479,7 +1548,24 @@ def build_job(*, executor_factory=None) -> Job:
             with ThreadPoolExecutor(max_workers=min(len(runnable) or 1, worker_limit)) as pool:
                 futures = {key: pool.submit(run, dispatches[key], upstream) for key, upstream in runnable}
                 for key, _upstream in runnable:
-                    completed[key] = futures[key].result()
+                    receipt = futures[key].result()
+                    planned = [decision_from_mapping(value) for value in
+                               dispatches[key].get("processing_decisions", ())]
+                    terminal_decisions = []
+                    for decision in planned:
+                        artifacts_required = decision.feature is ProcessingFeature.COMPILER_ARTIFACTS
+                        terminal_decisions.append(finalize_processing(
+                            decision, succeeded=receipt.get("terminal_status") == "SUCCEEDED",
+                            evidence_complete=not bool(receipt.get("gaps")),
+                            artifacts_valid=(bool(receipt.get("artifacts")) if artifacts_required else True),
+                            toolchain_available=receipt.get("terminal_status") not in {"BLOCKED"},
+                        ).as_dict())
+                    processing_gaps = [f"{value['feature']}: {value['reason_code']}"
+                                       for value in terminal_decisions
+                                       if value.get("disposition") == "GAP"]
+                    completed[key] = {**receipt,
+                        "gaps": list(dict.fromkeys([*receipt.get("gaps", ()), *processing_gaps])),
+                        "processing_decisions": terminal_decisions}
             pending.difference_update(ready)
         receipts = [completed[key] for key in sorted(completed)]
         gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value.get("gaps", ())]
@@ -1500,6 +1586,9 @@ def build_job(*, executor_factory=None) -> Job:
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_project_build_handoff_sha256": loaded["accepted"]["project_build_handoff_sha256"],
                     "receipts": [receipt for result in executions for receipt in result["receipts"]],
+                    "processing_decisions": [decision for result in executions
+                                             for receipt in result["receipts"]
+                                             for decision in receipt.get("processing_decisions", ())],
                     "gaps": list(dict.fromkeys([*unsupported_gaps,
                         *(gap for result in executions for gap in result["gaps"])]))}
         artifact = _artifact(unit, "accepted-language-builds.json", document)
@@ -1510,6 +1599,8 @@ def build_job(*, executor_factory=None) -> Job:
         index_manifest = _publish_build_index(unit, document["receipts"])
         return {"artifact": artifact, "build_count": len(document["receipts"]), "gaps": document["gaps"],
                 "index_manifest": index_manifest,
+                "processing_decisions": document["processing_decisions"],
+                "dispositions": document["processing_decisions"],
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
     units = (Unit("load.native", load_family("native")), Unit("load.go", load_family("go")),
@@ -1532,9 +1623,10 @@ def build_job(*, executor_factory=None) -> Job:
              Unit("acceptance.publish_handoff", publish,
                   ("execute.native", "execute.go", "execute.dotnet", "execute.node", "execute.python",
                    "execute.rust", "execute.php", "execute.java", "execute.wasm")))
-    implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
-        Path(elf.__file__).read_bytes() +
-        Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
+    implementation = hashlib.sha256(Path(__file__).read_bytes() +
+        Path(applicability_contract.__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
+        Path(captured_build.__file__).read_bytes() + Path(elf.__file__).read_bytes() +
+        Path(go.__file__).read_bytes() + Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
         Path(wasm.__file__).read_bytes() +
         (b"injected" if executor_factory else b"container")).hexdigest()
     return Job("job_language_build", "language_build", UnitExecutor(units).execute,

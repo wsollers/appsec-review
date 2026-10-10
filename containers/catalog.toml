@@ -371,6 +371,7 @@ dockerfile = "Dockerfile"
 dependencies = []
 architectures = ["linux/amd64"]
 tool_manifest = "containers/tools/native-cpp/tool.toml"
+assets_lock = "containers/tools/native-cpp/assets.lock.json"
 build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline C/C++ configure, compilation, Clang AST, LLVM IR, and ELF/symbol evidence."
 
@@ -617,6 +618,38 @@ tool_manifest = "containers/tools/infer/tool.toml"
 assets_lock = "containers/tools/infer/assets.lock.json"
 build_args = { TOOL_VERSION = "1.3.0" }
 purpose = "Interprocedural C/C++ memory, lifetime, resource, and concurrency analysis."
+
+[[images]]
+id = "tool-clangd-indexer"
+state = "enabled"
+kind = "tool"
+version = "23.1.0"
+tag = "appsec-review/tool-clangd-indexer:23.1.0"
+context = "containers/tools/clangd-indexer"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/clangd-indexer/tool.toml"
+assets_lock = "containers/tools/clangd-indexer/assets.lock.json"
+build_contexts = { shared = "containers/tools/shared" }
+build_args = { TOOL_VERSION = "23.1.0", CLANGD_SHA512 = "1c901aca0bdbc8b1367b9400fa7993f806db00948fbfa0239e17204ab01915a32caf8e04f098370d9134e26904492edef8e3e2efa214a2d0be600f0336dfc2b0" }
+purpose = "Offline C/C++ semantic symbol and reference index from a compilation database, including clang-cl commands; runtime availability is not index coverage."
+
+[[images]]
+id = "tool-joern"
+state = "enabled"
+kind = "tool"
+version = "4.0.630"
+tag = "appsec-review/tool-joern:4.0.630"
+context = "containers/tools/joern"
+dockerfile = "Dockerfile"
+dependencies = ["base-jre"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/joern/tool.toml"
+assets_lock = "containers/tools/joern/assets.lock.json"
+build_contexts = { shared = "containers/tools/shared" }
+build_args = { TOOL_VERSION = "4.0.630", JOERN_SHA512 = "812cfd7bcc5cafc4d64c5cda44da2c555490884d9418359050b24caf0b90f035d19fd1180ed6eb08d8ea0f572a87ac258f4722e2bef68672a3afa57a493273bd" }
+purpose = "Offline C/C++ code property graph production with c2cpg and bounded export support; runtime availability is not CPG coverage."
 
 [[images]]
 id = "tool-shellcheck"

@@ -6,6 +6,10 @@ import hashlib
 from pathlib import PurePosixPath
 from typing import Any
 
+from appsec_review.applicability import (
+    ApplicabilityAction, ApplicabilityDecision, FACTS_SCHEMA, ProcessingFeature,
+    ProjectProcessingFacts, SourceArtifactIdentity, evaluate_applicability,
+)
 from appsec_review.storage import canonical_json
 
 
@@ -125,10 +129,10 @@ class CodeQLScope:
             raise ValueError("invalid CodeQL scope contract")
         if self.mode == "none" and self.commands_permitted:
             raise ValueError("CodeQL source/no-build scopes cannot permit commands")
-        if self.mode == "manual" and (not self.commands_permitted or not self.build_unit_id):
-            raise ValueError("CodeQL manual scopes require an accepted build unit")
         if self.language == "rust" and self.mode != "none":
             raise ValueError("the pinned CodeQL Rust extractor requires source/no-build mode")
+        if self.mode == "manual" and (not self.commands_permitted or not self.build_unit_id):
+            raise ValueError("CodeQL manual scopes require an accepted build unit")
         if self.language == "java" and "Kotlin" in self.source_languages and "Java" not in self.source_languages:
             # The extractor id is `java`, but the source coverage must still say Kotlin explicitly.
             object.__setattr__(self, "source_languages", tuple(sorted(set(self.source_languages))))
@@ -142,6 +146,7 @@ class CodeQLPlan:
     scopes: tuple[CodeQLScope, ...]
     gaps: tuple[str, ...]
     non_applicable: tuple[Mapping[str, str], ...]
+    decisions: tuple[Mapping[str, Any], ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -151,7 +156,36 @@ class CodeQLPlan:
             "scopes": [asdict(scope) for scope in self.scopes],
             "gaps": list(self.gaps),
             "non_applicable": [dict(item) for item in self.non_applicable],
+            "decisions": [dict(item) for item in self.decisions],
         }
+
+
+def _applicability_facts(*, project_id: str, language: str, family: str, root: str,
+                         files: Sequence[Mapping[str, Any]], material: bool,
+                         capabilities: Iterable[str]) -> ProjectProcessingFacts:
+    sources = tuple(sorted((SourceArtifactIdentity(str(item["path"]), str(item["sha256"]))
+                            for item in files), key=lambda item: (item.path, item.sha256)))
+    return ProjectProcessingFacts(
+        FACTS_SCHEMA, project_id, language, family, root,
+        "accepted-build-receipt" if material else "source-only", True,
+        ("accepted-material-build",) if material else (),
+        () if material else (f"source-only:{language}",), (),
+        tuple(sorted(set(capabilities))), sources,
+    )
+
+
+def _decide(*, project_id: str, language: str, family: str, root: str,
+            files: Sequence[Mapping[str, Any]], material: bool,
+            capabilities: Iterable[str], language_modes: Mapping[str, str],
+            configuration_sha256: str) -> ApplicabilityDecision:
+    return evaluate_applicability(
+        feature=ProcessingFeature.CODEQL,
+        policy=str(language_modes.get(language, "auto")),
+        facts=_applicability_facts(project_id=project_id, language=language, family=family,
+                                   root=root, files=files, material=material,
+                                   capabilities=capabilities),
+        configuration_sha256=configuration_sha256,
+    )
 
 
 def _environment_identity(receipt: Mapping[str, Any]) -> str:
@@ -190,7 +224,9 @@ def _scope(*, language: str, source_languages: Iterable[str], mode: str, root: s
 def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, Any]],
                       receipts: Sequence[Mapping[str, Any]], supported_extractors: Iterable[str],
                       source_image_id: str,
-                      projects: Sequence[Mapping[str, Any]] = ()) -> CodeQLPlan:
+                      projects: Sequence[Mapping[str, Any]] = (),
+                      language_modes: Mapping[str, str] | None = None,
+                      configuration_sha256: str = "0" * 64) -> CodeQLPlan:
     """Map accepted scopes using the extractor inventory reported by the pinned CLI."""
     inventory = tuple(sorted(set(str(value) for value in supported_extractors)))
     if not source_fingerprint:
@@ -201,6 +237,12 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
     gaps: list[str] = []
     scopes: list[CodeQLScope] = []
     covered_paths: set[str] = set()
+    decisions: list[Mapping[str, Any]] = []
+    non_applicable: list[Mapping[str, str]] = []
+    modes = dict(language_modes or {
+        "cpp": "build", "go": "build", "java": "build", "csharp": "build",
+        "javascript": "source", "python": "source", "rust": "source", "actions": "source",
+    })
 
     seen_build_units: set[str] = set()
     for receipt in sorted(receipts, key=lambda item: str(item.get("build_unit_id", ""))):
@@ -216,6 +258,21 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         selected = _files_for(normalized_files, root, _LANGUAGE_SUFFIXES[language])
         if not selected:
             continue
+        decision = _decide(
+            project_id=build_unit, language=language, family=family, root=root,
+            files=selected, material=True,
+            capabilities=(("codeql-build",) if family in _COMPILED_FAMILIES else ("codeql-source",)),
+            language_modes=modes, configuration_sha256=configuration_sha256)
+        decisions.append(decision.as_dict())
+        if decision.action is ApplicabilityAction.SKIP:
+            non_applicable.append({"language": language, "status": decision.disposition.value,
+                                   "reason": decision.reason_code.value})
+            covered_paths.update(item["path"] for item in selected)
+            continue
+        if decision.action is ApplicabilityAction.GAP:
+            gaps.append(f"{build_unit}/{language}: {decision.reason_code.value}")
+            covered_paths.update(item["path"] for item in selected)
+            continue
         if language not in inventory:
             gaps.append(f"{build_unit}/{language}: pinned runtime did not report the required extractor")
             continue
@@ -225,7 +282,8 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         commands = receipt.get("commands")
         if not isinstance(commands, list):
             raise ValueError("accepted language-build command inventory is invalid")
-        if family in _COMPILED_FAMILIES and replay_commands(receipt) is None:
+        selected_mode = decision.selected_capability
+        if selected_mode == "build" and replay_commands(receipt) is None:
             gaps.append(f"{build_unit}/{language}: accepted compiled build has no exact replayable command set")
             continue
         if language == "rust":
@@ -234,10 +292,12 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
                 gaps.extend(rust_gaps)
                 continue
         source_languages = _source_labels(language, selected)
-        mode = "manual" if family in _COMPILED_FAMILIES else "none"
+        mode = "manual" if selected_mode == "build" else "none"
         scopes.append(_scope(language=language, source_languages=source_languages, mode=mode,
-                             root=root, files=selected, receipt=receipt,
-                             environment_identity=_environment_identity(receipt)))
+                             root=root, files=selected,
+                             receipt=receipt if selected_mode == "build" else None,
+                             environment_identity=(_environment_identity(receipt) if selected_mode == "build"
+                                                   else source_image_id.removeprefix("sha256:"))))
         covered_paths.update(item["path"] for item in selected)
 
     # Source/no-build languages remain applicable even when language_build had no command-bearing
@@ -249,6 +309,18 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         remaining = tuple(item for item in _files_for(normalized_files, ".", _LANGUAGE_SUFFIXES[language])
                           if item["path"] not in covered_paths)
         if not remaining:
+            continue
+        decision = _decide(
+            project_id=f"source:{language}", language=language, family=language, root=".",
+            files=remaining, material=False, capabilities=("codeql-source",),
+            language_modes=modes, configuration_sha256=configuration_sha256)
+        decisions.append(decision.as_dict())
+        if decision.action is ApplicabilityAction.SKIP:
+            non_applicable.append({"language": language, "status": decision.disposition.value,
+                                   "reason": decision.reason_code.value})
+            continue
+        if decision.action is ApplicabilityAction.GAP:
+            gaps.append(f"{language}: {decision.reason_code.value}")
             continue
         if language not in inventory:
             gaps.append(f"{language}: accepted source exists but the runtime reported no extractor")
@@ -287,7 +359,17 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         for prefix in _WORKFLOW_PREFIXES) and PurePosixPath(_path(item.get("path"))).suffix.lower()
         in _WORKFLOW_SUFFIXES), key=lambda item: item["path"]))
     if workflow_files:
-        if "actions" in inventory:
+        decision = _decide(
+            project_id="source:actions", language="actions", family="actions", root=".",
+            files=workflow_files, material=False, capabilities=("codeql-source",),
+            language_modes=modes, configuration_sha256=configuration_sha256)
+        decisions.append(decision.as_dict())
+        if decision.action is ApplicabilityAction.SKIP:
+            non_applicable.append({"language": "actions", "status": decision.disposition.value,
+                                   "reason": decision.reason_code.value})
+        elif decision.action is ApplicabilityAction.GAP:
+            gaps.append(f"actions: {decision.reason_code.value}")
+        elif "actions" in inventory:
             scopes.append(_scope(language="actions", source_languages=("GitHub Actions",), mode="none",
                                  root=".", files=workflow_files, receipt=None,
                                  environment_identity=source_image_id.removeprefix("sha256:")))
@@ -307,14 +389,19 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
                          if language in inventory else "pinned runtime reported no extractor")
             gaps.append(f"{display}: {len(found)} accepted source file(s); {qualifier}")
 
-    non_applicable = (
-        {"language": "php", "status": "NOT_APPLICABLE",
-         "reason": "PHP is not a CodeQL source language in the pinned runtime"},
-        {"language": "wasm", "status": "NOT_APPLICABLE",
-         "reason": "raw WebAssembly bytes are not a CodeQL source language; source producers are covered separately"},
-    )
+    for language, suffixes in (("php", {".php"}), ("wasm", {".wasm", ".wat"})):
+        found = _files_for(normalized_files, ".", suffixes)
+        if not found:
+            continue
+        decision = _decide(
+            project_id=f"source:{language}", language=language, family=language, root=".",
+            files=found, material=False, capabilities=(), language_modes=modes,
+            configuration_sha256=configuration_sha256)
+        decisions.append(decision.as_dict())
+        non_applicable.append({"language": language, "status": decision.disposition.value,
+                               "reason": decision.reason_code.value})
     ordered = tuple(sorted(scopes, key=lambda item: (item.language, item.root, item.scope_id)))
     if len(ordered) != len({item.scope_id for item in ordered}):
         raise ValueError("CodeQL plan contains duplicate independent scope identities")
     return CodeQLPlan(PLAN_SCHEMA, source_fingerprint, inventory, ordered,
-                      tuple(dict.fromkeys(gaps)), non_applicable)
+                      tuple(dict.fromkeys(gaps)), tuple(non_applicable), tuple(decisions))

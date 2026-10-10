@@ -13,11 +13,17 @@ from appsec_review.storage import atomic_json, canonical_json
 
 
 SCHEMA = "appsec-review/build-execution-record/1"
-EVENT_SCHEMA = "appsec-review/build-syscall-event/1"
+EVENT_SCHEMA = "appsec-review/build-syscall-event/2"
 TOOL_CALL_SCHEMA = "appsec-review/build-tool-call/1"
 SECRET_FINDINGS_SCHEMA = "appsec-review/build-capture-secret-findings/1"
 SECRET_SCAN_EXECUTION_SCHEMA = "appsec-review/build-capture-secret-scan-execution/1"
-REQUIRED_EVENT_KINDS = frozenset({"process_fork", "process_exec", "process_exit", "file_open", "connect"})
+REQUIRED_EVENT_KINDS = frozenset({
+    "process_fork", "process_exec", "process_exit", "file_open", "connect",
+    "directory_change", "file_rename", "file_link", "file_unlink",
+})
+# Event fields that carry filesystem paths; the secret-scan disposition redacts all of them.
+PATH_FIELDS = ("path", "directory", "resolved", "source", "source_directory",
+               "target", "target_directory")
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
 
 
@@ -146,13 +152,39 @@ class BuildExecutionRecorder:
                 normalized.update(envp=retained, envp_truncated=envp_truncated,
                                   envp_redacted_names=sorted(
                                       entry["name"] for entry in retained if entry["redacted"]))
-        elif kind == "file_open":
-            path = event.get("path")
-            if not isinstance(path, str):
-                raise ValueError("open path must be a string")
-            raw = path.encode("utf-8", "replace")
-            clipped = raw[:self.limits.path_bytes_limit].decode("utf-8", "ignore")
-            normalized.update(path=clipped, path_truncated=len(raw) > len(clipped.encode()))
+        elif kind in {"file_open", "directory_change", "file_rename", "file_link", "file_unlink"}:
+            required = ("source", "target") if kind in {"file_rename", "file_link"} else ("path",)
+            truncated = bool(event.get("path_truncated", False))
+            for name in PATH_FIELDS:
+                value = event.get(name)
+                if value is None and name not in required:
+                    continue
+                if not isinstance(value, str):
+                    raise ValueError(f"{kind} {name} must be a string")
+                raw = value.encode("utf-8", "replace")
+                clipped = raw[:self.limits.path_bytes_limit].decode("utf-8", "ignore")
+                truncated = truncated or len(raw) > len(clipped.encode())
+                normalized[name] = clipped
+            result = event.get("result", 0)
+            if type(result) is not int:
+                raise ValueError(f"{kind} result must be an integer")
+            normalized.update(path_truncated=truncated, result=result)
+            errno = event.get("errno")
+            if errno is not None:
+                if not isinstance(errno, str) or not re.fullmatch(r"E[A-Z0-9]{1,15}", errno):
+                    raise ValueError(f"{kind} errno is invalid")
+                normalized["errno"] = errno
+            if kind == "file_open":
+                flags = event.get("flags", "")
+                if not isinstance(flags, str) or not re.fullmatch(r"[A-Z0-9_|x]{0,256}", flags):
+                    raise ValueError("open flags are invalid")
+                names = set(flags.split("|"))
+                access = ("read-write" if "O_RDWR" in names else
+                          "write" if "O_WRONLY" in names else "read")
+                normalized.update(flags=flags, access=access,
+                                  creates="O_CREAT" in names or "O_TMPFILE" in names)
+            elif kind == "file_unlink":
+                normalized["directory_removal"] = bool(event.get("directory_removal", False))
         elif kind == "connect":
             normalized.update(
                 address_family=int(event.get("address_family", -1)),
@@ -170,7 +202,9 @@ class BuildExecutionRecorder:
                exit_code: int | None, timed_out: bool, stdout_path: Path,
                stderr_path: Path, collector_dropped: int = 0,
                collector_errors: Sequence[str] = (),
-               secret_scan: Mapping[str, Any] | None = None) -> Path:
+               secret_scan: Mapping[str, Any] | None = None,
+               file_inventory: Mapping[str, Any] | None = None,
+               response_files: tuple[Sequence[Mapping[str, Any]], Sequence[str]] | None = None) -> Path:
         if self._stream is None:
             raise RuntimeError("capture recorder is already finished")
         self._stream.close()
@@ -203,7 +237,6 @@ class BuildExecutionRecorder:
                 "envp_redact_names": list(self.limits.envp_redact_names),
                 "path_bytes_limit": self.limits.path_bytes_limit,
                 "tool_call_count_limit": self.limits.tool_call_count_limit,
-                "tool_stream_bytes_limit": self.limits.tool_stream_bytes_limit,
                 "secret_finding_count_limit": self.limits.secret_finding_count_limit,
             },
             "started_at": self._started_at,
@@ -237,6 +270,24 @@ class BuildExecutionRecorder:
         if call_capped:
             record["coverage"]["complete"] = False
             record["coverage"]["gaps"].append("tool call retention limit reached")
+        if file_inventory is not None:
+            inventory_path = self.root / "files.jsonl"
+            record["file_inventory"] = {"uri": inventory_path.name, "sha256": _sha256(inventory_path),
+                                        **dict(file_inventory)}
+            for gap in file_inventory.get("gaps", ()):
+                record["coverage"]["complete"] = False
+                record["coverage"]["gaps"].append(str(gap))
+        if response_files is not None:
+            entries, response_gaps = response_files
+            record["response_files"] = {
+                "retained": len(entries),
+                "records": [{**dict(entry), "sha256": _sha256(self.root / str(entry["uri"])),
+                             "size_bytes": (self.root / str(entry["uri"])).stat().st_size}
+                            for entry in entries],
+            }
+            for gap in response_gaps:
+                record["coverage"]["complete"] = False
+                record["coverage"]["gaps"].append(str(gap))
         if secret_scan is not None:
             record["secret_scan"] = dict(secret_scan)
             gap = secret_scan.get("coverage_gap")
@@ -249,6 +300,9 @@ class BuildExecutionRecorder:
 
 
 _TRACE = re.compile(r"^(?P<time>[0-9]+(?:\.[0-9]+)?) (?P<call>[a-z0-9_]+)\((?P<body>.*)\) += (?P<result>.*)$")
+_DETACHED = re.compile(
+    r"^[0-9]+(?:\.[0-9]+)? (?:[a-z0-9_]+|\?\?\?)\(.* <detached \.\.\.>$"
+)
 _QUOTED = re.compile(r'^"((?:[^"\\]|\\.)*)"')
 
 
@@ -307,6 +361,115 @@ def _exec_arguments(body: str, executable: str) -> tuple[list[str], list[str]]:
     return argv or [executable], envp
 
 
+_FD_ARGUMENT = re.compile(r"^(?:AT_FDCWD|-?[0-9]+)(?:<(?P<path>.*)>)?$")
+_STRING_ARGUMENT = re.compile(r'^"(?P<value>(?:[^"\\]|\\.)*)"(?P<truncated>\.\.\.)?$')
+_SYSCALL_RESULT = re.compile(r"^(?P<value>-?[0-9]+)(?:<(?P<path>.*)>)?(?:\s+(?P<errno>E[A-Z0-9]+)\b.*)?$")
+_FILE_CALLS = frozenset({"open", "openat", "openat2", "creat", "chdir", "fchdir", "rename", "renameat",
+                         "renameat2", "link", "linkat", "unlink", "unlinkat"})
+
+
+def _split_arguments(body: str) -> list[str]:
+    """Split strace arguments at top-level commas; quotes, brackets and fd annotations nest."""
+    arguments: list[str] = []
+    depth = start = 0
+    quoted = escaped = False
+    for index, char in enumerate(body):
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            continue
+        if char == '"':
+            quoted = True
+        elif char in "[{(<":
+            depth += 1
+        elif char in "]})>" and depth:
+            depth -= 1
+        elif char == "," and depth == 0:
+            arguments.append(body[start:index].strip())
+            start = index + 1
+    arguments.append(body[start:].strip())
+    return arguments
+
+
+def _decode_string(value: str) -> str:
+    try:
+        return json.loads('"' + value + '"')
+    except json.JSONDecodeError:
+        return value
+
+
+def _path_argument(argument: str) -> tuple[str, bool]:
+    match = _STRING_ARGUMENT.match(argument)
+    if not match:
+        raise ValueError("expected a quoted path argument")
+    return _decode_string(match.group("value")), match.group("truncated") is not None
+
+
+def _directory_argument(argument: str) -> str | None:
+    """Return the directory strace -y printed for a dirfd (AT_FDCWD shows the process cwd)."""
+    match = _FD_ARGUMENT.match(argument)
+    return match.group("path") if match and match.group("path") else None
+
+
+def _file_event(call: str, body: str, result: str) -> dict[str, Any]:
+    """Normalize one path-bearing syscall printed by ``strace -y``."""
+    outcome = _SYSCALL_RESULT.match(result.strip())
+    if not outcome:
+        raise ValueError("unparsed syscall result")
+    args = _split_arguments(body)
+    event: dict[str, Any] = {"result": int(outcome.group("value"))}
+    if outcome.group("errno"):
+        event["errno"] = outcome.group("errno")
+    truncated = False
+    if call in {"open", "openat", "openat2", "creat"}:
+        at = call in {"openat", "openat2"}
+        event["kind"] = "file_open"
+        event["path"], truncated = _path_argument(args[1 if at else 0])
+        if at and (directory := _directory_argument(args[0])):
+            event["directory"] = directory
+        if call == "creat":
+            event["flags"] = "O_WRONLY|O_CREAT|O_TRUNC"
+        elif call == "openat2":
+            flags = re.search(r"flags=([A-Z0-9_|x]+)", args[2])
+            event["flags"] = flags.group(1) if flags else ""
+        else:
+            event["flags"] = args[2 if at else 1]
+        if outcome.group("path") and event["result"] >= 0:
+            event["resolved"] = outcome.group("path")
+    elif call in {"chdir", "fchdir"}:
+        event["kind"] = "directory_change"
+        if call == "chdir":
+            event["path"], truncated = _path_argument(args[0])
+        else:
+            directory = _directory_argument(args[0])
+            if directory is None:
+                raise ValueError("fchdir directory is not annotated")
+            event["path"] = directory
+    elif call in {"unlink", "unlinkat"}:
+        at = call == "unlinkat"
+        event["kind"] = "file_unlink"
+        event["path"], truncated = _path_argument(args[1 if at else 0])
+        if at and (directory := _directory_argument(args[0])):
+            event["directory"] = directory
+        event["directory_removal"] = at and "AT_REMOVEDIR" in args[2]
+    else:
+        at = call in {"renameat", "renameat2", "linkat"}
+        event["kind"] = "file_link" if call in {"link", "linkat"} else "file_rename"
+        event["source"], source_truncated = _path_argument(args[1 if at else 0])
+        event["target"], truncated = _path_argument(args[3 if at else 1])
+        truncated = truncated or source_truncated
+        if at:
+            for name, argument in (("source_directory", args[0]), ("target_directory", args[2])):
+                if directory := _directory_argument(argument):
+                    event[name] = directory
+    event["path_truncated"] = truncated
+    return event
+
+
 def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder) -> tuple[str, ...]:
     """Normalize bounded strace output; malformed rows become explicit collector errors."""
     errors: list[str] = []
@@ -319,7 +482,8 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                     return tuple(errors)
                 match = _TRACE.match(line.rstrip("\n"))
                 if not match:
-                    if ("unfinished ...>" not in line and "resumed>" not in line and
+                    if (_DETACHED.fullmatch(line.rstrip("\n")) is None and
+                            "unfinished ...>" not in line and "resumed>" not in line and
                             "--- SIG" not in line and "+++ exited with" not in line):
                         errors.append(f"unparsed trace row: {path.name}:{line_number}")
                     continue
@@ -342,10 +506,13 @@ def record_strace_files(paths: Iterable[Path], recorder: BuildExecutionRecorder)
                     code = body.split(",", 1)[0].strip()
                     recorder.add({**base, "kind": "process_exit",
                                   "exit_code": int(code) if code.lstrip("-").isdigit() else 0})
-                elif call in {"openat", "openat2"}:
-                    parts = body.split(",", 2)
-                    recorder.add({**base, "kind": "file_open",
-                                  "path": _trace_string(parts[1]) if len(parts) > 1 else ""})
+                elif call in _FILE_CALLS:
+                    try:
+                        event = _file_event(call, body, result)
+                    except (ValueError, IndexError):
+                        errors.append(f"unparsed {call} row: {path.name}:{line_number}")
+                        continue
+                    recorder.add({**base, **event})
                 elif call == "connect":
                     family = re.search(r"sa_family=AF_([A-Z0-9_]+)", body)
                     port = re.search(r"sin6?_port=htons\(([0-9]+)\)", body)
@@ -480,6 +647,13 @@ def _verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureS
         for name in ("stdout", "stderr"):
             _capture_member(tool_path.parent, tool.get(name))
         verified_calls.append({"uri": member["uri"], "sha256": member["sha256"], "record": tool})
+    if "file_inventory" in document:
+        _capture_member(capture_root, document["file_inventory"])
+    response_files = document.get("response_files", {"records": []})
+    if not isinstance(response_files, Mapping) or not isinstance(response_files.get("records"), list):
+        raise CaptureIntegrityError("build execution response files are invalid")
+    for member in response_files["records"]:
+        _capture_member(capture_root, member)
     secret_scan = document.get("secret_scan")
     if not isinstance(secret_scan, Mapping) or secret_scan.get("scanner") != "tool-gitleaks":
         raise CaptureIntegrityError("build execution secret scan is invalid")
