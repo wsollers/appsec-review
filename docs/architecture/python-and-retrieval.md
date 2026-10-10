@@ -49,6 +49,13 @@ model observations. The dedicated `query_build_security` read tool accepts exact
 project, build root/action, configuration, compile unit, linked artifact, producer, and shard.
 It opens only accepted immutable SQLite shards and never exposes protected argv artifacts.
 
+The security-tagging job adds one `tags` shard per display family (code facts, controls, weakness,
+threat, gap). Each `tag_assignment` entity carries a basis-qualified record from the
+[security tag taxonomy](security-tag-taxonomy.md), an `OBSERVED_AT` relation to its subject, and,
+for derived tags, `DERIVED_FROM` relations to the observed assignments that produced it. The job's
+manifest carries every upstream shard, so it replaces the accepted manifest without hiding earlier
+evidence.
+
 `runs/<run-id>/data/indices/accepted.json` binds one manifest to an accepted job handoff. Before
 opening a database, retrieval verifies the pointer, handoff status and hash, manifest membership in
 the handoff artifact list, manifest content hash, each shard hash, and each shard's embedded schema,

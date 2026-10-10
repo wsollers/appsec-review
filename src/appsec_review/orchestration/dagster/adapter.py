@@ -168,7 +168,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
-                    "job_ci_configuration_analysis", "job_tree_sitter_ast",
+                    "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_security_tagging",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -441,6 +441,18 @@ def build_definitions(
             if "job_codeql_analysis" in registered:
                 owasp_dependencies.append("job_codeql_analysis")
             wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys(owasp_dependencies))
+        if "job_security_tagging" in registered:
+            wave_jobs.append(registry.build("job_security_tagging"))
+            # Tagging reads the accepted retrieval manifest, so it follows its last publisher, and it
+            # closes the wave so the graph keeps exactly one terminal job.
+            tagging_dependencies = ["job_codeql_analysis"] if "job_codeql_analysis" in registered else [
+                job_id for job_id in ("job_language_build", "job_artifact_indexing",
+                                      "job_artifact_security_analysis", "job_cpp_compiled_analysis",
+                                      "job_post_build_security_assessment", "job_evidence_collection",
+                                      "job_tree_sitter_ast") if job_id in registered]
+            if "job_owasp_control_assessment" in registered:
+                tagging_dependencies.append("job_owasp_control_assessment")
+            wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))
     if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:
