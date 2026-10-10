@@ -21,7 +21,7 @@ from .cloud import build_cloud
 from .crosswalk import Crosswalk, evaluate, load_crosswalk
 from .producers import (
     TAG_INDEX, AcceptedIndexes, Scope, collect_coverage_gaps, collect_observation_facts,
-    collect_source_facts, resolve_scope,
+    collect_source_facts, component_topology_sha256, ownership_rules, resolve_scope,
 )
 from .taxonomy import (
     CapabilityRules, TaxonomyError, Vocabulary, assignment, load_capability_rules, load_vocabulary,
@@ -30,6 +30,7 @@ from .taxonomy import (
 
 
 SCHEMA = "appsec-review/security-tagging-handoff/1"
+SCOPE_SCHEMA = "appsec-review/tag-scope/2"
 TOPOLOGY = {
     "taxonomy": ("load_taxonomy",),
     "scope": ("resolve_inputs",),
@@ -112,6 +113,13 @@ def _indexes(unit: UnitContext) -> AcceptedIndexes:
 
 def _scope(unit: UnitContext) -> Scope:
     value = _read(unit, unit.output("scope.resolve_inputs")["artifact"])
+    if value.get("schema") != SCOPE_SCHEMA:
+        raise ValueError("security tagging scope schema is unsupported")
+    if value.get("ownership_rules") != ownership_rules():
+        raise ValueError("component ownership rules changed during the security tagging attempt")
+    if value.get("component_topology_sha256") != component_topology_sha256(value["components"],
+                                                                          value["ownership_rules"]):
+        raise ValueError("security tagging component topology does not match its recorded identity")
     return Scope(value["target_snapshot"], value["project"], tuple(value["components"]))
 
 
@@ -152,7 +160,7 @@ def _subject_location(record: Mapping[str, Any]) -> SourceLocation | None:
 
 
 def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: AcceptedIndexes,
-                    identities: Mapping[str, str]) -> list[IndexIdentity]:
+                    identities: Mapping[str, str], component_topology: str) -> list[IndexIdentity]:
     snapshot = indexes.target_snapshot
     by_id = {record["assignment_id"]: record for record in records}
     families = sorted({record["family"] for record in records})
@@ -165,7 +173,8 @@ def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: A
             producer_artifacts=[{"assignments_sha256": hashlib.sha256(canonical_json(members)).hexdigest()}],
             tool_identity={"vocabulary": identities["vocabulary_sha256"],
                            "capability_rules": identities["capability_rules_sha256"],
-                           "crosswalk": identities["crosswalk_sha256"]},
+                           "crosswalk": identities["crosswalk_sha256"],
+                           "component_topology": component_topology},
             parser_identity="tag-assignment/1", normalizer_identity="tag-vocabulary/1",
             mapping_identity="tag-crosswalk/1", upstream_manifests=[indexes.manifest_sha256])
         path = unit.job.run_root / "data" / "indices" / TAG_INDEX / shard_id / f"{fingerprint}.sqlite"
@@ -227,11 +236,15 @@ def build_job() -> Job:
             raise ValueError("security tagging target fingerprint does not match the accepted index manifest")
         scope, gaps = resolve_scope(indexes, limit)
         manifest = {"path": _rel(unit.job.run_root, indexes.manifest_path), "sha256": indexes.manifest_sha256}
-        document = {"schema": "appsec-review/tag-scope/1", "target_snapshot": scope.target_snapshot,
-                    "project": dict(scope.project), "components": [dict(item) for item in scope.components],
-                    "accepted_manifest": manifest, "gaps": gaps}
+        components = [dict(item) for item in scope.components]
+        rules = ownership_rules()
+        topology = component_topology_sha256(components, rules)
+        document = {"schema": SCOPE_SCHEMA, "target_snapshot": scope.target_snapshot,
+                    "project": dict(scope.project), "components": components, "ownership_rules": rules,
+                    "component_topology_sha256": topology, "accepted_manifest": manifest, "gaps": gaps}
         return {"artifact": _write(unit, "scope.json", document), "accepted_manifest": manifest,
-                "component_count": len(scope.components), "gaps": gaps,
+                "component_count": len(scope.components), "component_topology_sha256": topology,
+                "ownership_rules": rules, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def source_facts(unit: UnitContext) -> Mapping[str, Any]:
@@ -257,21 +270,23 @@ def build_job() -> Job:
         observed = [record for unit_id in COLLECTORS
                     for record in _read(unit, unit.output(unit_id)["artifact"])["assignments"]]
 
-        def scope_subject(kind: str, key: str, group: list[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+        def scope_subject(kind: str, key: str, group: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
             if kind == "same_subject":
-                return group[0]["subject"]
+                # Groups are keyed by the complete subject, so every member carries the same one.
+                return [group[0]["subject"]]
             if kind == "component":
-                return scope.component_subject(key)
+                subject = scope.component_subject(key)
+                return [subject] if subject is not None else []
             if kind == "project":
-                return scope.project
+                return [scope.project]
             for record in group:
                 for evidence in record["evidence"]:
                     if evidence.get("path") and evidence.get("file_sha256"):
                         source = LogicalIdentity.derive(EntityKind.SOURCE_FILE, scope.target_snapshot,
                                                         {"path": evidence["path"], "sha256": evidence["file_sha256"]})
-                        return scope.subject("source_file", source.value, evidence["path"],
-                                             native_address=f"ci_job:{key}")
-            return None
+                        return scope.subjects("source_file", source.value, evidence["path"],
+                                              native_address=f"ci_job:{key}")
+            return []
 
         derived = evaluate(crosswalk, vocabulary, observed, scope_subject=scope_subject)
         fixture_namespaces = sorted({record["namespace"] for record in derived
@@ -307,7 +322,8 @@ def build_job() -> Job:
         records = _read(unit, validated["artifact"])["assignments"]
         indexes = _indexes(unit)
         identities = unit.output("taxonomy.load_taxonomy")["identities"]
-        shards = _publish_shards(unit, records, indexes, identities)
+        topology = unit.output("scope.resolve_inputs")["component_topology_sha256"]
+        shards = _publish_shards(unit, records, indexes, identities, topology)
         upstream = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in indexes.identities]
         combined = unit.job.run_root / "data" / "indices" / "manifests" / f"tags-{unit.job.attempt_id}.json"
         write_manifest(combined, run_id=unit.job.run_id, target_snapshot=indexes.target_snapshot,
@@ -336,6 +352,8 @@ def build_job() -> Job:
         document = {"schema": SCHEMA, "target_snapshot": _scope(unit).target_snapshot,
                     "taxonomy": unit.output("taxonomy.load_taxonomy")["identities"],
                     "accepted_upstream_manifest": unit.output("scope.resolve_inputs")["accepted_manifest"],
+                    "component_topology_sha256": unit.output("scope.resolve_inputs")["component_topology_sha256"],
+                    "ownership_rules": unit.output("scope.resolve_inputs")["ownership_rules"],
                     "assignments": validated["artifact"], "assignment_count": validated["item_count"],
                     "basis_counts": validated["basis_counts"], "family_counts": validated["family_counts"],
                     "tag_cloud": unit.output("publication.publish_tag_cloud")["artifact"],

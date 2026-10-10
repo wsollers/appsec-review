@@ -208,7 +208,8 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
         "tool": tool_identity(unit.job.repository_root, TOOL_ID) if executor_factory is None
         else {"tool_id": TOOL_ID, "injected_executor": True},
         "limits": {key: value for key, value in limits.items() if key != "workers"}})
-    reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root)
+    reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope,
+                              required=("execution.receipt", "execution.compile_database"))
     if reused is not None:
         return reused
     execution = execute_scope_tool(
@@ -236,6 +237,7 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "execution": {key: execution[key] for key in ("receipt", "compile_database", "exit_code",
                                                               "timed_out", "oom_killed", "image_id")},
+              "accepted_compile_database": dict(scope.compile_database),
               "index_identity": asdict(index), "counts": counts, "gaps": counts["gaps"],
               "terminal_status": "COMPLETED_WITH_GAPS" if counts["gaps"] else "SUCCEEDED"}
     save_scope_checkpoint(root / "checkpoint.json", identity, result)

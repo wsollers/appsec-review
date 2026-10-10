@@ -6,6 +6,10 @@ database and retains the resulting CPG as hash-identified, run-owned evidence. B
 export, source mapping, functional fixtures, and security acceptance are not implemented yet, so
 each scope publishes a BLOCKED observation shard with zero observations and ``unavailable``
 coverage. Generating a CPG is not CPG coverage.
+
+``max_cpg_bytes`` is enforced while c2cpg writes: the container runs under RLIMIT_FSIZE of
+``max_cpg_bytes + 1``, so the kernel stops any file from growing past the bound on the run volume.
+A CPG that reaches the bound is discarded and the scope publishes an explicit producer gap.
 """
 
 from __future__ import annotations
@@ -13,24 +17,28 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.jobs.cpp_index_scopes import (
-    IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
+    CheckpointIntegrityError, IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
     publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
 )
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, index_fingerprint,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 
 JOB_ID = "job_cpg_analysis"
 SCHEMA = "appsec-review/cpg-analysis/1"
 TOOL_ID = "tool-joern"
-ADAPTER = "joern-c2cpg-adapter/3"
+ADAPTER = "joern-c2cpg-adapter/4"
+CPG_MANIFEST_SCHEMA = "appsec-review/cpg-manifest/1"
+ARGV = ("/opt/joern/joern-cli/c2cpg.sh", "/target/source", "--output", "/scratch/cpg.bin",
+        "--compilation-database", "/scratch/compile_commands.json")
 JOERN_GAP = (
     "BLOCKED: the hash-pinned Joern/c2cpg runtime (tool-joern) generated this scope's CPG as "
     "run-owned evidence, but bounded CPG/PDG export, source mapping, functional fixtures, and "
@@ -43,42 +51,79 @@ def _settings(unit: UnitContext) -> Mapping[str, int]:
             "max_cpg_bytes": int(unit.job.config.settings["max_cpg_bytes"])}
 
 
+def _reuse(unit: UnitContext, root: Path, identity: str, scope: IndexScope) -> dict[str, Any] | None:
+    reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope,
+                              required=("execution.receipt", "execution.compile_database", "cpg_manifest"))
+    if reused is None:
+        return None
+    manifest = json.loads((unit.job.run_root / reused["cpg_manifest"]["path"]).read_text(encoding="utf-8"))
+    bound = {"schema": CPG_MANIFEST_SCHEMA, "checkpoint_identity": identity, "scope": scope.as_dict(),
+             "cpg": reused["cpg"], "accepted_compile_database": dict(scope.compile_database),
+             "resource_limit": reused["resource_limit"]}
+    execution_keys = ("receipt", "compile_database", "image_id", "exit_code", "timed_out", "oom_killed")
+    executed = manifest.get("execution") if isinstance(manifest.get("execution"), dict) else {}
+    if {key: manifest.get(key) for key in bound} != bound or \
+            {key: executed.get(key) for key in execution_keys} != {key: reused["execution"][key] for key in execution_keys}:
+        raise CheckpointIntegrityError(f"{scope.scope_id}: CPG manifest does not match its checkpoint")
+    if reused["cpg"] is not None and not reused["cpg"]["path"].startswith(
+            (root / "run").relative_to(unit.job.run_root).as_posix() + "/"):
+        raise CheckpointIntegrityError(f"{scope.scope_id}: checkpointed CPG left its scope root")
+    return reused
+
+
 def _generate(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
     limits = _settings(unit)
+    limit = limits["max_cpg_bytes"]
     root = unit.job.run_root / "data" / "code-index" / "joern" / scope.scope_id
     identity = checkpoint_identity({
-        "schema": SCHEMA, "adapter": ADAPTER, "scope": scope.as_dict(), "gap": JOERN_GAP,
+        "schema": SCHEMA, "adapter": ADAPTER, "manifest_schema": CPG_MANIFEST_SCHEMA, "argv": list(ARGV),
+        "scope": scope.as_dict(), "gap": JOERN_GAP,
+        "container_compile_database": hashlib.sha256(canonical_json(scope.container_compile_database())).hexdigest(),
         "tool": tool_identity(unit.job.repository_root, TOOL_ID) if executor_factory is None
         else {"tool_id": TOOL_ID, "injected_executor": True},
-        "max_cpg_bytes": limits["max_cpg_bytes"]})
-    reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root)
+        "max_cpg_bytes": limit, "limit_mechanism": "RLIMIT_FSIZE"})
+    reused = _reuse(unit, root, identity, scope)
     if reused is not None:
         return reused
     scratch = root / "run"
-    execution = execute_scope_tool(
-        unit, scope, TOOL_ID,
-        ("/opt/joern/joern-cli/c2cpg.sh", "/target/source", "--output", "/scratch/cpg.bin",
-         "--compilation-database", "/scratch/compile_commands.json"), scratch, executor_factory)
+    execution = execute_scope_tool(unit, scope, TOOL_ID, ARGV, scratch, executor_factory,
+                                   file_size_limit_bytes=limit + 1)
     gaps: list[str] = []
     cpg_path = scratch / "cpg.bin"
     cpg = None
-    if execution["timed_out"]:
+    regular = cpg_path.is_file() and not cpg_path.is_symlink()
+    observed = cpg_path.lstat().st_size if regular else None
+    limited = execution["file_size_limit_reached"] or (observed is not None and observed > limit)
+    disposition = "LIMIT_REACHED" if limited else "WITHIN_LIMIT" if observed else "NOT_PRODUCED"
+    if limited:
+        # The kernel stopped the write at limit + 1 bytes; whatever exists is partial and is never evidence.
+        gaps.append(f"Joern c2cpg reached the {limit}-byte CPG limit while writing; "
+                    "the partial CPG was discarded")
+    elif execution["timed_out"]:
         gaps.append("Joern c2cpg timed out before a CPG was produced")
     elif execution["oom_killed"]:
         gaps.append("Joern c2cpg was OOM-killed before a CPG was produced")
     elif execution["exit_code"] != 0:
         gaps.append(f"Joern c2cpg exited with status {execution['exit_code']}")
-    elif not cpg_path.is_file() or cpg_path.is_symlink() or cpg_path.stat().st_size == 0:
+    elif not regular or observed == 0:
         gaps.append("Joern c2cpg produced no CPG")
-    elif cpg_path.stat().st_size > limits["max_cpg_bytes"]:
-        gaps.append(f"Joern CPG exceeds the {limits['max_cpg_bytes']}-byte retention bound")
-        cpg_path.unlink()
     else:
         cpg = artifact(unit.job.run_root, cpg_path)
+    if cpg is None and (cpg_path.exists() or cpg_path.is_symlink()):
+        cpg_path.unlink()
     gaps.append(JOERN_GAP)
+    resource_limit = {"mechanism": "RLIMIT_FSIZE", "max_cpg_bytes": limit, "enforced_bytes": limit + 1,
+                      "disposition": disposition, "observed_bytes": observed}
+    manifest_path = root / "cpg-manifest.json"
+    atomic_json(manifest_path, {
+        "schema": CPG_MANIFEST_SCHEMA, "checkpoint_identity": identity, "scope": scope.as_dict(), "cpg": cpg,
+        "accepted_compile_database": dict(scope.compile_database), "resource_limit": resource_limit,
+        "execution": {key: execution[key] for key in ("receipt", "compile_database", "image_id", "image_digest",
+                                                     "argv_identity", "exit_code", "timed_out", "oom_killed")}})
+    cpg_manifest = artifact(unit.job.run_root, manifest_path)
 
     shard = f"joern-{scope.scope_id}"
-    artifacts = [execution["receipt"], execution["compile_database"], dict(scope.compile_database)]
+    artifacts = [execution["receipt"], execution["compile_database"], dict(scope.compile_database), cpg_manifest]
     if cpg is not None:
         artifacts.append(cpg)
     fingerprint = index_fingerprint(
@@ -96,6 +141,7 @@ def _generate(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> di
     builder.add_entity(EntityRecord(evidence, f"joern:{scope.case_id}", "joern",
                                     "; ".join(gaps)[:16384],
                                     {"status": "BLOCKED", "observation_count": 0, "cpg": cpg,
+                                     "cpg_manifest": cpg_manifest, "resource_limit": resource_limit,
                                      "project_id": scope.project_id, "shard_id": shard}))
     builder.add_coverage(f"joern:{scope.project_id}"[:256], "unavailable", "; ".join(gaps))
     sha = file_sha256(path) if path.exists() else builder.build()
@@ -105,8 +151,11 @@ def _generate(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> di
                           tuple(gaps), shard)
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "execution": {key: execution[key] for key in ("receipt", "compile_database", "exit_code",
-                                                              "timed_out", "oom_killed", "image_id")},
-              "cpg": cpg, "observation_count": 0, "index_identity": asdict(index), "gaps": gaps,
+                                                              "timed_out", "oom_killed", "image_id",
+                                                              "file_size_limit_bytes", "file_size_limit_reached")},
+              "accepted_compile_database": dict(scope.compile_database), "resource_limit": resource_limit,
+              "cpg": cpg, "cpg_manifest": cpg_manifest, "observation_count": 0, "index_identity": asdict(index),
+              "gaps": gaps,
               "terminal_status": "COMPLETED_WITH_GAPS"}
     save_scope_checkpoint(root / "checkpoint.json", identity, result)
     return result

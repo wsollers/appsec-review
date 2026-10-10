@@ -30,7 +30,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
-from appsec_review.rulepacks.sei_cert.pack import LOCK_NAME as SEI_CERT_LOCK, tree_digest
+from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 
 
 CAPABILITIES: Mapping[str, tuple[str, ...]] = {
@@ -137,26 +137,18 @@ def plan_applicability(run_root: Path) -> list[dict[str, Any]]:
 SEI_CERT_TOOLS = frozenset({"tool-semgrep", "tool-opengrep"})
 
 
-def _sei_cert_pack(repository: Path) -> tuple[Path, dict[str, str]] | None:
-    """Verify the SEI CERT rule files against pack.lock.json and return the rules root and identity."""
-    pack = repository / "rules" / "sei-cert"
+def _sei_cert_pack(repository: Path) -> PackIdentity | None:
+    """Strictly verify the complete SEI CERT pack against pack.lock.json.
+
+    Every regular file in ``rules/sei-cert`` (rules, mappings, source index, fixtures, manifest,
+    documents) must match the lock, so the complete-pack identity reported with evidence is the
+    identity that was actually verified. Any mismatch, unexpected file, symlink, or malformed lock
+    leaves the pack unverified.
+    """
     try:
-        lock = json.loads((pack / SEI_CERT_LOCK).read_text(encoding="utf-8"))
-        manifest = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
-        rules_root = pack / "rules"
-        actual = {path.relative_to(pack).as_posix(): file_sha256(path)
-                  for path in sorted(rules_root.rglob("*")) if path.is_file()}
-        locked = {relative: digest for relative, digest in lock["files"].items() if relative.startswith("rules/")}
-        if (lock.get("schema") != "appsec-review/sei-cert-rule-pack-lock/1" or not actual
-                or any(path.is_symlink() for path in rules_root.rglob("*")) or actual != locked
-                or sorted(actual) != sorted(manifest.get("rule_files", []))
-                or tree_digest(actual) != lock.get("rule_files_sha256")):
-            return None
-    except (OSError, KeyError, ValueError, json.JSONDecodeError):
+        return verify_pack(repository / "rules" / "sei-cert")
+    except (PackError, OSError):
         return None
-    return rules_root, {"id": str(lock.get("pack")), "version": str(lock.get("version")),
-                        "rule_files_sha256": str(lock["rule_files_sha256"]),
-                        "tree_sha256": str(lock.get("tree_sha256"))}
 
 
 def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, Any]:
@@ -165,7 +157,7 @@ def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, An
     repository = unit.job.repository_root
     if adapter.tool_id in SEI_CERT_TOOLS:
         verified = _sei_cert_pack(repository)
-        packs["appsec-review/sei-cert"] = verified[1] if verified else {"verified": False}
+        packs["appsec-review/sei-cert"] = verified.as_record() if verified else {"verified": False}
     if adapter.tool_id == "tool-semgrep":
         try:
             lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
@@ -197,7 +189,7 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         verified_pack = _sei_cert_pack(repository)
         if verified_pack is None:
             return selection, (), {}, "hash-pinned SEI CERT rule pack is unavailable or does not match pack.lock.json"
-        mounts.append(Mount(verified_pack[0], SEI_CERT_MOUNT, True))
+        mounts.append(Mount(verified_pack.rules_root, SEI_CERT_MOUNT, True))
     if adapter.tool_id == "tool-pmd":
         rules = repository / "rules" / "pmd"
         ruleset = rules / "java-security.xml"
@@ -300,6 +292,9 @@ def _checkpoint_identity(unit: UnitContext, adapter: ToolAdapter, catalog: ScanC
         "image_id": image_id, "adapter": adapter.adapter_identity, "parser": adapter.parser_identity,
         "normalizer": NORMALIZER_IDENTITY, "validator": "static-tool-evidence/2",
         "inputs": _extra_identity(mounts),
+        # Bind the complete verified rule-pack identity, not only the mounted rule files, so a
+        # changed mapping, source index, fixture, or manifest never reuses an older checkpoint.
+        **_rule_pack_identity(unit, adapter),
         "job_settings": dict(unit.job.config.settings),
         "task_settings": dict(unit.job.config.step(unit.step_id).task(unit.task_id).settings),
     }
@@ -822,6 +817,10 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         for path in paths:
             digest.update(path.relative_to(root).as_posix().encode())
             digest.update(path.read_bytes() if path.is_file() else b"MISSING")
+        # The lock bytes alone do not show whether the pack still matches them; bind the result of
+        # strict verification so any pack change forces the job to re-run rather than be reused.
+        sei_cert = _sei_cert_pack(root)
+        digest.update(canonical_json(sei_cert.as_record() if sei_cert else {"verified": False}))
         if executor_factory is None:
             for tool_id in sorted(static_tools):
                 tool = static_tools[tool_id]

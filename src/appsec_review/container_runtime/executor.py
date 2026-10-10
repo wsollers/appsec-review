@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 from typing import Any
 import uuid
@@ -32,6 +33,10 @@ class ExecutionRequest:
     extra_mounts: tuple[Mount, ...] = ()
     environment: Mapping[str, str] | None = None
     working_directory: str = "/target"
+    # Execution-level RLIMIT_FSIZE (bytes) for every file the scanner writes. The kernel refuses
+    # writes past it (SIGXFSZ, or EFBIG where the signal is ignored), so a producer cannot grow a
+    # run-owned artifact beyond its configured bound before the application inspects it.
+    file_size_limit_bytes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +68,8 @@ class ExecutionResult:
     stdout_path: str
     stderr_path: str
     receipt_path: str
+    file_size_limit_bytes: int | None = None
+    file_size_limit_reached: bool = False
 
     @property
     def terminal_status(self) -> str:
@@ -70,10 +77,14 @@ class ExecutionResult:
             return "TIMEOUT"
         if self.oom_killed:
             return "OOM"
+        if self.file_size_limit_reached:
+            return "FILE_SIZE_LIMIT"
         return "COMPLETED"
 
 
 Runner = Callable[[Sequence[str], int], CommandOutcome]
+# ``docker run`` reports a process killed by a signal as 128 + signal number.
+FILE_SIZE_SIGNAL_EXIT = 128 + int(signal.SIGXFSZ)
 
 
 def _stamp() -> str:
@@ -128,6 +139,9 @@ class ContainerExecutor:
             raise ValueError("argv contains an unsafe value")
         if request.environment and any(not re.fullmatch(r"[A-Z][A-Z0-9_]*", key) for key in request.environment):
             raise ValueError("environment key is invalid")
+        limit = request.file_size_limit_bytes
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("file size limit must be a positive byte count")
         mounts = (Mount(target, "/target", True), Mount(scratch, "/scratch", False), *request.extra_mounts)
         seen: set[str] = set()
         for mount in mounts:
@@ -182,6 +196,8 @@ class ContainerExecutor:
             "--tmpfs", str(self.catalog.policy["tmpfs"][0]),
             "--workdir", request.working_directory,
         ]
+        if request.file_size_limit_bytes is not None:
+            command.extend(("--ulimit", f"fsize={request.file_size_limit_bytes}:{request.file_size_limit_bytes}"))
         effective_sources: dict[str, Path] = {}
         for mount in mounts:
             effective = self._docker_bind_source(mount.source.resolve())
@@ -212,7 +228,7 @@ class ContainerExecutor:
             "memory": tool.memory, "pids": tool.pids_limit,
             "tmpfs": list(self.catalog.policy["tmpfs"]),
             "timeout_seconds": tool.timeout_seconds, "stdout_bytes": tool.output_bytes,
-            "stderr_bytes": tool.output_bytes,
+            "stderr_bytes": tool.output_bytes, "file_size_bytes": request.file_size_limit_bytes,
         }
         argv_identity = hashlib.sha256(json.dumps(request.argv, separators=(",", ":")).encode()).hexdigest()
         result = ExecutionResult(
@@ -226,6 +242,9 @@ class ContainerExecutor:
             stdout_path=stdout_path.relative_to(self.run_root).as_posix(),
             stderr_path=stderr_path.relative_to(self.run_root).as_posix(),
             receipt_path=receipt_path.relative_to(self.run_root).as_posix(),
+            file_size_limit_bytes=request.file_size_limit_bytes,
+            file_size_limit_reached=(request.file_size_limit_bytes is not None
+                                     and outcome.exit_code == FILE_SIZE_SIGNAL_EXIT),
         )
         receipt = asdict(result)
         receipt["terminal_status"] = result.terminal_status

@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.jobs.cataloging import (
+    LANGUAGES, MANIFEST_ECOSYSTEMS, PROJECT_FILES, SOURCE_ECOSYSTEMS, manifest_ecosystem,
+)
 from appsec_review.jobs.job_security_tagging import build_job
 from appsec_review.jobs.job_security_tagging.cloud import build_cloud
 from appsec_review.jobs.job_security_tagging.crosswalk import evaluate, load_crosswalk, parse_crosswalk
-from appsec_review.jobs.job_security_tagging.job import TOPOLOGY, _taxonomy
+from appsec_review.jobs.job_security_tagging.job import SCOPE_SCHEMA, TOPOLOGY, _taxonomy
+from appsec_review.jobs.job_security_tagging.producers import (
+    Row, Scope, collect_observation_facts, collect_source_facts, component_topology_sha256, ownership_rules,
+)
 from appsec_review.jobs.job_security_tagging.taxonomy import (
-    TaxonomyError, assignment, normalize_attack, normalize_cert, normalize_cwe, split_tag,
+    TaxonomyError, assignment, merge_assignments, normalize_attack, normalize_cert, normalize_cwe, split_tag,
     validate_assignment,
 )
 from appsec_review.owasp_workbench.engine import COMPONENT_ROLES
@@ -138,7 +144,7 @@ def test_crosswalk_is_one_hop_and_deterministic() -> None:
     hypothesis = assignment(vocabulary=vocabulary, tag="cwe:78", basis="derived", subject=subject,
                             producer={"name": "x"}, derived_from=["tag:x"], crosswalk_rule="other",
                             crosswalk_sha256=crosswalk.sha256)
-    run = lambda records: evaluate(crosswalk, vocabulary, records, scope_subject=lambda kind, key, group: subject)
+    run = lambda records: evaluate(crosswalk, vocabulary, records, scope_subject=lambda kind, key, group: [subject])
     derived = run([reported, hypothesis])
     assert {record["tag"] for record in derived} == {"capec:66", "asvs5:v1"}
     assert all(record["derived_from"] == [reported["assignment_id"]] for record in derived)
@@ -292,6 +298,12 @@ def test_job_tags_accepted_indexes_and_publishes_queryable_shards(tmp_path: Path
     assert not any(tag.startswith(("nist53r5:", "ssdf:", "cicd-top10:")) for tag in by_tag)
     assert "clean" not in json.dumps([record["tag"] for record in records])
 
+    scope = json.loads((run_root / outcome["result"]["outputs"]["scope.resolve_inputs"]["artifact"]["path"])
+                       .read_text(encoding="utf-8"))
+    assert scope["schema"] == SCOPE_SCHEMA and scope["ownership_rules"] == ownership_rules()
+    assert scope["component_topology_sha256"] == component_topology_sha256(scope["components"], ownership_rules())
+    assert {record["subject"]["component_ownership"] for record in records} >= {"owned", "not_applicable"}
+
     pointer = json.loads((run_root / "data" / "indices" / "accepted.json").read_text(encoding="utf-8"))
     assert pointer["manifest_path"].endswith("tags-attempt_0001.json")
     core = RetrievalCore(config.runtime.runs_dir, RUN_ID)
@@ -351,3 +363,195 @@ def test_central_crosswalk_loads_from_pinned_file() -> None:
     taxonomy = load_config(ROOT / "appsec-review.toml").job("job_security_tagging").settings["taxonomy"]
     again = load_crosswalk(ROOT / taxonomy["crosswalk_path"], taxonomy["crosswalk_sha256"], vocabulary)
     assert again == crosswalk
+
+
+# --- Component ownership: same-root manifests never resolve by component identifier order. -----------
+
+
+_PROJECT = {"kind": "project", "logical_id": "project", "component_id": None, "project_id": "project",
+            "component_ownership": "not_applicable"}
+
+
+def _component(component_id: str, manifest: str) -> dict:
+    return {"component_id": component_id,
+            "logical_id": LogicalIdentity.derive(EntityKind.COMPONENT, SNAPSHOT,
+                                                 {"component_id": component_id, "manifest": manifest}).value,
+            "root": PurePosixPath(manifest).parent.as_posix(), "manifest": manifest,
+            "ecosystem": manifest_ecosystem(manifest)}
+
+
+def _scope(*manifests: str) -> Scope:
+    return Scope(SNAPSHOT, _PROJECT, tuple(_component(f"component:{index:04d}", manifest)
+                                          for index, manifest in enumerate(manifests, 1)))
+
+
+class _FakeIndexes:
+    """In-memory stand-in exposing only the bounded reader surface the collectors use."""
+
+    def __init__(self, **rows: list[Row]):
+        self._rows = rows
+
+    def shards(self, name: str) -> list[dict]:
+        return [{"name": name, "shard_id": "default", "sha256": "0" * 64}] if name in self._rows else []
+
+    def rows(self, identity, kinds, limit):
+        return [row for row in self._rows[identity["name"]] if row.kind in kinds][:limit], False
+
+
+def _source_row(path: str) -> Row:
+    identity = LogicalIdentity.derive(EntityKind.SOURCE_FILE, SNAPSHOT, {"path": path}).value
+    language = LANGUAGES.get(PurePosixPath(path).suffix.lower())
+    return Row(identity, EntityKind.SOURCE_FILE.value, path, path, {"language": language},
+               {"path": path, "file_sha256": "1" * 64, "start_line": 1, "end_line": 1})
+
+
+def _sql_observation(path: str) -> Row:
+    identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, SNAPSHOT, {"native": path}).value
+    return Row(identity, EntityKind.TOOL_OBSERVATION.value, path, "sql", {
+        "producer": "codeql", "rule_id": "cs/sql-injection",
+        "rule": {"properties": {"tags": ["external/cwe/cwe-089"]}}},
+        {"path": path, "file_sha256": "2" * 64, "start_line": 3, "end_line": 4})
+
+
+def _source_records(scope: Scope, *paths: str) -> list[dict]:
+    vocabulary, rules, _ = _taxonomy_files()
+    records, _ = collect_source_facts(_FakeIndexes(source=[_source_row(path) for path in paths]), scope,
+                                      vocabulary, rules, 100)
+    return records
+
+
+def test_ecosystem_tables_cover_every_cataloged_manifest() -> None:
+    assert set(MANIFEST_ECOSYSTEMS) == PROJECT_FILES
+    assert set(SOURCE_ECOSYSTEMS) <= set(LANGUAGES)
+    for manifest in ("app/App.csproj", "native/Lib.vcxproj", "All.sln"):
+        assert manifest_ecosystem(manifest) is not None
+
+
+def test_same_root_package_json_and_csproj_split_by_ecosystem() -> None:
+    scope = _scope("svc/package.json", "svc/app.csproj")
+    node = scope.ownership("svc/src/index.js")
+    assert (node.status, node.basis, node.component_ids) == ("owned", "manifest-ecosystem", ("component:0001",))
+    dotnet = scope.ownership("svc/Program.cs")
+    assert (dotnet.status, dotnet.component_ids) == ("owned", ("component:0002",))
+    manifest = scope.ownership("svc/package.json")
+    assert (manifest.status, manifest.basis, manifest.component_ids) == ("owned", "manifest-file", ("component:0001",))
+    [readme] = scope.subjects("source_file", "readme", "svc/README.md")
+    assert readme["component_id"] is None and readme["component_ownership"] == "ambiguous"
+    assert readme["component_candidates"] == ["component:0001", "component:0002"]
+
+    records = _source_records(scope, "svc/src/index.js", "svc/Program.cs", "svc/Dockerfile")
+    by_tag = {record["tag"]: [item for item in records if item["tag"] == record["tag"]] for record in records}
+    assert [item["subject"]["component_id"] for item in by_tag["lang:javascript"]] == ["component:0001"]
+    assert [item["subject"]["component_id"] for item in by_tag["lang:csharp"]] == ["component:0002"]
+    docker = by_tag["platform:docker"]
+    assert len(docker) == 1 and docker[0]["subject"]["component_id"] is None
+    assert docker[0]["subject"]["component_ownership"] == "ambiguous"
+    assert docker[0]["subject"]["component_candidates"] == ["component:0001", "component:0002"]
+
+
+def test_same_type_manifests_share_evidence_with_distinct_assignments() -> None:
+    vocabulary, rules, crosswalk = _taxonomy_files()
+    scope = _scope("src/package.json", "src/Api.csproj", "src/Api.Tests.csproj")
+    decision = scope.ownership("src/Db.cs")
+    assert (decision.status, decision.component_ids) == ("shared", ("component:0002", "component:0003"))
+    assert decision.candidates == ("component:0001", "component:0002", "component:0003")
+
+    records = [record for record in _source_records(scope, "src/Db.cs") if record["tag"] == "lang:csharp"]
+    assert sorted(record["subject"]["component_id"] for record in records) == ["component:0002", "component:0003"]
+    assert len({record["assignment_id"] for record in records}) == 2
+    assert len({record["evidence"][0]["ref"] for record in records}) == 1
+    assert all(record["subject"]["component_ownership"] == "shared" for record in records)
+
+    observed, _ = collect_observation_facts(_FakeIndexes(observations=[_sql_observation("src/Db.cs")]), scope,
+                                            vocabulary, rules, 100)
+    sql = [record for record in observed if record["tag"] == "cwe:89"]
+    assert sorted(record["subject"]["component_id"] for record in sql) == ["component:0002", "component:0003"]
+    assert len(merge_assignments(sql + sql)) == 2      # the same subject/component is never emitted twice
+    derived = evaluate(crosswalk, vocabulary, observed, scope_subject=lambda kind, key, group: [group[0]["subject"]])
+    capec = {record["subject"]["component_id"]: record["derived_from"] for record in derived
+             if record["tag"] == "capec:66"}
+    by_component = {record["subject"]["component_id"]: record["assignment_id"] for record in sql}
+    assert capec == {component: [assignment_id] for component, assignment_id in by_component.items()}
+
+
+def test_nested_component_root_wins_and_paths_outside_roots_are_unowned() -> None:
+    scope = _scope("package.json", "packages/api/package.json")
+    assert scope.ownership("packages/api/server.js").component_ids == ("component:0002",)
+    assert scope.ownership("packages/api/server.js").basis == "deepest-root"
+    assert scope.ownership("packages/apiary/x.js").component_ids == ("component:0001",)
+    assert scope.ownership("README.md").component_ids == ("component:0001",)
+    nested = _scope("services/web/package.json")
+    [outside] = nested.subjects("source_file", "doc", "docs/guide.md")
+    assert outside["component_ownership"] == "unowned" and outside["component_id"] is None
+    assert "component_candidates" not in outside
+    [project] = nested.subjects("tool_observation", "obs")
+    assert project["component_ownership"] == "not_applicable" and "path" not in project
+    assert nested.component_subject("component:0001")["component_ownership"] == "owned"
+
+
+def test_equal_depth_roots_apply_evidence_to_every_matching_component() -> None:
+    scope = _scope("jvm/pom.xml", "jvm/build.gradle")
+    subjects = scope.subjects("source_file", "main", "jvm/src/Main.java")
+    assert [item["component_id"] for item in subjects] == ["component:0001", "component:0002"]
+    assert {item["component_ownership"] for item in subjects} == {"shared"}
+    assert all(item["component_candidates"] == ["component:0001", "component:0002"] for item in subjects)
+
+
+def test_equal_depth_ambiguity_keeps_one_unassigned_record() -> None:
+    scope = _scope("app/package.json", "app/pom.xml")
+    for path in ("app/tool.py", "app/README.md", "app/Dockerfile"):
+        decision = scope.ownership(path)
+        assert (decision.status, decision.component_ids) == ("ambiguous", ())
+        [subject] = scope.subjects("source_file", path, path)
+        assert subject["component_id"] is None
+        assert subject["component_candidates"] == ["component:0001", "component:0002"]
+    records = _source_records(scope, "app/tool.py")
+    assert len(records) == 1 and records[0]["subject"]["component_ownership"] == "ambiguous"
+
+
+def test_ownership_is_independent_of_component_id_order() -> None:
+    manifests = ["package.json", "app.csproj", "Other.csproj", "pom.xml", "web/package.json", "web/site.csproj",
+                 "lib/Cargo.toml"]
+    paths = ["index.js", "Program.cs", "Main.java", "README.md", "Dockerfile", "package.json", "web/app.ts",
+             "web/Page.cs", "web/notes.md", "lib/src/lib.rs", "lib/README.md", "tool.py"]
+    first = _scope(*manifests)
+    renumbered = Scope(SNAPSHOT, _PROJECT, tuple(reversed([
+        _component(f"component:{9000 - index:04d}", manifest) for index, manifest in enumerate(manifests)])))
+
+    def normalized(scope: Scope) -> tuple[dict, set]:
+        manifest = {item["component_id"]: item["manifest"] for item in scope.components}
+        decisions = {}
+        for path in paths:
+            decision = scope.ownership(path)
+            decisions[path] = (decision.status, decision.basis,
+                               sorted(manifest[item] for item in decision.component_ids),
+                               sorted(manifest[item] for item in decision.candidates))
+        assignments = {(record["tag"], record["subject"]["logical_id"],
+                        manifest.get(record["subject"]["component_id"]), record["subject"]["component_ownership"],
+                        tuple(sorted(manifest[item] for item in record["subject"].get("component_candidates", ()))),
+                        record["evidence"][0]["ref"]) for record in _source_records(scope, *paths)}
+        return decisions, assignments
+
+    first_decisions, first_assignments = normalized(first)
+    second_decisions, second_assignments = normalized(renumbered)
+    assert first_decisions == second_decisions
+    assert first_assignments == second_assignments
+    assert len(first_assignments) == len(_source_records(first, *paths))
+    assert first_decisions["Program.cs"][0] == "shared"
+    assert first_decisions["web/Page.cs"][2] == ["web/site.csproj"]
+
+
+def test_component_topology_and_ownership_buckets_are_explicit() -> None:
+    vocabulary, _, _ = _taxonomy_files()
+    rules = ownership_rules()
+    base = [dict(item) for item in _scope("svc/package.json", "svc/app.csproj").components]
+    moved = [dict(item) for item in _scope("svc/package.json", "svc/app.vcxproj").components]
+    assert component_topology_sha256(base, rules) != component_topology_sha256(moved, rules)
+    assert component_topology_sha256(base, rules) != component_topology_sha256(base, {**rules, "version": "x"})
+    scope = Scope(SNAPSHOT, _PROJECT, tuple(base))
+    subjects = [*scope.subjects("source_file", _subject("source_file", "a")["logical_id"], "svc/README.md"),
+                *scope.subjects("source_file", _subject("source_file", "b")["logical_id"], "other/x.md"),
+                dict(scope.project)]
+    records = [assignment(vocabulary=vocabulary, tag="lang:python", basis="declared", subject=subject,
+                          producer={"name": "x"}, evidence=[{"ref": subject["logical_id"]}]) for subject in subjects]
+    assert build_cloud(vocabulary, records)["nodes"][0]["component_count"] == 3

@@ -6,18 +6,22 @@ text is data: it is matched against pinned rules and never interpreted as an ins
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import hashlib
 import hmac
 import json
 from pathlib import Path, PurePosixPath
 import sqlite3
 from typing import Any
 
+from appsec_review.jobs.cataloging import (
+    MANIFEST_ECOSYSTEMS, MANIFEST_SUFFIX_ECOSYSTEMS, SOURCE_ECOSYSTEMS, manifest_ecosystem, source_ecosystem,
+)
 from appsec_review.retrieval import EntityKind, LogicalIdentity
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
-from appsec_review.storage import file_sha256
+from appsec_review.storage import canonical_json, file_sha256
 
 from .taxonomy import (
     CapabilityRules, TaxonomyError, Vocabulary, assignment, normalize_cert, normalize_cwe, segment,
@@ -94,6 +98,42 @@ class AcceptedIndexes:
                     for row in database.execute("SELECT area, status, gap FROM coverage ORDER BY area, status")]
 
 
+OWNERSHIP_RULES_VERSION = "appsec-review/component-ownership/1"
+OWNERSHIP_STATUSES = ("owned", "shared", "ambiguous", "unowned", "not_applicable")
+
+
+def ownership_rules() -> dict[str, Any]:
+    """Versioned identity of the component-ownership rules, including the central ecosystem tables."""
+    tables = {"manifest_names": MANIFEST_ECOSYSTEMS, "manifest_suffixes": MANIFEST_SUFFIX_ECOSYSTEMS,
+              "source_suffixes": SOURCE_ECOSYSTEMS}
+    return {"version": OWNERSHIP_RULES_VERSION,
+            "tables_sha256": hashlib.sha256(canonical_json(tables)).hexdigest()}
+
+
+def component_topology_sha256(components: Iterable[Mapping[str, Any]], rules: Mapping[str, Any]) -> str:
+    """Hash the component roots, manifests, and ecosystems together with the ownership rules."""
+    return hashlib.sha256(canonical_json({"components": [dict(item) for item in components],
+                                          "ownership_rules": dict(rules)})).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class Ownership:
+    """Which components a path is attributed to, and why.
+
+    ``component_ids`` are the components that receive the evidence (one when owned, several when
+    shared, none otherwise); ``candidates`` are every equally specific matching component.
+    """
+
+    status: str
+    basis: str
+    component_ids: tuple[str, ...] = ()
+    candidates: tuple[str, ...] = ()
+
+
+def _under(root: str, path: str) -> bool:
+    return root == "." or path == root or path.startswith(root.rstrip("/") + "/")
+
+
 @dataclass(frozen=True, slots=True)
 class Scope:
     """Subjects that every collector shares: the project and the cataloged components."""
@@ -102,31 +142,63 @@ class Scope:
     project: Mapping[str, Any]
     components: tuple[Mapping[str, Any], ...]
 
-    def component_for(self, path: str | None) -> str | None:
+    def ownership(self, path: str | None) -> Ownership:
+        """Resolve a path to its deepest component root; ties are decided by manifest ecosystem only.
+
+        Component identifier order is never consulted: every equally deep candidate is considered.
+        """
         if not path:
-            return None
-        best: tuple[int, str] | None = None
+            return Ownership("not_applicable", "no-path")
+        deepest: list[Mapping[str, Any]] = []
+        best = -1
         for component in self.components:
             root = str(component.get("root") or ".")
-            if root == "." or path == root or path.startswith(root.rstrip("/") + "/"):
-                depth = 0 if root == "." else len(PurePosixPath(root).parts)
-                if best is None or depth > best[0]:
-                    best = (depth, str(component["component_id"]))
-        return best[1] if best else None
+            if not _under(root, path):
+                continue
+            depth = 0 if root == "." else len(PurePosixPath(root).parts)
+            if depth > best:
+                best, deepest = depth, [component]
+            elif depth == best:
+                deepest.append(component)
+        if not deepest:
+            return Ownership("unowned", "no-component-root")
+        candidates = tuple(sorted({str(item["component_id"]) for item in deepest}))
+        if len(candidates) == 1:
+            return Ownership("owned", "deepest-root", candidates, candidates)
+        manifests = sorted({str(item["component_id"]) for item in deepest if item.get("manifest") == path})
+        if len(manifests) == 1:
+            return Ownership("owned", "manifest-file", tuple(manifests), candidates)
+        ecosystem = source_ecosystem(path)
+        matches = tuple(sorted({str(item["component_id"]) for item in deepest
+                                if ecosystem is not None and item.get("ecosystem") == ecosystem}))
+        if len(matches) == 1:
+            return Ownership("owned", "manifest-ecosystem", matches, candidates)
+        if matches:
+            return Ownership("shared", "manifest-ecosystem", matches, candidates)
+        return Ownership("ambiguous", "no-ecosystem-match", (), candidates)
 
-    def subject(self, kind: str, logical_id: str, path: str | None = None, **extra: Any) -> dict[str, Any]:
-        value = {"kind": kind, "logical_id": logical_id, "component_id": self.component_for(path),
-                 "project_id": self.project["logical_id"]}
+    def subjects(self, kind: str, logical_id: str, path: str | None = None, **extra: Any) -> list[dict[str, Any]]:
+        """Return one subject per component the path resolves to, or one unassigned subject."""
+        decision = self.ownership(path)
+        base: dict[str, Any] = {"kind": kind, "logical_id": logical_id, "component_id": None,
+                                "project_id": self.project["logical_id"],
+                                "component_ownership": decision.status,
+                                "component_ownership_basis": decision.basis}
+        if decision.status in {"shared", "ambiguous"}:
+            base["component_candidates"] = list(decision.candidates)
         if path:
-            value["path"] = path
-        value.update({key: item for key, item in extra.items() if item is not None})
-        return value
+            base["path"] = path
+        base.update({key: item for key, item in extra.items() if item is not None})
+        if not decision.component_ids:
+            return [base]
+        return [{**base, "component_id": component_id} for component_id in decision.component_ids]
 
     def component_subject(self, component_id: str) -> dict[str, Any] | None:
         for component in self.components:
             if component["component_id"] == component_id:
                 return {"kind": "component", "logical_id": component["logical_id"], "component_id": component_id,
-                        "project_id": self.project["logical_id"]}
+                        "project_id": self.project["logical_id"], "component_ownership": "owned",
+                        "component_ownership_basis": "component-subject"}
         return None
 
 
@@ -135,7 +207,8 @@ def resolve_scope(indexes: AcceptedIndexes, limit: int) -> tuple[Scope, list[str
     project_id = LogicalIdentity.derive(EntityKind.PROJECT, indexes.target_snapshot,
                                         {"scope": "security-tagging", "target_snapshot": indexes.target_snapshot})
     project = {"kind": "project", "logical_id": project_id.value, "component_id": None,
-               "project_id": project_id.value}
+               "project_id": project_id.value, "component_ownership": "not_applicable",
+               "component_ownership_basis": "project-subject"}
     components = []
     for identity in indexes.shards("components"):
         rows, truncated = indexes.rows(identity, (EntityKind.COMPONENT.value,), limit)
@@ -144,8 +217,11 @@ def resolve_scope(indexes: AcceptedIndexes, limit: int) -> tuple[Scope, list[str
         for row in rows:
             component_id = row.payload.get("component_id")
             if isinstance(component_id, str) and component_id:
+                manifest = row.payload.get("manifest")
+                manifest = manifest if isinstance(manifest, str) and manifest else None
                 components.append({"component_id": component_id, "logical_id": row.identity,
-                                   "root": str(row.payload.get("root") or ".")})
+                                   "root": str(row.payload.get("root") or "."), "manifest": manifest,
+                                   "ecosystem": manifest_ecosystem(manifest)})
     components.sort(key=lambda item: (item["component_id"], item["logical_id"]))
     return Scope(indexes.target_snapshot, project, tuple(components)), gaps
 
@@ -189,7 +265,7 @@ def collect_source_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voc
             if row.location is None:
                 continue
             path = row.location["path"]
-            subject = scope.subject("source_file", row.identity, path)
+            subjects = scope.subjects("source_file", row.identity, path)
             evidence = [_evidence(row, identity)]
             emitted: list[tuple[str, str]] = []
             language = row.payload.get("language")
@@ -200,11 +276,12 @@ def collect_source_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voc
                 else:
                     emitted.append((tag, "catalog-language"))
             emitted.extend(_path_tags(rules, path))
-            for tag, rule_id in emitted:
-                records.append(assignment(
-                    vocabulary=vocabulary, tag=tag, basis="declared", subject=subject,
-                    producer={"name": "capability-rules", "rule_id": rule_id, "version": rules.sha256},
-                    evidence=evidence))
+            for subject in subjects:
+                for tag, rule_id in emitted:
+                    records.append(assignment(
+                        vocabulary=vocabulary, tag=tag, basis="declared", subject=subject,
+                        producer={"name": "capability-rules", "rule_id": rule_id, "version": rules.sha256},
+                        evidence=evidence))
     return records, sorted(set(gaps))
 
 
@@ -276,7 +353,7 @@ def collect_observation_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary
             ci_job = None
             if key.startswith("ci:") and row.payload.get("job") and row.location:
                 ci_job = {"path": row.location["path"], "job": str(row.payload["job"])}
-            subject = scope.subject("tool_observation", row.identity, path if isinstance(path, str) else None)
+            subjects = scope.subjects("tool_observation", row.identity, path if isinstance(path, str) else None)
             evidence = [_evidence(row, identity)]
             category = str(row.payload.get("category") or "")
             finding_tags = [item for item in emitted if item[1] == "reported"]
@@ -287,8 +364,8 @@ def collect_observation_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary
                             "version": rules.sha256}
                 if ci_job is not None:
                     producer["ci_job"] = ci_job
-                records.append(assignment(vocabulary=vocabulary, tag=tag, basis=basis, subject=subject,
-                                          producer=producer, evidence=evidence))
+                records.extend(assignment(vocabulary=vocabulary, tag=tag, basis=basis, subject=subject,
+                                          producer=producer, evidence=evidence) for subject in subjects)
     return records, sorted(set(gaps))
 
 

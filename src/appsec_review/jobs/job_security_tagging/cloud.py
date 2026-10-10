@@ -28,6 +28,14 @@ def _lens(record: Mapping[str, Any]) -> set[str]:
     return lenses
 
 
+def _component_bucket(subject: Mapping[str, Any]) -> str:
+    """Bucket by component, or by ownership status so not-applicable, ambiguous, and unowned differ."""
+    component_id = subject.get("component_id")
+    if component_id:
+        return str(component_id)
+    return f"ownership:{subject.get('component_ownership') or 'unrecorded'}"
+
+
 def build_cloud(vocabulary: Vocabulary, records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """Size by distinct subjects and components, never by raw hit count; fill by strongest basis."""
     nodes: dict[str, dict[str, Any]] = {}
@@ -48,7 +56,7 @@ def build_cloud(vocabulary: Vocabulary, records: Iterable[Mapping[str, Any]]) ->
             node["strongest_basis"] = record["basis"]
         node["derived_only"] = node["derived_only"] and record["basis"] == "derived"
         subjects[node_id].add(record["subject"]["logical_id"])
-        components[node_id].add(record["subject"].get("component_id") or "unassigned")
+        components[node_id].add(_component_bucket(record["subject"]))
         leaves[node_id].add(record["tag"])
         lenses[node_id] |= _lens(record)
         if namespace.rollup_gap:
