@@ -50,6 +50,26 @@
       "component_roles": ["application_api_server", "build_supply_chain"],
       "evidence_mode": "artifact_configuration",
       "required_tools": ["dependency_index"]
+    },
+    {
+      "id": "V15.1.2",
+      "title": "Third-party component inventory",
+      "text": "Fixture control: verify an inventory such as an SBOM covers all third-party libraries and that components come from trusted, maintained repositories.",
+      "domain": "build_supply_chain",
+      "levels": [2, 3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
+    },
+    {
+      "id": "V15.2.4",
+      "title": "Dependency source integrity",
+      "text": "Fixture control: verify components and their transitive dependencies resolve from the expected repository without dependency-confusion risk.",
+      "domain": "build_supply_chain",
+      "levels": [3],
+      "component_roles": ["application_api_server", "build_supply_chain"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["dependency_index"]
     }
   ]
 }
