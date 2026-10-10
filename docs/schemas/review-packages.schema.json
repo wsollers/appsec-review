@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/review-packages.schema.json",
+  "title": "Pre-adjudication review package contract, version 1",
+  "oneOf": [
+    { "$ref": "#/$defs/finding_lead" },
+    { "$ref": "#/$defs/hunt" }
+  ],
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "identity": { "type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$" },
+    "identities": { "type": "array", "items": { "$ref": "#/$defs/identity" }, "uniqueItems": true },
+    "gap": {
+      "type": "object", "additionalProperties": false,
+      "required": ["gap_id", "producer", "scope", "state", "reason"],
+      "properties": {
+        "gap_id": { "type": "string", "minLength": 1 },
+        "producer": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["missing", "skipped", "failed", "unavailable", "partial", "stale", "ambiguous", "truncated"] },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["entity_id", "relation", "shard_id", "shard_sha256", "resolution"],
+      "properties": {
+        "entity_id": { "$ref": "#/$defs/identity" },
+        "relation": { "enum": ["nominates", "supports", "contradicts", "qualifies"] },
+        "shard_id": { "type": "string", "minLength": 1 },
+        "shard_sha256": { "$ref": "#/$defs/sha" },
+        "resolution": { "enum": ["source_line", "run_artifact", "unresolved"] }
+      }
+    },
+    "lead": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observation_id", "scanner", "rule_id", "native_severity", "reported_severity", "severity_rule", "component_id", "suppression_status", "duplicate_of", "location_exact"],
+      "properties": {
+        "observation_id": { "$ref": "#/$defs/identity" },
+        "scanner": { "type": "string", "minLength": 1 },
+        "rule_id": { "type": "string", "minLength": 1 },
+        "native_severity": { "type": ["string", "null"] },
+        "reported_severity": { "enum": ["critical", "high", "medium", "low", "info", "unknown"] },
+        "severity_rule": { "type": "string", "minLength": 1 },
+        "component_id": { "type": "string", "minLength": 1 },
+        "suppression_status": { "enum": ["suppressed", "possibly_suppressed", "not_suppressed", "unknown"] },
+        "duplicate_of": { "oneOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+        "location_exact": { "type": "boolean" },
+        "flow_ids": { "$ref": "#/$defs/identities" }
+      }
+    },
+    "scope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["component_id", "trust_boundary_id", "build_unit_id", "partition_key", "source_ids", "artifact_ids"],
+      "properties": {
+        "component_id": { "type": "string", "minLength": 1 },
+        "trust_boundary_id": { "type": ["string", "null"] },
+        "build_unit_id": { "type": ["string", "null"] },
+        "partition_key": { "type": "string", "minLength": 1 },
+        "source_ids": { "$ref": "#/$defs/identities" },
+        "artifact_ids": { "$ref": "#/$defs/identities" }
+      }
+    },
+    "retrieval": {
+      "type": "object", "additionalProperties": false,
+      "required": ["indexes", "query_sets", "entity_ids", "max_page_size", "max_pages", "max_depth"],
+      "properties": {
+        "indexes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "query_sets": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "entity_ids": { "$ref": "#/$defs/identities" },
+        "max_page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_pages": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 }
+      }
+    },
+    "base": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
+      "properties": {
+        "schema": { "const": "appsec-review/review-package/1" },
+        "kind": { "enum": ["finding_lead", "hunt"] },
+        "package_id": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string", "minLength": 1 },
+        "manifest_sha256": { "$ref": "#/$defs/sha" },
+        "target_snapshot": { "type": "string", "minLength": 1 },
+        "input_fingerprint": { "$ref": "#/$defs/sha" },
+        "assembly_rule": { "const": "appsec-review/assemble-review-packages/1" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "lead_menu": { "type": "array", "items": { "$ref": "#/$defs/lead" } },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+        "context_ids": { "$ref": "#/$defs/identities" },
+        "proof_obligations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "retrieval": { "$ref": "#/$defs/retrieval" },
+        "coverage_gaps": { "type": "array", "items": { "$ref": "#/$defs/gap" } },
+        "truncation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["omitted_leads", "omitted_context", "next_partition"],
+          "properties": {
+            "omitted_leads": { "type": "integer", "minimum": 0 },
+            "omitted_context": { "type": "integer", "minimum": 0 },
+            "next_partition": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "finding_lead": {
+      "allOf": [{ "$ref": "#/$defs/base" }, {
+        "properties": { "kind": { "const": "finding_lead" }, "lead_menu": { "minItems": 1, "maxItems": 1 } }
+      }]
+    },
+    "hunt": {
+      "allOf": [{ "$ref": "#/$defs/base" }, {
+        "properties": { "kind": { "const": "hunt" } }
+      }]
+    }
+  }
+}
