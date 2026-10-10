@@ -29,6 +29,7 @@ from .settings import HistorySettings, parse_settings
 from .sources import GitSource, blob_id, history_identity, resolve_git_source
 from .symbols import COMPLEXITY_IDENTITY, SYMBOL_IDENTITY, extract, tree_sitter_language
 from .window import WINDOW_IDENTITY
+from appsec_review.jobs.job_source_history_analysis.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/source-history-analysis/2"
@@ -1122,4 +1123,5 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
 
     return Job("job_source_history_analysis", "source_history_analysis", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SCHEMA, implementation_identity=implementation,
-               runtime_identity=runtime_identity, units=units, input_identity=history_identity)
+               runtime_identity=runtime_identity, units=units, input_identity=history_identity,
+               datasets=DATASETS, consumes=CONSUMES)

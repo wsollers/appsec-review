@@ -35,6 +35,7 @@ from .languages import MAPPING_IDENTITY, SPECS, UNSCORED_GRAMMARS
 from .rules import RULES_IDENTITY
 from .semantic import CODEQL_LANGUAGES, codeql_paths, semgrep_signals
 from .syntax import SourceFile, build_tree, code_lines
+from appsec_review.jobs.job_review_prioritization.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/review-prioritization/1"
@@ -868,7 +869,8 @@ def build_job() -> Job:
 
     return Job(JOB_ID, "review_prioritization", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, implementation_identity=implementation, runtime_identity=runtime_identity,
-               units=units)
+               units=units,
+               datasets=DATASETS, consumes=CONSUMES)
 
 
 def load_accepted_prioritization(run_root: Path) -> Mapping[str, Any] | None:

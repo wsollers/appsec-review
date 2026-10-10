@@ -19,6 +19,7 @@ from appsec_review.storage import atomic_json, file_sha256
 from .model import GrammarLock, partition_scopes, plan_scopes
 from .normalize import NORMALIZER_SCHEMA
 from .scope_execution import parse_scope
+from appsec_review.jobs.job_tree_sitter_ast.datasets import CONSUMES, DATASETS
 
 
 TOPOLOGY = {
@@ -242,4 +243,5 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                                     (b"custom-executor" if executor_factory else b"container-only")).hexdigest()
     return Job("job_tree_sitter_ast", "tree_sitter_ast", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SCHEMA,
-               implementation_identity=implementation, units=units)
+               implementation_identity=implementation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

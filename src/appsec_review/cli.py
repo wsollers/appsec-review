@@ -36,7 +36,7 @@ def parser() -> argparse.ArgumentParser:
                      "job_artifact_security_analysis",
                      "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
                      "job_evidence_collection", "job_change_context_analysis", "job_codeql_analysis",
-                     "job_review_prioritization")
+                     "job_review_prioritization", "job_review_data_indexing")
     plan.add_argument("--force-from", choices=graph_job_ids)
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
@@ -126,7 +126,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 registry.build("job_evidence_collection"),
                 registry.build("job_change_context_analysis"),
                 registry.build("job_codeql_analysis"),
-                registry.build("job_review_prioritization")]
+                registry.build("job_review_prioritization"),
+                registry.build("job_review_data_indexing")]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":

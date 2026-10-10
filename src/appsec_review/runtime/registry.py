@@ -54,6 +54,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_owasp_control_assessment import build_job as build_owasp_control_assessment
     from appsec_review.jobs.job_security_tagging import build_job as build_security_tagging
     from appsec_review.jobs.job_review_prioritization import build_job as build_review_prioritization
+    from appsec_review.jobs.job_review_data_indexing import build_job as build_review_data_indexing
 
     registry = JobRegistry()
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
@@ -80,4 +81,5 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_owasp_control_assessment", build_owasp_control_assessment)
     registry.register("job_security_tagging", build_security_tagging)
     registry.register("job_review_prioritization", build_review_prioritization)
+    registry.register("job_review_data_indexing", build_review_data_indexing)
     return registry

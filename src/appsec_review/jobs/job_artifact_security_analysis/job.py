@@ -19,6 +19,7 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 
 from .formats import ArchiveLimits, builtin_observation, classify
 from .scanners import ADAPTERS, ContainerScannerRunner
+from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
@@ -385,4 +386,5 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                                     Path(__file__).with_name("scanners.py").read_bytes()).hexdigest()
     return Job("job_artifact_security_analysis", "artifact_security_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=implementation, validation_identity=implementation, units=units)
+               implementation_identity=implementation, validation_identity=implementation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

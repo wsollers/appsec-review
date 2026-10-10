@@ -28,6 +28,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
 from .clangd_yaml import iter_tagged, parse_documents
+from appsec_review.jobs.job_cpp_symbol_index.datasets import CONSUMES, DATASETS
 
 
 JOB_ID = "job_cpp_symbol_index"
@@ -302,4 +303,5 @@ def build_job(*, executor_factory=None) -> Job:
         Path(__file__).parents[1].joinpath("cpp_index_scopes.py").read_bytes() +
         (b"injected-executor" if executor_factory else b"container-executor")).hexdigest()
     return Job(JOB_ID, "cpp_symbol_index", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=SCHEMA, implementation_identity=implementation, units=units)
+               schema_identity=SCHEMA, implementation_identity=implementation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

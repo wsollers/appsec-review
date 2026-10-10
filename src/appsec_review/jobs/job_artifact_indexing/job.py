@@ -28,6 +28,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.retrieval.model import canonical_json, normalize_relative_path
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, LockUnavailable, atomic_json, file_sha256
+from appsec_review.jobs.job_artifact_indexing.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/artifact-indexing/1"
@@ -661,4 +662,5 @@ def build_job() -> Job:
     return Job("job_artifact_indexing", "artifact_indexing", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,
-               units=units)
+               units=units,
+               datasets=DATASETS, consumes=CONSUMES)
