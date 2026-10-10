@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -362,6 +363,9 @@ def security_acceptance(args: argparse.Namespace, catalog: dict[str, Any]) -> in
     scratch = run_dir / "scratch"
     workspace.mkdir(parents=True)
     scratch.mkdir()
+    # Match ContainerExecutor: the fixed non-root tool UID must be able to write only to the
+    # run-owned scratch bind, even when the host-side build user has a different UID.
+    scratch.chmod(0o777)
     failures = 0
     results = []
     for image_id in ids:
@@ -445,19 +449,30 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
                        "--format", "json", "--report-file", "/scratch/result.json", "--rulesets",
                        "/rules/java-security.xml", "--dir", "/workspace/Vulnerable.java"],
                       {0, 4}, "result.json", "RuntimeCommandExecution"),
+        "tool-sqlite": ("sqlite", ["/opt/tool/bin/sqlite-tool", "query",
+                        "/target/index.sqlite", "--sql",
+                        "SELECT value FROM records_fts WHERE records_fts MATCH ?",
+                        "--parameters", '["alpha"]'], {0}, None, '"alpha"'),
     }
     failures = 0
     run_dir = RUN_ROOT / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + f"-smoke-{os.getpid()}")
     run_dir.mkdir(parents=True, exist_ok=False)
+    sqlite_fixture = run_dir / "fixtures" / "sqlite"
+    if "tool-sqlite" in ids:
+        sqlite_fixture.mkdir(parents=True)
+        with sqlite3.connect(sqlite_fixture / "index.sqlite") as database:
+            database.execute("CREATE VIRTUAL TABLE records_fts USING fts5(value)")
+            database.execute("INSERT INTO records_fts(value) VALUES ('alpha'), ('beta')")
     for image_id in ids:
         if image_id not in cases:
             continue
         fixture_name, command, exit_codes, result_file, expected = cases[image_id]
         output_dir = run_dir / image_id
         output_dir.mkdir()
-        source = (fixtures / fixture_name).resolve()
+        source = sqlite_fixture if image_id == "tool-sqlite" else (fixtures / fixture_name).resolve()
+        target_mount = "/target" if image_id == "tool-sqlite" else "/workspace"
         argv = runtime_args(policy) + [
-            "--mount", f"type=bind,src={source},dst=/workspace,readonly",
+            "--mount", f"type=bind,src={source},dst={target_mount},readonly",
             "--mount", f"type=bind,src={output_dir.resolve()},dst=/scratch",
         ]
         if image_id == "tool-pmd":

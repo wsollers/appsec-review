@@ -636,6 +636,21 @@ build_args = { TOOL_VERSION = "4.10.4" }
 purpose = "JVM bytecode SAST with Find Security Bugs."
 
 [[images]]
+id = "tool-sqlite"
+state = "enabled"
+kind = "tool"
+version = "1.0.0"
+tag = "appsec-review/tool-sqlite:1.0.0"
+image_id = "sha256:7a566b686d4ac885db5f6b7b4933c4c69a5462b30e718c1d0f738d26b1208725"
+context = "containers/tools/sqlite"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/sqlite/tool.toml"
+build_args = { TOOL_VERSION = "1.0.0" }
+purpose = "Read-only bounded inspection and querying of mounted SQLite databases."
+
+[[images]]
 id = "tool-syft"
 state = "enabled"
 kind = "tool"
