@@ -83,6 +83,11 @@ record the later product as pending; do not claim full CFG/dataflow coverage fro
 3. Add safe metadata and query routes to currently artifact-only families, then add typed
    cross-domain links only where exact identities are available. Keep ambiguous candidates
    separate with mapping method and confidence.
+   Reuse the SQLite FTS tool image for offline build/validation of sanitized text/facet shards
+   after verifying and pinning its digest and FTS5 capabilities in the container catalog.
+   Preserve the existing immutable shard and accepted-manifest contract; do not add a live
+   search service or index protected raw content. If the image is unavailable, record the
+   gap and keep the current in-process FTS5 path explicit.
 4. Publish the first-stage products with independent rule versions and dependency fingerprints.
    Verify a changed rule rebuilds its descendants but leaves unrelated accepted shards reusable.
 5. Deliver a machine-readable inventory/coverage report, a language/build-unit matrix, and a
@@ -115,4 +120,6 @@ implementing, rather than copying a partial merge workspace.
   mappings produce named gaps. No empty query response is presented as a clean result.
 - Tests prove deterministic identities, manifest integrity, bounded output, MCP pagination,
   language routing, cross-domain links, inventory completeness, and selective shard reuse.
-  Document the exact tests and any unavailable toolchain in the PR.
+  For image-backed FTS, test deterministic tokenizer results, schema compatibility, source
+  identity resolution and secret exclusion. Document the exact tests and any unavailable
+  toolchain in the PR.
