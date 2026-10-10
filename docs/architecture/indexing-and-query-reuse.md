@@ -66,6 +66,70 @@ reused; a new copy of the same evidence is unnecessary.
 | API contracts, deployment topology, tests, docs, dynamic traces | planned or partly scanner-observed | scattered source/scanner observations only | add producer-specific indices when acquired; distinguish declared, intent, and observed evidence |
 | Run logs, raw tool outputs, exact environment, model transcripts, credentials | runtime and tool jobs | protected run-owned artifacts | only sanitized status, hashes, durations, producer and coverage enter retrieval; never index secret or raw model content |
 
+### Input-source and retrieval matrix
+
+This matrix is exhaustive for the **21 job families in the current registry/configuration** and
+the planned input families named in the review architecture. It describes logical datasets,
+not every file emitted by a tool. `Current` means an accepted index/query path exists today;
+`extend` means a producer exists but the listed links or product do not; `planned` means the
+input producer is not built. The emitted-dataset audit below remains the enforcement mechanism
+for every configured step, language, scanner and newly added output, so this table cannot become
+a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `find`, `trace`,
+`search`, `read_excerpt`, `resolve_evidence` and `coverage` are abbreviated `core`.
+
+| Input source / current producer | Used for | Indexed state / required representation | Precompute | MCP endpoint; skill decision |
+|---|---|---|---|---|
+| Resolved TOML, model/tool/guidance identities, target fingerprint; `job_review_intake` | Bind run, enabled lanes and provenance | Extend: sanitized configuration identity, lane status, hash and gap; raw secrets/guidance protected | `review_package` coverage/basis | `coverage`/dataset catalog; no retrieval skill |
+| Source snapshot bytes, paths, hashes; `job_target_catalog` | Resolve every cited location | Current `source` identities/excerpts; extend exact links to all representations | `symbol_links`, `hotspot_context` | `core`; no skill |
+| Repository partitions, languages, projects, components and dependencies; `job_target_catalog` | Scope review and language routing | Current `components`, `analysis`, `build`; audit project/build-unit edges | `artifact_inventory`, `review_package` | `core`; existing `target-analysis-planning` skill is for operator planning only |
+| Build recipes, compile database, dependency manifests; catalog/plan | Select tools, units and package identities | Current catalog/build facts; extend normalized manifest and build-target edges | `build_provenance`, `artifact_inventory` | `core`, `query_artifacts`; planning skill only |
+| Analysis-plan proposals and routing; `job_target_analysis_plan` | Choose bounded producer work | Current `analysis`; index accepted rationale, scope and skipped lanes | `review_package` coverage | `coverage`, `core`; planning skill only |
+| Local Git commits, diffs, blame and line/function history; `job_source_history_analysis` | Churn, entropy, fix-on-fix, SII, ownership | Current `history` and hotspot index; extend exact symbol and review-unit links | `history_context`, `hotspot_context` | `query_hotspots`, `query_change_context`, `QP`; no skill |
+| GitHub PR/review metadata; history enrichment | Review cadence and direct-push signals | Conditional current history facts; unavailable when disabled; protect raw API payload | `history_context` | `query_change_context`, `coverage`; no skill |
+| Review/deployment external facts and co-change/test association; `job_change_context_analysis` | Process anomalies and change context | Current `history`/priority facts; extend source/build/deployment identities | `history_context`, `ci_trust` | `query_change_context`, `QP`; no skill |
+| Tree-sitter CST/AST; `job_tree_sitter_ast` | Syntax, symbols, boundaries and complexity basis | Current bounded `analysis` nodes/spans; extend stable symbols/call sites and parse gaps | `symbol_links`, `call_graph`, `hotspot_context` | `core`, `QP`; no skill |
+| Cyclomatic, cognitive, coupling, taint-proximity and LPS features; `job_review_prioritization` | Rank review attention | Current `priority`; extend metric provenance and package vectors | `hotspot_context`, `review_package` | `query_hotspots`, `QP`; no skill |
+| Project build probes/repairs; `job_project_build` | Establish build feasibility and selected recipe | Current `build`; extend repair decisions, failed scopes and sanitized provenance | `build_provenance` | `query_build_security`, `coverage`; existing `build-image-repair` skill is operator-only |
+| Compile/link/archive commands, file accesses, env and toolchains; `job_language_build` | Reproduce source→artifact provenance and security flags | Current `build`/`build_security`; extend ordered redacted argv facts and allowlisted env classes; exact argv/env protected | `build_provenance`, `ci_trust`, `review_package` | `query_build_security`, `QP`; no worker skill |
+| Language package-manager metadata and SBOM inputs; `job_language_build`/artifact jobs | Dependency identity and lock resolution | Current build/artifact/package facets; audit each ecosystem and version resolution | `artifact_inventory`, `dependency_advisories` | `query_artifacts`, `QP`; no skill |
+| Files produced by builds: native, archives, packages, bytecode, assemblies, WASM; `job_artifact_indexing` | Artifact membership and source/build binding | Current `artifacts`; extend member/symbol/action links | `artifact_inventory`, `build_provenance` | `query_artifacts`, `QP`; no skill |
+| Artifact security scans, format and vulnerability observations; `job_artifact_security_analysis` | Binary/package leads | Current `observations`/`artifacts`; extend dedup and advisory evidence | `scanner_correlation`, `dependency_advisories` | `query_artifacts`, planned `query_observations`, `QP`; no skill |
+| Clang AST and compile-unit diagnostics; `job_cpp_compiled_analysis` | Resolved C/C++ types, definitions, macro/template context | Current partial `analysis`/`compiled`; extend origin and symbol links | `symbol_links`, `ast_ir_cpg_mapping` | `core`, `QP`; no skill |
+| LLVM IR, binary symbols, Infer output; `job_cpp_compiled_analysis` | Compiled calls, CFG/def-use, hardening and leads | Current partial IR and observations; extend CFG, memory, guards, source maps | `call_graph`, `control_flow`, `dataflow`, `guards_ranges` | `core`, `query_build_security`, `QP`; no skill |
+| clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; bridge to source/AST/IR/CPG | `symbol_links`, `call_graph`, `ast_ir_cpg_mapping` | `core`, `QP`; no skill |
+| Joern CPG; `job_cpg_analysis` | Call, CFG and data-dependency graph | Binary artifact only; planned bounded graph export with source maps | `call_graph`, `control_flow`, `dataflow`, `ast_ir_cpg_mapping` | `QP` after export; `coverage` reports unavailable now; no skill |
+| CodeQL database and SARIF paths; `job_codeql_analysis` | Analyzer leads and ordered flows | Current `observations`, priority flow steps; DB protected; extend graph correlation | `sarif_correlation`, `dataflow`, `scanner_correlation` | `query_codeql`, `QP`; no skill |
+| Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
+| CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
+| Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | Planned `query_observations`, `QP`; no skill |
+| Source SAST: Semgrep, Opengrep, gosec, mobsfscan, ShellCheck, phpcs, PHPStan, Psalm, SpotBugs, cppcheck, PMD; `job_evidence_collection` | Candidate defects, including High/Critical lead menu | Current observations; extend native/normalized severity, suppression, duplicate and membership audit | `scanner_correlation`, `review_package`, `hotspot_context` | Planned `query_observations` for exact severity/scanner filters; `QP`; no skill |
+| Syft software inventory; `job_evidence_collection` | SBOM/package identities | Current observations/components; extend package→artifact links | `artifact_inventory`, `dependency_advisories` | `query_artifacts`, `QP`; no skill |
+| OSV-Scanner and Grype matches; `job_evidence_collection` | Dependency vulnerability leads | Current observations when enabled; retain feed/version identity and uncertainty | `dependency_advisories`, `scanner_correlation` | Planned `query_observations`, `query_artifacts`, `QP`; no skill |
+| Hadolint, Checkov, Trivy and Zizmor config scans; `job_evidence_collection` | IaC/container/workflow leads | Current observations; link to declared deployment/CI identity when possible | `scanner_correlation`, `ci_trust`, `deployment_exposure` | Planned `query_observations`, `QP`; no skill |
+| Blint binary scan; `job_evidence_collection` | Binary hardening leads | Current observations; link exact produced artifact | `scanner_correlation`, `artifact_inventory` | `query_artifacts`, planned `query_observations`; no skill |
+| OWASP catalogs, applicability, validators and assessments; `job_owasp_control_assessment` | Control coverage and evidence obligations | Current workbench shards; extend links to findings/tests | `control_evidence`, `review_package` | `query_owasp_workbench`, `QP`; no skill |
+| Taxonomy, crosswalk and assignments; `job_security_tagging` | Security facets and review routing | Current `tags`; retain assignment basis and gaps | `scanner_correlation`, `hotspot_context` | `core`, `QP`; no skill |
+| NVD feed; `job_third_party_data_sync.nvd_sync` | CVE/CVSS/advisory reference | Current global snapshot; pin version per run and join to packages | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query if exact filters exceed it; no skill |
+| OSV feed; `job_third_party_data_sync.osv_sync` | Package advisory reference | Current global snapshot; pin version per run and join PURLs/versions | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
+| MITRE ATT&CK, CAPEC and CWE; `job_third_party_data_sync.mitre_sync` | Weakness/technique context | Current global snapshot; pin version per run and join exact mappings | `reference_intelligence`, `control_evidence` | `QP` or typed reference query; no skill |
+| cve-bin-tool derived database; `job_third_party_data_sync.cve_bin_tool_db_build` | Binary-component advisory matching | Current global artifact; pin source NVD snapshot and database version | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
+| API/IDL contracts, schemas and generated validators; planned `job_interface_contracts` | Declared routes, fields and bounds | Planned `contracts`; enforcement only with source/graph proof | `contract_enforcement`, `entrypoint_paths` | Planned `query_contracts` if `QP`/`core` cannot filter routes/fields; no skill |
+| IaC, rendered Helm/Kustomize, proxy and runtime config; planned `job_deployment_topology` | Exposure, privileges and limits | Planned `deployment`; scanner observations alone are not topology | `deployment_exposure`, `ci_trust` | Planned `query_deployment` if typed exposure filters are needed; no skill |
+| Tests and fixtures; planned `job_test_and_doc_indexing` | Developer intent and negative cases | Planned `tests`; link assertions to symbols; never claim enforcement | `test_intent`, `review_package` | Planned `query_tests` if intent filters exceed `QP`; no skill |
+| Docs, ADRs, README and threat models; planned `job_test_and_doc_indexing` | Declared architecture and trust boundaries | Planned `docs` bounded chunks; untrusted text quarantined | `review_package` nominations only | `search`, `find`; no skill |
+| Target-owned agent guidance; planned doc index | Owner statements only, never instructions | Planned `docs` with `target_guidance` flag and quarantine | None beyond nomination | `search` only if scope permits; no skill |
+| Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `dataflow`, `entrypoint_paths`, `review_package` | Planned `query_observations`/typed trace query if acquired; no skill |
+| Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
+| Normalized claims, reviews, adjudication, PoC receipts and final finding packages; future inference/publication | Review decisions and final evidence | Planned typed ledgers; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
+
+An MCP endpoint is justified only when `core`, an existing domain query, and `QP` cannot give a
+bounded typed answer. `query_observations` is the concrete missing endpoint for scanner severity,
+suppression, rule, provider and location filters; its design must keep tool findings distinct from
+confirmed findings. Other named planned endpoints above are conditional on their producers.
+Skills are operator procedures, not a way to provide target facts to review workers. New sources
+do not require new skills by default; add one only for a repeated operator workflow with its own
+validation steps. Worker access remains through accepted MCP indices and packages.
+
 An implementation task must enumerate actual artifacts and handoffs for every enabled job. Each
 dataset gets `producer`, `scope`, `schema`, `hash`, `snapshot`, sensitivity, disposition
 (`indexed`, `artifact_only`, `protected`, `unavailable`), index shard or exception reason, and
@@ -284,6 +348,14 @@ limit?, cursor?)` returns ranked priority items with metric vectors and evidence
 `find`, `search`, `trace`, `read_excerpt`, and `coverage` remain the tools for exact nodes,
 relationships, source bytes, and gap inspection. Retrieval responses stay run and manifest pinned,
 size/time bounded, auditable, and cursor bound to the exact request.
+
+The first indexing batch adds `query_observations` because the current generic and domain tools
+cannot filter all scanner observations by normalized reported severity, suppression state,
+provider, rule and exact source/artifact scope. It reads accepted observation shards only,
+returns native severity and normalization rule alongside the filter value, and reports skipped
+or failed scanner coverage. It does not elevate a tool result into a confirmed finding. Hunter
+package assembly uses it only as a query surface over a precomputed complete lead menu; package
+membership is validated by a deterministic publication job.
 
 The existing domain queries (`query_artifacts`, `query_build_security`,
 `query_ci_configuration`, `query_codeql`, `query_change_context`, and

@@ -65,8 +65,11 @@ record the later product as pending; do not claim full CFG/dataflow coverage fro
    signal, not an adjudicated finding severity.
 7. Make the dataset inventory discoverable through a bounded MCP catalog query or enhanced
    `coverage`. Exercise `query_precomputed`, `query_hotspots`, existing domain queries, `find`,
-   `trace`, and `read_excerpt`. Add another typed MCP query only where these cannot safely expose
-   a product. Never accept caller SQL, shell, regex, graph programs, or target filesystem paths.
+   `trace`, and `read_excerpt`. Add `query_observations` with exact, bounded scanner, rule,
+   normalized reported severity, suppression, source/artifact and location filters so the
+   High/Critical SAST lead menu can be audited and retrieved without scanning raw SARIF/JSON.
+   Add any other typed MCP query only where existing routes cannot safely expose a product.
+   Never accept caller SQL, shell, regex, graph programs, or target filesystem paths.
 8. Update the design and operations docs with actual indexed coverage, query-set semantics,
    per-language availability, reuse keys, protected exceptions, and remaining gaps.
 
@@ -83,7 +86,9 @@ record the later product as pending; do not claim full CFG/dataflow coverage fro
 4. Publish the first-stage products with independent rule versions and dependency fingerprints.
    Verify a changed rule rebuilds its descendants but leaves unrelated accepted shards reusable.
 5. Deliver a machine-readable inventory/coverage report, a language/build-unit matrix, and a
-   short follow-up list of graph products whose prerequisites remain missing.
+   short follow-up list of graph products whose prerequisites remain missing. Reconcile the
+   input-source matrix in the design doc against the resolved job registry and configuration;
+   record every newly discovered dataset before accepting the run.
 
 Do not alter PRs #98-#101 or their merge state as part of this task. Work in a new branch/worktree
 based on the accepted design/MCP branch from PR #102. Open a reviewable PR stacked on #102 while
