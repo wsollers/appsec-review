@@ -294,6 +294,29 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
     assert native["recipe"]["system_packages"] == []
 
 
+def test_disabled_build_capture_records_policy_skips_without_execution(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    source = config.source_path.read_text(encoding="utf-8")
+    config.source_path.write_text(
+        source.replace('mode = "required"', 'mode = "disabled"', 1), encoding="utf-8")
+    config = load_config(config.source_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    calls: list[tuple[str, ...]] = []
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+        image_resolver_factory=lambda unit: FakeImageResolver())]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    assert outcome["status"] == "SUCCEEDED"
+    assert calls == [] and accepted["probe_receipts"] == [] and accepted["build_dispatches"] == []
+    assert {item["disposition"] for item in accepted["processing_decisions"]} == {"SKIPPED_POLICY"}
+    assert all(item["configuration_sha256"] == config.resolved_sha256
+               for item in accepted["processing_decisions"])
+
+
 def test_project_build_has_independent_language_branches(tmp_path: Path) -> None:
     config, _target = _fixture(tmp_path)
     job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor([]),

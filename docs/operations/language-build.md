@@ -20,27 +20,34 @@ typed central configuration and frozen resolved-run snapshot. Build capture defa
 and can be overridden only for `job_project_build` or `job_language_build`. Compiler-artifact
 collection defaults to `required` in `job_language_build` and accepts overrides only for the fixed
 language families documented in the configuration reference. The runtime applicability evaluator
-is not implemented yet, so operators must not present the following flow as active dispatch or skip
-behavior. Once that evaluator lands, apply the two controls independently:
+applies the two controls independently:
 
 1. For `required`, run the applicable capture or collection path. Unavailability, failure, or
    incomplete evidence is a coverage gap and cannot be reported as clean.
-2. For `disabled`, do not run it; record an explicit policy reason using the repository's current
-   equivalent (`NOT_APPLICABLE` plus `CONFIGURED_DISABLED` where that disposition exists).
+2. For `disabled`, do not run it and record `SKIPPED_POLICY` with the exact resolved configuration
+   identity.
 3. For `auto`, evaluate only the bounded accepted manifests, recipe, classifier, and toolchain
    facts. If they establish package hooks, generation, transpilation/bundling, native extensions,
    or compiler/linker work, run the applicable path.
 4. For an interpreted project with only a syntax command (`python -m py_compile`, `php -l`, or
-   `node --check`), record evidence-supported `NOT_APPLICABLE`; do not treat the syntax check as a
+   `node --check`), record evidence-supported `SKIPPED_NA`; do not treat the syntax check as a
    material build.
 5. For an interpreted project with a package lifecycle, build hook, generator, transpiler,
    bundler, or native extension, treat the lifecycle as material and apply `required` or `auto` as
    resolved. A skip or not-applicable result is never a clean-security claim.
 
-CodeQL central configuration now uses `build`, `source`, `auto`, and `disabled`. The existing
-executor and receipts still use `manual` for exact accepted build replay and `none` for
-source/no-build creation; the loader/runtime boundary maps only `build -> manual` and
-`source -> none`. Effective `auto` selection and `disabled` disposition handling are pending.
+CodeQL central configuration uses `build`, `source`, `auto`, and `disabled`. The executor retains
+`manual` for exact accepted build replay and `none` for source/no-build creation; the evaluator
+selects that capability before execution. `auto` is descriptor-driven and `disabled` produces
+`SKIPPED_POLICY` without creating a database.
+
+The reason codes operators will see are `POLICY_REQUIRED`, `POLICY_DISABLED`,
+`MATERIAL_BUILD_CONFIRMED`, `MATERIAL_BUILD_ABSENT`, `INVENTORY_UNAVAILABLE`,
+`ARTIFACT_CAPABILITY_CONFIRMED`, `ARTIFACT_CAPABILITY_ABSENT`, `CODEQL_BUILD_SELECTED`,
+`CODEQL_SOURCE_SELECTED`, `CODEQL_NOT_APPLICABLE`, `CAPABILITY_UNSUPPORTED`,
+`TOOLCHAIN_UNAVAILABLE`, `PROCESSING_FAILED`, `EVIDENCE_INCOMPLETE`,
+`ARTIFACT_VALIDATION_FAILED`, and `PROCESSING_SUCCEEDED`. Inventory/configuration identity errors
+are framework-integrity failures; ordinary unavailable tools and failed processing remain `GAP`.
 
 Native CMake dispatches use the validated deterministic marker command recipe. A failed default
 project-build probe may add only validated apt packages through the bounded image-repair workflow;

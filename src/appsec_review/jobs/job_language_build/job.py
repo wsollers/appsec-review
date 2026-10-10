@@ -13,6 +13,12 @@ import struct
 import time
 from typing import Any
 
+import appsec_review.applicability as applicability_contract
+from appsec_review.applicability import (
+    ApplicabilityAction, ProcessingFeature, decision_from_mapping,
+    evaluate_applicability, facts_from_build_unit, finalize_processing,
+    resolved_configuration_identity,
+)
 from appsec_review.config import LanguageBuildSettings
 from appsec_review.container_runtime import (
     BuildContainerExecutor, BuildProfile, CaptureIntegrityError, CaptureScope, VerifiedCapture,
@@ -511,6 +517,11 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
             "build_execution_capture": capture.get("mode", "required")
             if isinstance(capture, Mapping) else "required",
             "compiler_artifact_collection": artifact_mode,
+        },
+        "applicability": {
+            "facts": dispatch.get("processing_facts"),
+            "decisions": dispatch.get("processing_decisions"),
+            "build_capture_decision": dispatch.get("build_capture_decision"),
         },
         "family_options": (settings.get(str(dispatch["family"]), {}) if settings is not None else {})})).hexdigest()
 
@@ -1401,6 +1412,10 @@ def build_job(*, executor_factory=None) -> Job:
     def load_family(family: str):
       def load(unit: UnitContext) -> Mapping[str, Any]:
         dispatches, accepted = _dispatches(unit)
+        typed = unit.job.config.typed_settings
+        if not isinstance(typed, LanguageBuildSettings):
+            raise ValueError("typed language-build settings are unavailable")
+        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
         wasm_rules = wasm._producer_rules(unit.job.config.settings["wasm"])
         wasm_selected = [(item, wasm._select_producer(item, wasm_rules)) for item in dispatches]
         if family == "wasm":
@@ -1414,21 +1429,43 @@ def build_job(*, executor_factory=None) -> Job:
                         and str(item.get("build_unit_id")) not in selected_ids]
                        if family == "dotnet" else [])
         if family == "rust":
-            typed = unit.job.config.typed_settings
-            if not isinstance(typed, LanguageBuildSettings):
-                raise ValueError("typed language-build settings are unavailable")
             for dispatch in selected:
                 errors = rust.validate_dispatch(dispatch, typed.rust)
                 if errors:
                     raise ValueError("accepted Rust dispatch is invalid: " + "; ".join(errors))
         if family == "go":
-            typed = unit.job.config.typed_settings
-            if not isinstance(typed, LanguageBuildSettings):
-                raise ValueError("typed language-build settings are unavailable")
             for dispatch in selected:
                 errors = go.validate_dispatch(dispatch, typed.go)
                 if errors:
                     raise ValueError("accepted Go dispatch is invalid: " + "; ".join(errors))
+        decisions = []
+        runnable = []
+        non_run_receipts = []
+        for dispatch in selected:
+            facts = facts_from_build_unit(dispatch)
+            build_decision = evaluate_applicability(
+                feature=ProcessingFeature.BUILD_CAPTURE,
+                policy=unit.job.config.build_capture.mode.value,
+                facts=facts, configuration_sha256=configuration_sha256)
+            artifact_decision = evaluate_applicability(
+                feature=ProcessingFeature.COMPILER_ARTIFACTS,
+                policy=typed.compiler_artifact_mode(family).value,
+                facts=facts, configuration_sha256=configuration_sha256)
+            pair = [build_decision.as_dict(), artifact_decision.as_dict()]
+            decisions.extend(pair)
+            if build_decision.action is ApplicabilityAction.RUN:
+                runnable.append({**dispatch, "processing_facts": facts.as_dict(),
+                                 "processing_decisions": pair})
+            else:
+                terminal = build_decision.disposition.value if build_decision.disposition else "GAP"
+                non_run_receipts.append({
+                    "schema": RECEIPT_SCHEMA, "build_unit_id": dispatch["build_unit_id"],
+                    "family": family, "root": dispatch["root"], "artifacts": [], "commands": [],
+                    "processing_decisions": pair, "terminal_status": terminal,
+                    "gaps": ([] if terminal in {"SKIPPED_NA", "SKIPPED_POLICY"} else
+                             [f"{build_decision.reason_code.value}: build execution was not available"]),
+                })
+        selected = runnable
         gaps = [f"{item.get('build_unit_id')}: " + "; ".join(item.get("gaps", ()))
                 for item in unavailable]
         if family == "wasm":
@@ -1436,10 +1473,12 @@ def build_job(*, executor_factory=None) -> Job:
                         for item, producer in wasm_selected if producer is None and
                         (item["family"] == "wasm" or any(str(value).lower().endswith(".wasm")
                          for value in item["recipe"].get("expected_outputs", ()))))
+        gaps.extend(f"{item['build_unit_id']}: {gap}" for item in non_run_receipts
+                    for gap in item.get("gaps", ()))
         return {"dispatches": selected, "unavailable": unavailable, "accepted": accepted,
-                "gaps": gaps,
+                "non_run_receipts": non_run_receipts, "processing_decisions": decisions, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
-                                   "SUCCEEDED" if selected else "NOT_APPLICABLE"}
+                                   "SUCCEEDED"}
       return load
 
     def execute_family(family: str):
@@ -1451,9 +1490,11 @@ def build_job(*, executor_factory=None) -> Job:
                for dependency in item.get("build_dependencies", ())):
             raise ValueError("accepted build dispatch references an unknown dependency")
         pending = set(dispatches)
-        completed = {str(item.get("build_unit_id")): _unavailable_dotnet_receipt(
+        completed = {str(item.get("build_unit_id")): dict(item)
+                     for item in loaded.get("non_run_receipts", ())}
+        completed.update({str(item.get("build_unit_id")): _unavailable_dotnet_receipt(
                          unit, item, loaded["accepted"])
-                     for item in loaded.get("unavailable", ())}
+                     for item in loaded.get("unavailable", ())})
 
         def run(dispatch, upstream):
             try:
@@ -1507,7 +1548,24 @@ def build_job(*, executor_factory=None) -> Job:
             with ThreadPoolExecutor(max_workers=min(len(runnable) or 1, worker_limit)) as pool:
                 futures = {key: pool.submit(run, dispatches[key], upstream) for key, upstream in runnable}
                 for key, _upstream in runnable:
-                    completed[key] = futures[key].result()
+                    receipt = futures[key].result()
+                    planned = [decision_from_mapping(value) for value in
+                               dispatches[key].get("processing_decisions", ())]
+                    terminal_decisions = []
+                    for decision in planned:
+                        artifacts_required = decision.feature is ProcessingFeature.COMPILER_ARTIFACTS
+                        terminal_decisions.append(finalize_processing(
+                            decision, succeeded=receipt.get("terminal_status") == "SUCCEEDED",
+                            evidence_complete=not bool(receipt.get("gaps")),
+                            artifacts_valid=(bool(receipt.get("artifacts")) if artifacts_required else True),
+                            toolchain_available=receipt.get("terminal_status") not in {"BLOCKED"},
+                        ).as_dict())
+                    processing_gaps = [f"{value['feature']}: {value['reason_code']}"
+                                       for value in terminal_decisions
+                                       if value.get("disposition") == "GAP"]
+                    completed[key] = {**receipt,
+                        "gaps": list(dict.fromkeys([*receipt.get("gaps", ()), *processing_gaps])),
+                        "processing_decisions": terminal_decisions}
             pending.difference_update(ready)
         receipts = [completed[key] for key in sorted(completed)]
         gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value.get("gaps", ())]
@@ -1528,6 +1586,9 @@ def build_job(*, executor_factory=None) -> Job:
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_project_build_handoff_sha256": loaded["accepted"]["project_build_handoff_sha256"],
                     "receipts": [receipt for result in executions for receipt in result["receipts"]],
+                    "processing_decisions": [decision for result in executions
+                                             for receipt in result["receipts"]
+                                             for decision in receipt.get("processing_decisions", ())],
                     "gaps": list(dict.fromkeys([*unsupported_gaps,
                         *(gap for result in executions for gap in result["gaps"])]))}
         artifact = _artifact(unit, "accepted-language-builds.json", document)
@@ -1538,6 +1599,8 @@ def build_job(*, executor_factory=None) -> Job:
         index_manifest = _publish_build_index(unit, document["receipts"])
         return {"artifact": artifact, "build_count": len(document["receipts"]), "gaps": document["gaps"],
                 "index_manifest": index_manifest,
+                "processing_decisions": document["processing_decisions"],
+                "dispositions": document["processing_decisions"],
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
     units = (Unit("load.native", load_family("native")), Unit("load.go", load_family("go")),
@@ -1560,7 +1623,8 @@ def build_job(*, executor_factory=None) -> Job:
              Unit("acceptance.publish_handoff", publish,
                   ("execute.native", "execute.go", "execute.dotnet", "execute.node", "execute.python",
                    "execute.rust", "execute.php", "execute.java", "execute.wasm")))
-    implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
+    implementation = hashlib.sha256(Path(__file__).read_bytes() +
+        Path(applicability_contract.__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
         Path(captured_build.__file__).read_bytes() + Path(elf.__file__).read_bytes() +
         Path(go.__file__).read_bytes() + Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
         Path(wasm.__file__).read_bytes() +

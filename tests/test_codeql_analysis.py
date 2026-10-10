@@ -106,7 +106,8 @@ def test_routes_every_supported_mode_and_keeps_kotlin_and_typescript_visible() -
     assert by_language["javascript"].source_languages == ("JavaScript", "TypeScript")
     assert all(not by_language[name].commands_permitted
                for name in ("javascript", "python", "rust", "actions"))
-    assert [item["status"] for item in plan.non_applicable] == ["NOT_APPLICABLE", "NOT_APPLICABLE"]
+    assert [item["status"] for item in plan.non_applicable] == ["SKIPPED_NA"]
+    assert plan.non_applicable[0]["language"] == "php"
 
 
 def test_failed_sibling_is_a_gap_without_erasing_successful_scope() -> None:

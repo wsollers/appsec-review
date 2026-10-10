@@ -103,26 +103,28 @@ through an unnecessary full probe before every instrumented or traced build.
 
 The agreed semantics and the 18-row `appsec-multi-vuln` fixture mapping are documented in
 [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md),
-using nested corpus commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. The documentation is
-ahead of runtime configuration in these explicit ways:
+using nested corpus commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. Current status:
 
 - implemented: independent typed central controls for build execution capture and
   compiler-artifact collection with `required`, `auto`, and `disabled` values;
 - implemented: canonical immutable per-run resolution and binding into handoff, job-configuration,
   and resume identities;
-- add deterministic applicability classifiers and explicit policy/not-applicable dispositions,
-  without introducing another syscall parser or reconciliation loop;
+- implemented: one deterministic descriptor-backed applicability evaluator and canonical
+  `SUCCEEDED`, `SKIPPED_NA`, `SKIPPED_POLICY`, and `GAP` processing dispositions, without another
+  syscall parser or reconciliation loop;
 - implemented: CodeQL's typed capability model accepts `build`, `source`, `auto`, and `disabled`,
   with one-way load-time normalization of legacy `manual`/`none` values; executor receipts retain
-  `manual`/`none` until the runtime policy evaluator is completed; and
-- add parameterized tests for every matrix row, including the Rust corpus/parent CodeQL mismatch,
-  Python and Node mixed native scopes, specialized-toolchain unavailability, and the distinction
-  between syntax-only and material interpreted-language lifecycles.
+  `manual`/`none` after deterministic capability selection;
+- implemented: parameterized schema/path/applicability coverage for every matrix row and focused
+  transitions for syntax-only versus material lifecycles, mixed native facts, missing inventory,
+  unsupported capability, failed processing, and incomplete evidence; and
+- remaining: specialized live Kotlin, Android SDK, Composer lifecycle, phpize, mixed-language
+  CodeQL, and WebAssembly toolchain acceptance. Their absence is a validation gap, not a changed
+  applicability decision.
 
-Do not describe conditional capture as fully deployed until the remaining classifier, dispatch,
-and disposition work lands. Existing standardized capture remains mandatory only on the adapters
-that explicitly call it, and existing CodeQL receipts must use `manual`, `none`, `NOT_APPLICABLE`,
-and named gaps as implemented.
+Conditional policy dispatch and dispositions are implemented. Do not describe specialized live
+toolchain acceptance as complete until the remaining gates above run. Executor-level CodeQL
+receipts continue to use `manual`/`none` after the canonical decision selects build/source.
 
 ## Scale native acceptance from fixtures to a game-sized build
 

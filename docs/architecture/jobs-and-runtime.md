@@ -117,10 +117,13 @@ JSON and its SHA-256 include defaults, overrides, and normalized CodeQL values; 
 job configuration hashes, and resume planning use the resolved hash. Changing any processing mode
 therefore invalidates reuse deterministically.
 
-This is the typed control plane only. `auto` applicability evaluation and the final
-`SKIPPED_NA`/`SKIPPED_POLICY` runtime dispositions are not implemented yet. Existing build adapters
-continue their verified execution and collection behavior, and CodeQL currently executes only
-language overrides that resolve directly to `build` or `source`.
+The generic deterministic evaluator makes these controls operational. Its immutable decision binds
+resolved policy and configuration hash to the accepted project/language identity, bounded facts,
+selected capability, descriptor source path/hash identities, reason code, and one of `SUCCEEDED`,
+`SKIPPED_NA`, `SKIPPED_POLICY`, or `GAP`. Decisions are retained in project-build,
+language-build, and CodeQL artifacts and handoffs. They are checkpoint inputs, participate in
+resume invalidation, and feed completeness accounting; `GAP` is retriable and blocks clean claims,
+while either skip remains explicit without becoming a gap or evidence of security.
 
 ## NVD synchronization
 

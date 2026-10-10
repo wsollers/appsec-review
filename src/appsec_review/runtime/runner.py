@@ -233,7 +233,7 @@ class JobRunner:
                 if output.get("terminal_status"):
                     dispositions.append(str(output["terminal_status"]))
             completed = datetime.now(timezone.utc).isoformat()
-            status = ("COMPLETED_WITH_GAPS" if any(value not in {"SUCCEEDED", "NOT_APPLICABLE"}
+            status = ("COMPLETED_WITH_GAPS" if any(value not in {"SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}
                                                     for value in dispositions) else "SUCCEEDED")
             started_at = datetime.fromisoformat(current["started_at"])
             duration = max(0, int((datetime.fromisoformat(completed) - started_at).total_seconds() * 1000))
@@ -321,7 +321,7 @@ class JobRunner:
                        "shard_identity": result.get("index_identity")}
             atomic_json(status_path, receipt)
             disposition = result.get("terminal_status")
-            task_event = ("TASK_COMPLETED_WITH_GAPS" if disposition not in {None, "SUCCEEDED", "NOT_APPLICABLE"}
+            task_event = ("TASK_COMPLETED_WITH_GAPS" if disposition not in {None, "SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}
                           else "TASK_SUCCEEDED")
             context.events.write(task_event, unit_id=unit_id, producer=result.get("tool_id"),
                                  disposition=result.get("terminal_status"),

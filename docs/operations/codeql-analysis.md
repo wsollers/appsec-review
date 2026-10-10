@@ -20,10 +20,12 @@ GitHub Actions is analyzed only when accepted `.github/workflows/*.yml` or `.yam
 The job-level typed default is `auto`, with fixed per-language overrides in the checked-in TOML that
 preserve the behavior above. Valid configuration values are `build`, `source`, `auto`, and
 `disabled`. Legacy `manual` and `none` input values normalize one way to `build` and `source`, so
-the immutable resolved configuration uses only the canonical vocabulary. Deterministic `auto`
-selection, effective `disabled` scopes, and final `SKIPPED_NA`/`SKIPPED_POLICY` dispositions are
-not implemented in this control-plane change; only directly resolved `build` and `source` scopes
-can currently reach the executor.
+the immutable resolved configuration uses only the canonical vocabulary. The deterministic
+evaluator selects `build` only when the accepted descriptor and materialized build receipt declare
+the build capability; it selects `source` only for a declared source/no-build capability.
+`disabled` records `SKIPPED_POLICY`, unsupported languages with positive accepted evidence record
+`SKIPPED_NA`, and missing extractors, replayable commands, toolchains, databases, SARIF, or required
+evidence remain `GAP`.
 
 Auxiliary build evidence such as package-catalog commands is never replayed as compilation. When
 the accepted producer labels commands, CodeQL selects only the ordered `configure` and `build`
@@ -35,7 +37,7 @@ working directory, and environment that the accepted build actually executed, no
 recipe text.
 
 Visual Basic and F# are not implied by C# coverage. PHP and raw WebAssembly are recorded as
-`NOT_APPLICABLE`. Ruby and Swift remain explicit gaps until an accepted executor/platform exists.
+`SKIPPED_NA`. Ruby and Swift remain explicit gaps until an accepted executor/platform exists.
 
 ## Runtime and checkpoints
 

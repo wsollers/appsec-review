@@ -53,7 +53,8 @@ _CONTEXT_NAMES = {
     "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "composer.lock", "requirements.txt",
     "poetry.lock", "Pipfile.lock", "pylock.toml", "setup.cfg",
     "rust-toolchain", "rust-toolchain.toml", "Directory.Build.props", "global.json",
-    "packages.lock.json", "Directory.Packages.props", "NuGet.Config",
+    "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
+    "binding.gyp", "config.m4",
 }
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++", "gcc", "g++",

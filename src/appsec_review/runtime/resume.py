@@ -91,7 +91,8 @@ class ResumePlanner:
         dispositions = [item for output in handoff.get("outputs", {}).values()
                         if isinstance(output, Mapping)
                         for item in output.get("dispositions", ()) if isinstance(item, Mapping)]
-        if any(item.get("terminal_status") == "FAILED" for item in dispositions):
+        if any(item.get("terminal_status") == "FAILED" or item.get("disposition") == "GAP"
+               for item in dispositions):
             reasons.append("accepted job contains a retriable failed producer")
         if not handoff.get("artifacts"):
             reasons.append("accepted handoff has no artifact identities")
