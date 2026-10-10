@@ -106,6 +106,12 @@ def validate(catalog: dict[str, Any]) -> list[str]:
             if not SHA256.fullmatch(digest) or digest != item.get("upstream_manifest_sha256"):
                 errors.append(f"{image_id}: base manifest digest mismatch")
         context = safe_path(item["context"])
+        for name, extra in sorted(item.get("build_contexts", {}).items()):
+            try:
+                if not SAFE_ID.fullmatch(name) or not safe_path(extra).is_dir():
+                    errors.append(f"{image_id}: build context {name!r} must be a repository directory")
+            except ValueError:
+                errors.append(f"{image_id}: build context {name!r} escapes repository")
         dockerfile = context / item["dockerfile"]
         if not dockerfile.is_file():
             errors.append(f"{image_id}: missing {dockerfile.relative_to(ROOT)}")
@@ -252,6 +258,8 @@ def build_one(item: dict[str, Any], run_dir: Path) -> dict[str, Any]:
                 str(context / item["dockerfile"]), "--tag", item["tag"]]
         for key, value in sorted(item.get("build_args", {}).items()):
             argv += ["--build-arg", f"{key}={value}"]
+        for name, extra in sorted(item.get("build_contexts", {}).items()):
+            argv += ["--build-context", f"{name}={safe_path(extra)}"]
         argv.append(str(context))
         completed = run_logged(argv, build_log, 1800)
         if completed.returncode != 0:
@@ -460,6 +468,10 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
         "tool-cppcheck": ("cppcheck", ["/opt/cppcheck/bin/cppcheck", "--enable=warning,style,performance,portability",
                               "--xml", "--xml-version=2", "/workspace/vulnerable.cpp"],
                              {0}, None, "arrayIndexOutOfBounds"),
+        "tool-clangd-indexer": ("clangd-indexer", ["/opt/clangd/clangd_23.1.0/bin/clangd-indexer",
+                                   "--executor=all-TUs", "--format=yaml",
+                                   "/workspace/compile_commands.json"],
+                                  {0}, None, "Name:            clang_cl_entry"),
         "tool-pmd": ("pmd", ["/opt/pmd/bin/pmd", "check", "--no-cache", "--no-progress",
                        "--format", "json", "--report-file", "/scratch/result.json", "--rulesets",
                        "/rules/java-security.xml", "--dir", "/workspace/Vulnerable.java"],

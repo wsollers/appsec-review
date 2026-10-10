@@ -5,7 +5,8 @@ ARG TOOL_VERSION
 ARG JOERN_SHA512
 COPY downloads/joern-cli-linux-x86_64-v4.0.630.zip /tmp/joern.zip
 COPY downloads/joern-cli-linux-x86_64-v4.0.630.zip.sha512 /tmp/joern.zip.sha512
-COPY safe_extract.py tool.toml assets.lock.json inventory.json /opt/review/
+COPY --from=shared safe_extract.py /opt/review/
+COPY tool.toml assets.lock.json inventory.json /opt/review/
 # The upstream SHA-512 sidecar must name the platform archive and agree with the pinned build
 # argument before the archive is checked. safe_extract.py then re-verifies size, SHA-256, and
 # SHA-512 against assets.lock.json, rejects unsafe members, installs only the reviewed closure, and

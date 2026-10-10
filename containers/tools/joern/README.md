@@ -16,7 +16,7 @@ A successful build or version probe is not CPG coverage.
 | `assets.lock.json` | Release provenance and exact URL, path, byte size, and SHA-256 of the archive and its SHA-512 sidecar, plus the upstream SHA-512 and signature status. |
 | `tool.toml` | Runtime contract (non-root, no network, read-only root and target, limits, version probe) and the `[closure]` allowlist and extraction limits. |
 | `Dockerfile` | Two-stage offline build: verify and unpack in `python:3.12-slim` (digest-pinned), then install into `appsec-review/base-jre:21-noble`. |
-| `safe_extract.py` | Validates every archive member, installs only the closure allowlist, writes the deterministic inventory, and records JAR-manifest versions. |
+| `../shared/safe_extract.py` | Shared helper, copied in through the `shared` named build context. Validates every archive member, installs only the closure allowlist, writes the deterministic inventory, and records JAR-manifest versions. |
 | `inventory.json` | Committed, reviewed inventory of the installed closure: 222 files with path, kind, size, and SHA-256, plus Maven coordinates and embedded native libraries for each JAR. |
 | `joern-version` | Version probe: runs the real `c2cpg` JVM entry point offline, then prints the recorded versions. |
 | `LICENSE.md` | License, provenance, and vulnerability review notes, including the open items. |
@@ -69,7 +69,7 @@ The committed inventory came from the verified archive, using the same helper an
 image build:
 
 ```sh
-python3 -I containers/tools/joern/safe_extract.py joern-cli-linux-x86_64.zip <empty-dir> \
+python3 -I containers/tools/shared/safe_extract.py joern-cli-linux-x86_64.zip <empty-dir> \
     --policy containers/tools/joern/tool.toml \
     --lock containers/tools/joern/assets.lock.json \
     --inventory containers/tools/joern/inventory.json \
@@ -97,7 +97,7 @@ log).
 
 **Unpack stage** (`python:3.12-slim-bookworm@sha256:3923...`):
 
-1. Copies the archive, the sidecar, `safe_extract.py`, `tool.toml`, `assets.lock.json`, and
+1. Copies the archive, the sidecar, `safe_extract.py` (from the `shared` named build context), `tool.toml`, `assets.lock.json`, and
    `inventory.json` from the local build context. Nothing comes from the network.
 2. Checks that the sidecar's digest equals the pinned `JOERN_SHA512` build argument and that the
    sidecar names `joern-cli-linux-x86_64.zip`.

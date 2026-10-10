@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Validate, selectively extract, and inventory an untrusted Joern distribution archive.
+"""Validate, selectively extract, and inventory an untrusted tool distribution archive.
+
+Shared by catalog tool images through the ``shared`` named build context.
 
 The archive is data. Every member is validated before anything is written: no absolute or
 drive-qualified names, no traversal, no duplicate or file/directory-conflicting names, no
@@ -344,7 +346,7 @@ def load_policy(path: Path) -> tuple[Limits, tuple[str, ...], tuple[str, ...]]:
     limits = Limits(int(closure["max_members"]), int(closure["max_expanded_bytes"]),
                     float(closure["max_member_compression_ratio"]),
                     float(closure["max_archive_expansion_ratio"]))
-    return limits, tuple(closure["include"]), tuple(closure["version_jars"])
+    return limits, tuple(closure["include"]), tuple(closure.get("version_jars", ()))
 
 
 def verify_archive(archive: Path, lock_path: Path) -> dict[str, object]:
@@ -388,6 +390,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if json.loads(args.expect_inventory.read_text(encoding="utf-8")) != document:
                 raise UnsafeArchive("extracted closure differs from the reviewed inventory")
         if args.version_file:
+            if not version_jars:
+                raise UnsafeArchive("policy declares no version JARs for --version-file")
             args.version_file.write_text(manifest_versions(args.destination, version_jars), encoding="utf-8")
     except (UnsafeArchive, KeyError, zipfile.BadZipFile, tarfile.TarError, OSError) as exc:
         print(f"REJECTED {exc}", file=sys.stderr)

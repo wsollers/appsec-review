@@ -87,6 +87,5 @@ must:
   likely need a reviewed per-tool resource profile. This must be decided by the bounded-export
   work, not by weakening the policy here.
 
-The launcher and integration files in this directory (`Dockerfile`, `safe_extract.py`,
-`joern-version`, and the TOML/JSON contracts) belong to this repository and do not redistribute
+The launcher and integration files in this directory (`Dockerfile`, `joern-version`, and the TOML/JSON contracts) belong to this repository and do not redistribute
 Joern.

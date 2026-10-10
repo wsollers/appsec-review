@@ -26,7 +26,7 @@ dependency = "appsec-review/base-jre:21-noble"
 inventory = "containers/tools/joern/inventory.json"
 review = "containers/tools/joern/LICENSE.md"
 coverage = "none: runtime closure only; bounded CPG/PDG export and functional acceptance are pending"
-update = "Select an immutable upstream release tag, record the platform archive and its SHA-512 sidecar by exact size and hash, regenerate inventory.json from the archive with safe_extract.py, re-review licenses and advisories in LICENSE.md, then validate, build offline, smoke, and security-test."
+update = "Select an immutable upstream release tag, record the platform archive and its SHA-512 sidecar by exact size and hash, regenerate inventory.json from the archive with containers/tools/shared/safe_extract.py, re-review licenses and advisories in LICENSE.md, then validate, build offline, smoke, and security-test."
 
 # The reviewed installation closure. The archive is verified whole; only these members are
 # installed. Other language frontends, their native AST generators, Ghidra, schema-extender,

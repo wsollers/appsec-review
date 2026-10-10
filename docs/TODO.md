@@ -314,3 +314,20 @@ job will consume:
 Do not enable all frontends wholesale: that adds about 2 GB and six unreviewed native binaries.
 `ghidra2cpg` is binary analysis and belongs with the binary-analysis decomposition decision, not
 source CPG coverage.
+
+## Integrate the clangd static index
+
+Done: the pinned, reviewed, offline `tool-clangd-indexer` closure (clangd `23.1.0`,
+`containers/tools/clangd-indexer/`). A functional fixture shows that it indexes both Clang and
+clang-cl compile commands. Remaining work:
+
+- run it from the accepted compilation database in content-keyed, bounded TU batches, with per-TU
+  checkpoints;
+- normalize the YAML output (symbols, references, relations) into retrieval shards with exact
+  source mapping, emitting each header once;
+- mount licensed MSVC and Windows SDK headers read-only for clang-cl commands;
+- define a reviewed per-tool resource profile for Unreal-scale databases;
+- report unparsed TUs and over-budget batches as gaps.
+
+Resolve the open items in `containers/tools/clangd-indexer/LICENSE.md` first: confirming the LLVM
+source ref, and an advisory match for the LLVM binary.
