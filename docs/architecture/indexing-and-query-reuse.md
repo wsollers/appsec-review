@@ -72,6 +72,44 @@ dataset gets `producer`, `scope`, `schema`, `hash`, `snapshot`, sensitivity, dis
 coverage. The inventory itself is immutable and accepted with the run. An acceptance validator
 compares emitted datasets with this inventory so newly added jobs cannot silently omit indexing.
 
+### Publication contract and completeness audit
+
+The publisher treats a **dataset** as one logical output of a job step, even when it spans many
+files. Every enabled step declares its output kinds before execution and reports one row per
+actual output and one row per expected output that was skipped or failed. A row has a stable
+`dataset_id` derived from run, job, step, scope and output kind; producer attempt and artifact
+hashes; accepted target snapshot; schema and producer version; language/build unit where
+applicable; sensitivity; disposition; index shard identity or protected artifact reference;
+query route; record and truncation counts; coverage state and reason. Paths are logical target
+paths or run-owned references, never arbitrary host paths. Inventory and shard metadata are
+hash-pinned in the accepted manifest.
+
+| Disposition | Required publication | Acceptance rule |
+|---|---|---|
+| `indexed` | Accepted shard, exact query route, provenance and coverage | Shard hash, schema, snapshot and scope resolve; row counts agree with shard metadata |
+| `artifact_only` | Run-owned artifact plus queryable sanitized metadata | Named reason why detailed indexing is not useful or feasible; no review-critical facts hidden here |
+| `protected` | Protected artifact plus safe status/hash/producer metadata | Named sensitivity reason; raw bytes cannot enter source search, facts or model context |
+| `unavailable` | No fabricated facts; scoped gap record and attempted producer status | Distinguish disabled, unsupported, skipped, failed, timed out and truncated |
+
+The validator compares the step's declared outputs, emitted artifacts and index handoffs with
+inventory rows. It rejects missing/duplicate identities, dangling shard or artifact references,
+snapshot/hash mismatches, an `indexed` row without a query route, and any safe review-useful
+output filed as `artifact_only` without a concrete exception. A failed or skipped optional lane
+may be accepted only with scoped `unavailable` coverage. A failure in this audit prevents final
+index acceptance; it does not erase already captured evidence. Audit results themselves are
+run-owned, indexed status facts.
+
+The implementation should enumerate the current pipeline from its registry and resolved
+configuration, including `job_review_intake`, `job_target_catalog`,
+`job_source_history_analysis`, `job_target_analysis_plan`, `job_tree_sitter_ast`,
+`job_project_build`, `job_language_build`, `job_artifact_indexing`,
+`job_artifact_security_analysis`, `job_cpp_compiled_analysis`, `job_cpp_symbol_index`,
+`job_cpg_analysis`, `job_evidence_collection`, `job_change_context_analysis`,
+`job_codeql_analysis`, and `job_review_prioritization`. Other enabled jobs, including CI,
+OWASP, tagging, post-build assessment and standalone feed sync, are in scope when present in
+the resolved run. Registry/configuration discovery is authoritative; this list is a review
+check, not a hardcoded allowlist.
+
 ### Indexing levels
 
 | Level | Use | Example |
@@ -112,7 +150,7 @@ Run outputs remain under `runs/<run-id>/data/`. Configuration, limits, timeouts,
 belong in central TOML. Producers publish independently testable handoffs; skipped and failed
 scopes publish unavailable or partial coverage instead of empty-success records.
 
-## Precomputed query sets for the next task
+## Precomputed query sets and implementation batches
 
 Each set is an allowlisted `query_set`, with a versioned producer, an exact subject identity or
 source path, a bounded result, upstream hashes, and a coverage row named for the set. Products
@@ -146,11 +184,34 @@ should reuse the current `IndexBuilder`, `IndexIdentity`, and accepted-manifest 
 | `test_intent` | future test/doc index, source symbols | test assertion and negative-case links | tests not indexed or not executed; intent is not enforcement |
 | `review_package` | all accepted indices and products | compact evidence bundle for a bounded review question | every missing contributing lane and package truncation |
 
-The next task should first enforce dataset inventory and metadata coverage across all enabled
-jobs, then fill the highest-value index gaps. Precompute products in stages, prioritizing
-cross-domain review questions and graph paths that are expensive to answer at inference time. It
-must verify each language's available producer path and name unsupported combinations. It should
-test reuse by changing one query rule and proving unrelated upstream shards are not rebuilt.
+The [inventory and first-stage batch](../tasks/review-data-indexing-prompt.md) enforces dataset
+accounting across enabled jobs, adds safe query routes and cross-domain links, and publishes
+products over already accepted inputs. The dependent
+[graph and advanced-query batch](../tasks/review-graph-precomputation-prompt.md) exports Joern
+and LLVM graphs, links representations, and publishes graph and review-context products. Each
+batch verifies every language's available producer path, names unsupported combinations, and
+tests selective reuse when one query rule changes.
+
+### Product scheduling and invalidation
+
+Each query-set producer declares its exact upstream shard/artifact identities, rule version,
+tool version, configuration hash, scope and output schema. The product key is a hash of those
+inputs, not a run-wide timestamp. Product dependencies form a DAG; only descendants of a
+changed input rebuild. A producer may publish `partial` with bounded facts and explicit missing
+inputs, or `unavailable` with no facts. It must never publish complete empty results when an
+input failed. Publishing a product is an independent handoff; a failure in one set does not
+invalidate unrelated accepted sets.
+
+| Stage | Product sets | Prerequisite |
+|---|---|---|
+| 1: broad inventory | `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links` | Existing accepted domain shards and pinned feed identities |
+| 2: code graphs | `call_graph`, `control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths` | Bounded AST/IR/CPG export, source mappings and available analyzer evidence |
+| 3: review context | `hotspot_context`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`, `test_intent`, `review_package` | Accepted upstream sets; contract/deployment/test sets stay unavailable until their own producers exist |
+
+Within a stage, implement one complete producer→shard→manifest→MCP vertical slice before
+replicating the pattern. `review_package` is a compact composition of accepted identities,
+counts, paths and gaps, never a copy of every source excerpt or graph. A query may filter a
+product by exact subject/path but cannot cause product generation.
 
 ## Fact and MCP contract
 
@@ -175,7 +236,7 @@ The existing domain queries (`query_artifacts`, `query_build_security`,
 discoverable through a bounded catalog query or an enriched `coverage` result; it must not require
 the model to guess index names or inspect raw run directories.
 
-## Acceptance checks for the next task
+## Acceptance checks across both batches
 
 - Every supported language has a catalog-to-source-to-AST route; compiled/CPG coverage is scoped
   to languages and build units that actually produce it.
@@ -183,8 +244,8 @@ the model to guess index names or inspect raw run directories.
   exception, and a query route. New outputs cannot pass acceptance with an unclassified dataset.
 - A source-resolved graph path contains ordered nodes and typed edges, not just endpoint line
   numbers. Every missing or ambiguous hop is visible.
-- Joern output is decoded by a pinned, bounded exporter into accepted graph shards; a binary-only
-  CPG continues to report unavailable graph coverage.
+- In the graph batch, Joern output is decoded by a pinned, bounded exporter into accepted graph
+  shards; a binary-only CPG continues to report unavailable graph coverage.
 - A fact can be traced back through exact upstream identities and hashes; stale or mismatched
   source mappings are rejected.
 - Re-running an unchanged input reuses immutable shards; changes invalidate only dependent
