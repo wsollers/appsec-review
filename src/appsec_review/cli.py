@@ -30,7 +30,8 @@ def parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--target", type=Path, required=True)
-    graph_job_ids = ("job_review_intake", "job_target_catalog", "job_target_analysis_plan",
+    graph_job_ids = ("job_review_intake", "job_target_catalog", "job_design_artifact_discovery",
+                     "job_target_analysis_plan",
                      "job_project_build", "job_language_build", "job_artifact_indexing",
                      "job_artifact_security_analysis",
                      "job_cpp_compiled_analysis", "job_codeql_analysis", "job_evidence_collection")
@@ -111,6 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
         jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+                registry.build("job_design_artifact_discovery"),
                 registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
                 registry.build("job_language_build"),
                 registry.build("job_artifact_indexing"),

@@ -225,6 +225,27 @@ workers = 1
 [jobs.job_target_catalog.steps.publish_catalog.tasks.validate_catalog]
 [jobs.job_target_catalog.steps.publish_catalog.tasks.publish_handoff]
 
+[jobs.job_design_artifact_discovery]
+name = "design_artifact_discovery"
+workers = 1
+
+[jobs.job_design_artifact_discovery.settings]
+# Classifies cataloged paths, then probes a hash-verified prefix of ambiguous files.
+max_artifacts = 20000
+max_probe_files = 2000
+max_probe_bytes = 16384
+max_file_bytes = 1048576
+
+[jobs.job_design_artifact_discovery.steps.design_discovery]
+workers = 1
+[jobs.job_design_artifact_discovery.steps.design_discovery.tasks.classify_paths]
+[jobs.job_design_artifact_discovery.steps.design_discovery.tasks.probe_content]
+
+[jobs.job_design_artifact_discovery.steps.design_publication]
+workers = 1
+[jobs.job_design_artifact_discovery.steps.design_publication.tasks.build_index]
+[jobs.job_design_artifact_discovery.steps.design_publication.tasks.publish_handoff]
+
 [jobs.job_target_analysis_plan]
 name = "target_analysis_plan"
 workers = 1

@@ -102,7 +102,8 @@ python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dag
 With the current registry, the cross-job dependencies are:
 
 ```text
-review_intake -> target_catalog -> ci_configuration_analysis -> target_analysis_plan
+review_intake -> target_catalog -> design_artifact_discovery -> ci_configuration_analysis
+  -> target_analysis_plan
 target_analysis_plan -> tree_sitter_ast
 target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis
 language_build -> cpp_compiled_analysis -> post_build_security_assessment

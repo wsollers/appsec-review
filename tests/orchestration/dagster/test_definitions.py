@@ -251,6 +251,8 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "dispatch_wave1_review" not in names
     expected = {
         "review_intake__begin", "target_catalog__begin", "target_analysis_plan__begin",
+        "design_artifact_discovery__design_discovery__probe_content",
+        "design_artifact_discovery__design_publication__publish_handoff",
         "ci_configuration_analysis__ci_discovery__discover_definitions",
         "ci_configuration_analysis__ci_analysis__github_zizmor_scan",
         "ci_configuration_analysis__ci_observation_publication__github_zizmor_index",
@@ -312,7 +314,8 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         "evidence_collection__secrets__gitleaks_index")
     assert "evidence_collection__software_inventory__syft_scan" in upstream(
         "evidence_collection__vulnerability_matching__grype_scan")
-    assert "target_catalog__finalize" in upstream("ci_configuration_analysis__begin")
+    assert "target_catalog__finalize" in upstream("design_artifact_discovery__begin")
+    assert "design_artifact_discovery__finalize" in upstream("ci_configuration_analysis__begin")
     assert "ci_configuration_analysis__finalize" in upstream("target_analysis_plan__begin")
     assert "target_analysis_plan__finalize" in upstream("project_build__begin")
     assert "project_build__finalize" in upstream("language_build__begin")

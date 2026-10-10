@@ -163,8 +163,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "APPSEC_REVIEW_TARGET", config.runtime.repository_root / "targets" / "appsec-multi-vuln"
                 )).resolve()
                 target_jobs = {
-                    "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-                    "job_project_build", "job_language_build", "job_artifact_indexing",
+                    "job_review_intake", "job_target_catalog", "job_design_artifact_discovery",
+                    "job_target_analysis_plan", "job_project_build", "job_language_build", "job_artifact_indexing",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
@@ -379,12 +379,18 @@ def build_definitions(
         wave_dependencies: dict[str, tuple[str, ...]] = {
             "job_review_intake": (), "job_target_catalog": ("job_review_intake",),
         }
+        # Index-publishing jobs before the plan stay serial: each composes the accepted manifest.
+        gather_terminal = "job_target_catalog"
+        if "job_design_artifact_discovery" in registered:
+            wave_jobs.append(registry.build("job_design_artifact_discovery"))
+            wave_dependencies["job_design_artifact_discovery"] = (gather_terminal,)
+            gather_terminal = "job_design_artifact_discovery"
         if "job_ci_configuration_analysis" in registered:
             wave_jobs.append(registry.build("job_ci_configuration_analysis"))
-            wave_dependencies["job_ci_configuration_analysis"] = ("job_target_catalog",)
+            wave_dependencies["job_ci_configuration_analysis"] = (gather_terminal,)
+            gather_terminal = "job_ci_configuration_analysis"
         wave_jobs.append(registry.build("job_target_analysis_plan"))
-        wave_dependencies["job_target_analysis_plan"] = (("job_ci_configuration_analysis",)
-            if "job_ci_configuration_analysis" in registered else ("job_target_catalog",))
+        wave_dependencies["job_target_analysis_plan"] = (gather_terminal,)
         if "job_tree_sitter_ast" in registered:
             wave_jobs.append(registry.build("job_tree_sitter_ast"))
             wave_dependencies["job_tree_sitter_ast"] = ("job_target_analysis_plan",)

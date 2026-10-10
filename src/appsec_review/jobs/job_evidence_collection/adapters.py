@@ -39,6 +39,7 @@ class ScanCatalog:
     artifacts: tuple[Mapping[str, Any], ...] = ()
     target_root: Path | None = None
     compile_commands: tuple[Mapping[str, Any], ...] = ()
+    gaps: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def paths(self) -> tuple[str, ...]:

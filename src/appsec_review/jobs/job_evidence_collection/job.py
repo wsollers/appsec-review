@@ -107,6 +107,7 @@ def load_target_catalog(run_root: Path) -> ScanCatalog:
         handoff_sha256=str(latest["handoff_sha256"]), files=tuple(partition.get("files", [])),
         projects=tuple(projects.get("projects", [])), artifacts=artifacts, target_root=target_root,
         compile_commands=tuple(compile_commands.get("files", [])),
+        gaps=tuple(partition.get("gaps", [])),
     )
 
 
