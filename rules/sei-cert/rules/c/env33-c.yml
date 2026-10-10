@@ -1,0 +1,97 @@
+rules:
+  - id: appsec-review.sei-cert.c.env33-c.command-processor-call
+    languages: [c]
+    severity: ERROR
+    message: >-
+      ENV33-C: this call invokes a host command processor. Execute a fixed program with an explicit argument
+      vector (for example, fork plus execve) instead of a shell command string.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ENV33-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/environment-env/env33-c
+      cwe: [CWE-78, CWE-88]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [c-standard-library, posix, windows-crt]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches calls to system(), popen(), and _popen(). ENV33-C-EX1 (system with a null pointer to probe
+        for a command processor) is excluded for the NULL and 0 spellings.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: system($CMD)
+      - pattern: popen($CMD, $MODE)
+      - pattern: _popen($CMD, $MODE)
+    - pattern-not: system(NULL)
+    - pattern-not: system(0)
+    - pattern-not: system((char *)0)
+  - id: appsec-review.sei-cert.c.env33-c.exec-shell-command-string
+    languages: [c]
+    severity: ERROR
+    message: >-
+      ENV33-C: this exec call starts a shell with "-c", which is equivalent to system(). Execute the target
+      program directly with an explicit argument vector.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ENV33-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/environment-env/env33-c
+      cwe: [CWE-78, CWE-88]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [c-standard-library, posix, windows-crt]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches execl/execlp/execle whose literal arguments start a POSIX shell with -c. Vector forms (execv,
+        execvp) are not matched because the shell flag lives in a runtime array.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: execl($SH, $ARG0, "-c", ...)
+      - pattern: execlp($SH, $ARG0, "-c", ...)
+      - pattern: execle($SH, $ARG0, "-c", ...)
+    - metavariable-regex:
+        metavariable: $SH
+        regex: ^"(/usr)?(/bin/)?(ba|da|k|z)?sh"$
+  - id: appsec-review.sei-cert.cpp.env33-c.command-processor-call
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      ENV33-C (applies to C++): this call invokes a host command processor. Execute a fixed program with
+      an explicit argument vector instead of a shell command string.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ENV33-C
+      cert_standard: c
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/environment-env/env33-c
+      cwe: [CWE-78, CWE-88]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library, posix, windows-crt]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        C++ form of the C rule, which the CERT C++ standard lists as applying to C++. Matches system(),
+        std::system(), ::system(), popen(), and _popen(). ENV33-C-EX1 (null-pointer probe) is excluded for
+        the NULL, 0, and nullptr spellings.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: system($CMD)
+      - pattern: std::system($CMD)
+      - pattern: ::system($CMD)
+      - pattern: popen($CMD, $MODE)
+      - pattern: _popen($CMD, $MODE)
+    - pattern-not: system(NULL)
+    - pattern-not: system(0)
+    - pattern-not: system(nullptr)
+    - pattern-not: std::system(NULL)
+    - pattern-not: std::system(0)
+    - pattern-not: std::system(nullptr)

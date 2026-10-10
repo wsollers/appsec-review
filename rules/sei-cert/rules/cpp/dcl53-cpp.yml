@@ -1,0 +1,29 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.dcl53-cpp.unnamed-lock-temporary
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      DCL53-CPP: this statement declares a new, default-constructed lock object named $M instead
+      of locking $M, so the intended mutex is never locked. Give the lock object a name.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: DCL53-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl53-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches the parenthesized lock-guard declaration that the language reads as a declaration of a variable named after the mutex. Other syntactically ambiguous declarations (the vexing parse of T obj();) are not covered.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: std::$LOCK<$T>($M);
+          - pattern: std::$LOCK($M);
+      - metavariable-regex:
+          metavariable: $LOCK
+          regex: ^(lock_guard|unique_lock|shared_lock|scoped_lock)$

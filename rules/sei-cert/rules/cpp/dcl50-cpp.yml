@@ -1,0 +1,34 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.dcl50-cpp.variadic-function-definition
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      DCL50-CPP: this function definition takes a C-style variable argument list, which is not
+      type-safe. Use a variadic template or a fixed parameter list.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: DCL50-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl50-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: SUPPORTED
+      technology: [cpp-language]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        The engines' C++ grammar does not distinguish a C ellipsis parameter from a pattern ellipsis, so the parameter list of each function definition is matched with a bounded regular expression for a trailing ', ...)' or '(...)' before the body. DCL50-CPP-EX1 (extern "C" definitions) and DCL50-CPP-EX2 (declarations that are never defined) are excluded.
+      license: MIT
+    patterns:
+      - pattern-inside: $R $F(...) { ... }
+      - pattern-not-inside: extern "C" $R $F(...) { ... }
+      - pattern-not-inside: |
+          extern "C" {
+            ...
+          }
+      # Parameter-list end, optional cv/ref/noexcept/virt-specifiers, optional trailing return type,
+      # then the body.
+      - pattern-regex: (,\s*|\(\s*)\.\.\.\s*\)\s*((const|volatile|&&|&|noexcept(\s*\([^)]*\))?|override|final)\s*)*(->\s*[^{;=]+)?\{
+      # 'catch (...) {' is a handler, not a parameter list.
+      - pattern-not-regex: catch\s*\(\s*\.\.\.\s*\)\s*\{

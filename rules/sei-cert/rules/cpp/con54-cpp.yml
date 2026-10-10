@@ -1,0 +1,34 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.con54-cpp.predicate-free-wait-outside-loop
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      CON54-CPP: this condition-variable wait has no predicate and is not inside a loop, so a
+      spurious wake-up is treated as a notification. Pass a predicate or re-test the condition
+      in a loop.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: CON54-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con54-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.con54-predicate-free-condition-wait. Adds do-while and for loop exclusions. A loop that does not re-test the predicate is not distinguished from a correct loop.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: $CV.wait($LOCK)
+          - pattern: $CV.wait_for($LOCK, $DURATION)
+          - pattern: $CV.wait_until($LOCK, $DEADLINE)
+      - pattern-not-inside: |
+          while (...) { ... }
+      - pattern-not-inside: |
+          do { ... } while (...);
+      - pattern-not-inside: |
+          for (...) { ... }

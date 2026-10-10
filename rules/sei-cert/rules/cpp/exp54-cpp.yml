@@ -1,0 +1,91 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.exp54-cpp.escaping-reference-to-local
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      EXP54-CPP: the returned view, pointer, or iterator refers into $LOCAL, a local object
+      destroyed when the function returns, so every use by the caller is outside that object's
+      lifetime. Return an owning value instead.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: EXP54-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp54-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.str52-return-local-string-view, whose CERT mapping was corrected: STR52-CPP concerns invalidation by string operations, while access after the referenced local is destroyed is an object-lifetime violation. The original pattern-inside form used a parenthesized declaration that OpenGrep 1.30.2 did not match; this version uses the initializer form that both engines normalize. Matches returning std::string_view of, c_str()/data() of, or begin()/cbegin() of a non-static local std::string or std::vector.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $R $F(...) {
+                ...
+                std::$STRING $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $R $F(...) {
+                ...
+                std::$STRING $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $R $F(...) {
+                ...
+                const std::$STRING $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $R $F(...) {
+                ...
+                std::vector<$ELEMENT> $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $R $F(...) {
+                ...
+                std::vector<$ELEMENT> $LOCAL;
+                ...
+              }
+      - pattern-not-inside: |
+          $R $F(...) {
+            ...
+            static std::$STRING $LOCAL = $INIT;
+            ...
+          }
+      - pattern-not-inside: |
+          $R $F(...) {
+            ...
+            static std::vector<$ELEMENT> $LOCAL = $INIT;
+            ...
+          }
+      - pattern-either:
+          - pattern: return std::string_view($LOCAL);
+          - pattern: return std::wstring_view($LOCAL);
+          - patterns:
+              - pattern-inside: |
+                  std::string_view $F(...) { ... }
+              - pattern: return $LOCAL;
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      const char *$F(...) { ... }
+                  - pattern-inside: |
+                      char *$F(...) { ... }
+                  - pattern-inside: |
+                      const $E *$F(...) { ... }
+                  - pattern-inside: |
+                      $E *$F(...) { ... }
+              - pattern-either:
+                  - pattern: return $LOCAL.c_str();
+                  - pattern: return $LOCAL.data();
+          - pattern: return $LOCAL.begin();
+          - pattern: return $LOCAL.cbegin();
+          - pattern: return $LOCAL.end();
+          - pattern: return $LOCAL.cend();

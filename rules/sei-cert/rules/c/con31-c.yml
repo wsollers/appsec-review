@@ -1,0 +1,55 @@
+rules:
+  - id: appsec-review.sei-cert.c.con31-c.destroy-locked-mutex
+    languages: [c]
+    severity: ERROR
+    message: >-
+      CON31-C: this mutex is destroyed on a path where it was locked and not unlocked. Unlock
+      it, and ensure no thread is blocked on it, before destroying it.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: CON31-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/concurrency-con/con31-c
+      cwe: [CWE-667]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix-threads, c11-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Same-function shape: a lock statement, or a lock call inside an if condition, followed
+        in the same block by destruction without an intervening unlock. Mutexes locked by other
+        threads, or across functions, require concurrency analysis.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              pthread_mutex_lock(&$M);
+              ...
+          - pattern-inside: |
+              if (<... pthread_mutex_lock(&$M) ...>) $BODY;
+              ...
+          - pattern-inside: |
+              $RC = pthread_mutex_lock(&$M);
+              ...
+          - pattern-inside: |
+              mtx_lock(&$M);
+              ...
+          - pattern-inside: |
+              if (<... mtx_lock(&$M) ...>) $BODY;
+              ...
+          - pattern-inside: |
+              $RC = mtx_lock(&$M);
+              ...
+      # Unlock names are spelled literally: an unbound function metavariable in a negative clause
+      # would also match the lock call itself and suppress every finding.
+      - pattern-not-inside: |
+          pthread_mutex_unlock(&$M);
+          ...
+      - pattern-not-inside: |
+          mtx_unlock(&$M);
+          ...
+      - pattern-either:
+          - pattern: pthread_mutex_destroy(&$M)
+          - pattern: mtx_destroy(&$M)

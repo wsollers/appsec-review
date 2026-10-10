@@ -59,10 +59,15 @@ def main() -> int:
     if len(cert_rules) != inventory["codeql_cert_rules"]:
         fail("CodeQL CERT rule inventory does not match coverage.json")
 
-    semgrep_text = (ROOT / "semgrep/cpp-cert-gap-rules.yml").read_text(encoding="utf-8")
-    local_ids = set(re.findall(r"^\s*- id: (appsec-review\.cpp-cert\.[a-z0-9-]+)$", semgrep_text, re.MULTILINE))
-    if len(local_ids) != inventory["local_semgrep_rules"]:
-        fail("Semgrep rule inventory does not match coverage.json")
+    # Semgrep/OpenGrep rules live in the SEI CERT rule pack, which validates them against the official
+    # CERT source and executes them under both engines. This crosswalk may only reference them.
+    pack_rules = ROOT.parent / "sei-cert" / "rules"
+    pack_ids = {
+        match
+        for path in sorted(pack_rules.rglob("*.yml"))
+        for match in re.findall(r"^\s*- id: (appsec-review\.sei-cert\.[a-z0-9.-]+)$",
+                                path.read_text(encoding="utf-8"), re.MULTILINE)
+    }
 
     seen_cert: set[str] = set()
     referenced_local: set[str] = set()
@@ -74,13 +79,18 @@ def main() -> int:
         for query in entry["codeql"]:
             if not (ROOT / query).is_file():
                 fail(f"missing CodeQL query: {query}")
+        for rule_id in entry["semgrep"]:
+            if rule_id not in pack_ids:
+                fail(f"{cert}: unknown SEI CERT pack rule {rule_id}")
+            if f".{cert.lower()}." not in rule_id:
+                fail(f"{cert}: pack rule {rule_id} belongs to a different CERT rule")
         referenced_local.update(entry["semgrep"])
-    if referenced_local != local_ids:
-        fail("coverage.json and the local Semgrep rule IDs differ")
+    if len(referenced_local) != inventory["sei_cert_pack_rules"]:
+        fail("SEI CERT pack rule inventory does not match coverage.json")
 
     print(
         f"verified {len(queries)} CodeQL queries across {len(cert_rules)} CERT rules, "
-        f"{len(local_ids)} local Semgrep rules, and {len(lock['artifacts'])} locked artifacts"
+        f"{len(referenced_local)} SEI CERT pack rules, and {len(lock['artifacts'])} locked artifacts"
     )
     return 0
 

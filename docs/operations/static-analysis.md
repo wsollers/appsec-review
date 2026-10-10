@@ -13,6 +13,7 @@ scanners to run. In Dagster's `wave1_review`, it runs after `job_target_analysis
 | secrets | Gitleaks | Any bounded cataloged worktree; history is explicitly excluded |
 | source SAST | Semgrep, Gosec, MobSFScan, ShellCheck, PHPCS, PHPStan, Psalm, Cppcheck, PMD | Cataloged source languages; Cppcheck uses a sanitized compile database or reports source-mode gaps, while PMD reports missing classpath/bytecode coverage |
 | source SAST | SpotBugs | Accepted JVM bytecode only; the scanner never compiles target source |
+| source SAST | OpenGrep | Cataloged C, C++, and Java files; runs only the SEI CERT rule pack, which Semgrep also runs |
 | software inventory | Syft | Cataloged directory/manifests; directory, artifact, and OCI/archive coverage are distinct |
 | vulnerability matching | OSV Scanner, Grype | Cataloged manifests/SBOM plus a verified immutable local database; Grype also requires the Syft SBOM |
 | configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit Dockerfiles, typed Terraform/HCL, structurally identified CloudFormation, and GitHub workflows; arbitrary YAML is excluded |
@@ -64,7 +65,10 @@ Complete target files and raw scanner output are never placed in indexes or prom
 ## Rules, databases, CLI, and resume
 
 The repository-authored MIT Semgrep bundle lives under `rules/semgrep/`; `rules.lock.json` pins its
-SHA-256 and provenance. The adapters do not install PHP dependencies or invent project security
+SHA-256 and provenance. Semgrep and OpenGrep also run the SEI CERT rule pack from `rules/sei-cert/`
+after verifying its rule files against `pack.lock.json`; a mismatch blocks both tools with an explicit
+gap. Their records carry the CERT mapping and source hash, and engine errors or skipped files become
+gaps. See [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md). The adapters do not install PHP dependencies or invent project security
 configuration. OSV and Grype execute only with verified immutable local snapshots and never update at
 scan time. The data-sync pipeline publishes OSV. `tools/publish_grype_snapshot.py` separately imports
 an already-downloaded Grype v6 database only after verifying the upstream archive checksum, then

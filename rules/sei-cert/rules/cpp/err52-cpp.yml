@@ -1,0 +1,29 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.err52-cpp.nonlocal-jump
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      ERR52-CPP: $FN() transfers control without unwinding the stack, so destructors of
+      automatic objects are skipped. Use exceptions or ordinary control flow instead.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR52-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err52-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: SUPPORTED
+      technology: [cpp-standard-library, posix]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches setjmp, longjmp, and their POSIX sigsetjmp/siglongjmp and _setjmp/_longjmp spellings, qualified or unqualified. The rule has no exceptions.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: $FN(...)
+          - pattern: std::$FN(...)
+      - metavariable-regex:
+          metavariable: $FN
+          regex: ^(setjmp|longjmp|_setjmp|_longjmp|sigsetjmp|siglongjmp)$

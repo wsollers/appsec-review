@@ -589,6 +589,21 @@ build_args = { TOOL_VERSION = "1.178.0" }
 purpose = "Semgrep CE source SAST with rules supplied per run."
 
 [[images]]
+id = "tool-opengrep"
+state = "enabled"
+kind = "tool"
+version = "1.30.2"
+tag = "appsec-review/tool-opengrep:1.30.2"
+context = "containers/tools/opengrep"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/opengrep/tool.toml"
+assets_lock = "containers/tools/opengrep/assets.lock.json"
+build_args = { TOOL_VERSION = "1.30.2" }
+purpose = "OpenGrep engine for the portable SEI CERT rule pack, mounted per run after lock verification."
+
+[[images]]
 id = "tool-infer"
 state = "enabled"
 kind = "tool"

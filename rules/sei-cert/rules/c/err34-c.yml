@@ -1,0 +1,88 @@
+rules:
+  - id: appsec-review.sei-cert.c.err34-c.unchecked-conversion-function
+    languages: [c]
+    severity: WARNING
+    message: >-
+      ERR34-C: $FN() cannot report conversion errors or out-of-range input. Use strtol, strtoul, strtod,
+      or a related strto* function and check errno, the end pointer, and the range.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR34-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/error-handling-err/err34-c
+      cwe: [CWE-20, CWE-676]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [c-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches the atoi/atol/atoll/atof family, which has no error-reporting channel. strto* calls whose
+        errno and end pointer are not checked require data-flow analysis and are not detected.
+      license: MIT
+    patterns:
+    - pattern: $FN($STR)
+    - metavariable-regex:
+        metavariable: $FN
+        regex: ^(atoi|atol|atoll|atof)$
+  - id: appsec-review.sei-cert.c.err34-c.scanf-numeric-conversion
+    languages: [c]
+    severity: WARNING
+    message: >-
+      ERR34-C: a scanf-family numeric conversion has undefined behavior when the value cannot be represented
+      and cannot report range errors. Parse with a strto* function instead.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR34-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/error-handling-err/err34-c
+      cwe: [CWE-20, CWE-676]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [c-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches scanf, fscanf, and sscanf with a literal format containing an integer or floating conversion
+        (d, i, u, o, x, f, e, g, a with optional length modifiers). Non-literal formats are not analyzed.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: scanf($FMT, ...)
+      - pattern: sscanf($SRC, $FMT, ...)
+      - pattern: fscanf($STREAM, $FMT, ...)
+    - metavariable-regex:
+        metavariable: $FMT
+        regex: ^".*%[0-9]*(hh|h|ll|l|j|z|t|L)?[diouxXfeEgGaA].*"$
+  - id: appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      ERR34-C (applies to C++): this conversion function cannot report conversion errors or out-of-range
+      input. Use std::strtol or a related function and check errno, the end pointer, and the range.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR34-C
+      cert_standard: c
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/error-handling-err/err34-c
+      cwe: [CWE-20, CWE-676]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        C++ form of the C rule, which the CERT C++ standard lists as applying to C++. Matches atoi/atol/atoll/atof
+        with or without std:: qualification. Stream extraction and std::sto* misuse are ERR62-CPP concerns
+        and are not covered here.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: $FN($STR)
+      - pattern: std::$FN($STR)
+    - metavariable-regex:
+        metavariable: $FN
+        regex: ^(atoi|atol|atoll|atof)$

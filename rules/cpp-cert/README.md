@@ -10,9 +10,11 @@ define jobs, project detectors, containers, orchestration, or runtime configurat
   identifiers. The pack metadata requires `codeql/cpp-all` 5.0.0 and
   `codeql/common-cpp-coding-standards`; those dependencies and an appropriately licensed CodeQL CLI
   must be supplied by the analysis environment.
-- `semgrep/cpp-cert-gap-rules.yml` contains seven original MIT rules for high-confidence local
-  shapes involving ownership, lifetime, mismatched deallocation, and locks. The rules use the open
-  Semgrep YAML format and are intended to run under either Semgrep CE or OpenGrep.
+- Semgrep/OpenGrep rules are not part of this bundle. `coverage.json` references rule IDs in the
+  SEI CERT rule pack under `rules/sei-cert/`, which validates them against the official CERT source
+  and executes them under both pinned engines. The seven original gap rules moved there; two were
+  remapped to the CERT rule the official page assigns the case to (array `new[]` with scalar
+  `delete` is MEM51-CPP, and returning a view into a destroyed local is EXP54-CPP).
 - `mappings/codechecker/` contains unchanged Apache-2.0-with-LLVM-exception mapping files from
   CodeChecker. They connect CERT identifiers to Cppcheck, clang-tidy, and Clang Static Analyzer
   labels. A mapping is not an executable rule and does not establish that a checker is installed,
@@ -20,10 +22,10 @@ define jobs, project detectors, containers, orchestration, or runtime configurat
 - `coverage.json` is the machine-readable high-value crosswalk. It deliberately names incomplete
   local and analyzer coverage rather than interpreting absence of a match as a clean target.
 
-The CodeQL pack is broad. The original Semgrep rules are intentionally narrow: a syntax-only rule
-was added only where the positive shape could be tested without creating an obvious clean-fixture
-false positive. Deep ownership, lifetime, exception, bounds, and interprocedural concurrency cases
-remain assigned to CodeQL or another semantic analyzer.
+The CodeQL pack is broad. The pack rules are intentionally narrow; deep ownership, lifetime,
+exception, bounds, and interprocedural concurrency cases remain assigned to CodeQL or another
+semantic analyzer. The SEI CERT pack's `mappings/cpp.json` is authoritative for rule-pack status;
+this crosswalk records the high-value CodeQL and analyzer-label relationships.
 
 ## License and provenance decisions
 
@@ -47,9 +49,10 @@ python rules/cpp-cert/verify_bundle.py
 python -m pytest tests/test_cpp_cert_rules.py -q
 ```
 
-The focused test runs the positive and clean fixtures with the already-pinned Semgrep image when
-Docker and that image are available. It never pulls an image. OpenGrep parity is an explicit skip
-until a pinned OpenGrep executable is provided locally.
+The focused test runs the referenced pack rules over their fixtures with the already-pinned Semgrep
+image when Docker and that image are available, and with OpenGrep when `APPSEC_REVIEW_OPENGREP` or
+`PATH` provides it. It never pulls an image. Full cross-engine evaluation of the pack is described
+in `docs/operations/sei-cert-rule-pack.md`.
 
 ## Operator-only update workflow
 
@@ -64,9 +67,8 @@ Updates are a deliberate acquisition operation, separate from review execution:
    `relative-path`, a NUL byte, the file SHA-256, and a newline.
 5. Update `coverage.json` only from the files actually present. Keep unsupported cases as named
    gaps.
-6. Run the offline verifier, focused tests, and both positive and clean fixture scans. An OpenGrep
-   result may be claimed only after the same locked rules and fixtures pass under a pinned OpenGrep
-   version.
+6. Run the offline verifier and focused tests. Changes to referenced Semgrep/OpenGrep rules follow
+   the SEI CERT pack workflow, which requires both pinned engines.
 
 No update step is invoked by the generic C/C++ analysis workflow, and review runs do not access the
 network to refresh rules.

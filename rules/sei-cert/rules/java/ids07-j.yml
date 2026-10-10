@@ -1,0 +1,42 @@
+rules:
+  - id: appsec-review.sei-cert.java.ids07-j.untrusted-data-to-process-execution
+    languages: [java]
+    mode: taint
+    severity: ERROR
+    message: >-
+      IDS07-J: data from an untrusted source reaches a process-execution call. Do not build
+      commands from untrusted input; run a fixed program with allowlisted arguments and no shell.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: IDS07-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/input-validation-and-data-sanitization-ids/ids07-j
+      cwe: [CWE-78]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [java-language, java-servlet, jdk-httpserver]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Intraprocedural taint from command-line arguments, environment variables, system properties, servlet request parameters and headers, and JDK HttpServer request URIs into Runtime.exec and ProcessBuilder. Interprocedural flows, reflection-based invocation, and validation routines are not modeled; Integer/Long parsing is treated as a sanitizer.
+      license: MIT
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              public static void main(String[] $ARGS) { ... }
+          - pattern: $ARGS
+      - pattern: System.getenv(...)
+      - pattern: System.getProperty(...)
+      - pattern: (javax.servlet.http.HttpServletRequest $REQ).$GETTER(...)
+      - pattern: (jakarta.servlet.http.HttpServletRequest $REQ).$GETTER(...)
+      - pattern: (HttpServletRequest $REQ).$GETTER(...)
+      - pattern: (HttpExchange $EXCHANGE).getRequestURI()
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Long.parseLong(...)
+    pattern-sinks:
+      - pattern: Runtime.getRuntime().exec(...)
+      - pattern: (Runtime $RUNTIME).exec(...)
+      - pattern: new ProcessBuilder(...)
+      - pattern: (ProcessBuilder $BUILDER).command(...)

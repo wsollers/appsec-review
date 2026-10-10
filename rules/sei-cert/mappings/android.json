@@ -1,0 +1,1279 @@
+{
+  "schema": "appsec-review/sei-cert-mapping/1",
+  "language": "android",
+  "source_index": "sources/cert-source-index.json",
+  "classification_basis": "Implemented entries were reviewed against the official page, fixtures, and both engines. Summaries, analysis classes, and delegation recommendations for unimplemented entries were drafted from the official page and assigned a status by the documented rules in docs/architecture/sei-cert-rule-pack.md; review them against the official page before promoting an entry.",
+  "rules": [
+    {
+      "key": "DRD00",
+      "id": "DRD00",
+      "language": "android",
+      "category": "FIO",
+      "title": "Do not store sensitive information on external storage (SD card) unless encrypted first",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/file-io-and-logging-fio/drd00-do-not-store-sensitive-information-on-external-storage-sd-card-unless-encrypted-first",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/11.file-io-and-logging-fio/3.drd00-do-not-store-sensitive-information-on-external-storage-sd-card-unless-encrypted-first.md",
+        "sha256": "6e55aa646d2f32c24d62a828c338507de6fc83c68f13cce0da783f62f1038dcf"
+      },
+      "summary": "Sensitive data must not be persisted to shared external storage (SD card, OBB, mounted media) in plaintext, since other apps or people may read or alter it.",
+      "noncompliant_concept": "Writing secrets in cleartext to a file under the external storage directory.",
+      "compliant_concept": "Keep data in private internal storage, or apply sound encryption before writing externally.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "complete",
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_DATAFLOW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags every external-storage write, including non-sensitive or already-encrypted content."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses writes via wrapper helpers, libraries, or paths built indirectly; cannot judge sensitivity."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "mobsfscan",
+          "android-lint:SdCardPath",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD01-X",
+      "id": "DRD01-X",
+      "language": "android",
+      "category": "CPS",
+      "title": "Limit the accessibility of an app's sensitive content provider",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/component-security-cps/drd01-x",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/04.component-security-cps/2.drd01-x.md",
+        "sha256": "10bb5afd187e14025d97c7064557f05122f6a5168a8f312cf214719e40b63b65"
+      },
+      "summary": "A content provider holding sensitive data must not be reachable by other apps; mark it non-exported or guard it with restrictive permissions, noting older API defaults.",
+      "noncompliant_concept": "Provider entry lacking an exported=false setting, defaulting to public on legacy API levels.",
+      "compliant_concept": "Provider explicitly declared non-exported, or access gated by suitable permissions.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "manifest-xml",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "local-syntactic",
+      "status": "UNSUPPORTED_LANGUAGE",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Intentionally public providers serving nonsensitive data get flagged; permission strength not assessed."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Cannot tell which providers hold sensitive data; misses merged-manifest or targetSdk-dependent defaults."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:ExportedContentProvider",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD02-J",
+      "id": "DRD02-J",
+      "language": "android",
+      "category": "WBV",
+      "title": "Do not allow WebView to access sensitive local resource through file scheme",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/webview-wbv/drd02-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/31.webview-wbv/2.drd02-j.md",
+        "sha256": "2b9b923a10e8a0126bc48f8b1d018dbcc4126106861ae0e4b20867cbb2d6525e"
+      },
+      "summary": "A WebView rendering URIs from untrusted intents must not load file-scheme content with JavaScript enabled; validate incoming URIs and restrict file access settings.",
+      "noncompliant_concept": "JavaScript-enabled WebView loading an unvalidated intent-supplied URI, allowing file: scheme pages.",
+      "compliant_concept": "Validate received URIs, rejecting file scheme, and disable file and universal file-URL access.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "complete",
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_DATAFLOW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags JavaScript or file-access settings even when only trusted bundled content is loaded."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses intent-to-loadUrl flows through helpers and validation that is present but bypassable."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:SetJavaScriptEnabled",
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD03-J",
+      "id": "DRD03-J",
+      "language": "android",
+      "category": "ITT",
+      "title": "Do not broadcast sensitive information using an implicit intent",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/intent-itt/drd03-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/15.intent-itt/2.drd03-j.md",
+        "sha256": "2773e64a44248cff45f9016ef5fb5cba202222aee7387a91889dafa422478965"
+      },
+      "summary": "Intents carrying sensitive data must not be broadcast implicitly; restrict recipients via explicit target, package, permission, or in-process broadcasting.",
+      "noncompliant_concept": "Global sendBroadcast of an implicit intent whose extras include credentials or private data.",
+      "compliant_concept": "In-app local broadcast, explicit component or package, or receiver permission requirement.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "complete",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_DATAFLOW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Every implicit sendBroadcast matches, including harmless event notifications without sensitive extras."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Intent construction split across methods, sticky/ordered variants, or sensitivity of extras missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD04-J",
+      "id": "DRD04-J",
+      "language": "android",
+      "category": "FIO",
+      "title": "Do not log sensitive information",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/file-io-and-logging-fio/drd04-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/11.file-io-and-logging-fio/2.drd04-j.md",
+        "sha256": "1f2b090166fe863146d9049630c703ffd4047ec5a5ec57b0c6b9896577b49178"
+      },
+      "summary": "Applications and bundled libraries must not emit sensitive information such as tokens, credentials, or location to the system log.",
+      "noncompliant_concept": "Calling android.util.Log methods with access tokens or location values.",
+      "compliant_concept": "Omit sensitive values from logs; gate or strip logging in release builds.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "complete",
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_DATAFLOW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Matching all Log calls is noisy; name heuristics misjudge which variables are sensitive."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses logging wrappers, third-party library logging, and tainted values reaching logs indirectly."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD05-J",
+      "id": "DRD05-J",
+      "language": "android",
+      "category": "PER",
+      "title": "Do not grant URI permissions on implicit intents",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/permission-per/drd05-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/24.permission-per/2.drd05-j.md",
+        "sha256": "010594b724755190b50f7c36d82e1cfd09cd81ab12ae15bc2ba321162cd12f98"
+      },
+      "summary": "URI read/write grant flags must not be attached to implicit intents, since an interceptor would gain access to the referenced provider data.",
+      "noncompliant_concept": "Setting a URI-permission grant flag on an intent with no explicit target.",
+      "compliant_concept": "Address the intent explicitly to the intended component before granting URI access.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: May flag intents later made explicit elsewhere, or URIs exposing nonsensitive data."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses flags combined via variables or intents built across methods."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD06",
+      "id": "DRD06",
+      "language": "android",
+      "category": "ITT",
+      "title": "Verify the caller of intents before acting on them",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/intent-itt/drd06-verify-the-caller-of-intents-before-acting-on-them",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/15.intent-itt/4.drd06-verify-the-caller-of-intents-before-acting-on-them.md",
+        "sha256": "6ae68279e06f3ac7dbaddff4d6a16f1d7de4d8d087da7a44792e3abff8d86310"
+      },
+      "summary": "Exported components must establish the caller's identity or require permissions before acting on received intents, especially receivers registered for system actions.",
+      "noncompliant_concept": "Exported receiver or service acting on intent contents without validating the sender.",
+      "compliant_concept": "Check caller identity or action before acting, or declare a protecting permission.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags exported components whose handlers are harmless or validate input differently."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Cannot determine whether existing identity checks are adequate or reachable on all paths."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review",
+          "mobsfscan"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD07-X",
+      "id": "DRD07-X",
+      "language": "android",
+      "category": "CPS",
+      "title": "Protect exported services with strong permissions",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/component-security-cps/drd07-x",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/04.component-security-cps/3.drd07-x.md",
+        "sha256": "7a6ea12fcec5f8cf47273efb83f3490bb9272b88411207d968376cc358602e25"
+      },
+      "summary": "Any exported service must be protected by a sufficiently strong permission so arbitrary apps cannot start or bind it.",
+      "noncompliant_concept": "Service exported (often via intent filter) without any permission requirement.",
+      "compliant_concept": "Service guarded by a custom signature-level or otherwise strong permission, or not exported.",
+      "cwe": [
+        "CWE-926"
+      ],
+      "development_status": "work-in-progress",
+      "artifact": "manifest-xml",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "local-syntactic",
+      "status": "UNSUPPORTED_LANGUAGE",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Services intentionally public or protected dynamically in code would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Weak permission protection levels or permissions defined elsewhere may not be evaluated."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:ExportedService",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD08-J",
+      "id": "DRD08-J",
+      "language": "android",
+      "category": "CPS",
+      "title": "Always canonicalize a URL received by a content provider",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/component-security-cps/drd08-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/04.component-security-cps/4.drd08-j.md",
+        "sha256": "b69c98fb6c30253e052c3547f1548df6f7f39c10a3fefdcf29f2ec72e365c64f"
+      },
+      "summary": "File paths derived from URIs received by a content provider must be decoded and canonicalized, then confirmed to stay within the intended directory before use.",
+      "noncompliant_concept": "openFile building a File from getLastPathSegment output without canonical containment check.",
+      "compliant_concept": "Decode the path, canonicalize it, and verify it remains under the permitted base directory.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "complete",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_DATAFLOW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags providers already validating paths via unconventional helpers or framework utilities."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses traversal when URI flows through helper methods or uses alternative path APIs."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD09",
+      "id": "DRD09",
+      "language": "android",
+      "category": "CPS",
+      "title": "Restrict access to sensitive activities",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/component-security-cps/drd09-restrict-access-to-sensitive-activities",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/04.component-security-cps/5.drd09-restrict-access-to-sensitive-activities.md",
+        "sha256": "ddd3147f76b807252c317ecf8b7f67069381bddc8b43500af5f23e0d220962c9"
+      },
+      "summary": "Activities meant for internal use or performing sensitive actions must not be callable by arbitrary apps; avoid exporting them or verify the caller.",
+      "noncompliant_concept": "Internal sensitive activity exposed by an intent filter without access restriction.",
+      "compliant_concept": "Activity marked non-exported, permission-protected, or verifying caller signature.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "complete",
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Exported launcher or deliberately public activities flagged without knowing sensitivity."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: In-code caller checks and actual sensitivity of activity behavior cannot be judged."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD10-X",
+      "id": "DRD10-X",
+      "language": "android",
+      "category": "MSC",
+      "title": "Do not release apps that are debuggable",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/miscellaneous-msc/drd10-x",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/20.miscellaneous-msc/2.drd10-x.md",
+        "sha256": "7e341cf1bec0a88f512aeb3e9a92d8a5b87d2a67c0025befba191a998e8cafdf"
+      },
+      "summary": "Release builds must not be marked debuggable in the application manifest.",
+      "noncompliant_concept": "Application element with debuggable attribute set to true in shipped build.",
+      "compliant_concept": "Debuggable left false or unset, controlled by the release build type.",
+      "cwe": [
+        "CWE-264",
+        "CWE-359"
+      ],
+      "development_status": "work-in-progress",
+      "artifact": "manifest-xml",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "local-syntactic",
+      "status": "UNSUPPORTED_LANGUAGE",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Debug-only manifests or source sets may be flagged though not released."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses debuggable set through Gradle build types or merged manifests."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:HardcodedDebugMode",
+          "mobsfscan"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD11",
+      "id": "DRD11",
+      "language": "android",
+      "category": "FIO",
+      "title": "Ensure that sensitive data is kept secure",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/file-io-and-logging-fio/drd11-ensure-that-sensitive-data-is-kept-secure",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/11.file-io-and-logging-fio/4.drd11-ensure-that-sensitive-data-is-kept-secure.md",
+        "sha256": "1a54d978dd14e9297b14a6b07c8d79a03197c1e12bd2bda907cafd779d75d681"
+      },
+      "summary": "Sensitive data held in files, preferences, or databases must be inaccessible to other apps, using private mode internally or private mode plus strong encryption externally.",
+      "noncompliant_concept": "Creating a file, preference store, or database with world-accessible mode.",
+      "compliant_concept": "Creating storage with private mode, encrypting when stored externally.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Mode flags flag nonsensitive files; taint heuristics overestimate sensitivity."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Leaks via intents, IPC, or other channels need taint analysis beyond syntax."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:WorldReadableFiles",
+          "android-lint:WorldWriteableFiles",
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD12",
+      "id": "DRD12",
+      "language": "android",
+      "category": "FIO",
+      "title": "Do not trust data from world-writable files",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/file-io-and-logging-fio/drd12-do-not-trust-data-from-world-writable-files",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/11.file-io-and-logging-fio/5.drd12-do-not-trust-data-from-world-writable-files.md",
+        "sha256": "e429991851657ba28514fdcd4e9045833d20d847ee1bb571a3a38e5a1ee50434"
+      },
+      "summary": "Placeholder: data read from world-writable locations should not be trusted; page lacks a defined normative condition and examples.",
+      "noncompliant_concept": "Not defined on page; presumably consuming data from world-writable sources.",
+      "compliant_concept": "Not defined on page; presumably treating such data as untrusted or avoiding it.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Without defined condition, any read from shared storage could be flagged spuriously."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Writability is a runtime property; syntax cannot establish file permissions."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD13",
+      "id": "DRD13",
+      "language": "android",
+      "category": "WBV",
+      "title": "Do not provide addJavascriptInterface method access in a WebView which could contain untrusted content. (API level JELLY_BEAN or below)",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/webview-wbv/drd13-do-not-provide-addjavascriptinterface-method-access-in-a-webview-which-could-contain-untrusted-content-api-level-jelly_bean-or-below",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/31.webview-wbv/3.drd13-do-not-provide-addjavascriptinterface-method-access-in-a-webview-which-could-contain-untrusted-content-api-level-jelly_bean-or-below.md",
+        "sha256": "ddc5a723682b0459a1a46dc1018a432644965cf020a44dddc4ac237a469edc70"
+      },
+      "summary": "On API 16 and below, do not expose Java objects to a WebView via addJavascriptInterface when it may load untrusted content; otherwise require minimum API 17.",
+      "noncompliant_concept": "Registering a JavaScript bridge object in a WebView loading untrusted content on legacy APIs.",
+      "compliant_concept": "Omit the bridge, or set minimum SDK to 17+ with annotated exposed methods.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "build-or-whole-program",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags bridges when minSdk is already 17 or content is trusted."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Requires correlating minSdk from build config and content origin; syntax alone misses that."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:AddJavascriptInterface",
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD14-J",
+      "id": "DRD14-J",
+      "language": "android",
+      "category": "PER",
+      "title": "Check that a calling app has appropriate permissions before responding",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/permission-per/drd14-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/24.permission-per/3.drd14-j.md",
+        "sha256": "0b6ca6740f3432a68b77445e6fce649507b95efa69e8c2dfbd86cf98acdf3b7b"
+      },
+      "summary": "When servicing another app's request using the app's own permissions, first confirm the caller holds the corresponding permission to avoid confused-deputy escalation.",
+      "noncompliant_concept": "Returning permission-protected results to callers without verifying their permissions.",
+      "compliant_concept": "Check or enforce the calling app's permission before responding.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Absence of checkCallingPermission flagged even where unnecessary or enforced in the manifest."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Cannot know which operations need caller permission checks."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD15-J",
+      "id": "DRD15-J",
+      "language": "android",
+      "category": "MSC",
+      "title": "Consider privacy concerns when using Geolocation API",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/miscellaneous-msc/drd15-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/20.miscellaneous-msc/3.drd15-j.md",
+        "sha256": "2590059ee8df1f1cf6804ebb502390bd9e5784ffdeaade34fd199ef0576e59d8"
+      },
+      "summary": "WebView geolocation permission prompts must obtain the user's explicit consent before granting websites access to device location.",
+      "noncompliant_concept": "onGeolocationPermissionsShowPrompt override that unconditionally grants location access.",
+      "compliant_concept": "Ask the user via UI and grant only on consent, honoring settings.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "complete",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_DATAFLOW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Overrides that grant only after a consent dialog elsewhere may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Grant paths through callbacks or stored preferences are hard to follow syntactically."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD16-X",
+      "id": "DRD16-X",
+      "language": "android",
+      "category": "PER",
+      "title": "Explicitly define the exported attribute for private components",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/permission-per/drd16-x",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/24.permission-per/4.drd16-x.md",
+        "sha256": "e0b958318ff88174f81af210bf8589bbe4b03a668f0eb1e1c43e4a1ca1165ad0"
+      },
+      "summary": "Components intended to be private should have their exported attribute set explicitly to false in the manifest rather than relying on defaults.",
+      "noncompliant_concept": "Private component declared without explicit exported attribute.",
+      "compliant_concept": "Private component with exported explicitly set to false.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "manifest-xml",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "local-syntactic",
+      "status": "UNSUPPORTED_LANGUAGE",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Components intended to be public lacking the attribute get flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Intent of privacy unknowable syntactically; merged manifests from libraries missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD17-J",
+      "id": "DRD17-J",
+      "language": "android",
+      "category": "CRP",
+      "title": "Do not use the Android cryptographic security provider encryption default for AES",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/cryptography-crp/drd17-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/06.cryptography-crp/2.drd17-j.md",
+        "sha256": "d12846c97cc594c9773ea062aeba96a34a06805660d4e8bf5af838ed681b42f5"
+      },
+      "summary": "Do not rely on the provider's default AES transformation, which selects ECB mode; specify a secure mode and padding explicitly.",
+      "noncompliant_concept": "Requesting a cipher by bare algorithm name AES, implicitly using ECB.",
+      "compliant_concept": "Specify an authenticated or properly IV-based mode explicitly in the transformation.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Algorithm strings for non-encryption uses, or explicitly secure ones misparsed, may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Transformation strings built from constants or variables elsewhere evade literal matching."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:GetInstance",
+          "codeql:java",
+          "mobsfscan"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD18",
+      "id": "DRD18",
+      "language": "android",
+      "category": "CRP",
+      "title": "Do not use the default behavior in a cryptographic library if it does not use recommended practices",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/cryptography-crp/drd18-do-not-use-the-default-behavior-in-a-cryptographic-library-if-it-does-not-use-recommended-practices",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/06.cryptography-crp/3.drd18-do-not-use-the-default-behavior-in-a-cryptographic-library-if-it-does-not-use-recommended-practices.md",
+        "sha256": "c3ab3d0ed2569532f9798c040fab1f6aaea605e51240e1698198e699804b5a31"
+      },
+      "summary": "Avoid insecure cryptographic library defaults and common misuse such as ECB, predictable IVs, hardcoded keys or salts, weak PBE iteration counts, and fixed seeds.",
+      "noncompliant_concept": "Hardcoded keys, static IVs or salts, ECB mode, low PBE iterations, seeded SecureRandom.",
+      "compliant_concept": "Random IVs and salts, protected keys, adequate iteration counts, explicit secure modes.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Constants in tests or non-security contexts flagged as hardcoded keys or seeds."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Constant keys or IVs flowing across methods or fields escape local patterns."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:GetInstance",
+          "android-lint:SecureRandom",
+          "codeql:java",
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD19",
+      "id": "DRD19",
+      "language": "android",
+      "category": "NET",
+      "title": "Properly verify server certificate on SSL/TLS",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/network-ssltls-net/drd19-properly-verify-server-certificate-on-ssltls",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/21.network-ssltls-net/3.drd19-properly-verify-server-certificate-on-ssltls.md",
+        "sha256": "6f368e8ae43733b106eec5c1108f29ac0be7c6d06cefa86b8106c38f56db066a"
+      },
+      "summary": "TLS clients must fully validate server certificates, including trust chain, signature, validity period, and hostname; do not install permissive trust managers or hostname verifiers.",
+      "noncompliant_concept": "Empty TrustManager check methods or allow-all hostname verifier enabling interception.",
+      "compliant_concept": "Use platform default validation, or pin/self-signed handling per established guidance.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Debug-only or test trust managers flagged; nonempty but sound custom checks may match."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Conditional enabling via flags, subtly flawed custom validation, and cleartext mixing missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:TrustAllX509TrustManager",
+          "android-lint:BadHostnameVerifier",
+          "android-lint:AllowAllHostnameVerifier",
+          "codeql:java",
+          "mobsfscan"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD20-C",
+      "id": "DRD20-C",
+      "language": "android",
+      "category": "PER",
+      "title": "Specify permissions when creating files via the NDK",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/permission-per/drd20-c",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/24.permission-per/5.drd20-c.md",
+        "sha256": "cfd48346a6a0eb43343ecc647fe625b50b24e6838a5abb794bf51d68792db4a6"
+      },
+      "summary": "Native code creating files must explicitly set restrictive permissions or umask, since the inherited zygote umask yields world-readable and writable files.",
+      "noncompliant_concept": "Native file creation relying on default mode under a zero umask.",
+      "compliant_concept": "Set an appropriate umask or pass explicit restrictive mode to open.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "native-c",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Calls preceded by umask elsewhere in the process would still be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Permissive explicit modes or creation through wrappers and fopen variants missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD21-J",
+      "id": "DRD21-J",
+      "language": "android",
+      "category": "ITT",
+      "title": "Always pass explicit intents to a PendingIntent",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/intent-itt/drd21-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/15.intent-itt/3.drd21-j.md",
+        "sha256": "4339a4da0749bcac2d7200bd9e1558edad3fe277c1c1a041f01b9e267d47a917"
+      },
+      "summary": "Base intents wrapped in a PendingIntent must explicitly name a component owned by the creating app; never wrap an implicit intent.",
+      "noncompliant_concept": "Creating a PendingIntent from an intent lacking an explicit component.",
+      "compliant_concept": "Set the explicit component or class on the base intent before wrapping.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Intents made explicit through methods not recognized by the pattern get flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Intents passed in from other methods or fields hide their explicitness."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "mobsfscan"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD22",
+      "id": "DRD22",
+      "language": "android",
+      "category": "WBV",
+      "title": "Do not cache sensitive information",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/webview-wbv/drd22-do-not-cache-sensitive-information",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/31.webview-wbv/4.drd22-do-not-cache-sensitive-information.md",
+        "sha256": "4aa04329b8bfa5a55186c8bcfb58d1f071888c390d79f6287429d346fcb2888b"
+      },
+      "summary": "Sensitive information must not be left in caches such as WebView caches, keyboard dictionaries, camera caches, or retained screen state.",
+      "noncompliant_concept": "Allowing sensitive web or UI content to persist in an accessible cache.",
+      "compliant_concept": "Disable or clear caching for sensitive content and inputs.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Cache-related API use flagged regardless of whether content is sensitive."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Many cache channels are implicit; absence of clearing calls is hard to detect."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD23",
+      "id": "DRD23",
+      "language": "android",
+      "category": "FIO",
+      "title": "Do not use world readable or writeable to share files between apps",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/file-io-and-logging-fio/drd23-do-not-use-world-readable-or-writeable-to-share-files-between-apps",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/11.file-io-and-logging-fio/6.drd23-do-not-use-world-readable-or-writeable-to-share-files-between-apps.md",
+        "sha256": "3a558be47c9226326766cd08c5962bc6adad751bb202cd21d021c4524cab0620"
+      },
+      "summary": "Do not share files between apps by making them world-readable or world-writable; use content providers or other formal IPC instead.",
+      "noncompliant_concept": "Using world-readable or world-writable mode constants for shared files or preferences.",
+      "compliant_concept": "Share via content provider, broadcast, or service with access control.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "construct-use",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Low; constants could appear in unreachable legacy code or comments."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Misses permission changes via chmod, File setters, or native code."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:WorldReadableFiles",
+          "android-lint:WorldWriteableFiles",
+          "mobsfscan"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "DRD23-J",
+      "id": "DRD23-J",
+      "language": "android",
+      "category": "NET",
+      "title": "Do not use loopback when handling sensitive data",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/network-ssltls-net/drd23-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/21.network-ssltls-net/2.drd23-j.md",
+        "sha256": "d83c8f54536c0fa067bb4ac8ac29e5bfa2432b22e981867018ea73ad42a1dc9f"
+      },
+      "summary": "Do not transmit sensitive data over localhost sockets or bind listeners to all interfaces; use secured IPC or TLS channels.",
+      "noncompliant_concept": "Sending sensitive data through a loopback port or server bound to any address.",
+      "compliant_concept": "Use authenticated Android IPC or TLS-protected connections.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Loopback use for nonsensitive data or tests would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Addresses built dynamically and sensitivity of traffic cannot be inferred syntactically."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "mobsfscan",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD24",
+      "id": "DRD24",
+      "language": "android",
+      "category": "CRP",
+      "title": "Do not bundle OAuth security-related protocol logic or sensitive data into a relying party's app",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/cryptography-crp/drd24-do-not-bundle-oauth-security-related-protocol-logic-or-sensitive-data-into-a-relying-partys-app",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/06.cryptography-crp/4.drd24-do-not-bundle-oauth-security-related-protocol-logic-or-sensitive-data-into-a-relying-partys-app.md",
+        "sha256": "95c32f43e7ac9cc264df85a880e6be9940e97e8e013e2755ae7212c29cfd9e51"
+      },
+      "summary": "Placeholder: relying-party apps should not embed OAuth security logic or secrets such as client secrets; page provides no examples.",
+      "noncompliant_concept": "Not defined on page; presumably embedding OAuth secrets or protocol logic in the app.",
+      "compliant_concept": "Not defined on page; presumably delegating OAuth security handling to a server.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Secret-like strings or OAuth library usage flagged without context."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Protocol logic placement is architectural; syntax cannot assess it."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD25@CRP",
+      "id": "DRD25",
+      "language": "android",
+      "category": "CRP",
+      "title": "Use constant-time encryption",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/cryptography-crp/drd25-use-constant-time-encryption",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/06.cryptography-crp/5.drd25-use-constant-time-encryption.md",
+        "sha256": "cc306e315be1c37147074ddb448ad84dcfa1fab15837e8da9787d25651c41118"
+      },
+      "summary": "Placeholder: cryptographic operations should execute in constant time to resist timing side channels; page has no defined content.",
+      "noncompliant_concept": "Not defined on page; presumably timing-variable cryptographic or comparison code.",
+      "compliant_concept": "Not defined on page; presumably constant-time implementations or comparisons.",
+      "cwe": [
+        "CWE-182",
+        "CWE-326"
+      ],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "source_identifier_conflict": true,
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Non-secret comparisons using early-exit equality would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Timing leaks in library internals or branching on secrets are invisible syntactically."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD25@MSC",
+      "id": "DRD25",
+      "language": "android",
+      "category": "MSC",
+      "title": "To request user permission for OAuth, identify relying party and its permissions scope",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/miscellaneous-msc/drd25-to-request-user-permission-for-oauth-identify-relying-party-and-its-permissions-scope",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/20.miscellaneous-msc/6.drd25-to-request-user-permission-for-oauth-identify-relying-party-and-its-permissions-scope.md",
+        "sha256": "2086fe757a200101af7c2ec7165b78d88febb9583ecf01ce63f4128e6ba2416c"
+      },
+      "summary": "When requesting OAuth authorization, show the user the identity of the relying party and the scope of permissions requested.",
+      "noncompliant_concept": "Consent request omitting relying-party identity or requested scope.",
+      "compliant_concept": "Consent dialog naming the relying party and listing permission scope.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "source_identifier_conflict": true,
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: UI content is not reliably recognizable as a consent prompt."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Consent dialog completeness is a UX property beyond syntax."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD26-J",
+      "id": "DRD26-J",
+      "language": "android",
+      "category": "MSC",
+      "title": "For OAuth, use a secure Android method to deliver access tokens",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/miscellaneous-msc/drd26-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/20.miscellaneous-msc/4.drd26-j.md",
+        "sha256": "62c5674fe8aaae1e0a614cfac398615194badf393fff6eea3d4387bc767cb404"
+      },
+      "summary": "OAuth access tokens must be delivered to the relying-party app through a secure Android mechanism that uniquely identifies the recipient.",
+      "noncompliant_concept": "Passing tokens through channels other apps can intercept or impersonate.",
+      "compliant_concept": "Deliver tokens via explicit intents to a recipient verified by signing key.",
+      "cwe": [
+        "CWE-297"
+      ],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Token-named variables in intents flagged even when delivered explicitly."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Token identification and delivery-channel security need dataflow and design understanding."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD27-J",
+      "id": "DRD27-J",
+      "language": "android",
+      "category": "MSC",
+      "title": "For OAuth, use an explicit intent method to deliver access tokens",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/miscellaneous-msc/drd27-j",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/20.miscellaneous-msc/5.drd27-j.md",
+        "sha256": "59ea52e223be998676f2fc0c311661c24c3d38e38724c1d8612b9758881eee07"
+      },
+      "summary": "OAuth access tokens must be sent only via explicit intents addressed to the specific recipient component, never implicit intents.",
+      "noncompliant_concept": "Placing an access token in an implicit intent.",
+      "compliant_concept": "Placing the token in an explicitly targeted intent.",
+      "cwe": [
+        "CWE-297"
+      ],
+      "development_status": "work-in-progress",
+      "artifact": "java-source",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Name-based token detection misfires on unrelated extras."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Tokens renamed or added in another method escape detection."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "codeql:java",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DRD28",
+      "id": "DRD28",
+      "language": "android",
+      "category": "FIO",
+      "title": "Do not load world-writable libraries",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/android-secure-coding-standard/rules/file-io-and-logging-fio/drd28-do-not-load-world-writable-libraries",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/3.android-secure-coding-standard/3.rules/11.file-io-and-logging-fio/7.drd28-do-not-load-world-writable-libraries.md",
+        "sha256": "fd9133fe26a06bdd2c5d73df4ab6381f3e4db1f543920dbf4649bd8d4b3e2bb3"
+      },
+      "summary": "Placeholder: apps should not load native or code libraries from world-writable locations; page has no defined content.",
+      "noncompliant_concept": "Not defined on page; presumably loading libraries from shared writable storage.",
+      "compliant_concept": "Not defined on page; presumably loading only from app-private directories.",
+      "cwe": [],
+      "development_status": "work-in-progress",
+      "artifact": "unspecified",
+      "page_completeness": "incomplete-or-draft",
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_MANUAL_REVIEW",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Loads from app-private absolute paths flagged as suspicious."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Path origin and runtime writability not knowable from syntax."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "android-lint:UnsafeDynamicallyLoadedCode",
+          "android-lint:UnsafeNativeCodeLocation",
+          "codeql:java",
+          "manual-review"
+        ]
+      },
+      "pattern_candidate": false
+    }
+  ]
+}

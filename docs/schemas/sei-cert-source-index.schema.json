@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/sei-cert-source-index.schema.json",
+  "title": "Generated SEI CERT source index (metadata only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "authority",
+    "source_repository",
+    "source_revision",
+    "source_committed_at",
+    "retrieved",
+    "site_root",
+    "url_resolution",
+    "license_note",
+    "entries"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/sei-cert-source-index/1"
+    },
+    "authority": {
+      "type": "string"
+    },
+    "source_repository": {
+      "const": "https://github.com/cmu-sei/secure-coding-standards"
+    },
+    "source_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "source_committed_at": {
+      "type": "string"
+    },
+    "retrieved": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "site_root": {
+      "type": "string"
+    },
+    "url_resolution": {
+      "type": "string"
+    },
+    "license_note": {
+      "type": "string"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "id",
+          "language",
+          "category",
+          "title",
+          "url",
+          "source_path",
+          "source_sha256",
+          "cwe",
+          "exceptions",
+          "applies_to_cpp",
+          "applies_to_cpp_source",
+          "development_status"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "language": {
+            "enum": [
+              "c",
+              "cpp",
+              "java",
+              "android"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "cwe": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^CWE-[0-9]+$"
+            },
+            "uniqueItems": true
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "applies_to_cpp": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "applies_to_cpp_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "development_status": {
+            "enum": [
+              "published",
+              "work-in-progress"
+            ]
+          },
+          "source_identifier_conflict": {
+            "const": true
+          }
+        }
+      }
+    }
+  }
+}

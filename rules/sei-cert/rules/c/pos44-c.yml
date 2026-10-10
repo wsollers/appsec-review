@@ -1,0 +1,28 @@
+rules:
+  - id: appsec-review.sei-cert.c.pos44-c.terminating-signal-to-thread
+    languages: [c]
+    severity: ERROR
+    message: >-
+      POS44-C: sending $SIG with pthread_kill() terminates the whole process, not just the
+      target thread. Use pthread_cancel() with deferred cancellation or a cooperative stop flag.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: POS44-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/posix-pos/pos44-c
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches pthread_kill() with a literal signal whose default action terminates the
+        process. Signals passed through variables are not resolved.
+      license: MIT
+    patterns:
+      - pattern: pthread_kill($THREAD, $SIG)
+      - metavariable-regex:
+          metavariable: $SIG
+          regex: ^(SIGKILL|SIGTERM|SIGINT|SIGQUIT|SIGABRT|SIGHUP)$

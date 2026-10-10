@@ -1,0 +1,3928 @@
+{
+  "schema": "appsec-review/sei-cert-mapping/1",
+  "language": "cpp",
+  "source_index": "sources/cert-source-index.json",
+  "classification_basis": "Implemented entries were reviewed against the official page, fixtures, and both engines. Summaries, analysis classes, and delegation recommendations for unimplemented entries were drafted from the official page and assigned a status by the documented rules in docs/architecture/sei-cert-rule-pack.md; review them against the official page before promoting an entry.",
+  "rules": [
+    {
+      "key": "CON50-CPP",
+      "id": "CON50-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Do not destroy a mutex while it is locked",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/2.con50-cpp.md",
+        "sha256": "57422be3b7d8091f15f4f18d0f1d960b4e6e8196798087c3593691888c7372f1"
+      },
+      "summary": "A mutex must not be destroyed while any thread owns it or waits on it; its lifetime must exceed every thread that may lock it.",
+      "noncompliant_concept": "Local or member mutex goes out of scope or is deleted while detached threads may still hold or acquire it.",
+      "compliant_concept": "Mutex has static or otherwise longer lifetime, or all using threads are joined before destruction.",
+      "cwe": [
+        "CWE-667"
+      ],
+      "analysis_class": "concurrency-semantic",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Paths on which the lock call failed but the code continues to destroy are reported."
+      ],
+      "false_negative_risks": [
+        "std::mutex objects whose lifetime ends while locked require lifetime analysis.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con50-cpp.destroy-locked-mutex"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con50-cpp.destroy-locked-mutex"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/con50-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/con50-cpp.cpp"
+        ],
+        "coverage_note": "Same-function POSIX lock followed by destroy without an intervening unlock in C++ code."
+      },
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-localMutex",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON50-CPP/DoNotAllowAMutexToGoOutOfScopeWhileLocked.ql",
+          "rules/cpp-cert/codeql/cert/rules/CON50-CPP/DoNotDestroyAMutexWhileItIsLocked.ql"
+        ]
+      }
+    },
+    {
+      "key": "CON51-CPP",
+      "id": "CON51-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Ensure actively held locks are released on exceptional conditions",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/3.con51-cpp.md",
+        "sha256": "d77db14d1fb447f9801fe8929b76bd8af32fa2a74006ff1a3d6fa7dcd916c4b9"
+      },
+      "summary": "A held mutex must be released on every exit path, including when an exception propagates out of the critical section.",
+      "noncompliant_concept": "Manual lock() followed by code that may throw before the matching unlock() call.",
+      "compliant_concept": "Uses RAII guards such as lock_guard or unique_lock, or catches, unlocks, and rethrows.",
+      "cwe": [
+        "CWE-667"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "A throw that is caught inside the same scope before the lock matters may be reported."
+      ],
+      "false_negative_risks": [
+        "Exceptions raised by functions called while the lock is held are not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con51-cpp.manual-lock-before-throw"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con51-cpp.manual-lock-before-throw"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/con51-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/con51-cpp.cpp"
+        ],
+        "coverage_note": "Manual lock() followed by a throw without an intervening unlock()."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-thread-safety-analysis",
+          "clangsa:alpha.unix.PthreadLock",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON51-CPP/EnsureActivelyHeldLocksAreReleasedOnExceptionalConditions.ql"
+        ]
+      }
+    },
+    {
+      "key": "CON52-CPP",
+      "id": "CON52-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Prevent data races when accessing bit-fields from multiple threads",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/4.con52-cpp.md",
+        "sha256": "fa1ad31b0b84fdad0547a188c99e5937cc9687cf07b0da0fa1f7b37951a83a1e"
+      },
+      "summary": "Adjacent bit-fields sharing a memory location must not be accessed concurrently by different threads without common synchronization.",
+      "noncompliant_concept": "Two threads write different bit-fields of the same struct unprotected, or under different mutexes.",
+      "compliant_concept": "Protects all bit-fields sharing storage with one mutex, or uses separate non-bit-field members.",
+      "cwe": [],
+      "analysis_class": "concurrency-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Bit-field writes in single-threaded code or already serialized by a shared lock would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Determining which threads touch which bit-fields and storage-unit sharing requires layout and thread reasoning."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-thread-safety-analysis",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON52-CPP/PreventBitFieldAccessFromMultipleThreads.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CON53-CPP",
+      "id": "CON53-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Avoid deadlock by locking in a predefined order",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/5.con53-cpp.md",
+        "sha256": "536b2d9ec061ce63ec9916a00c8350e053eefe7746826b337a46638086a3e8ea"
+      },
+      "summary": "When several mutexes are acquired together, every thread must acquire them in one consistent global order, or use a deadlock-avoiding multi-lock.",
+      "noncompliant_concept": "Different code paths lock the same pair of mutexes in opposite orders, enabling circular wait.",
+      "compliant_concept": "Locks in a fixed ordering (e.g., by address or rank) or uses std::lock / scoped_lock.",
+      "cwe": [
+        "CWE-764"
+      ],
+      "analysis_class": "concurrency-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Nested lock acquisitions that are always ordered consistently would be reported."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Lock order inversions across functions, objects aliased at runtime, or argument-dependent order are missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-thread-safety-analysis",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON53-CPP/DeadlockByLockingInPredefinedOrder.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CON54-CPP",
+      "id": "CON54-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Wrap functions that can spuriously wake up in a loop",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/6.con54-cpp.md",
+        "sha256": "af784dc8d5e35385ec00b2b51ac4aa369f44b25791ed17e829bfd4cee82b7fe5"
+      },
+      "summary": "Condition-variable waits that can wake spuriously must be guarded by re-checking the condition predicate, via a loop or the predicate overload.",
+      "noncompliant_concept": "Calls wait/wait_for/wait_until once inside an if or unguarded, without re-testing the predicate.",
+      "compliant_concept": "Waits inside a while loop testing the predicate, or passes a predicate to wait.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "A wait guarded by a loop in a caller is reported."
+      ],
+      "false_negative_risks": [
+        "A loop that does not re-test the predicate is accepted as compliant.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con54-cpp.predicate-free-wait-outside-loop"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con54-cpp.predicate-free-wait-outside-loop"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/con54-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/con54-cpp.cpp"
+        ],
+        "coverage_note": "Predicate-free condition-variable waits not lexically inside a loop."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-spuriously-wake-up-functions",
+          "clang-tidy:cert-con54-cpp"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON54-CPP/WrapFunctionsThatCanSpuriouslyWakeUpInLoop.ql"
+        ]
+      }
+    },
+    {
+      "key": "CON55-CPP",
+      "id": "CON55-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Preserve thread safety and liveness when using condition variables",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/7.con55-cpp.md",
+        "sha256": "f0f2633f4e14af4e86dbe2c3359052ae1889515a36ce1086efb6f389ee916414"
+      },
+      "summary": "Notification of condition variables must wake the thread(s) whose predicate became true; notify_one is safe only when any waiter can proceed.",
+      "noncompliant_concept": "Uses notify_one when waiters have different predicates, so the wrong thread may wake and others starve.",
+      "compliant_concept": "Uses notify_all, or separate condition variables per distinct predicate.",
+      "cwe": [],
+      "analysis_class": "concurrency-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Every notify_one call would look suspicious even when all waiters share one predicate."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Whether waiters share the same predicate depends on cross-function, cross-thread design not visible syntactically."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON55-CPP/PreserveSafetyWhenUsingConditionVariables.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CON56-CPP",
+      "id": "CON56-CPP",
+      "language": "cpp",
+      "category": "CON",
+      "title": "Do not speculatively lock a non-recursive mutex that is already owned by the calling thread",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/03.concurrency-con/8.con56-cpp.md",
+        "sha256": "5508b8d04e5b62f8aceb91f35fa791991726af078a2ee8db758a607cbc7db0f5"
+      },
+      "summary": "A thread must not call a try_lock-family function on a non-recursive mutex it already owns.",
+      "noncompliant_concept": "Calls try_lock on a std::mutex or timed_mutex while the same thread holds that mutex.",
+      "compliant_concept": "Restructures so try_lock occurs only when unowned, or uses a recursive mutex.",
+      "cwe": [
+        "CWE-667"
+      ],
+      "analysis_class": "concurrency-semantic",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "None expected for the declared non-recursive mutex types."
+      ],
+      "false_negative_risks": [
+        "Re-locking through called functions or aliases, and std::unique_lock ownership, is not tracked.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con56-cpp.relock-owned-nonrecursive-mutex"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.con56-cpp.relock-owned-nonrecursive-mutex"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/con56-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/con56-cpp.cpp"
+        ],
+        "coverage_note": "Same-function lock() followed by another lock or try_lock on the same non-recursive mutex."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-thread-safety-analysis",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CON56-CPP/DoNotSpeculativelyLockALockedNonRecursiveMutex.ql",
+          "rules/cpp-cert/codeql/cert/rules/CON56-CPP/LockedALockedNonRecursiveMutexAudit.ql"
+        ]
+      }
+    },
+    {
+      "key": "CTR50-CPP",
+      "id": "CTR50-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Guarantee that container indices and iterators are within the valid range",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/02.ctr50-cpp.md",
+        "sha256": "fe485b540099cea0617605fbcc0debdc75dd274ea6bb5b45fc3d1e50d8efb24f"
+      },
+      "summary": "Container subscripts and iterator positions must be validated to lie within the container's valid range before access.",
+      "noncompliant_concept": "Indexes a vector or array with an unchecked or possibly negative value, or advances past end.",
+      "compliant_concept": "Checks the index against size() with an unsigned type, or uses at() with exception handling.",
+      "cwe": [
+        "CWE-119",
+        "CWE-129"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Every operator[] use would be flagged even when bounds are established by loop structure or prior checks."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Index values flowing from callers or arithmetic need range analysis that syntax cannot provide."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-algorithmOutOfBounds",
+          "cppcheck:cppcheck-containerOutOfBounds",
+          "cppcheck:cppcheck-containerOutOfBoundsIndexExpression",
+          "cppcheck:cppcheck-negativeContainerIndex",
+          "clangsa:alpha.cplusplus.IteratorRange",
+          "clang-tidy:cppcoreguidelines-pro-bounds-avoid-unchecked-container-access",
+          "clang-tidy:cppcoreguidelines-pro-bounds-constant-array-index"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR50-CPP/ContainerAccessWithoutRangeCheckCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR51-CPP",
+      "id": "CTR51-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Use valid references, pointers, and iterators to reference elements of a container",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/03.ctr51-cpp.md",
+        "sha256": "700d6c3dc04be49a48da2b7153ac067916adfac44548402611fde87b6caf018b"
+      },
+      "summary": "References, pointers, and iterators into a container must not be used after an operation that may invalidate them.",
+      "noncompliant_concept": "Keeps an iterator across insert/push_back/erase on the same container and then dereferences or increments it.",
+      "compliant_concept": "Refreshes iterators from the invalidating call's return value or re-obtains them after modification.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Modifications of containers whose invalidation rules spare the held iterator (e.g., list insert) look identical."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Aliased containers, modifications in callees, or reallocation-dependent invalidation are missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:alpha.cplusplus.InvalidatedIterator",
+          "cppcheck:cppcheck-invalidContainer",
+          "cppcheck:cppcheck-invalidContainerLoop",
+          "cppcheck:cppcheck-invalidIterator1",
+          "cppcheck:cppcheck-eraseDereference",
+          "cppcheck:cppcheck-derefInvalidIterator",
+          "clang-tidy:clang-diagnostic-lifetime-safety-invalidation"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR51-CPP/UsesValidContainerElementAccess.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR52-CPP",
+      "id": "CTR52-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Guarantee that library functions do not overflow",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/04.ctr52-cpp.md",
+        "sha256": "f5ab8ecc1d1c12fadc4f73358d46e0a677595f50d8c0a0ca9c10ddc0834a2280"
+      },
+      "summary": "Library algorithms that write into a destination must have a destination guaranteed large enough, or use an inserting iterator.",
+      "noncompliant_concept": "std::copy or fill_n into an empty or undersized container via begin() with an unchecked count.",
+      "compliant_concept": "Sizes the destination first or uses back_inserter/insert so the container grows.",
+      "cwe": [
+        "CWE-119",
+        "CWE-805"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Algorithm calls writing via begin() into containers already resized elsewhere would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Destination size depends on runtime values and prior resize/reserve calls that syntax cannot relate."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-algorithmOutOfBounds",
+          "cppcheck:cppcheck-containerOutOfBounds",
+          "clangsa:alpha.cplusplus.IteratorRange",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR52-CPP/GuaranteeGenericCppLibraryFunctionsDoNotOverflow.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR53-CPP",
+      "id": "CTR53-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Use valid iterator ranges",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/05.ctr53-cpp.md",
+        "sha256": "d65eebebd65734d027398bd3a5212cb173ae8213971fc32b307c272bcfdc6cad"
+      },
+      "summary": "Iterator ranges passed to algorithms or container operations must come from the same container, with begin not after end, and be valid.",
+      "noncompliant_concept": "Passes (a.begin(), b.end()) or a reversed/invalidated pair as a range.",
+      "compliant_concept": "Derives both range endpoints from the same live container in proper order.",
+      "cwe": [
+        "CWE-119"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Different-looking expressions that alias the same container (references, getters) may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Iterators stored in variables or passed from callers lose provenance; ordering needs value reasoning."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:alpha.cplusplus.MismatchedIterator",
+          "clangsa:alpha.cplusplus.IteratorRange",
+          "cppcheck:cppcheck-mismatchingContainers",
+          "cppcheck:cppcheck-mismatchingContainerIterator",
+          "cppcheck:cppcheck-mismatchingContainerExpression",
+          "cppcheck:cppcheck-iterators1",
+          "cppcheck:cppcheck-iterators2",
+          "cppcheck:cppcheck-iterators3"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR53-CPP/UseValidIteratorRanges.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR54-CPP",
+      "id": "CTR54-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Do not subtract iterators that do not refer to the same container",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/06.ctr54-cpp.md",
+        "sha256": "08330831a4b5ba330c190823fd4e7e4269741276fc1559bcadcc00f87fb162bd"
+      },
+      "summary": "Iterators or pointers may only be subtracted or relationally compared when both refer into the same container or array object.",
+      "noncompliant_concept": "Subtracts or compares pointers/iterators from distinct objects, e.g., to test whether one lies within a range.",
+      "compliant_concept": "Restricts arithmetic to same-object iterators, or tests membership via equality loops or std::less.",
+      "cwe": [
+        "CWE-469"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Pointer subtractions within one buffer are syntactically identical to cross-object ones."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Provenance of pointers passed through parameters or containers cannot be established without dataflow."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:alpha.core.PointerSub",
+          "clangsa:alpha.cplusplus.MismatchedIterator",
+          "cppcheck:cppcheck-mismatchingContainerExpression",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR54-CPP/DoNotSubtractIteratorsForDifferentContainers.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR55-CPP",
+      "id": "CTR55-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Do not use an additive operator on an iterator if the result would overflow",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/07.ctr55-cpp.md",
+        "sha256": "eb39621256b03ac9129c8cf448429e9406540758cd35b9ca3daf3a935c066a01"
+      },
+      "summary": "Adding to or subtracting from an iterator must not move it beyond the container's valid range, including past end.",
+      "noncompliant_concept": "Advances an iterator by an unchecked offset, e.g., begin() + n where n may exceed size().",
+      "compliant_concept": "Checks the offset against distance to end before arithmetic, or clamps with std::min.",
+      "cwe": [
+        "CWE-129"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Iterator arithmetic preceded by size checks in other statements may still be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Offsets originating from callers or computations need range analysis unavailable to syntax."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:alpha.cplusplus.IteratorRange",
+          "cppcheck:cppcheck-pointerOutOfBounds",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR55-CPP/DoNotUseAnAdditiveOperatorOnAnIterator.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR56-CPP",
+      "id": "CTR56-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Do not use pointer arithmetic on polymorphic objects",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/08.ctr56-cpp.md",
+        "sha256": "a2297f262cc5da5cdd70ac95bf401844d636b327274a8068b0eb793ff3feefbb"
+      },
+      "summary": "Pointer arithmetic and array subscripting must not be performed through a pointer to a polymorphic base when elements are of derived type.",
+      "noncompliant_concept": "Iterates an array of derived objects using a base-class pointer with ++ or [i].",
+      "compliant_concept": "Stores derived-typed arrays and uses derived pointers, or uses containers of (smart) pointers.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Without type info, any pointer arithmetic on class pointers would match, including non-polymorphic or final types."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Base pointer origin and whether the class is polymorphic require resolved types."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-pointer-arithmetic-on-polymorphic-object",
+          "clang-tidy:cppcoreguidelines-pro-bounds-pointer-arithmetic"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR56-CPP/DoNotUsePointerArithmeticOnPolymorphicObjects.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR57-CPP",
+      "id": "CTR57-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Provide a valid ordering predicate",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr57-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/09.ctr57-cpp.md",
+        "sha256": "b8219f8ec2e2df1a5b58b2d3af49139db46d7c6e8b563322146061cd8941815e"
+      },
+      "summary": "Comparison predicates given to ordered containers or sorting algorithms must implement a strict weak ordering.",
+      "noncompliant_concept": "Uses <= or >= in a comparator, or a comparator lacking transitivity or irreflexivity.",
+      "compliant_concept": "Comparator uses strict < semantics consistently, e.g., via std::tie lexicographic comparison.",
+      "cwe": [],
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Comparators using <= for non-ordering purposes or in helper code may be reported."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Non-transitive logic spread across several comparisons or functions is undetectable syntactically."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-StlMissingComparison",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR57-CPP/ProvideAValidOrderingPredicate.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "CTR58-CPP",
+      "id": "CTR58-CPP",
+      "language": "cpp",
+      "category": "CTR",
+      "title": "Predicate function objects should not be mutable",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/containers-ctr/ctr58-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/04.containers-ctr/10.ctr58-cpp.md",
+        "sha256": "d8e9ecf027fa63bd243c98a0256c547af46f4035d21509a1296557ef010b7c62"
+      },
+      "summary": "Predicate function objects passed to algorithms must not depend on mutable internal state, since algorithms may copy them.",
+      "noncompliant_concept": "Passes a stateful functor or mutable lambda whose result depends on how many times it was invoked.",
+      "compliant_concept": "Uses stateless predicates, or holds shared state externally via references or reference_wrapper.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Mutable lambdas whose state does not affect the predicate result would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Stateful functor classes defined elsewhere and passed by name are not recognizable without types."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/CTR58-CPP/PredicateFunctionObjectsShouldNotBeMutable.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DCL50-CPP",
+      "id": "DCL50-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Do not define a C-style variadic function",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/02.dcl50-cpp.md",
+        "sha256": "14090ddc34511571c3c23abb62d9bd1633e7ef5af8284282b1ed620a2ee7417f"
+      },
+      "summary": "Do not define functions with a C-style ellipsis parameter; use variadic templates or other type-safe alternatives.",
+      "noncompliant_concept": "Defines a function whose parameter list ends in ... and uses va_list.",
+      "compliant_concept": "Uses a function parameter pack or fixed overloads instead of an ellipsis.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "SUPPORTED",
+      "confidence": "HIGH",
+      "exceptions": [
+        {
+          "id": "DCL50-CPP-EX1",
+          "summary": "C-style variadic functions are allowed when they have extern \"C\" linkage, e.g. C APIs in C++.",
+          "handling": "excluded-by-rule"
+        },
+        {
+          "id": "DCL50-CPP-EX2",
+          "summary": "Variadic functions declared but never defined, used in unevaluated contexts like SFINAE, are allowed.",
+          "handling": "excluded-by-rule"
+        }
+      ],
+      "false_positive_risks": [
+        "A definition whose parameter list is spelled through macros may be misread."
+      ],
+      "false_negative_risks": [
+        "Definitions whose braces nest the extern \"C\" block in macros, or whose parameter list is produced by macros, are not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl50-cpp.variadic-function-definition"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl50-cpp.variadic-function-definition"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/dcl50-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/dcl50-cpp.cpp"
+        ],
+        "coverage_note": "Every C-style variadic function definition, including members and trailing-return forms; declarations and extern \"C\" definitions are excluded per the rule's exceptions."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-dcl50-cpp",
+          "clang-tidy:cppcoreguidelines-pro-type-vararg"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL50-CPP/DoNotDefineACStyleVariadicFunction.ql"
+        ]
+      }
+    },
+    {
+      "key": "DCL51-CPP",
+      "id": "DCL51-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Do not declare or define a reserved identifier",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/03.dcl51-cpp.md",
+        "sha256": "729786ba636f8d23314a21ed10da3cdae1b749effe445860274a650dbc05895c"
+      },
+      "summary": "Do not declare, define, #define, or #undef identifiers reserved to the implementation or names from standard headers and keywords.",
+      "noncompliant_concept": "Uses names with double underscores, leading underscore plus capital, or redefines standard names/keywords via macros.",
+      "compliant_concept": "Chooses identifiers outside reserved patterns and leaves standard names untouched.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "DCL51-CPP-EX1",
+          "summary": "Macros named like reserved identifiers are fine for compatibility when semantics are unchanged.",
+          "handling": "not-implemented"
+        },
+        {
+          "id": "DCL51-CPP-EX2",
+          "summary": "Compiler vendors and standard-library authors may use implementation-reserved identifiers.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Header guards and compatibility macros with leading underscores, or code inside implementation headers, may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Global-namespace names beginning with a single underscore need scope awareness; macro-generated names are missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-reserved-identifier",
+          "clang-tidy:clang-diagnostic-reserved-identifier",
+          "clang-tidy:clang-diagnostic-reserved-macro-identifier",
+          "clang-tidy:clang-diagnostic-reserved-id-macro",
+          "clang-tidy:clang-diagnostic-reserved-user-defined-literal",
+          "clang-tidy:clang-diagnostic-user-defined-literals"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/EnumeratorReusesReservedName.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/FunctionReusesReservedName.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/ObjectReusesReservedName.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/RedefiningOfStandardLibraryName.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/ReuseOfReservedIdentifier.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/UseOfDoubleUnderscoreReservedPrefix.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/UseOfReservedLiteralSuffixIdentifier.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL51-CPP/UseOfSingleUnderscoreReservedPrefix.ql"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "DCL52-CPP",
+      "id": "DCL52-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Never qualify a reference type with const or volatile",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/04.dcl52-cpp.md",
+        "sha256": "4d3dafe0555694643c364b5bcea04e3038f0cebe7fd9335c166019b0b327f77a"
+      },
+      "summary": "Reference types must not be given const or volatile qualifiers directly; cv-qualify the referenced type instead.",
+      "noncompliant_concept": "Writes a declaration like 'char &const p', applying const to the reference itself.",
+      "compliant_concept": "Qualifies the referred-to type, e.g. 'const char &p'.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_COMPILER_OR_IR",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Few; typedef or decltype-introduced qualifiers are syntactically different and legitimately ignored."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: cv-qualification applied through typedef or template parameters escapes syntactic matching."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-ignored-qualifiers"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "DCL53-CPP",
+      "id": "DCL53-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Do not write syntactically ambiguous declarations",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/05.dcl53-cpp.md",
+        "sha256": "3b9442139c9956bce5092a2c11c9bf5ed393a86524cdce57de293f96e414858f"
+      },
+      "summary": "Avoid declarations that parse ambiguously as function declarations or as unnamed temporaries (vexing parses).",
+      "noncompliant_concept": "Writes 'T obj();' or 'Lock(m);' intending an object, getting a function declaration or immediately-destroyed temporary.",
+      "compliant_concept": "Uses brace initialization or named variables so the declaration means what is intended.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "None expected for the matched lock types."
+      ],
+      "false_negative_risks": [
+        "The vexing parse T obj(); and other ambiguous declarations are not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl53-cpp.unnamed-lock-temporary"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl53-cpp.unnamed-lock-temporary"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/dcl53-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/dcl53-cpp.cpp"
+        ],
+        "coverage_note": "Parenthesized standard lock declarations that declare a variable named after the mutex."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-vexing-parse",
+          "clang-tidy:bugprone-unused-raii"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL53-CPP/LocalConstructorInitializedObjectHidesIdentifier.ql",
+          "rules/cpp-cert/codeql/cert/rules/DCL53-CPP/LocalFunctionDeclaration.ql"
+        ]
+      }
+    },
+    {
+      "key": "DCL54-CPP",
+      "id": "DCL54-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Overload allocation and deallocation functions as a pair in the same scope",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/06.dcl54-cpp.md",
+        "sha256": "568a9b7bb7bc874b0ac5b39d58d4f370589a138e9fa220e404477933d4454c3d"
+      },
+      "summary": "When an allocation function is overloaded in a scope, the matching deallocation function must be overloaded in the same scope, and vice versa.",
+      "noncompliant_concept": "Class defines operator new without a corresponding operator delete (or placement form without its pair).",
+      "compliant_concept": "Declares allocation and deallocation overloads together in the same class or namespace scope.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "DCL54-CPP-EX1",
+          "summary": "A placement deallocation function may be omitted when allocation and construction cannot throw.",
+          "handling": "not-implemented"
+        },
+        {
+          "id": "DCL54-CPP-EX2",
+          "summary": "An allocation/deallocation counterpart identical to the default may be omitted, with an explanatory comment.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Pairs split across a class and its base, or intentionally default-equivalent overloads, may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Overloads introduced via macros or inherited scopes may be missed without semantic lookup."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:misc-new-delete-overloads"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL54-CPP/SingularOverloadOfMemoryFunction.ql"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "DCL55-CPP",
+      "id": "DCL55-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Avoid information leakage when passing a class object across a trust boundary",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/07.dcl55-cpp.md",
+        "sha256": "497af6bdfeec2779346e6b7a5b59e54cd875233b1d0a60446bea3b7c5238fed2"
+      },
+      "summary": "Objects copied across a trust boundary must not expose uninitialized padding bytes or other unintended bytes of their representation.",
+      "noncompliant_concept": "Copies a struct with padding to user space or the network after member-wise initialization only.",
+      "compliant_concept": "Zero-fills the whole object first, serializes members individually, or uses packed layouts deliberately.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Raw copies of structs without padding, or whose bytes are fully initialized, would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Padding depends on layout and alignment; identifying trust boundaries requires domain knowledge."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:alpha.unix.cstring.UninitializedRead",
+          "clang-tidy:clang-diagnostic-padded",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL55-CPP/InformationLeakageAcrossTrustBoundaries.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DCL56-CPP",
+      "id": "DCL56-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Avoid cycles during initialization of static objects",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/08.dcl56-cpp.md",
+        "sha256": "ffa7d12f6136566b43c5252a2a287e9e5cd15684eb7a6adb387b6db5dc414eb8"
+      },
+      "summary": "Initialization of static or thread-storage objects must not recursively re-enter its own initialization or depend cyclically on other statics.",
+      "noncompliant_concept": "A function-local static's initializer calls back into the same function, or globals initialize from each other across TUs.",
+      "compliant_concept": "Removes initialization cycles, uses constant initialization, or lazily computes values without re-entry.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Static initializers calling functions that do not actually re-enter would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Cycles through call chains and across translation units require whole-program call graphs."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:misc-static-initialization-cycle",
+          "clang-tidy:clang-diagnostic-infinite-recursion",
+          "clang-tidy:bugprone-dynamic-static-initializers",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL56-CPP/CyclesDuringStaticObjectInit.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "DCL57-CPP",
+      "id": "DCL57-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Do not let exceptions escape from destructors or deallocation functions",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl57-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/09.dcl57-cpp.md",
+        "sha256": "1a69a043b1e438b395651338709ad4c67769d19a2a2671eb37a9c143e3bf04ca"
+      },
+      "summary": "Destructors and deallocation functions must not allow exceptions to escape them.",
+      "noncompliant_concept": "A destructor or operator delete throws, or calls a throwing function without catching, or is noexcept(false).",
+      "compliant_concept": "Catches and handles all exceptions inside destructors and deallocators, keeping them noexcept.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Destructors explicitly declared noexcept(false) whose callers handle the exception are reported."
+      ],
+      "false_negative_risks": [
+        "Exceptions propagated from called functions and from deallocation functions are not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl57-cpp.throw-in-destructor"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl57-cpp.throw-in-destructor"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/dcl57-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/dcl57-cpp.cpp"
+        ],
+        "coverage_note": "throw expressions directly inside a destructor body and not inside a try block."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-exception-escape",
+          "clang-tidy:bugprone-unsafe-to-allow-exceptions",
+          "cppcheck:cppcheck-exceptThrowInDestructor",
+          "cppcheck:cppcheck-exceptDeallocThrow",
+          "compiler:-Wterminate"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL57-CPP/DoNotLetExceptionsEscapeFromDestructorsOrDeallocationFunctions.ql"
+        ]
+      }
+    },
+    {
+      "key": "DCL58-CPP",
+      "id": "DCL58-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Do not modify the standard namespaces",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl58-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/10.dcl58-cpp.md",
+        "sha256": "13d0f6faf4f9261b3056c3965288fa97ba425c2d686cbf4b70dfb5aecd7040bb"
+      },
+      "summary": "Do not add declarations or definitions to namespace std or posix except permitted template specializations for user-defined types.",
+      "noncompliant_concept": "Declares new functions, types, or specializations involving only standard types inside namespace std.",
+      "compliant_concept": "Places code in own namespaces; only specializes std templates on program-defined types where allowed.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "PARTIAL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Declarations inside std blocks nested more than four brace levels deep, or specializations with unusual spellings, may be misclassified."
+      ],
+      "false_negative_risks": [
+        "New class definitions and specializations involving only standard types in namespace std are not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl58-cpp.standard-namespace-declaration"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.dcl58-cpp.standard-namespace-declaration"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/dcl58-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/dcl58-cpp.cpp"
+        ],
+        "coverage_note": "Variable and function declarations or definitions added to namespace std or posix."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-dcl58-cpp",
+          "clang-tidy:bugprone-std-namespace-modification"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL58-CPP/ModificationOfTheStandardNamespaces.ql"
+        ]
+      }
+    },
+    {
+      "key": "DCL59-CPP",
+      "id": "DCL59-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Do not define an unnamed namespace in a header file",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl59-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/11.dcl59-cpp.md",
+        "sha256": "aa9a4fcaf22b27892213a03f979bd670b19e1f046513a7fee61b09351c4df854"
+      },
+      "summary": "Header files must not contain unnamed namespaces, since each including translation unit gets its own distinct copy.",
+      "noncompliant_concept": "A .h/.hpp file declares 'namespace { ... }'.",
+      "compliant_concept": "Uses named namespaces with inline or extern declarations in headers, keeping unnamed namespaces in source files.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Headers included only once, or non-header files with header extensions, may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Header-ness is decided by file extension; included .inc/.cpp files or nonstandard extensions are missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:google-build-namespaces",
+          "clang-tidy:misc-anonymous-namespace-in-header"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL59-CPP/UnnamedNamespaceInHeaderFile.ql"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "DCL60-CPP",
+      "id": "DCL60-CPP",
+      "language": "cpp",
+      "category": "DCL",
+      "title": "Obey the one-definition rule",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl60-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/05.declarations-and-initialization-dcl/12.dcl60-cpp.md",
+        "sha256": "3247bf67881dc40641388cfb3265309581d242eb0338fa9b1145f89b8367acd3"
+      },
+      "summary": "Each entity must have exactly one definition program-wide, and inline or class definitions repeated across translation units must be token- and meaning-identical.",
+      "noncompliant_concept": "Different translation units define the same class, inline function, or template differently.",
+      "compliant_concept": "Defines shared entities once in headers with identical content, keeping TU-local items internal.",
+      "cwe": [],
+      "analysis_class": "build-or-whole-program",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Same-named entities in distinct namespaces or with internal linkage could be mistaken for duplicates."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: ODR violations emerge only across translation units, macros, and build configurations."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-odr",
+          "clang-tidy:misc-definitions-in-headers",
+          "compiler:-Wodr",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/DCL60-CPP/OneDefinitionRuleNotObeyed.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR50-CPP",
+      "id": "ERR50-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Do not abruptly terminate the program",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/02.err50-cpp.md",
+        "sha256": "773a0ed6cba20728e76b9404cd421281ee5384a32bc618526b415c4f73fef1c4"
+      },
+      "summary": "Programs must not terminate abruptly via abort, quick_exit, _Exit, or implicit std::terminate, bypassing cleanup.",
+      "noncompliant_concept": "Calls std::abort or quick_exit, or lets exceptions reach terminate via noexcept violations or uncaught throws.",
+      "compliant_concept": "Propagates errors to main and returns, or throws exceptions that are caught and handled.",
+      "cwe": [
+        "CWE-754"
+      ],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "ERR50-CPP-EX1",
+          "summary": "After reporting the problem, abort, _Exit, or terminate may be called for unrecoverable critical errors.",
+          "handling": "reported-for-review"
+        }
+      ],
+      "false_positive_risks": [
+        "Calls permitted by ERR50-CPP-EX1 (after reporting an unrecoverable error) are reported for review."
+      ],
+      "false_negative_risks": [
+        "Implicit std::terminate paths (uncaught exceptions, noexcept violations, exceptions from exit handlers) need exception-flow analysis.",
+        "std::exit after automatic objects are initialized is not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.err50-cpp.abrupt-termination-call"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.err50-cpp.abrupt-termination-call"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/err50-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/err50-cpp.cpp"
+        ],
+        "coverage_note": "Explicit abort, quick_exit, and _Exit calls."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-exception-escape",
+          "clang-tidy:concurrency-mt-unsafe",
+          "cppcheck:cppcheck-throwInNoexceptFunction",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR50-CPP/ConditionVariablePostConditionFailedCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/ERR50-CPP/ExitHandlerThrowsExceptionCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/ERR50-CPP/ExplicitAbruptTerminationCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/ERR50-CPP/JoinableThreadCopiedOrDestroyedCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/ERR50-CPP/RethrowNestedWithoutCaptureCert.ql"
+        ]
+      }
+    },
+    {
+      "key": "ERR51-CPP",
+      "id": "ERR51-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Handle all exceptions",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/03.err51-cpp.md",
+        "sha256": "bbbdc7404d1de92e14cb3ceb05ecaf9d85f99f976017cf3ca5351af03228cb4f"
+      },
+      "summary": "Every thrown exception must be caught by some handler; none may propagate out of main or a thread entry function.",
+      "noncompliant_concept": "main or a thread function lets exceptions escape without a catch-all handler.",
+      "compliant_concept": "Wraps main and thread bodies in try blocks catching all exceptions and terminating cleanly.",
+      "cwe": [
+        "CWE-754"
+      ],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Entry points that call only noexcept code would be flagged for missing catch-all."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Determining which exceptions callees throw requires interprocedural analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-exception-escape",
+          "clang-tidy:bugprone-unhandled-exception-at-new",
+          "cppcheck:cppcheck-throwInEntryPoint",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR51-CPP/HandleAllExceptions.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR52-CPP",
+      "id": "ERR52-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Do not use setjmp() or longjmp()",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/04.err52-cpp.md",
+        "sha256": "481bb414587e9b1b1c7217899ca84707e0aee697ffdb91f1b748614262552b57"
+      },
+      "summary": "Do not use setjmp or longjmp in C++ code.",
+      "noncompliant_concept": "Calls setjmp/longjmp to implement nonlocal control transfer.",
+      "compliant_concept": "Uses C++ exceptions or structured returns for nonlocal error handling.",
+      "cwe": [],
+      "analysis_class": "construct-use",
+      "status": "SUPPORTED",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "None expected; the rule forbids the facility outright."
+      ],
+      "false_negative_risks": [
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed.",
+        "Calls through function pointers are not detected."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.err52-cpp.nonlocal-jump"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.err52-cpp.nonlocal-jump"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/err52-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/err52-cpp.cpp"
+        ],
+        "coverage_note": "Every setjmp/longjmp-family use in C++ is reported."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-err52-cpp"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR52-CPP/DoNotUseSetjmpOrLongjmp.ql"
+        ]
+      }
+    },
+    {
+      "key": "ERR53-CPP",
+      "id": "ERR53-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Do not reference base classes or class data members in a constructor or destructor function-try-block handler",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/05.err53-cpp.md",
+        "sha256": "349282f00f9fdaa5efe84cee87572c8ec942e0f06703d138bd11afc6c3d214ba"
+      },
+      "summary": "Handlers of constructor or destructor function-try-blocks must not reference non-static members or base classes of the object.",
+      "noncompliant_concept": "A constructor's function-try-block catch handler reads or writes a data member.",
+      "compliant_concept": "Handles cleanup in member destructors or uses only parameters and statics in the handler.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: References to static members or same-named locals/parameters could be mistaken for member access."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Implicit this-> member accesses need name lookup to distinguish from locals."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-exceptions",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR53-CPP/DestroyedValueReferencedInConstructorDestructorCatchBlock.ql"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "ERR54-CPP",
+      "id": "ERR54-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Catch handlers should order their parameter types from most derived to least derived",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/06.err54-cpp.md",
+        "sha256": "c1f12a1265401fbf618b8aeb5de2f5dc39ae850677485a6feb35f67aeba9e7fc"
+      },
+      "summary": "Catch clauses in one try block must list more-derived exception types before their base classes.",
+      "noncompliant_concept": "A catch for a base class precedes a catch for a class derived from it, making it unreachable.",
+      "compliant_concept": "Orders handlers from most derived to least derived.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Unrelated types with similar names could be flagged by name-based heuristics."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Inheritance relationships require class hierarchy resolution."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-exceptions"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR54-CPP/CatchBlockShadowingCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR55-CPP",
+      "id": "ERR55-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Honor exception specifications",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/07.err55-cpp.md",
+        "sha256": "be32a1978bbd9d67f783978eb21624800e17e90427faac09a0ed56836dd5bb0a"
+      },
+      "summary": "Functions must not throw exceptions their exception specification disallows, including from noexcept functions.",
+      "noncompliant_concept": "A noexcept function calls something that can throw without catching it.",
+      "compliant_concept": "Catches all exceptions within noexcept functions, or relaxes the specification accurately.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Calls in noexcept functions to functions that never actually throw would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Exception sets of callees are unknown without interprocedural analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-exception-escape",
+          "clang-tidy:bugprone-unsafe-to-allow-exceptions",
+          "cppcheck:cppcheck-throwInNoexceptFunction",
+          "cppcheck:cppcheck-unhandledExceptionSpecification",
+          "compiler:-Wexceptions"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR55-CPP/HonorExceptionSpecifications.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR56-CPP",
+      "id": "ERR56-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Guarantee exception safety",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/08.err56-cpp.md",
+        "sha256": "dc4f98019056d6f9fb6537604b7198f217f20ea2620db6681e013add83fd84c4"
+      },
+      "summary": "Code must provide at least the basic exception guarantee: if an exception is thrown, objects remain valid and no resources or invariants are broken.",
+      "noncompliant_concept": "Mutates object state, then calls a throwing operation, leaving invariants broken or memory dangling on throw.",
+      "compliant_concept": "Uses copy-and-swap, RAII, and ordering so state changes commit only after throwing work succeeds.",
+      "cwe": [
+        "CWE-703",
+        "CWE-754",
+        "CWE-755"
+      ],
+      "analysis_class": "design-or-manual",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Pattern matches on delete-before-new sequences flag code where the throwing call cannot fail."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Invariant breakage depends on class semantics and throw points across functions."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR56-CPP/GuaranteeExceptionSafety.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR57-CPP",
+      "id": "ERR57-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Do not leak resources when handling exceptions",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err57-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/09.err57-cpp.md",
+        "sha256": "d49848a84cbeccbed7f8d310af893dfb6950533efb7eb87ef1e848570af0cb0f"
+      },
+      "summary": "Resources acquired must be released if an exception is thrown, including when constructors fail partway through.",
+      "noncompliant_concept": "Raw new or resource acquisition followed by code that can throw before the matching release.",
+      "compliant_concept": "Manages resources with RAII objects or smart pointers so unwinding releases them.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Raw allocations followed by non-throwing code are flagged even though no leak path exists."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Which calls can throw, and resources acquired in callees, require interprocedural knowledge."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.NewDeleteLeaks",
+          "cppcheck:cppcheck-memleak",
+          "cppcheck:cppcheck-resourceLeak",
+          "clang-tidy:bugprone-multiple-new-in-one-expression",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR57-CPP/DoNotLeakResourcesWhenHandlingExceptions.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR58-CPP",
+      "id": "ERR58-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Handle all exceptions thrown before main() begins executing",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err58-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/10.err58-cpp.md",
+        "sha256": "d4906a8f548c1f934546ceae817d8b9909502581ef5a17d4a4cfa8755e4ce6ab"
+      },
+      "summary": "Exceptions thrown while constructing or destroying static- or thread-storage objects cannot be caught by main; such initializers must not throw.",
+      "noncompliant_concept": "A global or namespace-scope object's constructor can throw, e.g., a std::string initialized from input.",
+      "compliant_concept": "Uses constexpr/noexcept constructors for statics, or defers initialization into functions with handlers.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Static objects whose constructors cannot throw in practice but lack noexcept may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Whether a constructor may throw depends on resolved overloads and callee behavior."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-err58-cpp",
+          "clang-tidy:bugprone-throwing-static-initialization"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR58-CPP/HandleAllExceptionsThrownBeforeMainBeginsExecuting.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR59-CPP",
+      "id": "ERR59-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Do not throw an exception across execution boundaries",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err59-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/11.err59-cpp.md",
+        "sha256": "1847b4296d3b6cb275ec63e888b7190c65a9d0b1d97294b43481f76b36ef8701"
+      },
+      "summary": "Exceptions must not propagate across execution boundaries such as C APIs, shared libraries built with different toolchains, or callbacks.",
+      "noncompliant_concept": "Lets an exception escape an extern \"C\" function or callback invoked by foreign code.",
+      "compliant_concept": "Catches all exceptions at the boundary and converts them to error codes.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: extern \"C\" functions that call only non-throwing code may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Boundaries like DLL exports or callback registration are not identifiable syntactically."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-exception-escape",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR59-CPP/DoNotThrowAnExceptionAcrossExecutionBoundaries.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR60-CPP",
+      "id": "ERR60-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Exception objects must be nothrow copy constructible",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err60-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/12.err60-cpp.md",
+        "sha256": "7f7c12b3662e475b672693d4b851d0ff1bb8ffb5556becd4831c240d6c3022fd"
+      },
+      "summary": "Types thrown as exceptions must have copy constructors that cannot throw.",
+      "noncompliant_concept": "Throws an object whose class has a member like std::string, making copying potentially throwing.",
+      "compliant_concept": "Throws types with noexcept copy constructors, e.g., holding a shared_ptr or deriving from std::runtime_error.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Exception classes whose copies never throw in practice but lack noexcept may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Copy-constructor noexcept-ness depends on resolved member types and class definitions."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-err60-cpp",
+          "clang-tidy:bugprone-exception-copy-constructor-throws"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR60-CPP/ExceptionObjectsMustBeNothrowCopyConstructible.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "ERR61-CPP",
+      "id": "ERR61-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Catch exceptions by lvalue reference",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err61-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/13.err61-cpp.md",
+        "sha256": "41356501e2f124146ffaef2a66c215a2312bc83ad038ed19354f54acd6ec2a49"
+      },
+      "summary": "Exceptions should be caught by lvalue reference, not by value or pointer, to avoid slicing and extra copying.",
+      "noncompliant_concept": "A catch clause declares its parameter by value, e.g. catch (std::exception e).",
+      "compliant_concept": "Catches by (const) lvalue reference, e.g. catch (const std::exception &e).",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "SUPPORTED",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Trivial class types and typedefs of scalar types, which may be caught by value, are reported because the type is not resolved."
+      ],
+      "false_negative_risks": [
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.err61-cpp.catch-by-value"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.err61-cpp.catch-by-value"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/err61-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/err61-cpp.cpp"
+        ],
+        "coverage_note": "Every by-value handler whose type is not a reference, pointer, or fundamental type."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:misc-throw-by-value-catch-by-reference",
+          "clang-tidy:cert-err61-cpp",
+          "clang-tidy:cert-err09-cpp",
+          "cppcheck:cppcheck-catchExceptionByValue"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR61-CPP/CatchExceptionsByLvalueReference.ql"
+        ]
+      }
+    },
+    {
+      "key": "ERR62-CPP",
+      "id": "ERR62-CPP",
+      "language": "cpp",
+      "category": "ERR",
+      "title": "Detect errors when converting a string to a number",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err62-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/06.exceptions-and-error-handling-err/14.err62-cpp.md",
+        "sha256": "c6bca2b73d9e8efbf18e18c7cdb86da7119abe766978d2bdd1a0ccf37c7d54c0"
+      },
+      "summary": "String-to-number conversions must check for failure, out-of-range values, and unconsumed trailing characters.",
+      "noncompliant_concept": "Uses atoi/atol or stream extraction without checking stream state or end position.",
+      "compliant_concept": "Uses strtol/stoi or stream extraction with error-state, range, and trailing-input checks.",
+      "cwe": [
+        "CWE-20",
+        "CWE-676"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Stream extraction whose state is checked later or by a caller may be reported."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Detecting missing fail-state checks after extraction needs control-flow reasoning."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-unchecked-string-to-number-conversion",
+          "clang-tidy:cert-err34-c",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/ERR62-CPP/DetectErrorsWhenConvertingAStringToANumber.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP50-CPP",
+      "id": "EXP50-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not depend on the order of evaluation for side effects",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/02.exp50-cpp.md",
+        "sha256": "c249287bdbe038c434837ea3f4b95cd58ccabab14fa12d0296d32796d8b2b958"
+      },
+      "summary": "Correctness must not depend on unspecified or unsequenced evaluation order of operands or function arguments with side effects.",
+      "noncompliant_concept": "Modifies a variable and also reads or modifies it elsewhere in the same unsequenced expression or argument list.",
+      "compliant_concept": "Splits side effects into separate statements so ordering is explicit.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: C++17 sequencing makes some patterns (e.g., assignment, shifts) well-defined though they look suspicious."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Side effects inside called functions or via aliases are invisible to syntactic matching."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-unsequenced",
+          "clang-tidy:bugprone-multiple-new-in-one-expression",
+          "cppcheck:cppcheck-unknownEvaluationOrder",
+          "compiler:-Wsequence-point"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP50-CPP/DoNotDependOnTheOrderOfEvaluationForSideEffectsInFunctionCallsAsFunctionArguments.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP50-CPP/DoNotDependOnTheOrderOfScalarObjectEvaluationForSideEffects.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP51-CPP",
+      "id": "EXP51-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not delete an array through a pointer of the incorrect type",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/03.exp51-cpp.md",
+        "sha256": "a66f082720bd52bddf7e7c9dfc23307719fb3fde105045e07ddcc1891bd28d5c"
+      },
+      "summary": "Arrays must be deleted through a pointer whose static type matches the allocated element type.",
+      "noncompliant_concept": "Allocates new Derived[n] and deletes via a Base* with delete[].",
+      "compliant_concept": "Deletes through the original element type, or uses containers of smart pointers.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Any delete[] on a base-typed pointer looks suspect even if the array truly holds base objects."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: The dynamic element type comes from allocation sites possibly far away."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.ArrayDelete",
+          "clangsa:alpha.cplusplus.ArrayDelete"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP51-CPP/DoNotDeleteAnArrayThroughAPointerOfTheIncorrectType.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP52-CPP",
+      "id": "EXP52-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not rely on side effects in unevaluated operands",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/04.exp52-cpp.md",
+        "sha256": "4a7d434768325408183005bcb3fa05cf83629fafaebbe66cd3750ebead18aa93"
+      },
+      "summary": "Do not write expressions with intended side effects as operands of sizeof, typeid on non-polymorphic types, noexcept, decltype, or similar unevaluated contexts.",
+      "noncompliant_concept": "Places an increment, assignment, or call inside sizeof or decltype expecting it to execute.",
+      "compliant_concept": "Performs side effects in separate statements and passes side-effect-free expressions to unevaluated operators.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "EXP52-CPP-EX1",
+          "summary": "Side-effecting expressions may be unevaluated operands in macros or SFINAE contexts.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Function calls in decltype or SFINAE expressions used purely for type deduction would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: typeid evaluation depends on whether the operand type is polymorphic, requiring types."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-unevaluated-expression",
+          "clang-tidy:clang-diagnostic-potentially-evaluated-expression",
+          "clang-tidy:bugprone-sizeof-expression"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP52-CPP/DoNotRelyOnSideEffectsInDeclTypeOperand.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP52-CPP/DoNotRelyOnSideEffectsInDeclValExpression.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP52-CPP/DoNotRelyOnSideEffectsInNoExceptOperand.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP52-CPP/DoNotRelyOnSideEffectsInSizeOfOperand.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP52-CPP/DoNotRelyOnSideEffectsInTypeIdOperand.ql"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "EXP53-CPP",
+      "id": "EXP53-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not read uninitialized memory",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/05.exp53-cpp.md",
+        "sha256": "17fac4891894a198b81611477e2fd6c4ad7fe0e0748d7bacb408aeecffe81c92"
+      },
+      "summary": "Objects with indeterminate value, such as uninitialized locals or default-initialized heap memory, must not be read before being given a value.",
+      "noncompliant_concept": "Reads a local or newly allocated variable on a path where it was never assigned.",
+      "compliant_concept": "Initializes variables at declaration or ensures assignment on all paths before use.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Uninitialized declarations later assigned on all paths, or initialized via out-parameters, are flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Path-sensitive reads, heap memory, and partial struct initialization need dataflow analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-uninitialized",
+          "clang-tidy:clang-diagnostic-sometimes-uninitialized",
+          "clang-tidy:cppcoreguidelines-init-variables",
+          "clangsa:core.CallAndMessage",
+          "clangsa:core.uninitialized.Assign",
+          "clangsa:core.uninitialized.Branch",
+          "clangsa:core.uninitialized.UndefReturn",
+          "clangsa:optin.cplusplus.UninitializedObject",
+          "cppcheck:cppcheck-uninitvar",
+          "cppcheck:cppcheck-uninitdata",
+          "cppcheck:cppcheck-uninitMemberVar",
+          "compiler:-Wmaybe-uninitialized"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP53-CPP/DoNotReadUninitializedMemory.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP54-CPP",
+      "id": "EXP54-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not access an object outside of its lifetime",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/06.exp54-cpp.md",
+        "sha256": "bd143e7919b18fa05e132edf5fb6834b66b5cf5a587639eedd38b0ecb5d4bf70"
+      },
+      "summary": "Objects must not be accessed before their lifetime begins or after it ends, including dangling references to temporaries and locals.",
+      "noncompliant_concept": "Returns a reference to a local, binds to a destroyed temporary, or uses an object after destruction.",
+      "compliant_concept": "Returns by value, extends lifetimes correctly, and keeps referents alive while references are used.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Callers that never use the returned view or iterator are still reported, because every use would be outside the object's lifetime."
+      ],
+      "false_negative_risks": [
+        "Use after explicit destructor calls, after scope exit, through thread_local or member pointers, and in placement-new storage requires lifetime analysis.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.exp54-cpp.escaping-reference-to-local"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.exp54-cpp.escaping-reference-to-local"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/exp54-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/exp54-cpp.cpp"
+        ],
+        "coverage_note": "Returning views, raw pointers, or iterators into non-static local strings and vectors."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-return-stack-address",
+          "clang-tidy:clang-diagnostic-dangling",
+          "clang-tidy:clang-diagnostic-dangling-gsl",
+          "clang-tidy:bugprone-dangling-handle",
+          "clang-tidy:bugprone-return-const-ref-from-parameter",
+          "clangsa:core.StackAddressEscape",
+          "clangsa:core.CallAndMessage",
+          "clangsa:cplusplus.NewDelete",
+          "cppcheck:cppcheck-returnDanglingLifetime",
+          "cppcheck:cppcheck-danglingLifetime",
+          "cppcheck:cppcheck-danglingTempReference",
+          "cppcheck:cppcheck-invalidLifetime"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP54-CPP/ObjectAccessedAfterLifetimeCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP54-CPP/ObjectAccessedBeforeLifetimeCert.ql"
+        ]
+      }
+    },
+    {
+      "key": "EXP55-CPP",
+      "id": "EXP55-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not access a cv-qualified object through a cv-unqualified type",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/07.exp55-cpp.md",
+        "sha256": "1ff6459de5b7b07922e742a7c44038956f4e27764d07505bb4ef10962de84ec5"
+      },
+      "summary": "Objects defined const or volatile must not be accessed through glvalues that drop those qualifiers, e.g., by const_cast and modification.",
+      "noncompliant_concept": "Uses const_cast or C-style casts to strip const/volatile and then modifies or reads through the result.",
+      "compliant_concept": "Keeps qualifiers, uses mutable for logically-const members, or fixes APIs to be const-correct.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "EXP55-CPP-EX1",
+          "summary": "Casting away const is allowed to call a non-const legacy API that does not modify the object.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: const_cast used where the original object is non-const, or for read-only legacy API calls, is benign."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Whether the underlying object is really const-defined requires tracing to its definition."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cppcoreguidelines-pro-type-const-cast",
+          "clang-tidy:cppcoreguidelines-pro-type-cstyle-cast",
+          "compiler:-Wcast-qual"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP55-CPP/RemoveConstOrVolatileQualificationCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP56-CPP",
+      "id": "EXP56-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not call a function with a mismatched language linkage",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/08.exp56-cpp.md",
+        "sha256": "a4123c6c6d23b562b60ab1491a0c9794e868f6b97f1f483c4b1be377e5f4947f"
+      },
+      "summary": "Functions must only be called through pointers or declarations whose language linkage matches the function's definition.",
+      "noncompliant_concept": "Passes a C++-linkage function where an extern \"C\" function pointer is expected, e.g., to a C callback API.",
+      "compliant_concept": "Declares callbacks for C APIs with extern \"C\" linkage.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Most compilers treat linkage as not part of the type, so many matches are practically harmless."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Linkage of function pointer types in casts or templates needs semantic analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP56-CPP/FunctionWithMismatchedLanguageLinkage.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP57-CPP",
+      "id": "EXP57-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not cast or delete pointers to incomplete classes",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp57-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/09.exp57-cpp.md",
+        "sha256": "9ecb7c8bdb33bb921e364b47a3514ed97d730a39563e196353226c2f2e97ea0f"
+      },
+      "summary": "Pointers to incomplete class types must not be deleted or cast in ways requiring the complete definition.",
+      "noncompliant_concept": "Deletes or static_casts a pointer whose class is only forward-declared at that point.",
+      "compliant_concept": "Ensures the class is complete where deleted or cast, e.g., defining pimpl destructors in the source file.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Deletes in files where the type is complete through an included header would be flagged by naive matching."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Type completeness at a given point depends on includes and declarations requiring a full parse."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-delete-incomplete",
+          "compiler:-Wdelete-incomplete"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP57-CPP/CastOfPointerToIncompleteClass.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP57-CPP/DeletingPointerToIncompleteClass.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP58-CPP",
+      "id": "EXP58-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Pass an object of the correct type to va_start",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp58-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/10.exp58-cpp.md",
+        "sha256": "6af0d2d25fc6f559b6717ccdf0f611a5eeab1c30543807834a0149ea6fd54e12"
+      },
+      "summary": "The last named parameter given to va_start must not be a reference, a type changed by default promotions, or a non-trivial class.",
+      "noncompliant_concept": "Calls va_start with a reference parameter or a float/char/short or class-type parameter.",
+      "compliant_concept": "Ensures the last named parameter is a trivially copyable, promotion-stable value type.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "None expected."
+      ],
+      "false_negative_risks": [
+        "Non-trivially copyable class parameters and typedefs of promoted types require type resolution.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.exp58-cpp.va-start-invalid-parameter"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.exp58-cpp.va-start-invalid-parameter"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/exp58-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/exp58-cpp.cpp"
+        ],
+        "coverage_note": "va_start on a reference parameter or a parameter whose type undergoes default promotion."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-varargs",
+          "cppcheck:cppcheck-va_start_referencePassed",
+          "cppcheck:cppcheck-va_start_wrongParameter",
+          "compiler:-Wvarargs"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP58-CPP/PassNonTrivialObjectToVaStart.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP58-CPP/PassPromotablePrimitiveTypeToVaStart.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP58-CPP/PassReferenceTypeToVaStart.ql"
+        ]
+      }
+    },
+    {
+      "key": "EXP59-CPP",
+      "id": "EXP59-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Use offsetof() on valid types and members",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp59-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/11.exp59-cpp.md",
+        "sha256": "964d1e34290fac952de2527a6e20086343c44aa4e4dd0b230a97643f60350024"
+      },
+      "summary": "offsetof must only be applied to standard-layout types and to non-static, non-bit-field data members.",
+      "noncompliant_concept": "Uses offsetof on a class with virtual functions or mixed access, or on a static member or bit-field.",
+      "compliant_concept": "Restricts offsetof to standard-layout structs and regular data members.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Without type layout knowledge, any offsetof on a class looks suspicious."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Standard-layout status depends on full class definitions and inheritance."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-invalid-offsetof",
+          "compiler:-Winvalid-offsetof"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP59-CPP/OffsetUsedOnInvalidTypeOrMember.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP60-CPP",
+      "id": "EXP60-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not pass a nonstandard-layout type object across execution boundaries",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp60-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/12.exp60-cpp.md",
+        "sha256": "187ee72081b677b476ed49166f0b28f864eb454f94a81684ea5c97d9fff42491"
+      },
+      "summary": "Objects of non-standard-layout type must not be passed to code compiled by a different compiler or language across an execution boundary.",
+      "noncompliant_concept": "Passes a class with virtual functions or mixed access to an extern \"C\" or separately compiled library function.",
+      "compliant_concept": "Passes only standard-layout structures, or opaque handles, across boundaries.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Calls to separately compiled code with standard-layout arguments would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Layout properties and which functions cross boundaries require type and build knowledge."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP60-CPP/DoNotPassANonstandardObjectAcrossBoundaries.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP61-CPP",
+      "id": "EXP61-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "A lambda object must not outlive any of its reference captured objects",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp61-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/13.exp61-cpp.md",
+        "sha256": "3a1719fa2ceb84118763f7ec1a986a06251099196e85607e305cd99a5284b6f6"
+      },
+      "summary": "Lambdas capturing by reference must not be used after any reference-captured object has gone out of scope.",
+      "noncompliant_concept": "Returns or stores a lambda capturing locals by reference that is invoked after the function returns.",
+      "compliant_concept": "Captures by value, or ensures captured objects outlive every invocation.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Reference-capturing lambdas passed to synchronous algorithms are safe but match syntactically."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Lambdas stored in containers, std::function, or threads need escape and lifetime analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-return-stack-address",
+          "clang-tidy:clang-diagnostic-dangling-capture",
+          "clangsa:core.StackAddressEscape",
+          "clangsa:alpha.core.StackAddressAsyncEscape"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP61-CPP/EscapingLambdaObjectWithCaptureByReference.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP61-CPP/ReturningLambdaObjectWithCaptureByReference.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP62-CPP",
+      "id": "EXP62-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not access the bits of an object representation that are not part of the object's value representation",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp62-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/14.exp62-cpp.md",
+        "sha256": "81a9e28e4b0e53626f550bd3e1bbba72af01c168633f859bdc8871d615582332"
+      },
+      "summary": "Code must not rely on bytes of an object that are not part of its value representation, such as padding or vtable pointers.",
+      "noncompliant_concept": "Compares or hashes class objects with memcmp, or memset/memcpy over objects with vptrs.",
+      "compliant_concept": "Compares members via operator== and copies via special member functions.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "EXP62-CPP-EX1",
+          "summary": "Object-representation bits may be accessed when unobservable, e.g. reading or writing only padding bits.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: memcmp/memcpy on padding-free trivially copyable types would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Padding and vptr presence depend on resolved type layouts."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-raw-memory-call-on-non-trivial-type",
+          "clang-tidy:bugprone-undefined-memory-manipulation",
+          "clang-tidy:clang-diagnostic-dynamic-class-memaccess",
+          "clang-tidy:bugprone-suspicious-memory-comparison",
+          "cppcheck:cppcheck-memsetClass"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP62-CPP/MemcmpUsedToAccessObjectRepresentation.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP62-CPP/MemcpyUsedToAccessObjectRepresentation.ql",
+          "rules/cpp-cert/codeql/cert/rules/EXP62-CPP/MemsetUsedToAccessObjectRepresentation.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "EXP63-CPP",
+      "id": "EXP63-CPP",
+      "language": "cpp",
+      "category": "EXP",
+      "title": "Do not rely on the value of a moved-from object",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp63-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/07.expressions-exp/15.exp63-cpp.md",
+        "sha256": "62d958206f5a563577cdba0eb7301dacef81028b1debe4b1c83f4b4fe309e31c"
+      },
+      "summary": "After an object is moved from, its value must not be relied upon until it is reassigned, except for types documenting a specified moved-from state.",
+      "noncompliant_concept": "Reads or uses a variable after passing it to std::move or a moving function.",
+      "compliant_concept": "Reinitializes moved-from objects before use, or only uses types like unique_ptr with defined moved-from states.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Uses after std::move where the callee did not actually move, or of types with specified states, are flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Moves via rvalue-reference parameters without explicit std::move, and loop paths, need dataflow."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-use-after-move",
+          "clangsa:cplusplus.Move",
+          "cppcheck:cppcheck-accessMoved",
+          "cppcheck:cppcheck-accessForwarded"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/EXP63-CPP/DoNotRelyOnTheValueOfAMovedFromObject.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "FIO50-CPP",
+      "id": "FIO50-CPP",
+      "language": "cpp",
+      "category": "FIO",
+      "title": "Do not alternately input and output from a file stream without an intervening positioning call",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/input-output-fio/fio50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/08.input-output-fio/2.fio50-cpp.md",
+        "sha256": "6fbcfd2211813db0328b6c3bd113c9186aac13a14a53d5c0d9268a001ff6e6dc"
+      },
+      "summary": "On an update-mode file stream, switching between reading and writing requires an intervening flush or positioning operation.",
+      "noncompliant_concept": "Writes to an fstream then immediately reads (or vice versa) without seekg/seekp or flush.",
+      "compliant_concept": "Calls a seek or flush operation between alternating input and output.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Sequences where a positioning call occurs in a helper function may be reported."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Read/write alternation across functions or loops requires stream state tracking."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-IOWithoutPositioning",
+          "clangsa:alpha.unix.Stream",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/FIO50-CPP/InterleavedInputOutputWithoutPosition.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "FIO51-CPP",
+      "id": "FIO51-CPP",
+      "language": "cpp",
+      "category": "FIO",
+      "title": "Close files when they are no longer needed",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/input-output-fio/fio51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/08.input-output-fio/3.fio51-cpp.md",
+        "sha256": "1fb96ef0892ec5a92cc777ca35327609814d84e86060baaa919a7b92c5c2d5f7"
+      },
+      "summary": "File streams opened by the program must be closed (explicitly or by destruction) before the program terminates or the stream object leaks.",
+      "noncompliant_concept": "Calls std::terminate/exit or leaks a heap-allocated fstream while the file remains open.",
+      "compliant_concept": "Closes streams explicitly before termination or relies on scoped RAII stream objects.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Streams closed in destructors or other helpers may be flagged as unclosed."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Leaked stream objects or termination paths across functions need lifetime reasoning."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-resourceLeak",
+          "clangsa:unix.Stream",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/FIO51-CPP/CloseFilesWhenTheyAreNoLongerNeeded.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "INT50-CPP",
+      "id": "INT50-CPP",
+      "language": "cpp",
+      "category": "INT",
+      "title": "Do not cast to an out-of-range enumeration value",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/integers-int/int50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/09.integers-int/2.int50-cpp.md",
+        "sha256": "fa8f9b5edb3cdd7e88de766bae43b6d678aae94cf271b58f503bae312448216a"
+      },
+      "summary": "Integer values must not be converted to an enumeration type unless they fall within that enumeration's range of valid values.",
+      "noncompliant_concept": "Casts an arbitrary integer to an unfixed-underlying-type enum without validating its range.",
+      "compliant_concept": "Checks the value against the enumeration's valid range before casting, or uses fixed underlying types.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Casts to enums with fixed underlying types or with prior range checks would be reported."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Enum range depends on enumerator values; integer values need range analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:optin.core.EnumCastOutOfRange",
+          "clangsa:alpha.cplusplus.EnumCastOutOfRange",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/INT50-CPP/DoNotCastToAnOutOfRangeEnumerationValue.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MEM50-CPP",
+      "id": "MEM50-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Do not access freed memory",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/2.mem50-cpp.md",
+        "sha256": "0754a576cd5a1de10e1386290701ed07b449004259f56dc6c7d3f2d7d03782fe"
+      },
+      "summary": "Memory or objects must not be accessed through pointers or references after being deallocated or destroyed.",
+      "noncompliant_concept": "Dereferences a pointer after delete/free, or uses c_str()/data() after the owning string changes.",
+      "compliant_concept": "Nulls or discards pointers after deallocation and uses ownership types with clear lifetimes.",
+      "cwe": [
+        "CWE-415",
+        "CWE-416"
+      ],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Use after delete where the pointer was reassigned in between, or in other branches, would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Deallocation in callees, aliasing, and containers require interprocedural pointer analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.NewDelete",
+          "clangsa:cplusplus.InnerPointer",
+          "clangsa:unix.Malloc",
+          "clang-tidy:clang-diagnostic-dangling",
+          "cppcheck:cppcheck-deallocuse",
+          "cppcheck:cppcheck-doubleFree",
+          "cppcheck:cppcheck-deallocret"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM50-CPP/UseAfterFree.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MEM51-CPP",
+      "id": "MEM51-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Properly deallocate dynamically allocated resources",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/3.mem51-cpp.md",
+        "sha256": "a6f46e2d8e7afc5354e44b1e21ebe13975a07866822edc6fe19d9bfe9120c5d9"
+      },
+      "summary": "Dynamic resources must be released exactly once, using the deallocation function matching their allocation.",
+      "noncompliant_concept": "Frees new memory with free, deletes new[] with delete, double-deletes, or deletes non-heap memory.",
+      "compliant_concept": "Pairs new/delete, new[]/delete[], malloc/free, or uses smart pointers with matching deleters.",
+      "cwe": [
+        "CWE-404",
+        "CWE-415",
+        "CWE-590",
+        "CWE-762"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "None expected for same-variable pairings."
+      ],
+      "false_negative_risks": [
+        "Double free, placement-new release, class-specific allocation functions, and pairings across functions require ownership analysis.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.mem51-cpp.allocator-deallocator-mismatch",
+          "appsec-review.sei-cert.cpp.mem51-cpp.array-new-scalar-delete"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.mem51-cpp.allocator-deallocator-mismatch",
+          "appsec-review.sei-cert.cpp.mem51-cpp.array-new-scalar-delete"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/mem51-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/mem51-cpp.cpp"
+        ],
+        "coverage_note": "Same-function array new/scalar delete, malloc/delete, new/free, and unique_ptr<T> adopting new T[]."
+      },
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.NewDelete",
+          "clangsa:cplusplus.NewDeleteLeaks",
+          "clangsa:unix.MismatchedDeallocator",
+          "clang-tidy:clang-diagnostic-mismatched-new-delete",
+          "clang-tidy:bugprone-shared-ptr-array-mismatch",
+          "clang-tidy:bugprone-unique-ptr-array-mismatch",
+          "clang-tidy:bugprone-multiple-new-in-one-expression",
+          "cppcheck:cppcheck-mismatchAllocDealloc",
+          "cppcheck:cppcheck-doubleFree",
+          "cppcheck:cppcheck-memleak",
+          "compiler:-Wmismatched-new-delete"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM51-CPP/ProperlyDeallocateDynamicallyAllocatedResources.ql"
+        ]
+      }
+    },
+    {
+      "key": "MEM52-CPP",
+      "id": "MEM52-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Detect and handle memory allocation errors",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/4.mem52-cpp.md",
+        "sha256": "624a6e7da240c5863f67c59485697a95a59b846d4044880480e6bd305fda847f"
+      },
+      "summary": "Failure of memory allocation must be detected and handled, whether reported by null returns or by bad_alloc exceptions.",
+      "noncompliant_concept": "Uses result of new(std::nothrow) or malloc without a null check, or lets bad_alloc escape unhandled.",
+      "compliant_concept": "Checks nothrow allocation results for null and catches bad_alloc where allocations may fail.",
+      "cwe": [
+        "CWE-252",
+        "CWE-391",
+        "CWE-476",
+        "CWE-690",
+        "CWE-703",
+        "CWE-754"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Allocations checked in a later statement or by a caller may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Null checks after aliasing, and exception handling in callers, require dataflow."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-unhandled-exception-at-new",
+          "clang-tidy:bugprone-multiple-new-in-one-expression",
+          "clangsa:unix.Malloc",
+          "cppcheck:cppcheck-nullPointerArithmeticOutOfMemory",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM52-CPP/DetectAndHandleMemoryAllocationErrors.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MEM53-CPP",
+      "id": "MEM53-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Explicitly construct and destruct objects when manually managing object lifetime",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/5.mem53-cpp.md",
+        "sha256": "e15a9948ba18d2b4d34ae5681f830a55f5a0290d887ff57914c5a0aff0269d9b"
+      },
+      "summary": "When storage is managed manually, objects must be explicitly constructed before use and explicitly destroyed before their storage is released or reused.",
+      "noncompliant_concept": "Casts malloc'd memory to a class pointer and uses it without placement new, or frees without calling the destructor.",
+      "compliant_concept": "Uses placement new to begin lifetime and explicitly invokes destructors before deallocation.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "MEM53-CPP-EX1",
+          "summary": "Explicit constructor or destructor calls are unnecessary for trivially constructible or destructible types.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags malloc/cast use on trivially constructible types, which is permitted."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Tracking whether constructor/destructor calls occur on each path requires dataflow and type triviality."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cppcoreguidelines-no-malloc",
+          "clang-tidy:cppcoreguidelines-pro-type-reinterpret-cast",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM53-CPP/MissingConstructorCallForManuallyManagedObject.ql",
+          "rules/cpp-cert/codeql/cert/rules/MEM53-CPP/MissingDestructorCallForManuallyManagedObject.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MEM54-CPP",
+      "id": "MEM54-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Provide placement new with properly aligned pointers to sufficient storage capacity",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/6.mem54-cpp.md",
+        "sha256": "1d8b52c118349d63e3e70a5cbfaf704455954e73f421b50418d7bbf83f15a2d6"
+      },
+      "summary": "Placement new must be given storage that is suitably aligned and large enough for the object or array being constructed.",
+      "noncompliant_concept": "Constructs an object via placement new into a char buffer that is too small or misaligned.",
+      "compliant_concept": "Uses alignas-qualified storage of adequate size, or std::aligned_storage-like buffers with size checks.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Placement new into properly aligned storage declared elsewhere may still be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Size and alignment depend on types, array cookies, and buffer origins needing semantic analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.PlacementNew",
+          "clang-tidy:clang-diagnostic-cast-align"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM54-CPP/PlacementNewInsufficientStorageCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/MEM54-CPP/PlacementNewNotProperlyAlignedCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MEM55-CPP",
+      "id": "MEM55-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Honor replacement dynamic storage management requirements",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/7.mem55-cpp.md",
+        "sha256": "85b57d4cfbc15bfb90d9a3f8a109152ed2a4938a3be71f46bb0e3782dc4a7c5e"
+      },
+      "summary": "Replacement global allocation and deallocation functions must meet the standard's required behavior, e.g., throwing bad_alloc rather than returning null.",
+      "noncompliant_concept": "A replacement operator new returns nullptr on failure instead of throwing.",
+      "compliant_concept": "Replacement functions throw std::bad_alloc on failure and otherwise honor library contracts.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Nothrow-variant replacements, which may legitimately return null, may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Failure paths through helper allocators require dataflow to determine what is returned."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-new-returns-null",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM55-CPP/OperatorDeleteMissingPartnerCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/MEM55-CPP/ThrowingNoThrowOperatorNewDeleteCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/MEM55-CPP/ThrowingOperatorNewReturnsNullCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/MEM55-CPP/ThrowingOperatorNewThrowsInvalidExceptionCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MEM56-CPP",
+      "id": "MEM56-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Do not store an already-owned pointer value in an unrelated smart pointer",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/8.mem56-cpp.md",
+        "sha256": "13f87c1db4eccd32e7b58dda22189988dea9d791bea725cb15bfbdd6abae7ea6"
+      },
+      "summary": "A pointer already owned by a smart pointer must not be handed to another unrelated smart pointer that would also manage it.",
+      "noncompliant_concept": "Constructs two shared_ptr or unique_ptr objects from the same raw pointer, or from get().",
+      "compliant_concept": "Copies the existing smart pointer, or uses enable_shared_from_this to share ownership.",
+      "cwe": [
+        "CWE-415",
+        "CWE-416",
+        "CWE-762"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "A get() result passed to a smart pointer with a no-op deleter is reported."
+      ],
+      "false_negative_risks": [
+        "Raw pointers obtained earlier and stored in variables are not tracked.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.mem56-cpp.unrelated-smart-pointer-owner"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.mem56-cpp.unrelated-smart-pointer-owner"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/mem56-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/mem56-cpp.cpp"
+        ],
+        "coverage_note": "Smart pointers constructed, declared, or reset from another owner's get()."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-incorrect-enable-shared-from-this",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM56-CPP/OwnedPointerValueStoredInUnrelatedSmartPointerCert.ql"
+        ]
+      }
+    },
+    {
+      "key": "MEM57-CPP",
+      "id": "MEM57-CPP",
+      "language": "cpp",
+      "category": "MEM",
+      "title": "Avoid using default operator new for over-aligned types",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem57-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/10.memory-management-mem/9.mem57-cpp.md",
+        "sha256": "28ef0959adb08056f5f1ac4dd8872a395b034698e7a9d92d09fed9e6e0497579"
+      },
+      "summary": "Over-aligned types must not be allocated with default operator new unless the implementation supports alignment-aware allocation.",
+      "noncompliant_concept": "Uses new on an alignas(64)-style type in pre-C++17 code without class-specific operator new.",
+      "compliant_concept": "Provides aligned allocation operators or uses C++17 aligned new.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Flags C++17 or later code where aligned new is automatic."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Alignment of types via typedefs or templates requires resolved types."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-mem57-cpp",
+          "clang-tidy:bugprone-default-operator-new-on-overaligned-type",
+          "clang-tidy:clang-diagnostic-over-aligned",
+          "compiler:-Waligned-new"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MEM57-CPP/UsingDefaultOperatorNewForOverAlignedTypes.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MSC50-CPP",
+      "id": "MSC50-CPP",
+      "language": "cpp",
+      "category": "MSC",
+      "title": "Do not use std::rand() for generating pseudorandom numbers",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/11.miscellaneous-msc/6.msc50-cpp.md",
+        "sha256": "72de47d67cb80c8cec1038902eee46f54e640d33b66f476b968755c574afd677"
+      },
+      "summary": "Do not use std::rand for pseudorandom numbers with quality or security requirements; use a proper generator.",
+      "noncompliant_concept": "Calls rand()/std::rand() to produce random values.",
+      "compliant_concept": "Uses <random> engines such as std::mt19937 seeded properly, or a CSPRNG for security uses.",
+      "cwe": [
+        "CWE-327",
+        "CWE-330"
+      ],
+      "analysis_class": "construct-use",
+      "status": "SUPPORTED",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Uses of std::rand() for non-security purposes are reported; the rule makes no such distinction."
+      ],
+      "false_negative_risks": [
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed.",
+        "Calls through function pointers are not detected."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.msc50-cpp.rand-call"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.msc50-cpp.rand-call"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/msc50-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/msc50-cpp.cpp"
+        ],
+        "coverage_note": "Every std::rand()/rand() call in C++ is reported."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-msc50-cpp",
+          "clang-tidy:misc-predictable-rand",
+          "clangsa:security.insecureAPI.rand"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MSC50-CPP/DoNotUseRandForGeneratingPseudorandomNumbers.ql"
+        ]
+      }
+    },
+    {
+      "key": "MSC51-CPP",
+      "id": "MSC51-CPP",
+      "language": "cpp",
+      "category": "MSC",
+      "title": "Ensure your random number generator is properly seeded",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/11.miscellaneous-msc/2.msc51-cpp.md",
+        "sha256": "3158e3a2ab7a4cbd8c4cb466a912e8705abfbb572dda287b2ac544cb6949e95a"
+      },
+      "summary": "Pseudorandom generators must be seeded from an unpredictable source, not left default-seeded or seeded with constants.",
+      "noncompliant_concept": "Default-constructs a random engine or seeds it with a literal or time value.",
+      "compliant_concept": "Seeds engines from std::random_device or another high-entropy source.",
+      "cwe": [
+        "CWE-327",
+        "CWE-330",
+        "CWE-337"
+      ],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "Engines used only for reproducible simulations or tests are reported."
+      ],
+      "false_negative_risks": [
+        "Direct initialization written as engine(std::time(nullptr)) is not parsed as a declaration by either engine.",
+        "Constant seeds supplied through variables and engines declared as class members are not detected.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.msc51-cpp.predictably-seeded-engine"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.msc51-cpp.predictably-seeded-engine"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/msc51-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/msc51-cpp.cpp"
+        ],
+        "coverage_note": "Default-constructed and time-seeded standard engines."
+      },
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-msc51-cpp",
+          "clang-tidy:bugprone-random-generator-seed"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MSC51-CPP/BadlySeededRandomNumberGenerator.ql"
+        ]
+      }
+    },
+    {
+      "key": "MSC52-CPP",
+      "id": "MSC52-CPP",
+      "language": "cpp",
+      "category": "MSC",
+      "title": "Value-returning functions must return a value from all exit paths",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/11.miscellaneous-msc/3.msc52-cpp.md",
+        "sha256": "4b6e70445e0870cbb66ef6eb750ec44eae5cde360fdd5069ea73560ecbaa833d"
+      },
+      "summary": "Every control path in a non-void function must return a value; flowing off the end is undefined behavior.",
+      "noncompliant_concept": "A non-void function, or function-try-block handler, can reach the closing brace without returning.",
+      "compliant_concept": "Adds return statements on all paths, or ends paths with throw or noreturn calls.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Paths ending in non-annotated never-returning calls or exhaustive switches may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Reachability through complex control flow needs CFG analysis beyond syntax."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-return-type",
+          "cppcheck:cppcheck-missingReturn",
+          "compiler:-Wreturn-type"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MSC52-CPP/NonVoidFunctionDoesNotReturnCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MSC53-CPP",
+      "id": "MSC53-CPP",
+      "language": "cpp",
+      "category": "MSC",
+      "title": "Do not return from a function declared \\[\\[noreturn\\]\\]",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/11.miscellaneous-msc/4.msc53-cpp.md",
+        "sha256": "7251b52f57373c0b6edc47dd216a77d17e17f9f3df01c5042b85f1f23b52397c"
+      },
+      "summary": "Functions declared [[noreturn]] must never return to their caller.",
+      "noncompliant_concept": "A [[noreturn]] function has a path that falls off its end or executes return.",
+      "compliant_concept": "Ensures every path in such functions throws, loops forever, or calls another noreturn function.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Paths ending in calls to unannotated but non-returning functions may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Return paths depending on conditions or callee behavior need control-flow analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-invalid-noreturn",
+          "clang-tidy:bugprone-exception-escape",
+          "compiler:-Winvalid-noreturn"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MSC53-CPP/FunctionNoReturnAttributeConditionCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "MSC54-CPP",
+      "id": "MSC54-CPP",
+      "language": "cpp",
+      "category": "MSC",
+      "title": "A signal handler must be a plain old function",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/11.miscellaneous-msc/5.msc54-cpp.md",
+        "sha256": "7740078ec274ef7e12834c305549dc0be5becc7a9989dd3ad6457c137f8b7863"
+      },
+      "summary": "Signal handlers must be plain old functions using only the C/C++ common subset with C linkage, avoiding C++-only features.",
+      "noncompliant_concept": "Registers a handler that uses exceptions, std::string, new, or has C++ linkage.",
+      "compliant_concept": "Registers extern \"C\" handlers that only set volatile sig_atomic_t or lock-free atomics.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Handlers calling safe helper functions may be flagged if helpers cannot be inspected."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: C++ features reached through called functions require interprocedural analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-signal-handler",
+          "clang-tidy:cert-msc54-cpp"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/MSC54-CPP/SignalHandlerMustBeAPlainOldFunction.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP50-CPP",
+      "id": "OOP50-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Do not invoke virtual functions from constructors or destructors",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/02.oop50-cpp.md",
+        "sha256": "1820791d9887959708065a3831f7105570333a50969aa07903d130ddc92467f7"
+      },
+      "summary": "Constructors and destructors must not make unqualified virtual calls on the object under construction or destruction.",
+      "noncompliant_concept": "A constructor or destructor calls a virtual member function, directly or through helpers.",
+      "compliant_concept": "Calls non-virtual helpers, or qualifies the call explicitly when the current class's version is intended.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "OOP50-CPP-EX1",
+          "summary": "Virtual calls in constructors or destructors are allowed using an explicitly qualified name.",
+          "handling": "not-implemented"
+        },
+        {
+          "id": "OOP50-CPP-EX2",
+          "summary": "Virtual functions marked final, or in final classes, may be called during construction or destruction.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Calls to qualified, final, or non-virtual members look identical without type info."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Virtual calls made indirectly from helper functions require interprocedural analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:optin.cplusplus.VirtualCall",
+          "clangsa:cplusplus.PureVirtualCall",
+          "clang-tidy:clang-diagnostic-call-to-pure-virtual-from-ctor-dtor",
+          "cppcheck:cppcheck-virtualCallInConstructor",
+          "cppcheck:cppcheck-pureVirtualCall"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP50-CPP/DoNotInvokeVirtualFunctionsFromConstructorsOrDestructors.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP51-CPP",
+      "id": "OOP51-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Do not slice derived objects",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/03.oop51-cpp.md",
+        "sha256": "5b0f8901704028be637e7936ba34451ac554f969c19a76d4fed208bbfed3be61"
+      },
+      "summary": "Derived-class objects must not be copied into base-class objects by value, losing derived state.",
+      "noncompliant_concept": "Passes, assigns, or catches a derived object by value as the base type.",
+      "compliant_concept": "Uses references, pointers, or smart pointers to the base, or clone patterns.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: By-value base parameters that never receive derived objects may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Derived-to-base relationships require class hierarchy and overload resolution."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cppcoreguidelines-slicing",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP51-CPP/DoNotSliceDerivedObjects.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP52-CPP",
+      "id": "OOP52-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Do not delete a polymorphic object without a virtual destructor",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/04.oop52-cpp.md",
+        "sha256": "3e502cd56b4bf1419370c93eb95d6f24fd8b6cfaf90ea5c6bce8aba7ed238a57"
+      },
+      "summary": "Objects of derived type must not be deleted through a base-class pointer unless the base destructor is virtual.",
+      "noncompliant_concept": "Deletes via Base* where Base has a non-virtual destructor and the object is Derived.",
+      "compliant_concept": "Declares the base destructor virtual, or protected and non-virtual to forbid base deletion.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Deletes through base pointers that never point at derived objects would be reported."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Virtual-ness of destructors and dynamic types need class and dataflow information."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-delete-non-virtual-dtor",
+          "clang-tidy:clang-diagnostic-delete-abstract-non-virtual-dtor",
+          "clang-tidy:clang-diagnostic-delete-non-abstract-non-virtual-dtor",
+          "clang-tidy:clang-diagnostic-non-virtual-dtor",
+          "clang-tidy:cppcoreguidelines-virtual-class-destructor",
+          "clangsa:alpha.cplusplus.DeleteWithNonVirtualDtor",
+          "cppcheck:cppcheck-virtualDestructor"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP52-CPP/DoNotDeleteAPolymorphicObjectWithoutAVirtualDestructor.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP53-CPP",
+      "id": "OOP53-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Write constructor member initializers in the canonical order",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/05.oop53-cpp.md",
+        "sha256": "2a2fa97f4a01635c0785e8cba5f2a086866fbc665d089dee72a39e46f10e2b64"
+      },
+      "summary": "Constructor member initializer lists should be written in the actual initialization order, so no initializer reads a not-yet-initialized member.",
+      "noncompliant_concept": "Initializer list order differs from declaration order and one initializer uses a later-declared member.",
+      "compliant_concept": "Orders initializers to match base and member declaration order, avoiding dependencies on later members.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Out-of-order lists without cross-member dependencies are style issues, not defects."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Requires the class's member declaration order, which may live in another file."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:clang-diagnostic-reorder-ctor",
+          "cppcheck:cppcheck-initializerList",
+          "compiler:-Wreorder"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP53-CPP/UseCanonicalOrderForMemberInit.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP54-CPP",
+      "id": "OOP54-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Gracefully handle self-copy assignment",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop54-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/06.oop54-cpp.md",
+        "sha256": "68fe48aa932a81dc7511489940ba13e9c1520641c0e79febe9229ef3ea2a69eb"
+      },
+      "summary": "User-provided copy assignment operators must leave both operands valid and unchanged when an object is assigned to itself.",
+      "noncompliant_concept": "Copy assignment deletes owned resources before copying from the source, breaking self-assignment.",
+      "compliant_concept": "Uses copy-and-swap, or checks for this == &rhs, or copies before releasing.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Operators safe by construction (copy-then-swap without explicit check) may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Unsafe release-then-copy ordering through helper functions requires dataflow."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-unhandled-self-assignment",
+          "clang-tidy:cert-oop54-cpp",
+          "clangsa:cplusplus.SelfAssignment",
+          "cppcheck:cppcheck-operatorEqToSelf"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP54-CPP/GracefullyHandleSelfCopyAssignment.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP55-CPP",
+      "id": "OOP55-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Do not use pointer-to-member operators to access nonexistent members",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop55-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/07.oop55-cpp.md",
+        "sha256": "9a1123fac4864a3b33a2b57fd219ec7a0243a4eed974de812b3342acc905837e"
+      },
+      "summary": "Pointer-to-member operators must only be applied to objects whose dynamic type actually contains the referenced member.",
+      "noncompliant_concept": "Converts a derived-member pointer to a base-member pointer and applies it to a pure base object.",
+      "compliant_concept": "Applies member pointers only to objects of the class containing the member; avoids null member pointers.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Any .* or ->* on downcast member pointers looks similar even when the object type is correct."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Requires dynamic type tracking of objects and member-pointer provenance."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP55-CPP/MemberAccessWithUninitializedStaticPointerToMember.ql",
+          "rules/cpp-cert/codeql/cert/rules/OOP55-CPP/UseOfPointerToMemberToAccessNonexistentMember.ql",
+          "rules/cpp-cert/codeql/cert/rules/OOP55-CPP/UseOfPointerToMemberToAccessUndefinedMember.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP56-CPP",
+      "id": "OOP56-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Honor replacement handler requirements",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop56-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/08.oop56-cpp.md",
+        "sha256": "116a3195847a7c00d50e3e9bf03267c9902cfc96e8efdefb554ddfa770f5f711"
+      },
+      "summary": "Custom new, terminate, and unexpected handlers installed by the program must satisfy their required behaviors.",
+      "noncompliant_concept": "A new_handler returns without freeing memory, or a terminate handler returns to its caller.",
+      "compliant_concept": "Handlers free memory or throw bad_alloc, and terminate handlers end execution without returning.",
+      "cwe": [],
+      "analysis_class": "interprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Handlers that return under conditions where returning is permitted may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Handler identification and behavior analysis span registration and handler bodies across functions."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:bugprone-exception-escape",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP56-CPP/HonorNewReplacementHandlerRequirements.ql",
+          "rules/cpp-cert/codeql/cert/rules/OOP56-CPP/HonorTerminationReplacementHandlerRequirements.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP57-CPP",
+      "id": "OOP57-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Prefer special member functions and overloaded operators to C Standard Library functions",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop57-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/09.oop57-cpp.md",
+        "sha256": "223b6707dd23eb1f35c46400330cf0e80ff778427b00013760e4c47acc4e5722"
+      },
+      "summary": "Prefer copy/compare/initialize via special member functions and operators instead of C byte functions like memcpy, memset, or memcmp on class objects.",
+      "noncompliant_concept": "Uses memset/memcpy/memcmp on non-trivially-copyable or non-standard-layout class objects.",
+      "compliant_concept": "Uses constructors, assignment, and comparison operators for class objects.",
+      "cwe": [],
+      "analysis_class": "type-semantic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Byte functions on trivially copyable PODs are acceptable yet match name-based patterns."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Object triviality and layout depend on resolved types."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-oop57-cpp",
+          "clang-tidy:bugprone-raw-memory-call-on-non-trivial-type",
+          "clang-tidy:bugprone-undefined-memory-manipulation",
+          "clang-tidy:clang-diagnostic-dynamic-class-memaccess",
+          "clang-tidy:clang-diagnostic-nontrivial-memaccess",
+          "cppcheck:cppcheck-memsetClass",
+          "cppcheck:cppcheck-memsetClassReference",
+          "compiler:-Wclass-memaccess"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP57-CPP/PreferSpecialMemberFunctionsAndOverloadedOperatorsToCStandardLibraryFunctions.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "OOP58-CPP",
+      "id": "OOP58-CPP",
+      "language": "cpp",
+      "category": "OOP",
+      "title": "Copy operations must not mutate the source object",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/object-oriented-programming-oop/oop58-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/12.object-oriented-programming-oop/10.oop58-cpp.md",
+        "sha256": "d6f7fe9274c90fbe5e1920b56c4eb39abe9e960c1c49fcc9a06f34d0c099f80d"
+      },
+      "summary": "Copy constructors and copy assignment operators must not modify the observable state of the source object.",
+      "noncompliant_concept": "A copy operation takes a non-const reference and alters the source, e.g., resetting its pointer.",
+      "compliant_concept": "Copy operations accept const references and leave the source unchanged; transfers use move operations.",
+      "cwe": [],
+      "analysis_class": "local-syntactic",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [
+        {
+          "id": "OOP58-CPP-EX0",
+          "summary": "Copy operations of reference-counted types like shared_ptr may update the source's reference count.",
+          "handling": "not-implemented"
+        }
+      ],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Mutation of non-salient bookkeeping such as reference counts would be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Mutation via helper calls or mutable members needs semantic analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clang-tidy:cert-oop58-cpp",
+          "clang-tidy:bugprone-copy-constructor-mutates-argument"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/OOP58-CPP/CopyOperationsMustNotMutateTheSourceObject.ql"
+        ]
+      },
+      "pattern_candidate": true
+    },
+    {
+      "key": "STR50-CPP",
+      "id": "STR50-CPP",
+      "language": "cpp",
+      "category": "STR",
+      "title": "Guarantee that storage for strings has sufficient space for character data and the null terminator",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/characters-and-strings-str/str50-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/02.characters-and-strings-str/2.str50-cpp.md",
+        "sha256": "546eedc4b4375c73c644ceb220884641932e8f8b5f7d27f380a154e4d7c06380"
+      },
+      "summary": "Buffers receiving character data must be large enough for all characters plus the terminating null.",
+      "noncompliant_concept": "Extracts input into a fixed char array via operator>> without a width limit.",
+      "compliant_concept": "Reads into std::string, or sets stream width or checks lengths before copying.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Extraction into char arrays preceded by width() settings elsewhere may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Buffer sizes and data lengths flowing through variables need dataflow."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:security.insecureAPI.gets",
+          "clangsa:alpha.unix.cstring.OutOfBounds",
+          "clangsa:unix.cstring.BadSizeArg",
+          "clang-tidy:bugprone-not-null-terminated-result",
+          "cppcheck:cppcheck-bufferAccessOutOfBounds",
+          "manual-review"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/STR50-CPP/BasicStringMayNotBeNullTerminatedCert.ql",
+          "rules/cpp-cert/codeql/cert/rules/STR50-CPP/OperationMayNotNullTerminateCStyleStringCert.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "STR51-CPP",
+      "id": "STR51-CPP",
+      "language": "cpp",
+      "category": "STR",
+      "title": "Do not attempt to create a std::string from a null pointer",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/characters-and-strings-str/str51-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/02.characters-and-strings-str/5.str51-cpp.md",
+        "sha256": "1ea80a3aeea2e418d021db35b232395146e71ac07504b4db86c8bd5dbefbc7c5"
+      },
+      "summary": "std::basic_string objects must not be constructed or assigned from a null character pointer.",
+      "noncompliant_concept": "Initializes std::string from getenv or another possibly-null pointer without checking.",
+      "compliant_concept": "Checks for null before constructing, or substitutes an empty string.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "PARTIAL",
+      "confidence": "HIGH",
+      "exceptions": [],
+      "false_positive_risks": [
+        "None expected; getenv can return null for any name."
+      ],
+      "false_negative_risks": [
+        "Null pointers reaching std::string construction through variables or functions other than getenv are not tracked.",
+        "Engines do not preprocess: code produced by macro expansion, conditional compilation, or code generation is not analyzed."
+      ],
+      "implementation": {
+        "semgrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.str51-cpp.string-from-null-pointer"
+        ],
+        "opengrep_rule_ids": [
+          "appsec-review.sei-cert.cpp.str51-cpp.string-from-null-pointer"
+        ],
+        "engine_versions": {
+          "semgrep": "1.178.0",
+          "opengrep": "1.30.2"
+        },
+        "rule_files": [
+          "rules/cpp/str51-cpp.yml"
+        ],
+        "fixtures": [
+          "fixtures/cpp/str51-cpp.cpp"
+        ],
+        "coverage_note": "std::string constructed directly from a null literal or an unchecked getenv() result."
+      },
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.StringChecker",
+          "clang-tidy:bugprone-string-constructor",
+          "clang-tidy:bugprone-stringview-nullptr",
+          "cppcheck:cppcheck-nullPointer"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/STR51-CPP/DoNotAttemptToCreateAStringFromANullPointer.ql"
+        ]
+      }
+    },
+    {
+      "key": "STR52-CPP",
+      "id": "STR52-CPP",
+      "language": "cpp",
+      "category": "STR",
+      "title": "Use valid references, pointers, and iterators to reference elements of a basic_string",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/characters-and-strings-str/str52-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/02.characters-and-strings-str/3.str52-cpp.md",
+        "sha256": "30ec4880a48c880437dec724eedb61e22aca05672dbd465b890ac53a9efbbba0"
+      },
+      "summary": "References, pointers, and iterators into a basic_string must not be used after string operations that may invalidate them.",
+      "noncompliant_concept": "Keeps an iterator or c_str()/data() pointer across a modifying string call, then uses it.",
+      "compliant_concept": "Re-obtains iterators or pointers after modifying the string, using returned iterators where available.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Non-invalidating operations in between may be flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Invalidation in called functions or via aliased strings is missed."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "clangsa:cplusplus.InnerPointer",
+          "cppcheck:cppcheck-invalidContainer",
+          "clang-tidy:clang-diagnostic-dangling-gsl",
+          "clang-tidy:clang-diagnostic-lifetime-safety-invalidation"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/STR52-CPP/UseValidReferencesForElementsOfString.ql"
+        ]
+      },
+      "pattern_candidate": false
+    },
+    {
+      "key": "STR53-CPP",
+      "id": "STR53-CPP",
+      "language": "cpp",
+      "category": "STR",
+      "title": "Range check element access",
+      "source": {
+        "url": "https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/characters-and-strings-str/str53-cpp",
+        "retrieved": "2026-10-10",
+        "revision": "98706f871dd6fc6494250cb24addd08302ca11ea",
+        "path": "content/5.sei-cert-cpp-coding-standard/3.rules/02.characters-and-strings-str/4.str53-cpp.md",
+        "sha256": "a5c5709f80e0393895b87e4c16e5a0b3aecc90c242771f64e3234066eb0cc0b4"
+      },
+      "summary": "Position arguments to string element accessors and member functions must be within range; unchecked accessors need prior validation.",
+      "noncompliant_concept": "Uses operator[], front(), or back() with unchecked indices or on a possibly empty string.",
+      "compliant_concept": "Uses at() with exception handling, or validates positions against size() first.",
+      "cwe": [],
+      "analysis_class": "intraprocedural-dataflow",
+      "status": "REQUIRES_CODEQL",
+      "confidence": "MEDIUM",
+      "exceptions": [],
+      "false_positive_risks": [
+        "If implemented as a syntax-only rule: Indexes bounded by loop conditions or prior checks are still flagged."
+      ],
+      "false_negative_risks": [
+        "This rule pack contains no detection for this rule; an absence of findings is not evidence of compliance.",
+        "Syntax-only detection limit: Index values and string sizes from callers or input need range analysis."
+      ],
+      "implementation": null,
+      "delegation": {
+        "recommended": [
+          "cppcheck:cppcheck-containerOutOfBounds",
+          "cppcheck:cppcheck-containerOutOfBoundsIndexExpression",
+          "clang-tidy:cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
+        ],
+        "codeql_queries": [
+          "rules/cpp-cert/codeql/cert/rules/STR53-CPP/RangeCheckStringElementAccess.ql"
+        ]
+      },
+      "pattern_candidate": false
+    }
+  ]
+}

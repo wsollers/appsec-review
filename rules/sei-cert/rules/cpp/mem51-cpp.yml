@@ -1,0 +1,99 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.mem51-cpp.array-new-scalar-delete
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      MEM51-CPP: storage obtained with array new[] is released with scalar delete. Release it
+      with delete[], or hold it in std::unique_ptr<T[]> or a container.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: MEM51-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem51-cpp
+      cwe: [CWE-762]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-language]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.exp51-array-scalar-delete, whose CERT mapping was corrected: the official MEM51-CPP page owns the array new[]/delete pairing case, while EXP51-CPP concerns deleting arrays through a pointer of a different static type. Matches same-function allocation and scalar deletion through the same variable, and std::unique_ptr<T> (non-array) adopting new T[].
+      license: MIT
+    pattern-either:
+      - pattern: |
+          $T $PTR = new $U[$N];
+          ...
+          delete $PTR;
+      - pattern: |
+          $T $PTR = new $U[$N]{...};
+          ...
+          delete $PTR;
+      - pattern: |
+          $PTR = new $U[$N];
+          ...
+          delete $PTR;
+      - patterns:
+          - pattern-either:
+              - pattern: std::unique_ptr<$T> $P(new $U[$N]);
+              - pattern: std::unique_ptr<$T>(new $U[$N])
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^[^\[]*$
+
+  - id: appsec-review.sei-cert.cpp.mem51-cpp.allocator-deallocator-mismatch
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      MEM51-CPP: memory is released with a deallocation function that does not match how it was
+      allocated (malloc-family with delete, or new with free). Pair each allocation with its
+      matching deallocation.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: MEM51-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/memory-management-mem/mem51-cpp
+      cwe: [CWE-762]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-language, c-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches same-function malloc/calloc/realloc results released with delete or delete[], and new or new[] results released with free. Pairings across functions require ownership analysis.
+      license: MIT
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  $T $PTR = ($C) $ALLOC(...);
+                  ...
+                  delete $PTR;
+              - pattern: |
+                  $T $PTR = static_cast<$C>($ALLOC(...));
+                  ...
+                  delete $PTR;
+              - pattern: |
+                  $T $PTR = static_cast<$C>(std::$ALLOC(...));
+                  ...
+                  delete $PTR;
+          - metavariable-regex:
+              metavariable: $ALLOC
+              regex: ^(malloc|calloc|realloc|aligned_alloc)$
+      - pattern: |
+          $T $PTR = new $U;
+          ...
+          free($PTR);
+      - pattern: |
+          $T $PTR = new $U(...);
+          ...
+          free($PTR);
+      - pattern: |
+          $T $PTR = new $U;
+          ...
+          std::free($PTR);
+      - pattern: |
+          $T $PTR = new $U(...);
+          ...
+          std::free($PTR);

@@ -1,0 +1,34 @@
+rules:
+  - id: appsec-review.sei-cert.c.con36-c.condition-wait-outside-loop
+    languages: [c]
+    severity: ERROR
+    message: >-
+      CON36-C: condition-variable waits can return spuriously. Call $WAIT inside a loop that
+      re-tests the predicate after every wake-up.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: CON36-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/concurrency-con/con36-c
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix-threads, c11-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Reports a wait call not lexically inside a while, do-while, or for loop. A loop that
+        does not re-test the predicate is not distinguished from a correct loop.
+      license: MIT
+    patterns:
+      - pattern: $WAIT(...)
+      - metavariable-regex:
+          metavariable: $WAIT
+          regex: ^(pthread_cond_wait|pthread_cond_timedwait|cnd_wait|cnd_timedwait)$
+      - pattern-not-inside: |
+          while (...) { ... }
+      - pattern-not-inside: |
+          do { ... } while (...);
+      - pattern-not-inside: |
+          for (...) { ... }

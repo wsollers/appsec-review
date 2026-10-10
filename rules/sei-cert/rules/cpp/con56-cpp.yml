@@ -1,0 +1,45 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.con56-cpp.relock-owned-nonrecursive-mutex
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      CON56-CPP: non-recursive mutex $MUTEX is locked again by the thread that already owns it,
+      which has undefined behavior. Unlock it first, or restructure so it is acquired once.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: CON56-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con56-cpp
+      cwe: [CWE-667]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.con56-repeat-nonrecursive-lock. The original rule could span from a namespace-scope declaration across several functions; this version requires the lock and the relock to be in the same function body, with no intervening unlock.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              std::$KIND $MUTEX;
+              ...
+      - metavariable-regex:
+          metavariable: $KIND
+          regex: ^(mutex|timed_mutex|shared_mutex|shared_timed_mutex)$
+      - pattern-inside: |
+          $R $F(...) { ... }
+      - pattern: |
+          $MUTEX.lock();
+          ...
+          $MUTEX.$RELOCK(...);
+      - metavariable-regex:
+          metavariable: $RELOCK
+          regex: ^(lock|try_lock|try_lock_for|try_lock_until)$
+      - pattern-not: |
+          $MUTEX.lock();
+          ...
+          $MUTEX.unlock();
+          ...
+          $MUTEX.$RELOCK(...);

@@ -1,0 +1,24 @@
+rules:
+  - id: appsec-review.sei-cert.c.pos47-c.asynchronous-cancellation
+    languages: [c]
+    severity: ERROR
+    message: >-
+      POS47-C: asynchronous cancellation can stop a thread in the middle of any operation,
+      including inside the C library. Keep the default deferred cancellation type.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: POS47-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/posix-pos/pos47-c
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches pthread_setcanceltype() with the PTHREAD_CANCEL_ASYNCHRONOUS constant. A type
+        value passed through a variable is not resolved.
+      license: MIT
+    pattern: pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, $OLD)

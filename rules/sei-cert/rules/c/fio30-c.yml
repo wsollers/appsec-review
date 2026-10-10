@@ -1,0 +1,74 @@
+rules:
+  - id: appsec-review.sei-cert.c.fio30-c.nonliteral-format-without-arguments
+    languages: [c]
+    severity: WARNING
+    message: >-
+      FIO30-C: the format argument is not a string literal and no data arguments follow, so any conversion
+      specifiers in the data are interpreted. Use a literal format such as "%s".
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: FIO30-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/input-output-fio/fio30-c
+      cwe: [CWE-134]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [c-standard-library, posix-syslog]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Flags printf-family and syslog calls whose format is a non-literal expression with no trailing data
+        arguments, the shape in which externally supplied text becomes the format. Whether the expression
+        is actually influenced by user input is not established.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: printf($FMT)
+      - pattern: fprintf($STREAM, $FMT)
+      - pattern: sprintf($BUF, $FMT)
+      - pattern: snprintf($BUF, $SIZE, $FMT)
+      - pattern: syslog($PRIORITY, $FMT)
+    - pattern-not: printf("...")
+    - pattern-not: fprintf($STREAM, "...")
+    - pattern-not: sprintf($BUF, "...")
+    - pattern-not: snprintf($BUF, $SIZE, "...")
+    - pattern-not: syslog($PRIORITY, "...")
+  - id: appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      FIO30-C (applies to C++): the format argument is not a string literal and no data arguments follow.
+      Use a literal format such as "%s".
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: FIO30-C
+      cert_standard: c
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/input-output-fio/fio30-c
+      cwe: [CWE-134]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [cpp-standard-library, posix-syslog]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        C++ form of the C rule, which the CERT C++ standard lists as applying to C++. Covers unqualified
+        and std::-qualified printf-family calls and syslog.
+      license: MIT
+    patterns:
+    - pattern-either:
+      - pattern: printf($FMT)
+      - pattern: std::printf($FMT)
+      - pattern: fprintf($STREAM, $FMT)
+      - pattern: std::fprintf($STREAM, $FMT)
+      - pattern: snprintf($BUF, $SIZE, $FMT)
+      - pattern: std::snprintf($BUF, $SIZE, $FMT)
+      - pattern: syslog($PRIORITY, $FMT)
+    - pattern-not: printf("...")
+    - pattern-not: std::printf("...")
+    - pattern-not: fprintf($STREAM, "...")
+    - pattern-not: std::fprintf($STREAM, "...")
+    - pattern-not: snprintf($BUF, $SIZE, "...")
+    - pattern-not: std::snprintf($BUF, $SIZE, "...")
+    - pattern-not: syslog($PRIORITY, "...")
