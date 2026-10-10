@@ -523,9 +523,10 @@ def test_semantic_paths_semgrep_patterns_and_history_hotspots_feed_the_score(tmp
     snapshot = source_fingerprint(target)
     handler = "go/server/handler.go"
     # Two alternative code flows for the same source and sink: only the shortest is kept.
-    long_flow = [_step(handler, 18, 32, target, 0, 1), _step(handler, 22, 3, target, 0, 2),
-                 _step(handler, 22, 15, target, 0, 3)]
-    short_flow = [_step(handler, 18, 32, target, 1, 4), _step(handler, 22, 15, target, 1, 5)]
+    long_flow = [_step(handler, 18, 32, target, 0, 1), _step(handler, 19, 3, target, 0, 2),
+                 _step(handler, 22, 3, target, 0, 3), _step(handler, 22, 15, target, 0, 4)]
+    short_flow = [_step(handler, 18, 32, target, 1, 5), _step("go/store/store.go", 15, 3, target, 1, 6),
+                  _step(handler, 22, 15, target, 1, 7)]
     codeql_manifest = _shard(run_root, snapshot, target, "observations", {"job": "job_codeql_analysis"}, [
         ({"producer": "codeql", "rule_id": "go/command-injection", "query_identity": "q" * 64, "language": "go",
           "message": "Command built from user input", "flows": [*long_flow, *short_flow]}, {"path": handler,
@@ -554,11 +555,12 @@ def test_semantic_paths_semgrep_patterns_and_history_hotspots_feed_the_score(tmp
         "dispositions": [{"tool_id": "tool-semgrep", "terminal_status": "SUCCEEDED", "gaps": []}]})
     _publish_handoff(run_root, "job_evidence_collection", {"evidence_publication.publish_handoff": {
         "artifact": evidence, "index_manifest": semgrep_manifest}})
-    signals = _artifact(run_root, run_root / "fixture" / "history-signals.json", {"files": {
-        "go/store/store.go": {"attention": {"rank": 1, "score": 0.9}},
-        "web/src/util.js": {"attention": {"rank": 2, "score": 0.4}}}})
+    signals = _artifact(run_root, run_root / "fixture" / "history-signals.json", {
+        "schema": "appsec-review/source-history-signals/2", "symbols": {}, "files": {
+            "go/store/store.go": {"sii": {"rank": 1, "tier": 1, "score": 90.0}},
+            "web/src/util.js": {"sii": {"rank": 2, "tier": 2, "score": 40.0}}}})
     history = _artifact(run_root, run_root / "fixture" / "source-history.json", {
-        "schema": "appsec-review/source-history-analysis/1", "decision": "SUCCEEDED", "binding": "exact",
+        "schema": "appsec-review/source-history-analysis/2", "decision": "SUCCEEDED", "binding": "exact",
         "ranking": {"signals": signals}, "gaps": []})
     _publish_handoff(run_root, "job_source_history_analysis", {"publish.publish_handoff": {"artifact": history}})
 
@@ -570,7 +572,9 @@ def test_semantic_paths_semgrep_patterns_and_history_hotspots_feed_the_score(tmp
     assert any("CodeQL java scope FAILED" in gap for gap in document["gaps"])
     semantic = json.loads((run_root / document["artifacts"]["semantic"]["path"]).read_text())
     [path] = semantic["semantic_paths"]
-    assert path["steps"] == 2 and path["basis"] == "verified_semantic_path"
+    assert path["steps"] == 3 and path["basis"] == "verified_semantic_path"
+    assert [step["location"]["start_line"] for step in path["flow_steps"]] == [18, 15, 22]
+    assert path["flow_steps"][1]["location"]["path"] == "go/store/store.go"
     assert path["source_function"].endswith("Register.<callback:mux.HandleFunc>@16:25")
     [pattern] = semantic["semgrep_signals"]
     assert pattern["category"] == "privilege_shift" and pattern["producer"] == "semgrep"
@@ -579,13 +583,15 @@ def test_semantic_paths_semgrep_patterns_and_history_hotspots_feed_the_score(tmp
     functions = {item["name"]: item for item in ranking["functions"]}
     handler_item = functions["Register.<callback:mux.HandleFunc>"]
     assert handler_item["features"]["semantic_path"] == 1 and path["signal_id"] in handler_item["evidence"]
+    assert functions["DB.Save"]["features"]["semantic_path"] == 1
     assert functions["UserController.importUsers"]["features"]["semantic_path"] is None  # Java CodeQL failed
     assert functions["UserController.importUsers"]["features"]["privilege_shift"] == 2  # Tree-sitter + Semgrep
     files = {item["path"]: item for item in ranking["files"]}
-    assert files["go/store/store.go"]["features"]["history_hotspot"] == 0.9
-    assert files["native/src/codec.c"]["features"]["history_hotspot"] == 0.0  # exact binding, no in-window change
-    # Only Go has CodeQL coverage: four Go functions have no path (0) and the handler has one.
-    assert handler_item["percentiles"]["semantic_path"] == 0.9
+    assert files["go/store/store.go"]["features"]["history_hotspot"] == 90.0
+    assert files["go/store/store.go"]["features"]["semantic_path"] == 1
+    assert files["native/src/codec.c"]["features"]["history_hotspot"] is None
+    # Only Go has CodeQL coverage: the handler and store function share the positive path percentile.
+    assert handler_item["percentiles"]["semantic_path"] == 0.8
     weights = ranking["weights"]
     expected = sum(weights[name] * value for name, value in handler_item["percentiles"].items()) / sum(
         weights[name] for name in handler_item["percentiles"])
@@ -595,3 +601,8 @@ def test_semantic_paths_semgrep_patterns_and_history_hotspots_feed_the_score(tmp
     core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
     hits = core.search(query="semantic_path", indexes=("priority",), kinds=("review_signal",))["results"]
     assert hits and hits[0]["payload"]["basis"] == "verified_semantic_path"
+    steps = core.find(kind="review_flow_step", indexes=("priority",))["results"]
+    assert len(steps) == 3
+    assert core.find(kind="review_context_file", indexes=("priority",))["results"]
+    graph = core.trace(identity=hits[0]["identity"], relations=("CONTAINS", "FLOWS_TO"), depth=3)["results"]
+    assert sum(edge["kind"] == "FLOWS_TO" for edge in graph) >= 2

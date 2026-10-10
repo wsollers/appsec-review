@@ -79,7 +79,7 @@ def semgrep_signals(run_root: Path, repository_root: Path) -> dict[str, Any]:
             "handoff_sha256": handoff_sha, "gaps": gaps}
 
 
-def codeql_paths(run_root: Path, *, limit: int) -> dict[str, Any]:
+def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[str, Any]:
     if not has_handoff(run_root, "job_codeql_analysis"):
         return {"status": "UNAVAILABLE", "paths": [], "languages": {},
                 "gaps": ["semantic_paths_unavailable: CodeQL analysis has no accepted handoff"]}
@@ -105,13 +105,16 @@ def codeql_paths(run_root: Path, *, limit: int) -> dict[str, Any]:
         flows = [item for item in payload.get("flows", ()) if isinstance(item, Mapping)]
         groups: dict[Any, list[Mapping[str, Any]]] = {}
         for flow in flows:
-            groups.setdefault(flow.get("code_flow", "merged"), []).append(flow)
-        if "merged" in groups and len(flows) > 1:
+            groups.setdefault((flow.get("code_flow"), flow.get("thread_flow")), []).append(flow)
+        if any(None in key for key in groups) and len(flows) > 1:
             merged_flows += 1
-        for steps in groups.values():
+        for flow_key, steps in groups.items():
             mapped = [step for step in sorted(steps, key=lambda item: int(item.get("ordinal", 0)))
                       if isinstance(step.get("location"), Mapping) and step["location"].get("path")]
             if len(mapped) < 2 or len(mapped) != len(steps):
+                continue
+            if len(mapped) > step_limit:
+                gaps.append(f"semantic_path_step_bound_reached: {payload.get('rule_id')} has {len(mapped)} steps")
                 continue
             source, sink = mapped[0]["location"], mapped[-1]["location"]
             key = (str(payload.get("rule_id")), f"{source['path']}:{source['start_line']}:{source['start_column']}",
@@ -120,6 +123,11 @@ def codeql_paths(run_root: Path, *, limit: int) -> dict[str, Any]:
                 "rule_id": str(payload.get("rule_id")), "rules": str(payload.get("query_identity")),
                 "producer": "codeql", "basis": SEMANTIC, "category": "semantic_path", "surface": "dataflow",
                 "language": payload.get("language"), "observation": entity["identity"], "steps": len(mapped),
+                "code_flow": flow_key[0], "thread_flow": flow_key[1],
+                "flow_steps": [{"ordinal": index, "message": str(step.get("message") or "")[:256],
+                                "location": {name: step["location"].get(name) for name in (
+                                    "path", "file_sha256", "start_line", "end_line", "start_column", "end_column")}}
+                               for index, step in enumerate(mapped)],
                 "source": {key_: source.get(key_) for key_ in ("path", "file_sha256", "start_line", "end_line",
                                                                "start_column", "end_column")},
                 "sink": {key_: sink.get(key_) for key_ in ("path", "file_sha256", "start_line", "end_line",
@@ -139,6 +147,7 @@ def codeql_paths(run_root: Path, *, limit: int) -> dict[str, Any]:
         paths = paths[:limit]
     for item in paths:
         item["path_id"] = "path-" + hashlib.sha256(json.dumps(
-            [item["rule_id"], item["source"], item["sink"]], sort_keys=True).encode()).hexdigest()[:24]
+            [item["rule_id"], item["source"], item["sink"], item["code_flow"], item["thread_flow"],
+             item["observation"]], sort_keys=True).encode()).hexdigest()[:24]
     return {"status": "PARTIAL" if gaps else "SUCCEEDED", "paths": paths, "languages": languages,
             "handoff_sha256": handoff_sha, "gaps": gaps}

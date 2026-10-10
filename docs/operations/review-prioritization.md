@@ -12,8 +12,8 @@ The job runs inside Dagster's `wave1_review` after CodeQL and OWASP control asse
 security tagging. It is also the standalone Dagster job `review_prioritization`; launch it with the
 `appsec/application_run_id` tag of a run that already has accepted intake, catalog, and Tree-sitter
 handoffs. It needs no container image: it runs in the application process over accepted artifacts
-and hash-verified target bytes. It is not part of the direct CLI `start`/`resume` graph, which does
-not produce Tree-sitter ASTs.
+and hash-verified target bytes. The direct CLI `start`/`resume` graph runs Tree-sitter first and
+then this job after CodeQL.
 
 Required inputs are the accepted intake, catalog, and `job_tree_sitter_ast` handoffs. History,
 Semgrep (evidence collection), and CodeQL handoffs are optional. When one is absent or failed, the
@@ -32,7 +32,7 @@ All settings live under `[jobs.job_review_prioritization.settings]` in `appsec-r
 |---|---|---|
 | `max_files`, `max_file_bytes`, `max_functions` | 50000, 2 MiB, 500000 | bounds on scored files and units; reaching one is a named gap |
 | `max_signals_per_file` | 200 | stored signal and suppression records per file (counts stay complete) |
-| `max_import_records`, `max_semantic_paths` | 500000, 5000 | import outcomes resolved; shortest CodeQL paths kept |
+| `max_import_records`, `max_semantic_paths`, `max_flow_steps_per_path` | 500000, 5000, 128 | import outcomes resolved; shortest bounded CodeQL paths and their steps kept |
 | `cyclomatic_thresholds`, `scored_threshold` | `[10, 15]`, 15 | thresholds for "functions above threshold"; the score uses `scored_threshold` |
 | `count_error_propagation` | `true` | count Rust `?` and Go `if err != nil { return }` as decisions (both or neither) |
 | `min_edge_confidence` | 0.8 | lowest import-resolution confidence counted in Ca/Ce |
@@ -40,7 +40,7 @@ All settings live under `[jobs.job_review_prioritization.settings]` in `appsec-r
 | `state_mutation_min_operations` | 3 | multi-mutation threshold per unit |
 | `normalization_population` | `"run"` | `"language"` normalizes each language separately |
 | `[…settings.priority_weights]` | see design | non-negative weight per feature; at least one positive; unknown names are rejected |
-| `[…settings.index]` | 25% of files, 10% of functions, cap 5000 | `*_top_count > 0` selects an exact count instead of the fraction; `max_evidence_links_per_item` bounds evidence links |
+| `[…settings.index]` | 25% of files, 10% of functions, cap 5000 | `*_top_count > 0` selects an exact count instead of the fraction; `max_evidence_links_per_item` bounds evidence links and `max_graph_neighbors` bounds one-hop import context (default 5000) |
 | `[…settings.sources]` | all `true` | `false` skips consuming history, Semgrep, or CodeQL by policy (a named gap) |
 
 Validation rejects out-of-range bounds, unsorted or duplicate thresholds, a `scored_threshold` that
@@ -60,6 +60,7 @@ is not listed, unknown features, negative weights, and a configuration without a
 Use the generic retrieval tools; there is no prioritization-specific tool. In Python:
 
 ```python
+from pathlib import Path
 from appsec_review.retrieval import RetrievalCore
 
 core = RetrievalCore(Path("runs"), "2026-10-10-0001")
@@ -72,6 +73,9 @@ core.trace(identity="asr:priority_item:<sha256>", relations=("DERIVED_FROM",), d
 # Privilege-shift and semantic-path evidence across the indexed items.
 core.search(query="privilege_shift insecure_verification", indexes=("priority",), kinds=("review_signal",))
 core.search(query="semantic_path", indexes=("priority",), kinds=("review_signal",))
+# Given a semantic-path review_signal identity, inspect the ordered graph and exact step locations.
+core.trace(identity="asr:review_signal:<sha256>", relations=("CONTAINS", "FLOWS_TO"), depth=3)
+core.find(kind="review_flow_step", indexes=("priority",), limit=20)
 # What was not covered.
 core.coverage(indexes=("priority",))
 ```

@@ -327,6 +327,9 @@ def test_churn_facts(changes: list[Mapping[str, Any]], roles: PathRoles, roots: 
         unassociated[1] += deleted
     associated_tests = {item for values in associated.values() for item in values}
     associated_churn = sum(sum(tests[item]) for item in associated_tests)
+    contract_tests = {item for path, values in associated.items() if roles.role(path) == "contract"
+                      for item in values}
+    associated_contract_churn = sum(sum(tests[item]) for item in contract_tests)
     production_churn = totals["production_added"] + totals["production_deleted"]
     contract_churn = totals["contract_added"] + totals["contract_deleted"]
     untested_files = sorted(path for path in production if not associated.get(path))
@@ -336,12 +339,13 @@ def test_churn_facts(changes: list[Mapping[str, Any]], roles: PathRoles, roots: 
         "production_added": totals["production_added"], "production_deleted": totals["production_deleted"],
         "contract_added": totals["contract_added"], "contract_deleted": totals["contract_deleted"],
         "test_added": totals["test_added"], "test_deleted": totals["test_deleted"],
-        "associated_test_churn": associated_churn, "unassociated_test_added": unassociated[0],
+        "associated_test_churn": associated_churn, "associated_contract_test_churn": associated_contract_churn,
+        "unassociated_test_added": unassociated[0],
         "unassociated_test_deleted": unassociated[1], "association_rule_counts": dict(sorted(rule_counts.items())),
         "ambiguous_test_files": ambiguous[:20], "ambiguous_association_count": len(ambiguous),
         "untested_production_files": untested_files[:20],
         "untested_production": production_churn >= minimum and associated_churn == 0,
-        "untested_contract": contract_churn > 0 and totals["test_added"] + totals["test_deleted"] == 0,
+        "untested_contract": contract_churn > 0 and associated_contract_churn == 0,
     }
 
 

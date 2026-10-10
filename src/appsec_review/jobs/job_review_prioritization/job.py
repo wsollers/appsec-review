@@ -49,11 +49,13 @@ TOPOLOGY: Mapping[str, tuple[str, ...]] = {
 INT_SETTINGS = {
     "max_files": (1, 1_000_000), "max_file_bytes": (1, 64 * 1024 * 1024), "max_functions": (1, 5_000_000),
     "max_signals_per_file": (1, 100_000), "max_import_records": (1, 5_000_000), "max_semantic_paths": (0, 1_000_000),
+    "max_flow_steps_per_path": (2, 10_000),
     "custom_parsing_min_operations": (1, 100_000), "state_mutation_min_operations": (1, 100_000),
     "scored_threshold": (1, 10_000),
 }
 INDEX_SETTINGS = {"file_top_fraction": float, "file_top_count": int, "function_top_fraction": float,
-                  "function_top_count": int, "max_indexed_items": int, "max_evidence_links_per_item": int}
+                  "function_top_count": int, "max_indexed_items": int, "max_evidence_links_per_item": int,
+                  "max_graph_neighbors": int}
 # Catalog language -> grammar for languages this batch scores (".tsx" files route to the TSX grammar).
 SCORED_LANGUAGES = {"C": "c", "C++": "cpp", "C/C++": "cpp", "Java": "java", "C#": "csharp", "Go": "go",
                     "JavaScript": "javascript", "TypeScript": "typescript", "Rust": "rust", "PHP": "php"}
@@ -394,7 +396,8 @@ def build_job() -> Job:
         else:
             semgrep = {"status": "SKIPPED_POLICY", "signals": [], "gaps": ["semgrep_review_signals_disabled"]}
         if settings["sources"]["codeql"]:
-            codeql = codeql_paths(unit.job.run_root, limit=int(settings["max_semantic_paths"]))
+            codeql = codeql_paths(unit.job.run_root, limit=int(settings["max_semantic_paths"]),
+                                  step_limit=int(settings["max_flow_steps_per_path"]))
         else:
             codeql = {"status": "SKIPPED_POLICY", "paths": [], "languages": {}, "gaps": ["semantic_paths_disabled"]}
         gaps.extend([*semgrep["gaps"], *codeql["gaps"]])
@@ -411,11 +414,16 @@ def build_job() -> Job:
             signals.append(item)
         paths = []
         for item in codeql["paths"]:
-            ends = [item["source"], item["sink"]]
+            ends = [step["location"] for step in item["flow_steps"]]
             if any(end["path"] not in files or end.get("file_sha256") not in {None, files[end["path"]]["sha256"]}
                    for end in ends):
                 gaps.append(f"semantic path {item['path_id']} is not bound to accepted files")
                 continue
+            item["flow_functions"] = list(dict.fromkeys(
+                function_id for step in item["flow_steps"]
+                if (function_id := _innermost(
+                    facts.get(step["location"]["path"], {}).get("units", []),
+                    int(step["location"]["start_line"]))) is not None))
             item["source_function"] = _innermost(facts.get(item["source"]["path"], {}).get("units", []),
                                                  int(item["source"]["start_line"]))
             item["sink_function"] = _innermost(facts.get(item["sink"]["path"], {}).get("units", []),
@@ -430,22 +438,27 @@ def build_job() -> Job:
                 "codeql_status": codeql["status"], "signal_count": len(signals), "path_count": len(paths),
                 "gaps": gaps, "terminal_status": _status(gaps)}
 
-    def history_values(unit: UnitContext, settings: Mapping[str, Any]) -> tuple[dict[str, float | None], list[str], str]:
+    def history_values(unit: UnitContext, settings: Mapping[str, Any]) -> tuple[dict[str, Any], list[str], str]:
         if not settings["sources"]["history"]:
-            return {}, ["history_hotspots_disabled"], "SKIPPED_POLICY"
+            return {"files": {}, "symbols": {}}, ["history_hotspots_disabled"], "SKIPPED_POLICY"
         if not has_handoff(unit.job.run_root, "job_source_history_analysis"):
-            return {}, ["history_hotspots_unavailable: source history analysis has no accepted handoff"], "UNAVAILABLE"
+            return {"files": {}, "symbols": {}}, ["history_hotspots_unavailable: source history analysis has no accepted handoff"], "UNAVAILABLE"
         from appsec_review.jobs.job_source_history_analysis import load_accepted_history
         history = load_accepted_history(unit.job.run_root) or {}
         decision = str(history.get("decision"))
         signals_identity = history.get("ranking", {}).get("signals")
         if not signals_identity:
-            return {}, [f"history_hotspots_unavailable: history decision {decision}"], "UNAVAILABLE"
+            return {"files": {}, "symbols": {}}, [f"history_hotspots_unavailable: history decision {decision}"], "UNAVAILABLE"
         document = read_json(unit.job.run_root, signals_identity)
-        values: dict[str, float | None] = {}
-        for path, value in document.get("files", {}).items():
-            attention = value.get("attention") or {}
-            values[path] = float(attention.get("score", 0.0)) if attention else 0.0
+        if document.get("schema") != "appsec-review/source-history-signals/2":
+            raise ValueError("accepted history signals use an unsupported SII schema")
+        values = {
+            "files": {path: float(value["sii"]["score"]) for path, value in document.get("files", {}).items()
+                      if value.get("sii")},
+            "symbols": {(value["path"], int(value["start_byte"]), int(value["end_byte"])):
+                        float(value["sii"]["score"])
+                        for value in document.get("symbols", {}).values() if value.get("sii")},
+        }
         status = "EXACT" if history.get("binding") == "exact" else "PARTIAL"
         gaps = [f"history: {gap}" for gap in history.get("gaps", ())][:20]
         return values, gaps, status
@@ -463,7 +476,7 @@ def build_job() -> Job:
             semgrep_by_file[item["path"]].append(item)
         paths_by_file: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
         for item in semantic["semantic_paths"]:
-            for end in {item["source"]["path"], item["sink"]["path"]}:
+            for end in {step["location"]["path"] for step in item["flow_steps"]}:
                 paths_by_file[end].append(item)
         scored = str(settings["scored_threshold"])
         file_items: list[dict[str, Any]] = []
@@ -472,7 +485,7 @@ def build_job() -> Job:
             coupling = graph["files"].get(path, {})
             semantic_available = CODEQL_LANGUAGES.get(record["language"]) in covered_languages
             if history_status in {"EXACT", "PARTIAL"}:
-                hotspot = history.get(path, 0.0 if history_status == "EXACT" else None)
+                hotspot = history["files"].get(path)
             else:
                 hotspot = None
             inherited = {"afferent_coupling": coupling.get("afferent_coupling"),
@@ -489,9 +502,9 @@ def build_job() -> Job:
                    for name in scoring.SIGNAL_FEATURES},
                 "semantic_path": len(file_paths) if semantic_available else None, **inherited,
             }
-            evidence = [*(item["signal_id"] for item in record["signals"]),
+            evidence = [*(item["signal_id"] for item in file_paths),
+                        *(item["signal_id"] for item in record["signals"]),
                         *(item["signal_id"] for item in semgrep_by_file.get(path, ())),
-                        *(item["signal_id"] for item in file_paths),
                         *(item["signal_id"] for item in record["suppressions"])]
             file_items.append({"item_id": f"file:{path}", "scope": "file", "path": path, "name": path,
                                "language": record["language"], "component_id": record["component_id"],
@@ -502,7 +515,7 @@ def build_job() -> Job:
                 function_id = item["function_id"]
                 semgrep_owned = [signal for signal in semgrep_by_file.get(path, ()) if signal["function_id"] == function_id]
                 owned_paths = [value for value in file_paths
-                               if function_id in {value.get("source_function"), value.get("sink_function")}]
+                               if function_id in value.get("flow_functions", ())]
                 unit_features = {
                     "cyclomatic": item["cyclomatic"], "cognitive": item["cognitive"],
                     "complexity_density": item["complexity_density"],
@@ -512,8 +525,11 @@ def build_job() -> Job:
                        for name in scoring.SIGNAL_FEATURES},
                     "semantic_path": len(owned_paths) if semantic_available else None, **inherited,
                 }
-                links = [*(signal["signal_id"] for signal in record["signals"] if signal["function_id"] == function_id),
-                         *(signal["signal_id"] for signal in semgrep_owned), *(value["signal_id"] for value in owned_paths),
+                unit_features["history_hotspot"] = history["symbols"].get(
+                    (path, int(item["start_byte"]), int(item["end_byte"]))) if history_status in {"EXACT", "PARTIAL"} else None
+                links = [*(value["signal_id"] for value in owned_paths),
+                         *(signal["signal_id"] for signal in record["signals"] if signal["function_id"] == function_id),
+                         *(signal["signal_id"] for signal in semgrep_owned),
                          *(entry["signal_id"] for entry in record["suppressions"] if entry["function_id"] == function_id)]
                 function_items.append({
                     "item_id": f"function:{function_id}", "scope": "function", "path": path, "function_id": function_id,
@@ -638,6 +654,31 @@ def build_job() -> Job:
                 payload = {**record, "authority": "review lead; not a finding"}
                 builder.add_entity(EntityRecord(identity, signal_id, str(record.get("rule_id")), text, payload, location))
                 evidence_ids[signal_id] = identity.value
+                if record.get("category") == "semantic_path":
+                    previous = None
+                    for step in record["flow_steps"]:
+                        point = step["location"]
+                        step_identity = LogicalIdentity.derive(EntityKind.REVIEW_FLOW_STEP, snapshot, {
+                            "path_id": signal_id, "ordinal": step["ordinal"], "source": point,
+                        })
+                        step_location = _line_location(
+                            snapshot, data_of(point["path"]), point["path"], files[point["path"]]["sha256"],
+                            int(point["start_line"]), int(point["end_line"]), "codeql-sarif-flow-step", 1.0,
+                            {"producer": "codeql", "path_id": signal_id, "ordinal": step["ordinal"]})
+                        step_text = (f"flow step {step['ordinal']} of {signal_id} "
+                                     f"{point['path']}:{point['start_line']} {step['message']}")
+                        builder.add_entity(EntityRecord(step_identity, f"{signal_id}:{step['ordinal']}",
+                                                        f"flow step {step['ordinal']}", step_text,
+                                                        {"path_id": signal_id, "ordinal": step["ordinal"],
+                                                         "message": step["message"], "producer": "codeql",
+                                                         "basis": "verified_semantic_path"}, step_location))
+                        builder.add_relation(RelationRecord(RelationKind.CONTAINS, identity.value,
+                                                            step_identity.value, True, 1.0))
+                        if previous is not None:
+                            builder.add_relation(RelationRecord(RelationKind.FLOWS_TO, previous,
+                                                                step_identity.value, True, 1.0,
+                                                                payload={"path_id": signal_id}))
+                        previous = step_identity.value
                 return identity.value
 
             for item in [*selected_files, *selected_functions]:
@@ -673,14 +714,54 @@ def build_job() -> Job:
                 if parent is not None:
                     builder.add_relation(RelationRecord(RelationKind.CONTAINS, parent, entity_ids[item["item_id"]],
                                                         True, 1.0))
-            for edge in graph["edges"]:
-                left, right = entity_ids.get(f"file:{edge['from']}"), entity_ids.get(f"file:{edge['to']}")
-                if left is not None and right is not None:
-                    exact = float(edge["confidence"]) >= 1.0
-                    builder.add_relation(RelationRecord(
-                        RelationKind.DEPENDS_ON, left, right, exact, float(edge["confidence"]),
-                        None if exact else f"import resolved by {edge['method']}",
-                        {"method": edge["method"], "line": edge["line"]}))
+            selected_paths = {item["path"] for item in [*selected_files, *selected_functions]}
+            context_ids: dict[str, str] = {}
+            graph_neighbor_limit = int(settings["index"]["max_graph_neighbors"])
+
+            def file_node(file_path: str) -> str | None:
+                selected = entity_ids.get(f"file:{file_path}")
+                if selected is not None:
+                    return selected
+                if file_path in context_ids:
+                    return context_ids[file_path]
+                if len(context_ids) >= graph_neighbor_limit:
+                    return None
+                info = files[file_path]
+                file_bytes = data_of(file_path)
+                identity = LogicalIdentity.derive(EntityKind.REVIEW_CONTEXT_FILE, snapshot, {"path": file_path})
+                location = SourceLocation(snapshot, file_path, info["sha256"], 0, len(file_bytes), 1,
+                                          max(1, len(file_bytes.splitlines())), 1, 1,
+                                          {"producer": "accepted-target", "scope": "dependency-context"},
+                                          "accepted-file-span", 1.0)
+                builder.add_entity(EntityRecord(identity, file_path, file_path,
+                                                f"dependency context {file_path}",
+                                                {"path": file_path, "scope": "dependency-context",
+                                                 "authority": "graph context; not a vulnerability finding"}, location))
+                context_ids[file_path] = identity.value
+                return identity.value
+
+            indexed_edges: set[tuple[str, str]] = set()
+            for edge in sorted(graph["edges"], key=lambda item: (item["from"], item["to"],
+                                                               -float(item["confidence"]), item["line"])):
+                if edge["from"] not in selected_paths and edge["to"] not in selected_paths:
+                    continue
+                edge_key = (edge["from"], edge["to"])
+                if edge_key in indexed_edges:
+                    continue
+                left, right = file_node(edge["from"]), file_node(edge["to"])
+                if left is None or right is None:
+                    gaps.append("dependency_graph_context_bound_reached")
+                    continue
+                exact = float(edge["confidence"]) >= 1.0
+                builder.add_relation(RelationRecord(
+                    RelationKind.DEPENDS_ON, left, right, exact, float(edge["confidence"]),
+                    None if exact else f"import resolved by {edge['method']}",
+                    {"method": edge["method"], "line": edge["line"]}))
+                indexed_edges.add(edge_key)
+            for item in selected_functions:
+                if f"file:{item['path']}" not in entity_ids and item["path"] in context_ids:
+                    builder.add_relation(RelationRecord(RelationKind.CONTAINS, context_ids[item["path"]],
+                                                        entity_ids[item["item_id"]], True, 1.0))
             syntax_gaps = [gap for gap in syntax_output["gaps"]]
             builder.add_coverage("complexity", "partial" if syntax_gaps else "complete", "; ".join(syntax_gaps[:20]) or None)
             builder.add_coverage("dependency-graph", "partial" if graph_output["gaps"] else "complete",

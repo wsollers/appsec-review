@@ -518,6 +518,7 @@ max_functions = 500000
 max_signals_per_file = 200
 max_import_records = 500000
 max_semantic_paths = 5000
+max_flow_steps_per_path = 128
 cyclomatic_thresholds = [10, 15]
 # Feature share_above_threshold uses this threshold; it must be listed in cyclomatic_thresholds.
 scored_threshold = 15
@@ -560,6 +561,7 @@ function_top_fraction = 0.10
 function_top_count = 0
 max_indexed_items = 5000
 max_evidence_links_per_item = 50
+max_graph_neighbors = 5000
 
 [jobs.job_review_prioritization.settings.sources]
 history = true

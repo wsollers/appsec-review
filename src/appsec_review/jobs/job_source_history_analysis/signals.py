@@ -39,7 +39,7 @@ def _round(value: float) -> float:
 
 
 def normalize(commits: list[Mapping[str, Any]], *, current_paths: Iterable[str], shallow: Iterable[str],
-              window_months: int, max_changes: int, bulk_threshold: int) -> dict[str, Any]:
+              window_months: int | None, max_changes: int, bulk_threshold: int) -> dict[str, Any]:
     """Map walked first-parent commits to current paths and calendar-month window membership.
 
     The anchor is the snapshot commit's committer time; the window is inclusive at both ends.
@@ -48,7 +48,8 @@ def normalize(commits: list[Mapping[str, Any]], *, current_paths: Iterable[str],
         return {"changes": [], "anchor_time": None, "window_start": None, "gaps": [], "observations": [],
                 "author_count": 0, "walked_change_count": 0}
     anchor = int(commits[0]["commit_time"])
-    window_start = calendar_window_start(anchor, window_months)
+    # None is reserved for bounded lifetime analysis of the already walked commits.
+    window_start = calendar_window_start(anchor, window_months) if window_months is not None else -(1 << 63)
     alias = {path: path for path in current_paths}
     shallow_set = set(shallow)
     authors: dict[str, int] = {}

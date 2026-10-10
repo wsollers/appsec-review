@@ -20,6 +20,7 @@ from appsec_review.jobs.job_change_context_analysis.sources import (
 from appsec_review.jobs.job_change_context_analysis.settings import ExportSource
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_source_history_analysis.github import GitHubClient, GitHubSettings, enrich
+from appsec_review.jobs.job_source_history_analysis import signals as history_signals
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.retrieval import EntityKind, LogicalIdentity, RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
@@ -31,6 +32,18 @@ DAY = 86_400
 HOUR = 3_600
 T0 = 1_700_000_000  # 2023-11-14T22:13:20Z, 17:13 in America/New_York (EST)
 pytestmark = pytest.mark.skipif(GIT is None, reason="host git is required to emulate the tool-git image")
+
+
+def test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow() -> None:
+    commits = [
+        {"commit": "a" * 40, "parents": ["b" * 40], "author_time": T0, "commit_time": T0,
+         "author_key": "new@example.test", "files": [{"path": "src/a.go", "added": 1, "deleted": 0}]},
+        {"commit": "b" * 40, "parents": [], "author_time": -1, "commit_time": -1,
+         "author_key": "old@example.test", "files": [{"path": "src/a.go", "added": 1, "deleted": 0}]},
+    ]
+    result = history_signals.normalize(commits, current_paths=("src/a.go",), shallow=(),
+                                       window_months=None, max_changes=2, bulk_threshold=500)
+    assert [item["change_id"] for item in result["changes"]] == ["a" * 40, "b" * 40]
 
 
 def default_settings(**overrides):
@@ -218,6 +231,12 @@ def test_test_association_rules_report_ambiguity_and_untested_churn() -> None:
     assert untested["untested_production"] is True and untested["unassociated_test_added"] == 30
     contract = metrics.test_churn_facts([change("e" * 40, 0, T0, [("api/user.proto", 4, 1)])], roles, roots, settings)
     assert contract["untested_contract"] is True and contract["untested_production"] is False
+    unrelated_contract_test = metrics.test_churn_facts([
+        change("1" * 40, 0, T0, [("api/user.proto", 4, 1), ("tests/test_auth.py", 5, 0)])],
+        roles, [("api", "c-api"), ("tests", "c-tests"), (".", "c-root")], settings)
+    assert unrelated_contract_test["test_added"] == 5
+    assert unrelated_contract_test["associated_contract_test_churn"] == 0
+    assert unrelated_contract_test["untested_contract"] is True
     review_unit = metrics.test_churn_facts([change("f" * 40, 0, T0, [("src/auth.py", 60, 0)]),
                                             change("9" * 40, 1, T0, [("tests/test_auth.py", 9, 0)])], roles, roots, settings)
     assert review_unit["untested_production"] is False, "tests in the same review unit count"

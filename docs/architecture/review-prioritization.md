@@ -25,14 +25,14 @@ Score**. The score orders LLM review attention: a high score means "review first
 
 In Dagster's `wave1_review` the job follows the last retrieval-manifest publishers (CodeQL and OWASP)
 and precedes security tagging, which remains the single terminal job. It is also a standalone
-Dagster job. It is not in the direct CLI graph, which does not run Tree-sitter.
+Dagster job. The direct CLI graph also runs Tree-sitter before this job.
 
 | Input | Required | Use |
 |---|---|---|
 | Accepted intake and target catalog | yes | snapshot fingerprint, inventory paths, hashes, languages, components |
 | Accepted `job_tree_sitter_ast` handoff | yes | per-file concrete syntax trees (node types, fields, spans, ordinal paths) and per-file parse gaps |
 | Target bytes | yes | identifier, comment, and literal text; every read re-verifies the catalog SHA-256 |
-| Accepted `job_source_history_analysis` | no | per-file history attention score (hotspot feature) |
+| Accepted `job_source_history_analysis` | no | file and symbol SII scores (hotspot features) |
 | Accepted `job_evidence_collection` Semgrep shard | no | matches of the `review-signals.yml` pack |
 | Accepted `job_codeql_analysis` observations | no | path-problem code flows (verified semantic paths) |
 
@@ -248,11 +248,11 @@ innermost unit by line. An unplanned, failed, or absent Semgrep run is the
 
 ### CodeQL source-to-sink paths
 
-For each accepted CodeQL path-problem observation, each SARIF code flow is a candidate path from its
+For each accepted CodeQL path-problem observation, each SARIF thread flow is a candidate path from its
 first to its last step. The job keeps the shortest flow per (rule, source location, sink location)
 and attributes source and sink to their innermost units. The CodeQL SARIF normalizer
-(`appsec-review/codeql-sarif-normalizer/2`) records each step's `code_flow` index so alternative
-flows are not concatenated; observations normalized without it are reported as
+(`appsec-review/codeql-sarif-normalizer/2`) records each step's `code_flow` and `thread_flow`
+indices so alternative flows are not concatenated; observations normalized without them are reported as
 `semantic_path_flow_boundaries_unavailable`. A language whose CodeQL scopes did not succeed, a
 language CodeQL does not cover (PHP), and an absent CodeQL handoff make `semantic_path` missing for
 those files.
@@ -281,7 +281,7 @@ Files and functions are scored separately with the same weights.
 | `parser`, `middleware` | count | count | input interpretation and request pipeline | 1 |
 | `validator` | count | count | published; validation presence is not risk | 0 |
 | `semantic_path` | CodeQL paths with an end in the file | paths with an end in the unit | a modeled source reaches a sink | 3 |
-| `history_hotspot` | accepted history attention score | inherited | recent and repeated change correlates with defects | 2 |
+| `history_hotspot` | accepted file SII score | exact snapshot symbol SII score | recent and repeated change correlates with defects | 2 |
 
 Signal counts include both Tree-sitter and Semgrep matches; counts are complete even when stored
 signal records are truncated by `max_signals_per_file`.
@@ -328,11 +328,23 @@ Retrieval index `priority`, shard `review-prioritization`:
 |---|---|---|---|
 | `priority_item` | `file:<path>` or `function:<path>#<qualified>@<line>:<column>` | scope, rank, score, `features`, `percentiles`, `missing_features`, `feature_coverage`, `boundary_total`, `evidence` (bounded by `max_evidence_links_per_item`), `evidence_truncated`, unit metrics, weights, population, score identity | functions: exact Tree-sitter bytes and points; files: whole file |
 | `review_signal` | signal, suppression, or path id | the signal record: producer, rule id and version, basis, category, surface, owning function, detail | Tree-sitter exact span; Semgrep line span; CodeQL sink line span |
+| `review_flow_step` | path id and ordinal | ordered CodeQL path message and producer | resolved CodeQL step line span |
+| `review_context_file` | file path | one-hop import neighbor of a selected item | accepted whole-file span |
 
 Relations: `priority_item -DERIVED_FROM-> review_signal`, `file item -CONTAINS-> function item`, and
-`file item -DEPENDS_ON-> file item` for resolved imports between indexed files (non-exact with an
-ambiguity note below confidence 1.0). Coverage areas: `complexity`, `dependency-graph`,
+`file/context item -DEPENDS_ON-> file/context item` for resolved imports touching a selected file
+(non-exact with an ambiguity note below confidence 1.0). A selected path has up to
+`max_graph_neighbors` additional file nodes; truncation is a named gap. Coverage areas: `complexity`, `dependency-graph`,
 `semgrep-review-signals`, `codeql-semantic-paths`, `history-hotspots`, and `prioritization`.
+
+For a selected CodeQL path, the `review_signal` contains bounded `review_flow_step` entities with
+source-resolved locations. Consecutive steps are connected by directed `FLOWS_TO` relations. The
+path's full ordered step list is also retained in its payload for bounded retrieval. A path with
+more than `max_flow_steps_per_path` steps is omitted and reported as a gap rather than reduced to
+endpoints. Every file and function on the retained path receives the semantic-path feature.
+The separate C/C++ symbol index exposes accepted `CALLS` and `REFERENCES` relations through the
+`analysis` index. Joern's current CPG job retains a binary artifact without indexed graph edges;
+the priority shard does not treat that artifact as flow coverage.
 
 ## Gap taxonomy
 
@@ -360,6 +372,7 @@ escaping artifacts fail the job instead of producing a gap.
   Composer autoload maps, Cargo workspaces beyond `src`, or Java/C# implicit same-package use.
 - Public API "changes" are not diffed: contract declarations are combined with the history hotspot
   feature rather than compared between revisions.
-- Function-level history is not available; functions inherit their file's hotspot score.
+- Function-level history uses an exact snapshot byte-span join to the source-history symbol SII.
+  Unmatched or unranked symbols have an unavailable history feature rather than inheriting a file score.
 - Source-to-sink paths exist only where CodeQL ran a path-problem query that succeeded; PHP has no
   CodeQL extractor.

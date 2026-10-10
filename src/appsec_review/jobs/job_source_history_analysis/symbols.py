@@ -111,7 +111,7 @@ RULES: Mapping[str, LanguageRules] = {
         ("goto_statement",), _C_FAMILY_TOKENS),
     "Rust": _rules(
         ("function_item", "closure_expression"), ("impl_item", "trait_item", "mod_item"), ("if_expression",),
-        ("while_expression", "for_expression", "match_arm"), (),
+        ("while_expression", "for_expression", "match_arm", "try_expression"), (),
         ("while_expression", "for_expression", "loop_expression", "match_expression"),
         ("else_clause",), _C_FAMILY_TOKENS),
     "PHP": _rules(

@@ -188,7 +188,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         commits = parse_log(_read_bytes(run_root, raw_log))
         walked = int(normalized["walked_change_count"])
         lifetime = history_signals.normalize(
-            commits[:walked], current_paths=eligible, shallow=(), window_days=1_000_000, max_changes=walked,
+            commits[:walked], current_paths=eligible, shallow=(), window_months=None, max_changes=walked,
             bulk_threshold=int(history_settings["bulk_change_file_threshold"]))
         ordinals: dict[str, str] = {}
         for commit in commits[:walked]:
@@ -390,6 +390,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         run_root = unit.job.run_root
         changes = _read(run_root, loaded["changes"])["changes"]
         classes = _read(run_root, loaded["classification"])["classes"]
+        times = {str(change["change_id"]): int(change["effective_time"]) for change in changes}
+        fix_interval = int(_resolved_job_settings(run_root, "job_source_history_analysis")[
+            "fix_on_fix"]["interval_days"]) * history_signals.DAY
         eligible = loaded["eligible"]
         fixes = {change_id for change_id, value in classes.items() if value.get("fix")}
         candidates = []
@@ -425,7 +428,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                 continue
             prior: dict[str, int] = defaultdict(int)
             for origin in parse_blame_commits(blame.stdout):
-                if origin in fixes and origin != commit:
+                if (origin in fixes and origin != commit and origin in times and
+                        0 <= times[commit] - times[origin] <= fix_interval):
                     prior[origin] += 1
                 elif origin not in classes:
                     unclassified += 1
@@ -553,11 +557,20 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                         blamed["line_authors"], bus)
         history_files = (_read(run_root, loaded["history_signals"]) if loaded.get("history_signals") else {})
         for key, item in files.items():
-            attention = history_files.get("files", {}).get(key, {}).get("attention")
-            item["history_hotspot"] = attention and {"rank": attention["rank"], "score": attention["score"]}
+            sii = history_files.get("files", {}).get(key, {}).get("sii")
+            item["history_hotspot"] = ({"rank": sii["rank"], "tier": sii["tier"], "score": sii["score"]}
+                                       if sii else None)
         for key, item in components.items():
-            attention = history_files.get("components", {}).get(key, {}).get("attention")
-            item["history_hotspot"] = attention and {"rank": attention["rank"], "score": attention["score"]}
+            priority = history_files.get("components", {}).get(key, {}).get("priority")
+            item["history_hotspot"] = ({"rank": priority["rank"], "score": priority["score"]}
+                                       if priority else None)
+        by_span = {(value["path"], value["start_byte"], value["end_byte"]): value["sii"]
+                   for value in history_files.get("symbols", {}).values() if value.get("sii")}
+        for item in functions.values():
+            location = item.get("location") or {}
+            matched = by_span.get((item["path"], location.get("start_byte"), location.get("end_byte")))
+            item["history_hotspot"] = ({"rank": matched["rank"], "tier": matched["tier"],
+                                        "score": matched["score"]} if matched else None)
         document = {"schema": "appsec-review/change-context-units/1", "files": files, "functions": functions,
                     "components": components}
         return {"artifact": _write(unit, "units.json", document), "file_count": len(files),
