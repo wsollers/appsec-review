@@ -199,7 +199,88 @@ def _scanner_scope(tool_id: str, files: tuple[Mapping[str, Any], ...], artifacts
     return ()
 
 
-def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -> dict[str, Any]:
+DESIGN_CONTEXT_SCHEMA = "appsec-review/target-analysis-design-context/1"
+_DESIGN_CATEGORIES = ("design_document", "threat_model", "api_specification", "interface_definition",
+                      "data_schema", "api_test", "test")
+_DESIGN_LISTS = {"declared_interfaces": ("api_specification", "interface_definition"),
+                 "threat_models": ("threat_model",), "design_documents": ("design_document",),
+                 "data_schemas": ("data_schema",), "api_tests": ("api_test",)}
+
+
+def _surface(entry: Mapping[str, Any]) -> int:
+    signals = entry.get("signals", {})
+    return int(signals.get("rpc_count", 0)) + int(signals.get("path_entry_count", 0)) + \
+        int(signals.get("root_operation_type_count", 0))
+
+
+def design_context(catalog: Mapping[str, Any], design: Mapping[str, Any] | None, *,
+                   max_items: int) -> dict[str, Any]:
+    """Project accepted design-discovery output onto exact catalog identities and components.
+
+    Only structured facts are carried; artifact content never enters the plan. Absent categories
+    describe discovery output and are never evidence of security.
+    """
+    empty = {"schema": DESIGN_CONTEXT_SCHEMA, "design_handoff_sha256": None, "summary": None,
+             "counts_by_category": {}, "absent_categories": [], "test_counts_by_level": {},
+             **{key: [] for key in _DESIGN_LISTS}, "component_counts": {}, "truncated": False,
+             "coverage_gaps": []}
+    if design is None:
+        return {**empty, "status": "UNAVAILABLE", "coverage_gaps": [
+            "design context: job_design_artifact_discovery has no accepted handoff for this run"]}
+    if (design["source_fingerprint"] != catalog["source_fingerprint"] or
+            design["catalog_handoff_sha256"] != catalog["catalog_handoff_sha256"]):
+        return {**empty, "status": "STALE", "design_handoff_sha256": design["handoff_sha256"],
+                "coverage_gaps": ["design context: accepted design discovery is bound to a different "
+                                  "target catalog and was not used"]}
+    hashes = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
+    components = tuple(sorted(catalog["components"], key=lambda item: str(item["component_id"])))
+    ordered = sorted(components, key=lambda item: (-len(PurePosixPath(str(item["root"])).parts),
+                                                   str(item["component_id"])))
+    gaps = [f"design context: {gap}" for gap in design["summary"].get("gaps", ())]
+    lists: dict[str, list[dict[str, Any]]] = {key: [] for key in _DESIGN_LISTS}
+    component_counts: dict[str, Counter[str]] = {str(item["component_id"]): Counter() for item in components}
+    test_levels: Counter[str] = Counter()
+    for artifact in design["artifacts"]:
+        path = str(artifact["path"])
+        if artifact.get("cataloged"):
+            if hashes.get(path) != artifact.get("sha256"):
+                raise ValueError(f"design artifact is not an exact accepted catalog identity: {path}")
+        owner = next((item for item in ordered if _under(path, str(item["root"]))), None)
+        component_id = str(owner["component_id"]) if owner is not None else None
+        for category in artifact["categories"]:
+            if category["category"] not in _DESIGN_CATEGORIES:
+                raise ValueError("design artifact category is not part of the accepted taxonomy")
+            if component_id is not None:
+                component_counts[component_id][category["category"]] += 1
+            if category["category"] == "test":
+                test_levels[str(category["subtype"])] += 1
+        entry = {"path": path, "sha256": artifact.get("sha256"), "cataloged": bool(artifact.get("cataloged")),
+                 "categories": [{"category": item["category"], "subtype": item["subtype"]}
+                                for item in artifact["categories"]],
+                 "signals": dict(artifact.get("signals", {})), "component_id": component_id}
+        for key, wanted in _DESIGN_LISTS.items():
+            if any(item["category"] in wanted for item in artifact["categories"]):
+                lists[key].append(entry)
+    truncated = False
+    for key, values in lists.items():
+        values.sort(key=lambda item: (-_surface(item), item["path"]))
+        if len(values) > max_items:
+            gaps.append(f"design context: {key} truncated at design_context_max_items={max_items} "
+                        f"({len(values)} discovered)")
+            del values[max_items:]
+            truncated = True
+    counts = dict(design["summary"].get("counts_by_category", {}))
+    return {"schema": DESIGN_CONTEXT_SCHEMA, "status": "ACCEPTED",
+            "design_handoff_sha256": design["handoff_sha256"], "summary": design["summary_artifact"],
+            "counts_by_category": counts,
+            "absent_categories": list(design["summary"].get("absent_categories", ())),
+            "test_counts_by_level": dict(sorted(test_levels.items())), **lists,
+            "component_counts": {key: dict(sorted(value.items())) for key, value in component_counts.items()},
+            "truncated": truncated, "coverage_gaps": list(dict.fromkeys(gaps))}
+
+
+def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
+                       design: Mapping[str, Any] | None = None) -> dict[str, Any]:
     files = tuple(sorted(catalog["files"], key=lambda item: str(item["path"])))
     artifacts = tuple(catalog.get("accepted_artifacts", ()))
     hashes = {str(item["path"]): str(item["sha256"]) for item in files}
@@ -239,6 +320,7 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
             "scanner_ids": sorted(component_scanners[cid]), "provenance": "deterministic",
             "confidence": "high", "reasons": ["accepted catalog component and exact path ownership"],
             "contradictions": [], "coverage_gaps": [],
+            "design_context": dict((design or {}).get("component_counts", {}).get(cid, {})),
         })
     gaps = [(f"{item.get('path')}: {item.get('reason')}" if isinstance(item, Mapping) else str(item))
             for item in catalog.get("gaps", ())]
@@ -247,6 +329,8 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
     if not compile_databases:
         gaps.append("build topology: no accepted compile database; compiled-unit coverage is unavailable")
     gaps.append("build topology: build targets and link outputs are not inferred without accepted build artifacts")
+    if design is not None:
+        gaps.extend(design["coverage_gaps"])
     generated = [{"path": item.get("path"), "status": "excluded", "reason": item.get("reason")}
                  for item in catalog.get("gaps", ()) if isinstance(item, Mapping) and
                  item.get("reason") == "generated_file_excluded"]
@@ -274,6 +358,7 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
             "relationships": [{"kind": "component_build_root", "component_id": component["component_id"],
                                "build_root": component["root"]} for component in component_values],
         },
+        "design_context": dict(design) if design is not None else None,
         "prerequisites": ["accepted target catalog", "verified immutable retrieval index set"],
         "expected_artifact_families": ["observations", "software-inventory", "configuration", "build"],
         "confidence": "high" if not gaps else "medium", "contradictions": [],
@@ -438,6 +523,17 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
     for item in plan.get("components", []):
         if item.get("component_id") not in components:
             raise ValueError("analysis plan component is not accepted by the catalog")
+    design = plan.get("design_context")
+    if design is not None:
+        if design.get("schema") != DESIGN_CONTEXT_SCHEMA or design.get("status") not in {
+                "ACCEPTED", "UNAVAILABLE", "STALE"}:
+            raise ValueError("analysis plan design context is invalid")
+        for key in _DESIGN_LISTS:
+            for entry in design.get(key, []):
+                if entry.get("cataloged") and paths.get(str(entry.get("path"))) != entry.get("sha256"):
+                    raise ValueError("analysis plan design context is not an exact accepted catalog identity")
+                if entry.get("component_id") is not None and entry["component_id"] not in components:
+                    raise ValueError("analysis plan design context names an unaccepted component")
     systems = plan.get("build_topology", {}).get("build_systems", [])
     if any(item.get("build_system") not in BUILD_SYSTEMS for item in systems):
         raise ValueError("analysis plan contains an unregistered build system")

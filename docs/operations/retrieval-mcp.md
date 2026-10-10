@@ -53,6 +53,12 @@ validator, batch, disposition, or shard and returns explicit pagination, truncat
 coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
 empty-coverage claim.
 
+`query_design_artifacts` reads only the accepted `analysis/design_artifacts` shard. Exact filters
+cover taxonomy category and subtype, cataloged state, and probe status. `path_prefix` is a
+normalized literal folder prefix, never a glob. Name-only binary documents and probe bounds are
+returned as coverage gaps. A run without design discovery returns an availability gap. See
+[`../architecture/design-artifact-discovery.md`](../architecture/design-artifact-discovery.md).
+
 `query_ci_configuration` reads only accepted `ci_*` observation shards and the canonical
 `ci_findings` evidence shard. Exact filters cover provider, pipeline, workflow, stage, job, step,
 tool, rule, category, canonical finding, and shard. Unavailable linter branches are returned as

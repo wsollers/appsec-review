@@ -94,6 +94,18 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},
+    {"name": "query_design_artifacts", "description": "Query accepted design documents, threat models, API specifications, interface definitions, schemas, API tests, and tests by exact taxonomy facets.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "category": {"type": "string", "enum": ["design_document", "threat_model", "api_specification",
+                                                  "interface_definition", "data_schema", "api_test", "test"]},
+         "subtype": {"type": "string", "pattern": "^[a-z0-9_]{1,128}$"},
+         "path_prefix": {"type": "string", "maxLength": 4096},
+         "cataloged": {"type": "boolean"},
+         "probe_status": {"type": "string", "enum": ["probed", "probed_prefix", "not_probed", "too_large",
+                                                      "bound_reached", "unavailable"]},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
     {"name": "query_codeql", "description": "Query accepted CodeQL observations by exact language, scope, rule, and source facets.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "language": {"type": "string", "maxLength": 128},

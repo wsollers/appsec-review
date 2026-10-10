@@ -711,6 +711,71 @@ class RetrievalCore:
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_ci_configuration", parameters, operation)
 
+    def query_design_artifacts(
+        self, *, category: str | None = None, subtype: str | None = None,
+        path_prefix: str | None = None, cataloged: bool | None = None,
+        probe_status: str | None = None, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Query the accepted design-artifact shard by exact taxonomy facets and a literal path prefix."""
+        for value in (category, subtype, probe_status):
+            if value is not None and (not value or len(value) > 128):
+                raise ValueError("invalid design artifact facet")
+        if subtype is not None and category is None:
+            raise ValueError("design artifact subtype requires a category")
+        if path_prefix is not None:
+            path_prefix = normalize_relative_path(path_prefix)
+        if cataloged is not None and not isinstance(cataloged, bool):
+            raise ValueError("cataloged must be a boolean")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"category": category, "subtype": subtype, "path_prefix": path_prefix,
+                      "cataloged": cataloged, "probe_status": probe_status, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_design_artifacts", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = [item for item in self.indexes.get("analysis", ())
+                          if item.get("shard_id") == "design_artifacts"]
+            if not candidates:
+                gaps.append("accepted design artifact index is unavailable")
+            for identity in candidates:
+                self._check_deadline(deadline)
+                clauses: list[str] = []
+                values: list[Any] = []
+                if category is not None:
+                    clauses.append("EXISTS (SELECT 1 FROM json_each(e.payload_json, '$.categories') c "
+                                   "WHERE json_extract(c.value, '$.category') = ?" +
+                                   (" AND json_extract(c.value, '$.subtype') = ?)" if subtype is not None else ")"))
+                    values.extend((category, subtype) if subtype is not None else (category,))
+                if path_prefix is not None:
+                    # Literal prefix comparison: no wildcard or glob semantics reach SQLite.
+                    clauses.append("(e.name = ? OR substr(e.name, 1, ?) = ?)")
+                    values.extend((path_prefix, len(path_prefix) + 1, path_prefix + "/"))
+                if cataloged is not None:
+                    clauses.append("json_extract(e.payload_json, '$.cataloged') = ?")
+                    values.append(1 if cataloged else 0)
+                if probe_status is not None:
+                    clauses.append("json_extract(e.payload_json, '$.probe_status') = ?")
+                    values.append(probe_status)
+                sql = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity"
+                if clauses:
+                    sql += " WHERE " + " AND ".join(clauses)
+                sql += " ORDER BY e.name, e.identity LIMIT ?"
+                values.append(offset + limit + 1)
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "analysis")
+                        item["shard_id"] = "design_artifacts"
+                        found.append(item)
+                    gaps.extend(f"analysis/design_artifacts: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"analysis/design_artifacts: {gap}" for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["name"], item["identity"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_design_artifacts", parameters, operation)
+
     def query_codeql(
         self, *, language: str | None = None, source_language: str | None = None,
         scope: str | None = None, build_unit: str | None = None,

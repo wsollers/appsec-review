@@ -10,6 +10,7 @@
     {"name":"query_artifacts","required":[],"properties":["artifact_identity","sha256","kind","format","language","runtime","platform","architecture","build_unit","project","component","producing_build_action","package","purl","scanner","tool","coverage_status","shard","limit","cursor"]},
     {"name":"query_build_security","required":[],"properties":["project","build_root","build_action","configuration","compile_unit","linked_artifact","producer","shard","limit","cursor"]},
     {"name":"query_ci_configuration","required":[],"properties":["provider","pipeline","workflow","stage","job","step","tool","rule","category","canonical_finding","shard","limit","cursor"]},
+    {"name":"query_design_artifacts","required":[],"properties":["category","subtype","path_prefix","cataloged","probe_status","limit","cursor"]},
     {"name":"query_owasp_workbench","required":[],"properties":["family","standard","version","profile","control","component","project","evidence_mode","validator","batch","disposition","shard","limit","cursor"]}
   ],
   "runtime_source": "appsec_review.mcp.schema:TOOLS"

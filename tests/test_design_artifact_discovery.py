@@ -143,3 +143,71 @@ def test_graph_run_publishes_queryable_shard_with_gaps_and_resumes(tmp_path: Pat
     resumed = GraphRunner(config, jobs).run(target_root=target, source_fingerprint=fingerprint,
                                             run_id=outcome["run_id"])
     assert [item["action"] for item in resumed["decisions"]] == ["REUSE", "REUSE", "REUSE"]
+
+
+def _planner_config(tmp_path: Path):
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
+        "[jobs.job_target_analysis_plan.settings.model]\nenabled = true",
+        "[jobs.job_target_analysis_plan.settings.model]\nenabled = false")
+    (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
+    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    return load_config(tmp_path / "appsec-review.toml")
+
+
+def test_planner_consumes_design_context_and_reviewers_query_it(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
+    from appsec_review.mcp.adapter import RetrievalMcpAdapter
+
+    config = _planner_config(tmp_path)
+    target = _target(tmp_path / "target")
+    (target / "proto/admin.proto").write_text(
+        "service Admin {\n  rpc A(R) returns (R);\n  rpc B(R) returns (R);\n  rpc C(R) returns (R);\n}\n",
+        encoding="utf-8")
+    (target / "pyproject.toml").write_text("[project]\nname = 'fixture'\n", encoding="utf-8")
+    outcome = GraphRunner(config, (build_intake(), build_catalog(), build_job(), build_plan())).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+    plan = load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
+    design = plan["design_context"]
+    assert design["status"] == "ACCEPTED"
+    assert design["design_handoff_sha256"] == outcome["jobs"]["job_design_artifact_discovery"]["handoff_sha256"]
+    # Largest declared surface first (three RPCs); equal surfaces are ordered by path.
+    assert [item["path"] for item in design["declared_interfaces"]] == [
+        "proto/admin.proto", "api/service.yaml", "proto/users.proto"]
+    assert [item["path"] for item in design["threat_models"]] == ["docs/security/threat-model.md"]
+    assert design["test_counts_by_level"] == {"integration_test": 1, "unit_test": 1}
+    assert any("docs/design/flows.pdf" in gap for gap in plan["coverage_gaps"])
+    assert all("Token format" not in str(value) for value in design.values())
+    component = plan["components"][0]
+    assert component["design_context"]["interface_definition"] == 2
+
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    adapter = RetrievalMcpAdapter(core)
+    protos = adapter.call("query_design_artifacts", {"category": "interface_definition", "subtype": "protobuf"})
+    assert [item["name"] for item in protos["results"]] == ["proto/admin.proto", "proto/users.proto"]
+    tests = adapter.call("query_design_artifacts", {"category": "test", "path_prefix": "tests/integration"})
+    assert [item["name"] for item in tests["results"]] == ["tests/integration/test_api.py"]
+    assert adapter.call("query_design_artifacts", {"path_prefix": "test"})["results"] == []
+    uncataloged = adapter.call("query_design_artifacts", {"cataloged": False})
+    assert [item["name"] for item in uncataloged["results"]] == ["docs/design/flows.pdf"]
+    assert any("not cataloged" in gap for gap in uncataloged["coverage_gaps"])
+    component_entity = core.find(kind="component", indexes=["analysis"], limit=5)["results"][0]
+    traced = core.trace(identity=component_entity["identity"], relations=["CONTAINS"], depth=1)
+    contained = {str(item.get("payload", {}).get("design_context")) for item in traced["results"]}
+    assert {"declared_interfaces", "threat_models", "design_documents"} <= contained
+    with pytest.raises(ValueError):
+        core.query_design_artifacts(subtype="protobuf")
+    with pytest.raises(ValueError):
+        core.query_design_artifacts(path_prefix="../outside")
+
+
+def test_planner_without_design_discovery_names_the_gap(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
+
+    config = _planner_config(tmp_path)
+    target = _target(tmp_path / "target")
+    outcome = GraphRunner(config, (build_intake(), build_catalog(), build_plan())).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+    plan = load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
+    assert plan["design_context"]["status"] == "UNAVAILABLE"
+    assert plan["design_context"]["declared_interfaces"] == []
+    assert any("job_design_artifact_discovery has no accepted handoff" in gap for gap in plan["coverage_gaps"])

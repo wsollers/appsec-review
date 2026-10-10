@@ -254,6 +254,8 @@ workers = 1
 summary_max_items = 2000
 summary_max_bytes = 524288
 summary_sample_per_prefix = 20
+# Bound on each design-context list (interfaces, threat models, documents, schemas, API tests).
+design_context_max_items = 256
 
 [jobs.job_target_analysis_plan.settings.model]
 enabled = true
@@ -269,6 +271,7 @@ workers = 6
 [jobs.job_target_analysis_plan.steps.catalog_summary]
 workers = 1
 [jobs.job_target_analysis_plan.steps.catalog_summary.tasks.load_accepted_catalog]
+[jobs.job_target_analysis_plan.steps.catalog_summary.tasks.load_design_context]
 [jobs.job_target_analysis_plan.steps.catalog_summary.tasks.summarize_components]
 
 [jobs.job_target_analysis_plan.steps.analysis_decisions]

@@ -109,9 +109,61 @@ document. Each category keeps its full list of evidence (`method` is `path` or `
   `security_findings` list. Any gap makes the terminal status `PARTIAL`, and the review completes
   with gaps.
 
-Review workers query the shard through the existing bounded retrieval tools. For example:
-`find(kind="source_file", indexes=["analysis"], path="api/openapi.yaml")`, or
-`search(query="design_artifact threat_model", indexes=["analysis"])`.
+## Reviewer query tool
+
+`query_design_artifacts` is a retrieval core method and an MCP tool. It reads only the accepted
+`analysis/design_artifacts` shard, using these filters:
+
+| Filter | Meaning |
+| --- | --- |
+| `category` | Matches any of an artifact's categories, not only the primary one. Restricted to the taxonomy enum. |
+| `subtype` | Exact subtype within `category`. Rejected unless `category` is also given. |
+| `path_prefix` | A literal folder prefix: `tests/integration` matches that path and everything under it, but `test` does not match `tests/`. The prefix is normalized and rejected if it escapes the target. It never reaches SQLite as a pattern, so wildcards and globs have no effect. |
+| `cataloged` | `false` lists the artifacts identified by name only. |
+| `probe_status` | One of the probe states listed under Outputs. |
+| `limit`, `cursor` | Signed pagination, the same as the other query tools. |
+
+Results are ordered by path. The path is returned as the entity `name`, because payload `path`
+keys are withheld by the core, and in the hash-verified location for cataloged files. Shard gaps
+come back as `coverage_gaps`. A run without an accepted design shard returns an availability gap,
+not an empty result claiming nothing exists. Generic `find` and `search` over the `analysis` index
+still work.
+
+## Planner consumption
+
+`job_target_analysis_plan` reads the accepted discovery output in a dedicated
+`catalog_summary.load_design_context` task and records it as the plan's `design_context` section
+(`appsec-review/target-analysis-design-context/1`).
+
+- **Binding.** The design handoff must be accepted, and must name the same target fingerprint and
+  `job_target_catalog` handoff the planner loaded. Hash or schema mismatches fail the plan.
+- **Missing or stale input.** If no accepted handoff exists, `status` is `UNAVAILABLE`. This
+  happens, for example, in the Dagster `project_build_review` graph, which does not run discovery.
+  If the handoff is bound to a different catalog, `status` is `STALE`. Either way the plan carries
+  a named coverage gap and empty lists. It does not fail.
+- **Contents.**
+  - `declared_interfaces` (API specifications and IDL), `threat_models`, `design_documents`,
+    `data_schemas`, and `api_tests`.
+  - Each entry holds its path, SHA-256, cataloged flag, categories, numeric signals, and owning
+    component.
+  - `declared_interfaces` is ordered by declared surface: RPCs plus HTTP path entries plus GraphQL
+    root types, largest first, then by path.
+  - Each list is capped at `design_context_max_items` (default 256). If a list is cut, the plan
+    records a gap.
+  - Also: `test_counts_by_level`, `counts_by_category`, `absent_categories`, and the design
+    handoff and summary identities.
+- **Per component.** Each plan component gains `design_context` category counts for the artifacts
+  it owns, using the same longest-root ownership rule as scanner scope.
+- **Validation.** `validate_plan` requires every cataloged entry to be an exact catalog
+  path/SHA-256 identity and every owner to be an accepted component.
+- **Gaps.** The discovery job's own gaps, such as name-only binary documents and probe bounds, are
+  added to the plan's `coverage_gaps` with the prefix `design context:`.
+- **Index.** The plan shard adds a `CONTAINS` relation from each component to its declared
+  interfaces, threat models, and design documents. Reviewers can follow these with `trace`.
+
+Design context is never sent to the build-recipe model. That model's request is limited to build
+descriptors, and target documents are data, not inputs to it. Discovery runs before the planner
+in both graphs, so a change in discovery invalidates the plan and everything after it on resume.
 
 ## Bounds and gaps
 
@@ -134,11 +186,8 @@ with the same fingerprint is reused instead of rebuilt, because shards are immut
 ## Non-goals and follow-ups
 
 - The job does not parse or validate specifications, run tests, or contact any API.
-- Consumers still to add:
-  - `job_target_analysis_plan` could use the summary to choose specification-aware scanners and
-    to prioritize declared RPC and HTTP entry points.
-  - Inference review workers could receive the declared API surface and threat-model locations as
-    bounded retrieval context.
-- A typed MCP tool, such as `query_design_artifacts` with category and subtype facets, would give a
-  narrower interface than generic `find` / `search`.
+- Scanner selection is unchanged. Choosing specification-aware producers, such as Checkov's
+  OpenAPI framework, needs evidence-collection adapter support first. Today that adapter is
+  bounded to typed IaC, Dockerfile, GitHub Actions, and CloudFormation inputs.
+- Inference review workers do not yet receive `design_context` as bounded task context.
 - Linking test files to the source units they cover is not attempted.

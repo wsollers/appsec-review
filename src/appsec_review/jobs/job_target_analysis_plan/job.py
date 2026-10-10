@@ -26,13 +26,13 @@ from appsec_review.inference import Infer, ModelRequest
 
 from .planning import (
     BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS,
-    ambiguity_reasons, deterministic_plan, merge_proposal, summarize_catalog,
+    ambiguity_reasons, design_context, deterministic_plan, merge_proposal, summarize_catalog,
     validate_plan, validate_proposal,
 )
 
 
 TOPOLOGY = {
-    "catalog_summary": ("load_accepted_catalog", "summarize_components"),
+    "catalog_summary": ("load_accepted_catalog", "load_design_context", "summarize_components"),
     "analysis_decisions": ("apply_deterministic_rules", "resolve_ambiguity"),
     "plan_acceptance": ("validate_plan", "index_plan", "publish_handoff"),
 }
@@ -125,6 +125,9 @@ def _validate_config(context, result) -> None:
     for key in ("summary_max_items", "summary_max_bytes", "summary_sample_per_prefix"):
         if type(settings.get(key)) is not int or int(settings[key]) < 1:
             raise ValueError(f"target analysis plan setting is invalid: {key}")
+    if type(settings.get("design_context_max_items")) is not int or not (
+            1 <= settings["design_context_max_items"] <= 10_000):
+        raise ValueError("target analysis plan setting is invalid: design_context_max_items")
     if settings["summary_max_bytes"] < 1024 or settings["summary_sample_per_prefix"] > settings["summary_max_items"]:
         raise ValueError("target analysis plan summary bounds are inconsistent")
     model = settings.get("model")
@@ -177,6 +180,21 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         unit.job.events.write("ANALYSIS_PLAN_STARTED", catalog_handoff_sha256=catalog["catalog_handoff_sha256"])
         return {"catalog": catalog, "catalog_handoff_sha256": catalog["catalog_handoff_sha256"]}
 
+    def load_design(unit: UnitContext) -> Mapping[str, Any]:
+        # Imported here: design discovery reuses the evidence catalog loader, which imports this job.
+        from appsec_review.jobs.job_design_artifact_discovery import load_accepted_design_artifacts
+
+        maybe_fail(unit)
+        catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
+        value = design_context(catalog, load_accepted_design_artifacts(unit.job.run_root),
+                               max_items=int(unit.job.config.settings["design_context_max_items"]))
+        unit.job.events.write("ANALYSIS_PLAN_DESIGN_CONTEXT", design_status=value["status"],
+                              declared_interface_count=len(value["declared_interfaces"]),
+                              threat_model_count=len(value["threat_models"]),
+                              gap_count=len(value["coverage_gaps"]))
+        return {"schema": value["schema"], "artifact": _artifact(unit, "design-context.json", value),
+                "design_context": value, "gaps": value["coverage_gaps"]}
+
     def summarize(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
@@ -192,7 +210,8 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         maybe_fail(unit)
         catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
         summary = unit.output("catalog_summary.summarize_components")["summary"]
-        value = deterministic_plan(catalog, summary)
+        design = unit.output("catalog_summary.load_design_context")["design_context"]
+        value = deterministic_plan(catalog, summary, design)
         unit.job.events.write("ANALYSIS_PLAN_DETERMINISTIC_DECISIONS",
                               selected_scanner_count=len(value["scanner_selections"]),
                               skipped_scanner_count=len(value["scanner_non_selections"]),
@@ -421,6 +440,16 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     builder.add_relation(RelationRecord(RelationKind.SUPPORTS, identity.value,
                                                         source_id.value, True, 1.0,
                                                         payload={"scope_path": scope["path"]}))
+            design = plan.get("design_context") or {}
+            for key in ("declared_interfaces", "threat_models", "design_documents"):
+                for entry in design.get(key, ()):
+                    if not entry["cataloged"] or entry["component_id"] not in component_ids:
+                        continue
+                    source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                                       {"path": entry["path"], "sha256": entry["sha256"]})
+                    builder.add_relation(RelationRecord(RelationKind.CONTAINS,
+                        component_ids[entry["component_id"]], source_id.value, True, 1.0,
+                        payload={"design_context": key, "categories": entry["categories"]}))
             for index, action in enumerate(plan["build_topology"]["build_actions"], 1):
                 identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
                                                    {"analysis_plan_action": index, **action})
@@ -481,9 +510,11 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
     u = Unit
     units = (
         u("catalog_summary.load_accepted_catalog", load_catalog),
+        u("catalog_summary.load_design_context", load_design, ("catalog_summary.load_accepted_catalog",)),
         u("catalog_summary.summarize_components", summarize, ("catalog_summary.load_accepted_catalog",)),
         u("analysis_decisions.apply_deterministic_rules", deterministic,
-          ("catalog_summary.load_accepted_catalog", "catalog_summary.summarize_components")),
+          ("catalog_summary.load_accepted_catalog", "catalog_summary.load_design_context",
+           "catalog_summary.summarize_components")),
         u("analysis_decisions.resolve_ambiguity", resolve,
           ("analysis_decisions.apply_deterministic_rules", "catalog_summary.load_accepted_catalog",
            "catalog_summary.summarize_components")),

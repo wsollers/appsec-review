@@ -132,6 +132,30 @@ def _probe(unit: UnitContext, candidates: list[Mapping[str, Any]]) -> tuple[list
     return artifacts, gaps
 
 
+def load_accepted_design_artifacts(run_root: Path) -> dict[str, Any] | None:
+    """Return the accepted discovery summary and artifact catalog, or None when never accepted."""
+    run_root = Path(run_root)
+    pointer_path = run_root / "data" / "jobs" / JOB_ID / "latest.json"
+    if not pointer_path.is_file():
+        return None
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    handoff = _read(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
+    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
+        raise ValueError("design artifact discovery handoff is not accepted")
+    published = handoff.get("outputs", {}).get("design_publication.publish_handoff", {})
+    summary = _read(run_root, published.get("artifact", {}))
+    if summary.get("schema") != "appsec-review/design-artifact-discovery-handoff/1":
+        raise ValueError("design artifact discovery summary schema is unsupported")
+    catalog = _read(run_root, summary["design_artifacts"])
+    if catalog.get("schema") != "appsec-review/design-artifact-catalog/1":
+        raise ValueError("design artifact catalog schema is unsupported")
+    return {"handoff_sha256": str(pointer["handoff_sha256"]),
+            "source_fingerprint": str(handoff.get("source_fingerprint")),
+            "catalog_handoff_sha256": handoff.get("upstream_handoff_sha256", {}).get("job_target_catalog"),
+            "summary_artifact": dict(published["artifact"]), "summary": summary,
+            "artifacts": list(catalog["artifacts"])}
+
+
 def _location(unit: UnitContext, artifact: Mapping[str, Any]) -> SourceLocation | None:
     if not artifact["cataloged"]:
         return None

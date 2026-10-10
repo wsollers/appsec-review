@@ -4,7 +4,7 @@
   "title": "Accepted target analysis plan",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "source_fingerprint", "catalog_handoff_sha256", "summary_sha256", "provenance", "components", "scanner_selections", "scanner_non_selections", "build_topology", "prerequisites", "expected_artifact_families", "confidence", "contradictions", "coverage_gaps", "model"],
+  "required": ["schema", "source_fingerprint", "catalog_handoff_sha256", "summary_sha256", "provenance", "components", "scanner_selections", "scanner_non_selections", "build_topology", "design_context", "prerequisites", "expected_artifact_families", "confidence", "contradictions", "coverage_gaps", "model"],
   "properties": {
     "schema": {"const": "appsec-review/target-analysis-plan/1"},
     "source_fingerprint": {"type": "string", "minLength": 1},
@@ -15,6 +15,17 @@
     "scanner_selections": {"type": "array"},
     "scanner_non_selections": {"type": "array"},
     "build_topology": {"type": "object"},
+    "design_context": {
+      "type": ["object", "null"],
+      "required": ["schema", "status", "design_handoff_sha256", "counts_by_category", "absent_categories",
+                   "declared_interfaces", "threat_models", "design_documents", "data_schemas", "api_tests",
+                   "test_counts_by_level", "component_counts", "truncated", "coverage_gaps"],
+      "properties": {
+        "schema": {"const": "appsec-review/target-analysis-design-context/1"},
+        "status": {"enum": ["ACCEPTED", "UNAVAILABLE", "STALE"]},
+        "design_handoff_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "prerequisites": {"type": "array", "items": {"type": "string"}},
     "expected_artifact_families": {"type": "array", "items": {"type": "string"}},
     "confidence": {"enum": ["high", "medium", "low"]},
