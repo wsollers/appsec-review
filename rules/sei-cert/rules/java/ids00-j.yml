@@ -1,0 +1,41 @@
+rules:
+  - id: appsec-review.sei-cert.java.ids00-j.concatenated-sql-statement
+    languages: [java]
+    severity: ERROR
+    message: >-
+      IDS00-J: the SQL text passed to this JDBC call is built by string concatenation with a
+      non-constant value, so data can change the statement's structure. Use a PreparedStatement
+      with bound parameters.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: IDS00-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/input-validation-and-data-sanitization-ids/ids00-j
+      cwe: [CWE-116]
+      supplemental_cwe: [CWE-89]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [java-jdbc]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches JDBC execute, executeQuery, executeUpdate, executeLargeUpdate, addBatch, prepareStatement, and prepareCall whose SQL argument is a concatenation, or a variable assigned a concatenation earlier in the same method, that includes at least one non-literal operand. Whether the non-literal operand is untrusted is not established; query builders and ORMs are not modeled.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$EXEC($LEFT + $RIGHT, ...)
+          - patterns:
+              - pattern-inside: |
+                  String $SQL = $LEFT + $RIGHT;
+                  ...
+              - pattern: $DB.$EXEC($SQL, ...)
+          - patterns:
+              - pattern-inside: |
+                  $SQL = $LEFT + $RIGHT;
+                  ...
+              - pattern: $DB.$EXEC($SQL, ...)
+      - metavariable-regex:
+          metavariable: $EXEC
+          regex: ^(execute|executeQuery|executeUpdate|executeLargeUpdate|addBatch|prepareStatement|prepareCall)$
+      - pattern-not: $DB.$EXEC("..." + "...", ...)

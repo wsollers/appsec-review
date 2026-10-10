@@ -1,0 +1,38 @@
+rules:
+  - id: appsec-review.sei-cert.java.err08-j.catch-null-pointer-exception
+    languages: [java]
+    severity: WARNING
+    message: >-
+      ERR08-J: catching NullPointerException masks a null dereference instead of preventing it.
+      Test for null, or use a null object, before the dereference.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR08-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/exceptional-behavior-err/err08-j
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [java-language]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches handlers that name NullPointerException, alone or in a multi-catch. Catching its ancestors (RuntimeException, Exception, Throwable) is also in scope for ERR08-J, but ERR08-J-EX0 to EX2 permit common catch-all designs that cannot be told apart syntactically, so ancestor handlers are not reported.
+      license: MIT
+    # Both engines ignore literal exception types in Java catch patterns (a NullPointerException
+    # pattern also matches other handlers), and a type metavariable binds only the first member of a
+    # multi-catch union. The first member is therefore checked through its binding and later union
+    # members with a regular expression scoped to a real catch clause.
+    pattern-either:
+      - patterns:
+          - pattern: |
+              try { ... } catch ($TYPE $E) { ... }
+          - metavariable-regex:
+              metavariable: $TYPE
+              regex: ^(java\.lang\.)?NullPointerException$
+          - focus-metavariable: $E
+      - patterns:
+          - pattern-inside: |
+              try { ... } catch ($TYPE $E) { ... }
+          - pattern-regex: catch\s*\([^)]*\|\s*(java\.lang\.)?NullPointerException\b[^)]*\)

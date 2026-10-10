@@ -28,6 +28,18 @@ MANIFEST_NAMES = {
     "composer.lock", "Gemfile", "Gemfile.lock",
 }
 BINARY_EXTENSIONS = {".jar", ".war", ".ear", ".class", ".dll", ".exe", ".so", ".dylib", ".a", ".o"}
+# Languages of the SEI CERT rule pack (rules/sei-cert); OpenGrep runs that pack only.
+SEI_CERT_EXTENSIONS = CPP_EXTENSIONS | {".java"}
+SEI_CERT_RULE_PREFIX = "appsec-review.sei-cert."
+SEI_CERT_MOUNT = "/rules-sei-cert"
+SEI_CERT_METADATA = ("pack", "cert", "cert_also", "cert_standard", "cert_url", "coverage", "confidence",
+                     "precision", "cwe")
+SEI_CERT_LIMITATIONS = (
+    "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules "
+    "with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence "
+    "of findings is not CERT conformance",
+    "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +133,15 @@ def _all_source(catalog: ScanCatalog) -> Applicability:
     paths = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in SOURCE_EXTENSIONS)
     return Applicability(bool(paths), f"catalog contains {len(paths)} source input(s)" if paths else
                          "target catalog contains no supported source files", paths, "source_files")
+
+
+def _sei_cert_source(catalog: ScanCatalog) -> Applicability:
+    paths = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in SEI_CERT_EXTENSIONS)
+    kotlin = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in {".kt", ".kts"})
+    gaps = (f"SEI CERT rule pack has no Kotlin rules; {len(kotlin)} Kotlin file(s) are outside its scope",) if kotlin else ()
+    return Applicability(bool(paths), f"catalog contains {len(paths)} C, C++, or Java input(s)" if paths else
+                         "target catalog contains no C, C++, or Java source for the SEI CERT rule pack",
+                         paths, "source_files", gaps)
 
 
 def _gitleaks(catalog: ScanCatalog) -> Applicability:
@@ -350,12 +371,37 @@ def _mobsfscan_parser(payload: bytes) -> list[dict[str, Any]]:
 
 
 def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
-    return [{
-        "rule_id": item.get("check_id"), "message": item.get("extra", {}).get("message"),
-        "severity": item.get("extra", {}).get("severity"), "category": "source_sast",
-        "path": item.get("path"), "start_line": item.get("start", {}).get("line"),
-        "end_line": item.get("end", {}).get("line"),
-    } for item in _json(payload).get("results", [])]
+    """Parse Semgrep CE / OpenGrep JSON, keeping engine errors and skipped targets as coverage gaps."""
+    document = _json(payload)
+    records: list[dict[str, Any]] = []
+    for item in document.get("results", []):
+        extra = item.get("extra", {}) if isinstance(item.get("extra"), Mapping) else {}
+        rule_id = str(item.get("check_id"))
+        record = {
+            "rule_id": item.get("check_id"), "message": extra.get("message"),
+            "severity": extra.get("severity"), "category": "source_sast",
+            "path": item.get("path"), "start_line": item.get("start", {}).get("line"),
+            "end_line": item.get("end", {}).get("line"),
+        }
+        if SEI_CERT_RULE_PREFIX in rule_id:
+            # Engines prefix rule IDs with the config directory; keep the pack-owned identity and the
+            # rule's CERT mapping so the observation resolves to rules/sei-cert/mappings.
+            record["rule_id"] = rule_id[rule_id.index(SEI_CERT_RULE_PREFIX):]
+            metadata = extra.get("metadata", {}) if isinstance(extra.get("metadata"), Mapping) else {}
+            record["rule_mapping"] = {key: metadata[key] for key in SEI_CERT_METADATA if key in metadata}
+        records.append(record)
+    for error in document.get("errors", []) if isinstance(document, Mapping) else []:
+        if isinstance(error, Mapping):
+            location = error.get("path") or error.get("rule_id") or "engine"
+            text = " ".join(str(error.get("message") or error.get("type") or "error").split())[:300]
+            records.append({"gap_only": True,
+                            "coverage_gap": f"engine reported {error.get('level', 'error')} for {location}: {text}"})
+    paths = document.get("paths", {}) if isinstance(document, Mapping) else {}
+    for skipped in (paths.get("skipped") or []) if isinstance(paths, Mapping) else []:
+        if isinstance(skipped, Mapping):
+            records.append({"gap_only": True,
+                            "coverage_gap": f"engine skipped {skipped.get('path')}: {skipped.get('reason')}"})
+    return records
 
 
 def _gosec_parser(payload: bytes) -> list[dict[str, Any]]:
@@ -521,7 +567,14 @@ def _registry() -> dict[str, ToolAdapter]:
                                       "--report-path", "/scratch/output.json", "--exit-code", "1"), _list_parser,
                     ("worktree only; git history is excluded",)),
         ToolAdapter("tool-semgrep", "source_sast", frozenset({0}), "/scratch/output.json", _all_source,
-                    _args("scan", "--disable-version-check", "--metrics", "off", "--config", "/rules/security.yml", "--json", "--output", "/scratch/output.json"), _semgrep_parser),
+                    _args("scan", "--disable-version-check", "--metrics", "off", "--config", "/rules/security.yml",
+                          "--config", SEI_CERT_MOUNT, "--json", "--output", "/scratch/output.json"), _semgrep_parser,
+                    SEI_CERT_LIMITATIONS),
+        ToolAdapter("tool-opengrep", "source_sast", frozenset({0}), "/scratch/output.json", _sei_cert_source,
+                    _args("scan", "--disable-version-check", "--config", SEI_CERT_MOUNT, "--json",
+                          "--output", "/scratch/output.json"), _semgrep_parser,
+                    ("runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+                     *SEI_CERT_LIMITATIONS)),
         ToolAdapter("tool-gosec", "source_sast", frozenset({0, 1}), "/scratch/output.json", lang({".go"}),
                     _args("-fmt=json", "-out=/scratch/output.json", "-no-fail"), _gosec_parser,
                     ("dependency/build context may be incomplete in offline mode",)),

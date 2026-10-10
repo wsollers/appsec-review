@@ -1,0 +1,29 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.err50-cpp.abrupt-termination-call
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      ERR50-CPP: $FN() ends the program without unwinding the stack or running destructors and
+      handlers. Report and propagate the error so the program can terminate in an orderly way.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR50-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err50-cpp
+      cwe: [CWE-754]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches explicit calls to abort, quick_exit, and _Exit. ERR50-CPP-EX1 (abort or _Exit after reporting an unrecoverable error) cannot be verified syntactically, so such calls are reported for review. Implicit std::terminate paths need exception-flow analysis.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: $FN(...)
+          - pattern: std::$FN(...)
+      - metavariable-regex:
+          metavariable: $FN
+          regex: ^(abort|quick_exit|_Exit)$

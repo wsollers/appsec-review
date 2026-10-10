@@ -11,7 +11,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 
 SECRET_FIELDS = {"secret", "match", "password", "token", "apikey", "api_key", "private_key"}
-NORMALIZER_IDENTITY = "static-evidence/2"
+NORMALIZER_IDENTITY = "static-evidence/3"
 _ASSIGNMENT = re.compile(
     r"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*([\"']?)([^\s,;\"']+)\2"
 )
@@ -61,6 +61,19 @@ def severity(value: object) -> str:
     return "UNKNOWN"
 
 
+def _rule_mapping(value: object) -> dict[str, Any] | None:
+    """Bounded rule-pack mapping metadata (for example the SEI CERT identifier) from the native rule."""
+    if not isinstance(value, Mapping):
+        return None
+    mapping: dict[str, Any] = {}
+    for key, item in sorted(value.items()):
+        if isinstance(item, str):
+            mapping[str(key)] = item[:512]
+        elif isinstance(item, list) and all(isinstance(entry, str) for entry in item):
+            mapping[str(key)] = [entry[:128] for entry in item[:32]]
+    return mapping or None
+
+
 def safe_location(path: object, start_line: object, end_line: object, cataloged: set[str]) -> dict[str, Any] | None:
     if path is None:
         return None
@@ -84,6 +97,7 @@ def build_envelope(
     coverage_scope: Mapping[str, Any], gaps: Iterable[object], raw_artifacts: Iterable[Path],
     parser_identity: str, observations: Iterable[Mapping[str, Any]], cataloged_paths: Iterable[str],
     terminal_status: str, run_root: Path, bounds: EvidenceBounds = EvidenceBounds(),
+    source_hashes: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     paths = set(cataloged_paths)
     records: list[dict[str, Any]] = []
@@ -100,6 +114,8 @@ def build_envelope(
             bounded_gaps.append("one or more normalized fields were truncated")
         location = safe_location(native.get("path"), native.get("start_line"),
                                  native.get("end_line"), paths)
+        if location is not None and source_hashes and source_hashes.get(location["path"]):
+            location["source_sha256"] = source_hashes[location["path"]]
         record = {
             "native_rule_id": _text(native.get("rule_id", "unknown"), bounds.max_field_bytes)[0],
             "native_severity": _text(native.get("severity", "UNKNOWN"), 128)[0],
@@ -112,6 +128,9 @@ def build_envelope(
             "advisory": native.get("advisory"),
             "language": native.get("language"),
         }
+        rule_mapping = _rule_mapping(native.get("rule_mapping"))
+        if rule_mapping is not None:
+            record["rule_mapping"] = rule_mapping
         if location is None:
             record["artifact_evidence"] = True
         record["evidence_id"] = "evidence-" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]

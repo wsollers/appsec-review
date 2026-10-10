@@ -1,0 +1,28 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.msc50-cpp.rand-call
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      MSC50-CPP: std::rand() has a short, predictable period. Use a <random> engine seeded from
+      std::random_device, or a platform CSPRNG for security-sensitive values.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: MSC50-CPP
+      # The CERT C++ standard lists MSC30-C as also applying to C++; the same calls evidence both.
+      cert_also: [MSC30-C]
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc50-cpp
+      cwe: [CWE-330]
+      confidence: HIGH
+      precision: medium
+      coverage: SUPPORTED
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        The rule forbids std::rand() for pseudorandom numbers without exceptions, so every call is reported, qualified or not. Findings also evidence MSC30-C, which the CERT C++ standard lists as applying to C++.
+      license: MIT
+    pattern-either:
+      - pattern: std::rand()
+      - pattern: rand()
+      - pattern: ::rand()

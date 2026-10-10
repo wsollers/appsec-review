@@ -1,0 +1,51 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-clangd-indexer",
+  "tool_version": "23.1.0",
+  "project": "https://github.com/clangd/clangd",
+  "license": "Apache-2.0 WITH LLVM-exception",
+  "license_source": "clangd_23.1.0/LICENSE.TXT in the release archive",
+  "license_sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+  "architecture": "linux/amd64",
+  "generated_from": "clangd/clangd release 23.1.0 linux indexing-tools distribution",
+  "release": {
+    "tag": "23.1.0",
+    "version": "23.1.0",
+    "tag_object": "0d73b70db36385313702175b480183eb80ca6a16",
+    "tag_signed": false,
+    "tag_kind": "lightweight tag on the clangd/clangd release-automation repository",
+    "commit": "0d73b70db36385313702175b480183eb80ca6a16",
+    "commit_date": "2026-05-28T15:19:28-04:00",
+    "release_url": "https://github.com/clangd/clangd/releases/tag/23.1.0",
+    "build_workflow": "https://github.com/clangd/clangd/blob/0d73b70db36385313702175b480183eb80ca6a16/.github/workflows/autobuild.yaml",
+    "source_ref": "llvm/llvm-project at the ref supplied when the workflow was dispatched; expected llvmorg-23.1.0 (tag 9b0f9b1eb4a233717c6ed014cff6f8a7c65512de, commit ea7d852a70e8bdfaf601d6626a760f9771b2c4b4). Unverified: the binary does not embed a revision and the release description was not retrievable during review.",
+    "build_provenance": "Upstream GitHub Actions builds on ubuntu:20.04 with clang-10, static libgcc, and zlib. No checksum file, signature, attestation, or reproducible-build record is published."
+  },
+  "review_date": "2026-10-10",
+  "review_notes": "containers/tools/clangd-indexer/LICENSE.md",
+  "artifacts": [
+    {
+      "role": "archive",
+      "name": "clangd_indexing_tools-linux-23.1.0.zip",
+      "url": "https://github.com/clangd/clangd/releases/download/23.1.0/clangd_indexing_tools-linux-23.1.0.zip",
+      "path": "downloads/clangd_indexing_tools-linux-23.1.0.zip",
+      "sha256": "48259f33a0684760fdb363be036eb5c6f707fbeb0877e5fff58d1e6cc308a763",
+      "sha512": "1c901aca0bdbc8b1367b9400fa7993f806db00948fbfa0239e17204ab01915a32caf8e04f098370d9134e26904492edef8e3e2efa214a2d0be600f0336dfc2b0",
+      "bytes": 159888487,
+      "architecture": "linux/amd64",
+      "verification": {
+        "kind": "reviewer-calculated-sha256-and-sha512",
+        "sha256_source": "calculated by the reviewer from the downloaded release asset",
+        "sha512_source": "calculated by the reviewer; upstream publishes no checksum"
+      },
+      "version": "23.1.0",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_source": "clangd_23.1.0/LICENSE.TXT in the release archive",
+      "provenance": "GitHub release asset of clangd/clangd tag 23.1.0",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "Upstream publishes no checksum file, detached signature, sigstore bundle, or attestation for this asset."
+      }
+    }
+  ]
+}

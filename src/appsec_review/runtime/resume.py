@@ -51,8 +51,10 @@ def job_config_sha256(config: AppConfig, job_id: str) -> str:
 
 
 class ResumePlanner:
-    def __init__(self, config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str):
+    def __init__(self, config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str,
+                 target_root: Path | None = None):
         self.config = config
+        self.target_root = target_root
         self.run_root = Path(run_root)
         self.jobs = tuple(jobs)
         self.source_fingerprint = source_fingerprint
@@ -87,6 +89,8 @@ class ResumePlanner:
             "upstream handoffs": (handoff.get("upstream_handoff_sha256", {}), dict(upstream)),
             "tool": (handoff.get("tool_identity"), {"python": os.sys.version.split()[0]}),
         }
+        if job.input_identity is not None:
+            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
         dispositions = [item for output in handoff.get("outputs", {}).values()
                         if isinstance(output, Mapping)

@@ -1,0 +1,27 @@
+rules:
+  - id: appsec-review.sei-cert.java.sec05-j.reflective-accessibility-increase
+    languages: [java]
+    severity: WARNING
+    message: >-
+      SEC05-J: reflection is used to suppress Java language access checks, exposing members
+      beyond their declared accessibility. Use the member's intended public API instead.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: SEC05-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/platform-security-sec/sec05-j
+      cwe: []
+      confidence: HIGH
+      precision: medium
+      coverage: PARTIAL
+      technology: [java-reflection]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches setAccessible(true) on a reflected object, the static AccessibleObject.setAccessible(array, true) form, and trySetAccessible(). MethodHandles.privateLookupIn and accessibility changes through variables holding true are not detected. Whether untrusted code can reach the member is not established.
+      license: MIT
+    pattern-either:
+      - pattern: $MEMBER.setAccessible(true)
+      - pattern: AccessibleObject.setAccessible($MEMBERS, true)
+      - pattern: java.lang.reflect.AccessibleObject.setAccessible($MEMBERS, true)
+      - pattern: $MEMBER.trySetAccessible()

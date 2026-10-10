@@ -80,7 +80,7 @@ class FakeBuildExecutor:
         return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
 
     def execute_captured(self, argv, *, workspace, working_directory, environment,
-                         capture_directory, capture_config, scope):
+                         capture_directory, capture_config, scope, **_options):
         result = self.execute(argv, workspace=workspace, working_directory=working_directory,
                               environment=environment)
         capture_directory.mkdir(parents=True)

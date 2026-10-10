@@ -13,7 +13,7 @@ from appsec_review.storage import canonical_json, file_sha256
 from .capture import CapturedBuildDescriptor, ToolIdentity
 
 
-CAPTURE_IDENTITY = "appsec-review/rust-cargo-build-capture/2"
+CAPTURE_IDENTITY = "appsec-review/rust-cargo-build-capture/3"
 _NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _TARGET = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _FORBIDDEN = {"run", "test", "bench", "install", "fix", "miri"}

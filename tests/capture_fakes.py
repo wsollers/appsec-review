@@ -88,6 +88,10 @@ class ContainerSimulation:
             self._write(self._pid, "exit_group(0)", "?")
         return self._pid
 
+    def syscall(self, call: str, result: str, *, pid: int | None = None) -> None:
+        """Record one raw syscall row exactly as ``strace -y`` prints it."""
+        self._write(self._pid if pid is None else pid, call, result)
+
     def open(self, path: str) -> None:
         self._write(self._pid, f"openat(AT_FDCWD, {_quoted(path)}, O_RDONLY|O_CLOEXEC)", "3")
 

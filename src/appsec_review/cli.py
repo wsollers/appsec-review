@@ -30,10 +30,12 @@ def parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--target", type=Path, required=True)
-    graph_job_ids = ("job_review_intake", "job_target_catalog", "job_target_analysis_plan",
+    graph_job_ids = ("job_review_intake", "job_target_catalog", "job_source_history_analysis",
+                     "job_target_analysis_plan",
                      "job_project_build", "job_language_build", "job_artifact_indexing",
                      "job_artifact_security_analysis",
-                     "job_cpp_compiled_analysis", "job_codeql_analysis", "job_evidence_collection")
+                     "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
+                     "job_codeql_analysis", "job_evidence_collection")
     plan.add_argument("--force-from", choices=graph_job_ids)
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
@@ -111,17 +113,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
         jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+                registry.build("job_source_history_analysis"),
                 registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
                 registry.build("job_language_build"),
                 registry.build("job_artifact_indexing"),
                 registry.build("job_artifact_security_analysis"),
                 registry.build("job_cpp_compiled_analysis"),
+                registry.build("job_cpp_symbol_index"),
+                registry.build("job_cpg_analysis"),
                 registry.build("job_codeql_analysis"),
                 registry.build("job_evidence_collection")]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":
-            decisions = graph.plan(args.run_id, fingerprint, force_from=args.force_from)
+            decisions = graph.plan(args.run_id, fingerprint, force_from=args.force_from,
+                                   target_root=args.target)
             print(json.dumps([item.as_dict() for item in decisions], sort_keys=True, indent=2))
             return 0
         outcome = graph.run(target_root=args.target, source_fingerprint=fingerprint,

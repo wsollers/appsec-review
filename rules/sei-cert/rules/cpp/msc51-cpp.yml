@@ -1,0 +1,41 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.msc51-cpp.predictably-seeded-engine
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      MSC51-CPP: this random-number engine uses its default seed or the current time, so its
+      sequence is reproducible or guessable. Seed it from std::random_device or a CSPRNG.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: MSC51-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/miscellaneous-msc/msc51-cpp
+      cwe: [CWE-330, CWE-337]
+      confidence: HIGH
+      precision: medium
+      coverage: PARTIAL
+      technology: [cpp-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches declarations of standard engines that are default-constructed or seeded from an expression containing std::time/time. Both engines fail to parse direct initialization written as engine(std::time(nullptr)), so that spelling is a recorded false negative; the &t, brace, and copy-initialization spellings are matched. Constant seeds supplied through variables are not detected.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: std::$ENGINE $G;
+          # Direct-initialization spellings are listed explicitly; the normalized "= $SEED" form
+          # below does not cover every parenthesized initializer.
+          - pattern: std::$ENGINE $G(std::time(...));
+          - pattern: std::$ENGINE $G(time(...));
+          - pattern: std::$ENGINE $G(static_cast<$T>(std::time(...)));
+          - pattern: std::$ENGINE $G(static_cast<$T>(time(...)));
+          - patterns:
+              - pattern: std::$ENGINE $G = $SEED;
+              - metavariable-pattern:
+                  metavariable: $SEED
+                  pattern-either:
+                    - pattern: <... std::time(...) ...>
+                    - pattern: <... time(...) ...>
+      - metavariable-regex:
+          metavariable: $ENGINE
+          regex: ^(mt19937|mt19937_64|default_random_engine|minstd_rand|minstd_rand0|ranlux24|ranlux48|ranlux24_base|ranlux48_base|knuth_b)$

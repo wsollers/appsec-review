@@ -20,6 +20,10 @@ envp_redact_names = [
   "PIP_INDEX_URL",
 ]
 path_bytes_limit = 4096
+# Post-build file inventory and response-file snapshot bounds (no hashing happens during the build).
+file_inventory_count_limit = 1000000
+response_file_count_limit = 10000
+response_file_bytes_limit = 1048576
 tool_call_count_limit = 10000
 secret_finding_count_limit = 1000
 
@@ -224,6 +228,67 @@ workers = 1
 workers = 1
 [jobs.job_target_catalog.steps.publish_catalog.tasks.validate_catalog]
 [jobs.job_target_catalog.steps.publish_catalog.tasks.publish_handoff]
+
+[jobs.job_source_history_analysis]
+name = "source_history_analysis"
+workers = 1
+
+[jobs.job_source_history_analysis.settings]
+# Windows are anchored to the mainline (main, else master) snapshot commit time, never wall clock.
+window_days = 365
+max_changes = 20000
+bulk_change_file_threshold = 500
+recency_half_life_days = 90
+minor_author_share = 0.05
+young_line_days = 30
+co_change_top_k = 10
+co_change_min_support = 3
+blame_max_files = 50
+blame_max_file_bytes = 1048576
+ranking_top_n = 200
+fix_labels = ["bug", "fix", "regression"]
+security_labels = ["security", "vulnerability"]
+
+# Ranking is churn-led; other signals are published but carry no weight unless configured here.
+[jobs.job_source_history_analysis.settings.ranking_weights]
+churn_lines = 3
+recency_weighted_churn = 2
+change_count = 1
+
+[jobs.job_source_history_analysis.settings.git]
+enabled = true
+
+[jobs.job_source_history_analysis.settings.github]
+enabled = false
+api_base = "https://api.github.com"
+repository = ""
+token_env = "GITHUB_TOKEN"
+max_requests = 2000
+timeout_seconds = 30
+
+[jobs.job_source_history_analysis.steps.resolve_sources]
+workers = 1
+[jobs.job_source_history_analysis.steps.resolve_sources.tasks.resolve_history_source]
+[jobs.job_source_history_analysis.steps.resolve_sources.tasks.bind_snapshot]
+
+[jobs.job_source_history_analysis.steps.acquire]
+workers = 1
+[jobs.job_source_history_analysis.steps.acquire.tasks.git_history]
+[jobs.job_source_history_analysis.steps.acquire.tasks.normalize_changes]
+[jobs.job_source_history_analysis.steps.acquire.tasks.github_enrichment]
+
+[jobs.job_source_history_analysis.steps.analyze]
+workers = 1
+[jobs.job_source_history_analysis.steps.analyze.tasks.classify_changes]
+[jobs.job_source_history_analysis.steps.analyze.tasks.compute_signals]
+[jobs.job_source_history_analysis.steps.analyze.tasks.blame_age]
+[jobs.job_source_history_analysis.steps.analyze.tasks.co_change]
+[jobs.job_source_history_analysis.steps.analyze.tasks.rank]
+
+[jobs.job_source_history_analysis.steps.publish]
+workers = 1
+[jobs.job_source_history_analysis.steps.publish.tasks.index_history]
+[jobs.job_source_history_analysis.steps.publish.tasks.publish_handoff]
 
 [jobs.job_target_analysis_plan]
 name = "target_analysis_plan"
@@ -653,10 +718,6 @@ workers = 1
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.infer.tasks.projects]
 
-[jobs.job_cpp_compiled_analysis.steps.joern]
-workers = 1
-[jobs.job_cpp_compiled_analysis.steps.joern.tasks.projects]
-
 [jobs.job_cpp_compiled_analysis.steps.binary]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.binary.tasks.projects]
@@ -862,6 +923,51 @@ workers = 1
 [jobs.job_codeql_analysis.steps.acceptance.tasks.publish_handoff]
 
 
+[jobs.job_cpp_symbol_index]
+name = "cpp_symbol_index"
+workers = 2
+
+[jobs.job_cpp_symbol_index.settings]
+# Concurrent project scopes; each scope is one clangd-indexer container under the central policy.
+workers = 2
+max_documents_per_scope = 2000000
+max_symbols_per_scope = 500000
+max_relations_per_scope = 2000000
+locations_per_relation = 8
+
+[jobs.job_cpp_symbol_index.steps.load]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.load.tasks.accepted_cpp]
+
+[jobs.job_cpp_symbol_index.steps.index]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.index.tasks.scopes]
+
+[jobs.job_cpp_symbol_index.steps.acceptance]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_cpg_analysis]
+name = "cpg_analysis"
+workers = 1
+
+[jobs.job_cpg_analysis.settings]
+# Joern is memory-heavy; scopes run one at a time until a per-tool resource profile is reviewed.
+workers = 1
+max_cpg_bytes = 2147483648
+
+[jobs.job_cpg_analysis.steps.load]
+workers = 1
+[jobs.job_cpg_analysis.steps.load.tasks.accepted_cpp]
+
+[jobs.job_cpg_analysis.steps.generate]
+workers = 1
+[jobs.job_cpg_analysis.steps.generate.tasks.scopes]
+
+[jobs.job_cpg_analysis.steps.acceptance]
+workers = 1
+[jobs.job_cpg_analysis.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_post_build_security_assessment]
 name = "post_build_security_assessment"
 workers = 8
@@ -1027,6 +1133,9 @@ workers = 4
 [jobs.job_evidence_collection.steps.source_sast.tasks.semgrep_scan]
 [jobs.job_evidence_collection.steps.source_sast.tasks.semgrep_normalize]
 [jobs.job_evidence_collection.steps.source_sast.tasks.semgrep_index]
+[jobs.job_evidence_collection.steps.source_sast.tasks.opengrep_scan]
+[jobs.job_evidence_collection.steps.source_sast.tasks.opengrep_normalize]
+[jobs.job_evidence_collection.steps.source_sast.tasks.opengrep_index]
 [jobs.job_evidence_collection.steps.source_sast.tasks.gosec_scan]
 [jobs.job_evidence_collection.steps.source_sast.tasks.gosec_normalize]
 [jobs.job_evidence_collection.steps.source_sast.tasks.gosec_index]
@@ -1126,7 +1235,7 @@ result_validator = "1"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
 catalog_path = "data/reference/owasp/fixtures/asvs-5.0.0.json"
-catalog_sha256 = "81e598b97836a8195bdd9ad890c2ae607530452f5c9cf5da6e32c1740d6d0450"
+catalog_sha256 = "841724424177d187f85a1128f30b432e2598316d215e99314cf8f87a5771b4e9"
 version = "5.0.0"
 repository = "https://github.com/OWASP/ASVS"
 ref = "v5.0.0_release"

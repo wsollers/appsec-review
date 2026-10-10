@@ -101,3 +101,22 @@ def test_bash_and_powershell_selection_parity() -> None:
                                  "list", "--json", *ids], cwd=ROOT, capture_output=True,
                                 text=True, check=True)
     assert json.loads(bash.stdout) == json.loads(powershell.stdout)
+
+
+def test_named_build_contexts_are_validated_and_passed_to_docker(monkeypatch, tmp_path: Path) -> None:
+    catalog = container_build.load_catalog()
+    item = dict(catalog["by_id"]["tool-joern"])
+    assert item["build_contexts"] == {"shared": "containers/tools/shared"}
+    catalog["by_id"]["tool-joern"] = catalog["images"][[i["id"] for i in catalog["images"]].index(
+        "tool-joern")] = {**item, "build_contexts": {"shared": "../outside"}}
+    assert any("tool-joern" in error and "escapes" in error for error in container_build.validate(catalog))
+
+    calls = []
+    monkeypatch.setattr(container_build, "fetch_one", lambda item, log: None)
+    monkeypatch.setattr(container_build, "run_logged", lambda argv, log, timeout: calls.append(argv) or
+                        subprocess.CompletedProcess(argv, 1))
+    container_build.build_one(item, tmp_path)
+    (argv,) = calls
+    assert argv[argv.index("--build-context") + 1] == (
+        "shared=" + str(container_build.safe_path("containers/tools/shared")))
+    assert "--network=none" in argv

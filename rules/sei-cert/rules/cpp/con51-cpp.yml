@@ -1,0 +1,33 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.con51-cpp.manual-lock-before-throw
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      CON51-CPP: $MUTEX is locked manually and an exception is thrown before it is unlocked, so
+      the lock stays held. Use std::lock_guard, std::unique_lock, or std::scoped_lock.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: CON51-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/concurrency-con/con51-cpp
+      cwe: [CWE-667]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-standard-library-threads]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Migrated from appsec-review.cpp-cert.con51-manual-lock-before-throw. Adds an exclusion when the same mutex is unlocked before the throw, which the original rule reported. Exceptions raised by called functions while the lock is held are not detected.
+      license: MIT
+    patterns:
+      - pattern: |
+          $MUTEX.lock();
+          ...
+          throw $EXCEPTION;
+      - pattern-not: |
+          $MUTEX.lock();
+          ...
+          $MUTEX.unlock();
+          ...
+          throw $EXCEPTION;

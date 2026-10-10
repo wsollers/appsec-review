@@ -4,7 +4,7 @@
   "inventory": {
     "codeql_queries": 117,
     "codeql_cert_rules": 82,
-    "local_semgrep_rules": 7
+    "sei_cert_pack_rules": 8
   },
   "priorities": [
     {
@@ -21,9 +21,12 @@
       "weakness": "incorrect or missing deallocation",
       "cwe": ["CWE-415", "CWE-762"],
       "codeql": ["codeql/cert/rules/MEM51-CPP/ProperlyDeallocateDynamicallyAllocatedResources.ql"],
-      "semgrep": [],
+      "semgrep": [
+        "appsec-review.sei-cert.cpp.mem51-cpp.allocator-deallocator-mismatch",
+        "appsec-review.sei-cert.cpp.mem51-cpp.array-new-scalar-delete"
+      ],
       "mapping_evidence": ["clang-tidy", "clangsa"],
-      "gap": "No local syntactic rule: ownership and path reasoning are required."
+      "gap": "Pack rules cover same-function allocation/deallocation mismatches; double free and cross-function ownership remain CodeQL work."
     },
     {
       "cert": "MEM52-CPP",
@@ -63,9 +66,9 @@
       "weakness": "unrelated smart-pointer ownership",
       "cwe": ["CWE-415"],
       "codeql": ["codeql/cert/rules/MEM56-CPP/OwnedPointerValueStoredInUnrelatedSmartPointerCert.ql"],
-      "semgrep": ["appsec-review.cpp-cert.mem56-unrelated-shared-owner"],
+      "semgrep": ["appsec-review.sei-cert.cpp.mem56-cpp.unrelated-smart-pointer-owner"],
       "mapping_evidence": [],
-      "gap": null
+      "gap": "Pack rule covers smart pointers built from another owner's get(); raw pointers stored earlier remain CodeQL work."
     },
     {
       "cert": "MEM57-CPP",
@@ -79,11 +82,11 @@
     {
       "cert": "EXP51-CPP",
       "weakness": "mismatched array deallocation",
-      "cwe": ["CWE-762"],
+      "cwe": [],
       "codeql": ["codeql/cert/rules/EXP51-CPP/DoNotDeleteAnArrayThroughAPointerOfTheIncorrectType.ql"],
-      "semgrep": ["appsec-review.cpp-cert.exp51-array-scalar-delete"],
+      "semgrep": [],
       "mapping_evidence": ["clangsa"],
-      "gap": "Local rule intentionally covers only a same-function high-confidence allocation/deallocation shape."
+      "gap": "The former local array-new/scalar-delete rule now maps to MEM51-CPP, which owns that case on the official page; deleting arrays through a pointer of another static type requires type resolution."
     },
     {
       "cert": "EXP54-CPP",
@@ -93,18 +96,18 @@
         "codeql/cert/rules/EXP54-CPP/ObjectAccessedAfterLifetimeCert.ql",
         "codeql/cert/rules/EXP54-CPP/ObjectAccessedBeforeLifetimeCert.ql"
       ],
-      "semgrep": [],
+      "semgrep": ["appsec-review.sei-cert.cpp.exp54-cpp.escaping-reference-to-local"],
       "mapping_evidence": ["clang-tidy", "clangsa"],
-      "gap": "General lifetime analysis is not expressible as a sound local pattern."
+      "gap": "Pack rule covers views, pointers, and iterators returned into destroyed locals; general lifetime analysis remains CodeQL work."
     },
     {
       "cert": "STR52-CPP",
       "weakness": "dangling string element or view",
-      "cwe": ["CWE-416"],
+      "cwe": [],
       "codeql": ["codeql/cert/rules/STR52-CPP/UseValidReferencesForElementsOfString.ql"],
-      "semgrep": ["appsec-review.cpp-cert.str52-return-local-string-view"],
+      "semgrep": [],
       "mapping_evidence": ["clangsa"],
-      "gap": "Local rule covers returned string_view over a local string; other invalidation cases remain data-flow work."
+      "gap": "The former local string_view rule now maps to EXP54-CPP because it concerns object lifetime; invalidation by string operations requires data-flow analysis."
     },
     {
       "cert": "CTR50-CPP",
@@ -150,27 +153,27 @@
         "codeql/cert/rules/CON50-CPP/DoNotAllowAMutexToGoOutOfScopeWhileLocked.ql",
         "codeql/cert/rules/CON50-CPP/DoNotDestroyAMutexWhileItIsLocked.ql"
       ],
-      "semgrep": ["appsec-review.cpp-cert.con50-destroy-locked-pthread-mutex"],
+      "semgrep": ["appsec-review.sei-cert.cpp.con50-cpp.destroy-locked-mutex"],
       "mapping_evidence": [],
-      "gap": "Local rule covers the direct pthread lock/destroy sequence only."
+      "gap": "Pack rule covers the direct POSIX lock/destroy sequence only."
     },
     {
       "cert": "CON51-CPP",
       "weakness": "lock not released on exception",
       "cwe": ["CWE-667"],
       "codeql": ["codeql/cert/rules/CON51-CPP/EnsureActivelyHeldLocksAreReleasedOnExceptionalConditions.ql"],
-      "semgrep": ["appsec-review.cpp-cert.con51-manual-lock-before-throw"],
+      "semgrep": ["appsec-review.sei-cert.cpp.con51-cpp.manual-lock-before-throw"],
       "mapping_evidence": [],
-      "gap": "Local rule covers a direct manual lock followed by throw; interprocedural exceptional exits require deeper analysis."
+      "gap": "Pack rule covers a direct manual lock followed by throw; interprocedural exceptional exits require deeper analysis."
     },
     {
       "cert": "CON54-CPP",
       "weakness": "condition-variable wait without retry condition",
-      "cwe": ["CWE-667"],
+      "cwe": [],
       "codeql": ["codeql/cert/rules/CON54-CPP/WrapFunctionsThatCanSpuriouslyWakeUpInLoop.ql"],
-      "semgrep": ["appsec-review.cpp-cert.con54-predicate-free-condition-wait"],
+      "semgrep": ["appsec-review.sei-cert.cpp.con54-cpp.predicate-free-wait-outside-loop"],
       "mapping_evidence": ["clang-tidy"],
-      "gap": "Local rule does not prove that surrounding non-while control flow is equivalent to a retry loop."
+      "gap": "Pack rule does not prove that a surrounding loop re-tests the predicate."
     },
     {
       "cert": "CON56-CPP",
@@ -180,14 +183,14 @@
         "codeql/cert/rules/CON56-CPP/DoNotSpeculativelyLockALockedNonRecursiveMutex.ql",
         "codeql/cert/rules/CON56-CPP/LockedALockedNonRecursiveMutexAudit.ql"
       ],
-      "semgrep": ["appsec-review.cpp-cert.con56-repeat-nonrecursive-lock"],
+      "semgrep": ["appsec-review.sei-cert.cpp.con56-cpp.relock-owned-nonrecursive-mutex"],
       "mapping_evidence": [],
-      "gap": "Local rule covers a direct std::timed_mutex lock/try_lock_for sequence only."
+      "gap": "Pack rule covers a same-function relock of a declared non-recursive mutex only."
     }
   ],
   "known_gaps": [
     "This bundle does not enable or license the CodeQL CLI; the generic C/C++ workflow must supply an approved CLI and the lock-file dependencies.",
-    "OpenGrep execution parity is not yet demonstrated because no pinned OpenGrep executable or image is present; the local YAML is Semgrep-compatible and tested with the pinned Semgrep image.",
+    "Semgrep/OpenGrep rules referenced here live in the rules/sei-cert pack, which pins and executes both engines; its mappings, not this crosswalk, are authoritative for rule-pack coverage status.",
     "CodeChecker files are mappings only; they do not install or enable clang-tidy, Clang Static Analyzer, or Cppcheck checkers.",
     "MISRA and AUTOSAR rule prose, examples, and commercial checker content are intentionally excluded because redistribution and derivative rights were not established.",
     "A mapped CERT identifier is evidence of a crosswalk, not evidence that a checker is installed, enabled, or complete."

@@ -36,6 +36,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_review_intake import build_job as build_intake
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
+    from appsec_review.jobs.job_source_history_analysis import build_job as build_source_history
     from appsec_review.jobs.job_tree_sitter_ast import build_job as build_tree_sitter_ast
     from appsec_review.jobs.job_project_build import build_job as build_project_build
     from appsec_review.jobs.job_language_build import build_job as build_language_build
@@ -45,6 +46,8 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_evidence_collection import build_job as build_evidence
     from appsec_review.jobs.job_ci_configuration_analysis import build_job as build_ci_configuration_analysis
     from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp_compiled
+    from appsec_review.jobs.job_cpp_symbol_index import build_job as build_cpp_symbol_index
+    from appsec_review.jobs.job_cpg_analysis import build_job as build_cpg_analysis
     from appsec_review.jobs.job_codeql_analysis.job import build_job as build_codeql_analysis
     from appsec_review.jobs.job_post_build_security_assessment import build_job as build_post_build_security
     from appsec_review.jobs.job_owasp_control_assessment import build_job as build_owasp_control_assessment
@@ -53,6 +56,7 @@ def builtin_registry() -> JobRegistry:
     registry = JobRegistry()
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
     registry.register("job_target_catalog", build_catalog)
+    registry.register("job_source_history_analysis", build_source_history)
     registry.register("job_target_analysis_plan",
                       lambda: build_analysis_plan(infer=infer))
     registry.register("job_tree_sitter_ast", build_tree_sitter_ast)
@@ -65,6 +69,8 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_evidence_collection", build_evidence)
     registry.register("job_ci_configuration_analysis", build_ci_configuration_analysis)
     registry.register("job_cpp_compiled_analysis", build_cpp_compiled)
+    registry.register("job_cpp_symbol_index", build_cpp_symbol_index)
+    registry.register("job_cpg_analysis", build_cpg_analysis)
     registry.register("job_codeql_analysis", build_codeql_analysis)
     registry.register("job_post_build_security_assessment",
                       lambda: build_post_build_security(infer=infer))

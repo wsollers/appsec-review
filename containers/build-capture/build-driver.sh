@@ -14,10 +14,10 @@ APPSEC_CAPTURE_PYTHON=$(command -v python3)
 export APPSEC_CAPTURE_PYTHON
 export PATH="$wrapper_root:$PATH"
 if [ "$capture_envp" = "1" ]; then
-  exec strace -ff -qq -ttt -v -s "$string_limit" \
-    -e trace=clone,clone3,fork,vfork,execve,execveat,exit,exit_group,openat,openat2,connect \
+  exec strace --seccomp-bpf -ff -qq -y -ttt -v -s "$string_limit" \
+    -e trace=clone,clone3,fork,vfork,execve,execveat,exit,exit_group,open,openat,openat2,creat,chdir,fchdir,rename,renameat,renameat2,link,linkat,unlink,unlinkat,connect \
     -o "$capture_root/trace" -- "$@"
 fi
-exec strace -ff -qq -ttt -s "$string_limit" \
-  -e trace=clone,clone3,fork,vfork,execve,execveat,exit,exit_group,openat,openat2,connect \
+exec strace --seccomp-bpf -ff -qq -y -ttt -s "$string_limit" \
+  -e trace=clone,clone3,fork,vfork,execve,execveat,exit,exit_group,open,openat,openat2,creat,chdir,fchdir,rename,renameat,renameat2,link,linkat,unlink,unlinkat,connect \
   -o "$capture_root/trace" -- "$@"

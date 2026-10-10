@@ -11,7 +11,7 @@ from appsec_review.storage import canonical_json, file_sha256
 from .capture import CapturedBuildDescriptor, ToolIdentity
 
 
-CAPTURE_IDENTITY = "appsec-review/native-build-capture/2"
+CAPTURE_IDENTITY = "appsec-review/native-build-capture/3"
 _DRIVER = re.compile(r"(?:[a-z0-9_.+-]+-)?(?:cc|c\+\+|gcc|g\+\+|clang|clang\+\+)(?:-[0-9.]+)?")
 _COMPILERS = {"clang-cl", "cl"}
 _ASSEMBLERS = {"as", "llvm-as"}

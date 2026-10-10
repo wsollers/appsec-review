@@ -1,0 +1,41 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.dcl57-cpp.throw-in-destructor
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      DCL57-CPP: an exception thrown here can escape the destructor, which calls std::terminate
+      (destructors are implicitly noexcept). Handle the error inside the destructor.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: DCL57-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/declarations-and-initialization-dcl/dcl57-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-exceptions]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches a throw expression lexically inside a destructor body, in-class or out-of-class, that is not enclosed by a try block in that destructor. Exceptions from called functions and from deallocation functions are not detected.
+      license: MIT
+    patterns:
+      # Destructor names are matched through a name metavariable; a literal "~$C()" pattern does
+      # not match in either engine.
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  $DTOR(...) { ... }
+              - metavariable-regex:
+                  metavariable: $DTOR
+                  regex: ^~
+          - patterns:
+              - pattern-inside: |
+                  $CLASS::$DTOR(...) { ... }
+              - metavariable-regex:
+                  metavariable: $DTOR
+                  regex: ^~
+      - pattern: throw $E;
+      - pattern-not-inside: |
+          try { ... } catch (...) { ... }

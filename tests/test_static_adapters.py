@@ -23,7 +23,7 @@ def fixture_catalog() -> ScanCatalog:
 
 def test_every_enabled_adapter_has_applicability_argv_exit_parser_and_limitations() -> None:
     registry = adapter_registry()
-    assert len(registry) == 19
+    assert len(registry) == 20
     catalog = fixture_catalog()
     for adapter in registry.values():
         selection = adapter.applicability(catalog)
@@ -109,3 +109,36 @@ def test_checkov_typed_multi_vuln_scope_includes_supported_families_not_arbitrar
     argv = adapter.argv("/opt/tool/bin/checkov", selected)
     assert "--framework" in argv and "dockerfile" in argv and "github_actions" in argv
     assert any("structural evidence" in gap for gap in selected.gaps)
+
+
+def test_sei_cert_engines_share_the_pack_and_keep_engine_diagnostics_as_gaps() -> None:
+    registry = adapter_registry()
+    catalog = fixture_catalog()
+    semgrep = registry["tool-semgrep"]
+    opengrep = registry["tool-opengrep"]
+    semgrep_argv = semgrep.argv("/bin/semgrep", semgrep.applicability(catalog))
+    assert semgrep_argv[semgrep_argv.index("/rules-sei-cert") - 1] == "--config"
+    selection = opengrep.applicability(catalog)
+    assert selection.files == ("MainActivity.java", "native.cpp")
+    argv = opengrep.argv("/bin/opengrep", selection)
+    assert "--config" in argv and "/rules-sei-cert" in argv and "/rules/security.yml" not in argv
+    assert any("not CERT conformance" in item for item in opengrep.limitations)
+    kotlin = ScanCatalog("fp", "h", ({"path": "App.kt", "sha256": "1" * 64}, {"path": "a.c", "sha256": "2" * 64}), (), ())
+    assert any("Kotlin" in gap for gap in opengrep.applicability(kotlin).gaps)
+    payload = json.dumps({
+        "results": [{"check_id": "rules-sei-cert.c.appsec-review.sei-cert.c.msc30-c.rand-call", "path": "a.c",
+                     "start": {"line": 2}, "end": {"line": 2},
+                     "extra": {"message": "MSC30-C", "severity": "WARNING", "metadata": {"cert": "MSC30-C"}}},
+                    {"check_id": "appsec-review.python-dangerous-eval", "path": "m.py", "start": {"line": 1},
+                     "end": {"line": 1}, "extra": {"message": "eval", "severity": "ERROR"}}],
+        "errors": [{"level": "error", "rule_id": "bad-rule", "message": "Rule parse error"}],
+        "paths": {"skipped": [{"path": "big.c", "reason": "exceeded_size_limit"}]},
+    }).encode()
+    for adapter in (semgrep, opengrep):
+        records = adapter.parse(payload)
+        assert records[0]["rule_id"] == "appsec-review.sei-cert.c.msc30-c.rand-call"
+        assert records[0]["rule_mapping"] == {"cert": "MSC30-C"}
+        assert "rule_mapping" not in records[1]
+        gaps = [record["coverage_gap"] for record in records if record.get("gap_only")]
+        assert gaps == ["engine reported error for bad-rule: Rule parse error",
+                        "engine skipped big.c: exceeded_size_limit"]

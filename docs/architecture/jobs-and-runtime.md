@@ -13,7 +13,7 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a ten-job linear review graph from
+The direct CLI currently exercises this mechanism with an eleven-job linear review graph from
 `job_review_intake` through `job_evidence_collection`. Dagster builds the broader, branched
 `wave1_review` topology from the registered and configured jobs, including CI configuration,
 tree-sitter, post-build, and OWASP branches that are not in the direct graph. Both surfaces use the
@@ -23,6 +23,12 @@ documented in [`../operations/wave1-review.md`](../operations/wave1-review.md).
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the
 accepted job receipts correctly remain linked to their original launch.
+
+A job may also declare a cheap, deterministic `input_identity` probe for inputs the target
+fingerprint deliberately excludes. The runner records the probe value in the claim and handoff, and
+the resume planner re-probes it against the graph target; a mismatch reruns the job and invalidates
+its downstream closure. `job_source_history_analysis` uses it for the mainline commit, object
+format, and shallow boundary, because `.git` is outside the source fingerprint.
 
 ## Global events
 
@@ -283,8 +289,14 @@ configuration, hash, checkpoint, and manifest failures stop publication. See
 language-build handoff. It does not configure or compile projects. Its graph is repository-independent:
 one task per stage batches an arbitrary project
 set while retaining per-project checkpoints, terminal states, and shard identities. Once a project
-catalog is terminal, compiled indexing, Clang AST, LLVM IR, Infer, Joern, and binary/symbol branches
+catalog is terminal, compiled indexing, Clang AST, LLVM IR, Infer, and binary/symbol branches
 can be produced without encoding project names or counts in the graph.
+
+`job_cpp_symbol_index` (clangd) and `job_cpg_analysis` (Joern) are independent consumers of the
+accepted C++ handoff. Each derives the same generic index scopes (accepted, hash-verified files plus
+their exact compile commands) from that handoff, runs one pinned tool per scope, and publishes its
+own shards. Neither depends on the other; both compose the accepted manifest without dropping
+sibling producers' shards, and CodeQL composes both.
 
 `job_codeql_analysis` is a separate cross-language consumer of the accepted catalog, language-build,
 artifact-index, and C++ handoffs. It owns C/C++, Go, Java/Kotlin, C#, JavaScript/TypeScript, Python,

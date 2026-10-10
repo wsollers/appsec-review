@@ -8,11 +8,11 @@
     "scope": {"type": "string", "minLength": 1},
     "inventory": {
       "type": "object",
-      "required": ["codeql_queries", "codeql_cert_rules", "local_semgrep_rules"],
+      "required": ["codeql_queries", "codeql_cert_rules", "sei_cert_pack_rules"],
       "properties": {
         "codeql_queries": {"type": "integer", "minimum": 0},
         "codeql_cert_rules": {"type": "integer", "minimum": 0},
-        "local_semgrep_rules": {"type": "integer", "minimum": 0}
+        "sei_cert_pack_rules": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": false
     },
@@ -26,7 +26,7 @@
           "weakness": {"type": "string", "minLength": 1},
           "cwe": {"type": "array", "items": {"type": "string", "pattern": "^CWE-[0-9]+$"}, "uniqueItems": true},
           "codeql": {"type": "array", "items": {"type": "string", "pattern": "^codeql/cert/rules/.+\\.ql$"}, "uniqueItems": true},
-          "semgrep": {"type": "array", "items": {"type": "string", "pattern": "^appsec-review\\.cpp-cert\\."}, "uniqueItems": true},
+          "semgrep": {"type": "array", "items": {"type": "string", "pattern": "^appsec-review\\.sei-cert\\.cpp\\."}, "uniqueItems": true},
           "mapping_evidence": {"type": "array", "items": {"enum": ["clang-tidy", "clangsa", "cppcheck"]}, "uniqueItems": true},
           "gap": {"type": ["string", "null"]}
         },

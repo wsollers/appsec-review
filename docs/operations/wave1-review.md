@@ -6,7 +6,8 @@ accepted handoffs, but they do not currently expose the same review topology.
 The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
 ```text
-review_intake -> target_catalog -> target_analysis_plan -> project_build -> language_build
+review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
+  -> project_build -> language_build
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
   -> codeql_analysis -> evidence_collection
 ```
@@ -32,6 +33,8 @@ appsec-review resume --run-id 2026-10-08-0001 --target targets/appsec-multi-vuln
 `plan-resume` is read-only apart from its audit event. It explains `REUSE`, `RUN`, and downstream
 `INVALIDATE` decisions. A job is reused only when its configuration, implementation, schema,
 validator, target, upstream handoffs, accepted handoff, and run-owned artifacts resolve and match.
+Source history analysis also re-probes the target's mainline history identity, so a rewritten
+commit message reruns it and invalidates the plan even when the tree bytes are unchanged.
 Failed and interrupted attempts remain immutable; only a validated success updates `latest.json`.
 
 Read the global log without `jq`:

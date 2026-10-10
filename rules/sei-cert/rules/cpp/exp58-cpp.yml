@@ -1,0 +1,35 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.exp58-cpp.va-start-invalid-parameter
+    languages: [cpp]
+    severity: ERROR
+    message: >-
+      EXP58-CPP: va_start() is given parameter $P, whose declared type is a reference or a type
+      changed by default argument promotion, which has undefined behavior. Pass an object of a
+      promoted, non-reference type as the last named parameter.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: EXP58-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/expressions-exp/exp58-cpp
+      cwe: []
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [cpp-language, c-variadic]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches va_start whose named parameter is declared in the enclosing definition as a reference or as float, char, short, or bool. Non-trivially copyable class parameters require type resolution and are not detected.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: $R $F(..., $T &$P, ...) { ... }
+          - pattern-inside: $R $F(..., const $T &$P, ...) { ... }
+          - pattern-inside: $R $F(..., $T &&$P, ...) { ... }
+          - pattern-inside: $R $F(..., float $P, ...) { ... }
+          - pattern-inside: $R $F(..., char $P, ...) { ... }
+          - pattern-inside: $R $F(..., short $P, ...) { ... }
+          - pattern-inside: $R $F(..., bool $P, ...) { ... }
+          - pattern-inside: $R $F(..., unsigned char $P, ...) { ... }
+          - pattern-inside: $R $F(..., unsigned short $P, ...) { ... }
+      - pattern: va_start($AP, $P)
