@@ -14,7 +14,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
 - [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
 - [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — proposed faceted, basis-qualified security
-  tag vocabulary, crosswalk, and tag-cloud rollup.
+  tag vocabulary covering application code, cloud, containers, IaC, CI/CD, and supply chain.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
 - [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
