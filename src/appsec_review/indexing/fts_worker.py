@@ -159,7 +159,14 @@ def validate_shards(run_root: Path, scratch: Path, shards: Sequence[Mapping[str,
                           scratch / "build")
     except (RuntimeError, ValueError, OSError) as exc:
         return finish("unavailable", f"image-backed FTS validation unavailable: {exc}", steps=steps)
-    build_report, verify_report = json.loads(built.splitlines()[-1]), json.loads(verified.splitlines()[-1])
+    try:
+        build_report = json.loads(built.splitlines()[-1])
+        verify_report = json.loads(verified.splitlines()[-1])
+        if not isinstance(build_report, dict) or not isinstance(verify_report, dict):
+            raise ValueError("tool reports must be objects")
+    except (IndexError, ValueError, TypeError) as exc:
+        return finish("unavailable", f"image-backed FTS validation returned an invalid report "
+                      f"({type(exc).__name__})", steps=steps)
     output = scratch / "build" / "search.sqlite"
     gaps: list[str] = []
     if build_report.get("record_count") != exported["record_count"] or \
@@ -168,21 +175,27 @@ def validate_shards(run_root: Path, scratch: Path, shards: Sequence[Mapping[str,
     if build_report.get("input_sha256") != exported["input_sha256"]:
         gaps.append("image FTS input hash differs from the exported document stream")
     probes: list[dict[str, Any]] = []
-    with sqlite3.connect(f"file:{output.as_posix()}?mode=ro&immutable=1", uri=True) as image_db:
-        for term in exported["terms"]:
-            expected: set[str] = set()
-            for shard in shards:
-                with open_shard(run_root, shard) as database:
-                    expected |= _matches(database, term)
-            actual = _matches(image_db, term)
-            probes.append({"term": term, "expected": len(expected), "actual": len(actual), "equal": expected == actual})
-            if expected != actual:
-                gaps.append(f"probe term {term!r} returns different identities from the image FTS")
+    try:
+        with sqlite3.connect(f"file:{output.as_posix()}?mode=ro&immutable=1", uri=True) as image_db:
+            for term in exported["terms"]:
+                expected: set[str] = set()
+                for shard in shards:
+                    with open_shard(run_root, shard) as database:
+                        expected |= _matches(database, term)
+                actual = _matches(image_db, term)
+                probes.append({"term": term, "expected": len(expected), "actual": len(actual),
+                               "equal": expected == actual})
+                if expected != actual:
+                    gaps.append(f"probe term {term!r} returns different identities from the image FTS")
+        output_sha256 = file_sha256(output)
+    except (OSError, sqlite3.Error) as exc:
+        return finish("unavailable", f"image-backed FTS validation output is unreadable "
+                      f"({type(exc).__name__})", steps=steps)
     values = {"steps": steps, "image_id": steps[-1]["image_id"] if steps else None,
               "sqlite_version": build_report.get("sqlite_version"), "record_count": exported["record_count"],
               "input_sha256": exported["input_sha256"], "probes": probes,
               "secret_pattern_documents": 0,
-              "output": {"path": output.relative_to(run_root).as_posix(), "sha256": file_sha256(output)}}
+              "output": {"path": output.relative_to(run_root).as_posix(), "sha256": output_sha256}}
     if gaps:
         receipt["gaps"].extend(gaps)
         return finish("mismatch", None, **values)

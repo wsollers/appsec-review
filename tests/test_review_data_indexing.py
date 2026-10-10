@@ -531,6 +531,19 @@ def test_fts_image_validation_gaps_and_required_mode(tmp_path: Path) -> None:
                                           mode="optional", executor_factory=lambda: right, **kwargs)
     assert verified["status"] == "verified" and verified["probes"][0]["equal"]
     assert verified["secret_pattern_documents"] == 0 and not verified["gaps"]
+
+    class MalformedOutput(LocalSqliteFts):
+        def execute(self, request):
+            result = super().execute(request)
+            if request.argv[1] == "build":
+                (self.run_root / result.stdout_path).write_text("not-json", encoding="utf-8")
+            return result
+
+    malformed = fts_worker.validate_shards(run_root, run_root / "data" / "indexing" / "fts" / "malformed", [shard],
+                                           mode="optional", executor_factory=lambda: MalformedOutput(run_root,
+                                                                                                       "sha256:" + "1" * 64),
+                                           **kwargs)
+    assert malformed["status"] == "unavailable" and "invalid report" in malformed["gaps"][0]
     skipped = fts_worker.validate_shards(run_root, run_root / "data" / "indexing" / "fts" / "e", [shard],
                                          mode="optional", executor_factory=lambda: right,
                                          **{**kwargs, "max_records": 0})
