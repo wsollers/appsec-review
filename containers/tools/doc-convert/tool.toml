@@ -1,0 +1,27 @@
+schema = "appsec-review/tool/1"
+id = "tool-doc-convert"
+name = "doc-convert"
+version = "1.0.0"
+license = "BSD-3-Clause AND GPL-2.0-or-later"
+project = "https://github.com/wsollers/appsec-review"
+purpose = "Offline text extraction from design documents: PDF via pypdf, DOCX/ODT/RTF/EPUB via the static pandoc binary in sandbox mode."
+architecture = "linux/amd64"
+network = "none"
+user = "10001:10001"
+root_filesystem = "read-only"
+target_mount = "read-only"
+scratch_mount = "read-write"
+capabilities = "drop-all"
+security_opt = "no-new-privileges"
+memory = "1g"
+cpus = "2"
+pids_limit = 256
+timeout_seconds = 600
+output_bytes = 16777216
+executable = "/opt/tool/bin/doc-convert"
+version_argv = ["/opt/tool/bin/doc-convert", "--version"]
+version_expect = "doc-convert {version}"
+dependency = "appsec-review/base-python:3.12-bookworm"
+# Used by job_document_conversion, not an evidence-collection scanner.
+static_adapter = false
+update = "Pin new pypdf/pandoc versions at least two weeks old, refresh requirements.txt and every asset hash and byte size, review licenses, then run validate/build/smoke."

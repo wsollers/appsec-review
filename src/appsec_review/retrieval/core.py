@@ -776,6 +776,143 @@ class RetrievalCore:
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_design_artifacts", parameters, operation)
 
+    def _design_content_shards(self) -> list[Mapping[str, Any]]:
+        return [item for item in self.indexes.get("analysis", ()) if item.get("shard_id") == "design_content"]
+
+    def search_design_content(
+        self, *, query: str, category: str | None = None, path_prefix: str | None = None,
+        chunk_kind: str | None = None, converted: bool | None = None, limit: int = 20,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Full-text search over accepted design-content chunks, ranked by bm25."""
+        tokens = _WORD.findall(query or "")[:32]
+        if not tokens:
+            raise ValueError("search query requires searchable terms")
+        for value in (category, chunk_kind):
+            if value is not None and (not value or len(value) > 128):
+                raise ValueError("invalid design content facet")
+        if path_prefix is not None:
+            path_prefix = normalize_relative_path(path_prefix)
+        if converted is not None and not isinstance(converted, bool):
+            raise ValueError("converted must be a boolean")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        expression = " AND ".join('"' + token.replace('"', '""') + '"' for token in tokens)
+        parameters = {"query": query, "category": category, "path_prefix": path_prefix,
+                      "chunk_kind": chunk_kind, "converted": converted, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("search_design_content", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[tuple[float, str, dict[str, Any]]] = []
+            shards = self._design_content_shards()
+            gaps = [] if shards else ["accepted design content index is unavailable"]
+            for shard in shards:
+                self._check_deadline(deadline)
+                sql = ("SELECT e.*, l.*, bm25(search_fts) AS rank FROM search_fts "
+                       "JOIN entities e ON e.identity=search_fts.identity "
+                       "LEFT JOIN locations l ON l.entity_id=e.identity "
+                       "WHERE search_fts MATCH ? AND e.kind = 'source_span'")
+                values: list[Any] = [expression]
+                if category is not None:
+                    sql += " AND EXISTS (SELECT 1 FROM json_each(e.payload_json, '$.categories') c WHERE c.value = ?)"
+                    values.append(category)
+                if path_prefix is not None:
+                    sql += (" AND (json_extract(e.payload_json, '$.artifact_path') = ? OR "
+                            "substr(json_extract(e.payload_json, '$.artifact_path'), 1, ?) = ?)")
+                    values.extend((path_prefix, len(path_prefix) + 1, path_prefix + "/"))
+                if chunk_kind is not None:
+                    sql += " AND json_extract(e.payload_json, '$.chunk_kind') = ?"
+                    values.append(chunk_kind)
+                if converted is not None:
+                    sql += " AND json_extract(e.payload_json, '$.converted') = ?"
+                    values.append(1 if converted else 0)
+                sql += " ORDER BY rank, e.identity LIMIT ?"
+                values.append(offset + limit + 1)
+                with self._database(shard, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "analysis")
+                        item["shard_id"] = "design_content"
+                        found.append((float(row["rank"]), row["identity"], item))
+                    gaps.extend(f"analysis/design_content: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"analysis/design_content: {gap}" for gap in shard.get("gaps", ()))
+            found.sort(key=lambda item: (item[0], item[1]))
+            return [item[2] for item in found[offset:offset + limit]], gaps, len(found) > offset + limit, offset
+        return self._execute("search_design_content", parameters, operation)
+
+    def query_interface_operations(
+        self, *, protocol: str | None = None, method: str | None = None, route_prefix: str | None = None,
+        security_state: str | None = None, security_scheme: str | None = None, streaming: bool | None = None,
+        operation_id: str | None = None, path_prefix: str | None = None, limit: int = 20,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Query declared interface operations by exact protocol, route, and security facets."""
+        for value in (protocol, method, security_state, security_scheme, operation_id):
+            if value is not None and (not value or len(value) > 512):
+                raise ValueError("invalid interface operation facet")
+        if route_prefix is not None and (not route_prefix or len(route_prefix) > 1024):
+            raise ValueError("invalid interface route prefix")
+        if path_prefix is not None:
+            path_prefix = normalize_relative_path(path_prefix)
+        if streaming is not None and not isinstance(streaming, bool):
+            raise ValueError("streaming must be a boolean")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"protocol": protocol, "method": method, "route_prefix": route_prefix,
+                      "security_state": security_state, "security_scheme": security_scheme,
+                      "streaming": streaming, "operation_id": operation_id, "path_prefix": path_prefix,
+                      "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_interface_operations", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            shards = self._design_content_shards()
+            gaps = [] if shards else ["accepted design content index is unavailable"]
+            for shard in shards:
+                self._check_deadline(deadline)
+                clauses = ["e.kind = 'interface_operation'"]
+                values: list[Any] = []
+                for key, value in (("protocol", protocol), ("security_state", security_state),
+                                   ("operation_id", operation_id)):
+                    if value is not None:
+                        clauses.append(f"json_extract(e.payload_json, '$.{key}') = ?")
+                        values.append(value)
+                if method is not None:
+                    clauses.append("json_extract(e.payload_json, '$.method') = ?")
+                    values.append(method.upper())
+                if route_prefix is not None:
+                    # Literal prefix comparison only; no wildcard semantics reach SQLite.
+                    clauses.append("substr(json_extract(e.payload_json, '$.route'), 1, ?) = ?")
+                    values.extend((len(route_prefix), route_prefix))
+                if security_scheme is not None:
+                    clauses.append("EXISTS (SELECT 1 FROM json_each(e.payload_json, '$.security_schemes') s "
+                                   "WHERE s.value = ?)")
+                    values.append(security_scheme)
+                if streaming is not None:
+                    clauses.append("(json_extract(e.payload_json, '$.client_streaming') OR "
+                                   "json_extract(e.payload_json, '$.server_streaming')) = ?")
+                    values.append(1 if streaming else 0)
+                if path_prefix is not None:
+                    clauses.append("(json_extract(e.payload_json, '$.artifact_path') = ? OR "
+                                   "substr(json_extract(e.payload_json, '$.artifact_path'), 1, ?) = ?)")
+                    values.extend((path_prefix, len(path_prefix) + 1, path_prefix + "/"))
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY e.name, e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                with self._database(shard, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "analysis")
+                        item["shard_id"] = "design_content"
+                        found.append(item)
+                    gaps.extend(f"analysis/design_content: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE area = 'design-content:interfaces' AND gap IS NOT NULL "
+                        "AND status != 'complete'"))
+            found.sort(key=lambda item: (item["name"], item["identity"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_interface_operations", parameters, operation)
+
     def query_codeql(
         self, *, language: str | None = None, source_language: str | None = None,
         scope: str | None = None, build_unit: str | None = None,

@@ -281,65 +281,31 @@ add bounded CPG export fixtures and security probes. Do not put the full CPG int
 
 ## Index design-artifact content and scan declared interfaces
 
-`job_design_artifact_discovery` classifies design documents, threat models, API specifications,
-IDL, schemas, API tests, and tests. It publishes only structured facts. The catalog's `source`
-shard full-text indexes only `cataloged.LANGUAGES` files, so Markdown, AsciiDoc, YAML/JSON specs,
-`.proto`, GraphQL, and diagram sources cannot be searched by content today. The goal is to make
-that content queryable by review workers with full-text search, with every hit resolving to exact
-source bytes. Work in this order:
+Content chunks (step 1), structured interface operations (step 2), and binary-document conversion
+(step 4) are implemented by `job_document_conversion` and `job_design_content_index`; see
+[`architecture/design-content-index.md`](architecture/design-content-index.md). Remaining work:
 
-1. **Content chunk shard.** Add a design-content step or job after discovery. It splits accepted
-   cataloged artifacts into bounded chunks along deterministic structure:
-   - Markdown/AsciiDoc/RST: one chunk per heading section.
-   - OpenAPI/AsyncAPI: one chunk per path operation and per security scheme.
-   - Protobuf: one chunk per service, rpc, and message.
-   - GraphQL: one chunk per type.
-   - JSON Schema: one chunk per definition.
-   - Fallback: a bounded line window.
-
-   Each chunk is an entity carrying an exact byte/line `SourceLocation` and the file SHA-256. It
-   goes into a separate `analysis/design_content` FTS5 shard, so the discovery shard stays
-   structure-only. Chunk, file, and shard byte bounds come from central TOML. Truncation is a named
-   gap. Chunk text is target data and is served only as bounded excerpts.
-
-2. **Structured interface entities.** Parse specifications deterministically, without executing
-   anything:
-   - OpenAPI/Swagger: operations (method, path template, operation id, security requirements
-     after global/override resolution, parameter locations, request/response media types).
-   - Protobuf: services and rpcs, including the streaming direction.
-   - GraphQL: root operation fields.
-
-   Exact facets must answer questions such as "operations without a security requirement" or
-   "client-streaming RPCs". Relate each entity to its chunk and owning component. Extend
-   `query_design_artifacts` or add a typed interface query.
-
-3. **Interface scanners.** Run each scanner on its declared interfaces and index the results as
-   observation shards that relate to the matching chunk or interface entity:
-   - Enable Checkov's `openapi` framework in the evidence-collection adapter, derived per planned
-     file. While doing so, fix plan-scoped Checkov dropping CloudFormation and GitHub workflow
-     inputs.
-   - Then add a pinned offline Spectral image with the OWASP API Security ruleset for
-     OpenAPI/AsyncAPI.
-   - Protobuf, Thrift, and GraphQL without a static security linter remain named gaps.
-
-4. **Binary design documents.** Enable `audit-doc-convert` (pdftotext/pandoc). This needs a
-   hash-complete offline package closure first. Converted text is a run-owned artifact. Its chunks
-   map to page/offset in that artifact, not to target bytes, and carry a converted mapping method
-   with reduced confidence. Encrypted, scanned/OCR-only, oversized, and timed-out inputs are named
-   gaps.
-
-5. **Vector recall, only if measured.** Evaluate FTS plus structured entities on paraphrase-style
-   reviewer queries first. Add embeddings only if recall is shown to be insufficient. They would
-   be an additional derived shard over the same chunk identities, inside the immutable per-run
-   SQLite model (for example `sqlite-vec`), using a hash-pinned offline embedding model named in
-   central TOML. Hybrid ranking must return chunk identities with source spans, never bare
-   similarity hits. Do not introduce a shared vector server: it would break run isolation,
-   immutability, and resume identity.
-
-Acceptance:
-- Unit tests for each chunker and parser, including hostile and malformed inputs and
-  prompt-injection text treated as inert data.
-- Bounds and truncation gaps.
-- MCP tests proving that every result resolves through `read_excerpt` to hash-verified bytes.
-- Resume tests proving that an unchanged discovery, chunker, and scanner identity is reused, and
-  that a changed chunker invalidates only content shards and their consumers.
+- **Live image acceptance.** Build `tool-doc-convert` on a Docker host (see
+  `containers/tools/doc-convert/README.md`), record its `image_id` in `containers/catalog.toml`, and
+  add it to a live Dagster acceptance run. Tests here run the same converter script and pinned
+  pypdf/pandoc outside the container.
+- **Interface scanners.** Run each scanner on its declared interfaces and index the results as
+  observation shards related to the matching chunk or `interface_operation` entity:
+  - Enable Checkov's `openapi` framework in the evidence-collection adapter, derived per planned
+    file. While doing so, fix plan-scoped Checkov dropping CloudFormation and GitHub workflow
+    inputs.
+  - Then add a pinned offline Spectral image with the OWASP API Security ruleset for
+    OpenAPI/AsyncAPI.
+  - Protobuf, Thrift, and GraphQL without a static security linter remain named gaps.
+- **Planner and worker consumption.** Feed `interface_operation` facets, such as unauthenticated or
+  insecure-transport operations and streaming RPCs, into the plan's `design_context` and into
+  bounded review-worker task context.
+- **OCR.** `NO_TEXT` PDFs are a named gap. Any OCR step must be offline, pinned, bounded, and
+  marked as reduced-confidence converted text.
+- **Vector recall, only if measured.** Evaluate full-text search plus structured operations on
+  paraphrase-style reviewer queries first. Add embeddings only if recall is shown to be
+  insufficient. They would be an additional derived shard over the same chunk identities, inside
+  the immutable per-run SQLite model (for example `sqlite-vec`), using a hash-pinned offline
+  embedding model named in central TOML. Hybrid ranking must return chunk identities with source
+  spans, never bare similarity hits. Do not introduce a shared vector server: it would break run
+  isolation, immutability, and resume identity.

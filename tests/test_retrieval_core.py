@@ -239,7 +239,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     assert {item["name"] for item in TOOLS} == {
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
         "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
-        "query_design_artifacts", "query_owasp_workbench"}
+        "query_design_artifacts", "query_interface_operations", "query_owasp_workbench",
+        "search_design_content"}
     codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
                                             "build_unit": "native-main", "path": "src/auth.c"})
     assert [item["name"] for item in codeql["results"]] == ["cpp/unsafe-strcat"]

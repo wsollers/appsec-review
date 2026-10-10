@@ -59,6 +59,15 @@ normalized literal folder prefix, never a glob. Name-only binary documents and p
 returned as coverage gaps. A run without design discovery returns an availability gap. See
 [`../architecture/design-artifact-discovery.md`](../architecture/design-artifact-discovery.md).
 
+`search_design_content` is bm25 full-text search over the accepted `analysis/design_content`
+chunks only. It can be filtered by category, literal path prefix, chunk kind, and converted state.
+Cataloged hits resolve through `read_excerpt`. Converted-document hits carry their hash-pinned
+text-artifact identity, character range, and bounded `converted_excerpt`.
+`query_interface_operations` filters declared HTTP, async, gRPC, and GraphQL operations by exact
+protocol, method, literal route prefix, effective security state, scheme, streaming, operation id,
+and artifact path prefix. See
+[`../architecture/design-content-index.md`](../architecture/design-content-index.md).
+
 `query_ci_configuration` reads only accepted `ci_*` observation shards and the canonical
 `ci_findings` evidence shard. Exact filters cover provider, pipeline, workflow, stage, job, step,
 tool, rule, category, canonical finding, and shard. Unavailable linter branches are returned as

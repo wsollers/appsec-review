@@ -1,0 +1,4 @@
+# tool-doc-convert: pypdf==6.19.0 for Python 3.12 (pure-Python wheel, no runtime dependencies on 3.11+).
+# pip installs it with --no-index --require-hashes from the verified downloads/wheels/ asset.
+pypdf==6.19.0 \
+    --hash=sha256:7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14

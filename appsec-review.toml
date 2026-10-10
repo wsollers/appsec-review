@@ -246,6 +246,60 @@ workers = 1
 [jobs.job_design_artifact_discovery.steps.design_publication.tasks.build_index]
 [jobs.job_design_artifact_discovery.steps.design_publication.tasks.publish_handoff]
 
+[jobs.job_document_conversion]
+name = "document_conversion"
+workers = 1
+
+[jobs.job_document_conversion.settings]
+# Converts design documents the catalog only names (PDF/DOCX/ODT/RTF/EPUB) with tool-doc-convert.
+max_documents = 200
+max_input_bytes = 33554432
+max_pages = 500
+max_chars = 2000000
+pandoc_timeout_seconds = 120
+
+[jobs.job_document_conversion.steps.conversion_planning]
+workers = 1
+[jobs.job_document_conversion.steps.conversion_planning.tasks.select_documents]
+
+[jobs.job_document_conversion.steps.conversion_execution]
+workers = 1
+[jobs.job_document_conversion.steps.conversion_execution.tasks.convert_documents]
+
+[jobs.job_document_conversion.steps.conversion_publication]
+workers = 1
+[jobs.job_document_conversion.steps.conversion_publication.tasks.publish_handoff]
+
+[jobs.job_design_content_index]
+name = "design_content_index"
+workers = 1
+
+[jobs.job_design_content_index.settings]
+# Structure-aware FTS chunks and interface operations over accepted design artifacts.
+max_files = 5000
+max_file_bytes = 1048576
+max_chunk_lines = 80
+max_chunk_bytes = 8192
+max_chunks = 100000
+max_operations = 50000
+
+[jobs.job_design_content_index.steps.content_input]
+workers = 1
+[jobs.job_design_content_index.steps.content_input.tasks.load_inputs]
+
+[jobs.job_design_content_index.steps.interface_extraction]
+workers = 1
+[jobs.job_design_content_index.steps.interface_extraction.tasks.extract_interfaces]
+
+[jobs.job_design_content_index.steps.content_chunking]
+workers = 1
+[jobs.job_design_content_index.steps.content_chunking.tasks.chunk_documents]
+
+[jobs.job_design_content_index.steps.content_publication]
+workers = 1
+[jobs.job_design_content_index.steps.content_publication.tasks.build_index]
+[jobs.job_design_content_index.steps.content_publication.tasks.publish_handoff]
+
 [jobs.job_target_analysis_plan]
 name = "target_analysis_plan"
 workers = 1

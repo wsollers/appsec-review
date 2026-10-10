@@ -7,6 +7,8 @@ name = "appsec-review"
 version = "0.0.0"
 description = "Evidence-backed application security review orchestration"
 requires-python = ">=3.11"
+# Specification parsing uses safe composition only; the deployment lock pins 6.0.3.
+dependencies = ["PyYAML>=6.0,<7"]
 
 [project.scripts]
 appsec-review = "appsec_review.cli:main"

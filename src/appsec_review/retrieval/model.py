@@ -43,6 +43,7 @@ class EntityKind(StrEnum):
     TOOL_OBSERVATION = "tool_observation"
     EVIDENCE_ARTIFACT = "evidence_artifact"
     FINDING_PACKAGE = "finding_package"
+    INTERFACE_OPERATION = "interface_operation"
 
 
 class RelationKind(StrEnum):

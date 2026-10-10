@@ -13,7 +13,7 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with an eleven-job linear review graph from
+The direct CLI currently exercises this mechanism with a thirteen-job linear review graph from
 `job_review_intake` through `job_evidence_collection`. Dagster builds the broader, branched
 `wave1_review` topology from the registered and configured jobs, including CI configuration,
 tree-sitter, post-build, and OWASP branches that are not in the direct graph. Both surfaces use the

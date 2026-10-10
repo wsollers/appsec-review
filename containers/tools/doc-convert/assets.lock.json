@@ -1,0 +1,42 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-doc-convert",
+  "tool_version": "1.0.0",
+  "project": "https://github.com/wsollers/appsec-review",
+  "license": "BSD-3-Clause AND GPL-2.0-or-later",
+  "architecture": "linux/amd64",
+  "generated_from": "manual-pin-2026-10-10",
+  "artifacts": [
+    {
+      "name": "pypdf-6.19.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/3c/2c/c43c03eaf630435f023f1dc61ec4a4a78951ad5530a62c71cc89bde307b7/pypdf-6.19.0-py3-none-any.whl",
+      "path": "downloads/wheels/pypdf-6.19.0-py3-none-any.whl",
+      "sha256": "7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14",
+      "bytes": 395480,
+      "verification": {"kind": "pypi-sha256", "sha256": "7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14"},
+      "version": "6.19.0",
+      "license": "BSD-3-Clause",
+      "license_source": "wheel METADATA License-Expression",
+      "provenance": "PyPI immutable file URL and repository SHA-256",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "No detached signature is consumed by this build; immutable source, byte size, and SHA-256 are enforced."
+      }
+    },
+    {
+      "name": "pandoc-3.9.0.2-linux-amd64.tar.gz",
+      "url": "https://github.com/jgm/pandoc/releases/download/3.9.0.2/pandoc-3.9.0.2-linux-amd64.tar.gz",
+      "path": "downloads/pandoc.tar.gz",
+      "sha256": "a69abfababda8a56969a254b09f9553a7be89ddec00d4e0fe9fd585d71a67508",
+      "bytes": 34520947,
+      "version": "3.9.0.2",
+      "license": "GPL-2.0-or-later",
+      "license_source": "pandoc upstream COPYING",
+      "provenance": "GitHub release asset for tag 3.9.0.2; SHA-256 and byte size recorded at pin time",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "The pandoc project does not publish detached signatures or checksum files for release archives."
+      }
+    }
+  ]
+}

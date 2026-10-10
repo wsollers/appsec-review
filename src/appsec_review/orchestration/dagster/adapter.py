@@ -164,6 +164,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 )).resolve()
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_design_artifact_discovery",
+                    "job_document_conversion", "job_design_content_index",
                     "job_target_analysis_plan", "job_project_build", "job_language_build", "job_artifact_indexing",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
                     "job_codeql_analysis",
@@ -385,6 +386,11 @@ def build_definitions(
             wave_jobs.append(registry.build("job_design_artifact_discovery"))
             wave_dependencies["job_design_artifact_discovery"] = (gather_terminal,)
             gather_terminal = "job_design_artifact_discovery"
+            for job_id in ("job_document_conversion", "job_design_content_index"):
+                if job_id in registered:
+                    wave_jobs.append(registry.build(job_id))
+                    wave_dependencies[job_id] = (gather_terminal,)
+                    gather_terminal = job_id
         if "job_ci_configuration_analysis" in registered:
             wave_jobs.append(registry.build("job_ci_configuration_analysis"))
             wave_dependencies["job_ci_configuration_analysis"] = (gather_terminal,)

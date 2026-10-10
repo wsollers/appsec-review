@@ -15,6 +15,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
 - [`design-artifact-discovery.md`](design-artifact-discovery.md) — gather-phase discovery of design docs,
   threat models, API specs, IDL, schemas, and tests.
+- [`design-content-index.md`](design-content-index.md) — offline document conversion, structure-aware
+  full-text design chunks, and declared interface operations.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
 - [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
