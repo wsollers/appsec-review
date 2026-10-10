@@ -250,6 +250,40 @@ schemas, a foreign scope, or inconsistent coverage are framework-integrity failu
 tool-call, or finding caps and collector/scanner failures are named coverage gaps. A gitleaks
 finding is evidence to retain and route; by itself it is not a capture-coverage gap.
 
+## Generic captured-build extension contract
+
+The compiled-language path has one driver, one collector boundary, and one reconciliation
+algorithm. `job_language_build` passes each accepted argv to the shared container executor. The
+executor applies the PATH wrappers, launches the arbitrary command under the syscall collector,
+retains complete stdout and stderr files, normalizes exec/exit/connect/envp and configured
+supplemental events, and scans retained streams, argv, and envp through gitleaks. The job verifies
+that record before it interprets any language-specific tool.
+
+`capture.py` owns the typed `CapturedBuildDescriptor` and `reconcile_captured_build` contract used
+by .NET, Go, native C/C++, and Rust. Successful process-exec is the sole authority that a tool ran.
+The generic reconciler attaches an optional wrapper record only after matching it to that exec,
+counts failed and redacted execs, redacted and unreconciled wrappers, connect and envp facts,
+malformed inputs, capture loss, and row truncation, and emits the same evidence and mapping shape
+for every descriptor. Build output, wrapper records, compile databases, and model text cannot create
+a tool row. The language descriptor supplies only the capture/provenance identities, executable and
+argv classifier, input/output mapping, link-kind selection, and mandatory-tool gap text. Recipe
+validation, fixed command shaping, artifact classification, metadata, and analysis capabilities
+remain small language-adapter functions called by the generic build job; none may reimplement
+capture or reconciliation.
+
+To add a captured language:
+
+1. Define the fixed recipe validation/argv shaping, artifact rules, and metadata readers in one
+   language module; keep inference separate from fixed capture acceptance.
+2. Add one `CapturedBuildDescriptor` with a classifier and invocation row builder. Do not add a
+   language reconciliation loop or a new executor/collector path.
+3. Register the descriptor once in `CAPTURE_DESCRIPTORS`; use the shared driver for every build,
+   catalog, and inspection command that can affect accepted evidence.
+4. Add the descriptor to the parameterized reconciliation contract, then add tests only for its
+   distinct recipe, classifier, artifact, metadata, and CodeQL/AST/IR behavior.
+5. Prove the fixed fixture retains complete streams and standardized capture, artifact, and secret
+   scan records; run the focused live container gate before changing an acceptance claim.
+
 ## Native C/C++ language-build integration
 
 Every accepted native configure and build command runs through the standardized capture boundary.
@@ -365,11 +399,16 @@ The main implementation surfaces are:
 - `src/appsec_review/container_runtime/build_capture.py` — normalization, execution record, and
   the shared record verifier;
 - `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
-- `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `rust.py`, and `dotnet.py` — native, Rust, and .NET
-  capture routing, receipt identities, and capture-derived tool provenance; and
+- `src/appsec_review/jobs/job_language_build/capture.py` — the typed descriptor and sole generic
+  successful-exec reconciliation algorithm;
+- `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`, and
+  `dotnet.py` — shared routing plus language-specific recipes, classification, artifacts, and
+  metadata; and
 - `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
-  `tests/test_project_build.py`, `tests/test_rust_language_build.py`, `tests/test_language_build.py`, and
-  `tests/test_live_build_toolchains.py` — unit and live contracts. `tests/capture_fakes.py` replaces
+  `tests/test_captured_build_reconciliation.py`, `tests/test_project_build.py`,
+  `tests/test_go_language_build.py`, `tests/test_rust_language_build.py`,
+  `tests/test_language_build.py`, and `tests/test_live_build_toolchains.py` — unit and live
+  contracts. `tests/capture_fakes.py` replaces
   only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.
 
 ## Acceptance sequence

@@ -21,7 +21,8 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.jobs.job_language_build import (
-    build_job as build_language, dotnet, jvm, load_accepted_language_build, native, node, php, python, rust, wasm,
+    build_job as build_language, dotnet, go, jvm, load_accepted_language_build, native, node, php,
+    python, rust, wasm,
 )
 from appsec_review.jobs.job_language_build.job import _catalog, _kind
 from appsec_review.jobs.job_project_build.job import _normalized_argv, _probe_environment
@@ -585,6 +586,82 @@ def test_live_native_language_build_accepts_syscall_authoritative_capture(tmp_pa
             assert stream["captured_bytes"] == stream["total_bytes"] == path.stat().st_size
             assert file_sha256(path) == stream["sha256"]
     assert not tuple(run_root.rglob("trace.[0-9]*"))
+
+
+class _GoFixtureRecipeModel:
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            if unit["family"] != "go":
+                continue
+            root = unit["root"]
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1",
+                "build_unit_id": unit["build_unit_id"],
+                "image_profile": "go",
+                "source_dir": root,
+                "build_dir": f"{root}/build",
+                "system_packages": [],
+                "environment": {},
+                "dependency_files": [f"{root}/go.mod"],
+                "configure_commands": [],
+                "build_commands": [["go", "build", "-o", "build/appsec-fixture-go", "."]],
+                "expected_outputs": [f"{root}/build/appsec-fixture-go"],
+                "network_required": False,
+                "reason": "fixed live Go capture fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+def test_live_go_language_build_accepts_syscall_authoritative_capture(tmp_path: Path) -> None:
+    _profile("go")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+                           encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "go", target / "go")
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(
+        infer=_GoFixtureRecipeModel().complete)]).run(
+            target_root=target, source_fingerprint=fingerprint)
+    run_id = upstream["run_id"]
+    project = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert project["status"] == "SUCCEEDED", project
+    outcome = GraphRunner(config, [build_language()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "SUCCEEDED", outcome
+
+    run_root = config.runtime.runs_dir / run_id
+    receipt = next(item for item in load_accepted_language_build(run_root)["receipts"]
+                   if item["family"] == "go")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["capture_identity"] == go.CAPTURE_IDENTITY
+    provenance = receipt["capture_provenance"]
+    assert provenance["complete"] is True and provenance["unreconciled_tool_calls"] == 0
+    assert provenance["envp_events"] > 0
+    assert set(provenance["observed_tool_kinds"]) >= {"build-driver", "compiler", "linker"}
+    assert receipt["package_relationships"]
+    assert receipt["build_metadata"]
+    assert {item["kind"] for item in receipt["artifacts"]} >= {"executable"}
+    assert all(item["mapping"].startswith("syscall-process-exec")
+               for item in receipt["tool_invocations"])
+    assert all(item["evidence"]["process_exec"]["count"] >= 1
+               for item in receipt["tool_invocations"])
+    for command in receipt["commands"]:
+        identity = command["execution_capture"]
+        assert identity["complete"] is True and identity["envp_captured"] is True
+        assert identity["scope"]["family"] == "go"
+        assert file_sha256(run_root / identity["path"]) == identity["sha256"]
+        for stream_name in ("stdout", "stderr"):
+            stream = command[stream_name]
+            retained = run_root / stream["path"]
+            assert stream["storage"] == "complete-file" and stream["truncated"] is False
+            assert stream["captured_bytes"] == stream["total_bytes"] == retained.stat().st_size
+            assert file_sha256(retained) == stream["sha256"]
+        assert not tuple((run_root / identity["path"]).parent.glob("trace*"))
 
 
 class _DotnetFixtureRecipeModel:

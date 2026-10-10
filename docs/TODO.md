@@ -35,8 +35,12 @@ accepted dispatch validation, real build execution, protected compiler/link prov
 failure isolation, checkpoint reuse, default-image-first probing, three bounded inference-guided
 dependency-image repairs, successful Dockerfile/image reuse, and dynamic C++/post-build
 consumption. The Go adapter supports accepted modules/workspaces, vendor mode, package targets,
-build tags, and cgo; retains bounded `go -x` provenance and stream artifacts; and catalogs modules,
-packages, generated sources, binaries, build IDs, and sanitized retrieval records. The .NET adapter
+build tags, and cgo; uses the same syscall-authoritative capture and generic reconciliation as
+native, Rust, and .NET; and catalogs modules, packages, generated sources, binaries, build IDs, and
+sanitized retrieval records. One parameterized contract now checks successful/failed/redacted exec,
+envp/connect facts, wrapper reconciliation, malformed input, and cap/loss behavior across all four
+descriptors; adding another compiled language must extend that descriptor contract rather than copy
+capture orchestration. The .NET adapter
 allows declared dependency restore, catalogs MSBuild/Roslyn and
 managed/native outputs, and reports Windows-only/.NET Framework units as explicit platform gaps.
 The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/features/lock

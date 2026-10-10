@@ -242,8 +242,8 @@ class JvmBuildSettings:
 @dataclass(frozen=True, slots=True)
 class GoBuildSettings:
     offline: bool
-    capture_trace: bool
     package_catalog: bool
+    inspect_build_id: bool
     diagnostic_tail_bytes: int
 
     def __post_init__(self) -> None:
@@ -571,8 +571,8 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                 ),
                 go=GoBuildSettings(
                     offline=go_value.get("offline") is True,
-                    capture_trace=go_value.get("capture_trace") is True,
                     package_catalog=go_value.get("package_catalog") is True,
+                    inspect_build_id=go_value.get("inspect_build_id") is True,
                     diagnostic_tail_bytes=int(go_value.get("diagnostic_tail_bytes", -1)),
                 ),
                 node=NodeBuildSettings(

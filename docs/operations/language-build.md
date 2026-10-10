@@ -5,6 +5,11 @@ current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kot
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.
+Native, Go, Rust, and .NET commands share one captured-build driver, executor/collector boundary,
+and successful-exec reconciliation implementation. Their descriptors classify observed tools and
+map language-specific inputs, outputs, artifacts, and metadata; they do not own copies of capture
+or wrapper reconciliation. Operators should treat a new per-language trace parser or reconciler as
+an architectural regression.
 Native CMake dispatches use the validated deterministic marker command recipe. A failed default
 project-build probe may add only validated apt packages through the bounded image-repair workflow;
 model output cannot change the accepted command, path, dependency, environment, or output contract.
@@ -49,13 +54,14 @@ hashes, original and retained sizes, configured bounds, truncation and diagnosti
 exit/timeout state, duration, image, command, and attempt identities.
 
 The Go adapter preserves the accepted module/workspace root, package targets, build tags, and cgo
-choice. It prefers an existing vendor tree when present and otherwise permits module resolution, and
-adds `-x` only to obtain the toolchain trace. Compiler, assembler, linker, cgo, package-builder,
-generator, and post-link invocations are retained with exact argv in protected artifacts and only
-hashes plus sanitized facts in receipts and retrieval. A bounded `go list -deps -json` catalog
-records package/module relationships without running packages or tests. Module/workspace files,
-vendored metadata, generated Go/assembly sources, archives, ELF outputs, build IDs, and the status of
-embedded debug data are hash-bound to the workspace manifest.
+choice. It prefers an existing vendor tree when present and otherwise permits module resolution.
+The shared syscall collector—not `go -x` text—establishes compiler, assembler, linker, cgo,
+package-builder, native-tool, generator, and post-link execution. The generic reconciler retains
+exact argv in protected artifacts and publishes only hashes plus sanitized facts. A bounded
+captured `go list -deps -json` command records package/module relationships without running
+packages or tests. Module/workspace files, vendored metadata, generated Go/assembly sources,
+archives, ELF outputs, build IDs, and embedded-debug-data status are hash-bound to the workspace
+manifest.
 
 The Rust adapter accepts bounded Cargo workspace/package, target triple, profile, feature,
 `--locked`, and `--offline` choices. Central policy permits dependency download and can still

@@ -6,8 +6,9 @@ from pathlib import Path, PurePosixPath
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from appsec_review.container_runtime import VerifiedCapture
 from appsec_review.storage import canonical_json, file_sha256
+
+from .capture import CapturedBuildDescriptor, ToolIdentity
 
 
 CAPTURE_IDENTITY = "appsec-review/dotnet-build-capture/2"
@@ -27,9 +28,6 @@ _TOOL_KINDS = {
     "ar": "archiver", "nuget": "package-builder", "msbuild": "build-driver",
     "msbuild.dll": "build-driver", "dotnet": "build-driver",
 }
-_INVOCATION_LIMIT = 16384
-_EVENT_ORDINAL_LIMIT = 8
-_REDACTED = "<redacted"
 
 
 def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None) -> tuple[str, ...]:
@@ -204,90 +202,17 @@ def _row(tool: str, kind: str, argv: Sequence[str], workspace: Path, directory: 
             "origin": origin, "mapping_confidence": 1.0}
 
 
-def _invocation_key(tool: str, argv: Sequence[str]) -> str:
-    # A PATH wrapper and the resolved binary differ only in argv[0].
-    return hashlib.sha256(canonical_json([tool, *[str(value) for value in argv[1:]]])).hexdigest()
+def _classify_tool(name: str, argv: Sequence[str]) -> ToolIdentity | None:
+    identity = tool_identity(name, argv)
+    return ToolIdentity(*identity) if identity is not None else None
 
 
-def capture_invocations(captures: Sequence[tuple[int, VerifiedCapture]], workspace: Path,
-                        directory: str) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
-    """Derive .NET tool provenance only from successful captured process-exec syscalls."""
-    rows: dict[str, dict[str, Any]] = {}
-    facts = {"process_exec_events": 0, "failed_exec_events": 0, "redacted_exec_events": 0,
-             "tool_call_records": 0, "redacted_tool_calls": 0, "unreconciled_tool_calls": 0,
-             "connect_events": 0, "envp_events": 0, "envp_redacted_names": []}
-    redacted_names: set[str] = set()
-    truncated = False
-    for ordinal, capture in captures:
-        label = f"execution-capture:command-{ordinal:03d}"
-        record_sha = str(capture.identity["sha256"])
-        for event in capture.events():
-            if event.get("kind") == "connect":
-                facts["connect_events"] += 1
-            if event.get("kind") != "process_exec":
-                continue
-            facts["process_exec_events"] += 1
-            argv = [str(value) for value in event.get("argv", ())]
-            executable = str(event.get("executable", ""))
-            if executable.startswith(_REDACTED) or (argv and argv[0].startswith(_REDACTED)):
-                facts["redacted_exec_events"] += 1
-                continue
-            if event.get("result", 0) != 0:
-                facts["failed_exec_events"] += 1
-                continue
-            if event.get("envp_captured"):
-                facts["envp_events"] += 1
-                redacted_names.update(str(name) for name in event.get("envp_redacted_names", ()))
-            identity = tool_identity(PurePosixPath(executable or (argv[0] if argv else "")).name, argv)
-            if identity is None:
-                continue
-            tool, kind = identity
-            key = _invocation_key(tool, argv)
-            row = rows.get(key)
-            if row is None:
-                if len(rows) >= _INVOCATION_LIMIT:
-                    truncated = True
-                    continue
-                row = rows[key] = _row(tool, kind, argv, workspace, directory,
-                                       f"{label}:event-{event.get('ordinal')}")
-                row["evidence"] = {"capture_record_sha256": record_sha, "tool_call": None,
-                                   "process_exec": {"count": 0, "event_ordinals": [],
-                                                    "executable": executable}}
-            observed = row["evidence"]["process_exec"]
-            observed["count"] += 1
-            if len(observed["event_ordinals"]) < _EVENT_ORDINAL_LIMIT:
-                observed["event_ordinals"].append(event.get("ordinal"))
-        for call in capture.tool_calls:
-            document = call["record"]
-            facts["tool_call_records"] += 1
-            argv = [str(value) for value in document.get("argv", ())]
-            if argv and argv[0].startswith(_REDACTED):
-                facts["redacted_tool_calls"] += 1
-                continue
-            identity = tool_identity(str(document.get("tool", "")), argv)
-            if identity is None:
-                continue
-            tool, _kind = identity
-            row = rows.get(_invocation_key(tool, argv))
-            if row is None:
-                facts["unreconciled_tool_calls"] += 1
-                continue
-            if row["evidence"]["tool_call"] is None:
-                row["evidence"]["tool_call"] = {
-                    "uri": call["uri"], "sha256": call["sha256"], "exit_code": document.get("exit_code"),
-                    "stdout_sha256": document.get("stdout", {}).get("sha256"),
-                    "stderr_sha256": document.get("stderr", {}).get("sha256")}
-    for row in rows.values():
-        row["mapping"] = ("syscall-process-exec+tool-call" if row["evidence"]["tool_call"] else
-                          "syscall-process-exec")
-    facts["envp_redacted_names"] = sorted(redacted_names)[:256]
-    gaps: list[str] = []
-    if facts["redacted_exec_events"]:
-        gaps.append(f"{facts['redacted_exec_events']} process-exec events were redacted by the secret "
-                    "scan; their tool provenance is unavailable")
-    if facts["unreconciled_tool_calls"]:
-        gaps.append(f"{facts['unreconciled_tool_calls']} tool-call records had no matching successful "
-                    "process-exec event and are not claimed as tool execution")
-    if truncated:
-        gaps.append(".NET tool invocation catalog truncated at its row bound")
-    return list(rows.values()), facts, gaps
+CAPTURE_DESCRIPTOR = CapturedBuildDescriptor(
+    family="dotnet",
+    capture_identity=CAPTURE_IDENTITY,
+    provenance_schema="appsec-review/dotnet-capture-provenance/1",
+    catalog_label=".NET",
+    classify_tool=_classify_tool,
+    build_invocation=_row,
+    missing_tool_gap=".NET compiler execution was not observed in the standardized capture",
+)

@@ -423,8 +423,8 @@ event_count_limit = 250000
 
 [jobs.job_language_build.settings.go]
 offline = false
-capture_trace = true
 package_catalog = true
+inspect_build_id = true
 diagnostic_tail_bytes = 32768
 
 [jobs.job_language_build.settings.python]
@@ -725,6 +725,11 @@ query_pack_sha256 = "9b04c802e6ce094775a7704fab79c21b3854241b4e3481ead559c18607a
 query_lock_sha256 = "7de43f9f44ae21e304310724c31abf8348ac4d9d093645d00e4d894ec2853783"
 source_languages = ["Go"]
 prerequisites = []
+
+[[jobs.job_codeql_analysis.settings.languages.go.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/go-security-extended.qls"
+query_suite_sha256 = "8970c08e48221cc8cfd89b6ac9c8cd1e56f143a740b613da67d835f3cabf7c29"
 
 [jobs.job_codeql_analysis.settings.languages.java]
 enabled = true
