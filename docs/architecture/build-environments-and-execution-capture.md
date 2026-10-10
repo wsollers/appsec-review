@@ -219,8 +219,11 @@ executor's container flags. Medians of 3 runs:
 | --- | --- | --- | --- | --- | --- |
 | Repository native fixture (CMake, 2 TUs) | 0.6 s | 2.6 s | 7.3 s | 3.3 s | 3.5 s |
 | zstd 1.5.7 static library (CMake + Ninja) | 17.9 s | 26.5 s | 48.3 s | 30.8 s | 31.8 s |
+| Synthetic C++ library, 300 heavy-STL TUs (CMake + Ninja), mean of 2 | 291.8 s | 300.6 s | 446.5 s | 302.4 s | 303.8 s |
 
-The extended syscall set and `-y` annotation add about 3% over `--seccomp-bpf` alone. On a real
+The extended syscall set and `-y` annotation add about 3% over `--seccomp-bpf` alone. On the
+compile-heavy synthetic workload, the previous capture cost +53%, and the current capture costs +4%
+over an uncaptured build. On a real
 capture of the fixture, the post-build pass resolved 6,311 opens to 553 unique paths (1,135 failed
 probes dropped, 429 image files identified without hashing) and hashed 27 workspace files in 7 ms.
 
