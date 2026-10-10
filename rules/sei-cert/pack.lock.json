@@ -2,7 +2,7 @@
   "files": {
     "COVERAGE.md": "e7e1f73baac795b523d2287efd5f2f135be589254f6ad97d1dc8ea91dfbe30bb",
     "LICENSE.md": "3f50fab789b3609993ded5a70d75b0f7380aba40ecef1c167cdf7ded7b550f9e",
-    "README.md": "e516f5cbcd8607bbb275af066c983ebb4c74f47711b6d28d6a32cedb9bd87f45",
+    "README.md": "c4752b23b3649f30f1636039474e105b0f48f4e7c8d9b939e59c87e4461815f4",
     "fixtures/c/con31-c.c": "191c301137b1476d25cd0194ec78997f5d7b57439dc4d7907e0686775f735a4b",
     "fixtures/c/con36-c.c": "b967d259591b48b9a3c6b3486f9acc37ee2b5802226754f164214dccb2318216",
     "fixtures/c/env33-c.c": "0262eb2bdf6969e4c562d4d4014423ad0a5c5a7067267c66b12cea1c794f44a9",
@@ -94,6 +94,6 @@
   "pack": "appsec-review/sei-cert",
   "rule_files_sha256": "2e40d30f012b34e7f7befde60361d799161e1c4170a61db50b41f96a5c855029",
   "schema": "appsec-review/sei-cert-rule-pack-lock/1",
-  "tree_sha256": "90ee3f5b4c5b6f3954ab5aca16c30d65c245e55430009fd9d72a12c1e8806142",
+  "tree_sha256": "8b79d0bf33930107fc9e09003fa7afd740334a5ffe31bbc09363a8dc81d4f6fd",
   "version": "1.0.0"
 }

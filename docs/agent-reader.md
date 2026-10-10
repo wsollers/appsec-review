@@ -11,6 +11,7 @@ Relevant bounded procedures and design references:
 - [`architecture/python-and-retrieval.md`](architecture/python-and-retrieval.md) — accepted immutable retrieval indexes.
 - [`operations/target-analysis-planning.md`](operations/target-analysis-planning.md) — operator behavior and recovery.
 - [`operations/cpp-compiled-analysis.md`](operations/cpp-compiled-analysis.md) — isolated C/C++ build, deep-analysis, licensing, evidence, and recovery.
+- [`SEI-CERT.md`](SEI-CERT.md) — SEI CERT coverage overview and links to the official standards.
 - [`operations/sei-cert-rule-pack.md`](operations/sei-cert-rule-pack.md) — validating, extending, and evaluating the SEI CERT rule pack under Semgrep and OpenGrep.
 
 This file is navigation only and introduces no additional instructions.
