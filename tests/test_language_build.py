@@ -13,7 +13,7 @@ from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build, native
 from appsec_review.jobs.job_language_build.dotnet import artifact_kind, project_topology, tool_identity, validate_recipe
 from appsec_review.jobs.job_language_build.job import (
-    _compile_rows, _dotnet_argv, _link_rows, _stream_identity,
+    _compile_rows, _dotnet_argv, _fingerprint, _link_rows, _stream_identity,
 )
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
@@ -31,6 +31,26 @@ from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, simulated_exec
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_processing_modes_change_language_build_checkpoint_identity() -> None:
+    dispatch = {
+        "source_fingerprint": "1" * 64, "recipe_identity": "2" * 64,
+        "family": "native", "probe_identity": "3" * 64,
+        "image": {"dependency_hashes": ["4" * 64], "image_id": "sha256:" + "5" * 64},
+    }
+    accepted = {"project_build_handoff_sha256": "6" * 64}
+    settings = {
+        "command_timeout_seconds": 1, "output_bytes": 2, "artifact_count_limit": 3,
+        "build_capture": {"mode": "required"},
+        "compiler_artifact_collection_mode": "required",
+        "compiler_artifact_collection_overrides": {}, "native": {},
+    }
+    baseline = _fingerprint(dispatch, accepted, settings)
+    assert _fingerprint(dispatch, accepted, {
+        **settings, "build_capture": {"mode": "auto"}}) != baseline
+    assert _fingerprint(dispatch, accepted, {
+        **settings, "compiler_artifact_collection_overrides": {"native": "auto"}}) != baseline
 
 
 @pytest.mark.parametrize(("name", "argv", "expected"), [

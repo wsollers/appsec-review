@@ -15,7 +15,7 @@ import pytest
 
 from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan, replay_commands
 from appsec_review.jobs.job_codeql_analysis.sarif import map_location, normalize_sarif
-from appsec_review.config.codeql import parse_codeql_settings
+from appsec_review.config.codeql import CodeQLExecutionMode, parse_codeql_settings
 from appsec_review.codeql.runtime import (
     CodeQLExecutor,
     CodeQLImage,
@@ -334,7 +334,7 @@ def test_typed_codeql_configuration_enforces_language_contracts() -> None:
     value = _settings_value()
     settings = parse_codeql_settings(value)
     assert settings.languages["java"].source_languages == ("Java", "Kotlin")
-    assert settings.languages["rust"].mode == "none"
+    assert settings.languages["rust"].mode == "source"
     assert settings.languages["cpp"].query_suite == "codeql-suites/cpp-code-scanning.qls"
     assert [(item.query_id, item.query_suite) for item in settings.languages["cpp"].custom_queries] == [
         ("cert-cpp", "codeql-suites/cert-cpp-default.qls")]
@@ -380,6 +380,11 @@ def test_database_and_query_checkpoint_inputs_invalidate_independently() -> None
         {**settings.languages, "go": extractor_changed}))
     assert _database_identity(unit, scope, image_identity="6" * 64, replay=replay,
                               settings=extractor_settings, asset_lock=lock) != database
+    mode_language = replace(language, mode=CodeQLExecutionMode.SOURCE)
+    mode_settings = replace(settings, languages=MappingProxyType(
+        {**settings.languages, "go": mode_language}))
+    assert _database_identity(unit, scope, image_identity="6" * 64, replay=replay,
+                              settings=mode_settings, asset_lock=lock) != database
     broken = _settings_value()
     broken["languages"]["csharp"]["source_languages"] = ["C#", "Visual Basic"]
     with pytest.raises(ValueError, match="VB"):

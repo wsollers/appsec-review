@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
+from enum import Enum
 import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 import tomllib
@@ -9,6 +12,23 @@ from types import MappingProxyType
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote, urlparse
+
+
+class ProcessingMode(str, Enum):
+    """Policy for build capture and compiler-artifact collection."""
+
+    REQUIRED = "required"
+    AUTO = "auto"
+    DISABLED = "disabled"
+
+
+def _processing_mode(value: object, field: str) -> ProcessingMode:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be one of: required, auto, disabled")
+    try:
+        return ProcessingMode(value)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be one of: required, auto, disabled") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,10 +54,13 @@ class BuildCaptureConfig:
     path_bytes_limit: int
     tool_call_count_limit: int
     secret_finding_count_limit: int
+    mode: ProcessingMode = ProcessingMode.REQUIRED
 
     def __post_init__(self) -> None:
         if self.backend not in {"ptrace", "ebpf"}:
             raise ValueError("build capture backend must be ptrace or ebpf")
+        if not isinstance(self.mode, ProcessingMode):
+            raise ValueError("build capture mode is invalid")
         if not 1 <= self.event_count_limit <= 10_000_000:
             raise ValueError("build capture event_count_limit is invalid")
         if not 1 <= self.argv_count_limit <= 4096:
@@ -67,7 +90,7 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
                    field: str = "build_capture") -> BuildCaptureConfig:
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be a table")
-    allowed = {"backend", "event_count_limit", "argv_count_limit",
+    allowed = {"mode", "backend", "event_count_limit", "argv_count_limit",
                "argument_bytes_limit", "capture_envp", "envp_count_limit",
                "envp_bytes_limit", "envp_redact_names", "path_bytes_limit",
                "tool_call_count_limit",
@@ -75,7 +98,7 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
     unknown = set(value) - allowed
     if unknown:
         raise ValueError(f"{field} has unknown settings: {', '.join(sorted(unknown))}")
-    if base is None and set(value) != allowed:
+    if base is None and set(value) - {"mode"} != allowed - {"mode"}:
         raise ValueError(f"{field} must define every capture setting")
     redact_names = (value["envp_redact_names"] if "envp_redact_names" in value else
                     list(base.envp_redact_names) if base else [])
@@ -104,6 +127,8 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
             "tool_call_count_limit", base.tool_call_count_limit if base else 0)),
         secret_finding_count_limit=int(value.get(
             "secret_finding_count_limit", base.secret_finding_count_limit if base else 0)),
+        mode=_processing_mode(value.get(
+            "mode", base.mode.value if base else ProcessingMode.REQUIRED.value), f"{field}.mode"),
     )
 
 
@@ -311,10 +336,16 @@ class LanguageBuildSettings:
     php: PhpBuildSettings
     jvm: JvmBuildSettings
     wasm: WasmBuildSettings
+    compiler_artifact_collection_mode: ProcessingMode
+    compiler_artifact_collection_overrides: Mapping[str, ProcessingMode]
 
     def __post_init__(self) -> None:
         if min(self.command_timeout_seconds, self.output_bytes, self.artifact_count_limit) < 1:
             raise ValueError("language-build limits must be positive")
+
+    def compiler_artifact_mode(self, language: str) -> ProcessingMode:
+        return self.compiler_artifact_collection_overrides.get(
+            language, self.compiler_artifact_collection_mode)
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,6 +419,8 @@ class JobConfig:
 class AppConfig:
     source_path: Path
     source_sha256: str
+    resolved_json: bytes
+    resolved_sha256: str
     runtime: RuntimeConfig
     build_capture: BuildCaptureConfig
     jobs: Mapping[str, JobConfig]
@@ -426,6 +459,7 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
     repository_root = source.parent
     source_bytes = source.read_bytes()
     document = tomllib.loads(source_bytes.decode("utf-8"))
+    resolved_document = copy.deepcopy(document)
 
     tools_value = document.get("tools", {})
     if not isinstance(tools_value, dict):
@@ -436,6 +470,7 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
     tool_capabilities = ToolCapabilityConfig(disable_grype=disable_grype)
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
+    resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
     runtime_value = document.get("runtime")
     if not isinstance(runtime_value, dict):
@@ -473,11 +508,17 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
         settings = value.get("settings", {})
         if not isinstance(settings, dict):
             raise ValueError(f"jobs.{job_id}.settings must be a table")
+        settings = copy.deepcopy(settings)
         capture_override = settings.get("build_capture")
+        if capture_override is not None and job_id not in {"job_project_build", "job_language_build"}:
+            raise ValueError(f"jobs.{job_id}.settings.build_capture is not a supported override target")
         resolved_capture = (_build_capture(
             capture_override, base=build_capture,
             field=f"jobs.{job_id}.settings.build_capture")
             if capture_override is not None else build_capture)
+        if job_id in {"job_project_build", "job_language_build"}:
+            settings["build_capture"] = {
+                **(capture_override or {}), "mode": resolved_capture.mode.value}
         steps_value = value.get("steps", {})
         if not isinstance(steps_value, dict):
             raise ValueError(f"jobs.{job_id}.steps must be a table")
@@ -511,6 +552,35 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
             )
         typed_settings: object | None = None
         if job_id == "job_language_build":
+            allowed_language_settings = {
+                "command_timeout_seconds", "output_bytes", "artifact_count_limit", "build_capture",
+                "compiler_artifact_collection_mode", "compiler_artifact_collection_overrides",
+                "dotnet", "go", "node", "python", "rust", "php", "jvm", "wasm",
+            }
+            unknown_language_settings = set(settings) - allowed_language_settings
+            if unknown_language_settings:
+                raise ValueError("jobs.job_language_build.settings has unknown settings: " +
+                                 ", ".join(sorted(unknown_language_settings)))
+            artifact_mode = _processing_mode(
+                settings.get("compiler_artifact_collection_mode", ProcessingMode.REQUIRED.value),
+                "jobs.job_language_build.settings.compiler_artifact_collection_mode")
+            artifact_overrides_value = settings.get("compiler_artifact_collection_overrides", {})
+            if not isinstance(artifact_overrides_value, dict):
+                raise ValueError(
+                    "jobs.job_language_build.settings.compiler_artifact_collection_overrides must be a table")
+            language_targets = {"native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"}
+            unknown_targets = set(artifact_overrides_value) - language_targets
+            if unknown_targets:
+                raise ValueError("unknown compiler-artifact override targets: " +
+                                 ", ".join(sorted(unknown_targets)))
+            artifact_overrides = MappingProxyType({
+                str(language): _processing_mode(mode,
+                    f"jobs.job_language_build.settings.compiler_artifact_collection_overrides.{language}")
+                for language, mode in artifact_overrides_value.items()
+            })
+            settings["compiler_artifact_collection_mode"] = artifact_mode.value
+            settings["compiler_artifact_collection_overrides"] = {
+                key: mode.value for key, mode in artifact_overrides.items()}
             go_value = settings.get("go")
             if not isinstance(go_value, dict):
                 raise ValueError("jobs.job_language_build.settings.go must be a table")
@@ -621,12 +691,17 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                     workspace_file_limit=int(wasm_value.get("workspace_file_limit", 0)),
                     producers=MappingProxyType(producers),
                 ),
+                compiler_artifact_collection_mode=artifact_mode,
+                compiler_artifact_collection_overrides=artifact_overrides,
             )
         elif job_id == "job_cpp_compiled_analysis":
             typed_settings = CppCompiledAnalysisSettings(lane=str(settings.get("lane", "")))
         elif job_id == "job_codeql_analysis":
             from .codeql import parse_codeql_settings
             typed_settings = parse_codeql_settings(settings)
+            settings["execution_mode"] = typed_settings.execution_mode.value
+            for language, language_settings in typed_settings.languages.items():
+                settings["languages"][language]["mode"] = language_settings.mode.value
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -646,9 +721,18 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
     pools = dagster_value.get("pools", {})
     if not isinstance(pools, dict):
         raise ValueError("[orchestration.dagster.pools] must be a table")
+    resolved_document["runtime"]["metadata_dir"] = str(
+        document["runtime"].get("metadata_dir", "runs/metadata"))
+    resolved_document.setdefault("tools", {})["disable_grype"] = tool_capabilities.disable_grype
+    for job_id, job in jobs.items():
+        resolved_document["jobs"][job_id]["settings"] = copy.deepcopy(dict(job.settings))
+    resolved_json = (json.dumps(resolved_document, sort_keys=True, separators=(",", ":"),
+                                ensure_ascii=False) + "\n").encode("utf-8")
     return AppConfig(
         source_path=source,
         source_sha256=hashlib.sha256(source_bytes).hexdigest(),
+        resolved_json=resolved_json,
+        resolved_sha256=hashlib.sha256(resolved_json).hexdigest(),
         runtime=runtime,
         build_capture=build_capture,
         jobs=MappingProxyType(jobs),

@@ -106,21 +106,23 @@ The agreed semantics and the 18-row `appsec-multi-vuln` fixture mapping are docu
 using nested corpus commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. The documentation is
 ahead of runtime configuration in these explicit ways:
 
-- add independent typed central controls for build execution capture and compiler-artifact
-  collection with `required`, `auto`, and `disabled` values;
-- resolve those values immutably per run and include them in receipt and checkpoint identities;
+- implemented: independent typed central controls for build execution capture and
+  compiler-artifact collection with `required`, `auto`, and `disabled` values;
+- implemented: canonical immutable per-run resolution and binding into handoff, job-configuration,
+  and resume identities;
 - add deterministic applicability classifiers and explicit policy/not-applicable dispositions,
   without introducing another syscall parser or reconciliation loop;
-- migrate CodeQL from the current `manual`/`none` modes and always-enabled parser contract to a
-  typed capability model that can express build replay, source/no-build, automatic selection, and
-  disabled policy, or retain the current names and document an exact stable mapping; and
+- implemented: CodeQL's typed capability model accepts `build`, `source`, `auto`, and `disabled`,
+  with one-way load-time normalization of legacy `manual`/`none` values; executor receipts retain
+  `manual`/`none` until the runtime policy evaluator is completed; and
 - add parameterized tests for every matrix row, including the Rust corpus/parent CodeQL mismatch,
   Python and Node mixed native scopes, specialized-toolchain unavailability, and the distinction
   between syntax-only and material interpreted-language lifecycles.
 
-Until those items land, do not describe conditional capture as deployed. Existing standardized
-capture remains mandatory only on the adapters that explicitly call it, and existing CodeQL
-receipts must use `manual`, `none`, `NOT_APPLICABLE`, and named gaps as implemented.
+Do not describe conditional capture as fully deployed until the remaining classifier, dispatch,
+and disposition work lands. Existing standardized capture remains mandatory only on the adapters
+that explicitly call it, and existing CodeQL receipts must use `manual`, `none`, `NOT_APPLICABLE`,
+and named gaps as implemented.
 
 ## Scale native acceptance from fixtures to a game-sized build
 

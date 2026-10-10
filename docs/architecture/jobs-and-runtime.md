@@ -71,6 +71,57 @@ Step/task overrides use
 `[jobs.<job_name>.steps.<step_name>.tasks.<task_name>]`; for example, the NVD step declares
 `fetch`, `process`, and `publish` tasks.
 
+## Processing-mode configuration reference
+
+Three independently typed controls are resolved by the central TOML loader:
+
+```toml
+[build_capture]
+mode = "required" # required | auto | disabled
+
+[jobs.job_language_build.settings]
+compiler_artifact_collection_mode = "required" # required | auto | disabled
+
+[jobs.job_language_build.settings.compiler_artifact_collection_overrides]
+native = "required"
+go = "required"
+dotnet = "required"
+rust = "required"
+
+[jobs.job_codeql_analysis.settings]
+enabled = true
+execution_mode = "auto" # build | source | auto | disabled
+
+[jobs.job_codeql_analysis.settings.languages.cpp]
+enabled = true
+mode = "build" # build | source | auto | disabled
+```
+
+`build_capture.mode` defaults to `required`. Only `job_project_build` and
+`job_language_build` may override it through their existing `settings.build_capture` table; all
+other job targets are rejected. `compiler_artifact_collection_mode` defaults to `required`, and
+its override table accepts only the configured language-build families: `native`, `go`, `dotnet`,
+`node`, `python`, `rust`, `php`, `java`, and `wasm`. An omitted family inherits the default.
+
+CodeQL `execution_mode` defaults to `auto`; each of the fixed CodeQL language entries can override
+it with `build`, `source`, `auto`, or `disabled`. The checked-in configuration preserves verified
+behavior explicitly: C/C++, Go, Java/Kotlin, and C# use `build`, while JavaScript/TypeScript,
+Python, Rust, and Actions use `source`. The old per-language spellings normalize only at load time:
+`manual` becomes `build` and `none` becomes `source`. The typed object and resolved configuration
+never retain the legacy spelling. A legacy `enabled` Boolean that conflicts with `disabled` is
+rejected rather than guessed.
+
+Every run retains both the exact source TOML and canonical `resolved.json` under
+`runs/<run-id>/data/configuration/`. The version 2 configuration manifest hashes both. Canonical
+JSON and its SHA-256 include defaults, overrides, and normalized CodeQL values; accepted handoffs,
+job configuration hashes, and resume planning use the resolved hash. Changing any processing mode
+therefore invalidates reuse deterministically.
+
+This is the typed control plane only. `auto` applicability evaluation and the final
+`SKIPPED_NA`/`SKIPPED_POLICY` runtime dispositions are not implemented yet. Existing build adapters
+continue their verified execution and collection behavior, and CodeQL currently executes only
+language overrides that resolve directly to `build` or `source`.
+
 ## NVD synchronization
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official

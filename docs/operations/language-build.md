@@ -15,9 +15,13 @@ an architectural regression.
 
 The authoritative control semantics and fixture matrix live in
 [`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md).
-The tri-state build-capture and compiler-artifact controls described there are not implemented in
-the current configuration schema; operators must not present this flow as active runtime behavior.
-When the schema lands, apply it independently to execution capture and artifact collection:
+The tri-state build-capture and compiler-artifact controls described there are implemented in the
+typed central configuration and frozen resolved-run snapshot. Build capture defaults to `required`
+and can be overridden only for `job_project_build` or `job_language_build`. Compiler-artifact
+collection defaults to `required` in `job_language_build` and accepts overrides only for the fixed
+language families documented in the configuration reference. The runtime applicability evaluator
+is not implemented yet, so operators must not present the following flow as active dispatch or skip
+behavior. Once that evaluator lands, apply the two controls independently:
 
 1. For `required`, run the applicable capture or collection path. Unavailability, failure, or
    incomplete evidence is a coverage gap and cannot be reported as clean.
@@ -33,9 +37,10 @@ When the schema lands, apply it independently to execution capture and artifact 
    bundler, or native extension, treat the lifecycle as material and apply `required` or `auto` as
    resolved. A skip or not-applicable result is never a clean-security claim.
 
-CodeQL currently uses `manual` for exact accepted build replay and `none` for source/no-build
-creation. It does not yet accept `build`, `source`, `auto`, or `disabled` as mode strings. Use the
-real mode names in runbooks and receipts until typed capability migration is implemented.
+CodeQL central configuration now uses `build`, `source`, `auto`, and `disabled`. The existing
+executor and receipts still use `manual` for exact accepted build replay and `none` for
+source/no-build creation; the loader/runtime boundary maps only `build -> manual` and
+`source -> none`. Effective `auto` selection and `disabled` disposition handling are pending.
 
 Native CMake dispatches use the validated deterministic marker command recipe. A failed default
 project-build probe may add only validated apt packages through the bounded image-repair workflow;

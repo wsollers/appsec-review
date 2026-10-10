@@ -492,6 +492,12 @@ def _go_module_metadata(workspace: Path, source_dir: str) -> list[dict[str, Any]
 
 def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> str:
     image = dispatch["image"]
+    family = str(dispatch["family"])
+    artifact_overrides = settings.get("compiler_artifact_collection_overrides", {}) if settings else {}
+    artifact_mode = (artifact_overrides.get(
+        family, settings.get("compiler_artifact_collection_mode", "required"))
+        if isinstance(artifact_overrides, Mapping) and settings else "required")
+    capture = settings.get("build_capture", {}) if settings else {}
     return hashlib.sha256(canonical_json({"schema": RECEIPT_SCHEMA, "target": dispatch["source_fingerprint"],
         "recipe": dispatch["recipe_identity"], "dependencies": image["dependency_hashes"],
         "image": image["image_id"], "executor": EXECUTOR_IDENTITY,
@@ -501,6 +507,11 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
         "limits": ({key: settings[key] for key in
                     ("command_timeout_seconds", "output_bytes", "artifact_count_limit")}
                    if settings is not None else {}),
+        "processing_modes": {
+            "build_execution_capture": capture.get("mode", "required")
+            if isinstance(capture, Mapping) else "required",
+            "compiler_artifact_collection": artifact_mode,
+        },
         "family_options": (settings.get(str(dispatch["family"]), {}) if settings is not None else {})})).hexdigest()
 
 

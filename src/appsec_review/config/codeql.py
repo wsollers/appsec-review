@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import PurePosixPath
 import re
 from types import MappingProxyType
@@ -10,8 +11,31 @@ from typing import Any
 
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE = re.compile(r"^sha256:[0-9a-f]{64}$")
-_MODES = {"cpp": "manual", "go": "manual", "java": "manual", "csharp": "manual",
-          "javascript": "none", "python": "none", "rust": "none", "actions": "none"}
+_LANGUAGES = {"cpp", "go", "java", "csharp", "javascript", "python", "rust", "actions"}
+_LEGACY_MODES = {"manual": "build", "none": "source"}
+
+
+class CodeQLExecutionMode(str, Enum):
+    BUILD = "build"
+    SOURCE = "source"
+    AUTO = "auto"
+    DISABLED = "disabled"
+
+
+def _execution_mode(value: object, field: str, *, legacy: bool = False) -> CodeQLExecutionMode:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be one of: build, source, auto, disabled")
+    normalized = _LEGACY_MODES.get(value, value) if legacy else value
+    try:
+        return CodeQLExecutionMode(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be one of: build, source, auto, disabled") from exc
+
+
+def _strict_bool(value: object, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be a Boolean")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +93,7 @@ class CodeQLCustomQuerySettings:
 @dataclass(frozen=True, slots=True)
 class CodeQLLanguageSettings:
     enabled: bool
-    mode: str
+    mode: CodeQLExecutionMode
     platform: str
     extractor_tree_sha256: str
     extractor_file_count: int
@@ -85,8 +109,10 @@ class CodeQLLanguageSettings:
     custom_queries: tuple[CodeQLCustomQuerySettings, ...]
 
     def __post_init__(self) -> None:
-        if not self.enabled or self.mode not in {"manual", "none"}:
-            raise ValueError("CodeQL language enablement or mode is invalid")
+        if not isinstance(self.mode, CodeQLExecutionMode):
+            raise ValueError("CodeQL language mode is invalid")
+        if self.enabled == (self.mode is CodeQLExecutionMode.DISABLED):
+            raise ValueError("CodeQL language enabled and mode settings conflict")
         if self.platform != "linux-x86_64" or self.extractor_file_count < 1:
             raise ValueError("CodeQL language platform or extractor count is invalid")
         for name, value in (("extractor", self.extractor_tree_sha256),
@@ -107,10 +133,17 @@ class CodeQLLanguageSettings:
         if len(query_ids) != len(set(query_ids)) or "default" in query_ids:
             raise ValueError("CodeQL custom query ids must be unique and cannot be default")
 
+    @property
+    def runtime_mode(self) -> str | None:
+        """Return the existing executor vocabulary when the control is immediately executable."""
+        return {CodeQLExecutionMode.BUILD: "manual",
+                CodeQLExecutionMode.SOURCE: "none"}.get(self.mode)
+
 
 @dataclass(frozen=True, slots=True)
 class CodeQLAnalysisSettings:
     enabled: bool
+    execution_mode: CodeQLExecutionMode
     source_image_tag: str
     source_image_id: str
     version: str
@@ -135,7 +168,9 @@ class CodeQLAnalysisSettings:
     languages: Mapping[str, CodeQLLanguageSettings]
 
     def __post_init__(self) -> None:
-        if not self.enabled or not self.source_image_tag or any(char.isspace() for char in self.source_image_tag):
+        if self.enabled == (self.execution_mode is CodeQLExecutionMode.DISABLED):
+            raise ValueError("CodeQL enabled and execution_mode settings conflict")
+        if not self.source_image_tag or any(char.isspace() for char in self.source_image_tag):
             raise ValueError("CodeQL runtime enablement or source image tag is invalid")
         if not _IMAGE.fullmatch(self.source_image_id) or not re.fullmatch(r"[0-9a-f]{40}", self.commit):
             raise ValueError("CodeQL source image or commit identity is invalid")
@@ -155,11 +190,8 @@ class CodeQLAnalysisSettings:
                   self.threads, self.ram_mb, self.max_paths)
         if min(limits) < 1 or self.concurrency > 16 or self.threads > 32 or self.ram_mb < 2048:
             raise ValueError("CodeQL resource and output limits are invalid")
-        if set(self.languages) != set(_MODES):
+        if set(self.languages) != _LANGUAGES:
             raise ValueError("CodeQL configured language set is incomplete")
-        for language, mode in _MODES.items():
-            if self.languages[language].mode != mode:
-                raise ValueError(f"CodeQL {language} mode is invalid")
         if set(self.languages["java"].source_languages) != {"Java", "Kotlin"}:
             raise ValueError("CodeQL Java configuration must preserve Kotlin coverage")
         if self.languages["csharp"].source_languages != ("C#",):
@@ -172,13 +204,39 @@ class CodeQLAnalysisSettings:
 
 
 def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
+    allowed = {
+        "enabled", "execution_mode", "source_image_tag", "source_image_id", "version", "commit",
+        "cli_sha256", "license_sha256", "asset_lock_sha256", "runtime_user", "retention",
+        "concurrency", "inventory_timeout_seconds", "database_timeout_seconds",
+        "query_timeout_seconds", "output_bytes", "database_file_limit", "database_bytes_limit",
+        "sarif_bytes_limit", "result_limit", "threads", "ram_mb", "max_paths", "languages",
+    }
+    unknown = set(value) - allowed
+    if unknown:
+        raise ValueError("jobs.job_codeql_analysis.settings has unknown settings: " +
+                         ", ".join(sorted(unknown)))
+    enabled = _strict_bool(value.get("enabled"), "CodeQL enabled")
+    execution_mode = _execution_mode(value.get("execution_mode", "auto"),
+                                     "CodeQL execution_mode")
     languages_value = value.get("languages")
     if not isinstance(languages_value, Mapping):
         raise ValueError("jobs.job_codeql_analysis.settings.languages must be a table")
     languages: dict[str, CodeQLLanguageSettings] = {}
     for language, raw in languages_value.items():
+        if language not in _LANGUAGES:
+            raise ValueError(f"unknown CodeQL language override target: {language}")
         if not isinstance(raw, Mapping):
             raise ValueError(f"CodeQL language configuration must be a table: {language}")
+        language_allowed = {
+            "enabled", "mode", "platform", "extractor_tree_sha256", "extractor_file_count",
+            "query_pack", "query_pack_version", "query_suite", "query_suite_sha256",
+            "query_pack_sha256", "query_lock_sha256", "source_languages", "prerequisites",
+            "additional_queries", "custom_queries",
+        }
+        language_unknown = set(raw) - language_allowed
+        if language_unknown:
+            raise ValueError(f"CodeQL language {language} has unknown settings: " +
+                             ", ".join(sorted(language_unknown)))
         custom_value = raw.get("custom_queries", [])
         additional_value = raw.get("additional_queries", [])
         if not isinstance(additional_value, list) or any(not isinstance(item, Mapping)
@@ -203,7 +261,9 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             query_suite_sha256=str(item.get("query_suite_sha256", "")),
         ) for item in additional_value)
         languages[str(language)] = CodeQLLanguageSettings(
-            enabled=raw.get("enabled") is True, mode=str(raw.get("mode", "")),
+            enabled=_strict_bool(raw.get("enabled"), f"CodeQL {language}.enabled"),
+            mode=_execution_mode(raw.get("mode", execution_mode.value),
+                                 f"CodeQL {language}.mode", legacy=True),
             platform=str(raw.get("platform", "")),
             extractor_tree_sha256=str(raw.get("extractor_tree_sha256", "")),
             extractor_file_count=int(raw.get("extractor_file_count", 0)),
@@ -219,7 +279,8 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             custom_queries=custom_queries,
         )
     return CodeQLAnalysisSettings(
-        enabled=value.get("enabled") is True,
+        enabled=enabled,
+        execution_mode=execution_mode,
         source_image_tag=str(value.get("source_image_tag", "")),
         source_image_id=str(value.get("source_image_id", "")), version=str(value.get("version", "")),
         commit=str(value.get("commit", "")), cli_sha256=str(value.get("cli_sha256", "")),

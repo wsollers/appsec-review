@@ -4,6 +4,7 @@ data_dir = "data"
 metadata_dir = "runs/metadata"
 
 [build_capture]
+mode = "required"
 backend = "ptrace"
 event_count_limit = 100000
 argv_count_limit = 256
@@ -417,6 +418,14 @@ command_timeout_seconds = 600
 # In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000
+compiler_artifact_collection_mode = "required"
+
+# Bounded language-family overrides. Omitted families inherit the required default above.
+[jobs.job_language_build.settings.compiler_artifact_collection_overrides]
+native = "required"
+go = "required"
+dotnet = "required"
+rust = "required"
 
 [jobs.job_language_build.settings.build_capture]
 event_count_limit = 250000
@@ -662,6 +671,7 @@ workers = 2
 
 [jobs.job_codeql_analysis.settings]
 enabled = true
+execution_mode = "auto"
 source_image_tag = "audit-codeql:custom-2.27.0"
 source_image_id = "sha256:3239953db3f14aaa9339f60adfa778ae8beb15c5db2aa393d3f21e7254413afa"
 version = "2.27.0"
@@ -686,7 +696,7 @@ max_paths = 4
 
 [jobs.job_codeql_analysis.settings.languages.cpp]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "71b5ab5175660b2526a26c43b9fde0eb4340b6eefacf03b3bfd28c2fc33763f9"
 extractor_file_count = 322
@@ -713,7 +723,7 @@ file_count = 1971
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "77602bd7b6167f6fe360d6116221eaed4d723471d5309ce8b45561d7e4abdf01"
 extractor_file_count = 46
@@ -733,7 +743,7 @@ query_suite_sha256 = "8970c08e48221cc8cfd89b6ac9c8cd1e56f143a740b613da67d835f3ca
 
 [jobs.job_codeql_analysis.settings.languages.java]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "cf07d7f555508aa38615426409a7a00cfd42300c226d0685ae6bb823f12e1c4c"
 extractor_file_count = 480
@@ -748,7 +758,7 @@ prerequisites = []
 
 [jobs.job_codeql_analysis.settings.languages.csharp]
 enabled = true
-mode = "manual"
+mode = "build"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "4af1424f5e14a8f183fc747929fb3b65e2e29566552b3d9a3c7cbff4dbbf5c71"
 extractor_file_count = 362
@@ -768,7 +778,7 @@ query_suite_sha256 = "7abab2161fc1ffef4b8fa2462b02fb7789c70fb738dc1eee678ab09ea7
 
 [jobs.job_codeql_analysis.settings.languages.javascript]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "a9a554b8601a7bf6014dafc9550a5c0036e6895b6ff9c6437a9944ee627a8285"
 extractor_file_count = 300
@@ -783,7 +793,7 @@ prerequisites = ["bundled-typescript"]
 
 [jobs.job_codeql_analysis.settings.languages.python]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "2ba1d0a331633b71472ca725f788175e66354db1b079a9f0ab57fed36e689a04"
 extractor_file_count = 76
@@ -798,7 +808,7 @@ prerequisites = []
 
 [jobs.job_codeql_analysis.settings.languages.rust]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "56cbdd2e8514ce13ee7a0d9839c058f996030433d463002121ab9e97c5778c50"
 extractor_file_count = 83
@@ -818,7 +828,7 @@ query_suite_sha256 = "73f133b0f0028e7721488a4ea95784d2b78b3acfb8cbf1668d2900d3ac
 
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true
-mode = "none"
+mode = "source"
 platform = "linux-x86_64"
 extractor_tree_sha256 = "1689e88244bdd01d6820a31193031b8a45462181dfe617a8216798ba0675b3e5"
 extractor_file_count = 8

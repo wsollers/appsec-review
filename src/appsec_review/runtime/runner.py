@@ -44,17 +44,22 @@ class JobRunner:
             import json
 
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("source_sha256") != self.config.source_sha256:
+            if manifest.get("resolved_sha256") != self.config.resolved_sha256:
                 raise ValueError("run is already bound to a different configuration")
-            if file_sha256(destination / "appsec-review.toml") != self.config.source_sha256:
+            if file_sha256(destination / "appsec-review.toml") != manifest.get("source_sha256"):
                 raise ValueError("run-owned configuration hash mismatch")
+            if file_sha256(destination / "resolved.json") != self.config.resolved_sha256:
+                raise ValueError("run-owned resolved configuration hash mismatch")
             return
         destination.mkdir(parents=True, exist_ok=True)
         atomic_bytes(destination / "appsec-review.toml", self.config.source_path.read_bytes())
+        atomic_bytes(destination / "resolved.json", self.config.resolved_json)
         atomic_json(manifest_path, {
-            "schema": "appsec-review/run-configuration/1",
+            "schema": "appsec-review/run-configuration/2",
             "source_sha256": self.config.source_sha256,
+            "resolved_sha256": self.config.resolved_sha256,
             "sources": [{"path": str(self.config.source_path), "sha256": self.config.source_sha256}],
+            "resolved": {"path": "resolved.json", "sha256": self.config.resolved_sha256},
         })
 
     def _context_from_claim(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
@@ -432,7 +437,7 @@ class JobRunner:
                    "attempt_id": context.attempt_id, "status": "ACCEPTED",
                    "completion_status": completion_status, "outputs": handoff_outputs,
                    "artifacts": artifacts, "upstream_handoff_sha256": dict(claim.get("upstream_handoffs", {})),
-                   "resolved_config_sha256": self.config.source_sha256,
+                   "resolved_config_sha256": self.config.resolved_sha256,
                    "job_config_sha256": job_config_sha256(self.config, job.job_id),
                    "source_fingerprint": context.source_fingerprint,
                    "implementation_identity": identities["implementation"],
@@ -620,7 +625,7 @@ class JobRunner:
                 "outputs": handoff_outputs,
                 "artifacts": artifacts,
                 "upstream_handoff_sha256": dict(upstream_handoffs or {}),
-                "resolved_config_sha256": self.config.source_sha256,
+                "resolved_config_sha256": self.config.resolved_sha256,
                 "job_config_sha256": job_config_sha256(self.config, job.job_id),
                 "source_fingerprint": source_fingerprint,
                 "implementation_identity": identities["implementation"],

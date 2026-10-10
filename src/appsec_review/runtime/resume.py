@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from enum import Enum
 import hashlib
 import json
 import os
@@ -27,9 +28,18 @@ class ResumeDecision:
 
 def job_config_sha256(config: AppConfig, job_id: str) -> str:
     job = config.job(job_id)
+    def jsonable(value: Any) -> Any:
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, Mapping):
+            return {str(key): jsonable(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [jsonable(item) for item in value]
+        return value
     value = {
         "job_id": job.job_id, "name": job.name, "workers": job.workers,
-        "settings": dict(job.settings),
+        "settings": jsonable(job.settings),
+        "build_capture": jsonable(asdict(job.build_capture)) if job.build_capture else None,
         "steps": {
             key: {"workers": step.workers, "settings": dict(step.settings),
                   "tasks": {task_id: {"workers": task.workers, "settings": dict(task.settings)}
@@ -68,7 +78,7 @@ class ResumePlanner:
         checks = {
             "handoff schema": (handoff.get("schema"), "appsec-review/job-handoff/1"),
             "status": (handoff.get("status"), "ACCEPTED"),
-            "resolved configuration": (handoff.get("resolved_config_sha256"), self.config.source_sha256),
+            "resolved configuration": (handoff.get("resolved_config_sha256"), self.config.resolved_sha256),
             "job configuration": (handoff.get("job_config_sha256"), job_config_sha256(self.config, job.job_id)),
             "target fingerprint": (handoff.get("source_fingerprint"), self.source_fingerprint),
             "implementation": (handoff.get("implementation_identity"), expected["implementation"]),

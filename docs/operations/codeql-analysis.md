@@ -9,12 +9,21 @@ before use.
 ## Supported coverage
 
 The pinned Linux x86-64 runtime is inventoried live before planning. C/C++, Go, Java/Kotlin, and
-C# use `manual` databases and replay the exact protected configure/build argv captured by
-`job_language_build`. JavaScript/TypeScript and Python use `none` databases. Rust uses the pinned
+C# are centrally configured as `build` and use `manual` executor databases that replay the exact
+protected configure/build argv captured by `job_language_build`. JavaScript/TypeScript and Python
+are configured as `source` and use `none` executor databases. Rust uses the pinned
 source/no-build extractor layered onto the accepted Rust build image so the semantic analyzer can
 load Cargo metadata without replaying or executing the target build; missing Cargo manifests,
 lockfiles, accepted Rust images, or semantic-analyzer coverage are explicit gaps.
 GitHub Actions is analyzed only when accepted `.github/workflows/*.yml` or `.yaml` files exist.
+
+The job-level typed default is `auto`, with fixed per-language overrides in the checked-in TOML that
+preserve the behavior above. Valid configuration values are `build`, `source`, `auto`, and
+`disabled`. Legacy `manual` and `none` input values normalize one way to `build` and `source`, so
+the immutable resolved configuration uses only the canonical vocabulary. Deterministic `auto`
+selection, effective `disabled` scopes, and final `SKIPPED_NA`/`SKIPPED_POLICY` dispositions are
+not implemented in this control-plane change; only directly resolved `build` and `source` scopes
+can currently reach the executor.
 
 Auxiliary build evidence such as package-catalog commands is never replayed as compilation. When
 the accepted producer labels commands, CodeQL selects only the ordered `configure` and `build`

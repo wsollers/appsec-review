@@ -4,12 +4,13 @@ from dataclasses import replace
 import json
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
-from appsec_review.config import load_config
+from appsec_review.config import ProcessingMode, load_config
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
-from appsec_review.jobs.job_project_build.job import _probe_environment
+from appsec_review.jobs.job_project_build.job import _probe_cache, _probe_environment
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.inference import ModelResult
@@ -20,6 +21,17 @@ from appsec_review.runtime import GraphRunner, plan_jobs
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_build_capture_mode_changes_project_probe_checkpoint_identity(tmp_path: Path) -> None:
+    job = load_config(ROOT / "appsec-review.toml").job("job_project_build")
+    unit = SimpleNamespace(job=SimpleNamespace(metadata_root=tmp_path, config=job))
+    baseline = _probe_cache(unit, "a" * 64)
+    changed_job = replace(job, build_capture=replace(
+        job.build_capture, mode=ProcessingMode.AUTO))
+    changed = _probe_cache(SimpleNamespace(job=SimpleNamespace(
+        metadata_root=tmp_path, config=changed_job)), "a" * 64)
+    assert changed != baseline
 
 
 class RecipeModel:

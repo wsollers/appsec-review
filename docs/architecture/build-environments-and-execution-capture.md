@@ -273,25 +273,34 @@ activity can establish a material build lifecycle. Syntax-only commands such as
 
 The status vocabulary has not yet been unified around `SKIPPED_POLICY` and `SKIPPED_NA`. The
 current repository uses `NOT_APPLICABLE` for an inapplicable scope and, in existing explicitly
-disabled tool paths, pairs it with `CONFIGURED_DISABLED`. Until the conditional build-control
-schema is implemented, documentation and receipts must use those actual names and retain the
-reason. A policy skip, an evidence-supported not-applicable result, and a coverage gap are distinct;
-none is a clean-security claim.
+disabled tool paths, pairs it with `CONFIGURED_DISABLED`. Although the typed control schema is now
+implemented, receipts must continue to use the dispositions the runtime actually emits and retain
+the reason until the evaluator migration lands. A policy skip, an evidence-supported
+not-applicable result, and a coverage gap are distinct; none is a clean-security claim.
 
-### Current implementation gap
+### Implemented control plane and remaining runtime gap
 
-This control model is design, not deployed behavior. `BuildCaptureConfig` currently types the
-capture backend, limits, envp behavior, and redaction, while the jobs decide unconditionally where
-to call `execute_captured`; it has no capture-policy value. Compiler-artifact collection likewise
-has adapter-specific settings and catalogs but no independent tri-state policy. CodeQL currently
-has global and per-language `enabled` booleans and only two accepted internal mode names:
-`manual` for exact accepted build replay and `none` for source/no-build database creation. The
-current parser requires the configured runtime and every configured language to be enabled, so a
-general per-scope disabled mode and `auto` selection are not implemented. The future schema must
-add these controls to central TOML, validate them as typed values, copy their resolved values into
-each run, bind them into checkpoint identity, and emit explicit policy/not-applicable/gap
-dispositions. Until then, use the real CodeQL names `manual` and `none`; do not claim that
-`build`, `source`, `auto`, or `disabled` are accepted configuration values.
+Central TOML now accepts and strictly types all three control vocabularies. Build capture has a
+global `required` default and bounded overrides for `job_project_build` and `job_language_build`.
+Compiler-artifact collection has a `required` language-build default and fixed language-family
+overrides. CodeQL has an `auto` job default and fixed per-language overrides using only `build`,
+`source`, `auto`, or `disabled`. Legacy CodeQL `manual` and `none` values are accepted only at the
+load boundary and normalize to `build` and `source`; resolved configuration never retains the old
+vocabulary. Unknown targets, invalid case, wrong types, conflicting enablement, and malformed
+tables fail loading.
+
+The canonical resolved document and hash are retained under each run's `data/configuration/` and
+are bound into handoff, job-configuration, and resume identities. The checked-in overrides retain
+the verified behavior: native C/C++, Go, .NET, and Rust capture/artifact collection remain
+`required`; C/C++, Go, Java/Kotlin, and C# CodeQL remain build-replay capable; and
+JavaScript/TypeScript, Python, Rust, and Actions remain source/no-build capable.
+
+The runtime policy evaluator is still pending. Existing adapters continue to execute the paths
+they already verified; they do not yet branch on `required`, `auto`, or `disabled`. CodeQL maps
+resolved `build` and `source` controls onto the executor's existing `manual` and `none` receipt
+vocabulary, while effective `auto` and `disabled` language scopes are not yet dispatched. Bounded
+deterministic applicability and final `SKIPPED_NA`/`SKIPPED_POLICY` dispositions remain later work;
+the presence of typed values must not be described as implementing those outcomes.
 
 ## `appsec-multi-vuln` project-type coverage matrix
 
@@ -299,9 +308,10 @@ The authoritative corpus mapping is
 [`support/project-matrix.json`](../../targets/appsec-multi-vuln/support/project-matrix.json),
 documented by the [corpus guide](../../targets/appsec-multi-vuln/README.md), at nested-repository
 commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. Every path below was resolved at that commit.
-The capture and artifact columns express the agreed acceptance policy, not a claim that the missing
-tri-state parent schema already enforces it. CodeQL entries retain the parent's real mode names
-`manual` and `none`; `unavailable` is the corpus capability label, not a configured parent mode.
+The capture and artifact columns express the agreed acceptance policy, not a claim that the pending
+runtime evaluator already enforces it. CodeQL entries below retain executor/receipt names
+`manual` and `none`; the central configuration names are now `build` and `source`, and
+`unavailable` is the corpus capability label rather than a configured parent mode.
 
 | Project type | Exact fixture path(s) | Build or validation command | Capture expectation | Compiler-artifact expectation | CodeQL mode / capability | Expected applicability | Specialized toolchain | Fixture role |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

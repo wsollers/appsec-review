@@ -325,7 +325,17 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
 
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = unit.job.config.settings["jvm"]
-    fingerprint = _fingerprint(dispatch, accepted, settings)
+    artifact_overrides = unit.job.config.settings.get("compiler_artifact_collection_overrides", {})
+    capture = unit.job.config.settings.get("build_capture", {})
+    fingerprint = _fingerprint(dispatch, accepted, {
+        **settings,
+        "processing_modes": {
+            "build_execution_capture": capture.get("mode", "required"),
+            "compiler_artifact_collection": artifact_overrides.get(
+                "java", unit.job.config.settings.get(
+                    "compiler_artifact_collection_mode", "required")),
+        },
+    })
     root = unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id
     workspace = root / "workspace"
     cache = unit.job.metadata_root / "language-builds" / "jvm" / fingerprint / "accepted.json"

@@ -245,7 +245,13 @@ def _capture_identity(unit: UnitContext, result: Any, *, build_unit_id: str,
 
 
 def _probe_cache(unit: UnitContext, recipe_identity: str) -> Path:
-    return unit.job.metadata_root / "project-probes" / recipe_identity / "accepted.json"
+    capture_mode = (unit.job.config.build_capture.mode.value
+                    if unit.job.config.build_capture is not None else "required")
+    identity = hashlib.sha256(canonical_json({
+        "recipe_identity": recipe_identity,
+        "build_execution_capture": capture_mode,
+    })).hexdigest()
+    return unit.job.metadata_root / "project-probes" / identity / "accepted.json"
 
 
 def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=None,

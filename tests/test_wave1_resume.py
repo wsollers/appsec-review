@@ -160,12 +160,21 @@ def test_corrupt_or_missing_artifact_and_force_from_invalidate_downstream(tmp_pa
     assert forced[1].reasons == ("forced rerun from named job",)
 
 
-def test_resolved_configuration_change_invalidates_entire_closure(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("old", "new"), [
+    ('mode = "required"', 'mode = "auto"'),
+    ('compiler_artifact_collection_mode = "required"',
+     'compiler_artifact_collection_mode = "auto"'),
+    ('execution_mode = "auto"', 'execution_mode = "source"'),
+])
+def test_processing_mode_change_invalidates_entire_closure(
+        tmp_path: Path, old: str, new: str) -> None:
     config, target = _fixture(tmp_path)
     graph = GraphRunner(config, [build_intake(), build_catalog()])
     fingerprint = source_fingerprint(target)
     first = graph.run(target_root=target, source_fingerprint=fingerprint)
-    config.source_path.write_text(config.source_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    source = config.source_path.read_text(encoding="utf-8")
+    assert old in source
+    config.source_path.write_text(source.replace(old, new, 1), encoding="utf-8")
     changed = load_config(config.source_path)
     plan = GraphRunner(changed, [build_intake(), build_catalog()]).plan(first["run_id"], fingerprint)
     assert [item.action for item in plan] == ["RUN", "INVALIDATE"]

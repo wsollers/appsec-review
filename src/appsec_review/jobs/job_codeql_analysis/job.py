@@ -275,7 +275,9 @@ def _database_identity(unit: UnitContext, scope: CodeQLScope, *, image_identity:
     language = settings.languages[scope.language]
     return hashlib.sha256(canonical_json({
         "schema": DATABASE_CHECKPOINT_SCHEMA,
-        "scope": asdict(scope), "mode": scope.mode, "environment_identity": scope.environment_identity,
+        "scope": asdict(scope), "mode": scope.mode,
+        "configured_execution_mode": language.mode.value,
+        "environment_identity": scope.environment_identity,
         "replay": replay, "codeql_image_identity": image_identity, "version": settings.version,
         "cli_sha256": settings.cli_sha256, "extractor_tree_sha256": language.extractor_tree_sha256,
         "runner_schema": "codeql-runner/2", "database_producer": "codeql-database/3",
@@ -720,7 +722,7 @@ def build_job() -> Job:
                 tuple(dict.fromkeys([*runtime_gaps, *planned.gaps])), planned.non_applicable)
         for scope in planned.scopes:
             configured = settings.languages.get(scope.language)
-            if configured is None or configured.mode != scope.mode:
+            if configured is None or configured.runtime_mode != scope.mode:
                 raise FrameworkIntegrityError(f"CodeQL {scope.language} mode differs from central configuration")
             locked = lock["query_packs"].get(scope.language)
             if not isinstance(locked, Mapping) or any((
