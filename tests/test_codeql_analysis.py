@@ -432,6 +432,16 @@ def test_csharp_default_and_extended_pack_queries_have_independent_identities() 
     assert len({_query_identity(database, profile, settings) for profile in profiles}) == 2
 
 
+def test_rust_default_and_extended_pack_queries_have_independent_identities() -> None:
+    settings = parse_codeql_settings(_settings_value())
+    language = settings.languages["rust"]
+    profiles = _query_profiles(language)
+    assert [(item["query_id"], item["kind"]) for item in profiles] == [
+        ("default", "default"), ("security-extended", "pack")]
+    database = {"database_identity": "1" * 64, "database_tree_sha256": "2" * 64}
+    assert len({_query_identity(database, profile, settings) for profile in profiles}) == 2
+
+
 def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None:
     lines = (ROOT / "containers" / "tools" / "codeql" / "Dockerfile").read_text(
         encoding="utf-8").splitlines()

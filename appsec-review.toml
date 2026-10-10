@@ -806,6 +806,11 @@ query_lock_sha256 = "daf1ee855889de477880b5e5235b1c8ddafca1947ed86842279f91584a4
 source_languages = ["Rust"]
 prerequisites = ["Cargo.toml", "Cargo.lock", "bundled-rust-indexer"]
 
+[[jobs.job_codeql_analysis.settings.languages.rust.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/rust-security-extended.qls"
+query_suite_sha256 = "73f133b0f0028e7721488a4ea95784d2b78b3acfb8cbf1668d2900d3ac1030c0"
+
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true
 mode = "none"

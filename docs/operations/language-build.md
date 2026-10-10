@@ -131,6 +131,15 @@ sanitized `build` shard, together with the capture record, event, and findings h
 output, exact argv, syscall events, tool-call records, environment values, and diagnostic tails
 remain run-owned protected artifacts and are never returned through retrieval or MCP.
 
+The pre-Dagster Rust fixture gate uses a fixed reviewed Cargo recipe for capture acceptance and a
+separate configured-model test for recipe inference. The fixed path verifies dependency-image
+egress, Cargo metadata and build execution, successful rustc/linker/build-script process-exec
+evidence, complete streams, standardized records, envp redaction, gitleaks findings, executable and
+intermediate artifacts, loader facts, and checkpoint-safe hash identities. Model output never enters
+the fixed capture test. The configured-model test remains opt-in through
+`APPSEC_RUN_LIVE_INFERENCE=1` because it sends bounded target planning metadata to the configured
+authenticated model transport.
+
 The PHP adapter requires `composer.json`; `composer.lock` is used when present. Composer dependency
 installation may occur while deriving the pinned project image or during the network-enabled build,
 with plugins and scripts disabled. Central policy controls Composer plugins and
@@ -155,6 +164,13 @@ Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_
 counts, dispositions, gap counts, and durations—not command text or environment values.
 
 ## Live acceptance
+
+The bounded non-Dagster Rust fixture acceptance is current for this tree: both the ordinary and
+synthetic-secret language-build runs succeed without capture gaps, and the pinned CodeQL Rust
+source/no-build database executes the default `rust-security-and-quality` and independently hashed
+`rust-security-extended` suites. The benign fixture produces zero normalized CodeQL observations;
+that is recorded as a zero-result query execution, not a clean-security claim. Rust compiler-native
+AST and IR production are not implemented. No Dagster run is claimed by this fixture gate.
 
 Dagster run `34cd763a-8798-4dc7-a27c-34cc6006c9e5` (application run
 `2026-10-09-0012`) is the accepted .NET/C# fixture run. All 284 selected orchestration steps

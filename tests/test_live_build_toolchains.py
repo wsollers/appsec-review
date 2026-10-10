@@ -754,6 +754,56 @@ class _RustFixtureRecipeModel:
                             "build_recipes": recipes})
 
 
+@pytest.mark.skipif(
+    os.environ.get("APPSEC_RUN_LIVE_INFERENCE") != "1",
+    reason="requires the configured authenticated model transport",
+)
+def test_live_configured_model_infers_valid_rust_recipe_that_builds(tmp_path: Path) -> None:
+    """Recipe inference is an independent gate and never supplies capture evidence."""
+    _profile("rust")
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config = load_config(config_path)
+    target = tmp_path / "target"
+    shutil.copytree(FIXTURE / "rust", target / "rust")
+    fingerprint = source_fingerprint(target)
+
+    planned = GraphRunner(
+        config,
+        [build_intake(check_models=check_models), build_catalog(), build_plan(infer=infer)],
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    assert planned["status"] == "SUCCEEDED", planned
+    run_id = planned["run_id"]
+    run_root = config.runtime.runs_dir / run_id
+    plan = load_accepted_plan(run_root)
+    assert plan["model"]["status"] == "ACCEPTED", plan["coverage_gaps"]
+    actions = [item for item in plan["build_topology"]["build_actions"]
+               if item["family"] == "rust"]
+    assert len(actions) == 1
+    assert actions[0]["executable"] is False and actions[0]["requires_inference"] is False
+    recipe = actions[0]["recipe"]
+    unit = {"build_unit_id": actions[0]["build_unit_id"], "family": "rust",
+            "root": actions[0]["root"], "build_system": actions[0]["build_system"],
+            "markers": [{"path": path} for path in recipe["dependency_files"]],
+            "descriptor_package": {"documents": [
+                {"path": path} for path in recipe["dependency_files"]]}}
+    assert validate_build_recipe(recipe, unit) == []
+    assert recipe["image_profile"] == "rust" and recipe["network_required"] is True
+    assert recipe["build_commands"] and all(command[:2] == ["cargo", "build"]
+                                               for command in recipe["build_commands"])
+
+    built = GraphRunner(config, [build_projects()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert built["status"] == "SUCCEEDED", built
+    accepted = load_accepted_builds(run_root)
+    receipt = next(item for item in accepted["probe_receipts"] if item["family"] == "rust")
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["gaps"] == []
+    assert receipt["probe_disposition"] == "PROBED"
+    dispatch = next(item for item in accepted["build_dispatches"] if item["family"] == "rust")
+    assert dispatch["recipe_provenance"] == "accepted-inference-default-image"
+    assert any(item["path"].endswith("appsec-fixture-rust") for item in receipt["artifacts"])
+
+
 class _SecretEnvironmentExecutor(BuildContainerExecutor):
     """The real executor, started with one extra variable the accepted recipe never named."""
 

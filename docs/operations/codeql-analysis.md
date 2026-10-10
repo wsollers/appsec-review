@@ -11,7 +11,9 @@ before use.
 The pinned Linux x86-64 runtime is inventoried live before planning. C/C++, Go, Java/Kotlin, and
 C# use `manual` databases and replay the exact protected configure/build argv captured by
 `job_language_build`. JavaScript/TypeScript and Python use `none` databases. Rust uses the pinned
-source/no-build extractor; missing Cargo manifests or lockfiles are explicit coverage gaps.
+source/no-build extractor layered onto the accepted Rust build image so the semantic analyzer can
+load Cargo metadata without replaying or executing the target build; missing Cargo manifests,
+lockfiles, accepted Rust images, or semantic-analyzer coverage are explicit gaps.
 GitHub Actions is analyzed only when accepted `.github/workflows/*.yml` or `.yaml` files exist.
 
 Auxiliary build evidence such as package-catalog commands is never replayed as compilation. When
@@ -38,7 +40,8 @@ read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bo
 logs.
 
 Database and query checkpoints are separate. Each applicable scope runs a `default` query profile;
-C/C++ also runs the discovered `cert-cpp` custom profile. The C/C++ default profile uses
+C# and Rust also run independently hash-pinned `security-extended` profiles, and C/C++ runs the
+discovered `cert-cpp` custom profile. The C/C++ default profile uses
 `cpp-code-scanning.qls`, while the custom profile uses `cert-cpp-default.qls`. Database identities
 exclude all query inputs, so a query-suite change reuses a verified database while a build recipe,
 dependency, environment,
@@ -67,13 +70,21 @@ For a fresh `appsec-multi-vuln` run, verify:
 1. the live extractor inventory matches `containers/tools/codeql/assets.lock.json`;
 2. every applicable scope reports separate database and per-profile query identities;
 3. every successful C/C++ database reports both `default` and `cert-cpp` query profiles;
-4. each supported language present has a real database and query execution or a precise gap;
-5. the accepted manifest contains profile-specific `codeql-*` observation shards;
-6. `query_codeql` returns the same accepted observations; and
-7. deployment verification reports per-language and per-profile execution, SARIF, observation,
+4. every successful C# and Rust database reports both `default` and `security-extended` profiles;
+5. each supported language present has a real database and query execution or a precise gap;
+6. the accepted manifest contains profile-specific `codeql-*` observation shards;
+7. `query_codeql` returns the same accepted observations; and
+8. deployment verification reports per-language and per-profile execution, SARIF, observation,
    and gap counts.
 
 ## Live acceptance
+
+The current pre-Dagster Rust fixture gate creates a real source/no-build database in the derived
+Rust/CodeQL image, confirms successful semantic extraction of the fixture source, and executes both
+the default `rust-security-and-quality` suite and `rust-security-extended`. Both runs retain SARIF
+and normalized observation files with verified hashes. The benign fixture currently produces zero
+observations; this is a verified zero-result execution, not evidence that an arbitrary Rust target
+is clean. Rust compiler-native AST and IR coverage are outside CodeQL and remain unsupported.
 
 The current bounded acceptance report is
 `deploy/dagster/verification/codeql-cross-language-live-acceptance.json`. Dagster run

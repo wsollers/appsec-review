@@ -119,7 +119,7 @@ LIVE_SCOPES = (
     )),
     ("javascript", "source", "none", "typescript", ()),
     ("python", "source", "none", "python", ()),
-    ("rust", "source", "none", "rust", ()),
+    ("rust", "rust", "none", "rust", ()),
     ("actions", "source", "none", ".", ()),
 )
 
@@ -145,7 +145,7 @@ def test_live_codeql_inventory_matches_the_pinned_extractors_and_query_packs(
     ("language", "profile", "mode", "source_subroot", "commands"),
     LIVE_SCOPES, ids=[value[0] for value in LIVE_SCOPES],
 )
-def test_live_codeql_database_default_queries_and_cpp_extended_queries(
+def test_live_codeql_database_default_and_applicable_extended_queries(
         live_codeql_runtime, language: str, profile: str, mode: str,
         source_subroot: str,
         commands: tuple[tuple[str, tuple[str, ...], dict[str, str]], ...]) -> None:
@@ -175,7 +175,7 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
     source_files = [{"path": path.relative_to(workspace).as_posix(),
                      "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
                     for path in workspace.rglob("*") if path.is_file() and
-                    path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"}]
+                    path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".rs"}]
 
     def assert_observation_identity(sarif_value, relative: str, query_id: str) -> None:
         sarif_path = scratch / relative
@@ -205,6 +205,15 @@ def test_live_codeql_database_default_queries_and_cpp_extended_queries(
     assert_observation_identity(sarif, output, "default")
     if language == "csharp":
         assert sum(len(run.get("results", ())) for run in sarif["runs"]) > 0
+    if language == "rust":
+        notifications = [
+            str(item.get("message", {}).get("text", ""))
+            for run in sarif["runs"]
+            for invocation in run.get("invocations", ())
+            for item in invocation.get("toolExecutionNotifications", ())
+        ]
+        assert "File successfully extracted." in notifications
+        assert not any("semantic analyzer unavailable" in item for item in notifications)
 
     for additional in configured.additional_queries:
         additional_output = f"queries/{additional.query_id}.sarif"

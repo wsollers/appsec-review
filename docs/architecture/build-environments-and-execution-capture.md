@@ -311,6 +311,17 @@ redacted is a gap. A unit whose capture or tool provenance is incomplete is neve
 reused checkpoint re-verifies every retained capture against the scope and hashes its receipt
 recorded and republishes the gaps that receipt named.
 
+The bounded Rust fixture acceptance derives a dependency-bearing project image with Cargo egress,
+runs metadata and build commands through the capture boundary, and verifies an executable, rlib,
+rmeta, dependency metadata, ELF loader facts, Cargo packages/resolve edges, rustc, a linker driver,
+and dependency build-script execution. It also proves exact-name envp redaction, gitleaks removal of
+a synthetic secret, complete retained streams, raw-trace cleanup, and default plus
+`security-extended` Rust CodeQL execution. Rust CodeQL remains source/no-build analysis layered onto
+the accepted Rust image so its semantic analyzer can load Cargo metadata; it is not compiler replay.
+There is no Rust compiler-native AST or IR producer in the current graph. Tree-sitter supplies a
+separate concrete-syntax source view when selected, and the missing compiler AST/IR branches remain
+an explicit coverage gap rather than being implied by CodeQL or the build artifact catalog.
+
 ## .NET language-build integration
 
 The .NET adapter uses the same standardized capture boundary for every accepted `dotnet restore`,

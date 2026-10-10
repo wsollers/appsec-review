@@ -43,6 +43,12 @@ The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/fe
 choices; retains rustc, linker, archiver, build-script, and proc-macro provenance; catalogs Cargo
 metadata and resolve edges plus generated sources, rlib/rmeta, native libraries, binaries, and debug
 metadata; and publishes sanitized build evidence without executing tests or produced programs.
+Its current Docker fixture gate verifies dependency egress, standardized syscall/envp/connect
+records, exact-name redaction, gitleaks findings, complete output files, Cargo dependency and
+intermediate artifacts, loader facts, default plus security-extended CodeQL profiles, and truthful
+zero-result SARIF. Recipe inference is a separate opt-in model gate and never contributes capture
+authority. Rust compiler-native AST and IR producers remain unimplemented; tree-sitter and CodeQL
+must not be described as substitutes for those missing branches.
 The native adapter now uses the same syscall/envp/connect/gitleaks boundary as Rust and .NET.
 Successful exec events alone establish tool provenance; compile databases and CMake link records are
 exact-match enrichment only. Docker-backed fixture acceptance covers complete streams,
