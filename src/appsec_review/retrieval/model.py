@@ -50,6 +50,8 @@ class EntityKind(StrEnum):
     REVIEW_UNIT = "review_unit"
     DEPLOYMENT_EVENT = "deployment_event"
     TAG_ASSIGNMENT = "tag_assignment"
+    PRIORITY_ITEM = "priority_item"
+    REVIEW_SIGNAL = "review_signal"
 
 
 class RelationKind(StrEnum):

@@ -452,3 +452,17 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   (`CODEOWNERS`) relatedness when the catalog exposes them.
 - Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on
   Tree-sitter without delaying the build lane.
+
+## Narrow review-prioritization approximations
+
+See [`architecture/review-prioritization.md`](architecture/review-prioritization.md).
+
+- Resolve call targets (clangd symbols, CodeQL call graphs) so wrapper, sink, and recursion
+  heuristics stop depending on callee names, and so indirect recursion is detected.
+- Evaluate build-system include paths, tsconfig `paths`, Composer PSR-4 maps, and Cargo workspaces in
+  import resolution, and count implicit same-package references.
+- Diff public API and contract declarations between the snapshot and its mainline parent instead of
+  combining declarations with the history hotspot.
+- Score preprocessor-conditional and macro control flow instead of reporting it as unsupported.
+- Add a Python mapping and any further languages the Tree-sitter producer gains.
+- Add Semgrep or CodeQL path queries for PHP, which has no CodeQL extractor today.

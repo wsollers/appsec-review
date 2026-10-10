@@ -600,6 +600,9 @@ and `coverage`. For example, `find(kind="hotspot", indexes=["history"])` returns
   classification, GitHub facts, raw log, binding, and hotspot ranks for review-process, sprawl,
   repair, test-churn, ownership, and function-level signals; see
   [`change-context-analysis.md`](change-context-analysis.md).
+- **Review prioritization.** `job_review_prioritization` uses accepted file and symbol SII scores
+  as history features. See
+  [`review-prioritization.md`](review-prioritization.md).
 
 ## Central TOML
 
