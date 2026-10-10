@@ -45,6 +45,7 @@ class EntityKind(StrEnum):
     FINDING_PACKAGE = "finding_package"
     CHANGE = "change"
     HISTORY_SIGNAL = "history_signal"
+    HOTSPOT = "hotspot"
     TAG_ASSIGNMENT = "tag_assignment"
 
 

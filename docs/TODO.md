@@ -429,5 +429,11 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   extend the OSV sync index and match walked commits against it.
 - Commit subjects are not indexed. Index them only after a gitleaks redaction pass, with a named gap
   when redaction is unavailable.
-- Join blame spans to Tree-sitter function nodes for function-level signals, and add an exact-filter
-  `query_history` MCP tool if consumers need one.
+- PR open-to-merge and deployment timing are named unavailable signals. Acquire them only from
+  authoritative sources (GitHub PR timestamps, deployment records), never from commit timestamps.
+- Function-level history uses snapshot Tree-sitter spans, so renamed or moved functions keep their
+  snapshot identity and deleted functions are not represented. Follow symbol identity across
+  history if consumers need it.
+- Cognitive complexity does not detect recursion. Add live grammar probes that pin the
+  complexity node-type table to the locked Tree-sitter language pack.
+- Add an exact-filter `query_history` MCP tool if consumers need more than `find(kind="hotspot")`.

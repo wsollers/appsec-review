@@ -234,8 +234,11 @@ name = "source_history_analysis"
 workers = 1
 
 [jobs.job_source_history_analysis.settings]
-# Windows are anchored to the mainline (main, else master) snapshot commit time, never wall clock.
-window_days = 365
+# The window is M calendar months (UTC) ending at the mainline (main, else master) snapshot commit's
+# committer time, never wall clock. A start day missing from its month clamps to that month's end.
+history_window_months = 6
+# N: the hotspot index publishes the top N ranked files and the top N ranked symbols.
+hotspot_count = 10
 max_changes = 20000
 bulk_change_file_threshold = 500
 recency_half_life_days = 90
@@ -245,15 +248,55 @@ co_change_top_k = 10
 co_change_min_support = 3
 blame_max_files = 50
 blame_max_file_bytes = 1048576
+# Length of the SII file ranking copied into the accepted document for the analysis plan.
 ranking_top_n = 200
 fix_labels = ["bug", "fix", "regression"]
 security_labels = ["security", "vulnerability"]
 
-# Ranking is churn-led; other signals are published but carry no weight unless configured here.
-[jobs.job_source_history_analysis.settings.ranking_weights]
-churn_lines = 3
-recency_weighted_churn = 2
-change_count = 1
+[jobs.job_source_history_analysis.settings.fix_on_fix]
+# A later fix within this many days of an earlier fix on the same lines or function (14-30).
+interval_days = 30
+
+[jobs.job_source_history_analysis.settings.line_history]
+# Per-file zero-context patches for line regions; files beyond the bound are named gaps.
+max_files = 50
+max_file_bytes = 1048576
+
+[jobs.job_source_history_analysis.settings.symbols]
+# Tree-sitter function spans and complexity for the highest-churn rank-eligible files.
+enabled = true
+max_files = 200
+max_file_bytes = 1048576
+max_nodes_per_file = 200000
+
+[jobs.job_source_history_analysis.settings.sii]
+# Security Instability Index: 0-100 over min-max normalized metrics; see the architecture document.
+complexity_metric = "cyclomatic"
+tier_1_share = 0.05
+tier_2_share = 0.15
+
+[jobs.job_source_history_analysis.settings.sii.weights]
+relative_churn = 0.35
+revision_frequency = 0.25
+author_entropy = 0.15
+complexity = 0.25
+
+[jobs.job_source_history_analysis.settings.filters]
+# Files matching these POSIX globs keep their metrics but are excluded from ranking. A pattern
+# without "/" matches the file name at any depth; "**/" spans directories.
+generated = ["**/generated/**", "**/gen/**", "*.pb.go", "*_pb2.py", "*_pb2_grpc.py", "*.pb.cc", "*.pb.h",
+             "*.g.dart", "*.designer.cs", "*.min.js", "*.min.css", "*.map"]
+lockfile = ["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "Pipfile.lock",
+            "uv.lock", "Cargo.lock", "go.sum", "composer.lock", "Gemfile.lock", "packages.lock.json",
+            "gradle.lockfile", "pubspec.lock", "mix.lock", "*.lock"]
+fixture = ["**/fixtures/**", "**/fixture/**", "**/testdata/**", "**/__snapshots__/**", "*.snap", "**/golden/**"]
+documentation = ["*.md", "*.rst", "*.adoc", "*.txt", "docs/**", "doc/**", "LICENSE*", "CHANGELOG*", "NOTICE*"]
+vendored = ["**/vendor/**", "**/third_party/**", "**/node_modules/**"]
+# Test paths are ranked like other code; they only classify production-to-test churn.
+test = ["**/test/**", "**/tests/**", "**/spec/**", "**/__tests__/**", "test_*", "*_test.*", "*.test.*", "*.spec.*",
+        "*Test.java", "*Tests.cs"]
+# A change whose subject names formatting is formatting churn only if |added - deleted| <= tolerance * max.
+formatting_balance_tolerance = 0.1
 
 [jobs.job_source_history_analysis.settings.git]
 enabled = true
@@ -283,6 +326,10 @@ workers = 1
 [jobs.job_source_history_analysis.steps.analyze.tasks.compute_signals]
 [jobs.job_source_history_analysis.steps.analyze.tasks.blame_age]
 [jobs.job_source_history_analysis.steps.analyze.tasks.co_change]
+[jobs.job_source_history_analysis.steps.analyze.tasks.line_history]
+[jobs.job_source_history_analysis.steps.analyze.tasks.symbol_spans]
+[jobs.job_source_history_analysis.steps.analyze.tasks.fix_on_fix]
+[jobs.job_source_history_analysis.steps.analyze.tasks.symbol_signals]
 [jobs.job_source_history_analysis.steps.analyze.tasks.rank]
 
 [jobs.job_source_history_analysis.steps.publish]
