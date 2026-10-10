@@ -13,7 +13,7 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a ten-job linear review graph from
+The direct CLI currently exercises this mechanism with an eleven-job linear review graph from
 `job_review_intake` through `job_evidence_collection`. Dagster builds the broader, branched
 `wave1_review` topology from the registered and configured jobs, including CI configuration,
 tree-sitter, post-build, and OWASP branches that are not in the direct graph. Both surfaces use the
@@ -23,6 +23,12 @@ documented in [`../operations/wave1-review.md`](../operations/wave1-review.md).
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the
 accepted job receipts correctly remain linked to their original launch.
+
+A job may also declare a cheap, deterministic `input_identity` probe for inputs the target
+fingerprint deliberately excludes. The runner records the probe value in the claim and handoff, and
+the resume planner re-probes it against the graph target; a mismatch reruns the job and invalidates
+its downstream closure. `job_source_history_analysis` uses it for the mainline commit, object
+format, and shallow boundary, because `.git` is outside the source fingerprint.
 
 ## Global events
 

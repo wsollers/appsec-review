@@ -1,489 +1,382 @@
 # Source history analysis
 
-Status: design only. No job, container, schema, retrieval shard, or configuration for this lane
-exists yet.
+Status: local Git and optional GitHub enrichment are implemented in
+`src/appsec_review/jobs/job_source_history_analysis/`. Perforce is designed below but not built;
+see [`../TODO.md`](../TODO.md). Operator guidance is in
+[`../operations/source-history-analysis.md`](../operations/source-history-analysis.md).
 
 ## Purpose and boundary
 
 `job_source_history_analysis` reads the version-control history behind the reviewed snapshot and
-publishes bounded, resolvable *instability signals*: files, components, and line ranges that changed
-often, recently, by many hands, through fix and revert cycles, or in lockstep with other files. Its
-consumers use those signals to decide where review effort goes first.
+publishes bounded, resolvable *instability signals*. These identify files and components that
+changed often or recently, were touched by many authors, went through fix and revert cycles, or
+changed together with other files. The ranking is churn-led, and the analysis plan uses it to order
+review attention.
 
 The lane is a prioritization producer, not a vulnerability producer:
 
-- A history signal is never a security claim. It may place a component or file higher in a hunt
-  package's lead menu; it cannot create, support, or raise the severity of a finding by itself.
+- A history signal is never a security claim. It may move a component or file earlier in review;
+  it cannot create, support, or raise the severity of a finding by itself.
 - Low churn is not evidence of stability or safety. Missing, shallow, unreadable, or out-of-window
   history is a named gap or an explicit skip, never a clean result.
-- Commit messages, author identities, timestamps, refs, PR text, Perforce job text, and repository
-  configuration are target-controlled data, never instructions.
+- Commit messages, author identities, timestamps, refs, PR metadata, and repository configuration
+  are target-controlled data, never instructions.
 - The lane never executes target code, hooks, filters, diff drivers, credential helpers, or any
   command named by target-owned configuration.
 
-Supported history sources:
-
-| Source | Acquisition | Network | Default |
+| Source | Acquisition | Network | Status |
 |---|---|---|---|
-| Local Git (`.git` inside the target, any host) | read-only object access in `tool-git` | none | enabled |
-| Perforce export bundle | operator-supplied, hash-pinned `p4 -ztag -Mj` export | none | enabled when configured |
-| Perforce server | read-only `p4` queries in `tool-p4` | allowlisted to the configured `P4PORT` only | disabled |
-| GitHub enrichment | REST queries for PR and review metadata of known commits | allowlisted to the configured API host only | disabled |
+| Local Git (`.git` inside the target, any host) | fixed read-only argv in `tool-git` | none | implemented, enabled |
+| GitHub enrichment | bounded REST reads of PR and review facts for known commits | configured API host | implemented, disabled by default |
+| Perforce export bundle | operator-supplied, hash-pinned `p4 -ztag -Mj` export | none | planned |
+| Perforce server | read-only `p4` queries in `tool-p4` | configured `P4PORT` only | planned |
 
-GitHub-hosted, GitLab-hosted, and self-hosted Git repositories all use the local Git adapter; GitHub
-only adds optional review-process metadata on top of it.
+GitHub-hosted, GitLab-hosted, and self-hosted Git repositories all use the local Git adapter.
+GitHub only adds review-process facts on top of it.
+
+## Decisions
+
+- History follows the first-parent chain of `main`, else `master`, else `HEAD`. A `HEAD` that
+  differs from the mainline is recorded as the `head_differs_from_mainline` observation.
+- The ranking is churn-led. Its default weights use only `churn_lines`, `recency_weighted_churn`,
+  and `change_count`. Every other signal is still published and can be given weight in TOML.
+- `job_target_analysis_plan` consumes the ranking. A history change therefore reruns the plan and
+  everything below it.
+- A runtime input-identity probe lets resume planning detect changes to history alone.
+- Scanning history for leaked secrets is out of scope.
+- Following submodules is a TODO. For now each gitlink is a `submodule_history_not_followed` gap.
 
 ## Placement in the graph
 
 ```text
-job_review_intake
-  -> job_target_catalog
-       -> job_source_history_analysis          (new, sibling branch)
-       -> job_target_analysis_plan -> ...       (unchanged in the first slice)
-  accepted history manifest
-  -> composed into the run's accepted index manifest
-  -> job_inference_security_review: assemble_review_scope / assemble_review_packages
+job_review_intake -> job_target_catalog -> job_source_history_analysis -> job_target_analysis_plan -> ...
+                                       \-> job_ci_configuration_analysis ---/   (Dagster wave1_review)
 ```
 
-The job consumes:
+The direct CLI graph runs the job between the catalog and the plan. In Dagster's `wave1_review` it
+is a sibling of CI configuration analysis, and the plan waits for both. The job consumes:
 
-- the accepted intake handoff for the target root and `sha256-bounded-tree-v1` fingerprint; and
-- the accepted catalog handoff for the bounded inventory, file hashes, component ownership, and
-  generated/vendored/excluded classification.
+- the accepted intake handoff and its `sha256-bounded-tree-v1` fingerprint; and
+- the accepted catalog: inventory paths, sizes, hashes, and component roots.
 
-It runs concurrently with planning, builds, and every static producer. In the first slice
-`job_target_analysis_plan` does not depend on it, so history changes never invalidate the plan or
-any build. Whether the plan should later consume history to allocate deeper-analysis budget is an
-open question below.
-
-The current inventory excludes `.git`, `.hg`, and `.svn` directories, so the intake fingerprint
-does not cover history. A history-only change (an amended message or a rewritten ancestor with the
-same tree) therefore cannot be detected by the existing source fingerprint. The job's first task
-computes a separate *history source identity* (below), and the job's reuse check must compare it
-against a fresh probe. This requires one small runtime extension: a job may declare a cheap,
-deterministic input-identity probe that the resume planner evaluates alongside the source
-fingerprint. Time is never used as proof of freshness.
+The inventory excludes `.git`, so the source fingerprint does not cover history. A history-only
+change, such as an amended message or a rewritten ancestor with the same tree, needs another check.
+`Job.input_identity` is a cheap, deterministic probe that hashes the resolved source decision,
+mainline ref, snapshot commit, object format, and shallow boundary. The runner records the probe
+value in the claim and handoff. The resume planner re-probes against the graph target, and a
+mismatch reruns the job and invalidates everything downstream. The job's publish unit re-probes
+before publishing, so a history that changes mid-run fails the attempt instead of being accepted.
 
 ## Source resolution and snapshot binding
 
-### Resolution order
+`resolve_history_source` produces exactly one Git decision, using the shared `SUCCEEDED`,
+`SKIPPED_NA`, `SKIPPED_POLICY`, or `GAP` vocabulary. It reads only the following, each with a size
+bound:
 
-`resolve_history_source` produces exactly one decision per configured source, using the existing
-`SUCCEEDED`, `SKIPPED_NA`, `SKIPPED_POLICY`, or `GAP` vocabulary:
+- `HEAD`, the loose ref or `packed-refs` entry, and `shallow`;
+- `objects/info/alternates`; and
+- format keys from `config` (`extensions.objectformat`, `extensions.refstorage`, partial-clone
+  markers).
 
-1. **Git**: a `.git` directory at the target root, or a `.git` gitfile whose `gitdir:` resolves
-   inside the target root after symlink-free path validation. A gitfile that escapes the target is
-   `GAP: history_source_outside_target`. No `.git` is `SKIPPED_NA: no_git_metadata`.
-2. **Perforce export**: configured bundle path and SHA-256. Hash mismatch is a hard integrity
-   failure; a missing configuration is `SKIPPED_NA`.
-3. **Perforce server**: configured `P4PORT`, depot scope, pinned changelist, and secret reference.
-   Disabled is `SKIPPED_POLICY`; unreachable, untrusted fingerprint, or failed authentication is a
-   `GAP`.
-4. **GitHub enrichment**: configured owner/repo and API host. Disabled is `SKIPPED_POLICY`.
+Nothing else in the target's configuration is used. The checks are:
 
-Target-owned locators are never trusted: the job ignores `remote.*.url` from `.git/config`,
-`P4CONFIG`/`P4ENVIRO` files and `.p4config` in the tree, and any host, port, or credential named by
-target content. Remote identities come only from central configuration.
+- **Location:** a `.git` directory at the target root, or a `.git` file whose `gitdir:` resolves
+  inside the target. A gitdir outside the target or a symlinked `.git` is
+  `GAP: history_source_outside_target`. No `.git` is `SKIPPED_NA: no_git_metadata`, and
+  `settings.git.enabled = false` is `SKIPPED_POLICY`.
+- **Unsupported layouts:**
+  - linked worktrees (`commondir`);
+  - non-`files` ref storage;
+  - unknown object formats;
+  - partial clones;
+  - absolute or escaping alternates; and
+  - invalid `shallow` files.
 
-If no source applies, the job still publishes an accepted handoff with a `history` coverage shard
-of zero observations and the skip reasons, so consumers can tell "no history" from "not run".
+  Each of these is a named `GAP`.
+- **Observations:** replace refs, grafts, config includes, and relative in-target alternates are
+  recorded and never honoured.
 
-### Git snapshot binding
+`bind_snapshot` lists the snapshot tree with `ls-tree -r -z` and compares each accepted inventory
+file's Git blob id with it. The blob id is computed in application code (SHA-1 or SHA-256) after
+re-verifying the catalog's SHA-256 of the bytes.
 
-History must describe the tree under review, not merely a repository that happens to sit beside
-it. The application:
+- Every file matches: binding `exact`.
+- Some files differ (edits, CRLF conversion, clean filters, LFS pointers): binding `partial`. The
+  run gets the `working_tree_divergent` gap, and those files' locations are marked ambiguous.
+- A file is absent from the tree: `untracked_path`.
+- No file matches: `history_not_of_snapshot`, and no file signals are published.
+- A truncated tree listing: `tree_listing_truncated`.
 
-1. Reads `HEAD`, the referenced loose ref or `packed-refs` entry, `shallow`, and the allowlisted
-   format keys (`core.repositoryformatversion`, `extensions.objectformat`) with bounded parsers.
-   No other repository configuration is read or used.
-2. Pins the *snapshot commit* to the resolved commit id. Every later query is the ancestry of that
-   one id; other refs are not imported.
-3. Compares each accepted inventory file's Git blob id, computed in application code with the
-   repository's object format (SHA-1 or SHA-256), with the snapshot commit's tree entry.
-   - All match: binding `exact`.
-   - Some differ (uncommitted edits, CRLF conversion, clean filters, LFS pointers): binding
-     `partial`; each differing path gets `GAP: working_tree_divergent` and its line-level
-     attribution is marked non-exact.
-   - Inventory files absent from the tree get `GAP: untracked_path`.
-   - A snapshot tree that shares no blobs with the inventory is `GAP: history_not_of_snapshot`, and
-     no file-level signals are published.
+## Git acquisition hardening
 
-The history source identity is the snapshot commit id, the object format, the hash of the
-validated `shallow` file, and the binding result.
+Git runs only in the pinned `tool-git` image. The image contains only the `git` binary extracted
+from the hash-pinned Ubuntu 24.04 package. The container runs with no network, non-root, read-only
+root and target, dropped capabilities, and bounded memory, PIDs, time, and output. The container
+sees three mounts:
 
-### Perforce snapshot binding
+- `/target` (read-only);
+- `/scratch` (per-execution, writable); and
+- `/gitdir` (read-only), an application-written directory holding a minimal `config` with only the
+  repository format, a detached `HEAD` at the snapshot commit, and the validated `shallow` file.
 
-Perforce history is bound to a pinned changelist `@N`; an unpinned server configuration is rejected
-at configuration load. The adapter compares each inventory file with `p4 fstat -Ol` size and digest
-at `@N`, normalizing line endings according to the reported file type. `ktext` keyword expansion,
-`+S` purged revisions, and Unicode/UTF-16 types that cannot be compared exactly are per-path
-non-exact gaps. The history source identity is the server identity reported by `p4 info`, the
-depot scope, `@N`, and the binding result. For an export bundle it is the bundle SHA-256 plus the
-same fields recorded inside the bundle.
+Execution is pinned down as follows:
 
-## Acquisition hardening
+- **Repository state:** `GIT_DIR=/gitdir` and `GIT_OBJECT_DIRECTORY=/target/<gitdir>/objects`. The
+  target's config, hooks, `info/`, refs, reflogs, and replace refs are never repository state.
+- **Environment:** `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_ATTR_NOSYSTEM=1`,
+  `GIT_NO_REPLACE_OBJECTS=1`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`, `GIT_PAGER=cat`,
+  `XDG_CONFIG_HOME=/dev/null`.
+- **Command-scope configuration:** `core.fsmonitor=false`, `core.hooksPath=/dev/null`,
+  `core.attributesFile=/dev/null`, `core.pager=cat`, `log.showSignature=false`, and
+  `safe.directory=*`.
+- **Command flags:** `--no-ext-diff --no-textconv --no-mailmap` where applicable.
+- **Commands:** four fixed argv builders: first-parent `log` with `--numstat -z`, first-parent
+  message `log`, `ls-tree`, and per-file `blame --porcelain`. No target text is interpolated into
+  options; paths follow `--`.
 
-### Git
+Parsing does not trust delimiters inside target text:
 
-`.git` contents are attacker-controlled. Repository configuration can name fsmonitor, pager, diff,
-textconv, filter, editor, SSH, and credential commands; `.gitattributes` can route paths to those
-drivers; replace refs and grafts can rewrite apparent history; `.mailmap` can rewrite identities;
-alternates can point outside the target; and partial clones attempt lazy network fetches.
+- Commit headers carry only hex ids, integers, and the author email; the email is the last field
+  and cannot contain NUL.
+- Numstat records are consumed by position, so paths may contain tabs, newlines, or control bytes.
+- Message bodies are split at the known next commit id, so a NUL inside a body cannot misalign
+  later commits.
 
-Git runs only inside a new pinned `tool-git` image under the central container policy: no network,
-non-root, read-only root and target, dropped capabilities, bounded memory, PIDs, time, and output.
-Inside the container:
+The tests run real Git through the executor against a repository whose config names fsmonitor,
+pager, textconv, clean and smudge filters, an SSH command, and a credential helper, and that has
+executable hooks, `.gitattributes` routing, and a `.mailmap`. They assert that no canary file
+appears and that identities are not rewritten.
 
-- `GIT_DIR` is a run-owned scratch directory containing only an application-written `config` with
-  the allowlisted format keys, a detached `HEAD` set to the snapshot commit, and the validated
-  `shallow` file. The target's `config`, hooks, `info/`, refs, and `logs/` are never exposed as
-  repository state.
-- `GIT_OBJECT_DIRECTORY` points to the read-only mounted `.git/objects`.
-  `objects/info/alternates` must be absent or resolve entirely inside the mounted target; otherwise
-  the source is `GAP: alternates_unresolvable`.
-- `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_ATTR_NOSYSTEM=1`,
-  `GIT_NO_REPLACE_OBJECTS=1`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`, and a scratch `HOME`.
-- Every command passes `--no-ext-diff --no-textconv --no-mailmap` where applicable, plus
-  `-c core.fsmonitor=false -c core.hooksPath=/dev/null -c log.showSignature=false` and
-  `safe.directory` in command scope only.
-- Commands come from a fixed argv allowlist (`log`, `rev-list`, `cat-file`, `ls-tree`,
-  `diff-tree`, `blame`) built by application code; no target text is interpolated into options.
-- Presence of replace refs, `info/grafts`, a promisor/partial-clone configuration, or submodule
-  gitlinks is recorded. Missing promisor objects are `GAP: partial_clone_objects_missing`;
-  submodules are `GAP: submodule_history_not_followed` per gitlink in the first slice.
+## GitHub enrichment
 
-### Perforce
+GitHub enrichment is disabled by default. When enabled, the repository identity and API base come
+only from central configuration, and the token comes from the environment variable named by
+`token_env`. The job:
 
-The server adapter runs in a new pinned `tool-p4` image whose only egress is the configured
-`P4PORT`. `ssl:` ports require a configured trust fingerprint. The ticket comes from a secret
-reference mounted as a run-owned `P4TICKETS` file; `P4CONFIG` is empty, `P4ENVIRO` is
-`/dev/null`, and `P4TRUST` is run-owned. Only read commands are allowed: `info`, `changes`,
-`describe -s` and `describe -ds`, `filelog`, `fstat`, `annotate`, and `fixes`. Every command is
-scoped to the configured depot paths at `@N` and to configured count bounds. Raw `-ztag -Mj`
-responses are stored as a protected, hash-identified acquisition snapshot. Resume reuses that
-snapshot unless the operator explicitly requests a refresh, which creates a new identity.
+1. confirms that the snapshot commit exists in the configured repository; then
+2. looks up the associated pull request for each in-window commit, newest first, until the request
+   budget is spent.
 
-The export mode consumes the same record shapes from an operator-produced bundle, so the review
-itself needs no network or credentials. The repository will ship the exact export command list as
-operator documentation, not as an executable script invoked by the job.
+For each pull request it retains only derived facts:
 
-Protections can hide files without any error. The adapter compares the inventory with the visible
-depot files and records invisible paths as `GAP: p4_protections_limited`.
+- whether the commit was a direct push;
+- whether a reviewer other than the author approved it;
+- whether the approval covered the merged head;
+- whether the author merged it; and
+- sanitized label names.
 
-### GitHub enrichment
-
-GitHub enrichment queries only commits already present in the bound local history. It first
-confirms that the snapshot commit exists in the configured repository. It then collects, under call
-and byte bounds: associated pull requests, review states at merge, merger versus author, whether
-commits were pushed after the last approval, and linked issue labels. Responses are stored as a
-protected, hash-identified acquisition snapshot, and reuse follows the same rule as Perforce.
-Rate limiting, partial pagination, and permission errors are gaps. The token comes from a secret
-reference and never appears in argv, logs, artifacts, or retrieval shards. GHSA and CVE linkage uses
-the offline OSV data already synchronized by `job_third_party_data_sync`, not the live advisory
-API.
+Titles, bodies, comments, and account names are not stored. Rate limiting is a retriable
+`github_rate_limited` gap, so resume reruns the job. An exhausted budget, missing pulls, or
+permission errors are named gaps. Enrichment runs in the application process over HTTPS, like NVD
+sync, not in the network-disabled Git container.
 
 ## Signals
 
-All windows are anchored to the snapshot commit's committer time or the changelist's server date,
-never to wall-clock time, so identical inputs give identical outputs. Git timestamps are claimed
-data: ordering uses topology, and non-monotonic or future timestamps are recorded as
-`timestamp_anomaly` observations and clamped for window membership.
+All windows are anchored to the snapshot commit's committer time, never to wall-clock time, so the
+same inputs give byte-identical outputs. Git timestamps are claimed data. A commit whose time is
+later than its first-parent child's is clamped to the child's time, and the count is recorded as a
+`timestamp_anomaly` observation.
 
-Git walks `--first-parent` ancestry with `--diff-merges=first-parent` and bounded rename detection.
-Perforce walks submitted changelists in the depot scope and follows integrations with
-`filelog -i` up to a configured depth. Generated, vendored, and excluded paths from the catalog are
-counted separately and do not drive ranking. A commit touching more than `bulk_change_file_threshold`
-files is flagged `bulk` and excluded from co-change and ownership, but still counted.
+Commits are walked newest first. Renames are followed backward, so churn on `app/util.py` before a
+rename counts toward the current `app/helpers.py`. A commit touching more than
+`bulk_change_file_threshold` files is marked `bulk`; it still counts for churn but is excluded from
+ownership and co-change. A shallow boundary inside the window is `shallow_history`, and reaching
+`max_changes` before the window start is `history_window_truncated`.
 
-| Signal | Unit | Definition (first version) |
+| Signal | Unit | Definition |
 |---|---|---|
-| `change_count` | file, component | changes touching the unit in the window |
-| `churn_lines` | file, component | added + deleted lines (`--numstat` / `describe -ds`) |
-| `relative_churn` | file | `churn_lines` / current non-blank lines from the catalog source metrics |
-| `recency_weighted_churn` | file, component | churn with exponential decay, half-life from config |
-| `author_count`, `minor_author_count` | file, component | distinct authors; authors under the minor-ownership share |
-| `top_author_share` | file, component | largest single author's share of changes |
-| `fix_change_count` | file, component | changes classified as fixes (below) |
-| `security_fix_change_count` | file, component | fixes with security evidence (below) |
-| `revert_count` | file, component | changes that are, or are reverted by, an exact revert pair |
+| `change_count` | file, component | in-window first-parent changes touching the unit |
+| `churn_lines` | file, component | added + deleted lines (`--numstat`; binary files count 0) |
+| `relative_churn` | file | `churn_lines` / current non-blank lines |
+| `recency_weighted_churn` | file, component | churn × 0.5^(age / `recency_half_life_days`) |
+| `author_count`, `minor_author_count`, `top_author_share` | file (count also component) | non-bulk authors; authors below `minor_author_share`; largest share |
+| `fix_change_count`, `security_fix_change_count` | file, component | changes classified as fixes / security fixes |
+| `revert_count` | file, component | changes that revert, or are reverted by, another change |
 | `retouch_interval_median_days` | file | median gap between successive changes |
-| `young_line_share` | file | share of current lines whose blame age is under the configured threshold |
-| `co_change_partners` | file pair | support and confidence of joint changes, top K per file, cross-component flagged |
-| `review_bypass_count` | file, component | GitHub only: merged with no approving review, self-merged, or pushed after approval |
+| `young_line_share` | file | blamed lines newer than `young_line_days`, for the top `blame_max_files` files by churn |
+| `co_change_partners` | file | top-K partners with support ≥ `co_change_min_support`, confidence, cross-component flag |
+| `review_bypass_count` | file, component | GitHub only: direct pushes, merges without another reviewer's approval, or stale approvals |
 
-Change classification is deterministic, versioned, and reported with its basis:
+Change classification is deterministic (`appsec-review/history-change-rules/1`), and each label
+records its basis:
 
-- `fix`: Perforce `p4 fixes` job linkage; GitHub-linked issue labels from the configured label
-  list; or the versioned message rule set (conventional `fix:` prefixes, configured issue-key
-  patterns, and fix/bug vocabulary). Message-only classification is marked `heuristic`.
-- `security_fix`: the change id appears as a `fixed` Git event in a synchronized OSV record for a
-  package the catalog maps to this target (`exact`); or the message or linked issue references a
-  CVE, GHSA, or CWE identifier (`heuristic`).
-- `revert`: a Git `This reverts commit <id>` trailer whose id resolves in the bound history, or a
-  Perforce undo record (`exact`); a subject-only `Revert "…"` match (`heuristic`).
+- `revert`:
+  - `exact` when a `This reverts commit <id>` trailer names a walked commit; the target also gets
+    `reverted_by`;
+  - `heuristic` for a subject-only `Revert "…"` match.
+- `security_fix`:
+  - `github_label` when a merged PR label matches `security_labels`;
+  - `heuristic` for CVE, GHSA, or CWE references or security vocabulary.
 
-No model is used in the first version. A later model-assisted classifier would follow the existing
-inference contract: centrally configured, preflighted, validated against exact change ids, and
-reported as a separate basis.
+  Referenced identifiers are recorded.
+- `fix`:
+  - `github_label` when a PR label matches `fix_labels`;
+  - `heuristic` for conventional `fix:` prefixes or fix vocabulary.
+
+  Every security fix is also a fix.
+
+No model is used. Exact matching of OSV `fixed` commit events is deferred, because the synchronized
+OSV index does not yet key advisories by commit id.
 
 ### Attention ranking
 
-`history_attention` is a deterministic, versioned ranking per file and per component. Each signal
-becomes a percentile within the target's eligible population. The rank is a weighted sum using
-weights from central TOML, with ties broken by stable path order. The full feature vector, its
-percentiles, the ranking version, and the configuration hash are published with every rank;
-consumers never receive a bare score. A file with no eligible history gets no rank, not a rank of
-zero.
+`history-attention/1` ranks files and components that have in-window history. Each weighted signal
+becomes a mid-rank percentile within the target's population. `retouch_interval_median_days` is
+inverted, because a shorter interval means less stability. The score is the weighted mean of the
+available percentiles, and ties break on path or component id. The full feature vector, percentiles,
+weights, and ranking identity are published with every rank, and consumers never receive a bare
+score. A file with no in-window history is unranked, not ranked last.
 
 ## Outputs
 
-Per attempt:
+These are written per attempt, under the unit directories:
 
-```text
-runs/<run-id>/jobs/job_source_history_analysis/attempts/<attempt>/
-  history-source.json        source decisions, identities, binding results, gaps
-  acquisition/               protected raw git/p4/GitHub responses and receipts (hash-identified)
-  changes.jsonl              normalized changes: id, parents, time, author ordinal, classification,
-                             per-path numstat, rename pairs, redacted subject hash
-  signals.jsonl              per-file, per-component, and per-pair signal records
-  ranking.json               attention ranks with features, percentiles, version, config hash
-  handoff.json
-```
+- `binding.json`: binding status, divergent, untracked, and submodule paths.
+- `protected/log.bin`, `protected/messages.bin`: raw Git output, kept in the attempt and never
+  indexed.
+- `changes.json`: normalized changes with ids, times, author ordinals, per-path numstat, renames,
+  and the bulk flag.
+- `classification.json`, `github-enrichment.json`, `co-change.json`, and `signals.json`: per-file
+  and per-component signals, ranks, and percentiles.
+- `source-history.json`: the accepted document. It holds source decisions, binding status, window,
+  top-N file and component ranking, gaps, observations, and the index manifest.
 
-- **Identity minimization.** Authors are ordinals assigned by first appearance in topological order
-  (`author-0001`). Names and emails stay only in the protected acquisition snapshot and are never
-  indexed or logged.
-- **Message handling.** Messages are untrusted and may contain secrets. Full messages stay
-  protected. Subjects are indexed only after the existing gitleaks redaction pass and a byte bound.
-  If gitleaks is unavailable, subjects are not indexed (`GAP: message_redaction_unavailable`) while
-  numeric signals still publish.
-- **Retrieval.** The job publishes one `history` shard per source and component partition, with
-  shard ids such as `git/<snapshot-commit-prefix>/<component>`, plus a source-level coverage shard.
-  New entity kinds are `change` and `history_signal`. Relations reuse the fixed vocabulary:
-  `OBSERVED_AT` from a signal to the current source file or exact current span (via blame),
-  `REFERENCES` from a change to CVE, GHSA, or CWE identities, `DERIVED_FROM` from a ranking to its
-  signals, and `CONTRADICTS` where classifications disagree. Spans from blame that could not be
-  exactly bound are non-exact with an ambiguity reason.
-- **Query surface.** Shards are queryable through the existing `search`, `find`, `trace`, and
-  `coverage` tools. A dedicated exact-filter `query_history` tool (path, component, change id,
-  signal, rank range) is deferred until a consumer needs it, following the `query_build_security`
-  precedent.
+Outputs keep identity exposure low:
+
+- **Authors:** ordinals assigned in walk order (`author-0001`). Names and emails exist only in the
+  protected raw log.
+- **Messages:** never indexed. Classification labels and referenced identifiers are indexed.
+  Indexing subjects after gitleaks redaction is a TODO.
+- **Retrieval:** a new `history` index name with one shard per run, `git-history`, which holds:
+  - one `history_signal` entity per file, with a whole-file `SourceLocation` (non-exact and
+    ambiguous for divergent files);
+  - one `history_signal` entity per component;
+  - `change` entities for each file's recent changes;
+  - `DERIVED_FROM` relations from each file signal to its changes, and `CONTAINS` from each
+    component to its files; and
+  - coverage rows `git-history` and `github-enrichment`.
+
+  The shard is composed into the accepted manifest and queryable through `find`, `search`,
+  `trace`, and `coverage`.
 
 ## Consumers
 
-- **Inference security review.** `assemble_review_scope` lists history coverage and gaps in the
-  evidence map. `assemble_review_packages` attaches each hunt package's top-ranked files and
-  co-change partners as a bounded menu with change ids and resolving current locations, never as a
-  search limit and never as message text. A claim may cite a change as context. Proof still
-  requires resolving source lines or a tool artifact.
+- **Target analysis plan.** The plan reads the accepted history handoff and adds `history_priority`:
+  status, history handoff hash, history identity, ranking identity, and accepted components and
+  files in churn rank order. Validation rejects any component or file that is not an exact accepted
+  catalog identity. Without history the section is `UNAVAILABLE` with a reason.
+- **Inference security review (design).** History coverage and ranks feed the evidence map and
+  hunt-package lead menus as context, never as message text or a search limit.
 - **Final report.** The limitations section lists history coverage, binding status, and gaps.
-- **Possible later consumers.** The OWASP control assessment could use review-bypass observations
-  as process evidence. The analysis plan could use attention ranks for budget allocation. Both are
-  open questions.
 
 ## Central TOML
 
 ```toml
-[jobs.job_source_history_analysis]
-name = "source_history_analysis"
-workers = 4
-
 [jobs.job_source_history_analysis.settings]
 window_days = 365
 max_changes = 20000
 bulk_change_file_threshold = 500
-rename_detection_max_files = 2000
 recency_half_life_days = 90
 minor_author_share = 0.05
 young_line_days = 30
 co_change_top_k = 10
 co_change_min_support = 3
-blame_max_files = 2000
+blame_max_files = 50
 blame_max_file_bytes = 1048576
-subject_max_bytes = 200
-fix_message_rules = "appsec-review/history-fix-rules/1"
-fix_issue_labels = ["bug", "security"]
-ranking_version = "appsec-review/history-attention/1"
+ranking_top_n = 200
+fix_labels = ["bug", "fix", "regression"]
+security_labels = ["security", "vulnerability"]
 
 [jobs.job_source_history_analysis.settings.ranking_weights]
-recency_weighted_churn = 3
-fix_change_count = 3
-security_fix_change_count = 4
-revert_count = 2
-author_count = 1
-young_line_share = 1
-review_bypass_count = 2
+churn_lines = 3
+recency_weighted_churn = 2
+change_count = 1
 
 [jobs.job_source_history_analysis.settings.git]
 enabled = true
 
-[jobs.job_source_history_analysis.settings.perforce]
-mode = "disabled"            # disabled | export | server
-export_path = ""
-export_sha256 = ""
-p4port = ""
-trust_fingerprint = ""
-depot_paths = []
-changelist = 0
-ticket_secret = ""
-integration_depth = 3
-
 [jobs.job_source_history_analysis.settings.github]
 enabled = false
-api_host = "api.github.com"
-repository = ""              # owner/repo
-token_secret = ""
+api_base = "https://api.github.com"
+repository = ""              # owner/name when enabled
+token_env = "GITHUB_TOKEN"
 max_requests = 2000
-
-[jobs.job_source_history_analysis.steps.resolve_sources]
-[jobs.job_source_history_analysis.steps.resolve_sources.tasks.resolve_history_source]
-[jobs.job_source_history_analysis.steps.resolve_sources.tasks.bind_snapshot]
-
-[jobs.job_source_history_analysis.steps.acquire]
-[jobs.job_source_history_analysis.steps.acquire.tasks.git_history]
-[jobs.job_source_history_analysis.steps.acquire.tasks.perforce_history]
-[jobs.job_source_history_analysis.steps.acquire.tasks.github_enrichment]
-
-[jobs.job_source_history_analysis.steps.analyze]
-[jobs.job_source_history_analysis.steps.analyze.tasks.normalize_changes]
-[jobs.job_source_history_analysis.steps.analyze.tasks.classify_changes]
-[jobs.job_source_history_analysis.steps.analyze.tasks.compute_signals]
-[jobs.job_source_history_analysis.steps.analyze.tasks.blame_age]
-[jobs.job_source_history_analysis.steps.analyze.tasks.co_change]
-[jobs.job_source_history_analysis.steps.analyze.tasks.rank]
-
-[jobs.job_source_history_analysis.steps.publish]
-[jobs.job_source_history_analysis.steps.publish.tasks.index_history]
-[jobs.job_source_history_analysis.steps.publish.tasks.publish_handoff]
+timeout_seconds = 30
 ```
 
-Configuration validation rejects:
+Topology:
 
-- Perforce server mode without a pinned changelist, trust fingerprint for `ssl:` ports, or ticket
-  secret;
-- export mode without a SHA-256;
-- GitHub enrichment without an explicit repository;
-- negative or zero bounds; and
-- unknown ranking signals.
-
-The rule-set and ranking versions are code-owned identities, not free-form prompts.
-
-## Fingerprints and invalidation
-
-| Unit | Fingerprint binds |
+| Step | Tasks |
 |---|---|
-| acquisition (per source) | history source identity, acquisition argv version, tool image id, bounds, configuration hash; for server/API sources the stored snapshot hash |
-| normalized changes | acquisition hashes, normalizer version, accepted catalog manifest (classification of generated/vendored paths) |
-| signals and ranking | normalized change hash, OSV snapshot identity, rule-set and ranking versions, settings hash |
-| blame age | snapshot commit, the file's blob id, blame bounds, tool image id |
-| retrieval shards | signal and ranking hashes, catalog component partition, schema version |
+| `resolve_sources` | `resolve_history_source`, `bind_snapshot` |
+| `acquire` | `git_history`, `normalize_changes`, `github_enrichment` |
+| `analyze` | `classify_changes`, `compute_signals`, `blame_age`, `co_change`, `rank` |
+| `publish` | `index_history`, `publish_handoff` |
 
-A new commit changes the snapshot commit and invalidates acquisition and everything below it. That
-also means its tree changed, so the source fingerprint invalidates upstream jobs as usual. A
-changed OSV snapshot invalidates only classification, signals, ranking, and shards. A ranking
-weight change invalidates only ranking and shards. Blame is checkpointed per file and blob id, so
-unchanged files reuse their blame.
+Validation rejects:
+
+- out-of-range bounds;
+- unknown ranking signals, negative weights, or no positive weight;
+- malformed label lists; and
+- for enabled GitHub, a non-HTTPS API base, a malformed `owner/name`, or a `token_env` that is not
+  an environment-variable name.
 
 ## Gap and decision taxonomy
 
 | Code | Decision | Meaning |
 |---|---|---|
-| `no_git_metadata`, `perforce_not_configured` | `SKIPPED_NA` | source does not apply |
-| `perforce_disabled`, `github_enrichment_disabled` | `SKIPPED_POLICY` | turned off by configuration |
-| `history_source_outside_target` | `GAP` | gitfile or alternates escape the target |
-| `history_not_of_snapshot` | `GAP` | repository history does not describe the reviewed tree |
-| `working_tree_divergent`, `untracked_path` | `GAP` (per path) | file-level attribution unavailable or non-exact |
-| `shallow_history` | `GAP` | ancestry truncated at the shallow boundary before the window start |
-| `history_window_truncated` | `GAP` | `max_changes` reached before the window start |
+| `no_git_metadata`, `no_commits` | `SKIPPED_NA` | Git does not apply |
+| `git_history_disabled`, `github_enrichment_disabled` | `SKIPPED_POLICY` | turned off by configuration |
+| `history_source_outside_target` | `GAP` | gitfile or `.git` symlink escapes the target |
+| `linked_worktree_not_supported`, `unsupported_ref_storage`, `unsupported_object_format`, `shallow_file_invalid` | `GAP` | repository layout not supported |
 | `partial_clone_objects_missing`, `alternates_unresolvable` | `GAP` | objects unreadable offline |
-| `submodule_history_not_followed` | `GAP` (per gitlink) | first-slice limitation |
-| `replace_refs_ignored`, `grafts_ignored` | observation | rewrite mechanisms present and deliberately ignored |
-| `rename_detection_bounded`, `blame_bound_reached` | `GAP` | bounded analysis did not cover every file |
-| `p4_server_unavailable`, `p4_auth_failed`, `p4_trust_mismatch` | `GAP` | server acquisition failed |
-| `p4_protections_limited`, `p4_digest_mismatch`, `p4_purged_revision` | `GAP` (per path) | depot visibility or binding incomplete |
-| `github_rate_limited`, `github_permission_denied`, `github_pagination_incomplete` | `GAP` | enrichment incomplete |
-| `message_redaction_unavailable` | `GAP` | subjects withheld from indexing |
-| `timestamp_anomaly` | observation | claimed time inconsistent with topology |
+| `history_not_of_snapshot` | `GAP` | the mainline tree does not describe the reviewed files |
+| `working_tree_divergent`, `untracked_path` | `GAP` | some file attribution unavailable or non-exact |
+| `tree_listing_truncated` | `GAP` | tree listing exceeded the output bound |
+| `submodule_history_not_followed` | `GAP` | gitlinks present (see TODO) |
+| `shallow_history`, `history_window_truncated` | `GAP` | ancestry ends inside the window |
+| `message_stream_misaligned` | `GAP` | message classification incomplete |
+| `blame_bound_reached`, `blame_execution_failed` | `GAP` | young-line share incomplete |
+| `git_execution_failed:<command>` | `GAP`, retriable | the Git container did not complete |
+| `github_rate_limited` | `GAP`, retriable | enrichment throttled |
+| `github_request_budget_exhausted`, `github_commit_pulls_unavailable`, `github_snapshot_commit_not_found`, `github_permission_denied` | `GAP` | enrichment incomplete |
+| `replace_refs_ignored`, `grafts_ignored`, `config_includes_ignored`, `mainline_not_found_using_head`, `head_differs_from_mainline`, `timestamp_anomaly:<n>` | observation | recorded, never honoured |
 
 Each of the following is a hard failure that blocks publication instead of creating a gap:
 
-- an export-bundle hash mismatch;
 - changed accepted target bytes;
-- an escaping path in an artifact;
-- an image-id mismatch; and
-- a corrupt or schema-invalid acquisition snapshot.
+- a history that changed during the run;
+- an artifact hash or path mismatch; and
+- a corrupt manifest.
 
-## Proposed source, container, and schema locations
+## Perforce design (planned)
 
-```text
-src/appsec_review/jobs/job_source_history_analysis/
-  job.py           topology, validators, units
-  sources.py       resolution, bounded .git/HEAD/refs/shallow parsing, snapshot binding
-  git.py           sanitized GIT_DIR assembly and fixed argv builders
-  perforce.py      export reader and server argv builders
-  github.py        bounded REST client with snapshot storage
-  classify.py      versioned fix/security/revert rules
-  signals.py       window, churn, ownership, retouch, co-change, blame age
-  ranking.py       percentile normalization and weighted ranking
-containers/tools/git/tool.toml        pinned git, network none
-containers/tools/p4/tool.toml         pinned Helix Core CLI, egress to configured P4PORT only
-docs/schemas/source-history-analysis.schema.json
-docs/operations/source-history-analysis.md
-```
+Perforce will be a second source behind the same signals, ranking, shard, and plan contract:
 
-The Helix Core command-line client is distributed under Perforce's own terms. Its license must be
-reviewed before the image is cataloged, as with other non-open-source tools.
+- **Export mode first.** The job consumes an operator-produced, SHA-256-pinned `p4 -ztag -Mj`
+  bundle, so the review itself needs no network or credentials. A hash mismatch is a hard failure.
+- **Server mode.** Queries run in a pinned `tool-p4` image whose only egress is the configured
+  `P4PORT`:
+  - `ssl:` ports require a configured trust fingerprint;
+  - the ticket comes from an environment-variable secret mounted as a run-owned `P4TICKETS`;
+  - `P4CONFIG` is empty, `P4ENVIRO` is `/dev/null`, and the target's `.p4config` is ignored; and
+  - only read commands run (`info`, `changes`, `describe -s/-ds`, `filelog`, `fstat`, `annotate`,
+    `fixes`), scoped to the configured depot paths at a pinned changelist `@N`.
+- **Binding.** Each inventory file is compared with `p4 fstat -Ol` digests at `@N`, with line
+  endings normalized by file type. `ktext`, purged revisions, and paths hidden by protections are
+  per-path gaps.
+- **Signals.** `describe -ds` supplies churn, `p4 fixes` supplies exact fix classification, and
+  bounded `filelog -i` follows integrations.
+- **Identity probe.** The probe inputs extend to server identity, depot scope, changelist, and
+  bundle hash.
+- **Licensing.** The Helix Core CLI license must be reviewed before the image is cataloged.
 
-## Tests
+## Implementation status
 
-Fixture repositories are created by the tests under `test/tmp/`, not committed as nested
-repositories.
-
-- **Unit tests:** bounded `HEAD`, `packed-refs`, `shallow`, and gitfile parsers; blob-id
-  computation for SHA-1 and SHA-256; window anchoring and decay; percentile ranking and tie order;
-  classification rules and their `exact`/`heuristic` basis; revert pairing; author ordinals; and
-  configuration validation.
-- **Determinism tests:** identical history gives byte-identical `changes.jsonl`, `signals.jsonl`,
-  and `ranking.json` regardless of wall-clock time and worker count.
-- **Adversarial tests:** a target `.git/config` naming `core.fsmonitor`, `core.pager`,
-  `diff.external`, a textconv driver, a clean/smudge filter, `core.sshCommand`, and a credential
-  helper, plus executable hooks and `.gitattributes` routing, must not create a canary file. Other
-  cases cover escaping alternates and gitfiles, replace refs and grafts, forged and non-monotonic
-  timestamps, a `.mailmap` impersonation, a huge bulk commit, prompt-injection text in messages and
-  PR bodies, secrets in messages, a target `.p4config` naming another server, and LFS pointers.
-- **Binding tests:** exact, partial, untracked, and unrelated-history targets, plus a shallow clone
-  whose boundary falls inside the window.
-- **Perforce tests:** a recorded export bundle exercises normalization, `fixes` linkage,
-  integrations, `ktext` mismatch, and protections-limited paths without a live server. A
-  server-mode test runs only when an operator-provided test server is configured.
-- **Integration tests:** the Dagster graph runs the job as a sibling branch, reuses it when only an
-  unrelated producer changes, invalidates it on a new commit, and composes its shards. MCP `search`
-  and `coverage` return history records with resolving locations and gaps.
-
-## Implementation slices
-
-1. **Local Git, file and component churn.** Source resolution, snapshot binding, the hardened
-   `tool-git` image, first-parent changes in the window, `change_count`, `churn_lines`,
-   `relative_churn`, `recency_weighted_churn`, author counts, message-rule and OSV-exact
-   classification, revert pairs, ranking, the coverage and `history` shards, the gap taxonomy, and
-   the runtime input-identity probe.
-2. **Depth.** Blame age with per-file checkpoints, co-change coupling, rename following, gitleaks
-   subject redaction and indexing, and attachment to hunt packages.
-3. **Perforce.** Export mode first, then server mode in `tool-p4`, with `fixes` linkage and
-   integration following.
-4. **GitHub enrichment.** PR and review metadata, `review_bypass_count`, and issue-label
-   classification.
-5. **Finer granularity.** Join blame spans to Tree-sitter function nodes for function-level
-   signals; add `query_history` if consumers need exact filters.
-
-## Open questions
-
-- Should `job_target_analysis_plan` consume attention ranks to allocate deeper-analysis budget?
-  That would let a history-only change invalidate the plan and every build below it.
-- Should submodule histories be followed as independent sources, each bound to its gitlink commit?
-- Is `--first-parent` the right default for merge-heavy repositories, or should a branch-aware mode
-  attribute merged work to its original commits?
-- Should secrets that exist only in history, through gitleaks history mode, be scanned here or as
-  a separate evidence-collection producer? It is a real security signal, but it is evidence rather
-  than prioritization, so it likely belongs in evidence collection and should only read this job's
-  bound source identity.
+1. **Done:** local Git resolution and binding, the hardened `tool-git` image, first-parent churn,
+   ownership, classification, reverts, co-change, blame age, churn-led ranking, the `history`
+   shard, the plan's `history_priority`, the runtime input-identity probe, and GitHub enrichment.
+2. **TODO:** Perforce export mode, then server mode.
+3. **TODO:** submodules as independent sources.
+4. **TODO:** exact OSV fix-commit matching, subject indexing after gitleaks redaction,
+   function-level signals from Tree-sitter spans, and a `query_history` tool if consumers need one.

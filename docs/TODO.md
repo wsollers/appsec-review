@@ -278,3 +278,38 @@ invalidation and required reuse across unrelated languages, projects, scopes, an
 The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
 only after reviewing and locking one platform archive and its complete JDK/dependency closure, then
 add bounded CPG export fixtures and security probes. Do not put the full CPG into MCP responses.
+
+## Add Perforce history to source history analysis
+
+`job_source_history_analysis` implements local Git and optional GitHub enrichment only. Perforce is
+designed in [`architecture/source-history-analysis.md`](architecture/source-history-analysis.md)
+but not built. Implement it as a second history source behind the same signals, ranking, `history`
+shard, and plan `history_priority` contract:
+
+- export mode first: consume an operator-produced, SHA-256-pinned `p4 -ztag -Mj` bundle with no
+  network or credentials in the review;
+- then server mode in a pinned `tool-p4` image whose only egress is the configured `P4PORT`, with a
+  pinned changelist, configured `ssl:` trust fingerprint, a ticket from an environment-variable
+  secret, and target `P4CONFIG`/`P4ENVIRO`/`.p4config` ignored;
+- bind every inventory file to `@N` with `p4 fstat -Ol` digests, reporting `ktext`, purged, and
+  protections-hidden paths as per-path gaps;
+- use `p4 describe -ds` for churn, `p4 fixes` for exact fix classification, and bounded
+  `filelog -i` integration following;
+- review the Helix Core CLI license before cataloging the image, and add the history identity probe
+  inputs (server identity, depot scope, changelist, bundle hash) so resume reruns on any change.
+
+## Consider following Git submodules in source history analysis
+
+Submodule gitlinks are currently a `submodule_history_not_followed` gap. Decide whether each
+submodule should become an independent history source bound to its gitlink commit, how its signals
+roll up into the parent's components, and how its own `.git` (often under the parent's
+`.git/modules/`, outside the submodule path) is resolved without leaving the target root.
+
+## Finish deferred source history signals
+
+- Exact security-fix classification needs an OSV index of `fixed` Git events keyed by commit id;
+  extend the OSV sync index and match walked commits against it.
+- Commit subjects are not indexed. Index them only after a gitleaks redaction pass, with a named gap
+  when redaction is unavailable.
+- Join blame spans to Tree-sitter function nodes for function-level signals, and add an exact-filter
+  `query_history` MCP tool if consumers need one.

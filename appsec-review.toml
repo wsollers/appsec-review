@@ -225,6 +225,67 @@ workers = 1
 [jobs.job_target_catalog.steps.publish_catalog.tasks.validate_catalog]
 [jobs.job_target_catalog.steps.publish_catalog.tasks.publish_handoff]
 
+[jobs.job_source_history_analysis]
+name = "source_history_analysis"
+workers = 1
+
+[jobs.job_source_history_analysis.settings]
+# Windows are anchored to the mainline (main, else master) snapshot commit time, never wall clock.
+window_days = 365
+max_changes = 20000
+bulk_change_file_threshold = 500
+recency_half_life_days = 90
+minor_author_share = 0.05
+young_line_days = 30
+co_change_top_k = 10
+co_change_min_support = 3
+blame_max_files = 50
+blame_max_file_bytes = 1048576
+ranking_top_n = 200
+fix_labels = ["bug", "fix", "regression"]
+security_labels = ["security", "vulnerability"]
+
+# Ranking is churn-led; other signals are published but carry no weight unless configured here.
+[jobs.job_source_history_analysis.settings.ranking_weights]
+churn_lines = 3
+recency_weighted_churn = 2
+change_count = 1
+
+[jobs.job_source_history_analysis.settings.git]
+enabled = true
+
+[jobs.job_source_history_analysis.settings.github]
+enabled = false
+api_base = "https://api.github.com"
+repository = ""
+token_env = "GITHUB_TOKEN"
+max_requests = 2000
+timeout_seconds = 30
+
+[jobs.job_source_history_analysis.steps.resolve_sources]
+workers = 1
+[jobs.job_source_history_analysis.steps.resolve_sources.tasks.resolve_history_source]
+[jobs.job_source_history_analysis.steps.resolve_sources.tasks.bind_snapshot]
+
+[jobs.job_source_history_analysis.steps.acquire]
+workers = 1
+[jobs.job_source_history_analysis.steps.acquire.tasks.git_history]
+[jobs.job_source_history_analysis.steps.acquire.tasks.normalize_changes]
+[jobs.job_source_history_analysis.steps.acquire.tasks.github_enrichment]
+
+[jobs.job_source_history_analysis.steps.analyze]
+workers = 1
+[jobs.job_source_history_analysis.steps.analyze.tasks.classify_changes]
+[jobs.job_source_history_analysis.steps.analyze.tasks.compute_signals]
+[jobs.job_source_history_analysis.steps.analyze.tasks.blame_age]
+[jobs.job_source_history_analysis.steps.analyze.tasks.co_change]
+[jobs.job_source_history_analysis.steps.analyze.tasks.rank]
+
+[jobs.job_source_history_analysis.steps.publish]
+workers = 1
+[jobs.job_source_history_analysis.steps.publish.tasks.index_history]
+[jobs.job_source_history_analysis.steps.publish.tasks.publish_handoff]
+
 [jobs.job_target_analysis_plan]
 name = "target_analysis_plan"
 workers = 1

@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-git",
+  "tool_version": "2.43.0",
+  "project": "https://git-scm.com/",
+  "license": "GPL-2.0-only",
+  "architecture": "linux/amd64",
+  "generated_from": "ubuntu-noble-updates-2026-10-10",
+  "artifacts": [
+    {
+      "name": "git.deb",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20260101T000000Z/pool/main/g/git/git_2.43.0-1ubuntu7.3_amd64.deb",
+      "path": "downloads/git.deb",
+      "sha256": "099bb129f543adc4c14203334b0fa0a909f8bf038c4d56bc9cc7c774ebf78f87",
+      "bytes": 3679758,
+      "version": "1:2.43.0-1ubuntu7.3",
+      "license": "GPL-2.0-only",
+      "license_source": "Ubuntu git package copyright file (/usr/share/doc/git/copyright)",
+      "provenance": "Ubuntu noble-updates archive package; SHA-256 and size match the signed noble-updates Packages index",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "The Release file signature is not verified by the build; immutable snapshot URL, byte size, and SHA-256 from the Packages index are enforced."
+      }
+    }
+  ]
+}

@@ -199,7 +199,32 @@ def _scanner_scope(tool_id: str, files: tuple[Mapping[str, Any], ...], artifacts
     return ()
 
 
-def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -> dict[str, Any]:
+def history_priority(history: Mapping[str, Any] | None, catalog: Mapping[str, Any]) -> dict[str, Any]:
+    """Project accepted churn-led history ranks onto accepted catalog identities only."""
+    if history is None:
+        return {"status": "UNAVAILABLE", "reason": "source history job is not in this graph",
+                "handoff_sha256": None, "history_identity": None, "ranking": None, "components": [], "files": []}
+    if history.get("stale_reason"):
+        return {"status": "UNAVAILABLE", "reason": str(history["stale_reason"]), "handoff_sha256": None,
+                "history_identity": None, "ranking": None, "components": [], "files": []}
+    hashes = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
+    components = {str(item["component_id"]) for item in catalog["components"]}
+    ranking = history.get("ranking", {})
+    status = "AVAILABLE" if ranking.get("files") or ranking.get("components") else "UNAVAILABLE"
+    reason = None if status == "AVAILABLE" else str(history.get("sources", {}).get("git", {}).get("reason") or
+                                                    "no ranked history")
+    return {
+        "status": status, "reason": reason, "handoff_sha256": history.get("handoff_sha256"),
+        "history_identity": history.get("history_identity"), "ranking": ranking.get("identity"),
+        "components": [{key: item[key] for key in ("component_id", "rank", "score", "churn_lines", "change_count")}
+                       for item in ranking.get("components", ()) if item.get("component_id") in components],
+        "files": [{key: item[key] for key in ("path", "sha256", "rank", "score", "churn_lines", "change_count")}
+                  for item in ranking.get("files", ()) if hashes.get(str(item.get("path"))) == item.get("sha256")],
+    }
+
+
+def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
+                       history: Mapping[str, Any] | None = None) -> dict[str, Any]:
     files = tuple(sorted(catalog["files"], key=lambda item: str(item["path"])))
     artifacts = tuple(catalog.get("accepted_artifacts", ()))
     hashes = {str(item["path"]): str(item["sha256"]) for item in files}
@@ -278,6 +303,7 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any]) -
         "expected_artifact_families": ["observations", "software-inventory", "configuration", "build"],
         "confidence": "high" if not gaps else "medium", "contradictions": [],
         "coverage_gaps": list(dict.fromkeys(gaps)), "model": {"status": "NOT_NEEDED", "proposal_sha256": None},
+        "history_priority": history_priority(history, catalog),
     }
 
 
@@ -438,6 +464,11 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
     for item in plan.get("components", []):
         if item.get("component_id") not in components:
             raise ValueError("analysis plan component is not accepted by the catalog")
+    priority = plan.get("history_priority", {})
+    if any(item.get("component_id") not in components for item in priority.get("components", [])):
+        raise ValueError("analysis plan history priority names an unaccepted component")
+    if any(paths.get(str(item.get("path"))) != item.get("sha256") for item in priority.get("files", [])):
+        raise ValueError("analysis plan history priority is not an exact accepted catalog identity")
     systems = plan.get("build_topology", {}).get("build_systems", [])
     if any(item.get("build_system") not in BUILD_SYSTEMS for item in systems):
         raise ValueError("analysis plan contains an unregistered build system")

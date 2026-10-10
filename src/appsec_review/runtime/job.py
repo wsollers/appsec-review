@@ -54,6 +54,12 @@ class Job:
     units: tuple["Unit", ...] = ()
     result_transform: Callable[[JobContext, Mapping[str, Any]], Mapping[str, Any]] | None = None
     worker_lookup: Callable[[str, str], int] | None = None
+    # Cheap deterministic identity of job inputs the target fingerprint does not cover, such as
+    # version-control history. Recorded in the handoff and re-probed by resume planning.
+    input_identity: Callable[[Path | None], str] | None = None
+
+    def probe_input_identity(self, target_root: Path | None) -> str | None:
+        return self.input_identity(target_root) if self.input_identity is not None else None
 
     def configured_workers(self, step_id: str, task_id: str) -> int:
         return self.worker_lookup(step_id, task_id) if self.worker_lookup is not None else 1

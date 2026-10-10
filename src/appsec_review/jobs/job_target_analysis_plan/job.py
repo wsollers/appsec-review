@@ -23,6 +23,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
 from appsec_review.inference import Infer, ModelRequest
+from appsec_review.jobs.job_source_history_analysis import load_accepted_history
 
 from .planning import (
     BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS,
@@ -174,8 +175,12 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         catalog = _accepted_catalog(unit.job.run_root)
         if catalog["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match the accepted catalog")
+        history = load_accepted_history(unit.job.run_root)
+        if history is not None and history.get("target_snapshot") != catalog["source_fingerprint"]:
+            history = {"stale_reason": "accepted source history describes a different target snapshot"}
         unit.job.events.write("ANALYSIS_PLAN_STARTED", catalog_handoff_sha256=catalog["catalog_handoff_sha256"])
-        return {"catalog": catalog, "catalog_handoff_sha256": catalog["catalog_handoff_sha256"]}
+        return {"catalog": catalog, "catalog_handoff_sha256": catalog["catalog_handoff_sha256"],
+                "history": history}
 
     def summarize(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -192,7 +197,8 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         maybe_fail(unit)
         catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
         summary = unit.output("catalog_summary.summarize_components")["summary"]
-        value = deterministic_plan(catalog, summary)
+        value = deterministic_plan(catalog, summary,
+                                   unit.output("catalog_summary.load_accepted_catalog").get("history"))
         unit.job.events.write("ANALYSIS_PLAN_DETERMINISTIC_DECISIONS",
                               selected_scanner_count=len(value["scanner_selections"]),
                               skipped_scanner_count=len(value["scanner_non_selections"]),
