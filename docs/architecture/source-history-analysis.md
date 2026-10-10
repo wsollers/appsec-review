@@ -173,7 +173,11 @@ For each pull request it retains only derived facts:
 - whether the author merged it; and
 - sanitized label names.
 
-Titles, bodies, comments, and account names are not stored. Rate limiting is a retriable
+It also keeps the review timeline that
+[`change-context-analysis.md`](change-context-analysis.md) consumes: PR creation and merge times,
+the final head SHA and its committer time (one extra commit read per PR), and each other-reviewer
+approval's submission time and reviewed commit. Titles, bodies, comments, and account names are not
+stored. Rate limiting is a retriable
 `github_rate_limited` gap, so resume reruns the job. An exhausted budget, missing pulls, or
 permission errors are named gaps. Enrichment runs in the application process over HTTPS, like NVD
 sync, not in the network-disabled Git container.
@@ -592,6 +596,10 @@ and `coverage`. For example, `find(kind="hotspot", indexes=["history"])` returns
   feed the evidence map and hunt-package lead menus as context, never as message text or a search
   limit.
 - **Final report.** The limitations section lists history coverage, binding status, and gaps.
+- **Change-context analysis.** `job_change_context_analysis` reuses the accepted changes,
+  classification, GitHub facts, raw log, binding, and hotspot ranks for review-process, sprawl,
+  repair, test-churn, ownership, and function-level signals; see
+  [`change-context-analysis.md`](change-context-analysis.md).
 
 ## Central TOML
 
@@ -759,8 +767,9 @@ Perforce will be a second source behind the same signals, ranking, shard, and pl
 4. **TODO:**
    - exact OSV fix-commit matching;
    - subject indexing after gitleaks redaction;
-   - PR and deployment timing acquisition;
    - following function renames across history;
    - recursion in cognitive complexity;
    - live grammar probes for the complexity node-type table; and
    - a `query_history` tool if consumers need one.
+   Function-level change signals from Tree-sitter spans are also implemented by
+   `job_change_context_analysis`.

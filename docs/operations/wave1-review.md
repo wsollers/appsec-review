@@ -9,11 +9,13 @@ The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
   -> project_build -> language_build
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
-  -> codeql_analysis -> evidence_collection
+  -> codeql_analysis -> evidence_collection -> change_context_analysis
 ```
 
 The direct graph does not include CI configuration analysis, tree-sitter AST production,
-post-build security assessment, or OWASP control assessment. Use Dagster's `wave1_review` when
+post-build security assessment, or OWASP control assessment, so change-context analysis there has no
+function scope (a named `function_spans_unavailable` gap). In `wave1_review`, change-context analysis
+follows tree-sitter AST production and precedes CodeQL. Use Dagster's `wave1_review` when
 those branches are required. Its current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 

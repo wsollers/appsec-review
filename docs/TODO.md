@@ -429,11 +429,26 @@ roll up into the parent's components, and how its own `.git` (often under the pa
   extend the OSV sync index and match walked commits against it.
 - Commit subjects are not indexed. Index them only after a gitleaks redaction pass, with a named gap
   when redaction is unavailable.
-- PR open-to-merge and deployment timing are named unavailable signals. Acquire them only from
-  authoritative sources (GitHub PR timestamps, deployment records), never from commit timestamps.
 - Function-level history uses snapshot Tree-sitter spans, so renamed or moved functions keep their
   snapshot identity and deleted functions are not represented. Follow symbol identity across
   history if consumers need it.
 - Cognitive complexity does not detect recursion. Add live grammar probes that pin the
   complexity node-type table to the locked Tree-sitter language pack.
 - Add an exact-filter `query_history` MCP tool if consumers need more than `find(kind="hotspot")`.
+  Blame-to-Tree-sitter function joins also exist in `job_change_context_analysis`.
+
+## Extend change-context analysis
+
+`job_change_context_analysis` is implemented; see
+[`architecture/change-context-analysis.md`](architecture/change-context-analysis.md). Remaining work:
+
+- Function-level fix-on-fix events: map the parent-side blamed lines through the fix and later
+  changes to snapshot function spans instead of reporting the metric unavailable at function scope.
+- Function attribution only sees surviving lines in the top blamed files; consider bounded
+  `log -L` per function for changes whose lines were later rewritten.
+- Native review-export adapters for GitLab, Gerrit, and Azure DevOps (today they must be converted
+  to `appsec-review/review-records/1`), and a deployment-event adapter for common CD systems.
+- Component relatedness uses nesting and co-change only; add build-graph or ownership-file
+  (`CODEOWNERS`) relatedness when the catalog exposes them.
+- Feed the change-context ranking into `job_target_analysis_plan` once the plan can wait on
+  Tree-sitter without delaying the build lane.

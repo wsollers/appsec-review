@@ -169,7 +169,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
-                    "job_security_tagging",
+                    "job_change_context_analysis", "job_security_tagging",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -393,6 +393,11 @@ def build_definitions(
         if "job_tree_sitter_ast" in registered:
             wave_jobs.append(registry.build("job_tree_sitter_ast"))
             wave_dependencies["job_tree_sitter_ast"] = ("job_target_analysis_plan",)
+        if "job_change_context_analysis" in registered and "job_source_history_analysis" in registered:
+            # Function-level attribution reads accepted Tree-sitter spans when the wave produces them.
+            wave_jobs.append(registry.build("job_change_context_analysis"))
+            wave_dependencies["job_change_context_analysis"] = (
+                ("job_tree_sitter_ast",) if "job_tree_sitter_ast" in registered else ("job_target_analysis_plan",))
         if "job_project_build" in registered:
             wave_jobs.append(registry.build("job_project_build"))
             wave_dependencies["job_project_build"] = ("job_target_analysis_plan",)
@@ -431,7 +436,8 @@ def build_definitions(
             codeql_dependencies = [job_id for job_id in (
                 "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
                 "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
-                "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast")
+                "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast",
+                "job_change_context_analysis")
                 if job_id in registered]
             wave_dependencies["job_codeql_analysis"] = tuple(codeql_dependencies or (
                 "job_target_analysis_plan",))
@@ -459,7 +465,7 @@ def build_definitions(
                 job_id for job_id in ("job_language_build", "job_artifact_indexing",
                                       "job_artifact_security_analysis", "job_cpp_compiled_analysis",
                                       "job_post_build_security_assessment", "job_evidence_collection",
-                                      "job_tree_sitter_ast") if job_id in registered]
+                                      "job_tree_sitter_ast", "job_change_context_analysis") if job_id in registered]
             if "job_owasp_control_assessment" in registered:
                 tagging_dependencies.append("job_owasp_control_assessment")
             wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))

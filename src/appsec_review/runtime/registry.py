@@ -37,6 +37,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_target_catalog import build_job as build_catalog
     from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
     from appsec_review.jobs.job_source_history_analysis import build_job as build_source_history
+    from appsec_review.jobs.job_change_context_analysis import build_job as build_change_context
     from appsec_review.jobs.job_tree_sitter_ast import build_job as build_tree_sitter_ast
     from appsec_review.jobs.job_project_build import build_job as build_project_build
     from appsec_review.jobs.job_language_build import build_job as build_language_build
@@ -57,6 +58,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
     registry.register("job_target_catalog", build_catalog)
     registry.register("job_source_history_analysis", build_source_history)
+    registry.register("job_change_context_analysis", build_change_context)
     registry.register("job_target_analysis_plan",
                       lambda: build_analysis_plan(infer=infer))
     registry.register("job_tree_sitter_ast", build_tree_sitter_ast)

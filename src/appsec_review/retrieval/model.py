@@ -46,6 +46,9 @@ class EntityKind(StrEnum):
     CHANGE = "change"
     HISTORY_SIGNAL = "history_signal"
     HOTSPOT = "hotspot"
+    CHANGE_CONTEXT_SIGNAL = "change_context_signal"
+    REVIEW_UNIT = "review_unit"
+    DEPLOYMENT_EVENT = "deployment_event"
     TAG_ASSIGNMENT = "tag_assignment"
 
 

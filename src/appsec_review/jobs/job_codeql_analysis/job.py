@@ -766,7 +766,7 @@ def build_job() -> Job:
         # unrelated static, post-build, AST, or artifact-security evidence.
         for job_id in ("job_artifact_security_analysis", "job_post_build_security_assessment",
                        "job_evidence_collection", "job_tree_sitter_ast", "job_cpp_symbol_index",
-                       "job_cpg_analysis"):
+                       "job_cpg_analysis", "job_change_context_analysis"):
             identity = _optional_accepted_handoff_identity(unit.job.run_root, job_id)
             if identity is None:
                 continue

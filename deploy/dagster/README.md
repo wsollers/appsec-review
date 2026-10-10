@@ -104,12 +104,13 @@ With the current registry, the cross-job dependencies are:
 ```text
 review_intake -> target_catalog -> ci_configuration_analysis -> target_analysis_plan
 target_catalog -> source_history_analysis -> target_analysis_plan
-target_analysis_plan -> tree_sitter_ast
+target_analysis_plan -> tree_sitter_ast -> change_context_analysis
 target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis
 language_build -> cpp_compiled_analysis -> post_build_security_assessment
 target_analysis_plan -> evidence_collection
 language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_analysis
-  + post_build_security_assessment + evidence_collection + tree_sitter_ast -> codeql_analysis
+  + post_build_security_assessment + evidence_collection + tree_sitter_ast
+  + change_context_analysis -> codeql_analysis
 post_build_security_assessment + evidence_collection + artifact_security_analysis
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
 codeql_analysis + owasp_control_assessment -> security_tagging
