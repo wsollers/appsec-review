@@ -3,14 +3,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from appsec_review.config import load_config
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
+from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build, native
 from appsec_review.jobs.job_language_build.dotnet import artifact_kind, project_topology, tool_identity, validate_recipe
-from appsec_review.jobs.job_language_build.job import _dotnet_argv, _stream_identity
+from appsec_review.jobs.job_language_build.job import (
+    _compile_rows, _dotnet_argv, _link_rows, _stream_identity,
+)
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp
@@ -22,10 +26,27 @@ from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
+from appsec_review.storage import file_sha256
 from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, simulated_executor
 
 
 ROOT = Path(__file__).parents[1]
+
+
+@pytest.mark.parametrize(("name", "argv", "expected"), [
+    ("clang++", ("clang++", "-c", "main.cpp", "-o", "main.o"), "compiler"),
+    ("gcc-14", ("gcc-14", "main.o", "-o", "app"), "linker-driver"),
+    ("as", ("as", "main.s", "-o", "main.o"), "assembler"),
+    ("ld.lld", ("ld.lld", "main.o", "-o", "app"), "linker"),
+    ("llvm-ar", ("llvm-ar", "rcs", "libapp.a", "main.o"), "archiver"),
+    ("protoc", ("protoc", "--cpp_out", "gen", "schema.proto"), "code-generator"),
+    ("cmake", ("cmake", "--build", "build"), "build-driver"),
+    ("python", ("python", "build.py"), None),
+], ids=["compiler", "linker-driver", "assembler", "linker", "archiver", "generator",
+        "build-driver", "unknown"])
+def test_native_tool_classification_requires_the_observed_executable(
+        name: str, argv: tuple[str, ...], expected: str | None) -> None:
+    assert native.tool_kind(name, argv) == expected
 
 
 def test_captured_stream_identity_retains_complete_file_beyond_preview_limit(
@@ -140,6 +161,37 @@ class NativeExecutor:
             (link / "link.txt").write_text(
                 f"clang++ {obj.as_posix()} -o {binary.as_posix()}\n", encoding="utf-8")
         return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
+
+
+def native_language_executor(profile, calls: list[tuple[str, ...]], *, fail: bool = False,
+                             fail_workdirs: set[str] | None = None,
+                             phantom_compiler: bool = False):
+    fake = NativeExecutor(calls, fail=fail, fail_workdirs=fail_workdirs)
+
+    def behavior(command, workspace, working_directory, environment, simulation):
+        simulation.exec("/capture/wrappers/cmake", command)
+        simulation.exec("/usr/bin/cmake", command)
+        simulation.tool_call("cmake", command[1:], executable="/usr/bin/cmake")
+        result = fake.execute(command, workspace=workspace, working_directory=working_directory,
+                              environment=environment)
+        if "--build" in command and result.exit_code == 0:
+            source = f"/workspace/{working_directory}/main.cpp"
+            obj = f"/workspace/{working_directory}/build/main.o"
+            binary = f"/workspace/{working_directory}/build/sample"
+            compiler = ("clang++", "-g", "-c", source, "-o", obj)
+            if phantom_compiler:
+                simulation.tool_call("clang++", compiler[1:], executable="/usr/bin/clang++")
+            else:
+                simulation.exec("/capture/wrappers/clang++", compiler)
+                simulation.exec("/usr/bin/clang++", compiler)
+                simulation.tool_call("clang++", compiler[1:], executable="/usr/bin/clang++")
+                linker = ("clang++", obj, "-o", binary)
+                simulation.exec("/capture/wrappers/clang++", linker)
+                simulation.exec("/usr/bin/clang++", linker)
+                simulation.tool_call("clang++", linker[1:], executable="/usr/bin/clang++")
+        return (None if result.timed_out else result.exit_code), result.stdout, result.stderr
+
+    return simulated_executor(profile, behavior)
 
 
 class DotnetExecutor:
@@ -275,7 +327,7 @@ def test_native_dispatch_executes_real_build_and_publishes_provenance(tmp_path: 
     calls: list[tuple[str, ...]] = []
     run_id, fingerprint = _accepted_project(config, target, calls)
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: NativeExecutor(calls))]).run(
+        executor_factory=lambda unit, profile: native_language_executor(profile, calls))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"  # loader dependencies are deliberately unobserved.
     accepted = load_accepted_language_build(config.runtime.runs_dir / run_id)
@@ -283,18 +335,64 @@ def test_native_dispatch_executes_real_build_and_publishes_provenance(tmp_path: 
     assert receipt["terminal_status"] == "SUCCEEDED"
     assert {item["kind"] for item in receipt["artifacts"]} >= {"object", "executable", "compile-database"}
     assert {item["tool_kind"] for item in receipt["tool_invocations"]} >= {
-        "compiler-driver", "compiler-driver-link"}
+        "compiler", "linker-driver"}
+    assert all(item["mapping"].startswith("syscall-process-exec")
+               for item in receipt["tool_invocations"])
+    assert receipt["capture_provenance"]["complete"] is True
+    assert receipt["capture_provenance"]["observed_tool_kinds"] >= ["build-driver", "compiler"]
+    assert all(command["execution_capture"]["complete"] for command in receipt["commands"])
     assert '"argv":' not in json.dumps(receipt["tool_invocations"])
     protected = config.runtime.runs_dir / run_id / receipt["protected_compile_commands"]["path"]
     assert "clang++" in protected.read_text(encoding="utf-8")
     assert len(calls) == 4  # probe and real build each execute the exact two-command recipe.
 
 
+def test_native_compile_database_and_wrapper_without_exec_are_not_provenance(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _accepted_project(config, target, [])
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        native_language_executor(profile, [], phantom_compiler=True))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    assert "compiler" not in {item["tool_kind"] for item in receipt["tool_invocations"]}
+    assert receipt["capture_provenance"]["unreconciled_tool_calls"] == 1
+    assert receipt["capture_provenance"]["complete"] is False
+    assert any("no matching successful process-exec" in gap for gap in receipt["gaps"])
+    assert any("compiler execution was not observed" in gap for gap in receipt["gaps"])
+    assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+
+
+@pytest.mark.parametrize("payload", [
+    b"\xff", b"{}", b"[{}]",
+    json.dumps([{"directory": "/workspace/native", "file": "main.cpp",
+                 "arguments": ["clang++", "bad\0arg"]}]).encode(),
+], ids=["invalid-utf8", "wrong-top-level", "missing-argv", "nul-argv"])
+def test_native_compile_database_malformed_output_is_an_explicit_gap(
+        tmp_path: Path, payload: bytes) -> None:
+    build = tmp_path / "native" / "build"
+    build.mkdir(parents=True)
+    (build / "compile_commands.json").write_bytes(payload)
+    rows, gaps = _compile_rows(tmp_path, "native", "native/build")
+    assert rows == [] and len(gaps) == 1 and "compile database was not parseable" in gaps[0]
+
+
+@pytest.mark.parametrize("payload", [b"\xff", b"clang++ 'unterminated\n", b"clang++ a.o -o app\n" * 101],
+                         ids=["invalid-utf8", "invalid-shell", "too-many-lines"])
+def test_native_link_metadata_malformed_output_is_an_explicit_gap(
+        tmp_path: Path, payload: bytes) -> None:
+    link = tmp_path / "native" / "build" / "CMakeFiles" / "app.dir" / "link.txt"
+    link.parent.mkdir(parents=True)
+    link.write_bytes(payload)
+    rows, gaps = _link_rows(tmp_path, "native/build")
+    assert rows == [] and len(gaps) == 1 and "link metadata" in gaps[0]
+
+
 def test_native_build_failure_is_a_gap_and_topology_is_generic(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     run_id, fingerprint = _accepted_project(config, target, [])
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: NativeExecutor([], fail=True))]).run(
+        executor_factory=lambda unit, profile: native_language_executor(profile, [], fail=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
@@ -315,7 +413,7 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(tmp
     (target / "sibling" / "main.cpp").write_text("int main() { return 1; }\n", encoding="utf-8")
     run_id, fingerprint = _accepted_project(config, target, [])
     outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        NativeExecutor([], fail_workdirs={"sibling"}))]).run(
+        native_language_executor(profile, [], fail_workdirs={"sibling"}))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
@@ -324,7 +422,7 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(tmp
 
     calls: list[tuple[str, ...]] = []
     resumed = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        NativeExecutor(calls))]).run(target_root=target, source_fingerprint=fingerprint,
+        native_language_executor(profile, calls))]).run(target_root=target, source_fingerprint=fingerprint,
                                      run_id=run_id, force_from="job_language_build")
     second = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     by_root = {item["root"]: item for item in second}
@@ -340,7 +438,7 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
     config, target = _fixture(tmp_path)
     run_id, fingerprint = _accepted_project(config, target, [])
     GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: NativeExecutor([]))]).run(
+        executor_factory=lambda unit, profile: native_language_executor(profile, []))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     outcome = GraphRunner(config, [build_cpp(
         executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
@@ -353,6 +451,16 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
     assert outputs["ir.projects"]["project_count"] == 1
     assert outputs["infer.projects"]["project_count"] == 1
     assert outputs["binary.projects"]["project_count"] == 1
+    run_root = config.runtime.runs_dir / run_id
+    project_id = next(iter(outputs["catalog.projects"]["projects"]))
+    build_receipt = outputs["catalog.projects"]["projects"][project_id]["build_receipt"]
+    assert all(file_sha256(run_root / artifact["path"]) == artifact["sha256"]
+               for artifact in build_receipt["artifacts"])
+    for branch in ("ast.projects", "ir.projects", "binary.projects"):
+        identity = outputs[branch]["projects"][project_id]["artifact"]
+        path = run_root / identity["path"]
+        assert path.is_file() and path.stat().st_size == identity["size_bytes"]
+        assert file_sha256(path) == identity["sha256"]
     post = GraphRunner(config, [build_post_build()]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert post["status"] == "COMPLETED_WITH_GAPS"

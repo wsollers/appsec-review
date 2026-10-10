@@ -43,6 +43,12 @@ The Rust adapter accepts Cargo workspaces/packages and bounded target/profile/fe
 choices; retains rustc, linker, archiver, build-script, and proc-macro provenance; catalogs Cargo
 metadata and resolve edges plus generated sources, rlib/rmeta, native libraries, binaries, and debug
 metadata; and publishes sanitized build evidence without executing tests or produced programs.
+The native adapter now uses the same syscall/envp/connect/gitleaks boundary as Rust and .NET.
+Successful exec events alone establish tool provenance; compile databases and CMake link records are
+exact-match enrichment only. Docker-backed fixture acceptance covers complete streams,
+compiler/linker/archiver provenance, compile database, objects, static library, executable, split
+debug data, link map, loader facts, Clang AST, LLVM IR, secret removal, and raw-trace cleanup. This
+lower-level acceptance has not been promoted to a Dagster run while language work remains batched.
 The Node adapter accepts npm, pnpm, and Yarn identities; allows dependency egress while denying application/test
 execution; treats lifecycle scripts as sandboxed target code; and catalogs generated code, bundles,
 maps, packages, and native addons with protected command/stream evidence and sanitized retrieval.
@@ -61,9 +67,9 @@ and is not acceptance evidence for the current tree. A fresh integrated Dagster 
 orchestration steps and accepted the shared language-build handoff with one native and seven JVM
 successes, nine explicit .NET recipe gaps, and truthful non-selection for Go, Node, Python, PHP,
 Rust, and WebAssembly. The composed retrieval manifest and an MCP query resolved sanitized JVM
-class evidence while retaining the unrelated catalog build shard. Producer-positive live coverage
-for Rust, Go, Node, .NET, Python, PHP, and WASM remains required before the Linux vertical can be
-closed; focused executor tests cover those family contracts in this revision.
+class evidence while retaining the unrelated catalog build shard. Producer-positive fixture and
+live-record coverage is tracked per language; a new integrated Dagster run remains required before
+the Linux vertical can be closed.
 The pinned cross-language CodeQL job and exact `query_codeql` MCP surface are implemented and have
 fresh live acceptance on `appsec-multi-vuln`: producer Dagster run
 `e596f2f0-3b47-4263-973e-e0bc0362fe5a`, application run `2026-10-09-0007`, and CodeQL attempt

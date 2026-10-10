@@ -33,13 +33,13 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 
-from . import dotnet, elf, jvm, node, php, python, rust
+from . import dotnet, elf, jvm, native, node, php, python, rust
 
 
 SCHEMA = "appsec-review/language-build-handoff/1"
 RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/1"
-CAPTURE_IDENTITIES = {"native": "appsec-review/native-build-capture/1",
+CAPTURE_IDENTITIES = {"native": native.CAPTURE_IDENTITY,
                       "go": "appsec-review/go-build-capture/1",
                       "dotnet": dotnet.CAPTURE_IDENTITY,
                       "java": jvm.JVM_CAPTURE_IDENTITY,
@@ -67,7 +67,7 @@ _TOOL_KINDS = {
     "pack": "package-builder", "go": "build-driver", "gcc": "compiler",
 }
 _GO_TRACE_TOOLS = {"compile", "asm", "link", "cgo", "pack", "gcc", "clang", "as", "ld", "ar"}
-_CAPTURED_FAMILIES = frozenset({"dotnet", "rust"})
+_CAPTURED_FAMILIES = frozenset({"dotnet", "native", "rust"})
 _CAPTURE_GAP = "execution capture command"
 
 
@@ -216,6 +216,7 @@ def _kind(path: Path, family: str = "native", *, relative: str = "",
     if suffix in _STATIC_SUFFIXES: return "static-library"
     if suffix in _SHARED_SUFFIXES: return "shared-library"
     if suffix in _BITCODE_SUFFIXES: return "llvm-bitcode"
+    if suffix == ".ast": return "clang-ast"
     if suffix in _DEBUG_SUFFIXES: return "debug-information"
     if suffix in _MAP_SUFFIXES: return "link-map"
     try:
@@ -270,30 +271,39 @@ def _compile_rows(workspace: Path, source_dir: str, build_dir: str) -> tuple[lis
         return [], ["compile database was not emitted; compiler-to-artifact mappings are unavailable"]
     if path.stat().st_size > 16 * 1024 * 1024:
         return [], ["compile database exceeded the 16 MiB provenance bound"]
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, list) or len(raw) > 4096:
-        raise ValueError("emitted compile database is invalid or exceeds its row bound")
-    rows = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, Mapping):
-            raise ValueError("emitted compile database row is invalid")
-        argv = item.get("arguments")
-        if argv is None and isinstance(item.get("command"), str):
-            argv = shlex.split(item["command"])
-        if not isinstance(argv, list) or not argv or any(not isinstance(v, str) or "\0" in v for v in argv):
-            raise ValueError("emitted compile database argv is invalid")
-        directory = str(item.get("directory", ""))
-        declared_output = item.get("output")
-        if not declared_output and "-o" in argv and argv.index("-o") + 1 < len(argv):
-            declared_output = argv[argv.index("-o") + 1]
-        inputs = _mapped_files(workspace, directory, [item.get("file")])
-        outputs = _mapped_files(workspace, directory, [declared_output])
-        rows.append({"ordinal": index + 1, "tool_kind": _TOOL_KINDS.get(Path(argv[0]).name, "compiler-driver"),
-                     "tool": Path(argv[0]).name, "argv": argv, "directory": str(item.get("directory", "")),
-                     "input": item.get("file"), "output": declared_output,
-                     "inputs": inputs, "outputs": outputs,
-                     "mapping": "compile-database", "mapping_confidence": 1.0})
-    return rows, []
+    try:
+        raw = json.loads(path.read_bytes().decode("utf-8"))
+        if not isinstance(raw, list) or len(raw) > 4096:
+            raise ValueError("top-level value is not a bounded row list")
+        rows = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, Mapping):
+                raise ValueError(f"row {index + 1} is not an object")
+            argv = item.get("arguments")
+            if argv is None and isinstance(item.get("command"), str):
+                argv = shlex.split(item["command"])
+            if (not isinstance(argv, list) or not argv or len(argv) > 16384 or
+                    any(not isinstance(value, str) or "\0" in value for value in argv)):
+                raise ValueError(f"row {index + 1} argv is invalid")
+            directory, source, declared_output = item.get("directory"), item.get("file"), item.get("output")
+            if (not isinstance(directory, str) or "\0" in directory or
+                    not isinstance(source, str) or not source or "\0" in source or
+                    declared_output is not None and
+                    (not isinstance(declared_output, str) or "\0" in declared_output)):
+                raise ValueError(f"row {index + 1} paths are invalid")
+            if not declared_output and "-o" in argv and argv.index("-o") + 1 < len(argv):
+                declared_output = argv[argv.index("-o") + 1]
+            inputs = _mapped_files(workspace, directory, [source])
+            outputs = _mapped_files(workspace, directory, [declared_output])
+            rows.append({"ordinal": index + 1,
+                         "tool_kind": _TOOL_KINDS.get(Path(argv[0]).name, "compiler-driver"),
+                         "tool": Path(argv[0]).name, "argv": argv, "directory": directory,
+                         "input": source, "output": declared_output,
+                         "inputs": inputs, "outputs": outputs,
+                         "mapping": "compile-database", "mapping_confidence": 1.0})
+        return rows, []
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        return [], [f"compile database was not parseable: {exc}"]
 
 
 def _workspace_path(workspace: Path, directory: str, value: Any) -> Path | None:
@@ -348,34 +358,47 @@ def _mapped_files(workspace: Path, directory: str, values: list[Any]) -> list[di
 def _link_rows(workspace: Path, build_dir: str) -> tuple[list[dict[str, Any]], list[str]]:
     root = workspace / Path(*PurePosixPath(build_dir).parts)
     rows: list[dict[str, Any]] = []
-    for path in sorted(root.rglob("link.txt"))[:4096] if root.is_dir() else ():
-        if path.is_symlink() or path.stat().st_size > 1024 * 1024:
-            continue
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[:100]:
-            if not line.strip():
-                continue
-            argv = shlex.split(line)
-            if not argv:
-                continue
-            tool = Path(argv[0]).name
-            kind = _TOOL_KINDS.get(tool, "compiler-driver-link")
-            output_values: list[str] = []
-            for index, value in enumerate(argv[:-1]):
-                if value == "-o":
-                    output_values.append(argv[index + 1])
-            if kind == "archiver":
-                candidates = [value for value in argv[1:] if value.endswith(tuple(_STATIC_SUFFIXES))]
-                output_values.extend(candidates[:1])
-            input_values = [value for value in argv[1:] if value.endswith(
-                tuple(_OBJECT_SUFFIXES | _STATIC_SUFFIXES | _SHARED_SUFFIXES | _BITCODE_SUFFIXES)) and
-                value not in output_values]
-            directory = path.parent.relative_to(workspace).as_posix()
-            rows.append({"tool_kind": "compiler-driver-link" if kind == "compiler-driver" else kind, "tool": tool,
-                         "argv": argv, "directory": directory,
-                         "origin": path.relative_to(workspace).as_posix(),
-                         "inputs": _mapped_files(workspace, directory, input_values),
-                         "outputs": _mapped_files(workspace, directory, output_values),
-                         "mapping": "build-system-link-receipt", "mapping_confidence": 1.0})
+    paths = sorted(root.rglob("link.txt")) if root.is_dir() else []
+    if len(paths) > 4096:
+        return [], ["build-system link metadata exceeded its file-count bound"]
+    try:
+        for path in paths:
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+                raise ValueError(f"{path.relative_to(workspace).as_posix()}: invalid link metadata file")
+            lines = path.read_bytes().decode("utf-8").splitlines()
+            if len(lines) > 100:
+                raise ValueError(f"{path.relative_to(workspace).as_posix()}: link row count exceeds its bound")
+            for line in lines:
+                if "\0" in line:
+                    raise ValueError(f"{path.relative_to(workspace).as_posix()}: link row contains NUL")
+                if not line.strip():
+                    continue
+                argv = shlex.split(line)
+                if not argv or len(argv) > 16384:
+                    raise ValueError(f"{path.relative_to(workspace).as_posix()}: link argv is invalid")
+                tool = Path(argv[0]).name
+                kind = _TOOL_KINDS.get(tool, "compiler-driver-link")
+                output_values: list[str] = []
+                for index, value in enumerate(argv[:-1]):
+                    if value == "-o":
+                        output_values.append(argv[index + 1])
+                if kind == "archiver":
+                    candidates = [value for value in argv[1:] if value.endswith(tuple(_STATIC_SUFFIXES))]
+                    output_values.extend(candidates[:1])
+                input_values = [value for value in argv[1:] if value.endswith(
+                    tuple(_OBJECT_SUFFIXES | _STATIC_SUFFIXES | _SHARED_SUFFIXES | _BITCODE_SUFFIXES)) and
+                    value not in output_values]
+                # CMake stores link.txt below CMakeFiles/<target>.dir but executes its row from
+                # the configured build directory, which is the root being scanned here.
+                directory = root.relative_to(workspace).as_posix()
+                rows.append({"tool_kind": "compiler-driver-link" if kind == "compiler-driver" else kind,
+                             "tool": tool, "argv": argv, "directory": directory,
+                             "origin": path.relative_to(workspace).as_posix(),
+                             "inputs": _mapped_files(workspace, directory, input_values),
+                             "outputs": _mapped_files(workspace, directory, output_values),
+                             "mapping": "build-system-link-receipt", "mapping_confidence": 1.0})
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        return [], [f"build-system link metadata was not parseable: {exc}"]
     return rows, ([] if rows else
                   ["exact linker/archiver provenance was not emitted; link relationships remain ambiguous"])
 
@@ -1112,11 +1135,40 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             package_members.extend(rows)
             gaps.extend(archive_gaps)
     if family == "native":
-        compile_rows, compile_gaps = _compile_rows(workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
-        gaps.extend(compile_gaps)
-        link_rows, link_gaps = _link_rows(workspace, str(recipe["build_dir"]))
-        gaps.extend(link_gaps)
-        normalized_links = _normalized_links(link_rows, str(recipe["build_dir"]))
+        # Compile databases and build-system link files remain useful output metadata, but they
+        # are not execution evidence. Validate them completely and retain only their gaps here;
+        # published tool rows come exclusively from successful process-exec events.
+        _compile_metadata, compile_gaps = _compile_rows(
+            workspace, str(recipe["source_dir"]), str(recipe["build_dir"]))
+        _link_metadata, link_gaps = _link_rows(workspace, str(recipe["build_dir"]))
+        gaps.extend([*compile_gaps, *link_gaps])
+        compile_rows, capture_facts, provenance_gaps = native.capture_invocations(
+            captures, workspace, str(recipe["source_dir"]))
+        # Validated CMake link metadata may resolve cwd-relative inputs/outputs, but only after
+        # an exact argv match to a successful syscall-authoritative invocation.
+        link_metadata_by_argv = {
+            (Path(str(row["argv"][0])).name, tuple(str(value) for value in row["argv"][1:])): row
+            for row in _link_metadata
+        }
+        for row in compile_rows:
+            argv = row.get("argv", ())
+            if not argv:
+                continue
+            metadata = link_metadata_by_argv.get(
+                (Path(str(argv[0])).name, tuple(str(value) for value in argv[1:])))
+            if metadata is not None:
+                row["inputs"] = list(metadata["inputs"])
+                row["outputs"] = list(metadata["outputs"])
+                row["metadata_origin"] = metadata["origin"]
+        gaps.extend(provenance_gaps)
+        link_rows = []
+        normalized_links = _normalized_links(native.link_rows(compile_rows), str(recipe["build_dir"]))
+        kinds = {str(row.get("tool_kind")) for row in compile_rows}
+        capture_facts["observed_tool_kinds"] = sorted(kinds)
+        if "compiler" not in kinds:
+            gap = "native compiler execution was not observed in the standardized capture"
+            gaps.append(gap)
+            provenance_gaps.append(gap)
     elif family == "go":
         compile_rows, link_rows, normalized_links = go_trace_rows, [], []
         if not compile_rows:
@@ -1222,6 +1274,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["package_relationships"] = list(receipt["cargo_metadata"].get("relationships", ()))
         receipt["capture_provenance"] = {
             "schema": "appsec-review/rust-capture-provenance/1", "complete": capture_complete,
+            "command_count": len(captures), **capture_facts}
+    if family == "native":
+        receipt["capture_provenance"] = {
+            "schema": "appsec-review/native-capture-provenance/1", "complete": capture_complete,
             "command_count": len(captures), **capture_facts}
     if family == "dotnet":
         receipt["capture_provenance"] = {

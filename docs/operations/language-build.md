@@ -22,7 +22,13 @@ executables, LLVM bitcode/IR, debug data, and link maps. Loader dependencies of 
 shared libraries are read from the dynamic section by a bounded in-repository parser that loads and
 executes nothing. Every name must terminate inside the `DT_STRSZ`-declared string table, and the
 interpreter inside its `PT_INTERP` segment; a file it cannot parse that strictly is a named gap, never
-a resolved dependency list. Exact recipe and compiler/linker argv are retained only under
+a resolved dependency list. Successful process-exec syscall events are the only authority that a
+native compiler, assembler, linker driver, linker, archiver, generator, post-link tool, or build
+driver executed. Validated compile databases and link files may enrich input/output mappings only
+after an exact argv match to such an event; they never establish tool provenance. Every command
+carries argv/envp/connect capture and a gitleaks receipt. Capture loss, a redacted exec, an unmatched
+wrapper call, or an unobserved compiler is a named gap, makes provenance incomplete, and prevents
+checkpointing. Exact recipe and compiler/linker argv are retained only under
 the unit's `protected-commands/` directory; searchable records retain argv hashes, sanitized
 environment facts, resolved inputs/outputs, artifact hashes, and mapping confidence. A complete
 workspace manifest protects the handoff consumed by later language-specific analysis.

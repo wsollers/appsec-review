@@ -19,7 +19,7 @@ be treated as one container lifecycle:
    gitleaks scan.
 
 Captured execution is an acceptance requirement for `job_project_build` probes and for every
-command of the Rust/Cargo and .NET SDK adapters in `job_language_build`. The remaining `job_language_build`
+command of the native C/C++, Rust/Cargo, and .NET SDK adapters in `job_language_build`. The remaining `job_language_build`
 adapters still use their family-specific execution and provenance paths; they must not be described
 as producing the standardized syscall/envp/secret-scan record until they are explicitly migrated
 and tested. The current capture backend is in-container
@@ -250,6 +250,23 @@ schemas, a foreign scope, or inconsistent coverage are framework-integrity failu
 tool-call, or finding caps and collector/scanner failures are named coverage gaps. A gitleaks
 finding is evidence to retain and route; by itself it is not a capture-coverage gap.
 
+## Native C/C++ language-build integration
+
+Every accepted native configure and build command runs through the standardized capture boundary.
+Successful process-exec events are the sole authority for compiler, assembler, linker-driver,
+linker, archiver, code-generator, post-link, and build-driver provenance. Compile databases and
+CMake `link.txt` files are hostile secondary metadata: after complete validation they may resolve
+inputs and outputs only for an exact argv match to a successful captured execution. They cannot
+create an invocation or satisfy the mandatory compiler check.
+
+Each native receipt publishes `appsec-review/native-capture-provenance/1` facts and hash-bound
+capture identities. Capture loss, redacted execs, unmatched wrapper calls, or an unobserved compiler
+make provenance incomplete and prevent checkpointing. The native fixture acceptance verifies a
+compile database, objects, a static library, executable, split debug data, link map, loader facts,
+Clang AST, LLVM IR, complete streams, gitleaks artifacts, envp evidence, and the absence of raw
+traces and scan inputs. AST and IR are separate analysis-stage outputs when they are not part of
+the accepted language-build recipe.
+
 ## Rust language-build integration
 
 `job_language_build` runs Cargo metadata and every accepted Cargo configure/build command through
@@ -337,7 +354,7 @@ The main implementation surfaces are:
 - `src/appsec_review/container_runtime/build_capture.py` — normalization, execution record, and
   the shared record verifier;
 - `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
-- `src/appsec_review/jobs/job_language_build/job.py`, `rust.py`, and `dotnet.py` — Rust and .NET
+- `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `rust.py`, and `dotnet.py` — native, Rust, and .NET
   capture routing, receipt identities, and capture-derived tool provenance; and
 - `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
   `tests/test_project_build.py`, `tests/test_rust_language_build.py`, `tests/test_language_build.py`, and

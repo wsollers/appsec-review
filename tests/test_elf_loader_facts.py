@@ -80,6 +80,7 @@ def test_loader_facts_never_reads_a_name_from_outside_the_declared_string_table(
     planted = bytearray(image)
     struct.pack_into("<Q", planted, _entry(image, 1) + 8, table_size)   # DT_NEEDED -> first byte past the table
     struct.pack_into("<Q", planted, 0x60, len(planted))                 # PT_LOAD p_filesz covers the planted bytes
+    struct.pack_into("<Q", planted, 0x68, len(planted))                 # PT_LOAD p_memsz remains consistent
     path = tmp_path / "planted"
     path.write_bytes(bytes(planted))
     assert bytes(planted)[table + table_size:].startswith(b"libplanted.so")
@@ -145,6 +146,36 @@ def test_loader_facts_bounds_the_program_header_table(tmp_path: Path) -> None:
     path = tmp_path / "many-headers"
     path.write_bytes(bytes(data))
     with pytest.raises(ValueError, match="program header table"):
+        elf.loader_facts(path)
+
+
+@pytest.mark.parametrize(("mutate", "message"), [
+    (lambda image: struct.pack_into("<H", image, 0x34, 16), "program header table"),
+    (lambda image: struct.pack_into("<Q", image, 0x20, 32), "program header table"),
+    (lambda image: struct.pack_into("<Q", image, 0x60, len(image) + 1), "segment extends"),
+    (lambda image: struct.pack_into("<Q", image, 0x68, 1), "invalid size"),
+    (lambda image: struct.pack_into("<Q", image, 0x98, 15), "dynamic section size"),
+], ids=["short-header", "header-table-overlap", "segment-past-file", "memsz-smaller",
+        "misaligned-dynamic"])
+def test_loader_facts_rejects_inconsistent_structure_bounds(tmp_path: Path, mutate, message: str) -> None:
+    image = bytearray(minimal_elf(("libc.so.6",)))
+    mutate(image)
+    path = tmp_path / "malformed-structure"
+    path.write_bytes(bytes(image))
+    with pytest.raises(ValueError, match=message):
+        elf.loader_facts(path)
+
+
+def test_loader_facts_requires_dynamic_terminator(tmp_path: Path) -> None:
+    image = bytearray(minimal_elf(("libc.so.6",)))
+    start, _table = _dynamic(bytes(image))
+    index = 0
+    while struct.unpack_from("<q", image, start + index * 16)[0] != 0:
+        index += 1
+    struct.pack_into("<qQ", image, start + index * 16, 1, 1)
+    path = tmp_path / "unterminated-dynamic"
+    path.write_bytes(bytes(image))
+    with pytest.raises(ValueError, match="dynamic section is not terminated"):
         elf.loader_facts(path)
 
 
