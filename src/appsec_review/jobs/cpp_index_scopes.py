@@ -193,16 +193,14 @@ def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[s
     The container compile database is written to ``/scratch/compile_commands.json`` first.
     """
     from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
-    from appsec_review.storage import atomic_json
+    from appsec_review.storage import tool_input_json
 
     if scratch.exists():
         import shutil
         shutil.rmtree(scratch)
     scratch.mkdir(parents=True)
     compile_database = scratch / "compile_commands.json"
-    atomic_json(compile_database, scope.container_compile_database())
-    # atomic_json writes 0600; the tool runs as uid 10001 and must be able to read its input.
-    compile_database.chmod(0o644)
+    tool_input_json(compile_database, scope.container_compile_database())
     executor = (executor_factory(unit) if executor_factory is not None else
                 ContainerExecutor(load_catalog(unit.job.repository_root), unit.job.run_root))
     result = executor.execute(ExecutionRequest(tool_id=tool_id, argv=argv,

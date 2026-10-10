@@ -285,6 +285,11 @@ class AnalysisExecutor:
         root = request.scratch_root
         root.mkdir(parents=True, exist_ok=True)
         mode = "infer" if request.tool_id == "tool-infer" else request.argv[1]
+        # Tools run as uid 10001; the inputs the C++ job writes for them must be readable by others.
+        tool_input = (root / "compile_commands.json" if mode == "infer" else
+                      root / "normalized-compile-commands.json" if mode in {"ast", "ir"} else None)
+        if tool_input is not None:
+            assert tool_input.stat().st_mode & 0o004, f"{tool_input.name} is unreadable by the tool user"
         if mode in {"ast", "ir"}:
             destination = root / "analysis" / mode
             destination.mkdir(parents=True, exist_ok=True)

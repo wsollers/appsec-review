@@ -20,7 +20,7 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.storage import atomic_json, canonical_json, file_sha256, tool_input_json
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
@@ -129,7 +129,7 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
         shutil.rmtree(scratch)
     scratch.mkdir(parents=True, exist_ok=True)
     compile_database = scratch / "compile_commands.json"
-    atomic_json(compile_database, _infer_compile_database(catalog))
+    tool_input_json(compile_database, _infer_compile_database(catalog))
     tool_catalog = (load_catalog(unit.job.repository_root) if
                     (unit.job.repository_root / "containers" / "catalog.toml").is_file() else None)
     executor = (executor_factory(unit) if executor_factory is not None else
@@ -890,7 +890,10 @@ def build_job(*, executor_factory=None) -> Job:
             root = _case_root(unit, case_id)
             try:
                 commands = normalize_compile_db(root, mapping)
-                compile_artifact = _json_artifact(unit, root / "normalized-compile-commands.json", commands)
+                # tool-native-cpp reads this as uid 10001 for the AST and IR replays.
+                normalized = root / "normalized-compile-commands.json"
+                tool_input_json(normalized, commands)
+                compile_artifact = _artifact(unit.job.run_root, normalized)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 projects[case_id] = {"project_key": case_id, "mapping": mapping,
                     "gaps": [f"{case_id} compile database invalid: {type(exc).__name__}: {exc}"],

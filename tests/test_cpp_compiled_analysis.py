@@ -70,6 +70,11 @@ class FakeNativeExecutor:
         infer = request.tool_id == "tool-infer"
         mode = "infer" if infer else request.argv[1]
         project_root = request.target_root if infer else root
+        # Tools run as uid 10001; the inputs the job writes for them must be readable by others.
+        tool_input = (root / "compile_commands.json" if infer else
+                      root / "normalized-compile-commands.json" if mode in {"ast", "ir"} else None)
+        if tool_input is not None:
+            assert tool_input.stat().st_mode & 0o004, f"{tool_input.name} is unreadable by the tool user"
         project = project_root.name
         self.calls.append((project, mode))
         exit_code = 9 if self.fail == (project, mode) else 0

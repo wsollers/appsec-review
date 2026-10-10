@@ -316,3 +316,13 @@ def test_capture_verification_binds_the_callers_scope_and_run(tmp_path: Path) ->
     elsewhere.mkdir()
     with pytest.raises(CaptureIntegrityError, match="escaped the run"):
         verify_capture_record(record, run_root=elsewhere, scope=scope)
+
+
+def test_tool_input_json_is_readable_by_the_container_user(tmp_path: Path) -> None:
+    from appsec_review.storage import atomic_json, tool_input_json
+
+    atomic_json(tmp_path / "private.json", {"a": 1})
+    tool_input_json(tmp_path / "input.json", {"a": 1})
+    assert (tmp_path / "private.json").stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "input.json").stat().st_mode & 0o777 == 0o644
+    assert json.loads((tmp_path / "input.json").read_text(encoding="utf-8")) == {"a": 1}
