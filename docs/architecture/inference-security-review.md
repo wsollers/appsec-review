@@ -188,6 +188,10 @@ The red discovery pool maps over hunt packages. `hypothesis_hunter` searches for
 `red_team_analyst` develops the attacker-controlled preconditions and explicit evidence requests
 for normalized leads. Both emit only `proposed` claims and evidence requests. They cannot set
 confirmation, severity, priority, exploitability, PoC eligibility, or chain state.
+Their versioned [red discovery output](red-discovery-output.md) carries lead accounting,
+provisional claims, source-to-sink path segments, chain seeds, citations, open obligations and
+gaps. A chain seed remains a hypothesis; canonical attack-chain composition follows claim
+adjudication.
 Package construction does not prove a scanner lead. For C/C++ claims, accepted source-mapped
 post-macro and template-expanded Clang artifacts can help these pools assess the compiled construct;
 blue and blind verification still challenge the relevant predicates before adjudication.
@@ -794,8 +798,10 @@ that content is safe to publish.
 
 ## Schema sketches and examples
 
-Normative schemas will live under `docs/schemas/inference-security-review/` and use closed objects,
-bounded strings/arrays, enums for state, and reusable definitions for artifact/evidence references.
+Normative schemas live under `docs/schemas/inference-security-review/` as each stage is defined.
+The red discovery result has a closed versioned schema; later stage schemas remain to be defined.
+They use closed objects, bounded strings/arrays, enums for state, and reusable definitions for
+artifact/evidence references.
 The following documents are concise shape examples; hashes are shortened only for readability.
 
 ### Claim

@@ -42,3 +42,5 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   quorum design.
 - [`review-package-contract.md`](review-package-contract.md) — versioned finding-lead and hunt
   package inputs, membership gates, retrieval scopes, and implementation dependencies.
+- [`red-discovery-output.md`](red-discovery-output.md) — red-pool proposal, taint-path, chain-seed,
+  evidence, and lead-accounting contract.

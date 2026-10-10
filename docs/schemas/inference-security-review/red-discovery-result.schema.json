@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/red-discovery-result.schema.json",
+  "title": "Red discovery proposal result, version 1",
+  "description": "A package-scoped proposal for normalization and independent challenge, never an adjudicated finding or attack chain. Runtime limits are applied from resolved TOML configuration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "package", "role", "round_id", "result_status", "lead_accounting", "proposals", "proof_obligations", "taint_paths", "chain_seeds", "evidence_refs", "evidence_requests", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/red-discovery-result/1"},
+    "package": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "manifest_sha256", "package_id", "package_sha256"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "package_id": {"type": "string", "minLength": 1},
+        "package_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "role": {"enum": ["hypothesis_hunter", "red_team_analyst"]},
+    "round_id": {"type": "string", "minLength": 1},
+    "result_status": {"enum": ["completed", "partial"]},
+    "lead_accounting": {"type": "array", "items": {"$ref": "#/$defs/lead_accounting"}},
+    "proposals": {"type": "array", "items": {"$ref": "#/$defs/proposal"}},
+    "proof_obligations": {"type": "array", "items": {"$ref": "#/$defs/obligation"}},
+    "taint_paths": {"type": "array", "items": {"$ref": "#/$defs/taint_path"}},
+    "chain_seeds": {"type": "array", "items": {"$ref": "#/$defs/chain_seed"}},
+    "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "evidence_requests": {"type": "array", "items": {"$ref": "#/$defs/evidence_request"}},
+    "gaps": {"type": "array", "items": {"$ref": "#/$defs/gap"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "entity_id": {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"},
+    "local_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "entity_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/entity_id"}},
+    "local_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/local_id"}},
+    "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "lead_accounting": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observation_id", "outcome", "proposal_ids", "gap_ids", "reason"],
+      "properties": {
+        "observation_id": {"$ref": "#/$defs/entity_id"},
+        "outcome": {"enum": ["proposal", "no_proposal", "blocked"]},
+        "proposal_ids": {"$ref": "#/$defs/local_ids"},
+        "gap_ids": {"$ref": "#/$defs/local_ids"},
+        "reason": {"$ref": "#/$defs/text"}
+      }
+    },
+    "proposal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "source_lead_ids", "affected_entities", "statement", "mechanism", "security_predicate", "attacker_entry", "trigger", "suspected_consequence", "assumptions", "evidence_ids", "counterevidence_ids", "obligation_ids", "taint_path_ids"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "source_lead_ids": {"$ref": "#/$defs/entity_ids"},
+        "affected_entities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/entity_id"}},
+        "statement": {"$ref": "#/$defs/text"},
+        "mechanism": {"$ref": "#/$defs/text"},
+        "weakness": {
+          "type": "object", "additionalProperties": false,
+          "required": ["namespace", "id"],
+          "properties": {"namespace": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1}}
+        },
+        "security_predicate": {"$ref": "#/$defs/text"},
+        "attacker_entry": {
+          "type": "object", "additionalProperties": false,
+          "required": ["entity_id", "control", "preconditions"],
+          "properties": {
+            "entity_id": {"oneOf": [{"$ref": "#/$defs/entity_id"}, {"type": "null"}]},
+            "control": {"$ref": "#/$defs/text"},
+            "preconditions": {"type": "array", "items": {"$ref": "#/$defs/text"}}
+          }
+        },
+        "trigger": {"$ref": "#/$defs/text"},
+        "suspected_consequence": {"$ref": "#/$defs/text"},
+        "assumptions": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+        "evidence_ids": {"$ref": "#/$defs/local_ids"},
+        "counterevidence_ids": {"$ref": "#/$defs/local_ids"},
+        "obligation_ids": {"$ref": "#/$defs/local_ids"},
+        "taint_path_ids": {"$ref": "#/$defs/local_ids"}
+      }
+    },
+    "obligation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "proposal_id", "predicate", "question", "candidate_evidence_ids"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "proposal_id": {"$ref": "#/$defs/local_id"},
+        "predicate": {"enum": ["affected_construct", "attacker_control", "reachability", "guard_state", "configuration", "impact", "taint_continuity", "chain_continuity", "other"]},
+        "question": {"$ref": "#/$defs/text"},
+        "candidate_evidence_ids": {"$ref": "#/$defs/local_ids"}
+      }
+    },
+    "taint_node": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "role", "entity_id", "description"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "role": {"enum": ["source", "transform", "sanitizer", "guard", "boundary", "sink"]},
+        "entity_id": {"oneOf": [{"$ref": "#/$defs/entity_id"}, {"type": "null"}]},
+        "description": {"$ref": "#/$defs/text"},
+        "guard_effect": {"enum": ["unknown", "potential_block", "potential_bypass"]}
+      }
+    },
+    "taint_edge": {
+      "type": "object", "additionalProperties": false,
+      "required": ["from_node", "to_node", "kind", "basis", "evidence_ids", "open_question"],
+      "properties": {
+        "from_node": {"$ref": "#/$defs/local_id"},
+        "to_node": {"$ref": "#/$defs/local_id"},
+        "kind": {"enum": ["data", "call", "alias", "control", "cross_boundary"]},
+        "basis": {"enum": ["accepted_tool_path", "source_mapped_analysis", "analyst_hypothesis"]},
+        "evidence_ids": {"$ref": "#/$defs/local_ids"},
+        "open_question": {"type": ["string", "null"], "maxLength": 4096}
+      }
+    },
+    "taint_path": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "proposal_id", "source_node", "sink_node", "basis", "nodes", "edges", "gap_ids"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "proposal_id": {"$ref": "#/$defs/local_id"},
+        "source_node": {"$ref": "#/$defs/local_id"},
+        "sink_node": {"$ref": "#/$defs/local_id"},
+        "basis": {"enum": ["reported", "partial", "hypothesized"]},
+        "nodes": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/taint_node"}},
+        "edges": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/taint_edge"}},
+        "gap_ids": {"$ref": "#/$defs/local_ids"}
+      }
+    },
+    "chain_step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "description", "proposal_id", "prerequisite", "resulting_state", "entity_ids"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "description": {"$ref": "#/$defs/text"},
+        "proposal_id": {"oneOf": [{"$ref": "#/$defs/local_id"}, {"type": "null"}]},
+        "prerequisite": {"$ref": "#/$defs/text"},
+        "resulting_state": {"$ref": "#/$defs/text"},
+        "entity_ids": {"$ref": "#/$defs/entity_ids"}
+      }
+    },
+    "chain_link": {
+      "type": "object", "additionalProperties": false,
+      "required": ["from_step", "to_step", "continuity_dimensions", "evidence_ids", "open_questions"],
+      "properties": {
+        "from_step": {"$ref": "#/$defs/local_id"},
+        "to_step": {"$ref": "#/$defs/local_id"},
+        "continuity_dimensions": {"type": "array", "uniqueItems": true, "items": {"enum": ["identity", "privilege", "trust_boundary", "deployment_artifact", "temporal"]}},
+        "evidence_ids": {"$ref": "#/$defs/local_ids"},
+        "open_questions": {"type": "array", "items": {"$ref": "#/$defs/text"}}
+      }
+    },
+    "chain_seed": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "objective", "steps", "links", "gap_ids"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "objective": {"$ref": "#/$defs/text"},
+        "steps": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/chain_step"}},
+        "links": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/chain_link"}},
+        "gap_ids": {"$ref": "#/$defs/local_ids"}
+      }
+    },
+    "source_locator": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "path", "file_sha256", "start_line", "end_line"],
+      "properties": {
+        "kind": {"const": "source_line"},
+        "path": {"type": "string", "minLength": 1},
+        "file_sha256": {"$ref": "#/$defs/sha256"},
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1}
+      }
+    },
+    "artifact_locator": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "artifact_id", "artifact_sha256"],
+      "properties": {
+        "kind": {"const": "run_artifact"},
+        "artifact_id": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "unresolved_locator": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "reason"],
+      "properties": {"kind": {"const": "unresolved"}, "reason": {"$ref": "#/$defs/text"}}
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "entity_id", "shard_id", "shard_sha256", "relation", "predicate", "locator"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "entity_id": {"$ref": "#/$defs/entity_id"},
+        "shard_id": {"type": "string", "minLength": 1},
+        "shard_sha256": {"$ref": "#/$defs/sha256"},
+        "relation": {"enum": ["supports", "contradicts", "qualifies", "nominates"]},
+        "predicate": {"$ref": "#/$defs/text"},
+        "locator": {"oneOf": [
+          {"$ref": "#/$defs/source_locator"},
+          {"$ref": "#/$defs/artifact_locator"},
+          {"$ref": "#/$defs/unresolved_locator"}
+        ]}
+      }
+    },
+    "evidence_request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "proposal_id", "predicate", "requested_kind", "scope_entity_ids", "reason"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "proposal_id": {"$ref": "#/$defs/local_id"},
+        "predicate": {"$ref": "#/$defs/text"},
+        "requested_kind": {"enum": ["source_line", "compiled_view", "dataflow", "configuration", "build_provenance", "deployment", "run_artifact", "other"]},
+        "scope_entity_ids": {"$ref": "#/$defs/entity_ids"},
+        "reason": {"$ref": "#/$defs/text"}
+      }
+    },
+    "gap": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "kind", "scope", "reason"],
+      "properties": {
+        "local_id": {"$ref": "#/$defs/local_id"},
+        "kind": {"enum": ["missing", "skipped", "failed", "unavailable", "partial", "stale", "ambiguous", "truncated", "unresolved"]},
+        "scope": {"$ref": "#/$defs/text"},
+        "reason": {"$ref": "#/$defs/text"}
+      }
+    }
+  }
+}
