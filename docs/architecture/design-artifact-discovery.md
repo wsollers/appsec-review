@@ -190,4 +190,7 @@ with the same fingerprint is reused instead of rebuilt, because shards are immut
   OpenAPI framework, needs evidence-collection adapter support first. Today that adapter is
   bounded to typed IaC, Dockerfile, GitHub Actions, and CloudFormation inputs.
 - Inference review workers do not yet receive `design_context` as bounded task context.
+- Full-text content indexing, structured interface entities, interface scanners, binary-document
+  conversion, and possible vector recall are planned in `docs/TODO.md` under "Index design-artifact
+  content and scan declared interfaces".
 - Linking test files to the source units they cover is not attempted.
