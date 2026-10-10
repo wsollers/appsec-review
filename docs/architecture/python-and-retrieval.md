@@ -35,8 +35,9 @@ member shards per package/extractor identity, and artifact-specific relationship
 catalog fingerprints exclude scanners and MCP transport, so scanner changes cannot rebuild catalogs
 and transport changes rebuild nothing.
 
-The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard,
-Joern-observation shard, and binary/symbol shard per accepted case. The separate cross-language
+The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard, and
+binary/symbol shard per accepted case. The independent clangd job adds one symbol shard per accepted
+case, and the independent Joern job adds one CPG-observation shard per accepted case. The separate cross-language
 CodeQL job adds an observation shard per accepted language scope. A
 blocked producer still publishes an unavailable-coverage shard with zero observations, so absence
 cannot be mistaken for clean coverage. Compile and linker relationships that lack an exact output

@@ -275,18 +275,24 @@ invalidation and required reuse across unrelated languages, projects, scopes, an
 
 ## Joern bounded export and acceptance
 
-Done: the pinned, reviewed, offline Joern/c2cpg runtime closure (`tool-joern`,
-`containers/tools/joern/`). The C++ job still publishes a producer-local Joern shard with a precise
-blocked disposition. Remaining work:
+Done:
 
-- a bounded CPG/PDG exporter;
+- the pinned, reviewed, offline Joern/c2cpg runtime closure (`tool-joern`);
+- the independent `job_cpg_analysis`, which runs c2cpg per accepted C/C++ scope over the exact
+  accepted compile commands and retains each CPG as hash-identified, run-owned evidence;
+- the `noexec` `/tmp` zstd JNI fix in the image.
+
+The job still publishes a `BLOCKED` shard with zero observations per scope. Remaining work:
+
+- a bounded CPG/PDG exporter (a repository-owned `joern --script`; scripts compile and run fully
+  offline in the image);
 - the index contract and source mapping;
 - slicing;
 - exporter security probes;
-- live functional fixtures and job integration.
+- live functional fixtures.
 
-Resolve the open items in `containers/tools/joern/LICENSE.md` first: the `noexec` `/tmp` JNI
-extraction, the per-tool resource profile, and license attribution for the JARs without embedded
+Then replace the blocked shard with real observations. Also resolve the per-tool resource profile
+(Joern needs far more than 1 GiB at scale) and license attribution for JARs without embedded
 metadata. Do not put the full CPG into MCP responses.
 
 ## Evaluate additional Joern language frontends
@@ -315,19 +321,20 @@ Do not enable all frontends wholesale: that adds about 2 GB and six unreviewed n
 `ghidra2cpg` is binary analysis and belongs with the binary-analysis decomposition decision, not
 source CPG coverage.
 
-## Integrate the clangd static index
+## Scale the clangd symbol index
 
-Done: the pinned, reviewed, offline `tool-clangd-indexer` closure (clangd `23.1.0`,
-`containers/tools/clangd-indexer/`). A functional fixture shows that it indexes both Clang and
-clang-cl compile commands. Remaining work:
+Done: the pinned `tool-clangd-indexer` closure, and the independent `job_cpp_symbol_index`. Per
+accepted C/C++ scope it runs clangd-indexer over the exact accepted compile commands. It then
+normalizes symbols with exact source locations, and aggregated call/reference edges between
+accepted symbols, into `analysis` shards with per-scope coverage and verified checkpoints. A live
+run against the real image indexed the fixture completely. Remaining work:
 
-- run it from the accepted compilation database in content-keyed, bounded TU batches, with per-TU
-  checkpoints;
-- normalize the YAML output (symbols, references, relations) into retrieval shards with exact
-  source mapping, emitting each header once;
+- content-keyed, bounded TU batches with per-TU checkpoints, so Unreal-scale scopes fit the tool
+  output bound (index output above it is currently a named truncation gap);
+- symbols declared only in headers outside the accepted sources (SDK, engine, system) are counted,
+  not indexed; decide how header-only symbols are emitted once across scopes;
 - mount licensed MSVC and Windows SDK headers read-only for clang-cl commands;
-- define a reviewed per-tool resource profile for Unreal-scale databases;
-- report unparsed TUs and over-budget batches as gaps.
+- a reviewed per-tool resource profile for large compilation databases.
 
 Resolve the open items in `containers/tools/clangd-indexer/LICENSE.md` first: confirming the LLVM
 source ref, and an advisory match for the LLVM binary.

@@ -12,7 +12,6 @@ import io
 import json
 from pathlib import Path, PurePosixPath
 import re
-import sqlite3
 import subprocess
 import sys
 import tomllib
@@ -20,10 +19,7 @@ import tomllib
 import pytest
 
 from appsec_review.container_runtime import load_catalog as load_runtime_catalog
-from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp
-from appsec_review.jobs.job_cpp_compiled_analysis.job import JOERN_GAP
-from appsec_review.jobs.job_language_build import build_job as build_language
-from appsec_review.runtime import GraphRunner
+from appsec_review.jobs.job_cpg_analysis import JOERN_GAP
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -374,12 +370,12 @@ def test_fetch_rejects_paths_that_escape_the_context(tmp_path: Path) -> None:
                                        io.StringIO(), _opener(b"x", []))
 
 
-# Truthful blocked status
+# Truthful blocked status (the job-level shard behaviour is covered in test_cpp_index_jobs.py)
 
 
-def test_joern_gap_states_runtime_availability_without_claiming_coverage() -> None:
+def test_joern_gap_states_cpg_generation_without_claiming_coverage() -> None:
     assert JOERN_GAP.startswith("BLOCKED:")
-    assert "tool-joern" in JOERN_GAP and "is available" in JOERN_GAP
+    assert "tool-joern" in JOERN_GAP and "generated this scope's CPG" in JOERN_GAP
     assert "not available in the tool catalog" not in JOERN_GAP
     for pending in ("bounded CPG/PDG export", "source mapping", "functional fixtures",
                     "security acceptance"):
@@ -387,30 +383,12 @@ def test_joern_gap_states_runtime_availability_without_claiming_coverage() -> No
     assert "no CPG coverage is claimed" in JOERN_GAP
 
 
-def test_joern_branch_publishes_only_a_blocked_zero_observation_shard(tmp_path: Path) -> None:
-    from tests.test_language_build import AnalysisExecutor, _accepted_project, _fixture
-    from tests.test_language_build import native_language_executor
-
-    config, target = _fixture(tmp_path)
-    run_id, fingerprint = _accepted_project(config, target, [])
-    GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(profile, []))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    outcome = GraphRunner(config, [build_cpp(
-        executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
-    result_path = Path(outcome["jobs"]["job_cpp_compiled_analysis"]["attempt_root"]) / "result.json"
-    joern = json.loads(result_path.read_text(encoding="utf-8"))["outputs"]["joern.projects"]
-    assert joern["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert joern["project_count"] == 1 and joern["gaps"] == [JOERN_GAP]
-    (project,) = joern["projects"].values()
-    assert project["observation_count"] == 0
-    assert project["terminal_status"] == "COMPLETED_WITH_GAPS" and project["gaps"] == [JOERN_GAP]
-    shard = config.runtime.runs_dir / run_id / project["artifact"]["path"]
-    with sqlite3.connect(shard) as database:
-        coverage = database.execute("SELECT area, status, gap FROM coverage").fetchall()
-        statuses = [json.loads(row[0])["status"] for row in
-                    database.execute("SELECT payload_json FROM entities").fetchall()]
-    assert coverage == [("joern", "unavailable", JOERN_GAP)]
-    assert statuses == ["BLOCKED"]
+def test_image_supplies_zstd_native_library_without_an_executable_tmp() -> None:
+    text = _dockerfile()
+    jar = "/opt/joern/joern-cli/lib/com.github.luben.zstd-jni-1.5.7-11.jar"
+    assert jar.removeprefix("/opt/joern/") in [item["path"] for item in json.loads(
+        (CONTEXT / "inventory.json").read_text(encoding="utf-8"))["files"]]
+    assert f"zipfile.ZipFile('{jar}').open('linux/amd64/libzstd-jni-1.5.7-11.so')" in text
+    assert 'JAVA_TOOL_OPTIONS="-Djava.library.path=/opt/joern/native"' in text
+    # The fix never relocates the JVM temp directory or relaxes the runtime policy's noexec /tmp.
+    assert "java.io.tmpdir" not in text and "--tmpfs" not in text

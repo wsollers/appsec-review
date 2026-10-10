@@ -23,6 +23,9 @@ RUN set -eu; \
     grep -Fx "joern-cli ${TOOL_VERSION}" /opt/joern/VERSION; \
     grep -Fx "c2cpg ${TOOL_VERSION}" /opt/joern/VERSION; \
     cp /opt/review/inventory.json /opt/joern/inventory.json; \
+    mkdir /opt/joern/native; \
+    python -I -c "import shutil, zipfile; shutil.copyfileobj(zipfile.ZipFile('/opt/joern/joern-cli/lib/com.github.luben.zstd-jni-1.5.7-11.jar').open('linux/amd64/libzstd-jni-1.5.7-11.so'), open('/opt/joern/native/libzstd-jni-1.5.7-11.so', 'xb'))"; \
+    sha256sum /opt/joern/native/libzstd-jni-1.5.7-11.so; \
     rm -f /tmp/joern.zip /tmp/joern.zip.sha512
 
 FROM appsec-review/base-jre:21-noble
@@ -32,7 +35,10 @@ LABEL org.opencontainers.image.title="tool-joern" \
       org.opencontainers.image.licenses="Apache-2.0"
 COPY --from=unpack /opt/joern /opt/joern
 COPY --chmod=0555 joern-version /opt/joern/bin/joern-version
-ENV PATH="/opt/joern/bin:/opt/joern/joern-cli:${PATH}" HOME=/tmp
+# zstd-jni otherwise extracts its JNI library into the noexec /tmp at run time and fails. The
+# library above was copied from the hash-pinned, inventoried JAR, so the runtime /tmp stays noexec.
+ENV PATH="/opt/joern/bin:/opt/joern/joern-cli:${PATH}" HOME=/tmp \
+    JAVA_TOOL_OPTIONS="-Djava.library.path=/opt/joern/native"
 RUN /opt/joern/bin/joern-version | grep -Fx "c2cpg ${TOOL_VERSION}"
 USER 10001:10001
 WORKDIR /scratch

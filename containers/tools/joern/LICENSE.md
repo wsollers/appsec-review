@@ -80,9 +80,12 @@ must:
 
 ## Runtime notes for functional acceptance
 
-- JNI libraries (zstd-jni, jna) unpack into `java.io.tmpdir` at load time. The central runtime
-  policy mounts `/tmp` as `noexec`, so CPG serialization that needs zstd may fail until an
-  exec-capable, run-owned temp location is reviewed.
+- Resolved: zstd-jni unpacked its JNI library into `java.io.tmpdir` at load time, and the central
+  policy's `noexec` `/tmp` made CPG serialization fail. The image now copies
+  `linux/amd64/libzstd-jni-1.5.7-11.so` from the hash-pinned, inventoried JAR into
+  `/opt/joern/native` at build time and sets `JAVA_TOOL_OPTIONS=-Djava.library.path=/opt/joern/native`.
+  `/tmp` stays `noexec`. jna's library is not loaded on the c2cpg path exercised so far; if a later
+  export path needs it, apply the same treatment.
 - The central policy caps every tool at 1 GiB of memory and 600 seconds. Real C/C++ projects will
   likely need a reviewed per-tool resource profile. This must be decided by the bounded-export
   work, not by weakening the policy here.

@@ -11,6 +11,7 @@ import shlex
 import shutil
 from typing import Any
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
+from appsec_review.jobs.cpp_index_scopes import container_compile_database
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -23,16 +24,11 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
-BRANCHES = ("compiled", "ast", "ir", "infer", "joern", "binary")
+BRANCHES = ("compiled", "ast", "ir", "infer", "binary")
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
                    "ir": "llvm-ir/2",
-                   "infer": "infer-cpp-adapter/1", "joern": "joern-c2cpg-adapter/2",
+                   "infer": "infer-cpp-adapter/1",
                    "binary": "elf-symbols/2"}
-JOERN_GAP = (
-    "BLOCKED: the hash-pinned Joern/c2cpg runtime (tool-joern) is available, but bounded CPG/PDG "
-    "export, source mapping, functional fixtures, and security acceptance are not complete; no CPG "
-    "coverage is claimed."
-)
 
 
 def _project_key(root: PurePosixPath) -> str:
@@ -122,26 +118,7 @@ def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_f
 
 
 def _infer_compile_database(catalog: Mapping[str, Any]) -> list[dict[str, Any]]:
-    mapping = catalog["mapping"]
-    root = str(mapping["root"]).rstrip("/") + "/"
-    rows = []
-    for command in catalog["compile_commands"]:
-        target_path = str(command["target_path"])
-        if not target_path.startswith(root):
-            raise ValueError("Infer compile unit is outside the accepted project root")
-        relative = target_path[len(root):]
-        source = "/target/source/" + relative
-        arguments = []
-        for index, value in enumerate(command["arguments"]):
-            rewritten = str(value).replace("/scratch/source", "/target/source").replace(
-                "/scratch/build", "/target/build")
-            if index == 0:
-                rewritten = "clang++" if PurePosixPath(relative).suffix.lower() in {
-                    ".cc", ".cpp", ".cxx", ".c++", ".mm"
-                } else "clang"
-            arguments.append(rewritten)
-        rows.append({"directory": "/target/source", "file": source, "arguments": arguments})
-    return rows
+    return container_compile_database(catalog["mapping"]["root"], catalog["compile_commands"])
 
 
 def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
@@ -610,20 +587,6 @@ def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execu
     return result
 
 
-def _blocked_index(unit: UnitContext, case_id: str, branch: str, catalog: Mapping[str, Any], gap: str) -> Mapping[str, Any]:
-    builder, path, fingerprint, shard = _new_builder(unit, "observations", case_id, branch,
-        [catalog["compile_database"]], [gap], {"tool": branch, "availability": "blocked"},
-        catalog["mapping"]["case_snapshot"])
-    identity = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, catalog["mapping"]["case_snapshot"],
-                                      {"case": case_id, "producer": branch, "status": "BLOCKED"})
-    builder.add_entity(EntityRecord(identity, f"{branch}:{case_id}", branch,
-                                    gap, {"status": "BLOCKED", "observation_count": 0}))
-    builder.add_coverage(branch, "unavailable", gap)
-    result = dict(_finish_index(unit, builder, path, fingerprint, shard, "observations", branch, [gap]))
-    result["observation_count"] = 0
-    return result
-
-
 def _bounded_infer_report(path: Path) -> list[Mapping[str, Any]]:
     if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("Infer report is missing, linked, or exceeds 64 MiB")
@@ -972,7 +935,7 @@ def build_job(*, executor_factory=None) -> Job:
                 gap = _terminal_gap(cataloged)
                 if gap:
                     builder, path, fingerprint, shard = _new_builder(unit,
-                        "observations" if name == "joern" else "analysis",
+                        "analysis",
                         case_id, name, [], [gap], {"tool": name, "status": "blocked-by-build"},
                         cataloged["mapping"]["case_snapshot"])
                     builder.add_coverage(name, "unavailable", gap)
@@ -988,9 +951,6 @@ def build_job(*, executor_factory=None) -> Job:
                         "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
                         "link_database": cataloged["link_database"]["sha256"],
                     })
-                if name == "joern":
-                    # A reused checkpoint must never republish a superseded blocked reason.
-                    identity_values["blocked_reason"] = JOERN_GAP
                 identity = _checkpoint_identity(
                     unit, case_id, f"branch-{name}", identity_values,
                     tool_id="tool-infer" if name == "infer" else "tool-native-cpp")
@@ -1003,8 +963,6 @@ def build_job(*, executor_factory=None) -> Job:
                 elif name == "infer":
                     execution = _run_infer(unit, case_id, cataloged, executor_factory)
                     result = _infer_index(unit, case_id, cataloged, execution)
-                elif name == "joern":
-                    result = _blocked_index(unit, case_id, name, cataloged, JOERN_GAP)
                 else:
                     tool_mode = "symbols" if name == "binary" else name
                     execution = _run_tool(unit, case_id, (tool_mode,), executor_factory)

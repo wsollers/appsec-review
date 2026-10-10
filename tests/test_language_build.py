@@ -463,7 +463,8 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
     outcome = GraphRunner(config, [build_cpp(
         executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # Joern is unavailable in the fixture.
+    # Joern runs in the independent job_cpg_analysis, so the compiled analysis itself is complete.
+    assert outcome["status"] == "SUCCEEDED"
     result_path = Path(outcome["jobs"]["job_cpp_compiled_analysis"]["attempt_root"]) / "result.json"
     outputs = json.loads(result_path.read_text(encoding="utf-8"))["outputs"]
     assert outputs["catalog.projects"]["project_count"] == 1

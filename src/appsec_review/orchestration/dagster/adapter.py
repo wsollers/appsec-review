@@ -166,7 +166,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
                     "job_project_build", "job_language_build", "job_artifact_indexing",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
-                    "job_codeql_analysis",
+                    "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast",
                 }
@@ -408,6 +408,11 @@ def build_definitions(
             wave_dependencies["job_cpp_compiled_analysis"] = (("job_language_build",)
                 if "job_language_build" in registered else
                 ("job_project_build",) if "job_project_build" in registered else ("job_target_analysis_plan",))
+        # Both indexers consume only the accepted C++ handoff and never wait for each other.
+        for job_id in ("job_cpp_symbol_index", "job_cpg_analysis"):
+            if job_id in registered and "job_cpp_compiled_analysis" in registered:
+                wave_jobs.append(registry.build(job_id))
+                wave_dependencies[job_id] = ("job_cpp_compiled_analysis",)
         if "job_post_build_security_assessment" in registered:
             wave_jobs.append(registry.build("job_post_build_security_assessment"))
             wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
@@ -420,8 +425,8 @@ def build_definitions(
             wave_jobs.append(registry.build("job_codeql_analysis"))
             codeql_dependencies = [job_id for job_id in (
                 "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
-                "job_cpp_compiled_analysis", "job_post_build_security_assessment",
-                "job_evidence_collection", "job_tree_sitter_ast")
+                "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
+                "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast")
                 if job_id in registered]
             wave_dependencies["job_codeql_analysis"] = tuple(codeql_dependencies or (
                 "job_target_analysis_plan",))
