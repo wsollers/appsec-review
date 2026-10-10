@@ -3,14 +3,15 @@
 `appsec-review/tool-native-cpp:1.0.0` is the tool image declared by `tool-native-cpp` in
 [`containers/catalog.toml`](../../catalog.toml).
 
-The catalog declares no `assets_lock` for this image, so the launcher does not fetch its inputs. The
-166-package `.deb` closure is acquired separately and must already be present as
-`downloads/native-cpp-debs.tar`, matching the byte size and SHA-256 recorded in `assets.lock.json`.
+Its only external artifact, the 166-package `.deb` closure, is pinned by exact byte size and
+SHA-256 in `assets.lock.json`. The closure is acquired separately (its lock URL is the Ubuntu
+archive root, not a downloadable file), so place it at `downloads/native-cpp-debs.tar` before
+building. The launcher verifies it and stops if it is missing or does not match.
 
 ## Build
 
-Run from the repository root. The launcher runs the build with networking disabled and writes logs
-under `runs/container-builds/<run-id>/`:
+Run from the repository root. The launcher verifies the locked asset, runs the build with
+networking disabled, and writes logs under `runs/container-builds/<run-id>/`:
 
 ```text
 containers/build-all.sh build tool-native-cpp
