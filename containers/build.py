@@ -128,6 +128,8 @@ def validate(catalog: dict[str, Any]) -> list[str]:
                     prefix = f"{image_id}: artifact {index}"
                     if not str(artifact.get("url", "")).startswith("https://"):
                         errors.append(f"{prefix} needs an HTTPS source")
+                    if "/latest/" in str(artifact.get("url", "")):
+                        errors.append(f"{prefix} must not use a moving latest URL")
                     if not SHA256.fullmatch(str(artifact.get("sha256", ""))):
                         errors.append(f"{prefix} needs sha256")
                     if not isinstance(artifact.get("bytes"), int) or artifact["bytes"] <= 0:
@@ -168,6 +170,47 @@ def selected_ids(args: argparse.Namespace, catalog: dict[str, Any]) -> list[str]
     return ids
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def fetch_artifact(artifact: dict[str, Any], context: Path, log, opener=urllib.request.urlopen) -> str:
+    """Fetch one locked artifact into the build context, accepting it only at its exact size and SHA-256."""
+    target = (context / artifact["path"]).resolve()
+    target.relative_to(context.resolve())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    expected_hash = artifact["sha256"]
+    expected_size = artifact["bytes"]
+    if target.is_file() and target.stat().st_size == expected_size and file_sha256(target) == expected_hash:
+        log.write(f"CURRENT {artifact['path']}\n")
+        return "current"
+    temporary = target.with_suffix(target.suffix + ".partial")
+    temporary.unlink(missing_ok=True)
+    request = urllib.request.Request(artifact["url"], headers={"User-Agent": "appsec-review-container-builder/1"})
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with opener(request, timeout=120) as response, temporary.open("wb") as stream:
+            while chunk := response.read(1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+                if size > expected_size:
+                    break
+                stream.write(chunk)
+        if size != expected_size or digest.hexdigest() != expected_hash:
+            raise RuntimeError(f"asset verification failed: {artifact['url']}")
+        temporary.replace(target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    log.write(f"FETCHED {artifact['path']} {size} {expected_hash}\n")
+    return "fetched"
+
+
 def fetch_one(item: dict[str, Any], log) -> None:
     lock_name = item.get("assets_lock")
     if not lock_name:
@@ -175,31 +218,7 @@ def fetch_one(item: dict[str, Any], log) -> None:
     context = safe_path(item["context"])
     lock = json.loads(safe_path(lock_name).read_text(encoding="utf-8"))
     for artifact in lock.get("artifacts", []):
-        target = (context / artifact["path"]).resolve()
-        target.relative_to(context.resolve())
-        target.parent.mkdir(parents=True, exist_ok=True)
-        expected_hash = artifact["sha256"]
-        expected_size = artifact["bytes"]
-        if target.is_file() and target.stat().st_size == expected_size:
-            actual = hashlib.sha256(target.read_bytes()).hexdigest()
-            if actual == expected_hash:
-                log.write(f"CURRENT {artifact['path']}\n")
-                continue
-        temporary = target.with_suffix(target.suffix + ".partial")
-        temporary.unlink(missing_ok=True)
-        request = urllib.request.Request(artifact["url"], headers={"User-Agent": "appsec-review-container-builder/1"})
-        digest = hashlib.sha256()
-        size = 0
-        with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as stream:
-            while chunk := response.read(1024 * 1024):
-                digest.update(chunk)
-                size += len(chunk)
-                stream.write(chunk)
-        if size != expected_size or digest.hexdigest() != expected_hash:
-            temporary.unlink(missing_ok=True)
-            raise RuntimeError(f"asset verification failed: {artifact['url']}")
-        temporary.replace(target)
-        log.write(f"FETCHED {artifact['path']} {size} {expected_hash}\n")
+        fetch_artifact(artifact, context, log)
 
 
 def docker_binary() -> str:

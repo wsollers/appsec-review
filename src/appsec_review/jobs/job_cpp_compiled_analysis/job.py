@@ -29,8 +29,9 @@ BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
                    "infer": "infer-cpp-adapter/1", "joern": "joern-c2cpg-adapter/2",
                    "binary": "elf-symbols/2"}
 JOERN_GAP = (
-    "BLOCKED: a hash-pinned Joern/c2cpg distribution with reviewed license provenance is not "
-    "available in the tool catalog; no CPG coverage is claimed."
+    "BLOCKED: the hash-pinned Joern/c2cpg runtime (tool-joern) is available, but bounded CPG/PDG "
+    "export, source mapping, functional fixtures, and security acceptance are not complete; no CPG "
+    "coverage is claimed."
 )
 
 
@@ -987,6 +988,9 @@ def build_job(*, executor_factory=None) -> Job:
                         "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
                         "link_database": cataloged["link_database"]["sha256"],
                     })
+                if name == "joern":
+                    # A reused checkpoint must never republish a superseded blocked reason.
+                    identity_values["blocked_reason"] = JOERN_GAP
                 identity = _checkpoint_identity(
                     unit, case_id, f"branch-{name}", identity_values,
                     tool_id="tool-infer" if name == "infer" else "tool-native-cpp")

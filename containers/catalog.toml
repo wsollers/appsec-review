@@ -604,6 +604,21 @@ build_args = { TOOL_VERSION = "1.3.0" }
 purpose = "Interprocedural C/C++ memory, lifetime, resource, and concurrency analysis."
 
 [[images]]
+id = "tool-joern"
+state = "enabled"
+kind = "tool"
+version = "4.0.630"
+tag = "appsec-review/tool-joern:4.0.630"
+context = "containers/tools/joern"
+dockerfile = "Dockerfile"
+dependencies = ["base-jre"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/joern/tool.toml"
+assets_lock = "containers/tools/joern/assets.lock.json"
+build_args = { TOOL_VERSION = "4.0.630", JOERN_SHA512 = "812cfd7bcc5cafc4d64c5cda44da2c555490884d9418359050b24caf0b90f035d19fd1180ed6eb08d8ea0f572a87ac258f4722e2bef68672a3afa57a493273bd" }
+purpose = "Offline C/C++ code property graph production with c2cpg and bounded export support; runtime availability is not CPG coverage."
+
+[[images]]
 id = "tool-shellcheck"
 state = "enabled"
 kind = "tool"

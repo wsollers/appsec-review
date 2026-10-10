@@ -273,8 +273,18 @@ environment should retain provenance without forcing unrelated databases or quer
 Back the matrix with table-driven tests that change one dimension at a time and prove both required
 invalidation and required reuse across unrelated languages, projects, scopes, and query profiles.
 
-## Supply a pinned Joern/c2cpg closure
+## Joern bounded export and acceptance
 
-The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
-only after reviewing and locking one platform archive and its complete JDK/dependency closure, then
-add bounded CPG export fixtures and security probes. Do not put the full CPG into MCP responses.
+Done: the pinned, reviewed, offline Joern/c2cpg runtime closure (`tool-joern`,
+`containers/tools/joern/`). The C++ job still publishes a producer-local Joern shard with a precise
+blocked disposition. Remaining work:
+
+- a bounded CPG/PDG exporter;
+- the index contract and source mapping;
+- slicing;
+- exporter security probes;
+- live functional fixtures and job integration.
+
+Resolve the open items in `containers/tools/joern/LICENSE.md` first: the `noexec` `/tmp` JNI
+extraction, the per-tool resource profile, and license attribution for the JARs without embedded
+metadata. Do not put the full CPG into MCP responses.

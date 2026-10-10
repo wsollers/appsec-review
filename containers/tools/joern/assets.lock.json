@@ -1,0 +1,74 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-joern",
+  "tool_version": "4.0.630",
+  "project": "https://github.com/joernio/joern",
+  "license": "Apache-2.0",
+  "license_source": "https://github.com/joernio/joern/blob/v4.0.630/LICENSE",
+  "license_sha256": "2e50a6169977b8c7bb3c3fb39e13b4502c0a5f00c79716647bee12731f50c4ce",
+  "architecture": "linux/amd64",
+  "generated_from": "joernio/joern release v4.0.630 linux-x86_64 CLI distribution",
+  "release": {
+    "tag": "v4.0.630",
+    "version": "4.0.630",
+    "tag_object": "1eaf54c21d52c75977618e61343f3aae32b3740e",
+    "tag_signed": false,
+    "commit": "567be3ae33496ba87aec04256696fc5b7222f7ed",
+    "commit_date": "2026-09-17T07:43:26+01:00",
+    "commit_signature": "GitHub web-flow merge signature on the commit object only; it does not cover release assets",
+    "release_url": "https://github.com/joernio/joern/releases/tag/v4.0.630",
+    "build_workflow": "https://github.com/joernio/joern/blob/v4.0.630/.github/workflows/release-github.yml",
+    "build_provenance": "Upstream GitHub Actions builds the archive with `sbt stage createDistribution` on ubuntu-latest and writes the SHA-512 sidecar in the same job. No attestation, SLSA provenance, or reproducible-build record is published."
+  },
+  "java": {
+    "bundled": false,
+    "runtime": "appsec-review/base-jre:21-noble",
+    "evidence": "The archive contains no JRE or JDK; launchers resolve java from PATH. Upstream builds and tests the release with Temurin 21."
+  },
+  "review_date": "2026-10-10",
+  "review_notes": "containers/tools/joern/LICENSE.md",
+  "artifacts": [
+    {
+      "role": "archive",
+      "name": "joern-cli-linux-x86_64.zip",
+      "url": "https://github.com/joernio/joern/releases/download/v4.0.630/joern-cli-linux-x86_64.zip",
+      "path": "downloads/joern-cli-linux-x86_64-v4.0.630.zip",
+      "sha256": "92ee27a948b273b83499a8e63c33b604d0abf531ffc43343683492489af41e8d",
+      "sha512": "812cfd7bcc5cafc4d64c5cda44da2c555490884d9418359050b24caf0b90f035d19fd1180ed6eb08d8ea0f572a87ac258f4722e2bef68672a3afa57a493273bd",
+      "bytes": 1858333634,
+      "architecture": "linux/amd64",
+      "verification": {
+        "kind": "independent-sha256-and-upstream-sha512-sidecar",
+        "sha256_source": "calculated by the reviewer from the downloaded release asset",
+        "sha512_source": "joern-cli-linux-x86_64.zip.sha512 release asset; independently recalculated and equal",
+        "sidecar_entry": "target/joern-cli-linux-x86_64.zip"
+      },
+      "version": "4.0.630",
+      "license": "Apache-2.0",
+      "license_source": "https://github.com/joernio/joern/blob/v4.0.630/LICENSE",
+      "provenance": "immutable GitHub release asset of tag v4.0.630",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "Upstream publishes no detached signature, sigstore bundle, or attestation for this asset. The SHA-512 sidecar is an integrity checksum from the same release channel, not a signature."
+      }
+    },
+    {
+      "role": "checksum-sidecar",
+      "name": "joern-cli-linux-x86_64.zip.sha512",
+      "url": "https://github.com/joernio/joern/releases/download/v4.0.630/joern-cli-linux-x86_64.zip.sha512",
+      "path": "downloads/joern-cli-linux-x86_64-v4.0.630.zip.sha512",
+      "sha256": "a6a6d2d9d483efbae8cabccdfcb8283504eb1ade3854cb5c17f069c89edc6297",
+      "bytes": 164,
+      "architecture": "linux/amd64",
+      "is_signature": false,
+      "version": "4.0.630",
+      "license": "Apache-2.0",
+      "license_source": "https://github.com/joernio/joern/blob/v4.0.630/LICENSE",
+      "provenance": "immutable GitHub release asset of tag v4.0.630",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "This file is a checksum sidecar, not a signature, and is itself unsigned."
+      }
+    }
+  ]
+}

@@ -63,16 +63,30 @@ hash-pinned CMU SEI CERT Secure Coding Standards revision recorded in the extern
 example was copied, and no MISRA Example Suite or CodeQL test source was used. No rule identifiers,
 weakness labels, or local defect map is present in the scan root.
 
-## Joern decision
+## Joern status
 
-Joern is Apache-2.0 according to its [upstream repository](https://github.com/joernio/joern) and
-publishes platform archives, but the current distribution is roughly 1.67 GiB and releases are
-frequent. No reviewed, hash-pinned Joern/c2cpg closure is present locally. The contract therefore
-emits a `BLOCKED` CPG shard instead of downloading a moving release during a review. Enabling it
-requires a fixed archive, exact byte/hash/signature provenance, its JDK/dependency closure, a
-non-root offline image, and fixture-verified bounded exports for files, methods, calls, identifiers,
-types, control/data-flow edges, and source locations. Full CPGs remain run-owned; MCP receives only
-bounded typed records.
+Completed: the immutable Joern/c2cpg runtime closure. `tool-joern` in `containers/catalog.toml`
+pins Joern `v4.0.630`, with Apache-2.0 provenance. The asset lock records the exact byte size,
+SHA-256, and upstream SHA-512 of `joern-cli-linux-x86_64.zip`. No archive signature is published,
+and the checksum sidecar is not counted as one. The image installs only the reviewed core and
+`c2cpg` closure from `inventory.json` on the pinned `base-jre` (Java 21). It is built with no
+network and runs as `10001:10001` under the central read-only, no-network, drop-all policy. See
+`containers/tools/joern/README.md` for the construction flow and `LICENSE.md` for the license and
+advisory review and its open items.
+
+Still blocked, and the C++ job's Joern branch therefore still emits a `BLOCKED` shard with zero
+observations and `unavailable` coverage:
+
+- a bounded exporter;
+- the CPG/PDG index contract;
+- source mapping to accepted snapshot locations;
+- slicing;
+- security probes for the exporter path;
+- live functional acceptance on fixtures;
+- job integration.
+
+Runtime availability is not CPG coverage. Full CPGs remain run-owned; MCP receives only bounded
+typed records.
 
 ## Evidence and recovery
 
