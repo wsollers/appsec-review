@@ -774,6 +774,64 @@ class RetrievalCore:
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_codeql", parameters, operation)
 
+    def query_change_context(
+        self, *, scope: str | None = None, path: str | None = None, component: str | None = None,
+        signal: str | None = None, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Return accepted change-context priority records in rank order by exact facets.
+
+        Records order review work and are never findings; unavailable coverage is returned as gaps.
+        """
+        signals = ("fast_review_change_count", "stale_approval_change_count", "unapproved_mainline_change_count",
+                   "off_hours_change_count", "pre_deployment_change_count", "sprawling_change_count",
+                   "repeated_repair_peak", "fix_on_fix_event_count", "untested_production_change_count",
+                   "lifetime_principal_author_share", "departed_dominant_owner")
+        if scope is not None and scope not in {"file", "function", "component"}:
+            raise ValueError("invalid change context scope")
+        if signal is not None and signal not in signals:
+            raise ValueError("invalid change context signal")
+        if any(value is not None and (not value or len(value) > 4096) for value in (path, component)):
+            raise ValueError("invalid change context facet")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"scope": scope, "path": path, "component": component, "signal": signal,
+                      "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_change_context", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = [item for item in self.indexes.get("history", ())
+                          if str(item.get("shard_id", "")) == "change-context"]
+            if not candidates:
+                gaps.append("accepted change-context index is unavailable")
+            for identity in candidates:
+                self._check_deadline(deadline)
+                clauses, values = ["e.kind = 'change_context_signal'"], []
+                for key, value in (("scope", scope), ("path", path), ("component_id", component)):
+                    if value is not None:
+                        clauses.append("json_extract(e.payload_json, ?) = ?")
+                        values.extend((f"$.{key}", value))
+                if signal is not None:
+                    clauses.append("CAST(json_extract(e.payload_json, ?) AS REAL) > 0")
+                    values.append(f"$.metrics.{signal}")
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY json_extract(e.payload_json, '$.scope'), "
+                       "CAST(json_extract(e.payload_json, '$.rank') AS INTEGER), e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "history")
+                        item["shard_id"] = "change-context"
+                        found.append(item)
+                    gaps.extend(f"history/change-context: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"))
+                gaps.extend(f"history/change-context: {gap}" for gap in identity.get("gaps", ()))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_change_context", parameters, operation)
+
     def query_build_security(
         self, *, project: str | None = None, build_root: str | None = None,
         build_action: str | None = None, configuration: str | None = None,

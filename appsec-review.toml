@@ -290,6 +290,109 @@ workers = 1
 [jobs.job_source_history_analysis.steps.publish.tasks.index_history]
 [jobs.job_source_history_analysis.steps.publish.tasks.publish_handoff]
 
+[jobs.job_change_context_analysis]
+name = "change_context_analysis"
+workers = 1
+
+[jobs.job_change_context_analysis.settings]
+# Change-context priorities order review work; they are never findings. Missing or untrusted data is
+# a named gap and an unavailable metric, never zero.
+ranking_top_files = 200
+ranking_top_functions = 200
+ranking_top_components = 100
+supporting_change_limit = 20
+
+[jobs.job_change_context_analysis.settings.review]
+# "github_enrichment" reuses the accepted history job's GitHub facts; "export" reads a hash-pinned
+# appsec-review/review-records/1 file relative to the repository root; "none" disables review signals.
+source = "github_enrichment"
+export_path = ""
+export_sha256 = ""
+fast_review_seconds = 300
+
+[jobs.job_change_context_analysis.settings.schedule]
+# IANA zone used for off-hours classification. Empty means off-hours is unavailable, never inferred.
+time_zone = ""
+business_hours_start = "08:00"
+business_hours_end = "18:00"
+weekend_days = ["saturday", "sunday"]
+
+[jobs.job_change_context_analysis.settings.deployments]
+# Deployment proximity uses only actual deployment events (appsec-review/deployment-events/1).
+enabled = false
+export_path = ""
+export_sha256 = ""
+environments = ["production"]
+pre_deployment_window_hours = 24
+
+[jobs.job_change_context_analysis.settings.scope_sprawl]
+min_unrelated_groups = 3
+min_churn_lines = 400
+min_group_entropy = 0.5
+related_component_min_support = 3
+
+[jobs.job_change_context_analysis.settings.repeated_repairs]
+window_days = 60
+min_fix_changes = 4
+fix_on_fix_max_checks = 100
+
+[jobs.job_change_context_analysis.settings.test_association]
+enabled = true
+production_extensions = [".c", ".cc", ".cpp", ".cs", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt",
+                         ".php", ".py", ".rb", ".rs", ".scala", ".swift", ".ts", ".tsx"]
+test_patterns = ["test/**", "tests/**", "**/test/**", "**/tests/**", "**/__tests__/**", "**/test_*.py",
+                 "**/*_test.py", "**/*_test.go", "**/*Test.java", "**/*Tests.java", "**/*Tests.cs",
+                 "**/*.test.{js,jsx,ts,tsx}", "**/*.spec.{js,jsx,ts,tsx}", "**/*_spec.rb"]
+contract_patterns = ["**/*.proto", "**/*.graphql", "**/*.avsc", "**/openapi*.{json,yaml,yml}",
+                     "**/swagger*.{json,yaml,yml}"]
+min_production_churn_lines = 50
+
+[jobs.job_change_context_analysis.settings.ownership]
+dominant_owner_share = 0.5
+bus_factor_share = 0.5
+line_attribution_max_files = 50
+line_attribution_max_file_bytes = 1048576
+
+[jobs.job_change_context_analysis.settings.organization]
+# Departure comes only from an appsec-review/organization-membership/1 export, never Git inactivity.
+enabled = false
+export_path = ""
+export_sha256 = ""
+
+[jobs.job_change_context_analysis.settings.priority_weights]
+fast_review_change_count = 2
+stale_approval_change_count = 2
+unapproved_mainline_change_count = 3
+off_hours_change_count = 1
+pre_deployment_change_count = 2
+sprawling_change_count = 2
+repeated_repair_peak = 3
+fix_on_fix_event_count = 2
+untested_production_change_count = 2
+lifetime_principal_author_share = 1
+departed_dominant_owner = 3
+
+[jobs.job_change_context_analysis.steps.load]
+workers = 1
+[jobs.job_change_context_analysis.steps.load.tasks.accepted_history]
+[jobs.job_change_context_analysis.steps.load.tasks.external_sources]
+
+[jobs.job_change_context_analysis.steps.attribute]
+workers = 1
+[jobs.job_change_context_analysis.steps.attribute.tasks.line_attribution]
+[jobs.job_change_context_analysis.steps.attribute.tasks.fix_on_fix]
+
+[jobs.job_change_context_analysis.steps.analyze]
+workers = 1
+[jobs.job_change_context_analysis.steps.analyze.tasks.change_signals]
+[jobs.job_change_context_analysis.steps.analyze.tasks.unit_signals]
+[jobs.job_change_context_analysis.steps.analyze.tasks.rank]
+
+[jobs.job_change_context_analysis.steps.publish]
+workers = 1
+[jobs.job_change_context_analysis.steps.publish.tasks.index_change_context]
+[jobs.job_change_context_analysis.steps.publish.tasks.publish_handoff]
+
 [jobs.job_target_analysis_plan]
 name = "target_analysis_plan"
 workers = 1
