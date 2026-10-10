@@ -20,6 +20,7 @@ INDEX_NAMES = (
     "history",
     "tags",
     "priority",
+    "precomputed",
 )
 
 

@@ -71,3 +71,14 @@ and score) and `review_signal` entities for their linked evidence. Query it with
 `search`, `find`, `trace`, and `coverage` tools and `"indexes": ["priority"]`. A ranked item orders
 review attention and is never a finding; examples are in
 [`review-prioritization.md`](review-prioritization.md).
+
+`query_hotspots` returns those priority items in rank order with exact scope/path and minimum-score
+filters. Each result includes the stored feature vector, evidence identities, and resolving source
+location. It reports absent or partial priority coverage as a gap.
+
+`query_precomputed` reads only accepted `precomputed` shards for an allowlisted query set. The
+current query sets are `symbol_links`, `call_graph`, `control_flow`, `dataflow`, `entrypoint_paths`,
+`guards_ranges`, `sarif_correlation`, `ast_ir_cpg_mapping`, and `hotspot_context`. The producer jobs
+for these sets are planned separately; until a set has an accepted shard, the tool returns an
+unavailable gap. It never executes Joern, LLVM tools, CodeQL, or target code during retrieval. The
+fact and reuse design is in [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).

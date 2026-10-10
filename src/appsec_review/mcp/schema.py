@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from .owasp import QUERY_TOOL_SCHEMA
+from appsec_review.retrieval.precomputed import QUERY_SETS
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
-INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags", "priority"]}
+INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags", "priority", "precomputed"]}
 
 TOOLS: tuple[dict[str, Any], ...] = (
     {"name": "search", "description": "Full-text search accepted immutable evidence indexes.",
@@ -118,6 +119,22 @@ TOOLS: tuple[dict[str, Any], ...] = (
                                                "repeated_repair_peak", "fix_on_fix_event_count",
                                                "untested_production_change_count",
                                                "lifetime_principal_author_share", "departed_dominant_owner"]},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_hotspots", "description": "Query accepted priority-index hotspots in rank order, including metrics and evidence links.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "scope": {"type": "string", "enum": ["file", "function"]},
+         "path": {"type": "string", "maxLength": 4096},
+         "min_score": {"type": "number", "minimum": 0, "maximum": 100},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_precomputed", "description": "Query accepted, hash-verified precomputed code facts by named set and exact subject; no analysis runs during retrieval.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["query_set"], "properties": {
+         "query_set": {"type": "string", "enum": list(QUERY_SETS)},
+         "subject": IDENTITY,
+         "path": {"type": "string", "maxLength": 4096},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},

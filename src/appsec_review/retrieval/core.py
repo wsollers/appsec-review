@@ -8,6 +8,7 @@ from contextvars import ContextVar
 import hashlib
 import hmac
 import json
+import math
 from pathlib import Path
 import re
 import sqlite3
@@ -22,6 +23,7 @@ from appsec_review.retrieval.model import (
     EntityKind, LogicalIdentity, RelationKind, canonical_json, normalize_relative_path,
     sanitize_producer_data,
 )
+from appsec_review.retrieval.precomputed import FACT_SCHEMA, QUERY_SETS
 from appsec_review.storage import RunStore, file_sha256
 
 
@@ -831,6 +833,112 @@ class RetrievalCore:
                 gaps.extend(f"history/change-context: {gap}" for gap in identity.get("gaps", ()))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_change_context", parameters, operation)
+
+    def query_hotspots(
+        self, *, scope: str | None = None, path: str | None = None,
+        min_score: float = 0.0, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded ranked priority items, with their metric and evidence payloads."""
+        if scope is not None and scope not in {"file", "function"}:
+            raise ValueError("invalid hotspot scope")
+        if path is not None:
+            path = normalize_relative_path(path)
+        if isinstance(min_score, bool) or not isinstance(min_score, (int, float)) or not math.isfinite(min_score) \
+                or not 0 <= min_score <= 100:
+            raise ValueError("invalid hotspot minimum score")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"scope": scope, "path": path, "min_score": min_score, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_hotspots", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = self.indexes.get("priority", ())
+            if not candidates:
+                gaps.append("accepted priority index is unavailable")
+            for shard in candidates:
+                self._check_deadline(deadline)
+                clauses = ["e.kind = 'priority_item'",
+                           "CAST(json_extract(e.payload_json, '$.score') AS REAL) >= ?"]
+                values: list[Any] = [min_score]
+                for key, value in (("scope", scope), ("path", path)):
+                    if value is not None:
+                        clauses.append("json_extract(e.payload_json, ?) = ?")
+                        values.extend((f"$.{key}", value))
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY CAST(json_extract(e.payload_json, '$.rank') AS INTEGER), "
+                       "e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                with self._database(shard, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "priority")
+                        item["shard_id"] = shard.get("shard_id", "default")
+                        found.append(item)
+                    gaps.extend(f"priority/{shard['shard_id']}: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"))
+                gaps.extend(f"priority/{shard['shard_id']}: {gap}" for gap in shard.get("gaps", ()))
+            found.sort(key=lambda item: (int(item["payload"].get("rank", 0)), item["identity"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_hotspots", parameters, operation)
+
+    def query_precomputed(
+        self, *, query_set: str, subject: str | None = None, path: str | None = None,
+        limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Read a named run-owned fact set; never compute a graph or execute a query at inference time."""
+        if query_set not in QUERY_SETS:
+            raise ValueError("invalid precomputed query set")
+        if subject is not None:
+            LogicalIdentity.parse(subject)
+        if path is not None:
+            path = normalize_relative_path(path)
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"query_set": query_set, "subject": subject, "path": path,
+                      "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_precomputed", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = [shard for shard in self.indexes.get("precomputed", ())
+                          if shard.get("producer", {}).get("query_set") == query_set]
+            if not candidates:
+                gaps.append(f"accepted precomputed {query_set} index is unavailable")
+            for shard in candidates:
+                self._check_deadline(deadline)
+                clauses = ["e.kind = 'precomputed_fact'", "json_extract(e.payload_json, '$.query_set') = ?"]
+                values: list[Any] = [query_set]
+                if subject is not None:
+                    clauses.append("json_extract(e.payload_json, '$.subject_identity') = ?")
+                    values.append(subject)
+                if path is not None:
+                    clauses.append("(l.path = ? OR json_extract(e.payload_json, '$.subject_path') = ?)")
+                    values.extend((path, path))
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                with self._database(shard, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "precomputed")
+                        if item["payload"].get("schema") != FACT_SCHEMA:
+                            gaps.append(f"precomputed/{shard['shard_id']}: unsupported fact schema")
+                            continue
+                        item["shard_id"] = shard.get("shard_id", "default")
+                        found.append(item)
+                    areas = list(database.execute("SELECT area, status, gap FROM coverage ORDER BY area"))
+                    if not any(row["area"] == query_set for row in areas):
+                        gaps.append(f"precomputed/{shard['shard_id']}: query-set coverage is unavailable")
+                    gaps.extend(f"precomputed/{shard['shard_id']}: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in areas if row["status"] != "complete")
+                gaps.extend(f"precomputed/{shard['shard_id']}: {gap}" for gap in shard.get("gaps", ()))
+            found.sort(key=lambda item: item["identity"])
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_precomputed", parameters, operation)
 
     def query_build_security(
         self, *, project: str | None = None, build_root: str | None = None,

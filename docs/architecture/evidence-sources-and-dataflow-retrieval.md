@@ -2,6 +2,9 @@
 
 Status: design for implementation planning. Rows marked `indexed` exist in the pipeline today;
 `blocked` and `planned` rows are not implemented by this document.
+For the current producer inventory and reusable index boundaries, see
+[`indexing-and-query-reuse.md`](indexing-and-query-reuse.md). This older planning inventory may
+describe jobs that have since been rebuilt.
 
 This design states how every available input reaches review workers. It extends
 [`python-and-retrieval.md`](python-and-retrieval.md) (shards, identities, MCP boundary) and
