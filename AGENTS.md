@@ -62,6 +62,8 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Add tests for behavior that survives the refactor. Do not restore archived tests merely to retain
   old coverage counts.
 - Preserve unrelated new work. Commit coherent changes to `main`; do not push unless the user asks.
+- Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
+  specifically instructs you to merge that pull request.
 
 ## Workspace hygiene
 
