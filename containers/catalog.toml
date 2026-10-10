@@ -371,6 +371,7 @@ dockerfile = "Dockerfile"
 dependencies = []
 architectures = ["linux/amd64"]
 tool_manifest = "containers/tools/native-cpp/tool.toml"
+assets_lock = "containers/tools/native-cpp/assets.lock.json"
 build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline C/C++ configure, compilation, Clang AST, LLVM IR, and ELF/symbol evidence."
 
