@@ -13,13 +13,15 @@ accepted generic language-build handoff
   -> verify native workspace manifests, artifacts, recipes, images, and source mappings
   -> copy accepted source/build products into analysis scratch
   -> normalize compile/link records and catalog objects/libraries/executables
-  -> compiled index | Clang AST | LLVM IR | Infer | Joern | binary/symbol index
+  -> compiled index | Clang AST | LLVM IR | Infer | binary/symbol index
   -> verified composite manifest and accepted handoff
+     -> (independent consumers) job_cpp_symbol_index (clangd) | job_cpg_analysis (Joern)
 ```
 
 The generic native executor described in [`language-build.md`](language-build.md) owns the accepted
-build. The compiled-analysis job does not rerun that build for AST, IR, Infer, Joern, or binary
-analysis. The separate cross-language `job_codeql_analysis` owns traced rebuilds and CodeQL
+build. The compiled-analysis job does not rerun that build for AST, IR, Infer, or binary analysis.
+The clangd symbol index and the Joern CPG run as independent jobs over this job's accepted handoff;
+see [`cpp-index-jobs.md`](cpp-index-jobs.md). The separate cross-language `job_codeql_analysis` owns traced rebuilds and CodeQL
 evidence for this and every other supported language; see
 [`codeql-analysis.md`](codeql-analysis.md). The pipeline never runs target executables or tests.
 
@@ -63,16 +65,14 @@ hash-pinned CMU SEI CERT Secure Coding Standards revision recorded in the extern
 example was copied, and no MISRA Example Suite or CodeQL test source was used. No rule identifiers,
 weakness labels, or local defect map is present in the scan root.
 
-## Joern decision
+## Joern status
 
-Joern is Apache-2.0 according to its [upstream repository](https://github.com/joernio/joern) and
-publishes platform archives, but the current distribution is roughly 1.67 GiB and releases are
-frequent. No reviewed, hash-pinned Joern/c2cpg closure is present locally. The contract therefore
-emits a `BLOCKED` CPG shard instead of downloading a moving release during a review. Enabling it
-requires a fixed archive, exact byte/hash/signature provenance, its JDK/dependency closure, a
-non-root offline image, and fixture-verified bounded exports for files, methods, calls, identifiers,
-types, control/data-flow edges, and source locations. Full CPGs remain run-owned; MCP receives only
-bounded typed records.
+Joern no longer runs inside this job. The independent `job_cpg_analysis` consumes this job's
+accepted handoff, runs the pinned `tool-joern` c2cpg frontend per accepted project, and retains each
+CPG as run-owned evidence. Until bounded CPG/PDG export, source mapping, functional fixtures, and
+security acceptance exist, it publishes a `BLOCKED` shard with zero observations and `unavailable`
+coverage per project. See [`cpp-index-jobs.md`](cpp-index-jobs.md) and
+`containers/tools/joern/README.md`.
 
 ## Evidence and recovery
 
@@ -84,5 +84,5 @@ observations are evidence, not adjudicated findings.
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
 reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
 executor, capture, and handoff identities. An Infer image or adapter change affects Infer
-fingerprints only; a compile identity invalidates the dependent compiled, AST, IR, Infer, Joern,
-and binary branches. Cross-language CodeQL has its own database and query checkpoints.
+fingerprints only; a compile identity invalidates the dependent compiled, AST, IR, Infer, and binary
+branches, and, through the accepted scope identity, the independent clangd and Joern jobs. Cross-language CodeQL has its own database and query checkpoints.

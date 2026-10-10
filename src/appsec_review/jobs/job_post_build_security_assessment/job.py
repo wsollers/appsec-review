@@ -9,6 +9,7 @@ import shlex
 import time
 from typing import Any
 
+from appsec_review.jobs.cpp_index_scopes import load_accepted_cpp
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
@@ -51,41 +52,6 @@ def _read_json_artifact(run_root: Path, identity: Mapping[str, Any]) -> Any:
     if file_sha256(path) != identity.get("sha256"):
         raise ValueError("accepted upstream artifact identity changed")
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _accepted_cpp(run_root: Path) -> Mapping[str, Any]:
-    pointer_path = run_root / "data" / "jobs" / "job_cpp_compiled_analysis" / "latest.json"
-    if not pointer_path.is_file():
-        raise ValueError("accepted job_cpp_compiled_analysis handoff is required")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff = _read_json_artifact(run_root, {"path": pointer.get("handoff_path"),
-                                            "sha256": pointer.get("handoff_sha256")})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError("C++ compiled-analysis handoff is not accepted")
-    if handoff.get("job_id") != "job_cpp_compiled_analysis":
-        raise ValueError("accepted C++ handoff producer is invalid")
-    result_path = str(handoff.get("resolving_paths", {}).get("result", ""))
-    result_identity = next((item for item in handoff.get("artifacts", ())
-                            if item.get("path") == result_path), None)
-    if not isinstance(result_identity, Mapping):
-        raise ValueError("accepted C++ handoff does not bind its result")
-    result = _read_json_artifact(run_root, result_identity)
-    if result.get("schema") not in {"appsec-review/unit-execution/1", "appsec-review/unit-execution/2"}:
-        raise ValueError("accepted C++ result schema is unsupported")
-    published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
-    manifest_identity = published.get("index_manifest") if isinstance(published, Mapping) else None
-    if not isinstance(manifest_identity, Mapping):
-        raise ValueError("accepted C++ handoff does not publish an index manifest")
-    manifest_path = (run_root / str(manifest_identity.get("path", ""))).resolve()
-    manifest_sha = str(manifest_identity.get("sha256", ""))
-    if run_root.resolve() not in manifest_path.parents or not any(
-        item.get("path") == manifest_identity.get("path") and item.get("sha256") == manifest_sha
-        for item in handoff.get("artifacts", ())
-    ):
-        raise ValueError("accepted C++ index manifest is not bound to its handoff")
-    load_verified_manifest(run_root, manifest_path, manifest_sha)
-    return {"handoff": handoff, "handoff_sha256": pointer["handoff_sha256"], "result": result,
-            "manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha}}
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
@@ -167,7 +133,7 @@ def _validate_config(context, _result) -> None:
 
 def build_job(*, infer: Infer | None = None) -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
-        accepted = _accepted_cpp(unit.job.run_root)
+        accepted = load_accepted_cpp(unit.job.run_root)
         if accepted["handoff"].get("source_fingerprint") != unit.job.source_fingerprint:
             raise ValueError("post-build target snapshot differs from accepted build")
         cases = {}

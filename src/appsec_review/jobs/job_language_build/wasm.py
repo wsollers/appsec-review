@@ -23,7 +23,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 
 RECEIPT_SCHEMA = "appsec-review/wasm-build-receipt/1"
 EXECUTOR_IDENTITY = "appsec-review/wasm-output-family-executor/1"
-CAPTURE_IDENTITY = "appsec-review/protected-build-capture/2"
+CAPTURE_IDENTITY = "appsec-review/protected-build-capture/3"
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _WASM_MAGIC = b"\x00asm"
 _TOOL_KINDS = {

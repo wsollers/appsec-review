@@ -1,0 +1,44 @@
+schema = "appsec-review/tool/1"
+id = "tool-clangd-indexer"
+name = "clangd-indexer"
+version = "23.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+project = "https://github.com/clangd/clangd"
+purpose = "Offline C/C++ semantic symbol and reference index from a compilation database, including clang-cl (MSVC-style) commands."
+static_adapter = false
+architecture = "linux/amd64"
+network = "none"
+user = "10001:10001"
+root_filesystem = "read-only"
+target_mount = "read-only"
+scratch_mount = "read-write"
+capabilities = "drop-all"
+security_opt = "no-new-privileges"
+memory = "1g"
+cpus = "2"
+pids_limit = 256
+timeout_seconds = 600
+output_bytes = 16777216
+executable = "/opt/clangd/clangd_23.1.0/bin/clangd-indexer"
+version_argv = ["/opt/clangd/clangd_23.1.0/bin/clangd-indexer", "--version"]
+version_expect = "LLVM version {version}"
+dependency = "appsec-review/base-ubuntu:24.04"
+inventory = "containers/tools/clangd-indexer/inventory.json"
+review = "containers/tools/clangd-indexer/LICENSE.md"
+coverage = "none: runtime closure only; index normalization and job integration are pending"
+update = "Select an immutable clangd release, record the clangd_indexing_tools-linux archive by exact size, SHA-256 and SHA-512, regenerate inventory.json with containers/tools/shared/safe_extract.py, re-review LICENSE.md, then validate, build offline, smoke (including --functional), and security-test."
+
+# The reviewed installation closure. The archive is verified whole; only the indexer, its
+# license, and Clang's builtin headers (required to parse any translation unit) are installed.
+# The network index server, its monitor, and the compiler-rt runtime libraries are excluded.
+[closure]
+root = "/opt/clangd"
+include = [
+  "clangd_23.1.0/LICENSE.TXT",
+  "clangd_23.1.0/bin/clangd-indexer",
+  "clangd_23.1.0/lib/clang/23/include",
+]
+max_members = 1024
+max_expanded_bytes = 536870912
+max_member_compression_ratio = 50.0
+max_archive_expansion_ratio = 4.0

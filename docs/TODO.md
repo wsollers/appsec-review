@@ -273,12 +273,100 @@ environment should retain provenance without forcing unrelated databases or quer
 Back the matrix with table-driven tests that change one dimension at a time and prove both required
 invalidation and required reuse across unrelated languages, projects, scopes, and query profiles.
 
-## Supply a pinned Joern/c2cpg closure
+## Joern bounded export and acceptance
 
-The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
-only after reviewing and locking one platform archive and its complete JDK/dependency closure, then
-add bounded CPG export fixtures and security probes. Do not put the full CPG into MCP responses.
+Done:
 
+- the pinned, reviewed, offline Joern/c2cpg runtime closure (`tool-joern`);
+- the independent `job_cpg_analysis`, which runs c2cpg per accepted C/C++ scope over the exact
+  accepted compile commands and retains each CPG as hash-identified, run-owned evidence;
+- the `noexec` `/tmp` zstd JNI fix in the image.
+
+The job still publishes a `BLOCKED` shard with zero observations per scope. Remaining work:
+
+- a bounded CPG/PDG exporter (a repository-owned `joern --script`; scripts compile and run fully
+  offline in the image);
+- the index contract and source mapping;
+- slicing;
+- exporter security probes;
+- live functional fixtures.
+
+Then replace the blocked shard with real observations. Also resolve the per-tool resource profile
+(Joern needs far more than 1 GiB at scale) and license attribution for JARs without embedded
+metadata. Do not put the full CPG into MCP responses.
+
+## Evaluate additional Joern language frontends
+
+The pinned `v4.0.630` archive is verified whole, but `tool-joern` installs only the core and
+`c2cpg`. The other thirteen frontend directories are excluded until a job needs them: `javasrc2cpg`,
+`jimple2cpg`, `kotlin2cpg`, `jssrc2cpg`, `pysrc2cpg`, `php2cpg`, `rubysrc2cpg`, `gosrc2cpg`,
+`csharpsrc2cpg`, `swiftsrc2cpg`, `rust2cpg`, `abap2cpg`, and `ghidra2cpg`. For each language that a
+job will consume:
+
+1. State the job and coverage the frontend serves, and why CodeQL or an existing producer does not
+   already cover it.
+2. Review the frontend's added JARs and any native AST generator, recording provenance, licenses,
+   and advisories in `containers/tools/joern/LICENSE.md`. The native AST generators are
+   `astgen-linux`, `SwiftAstGen-linux`, `goastgen-linux`, `dotnetastgen-linux`,
+   `rust_ast_gen-linux`, and `abapgen-linux`; `php2cpg` also bundles a PHP parser `.phar`.
+3. Prove that native AST generators and any interpreter dependency, such as a PHP runtime, run
+   offline as uid 10001 under the read-only, no-network, drop-all policy without writing outside
+   scratch.
+4. Add the paths to `[closure].include` in `containers/tools/joern/tool.toml`, regenerate
+   `inventory.json`, and update `tests/test_joern_tool.py`, which currently asserts that no other
+   frontend or ELF binary is installed.
+5. Add bounded-export fixtures and keep each language's coverage `unavailable` until they pass.
+
+Do not enable all frontends wholesale: that adds about 2 GB and six unreviewed native binaries.
+`ghidra2cpg` is binary analysis and belongs with the binary-analysis decomposition decision, not
+source CPG coverage.
+
+## Scale the clangd symbol index
+
+Done: the pinned `tool-clangd-indexer` closure, and the independent `job_cpp_symbol_index`. Per
+accepted C/C++ scope it runs clangd-indexer over the exact accepted compile commands. It then
+normalizes symbols with exact source locations, and aggregated call/reference edges between
+accepted symbols, into `analysis` shards with per-scope coverage and verified checkpoints. A live
+run against the real image indexed the fixture completely. Remaining work:
+
+- content-keyed, bounded TU batches with per-TU checkpoints, so Unreal-scale scopes fit the tool
+  output bound (index output above it is currently a named truncation gap);
+- symbols declared only in headers outside the accepted sources (SDK, engine, system) are counted,
+  not indexed; decide how header-only symbols are emitted once across scopes;
+- mount licensed MSVC and Windows SDK headers read-only for clang-cl commands;
+- a reviewed per-tool resource profile for large compilation databases.
+
+Resolve the open items in `containers/tools/clangd-indexer/LICENSE.md` first: confirming the LLVM
+source ref, and an advisory match for the LLVM binary.
+
+## Replace the Python build-capture tool wrapper with a static Go binary
+
+`containers/build-capture/tool-wrapper.py` runs for every `PATH`-resolved build tool (cc, c++, ld,
+ar, ninja, cmake and others). Measured cost, inside the executor's container boundary with
+`--seccomp-bpf` capture:
+
+- about 40 ms per call;
+- 45 calls added about 1.8 s to a 0.65 s fixture build;
+- about +9 s (+49%) on an 18 s zstd build.
+
+At AAA scale (tens of thousands of compiler and linker calls) that is tens of CPU-minutes per
+build. The wrapper also forces `python3` into every build image.
+
+1. First confirm the wrapper still earns its place. strace already records every exec's argv,
+   resolved executable and environment authoritatively. The wrapper's unique outputs are per-tool
+   stdout/stderr and tool-call records, which reconciliation treats as optional secondary
+   evidence. It also misses compilers invoked by absolute path, which Unreal's build tool does.
+2. If it stays, reimplement it as a static Go binary (`CGO_ENABLED=0`) with byte-identical
+   behaviour:
+   - call ordinal locking and the call limit;
+   - per-call record, stdout/stderr retention and envp redaction;
+   - `exec` of the real tool.
+3. Build it offline from a pinned Go toolchain image with locked modules (standard library only,
+   if possible). Install it through the capture assets; never commit a binary.
+4. Keep the tool-call record schema stable, and bump the capture identities so that changed
+   captures invalidate build checkpoints.
+5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
+   after.
 ## Build the dataflow, contract, and deployment evidence lanes
 
 Implement the planned jobs and queries in

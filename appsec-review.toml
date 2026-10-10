@@ -20,6 +20,10 @@ envp_redact_names = [
   "PIP_INDEX_URL",
 ]
 path_bytes_limit = 4096
+# Post-build file inventory and response-file snapshot bounds (no hashing happens during the build).
+file_inventory_count_limit = 1000000
+response_file_count_limit = 10000
+response_file_bytes_limit = 1048576
 tool_call_count_limit = 10000
 secret_finding_count_limit = 1000
 
@@ -653,10 +657,6 @@ workers = 1
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.infer.tasks.projects]
 
-[jobs.job_cpp_compiled_analysis.steps.joern]
-workers = 1
-[jobs.job_cpp_compiled_analysis.steps.joern.tasks.projects]
-
 [jobs.job_cpp_compiled_analysis.steps.binary]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.binary.tasks.projects]
@@ -861,6 +861,51 @@ workers = 2
 workers = 1
 [jobs.job_codeql_analysis.steps.acceptance.tasks.publish_handoff]
 
+
+[jobs.job_cpp_symbol_index]
+name = "cpp_symbol_index"
+workers = 2
+
+[jobs.job_cpp_symbol_index.settings]
+# Concurrent project scopes; each scope is one clangd-indexer container under the central policy.
+workers = 2
+max_documents_per_scope = 2000000
+max_symbols_per_scope = 500000
+max_relations_per_scope = 2000000
+locations_per_relation = 8
+
+[jobs.job_cpp_symbol_index.steps.load]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.load.tasks.accepted_cpp]
+
+[jobs.job_cpp_symbol_index.steps.index]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.index.tasks.scopes]
+
+[jobs.job_cpp_symbol_index.steps.acceptance]
+workers = 1
+[jobs.job_cpp_symbol_index.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_cpg_analysis]
+name = "cpg_analysis"
+workers = 1
+
+[jobs.job_cpg_analysis.settings]
+# Joern is memory-heavy; scopes run one at a time until a per-tool resource profile is reviewed.
+workers = 1
+max_cpg_bytes = 2147483648
+
+[jobs.job_cpg_analysis.steps.load]
+workers = 1
+[jobs.job_cpg_analysis.steps.load.tasks.accepted_cpp]
+
+[jobs.job_cpg_analysis.steps.generate]
+workers = 1
+[jobs.job_cpg_analysis.steps.generate.tasks.scopes]
+
+[jobs.job_cpg_analysis.steps.acceptance]
+workers = 1
+[jobs.job_cpg_analysis.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_post_build_security_assessment]
 name = "post_build_security_assessment"

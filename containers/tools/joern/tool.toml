@@ -1,0 +1,55 @@
+schema = "appsec-review/tool/1"
+id = "tool-joern"
+name = "joern"
+version = "4.0.630"
+license = "Apache-2.0"
+project = "https://github.com/joernio/joern"
+purpose = "Offline C/C++ code property graph production with c2cpg and bounded export support."
+static_adapter = false
+architecture = "linux/amd64"
+network = "none"
+user = "10001:10001"
+root_filesystem = "read-only"
+target_mount = "read-only"
+scratch_mount = "read-write"
+capabilities = "drop-all"
+security_opt = "no-new-privileges"
+memory = "1g"
+cpus = "2"
+pids_limit = 256
+timeout_seconds = 600
+output_bytes = 16777216
+executable = "/opt/joern/joern-cli/c2cpg.sh"
+version_argv = ["/opt/joern/bin/joern-version"]
+version_expect = "c2cpg {version}"
+dependency = "appsec-review/base-jre:21-noble"
+inventory = "containers/tools/joern/inventory.json"
+review = "containers/tools/joern/LICENSE.md"
+coverage = "none: runtime closure only; bounded CPG/PDG export and functional acceptance are pending"
+update = "Select an immutable upstream release tag, record the platform archive and its SHA-512 sidecar by exact size and hash, regenerate inventory.json from the archive with containers/tools/shared/safe_extract.py, re-review licenses and advisories in LICENSE.md, then validate, build offline, smoke, and security-test."
+
+# The reviewed installation closure. The archive is verified whole; only these members are
+# installed. Other language frontends, their native AST generators, Ghidra, schema-extender,
+# and sample scripts are excluded.
+[closure]
+root = "/opt/joern"
+include = [
+  "joern-cli/.installation_root",
+  "joern-cli/bin",
+  "joern-cli/c2cpg.sh",
+  "joern-cli/conf",
+  "joern-cli/frontends/c2cpg",
+  "joern-cli/joern",
+  "joern-cli/joern-export",
+  "joern-cli/joern-parse",
+  "joern-cli/joern-slice",
+  "joern-cli/lib",
+]
+version_jars = [
+  "joern-cli/lib/io.joern.joern-cli-4.0.630.jar",
+  "joern-cli/frontends/c2cpg/lib/io.joern.c2cpg-4.0.630.jar",
+]
+max_members = 2048
+max_expanded_bytes = 2684354560
+max_member_compression_ratio = 50.0
+max_archive_expansion_ratio = 4.0

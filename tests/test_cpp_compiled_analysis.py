@@ -70,6 +70,11 @@ class FakeNativeExecutor:
         infer = request.tool_id == "tool-infer"
         mode = "infer" if infer else request.argv[1]
         project_root = request.target_root if infer else root
+        # Tools run as uid 10001; the inputs the job writes for them must be readable by others.
+        tool_input = (root / "compile_commands.json" if infer else
+                      root / "normalized-compile-commands.json" if mode in {"ast", "ir"} else None)
+        if tool_input is not None:
+            assert tool_input.stat().st_mode & 0o004, f"{tool_input.name} is unreadable by the tool user"
         project = project_root.name
         self.calls.append((project, mode))
         exit_code = 9 if self.fail == (project, mode) else 0
@@ -265,7 +270,7 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     job = build_job(executor_factory=lambda unit: None)
     plan = plan_jobs((job,), config)
     assert PROJECT_TASKS == ("projects",)
-    assert len(job.units) == 10
+    assert len(job.units) == 9
     assert plan.node("job_cpp_compiled_analysis.ast.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     assert plan.node("job_cpp_compiled_analysis.ir.projects").dependencies == (
@@ -273,7 +278,7 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     assert plan.node("job_cpp_compiled_analysis.infer.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     final = plan.node("job_cpp_compiled_analysis.acceptance.publish_handoff")
-    assert len(final.dependencies) == 6
+    assert len(final.dependencies) == 5
     assert not any("case001" in node.node_id for node in plan.nodes)
     assert not any(node.node_id.endswith(("configure.projects", "compile.projects")) for node in plan.nodes)
 
