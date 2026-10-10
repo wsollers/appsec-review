@@ -278,3 +278,17 @@ invalidation and required reuse across unrelated languages, projects, scopes, an
 The C++ job now publishes a producer-local Joern shard and precise blocked disposition. Enable it
 only after reviewing and locking one platform archive and its complete JDK/dependency closure, then
 add bounded CPG export fixtures and security probes. Do not put the full CPG into MCP responses.
+
+## Build the dataflow, contract, and deployment evidence lanes
+
+Implement the planned jobs and queries in
+[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
+starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
+calls, unmodeled externals, and path/depth limits must be published as gaps.
+
+## Acquire dynamic execution evidence
+
+Coverage profiles, sanitizer logs, fuzz corpora, and IAST traces are not yet available. Define
+either a hash-verified import of externally produced artifacts or a separately authorized,
+isolated execution job. Positive traces may support reachability; zero coverage is a gap and never
+refutes a claim.
