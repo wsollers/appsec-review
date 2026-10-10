@@ -25,6 +25,12 @@ The server implements JSON-RPC MCP initialization, tool listing, calls, and ping
 are in `docs/schemas/retrieval-mcp-tools.json`. Application code should instantiate
 `RetrievalCore` instead of calling the MCP process.
 
+The stdio gateway and plain `RetrievalMcpAdapter` are operator interfaces. Review workers must
+receive only `ScopedRetrievalMcpAdapter` with a package and role capability issued from a verified
+run-owned review package. It checks package identity and permitted entities on every call and
+denies broad search and cross-package retrieval. The package contract and current bounds are in
+[review-package-contract.md](../architecture/review-package-contract.md).
+
 The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes the core tool
 set, while `tests/test_retrieval_artifacts.py` exercises artifact queries through both the core and
 stdio transport.

@@ -34,11 +34,12 @@
     },
     "lead": {
       "type": "object", "additionalProperties": false,
-      "required": ["observation_id", "scanner", "rule_id", "native_severity", "reported_severity", "severity_rule", "component_id", "suppression_status", "duplicate_of", "location_exact"],
+      "required": ["observation_id", "scanner", "rule_id", "category", "native_severity", "reported_severity", "severity_rule", "component_id", "suppression_status", "duplicate_of", "location_exact", "location"],
       "properties": {
         "observation_id": { "$ref": "#/$defs/identity" },
         "scanner": { "type": "string", "minLength": 1 },
         "rule_id": { "type": "string", "minLength": 1 },
+        "category": {"type": "string", "minLength": 1},
         "native_severity": { "type": ["string", "null"] },
         "reported_severity": { "enum": ["critical", "high", "medium", "low", "info", "unknown"] },
         "severity_rule": { "type": "string", "minLength": 1 },
@@ -46,6 +47,12 @@
         "suppression_status": { "enum": ["suppressed", "possibly_suppressed", "not_suppressed", "unknown"] },
         "duplicate_of": { "oneOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
         "location_exact": { "type": "boolean" },
+        "location": {"type": "object", "additionalProperties": false,
+          "required": ["mapping_method"], "properties": {
+            "mapping_method": {"type": "string"}, "source_path": {"type": "string"},
+            "file_sha256": {"$ref": "#/$defs/sha"},
+            "start_line": {"type": "integer", "minimum": 1},
+            "end_line": {"type": "integer", "minimum": 1}}},
         "flow_ids": { "$ref": "#/$defs/identities" }
       }
     },
@@ -63,19 +70,56 @@
     },
     "retrieval": {
       "type": "object", "additionalProperties": false,
-      "required": ["indexes", "query_sets", "entity_ids", "max_page_size", "max_pages", "max_depth"],
+      "required": ["indexes", "query_sets", "entity_ids", "max_page_size", "max_pages", "max_depth", "max_response_bytes"],
       "properties": {
         "indexes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
         "query_sets": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
         "entity_ids": { "$ref": "#/$defs/identities" },
         "max_page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
         "max_pages": { "type": "integer", "minimum": 1, "maximum": 100 },
-        "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 }
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "max_response_bytes": {"type": "integer", "minimum": 1024, "maximum": 262144}
+      }
+    },
+    "metric": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "scope_id", "status", "producer", "algorithm_version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "scope_id": {"type": "string", "minLength": 1},
+        "value": {"type": ["number", "string", "null"]},
+        "status": {"enum": ["available", "partial", "unavailable"]},
+        "producer": {"type": "string", "minLength": 1},
+        "algorithm_version": {"type": "string", "minLength": 1},
+        "window_days": {"type": "integer", "minimum": 0},
+        "language": {"type": "string"},
+        "source_sha256": {"$ref": "#/$defs/sha"},
+        "gap_id": {"type": "string"}
+      }
+    },
+    "build_context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["action_ids", "artifact_ids", "command_facts", "environment_facts"],
+      "properties": {
+        "action_ids": {"$ref": "#/$defs/identities"},
+        "artifact_ids": {"$ref": "#/$defs/identities"},
+        "command_facts": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["build_action_id", "tool_id", "ordered_tokens", "exact_artifact_sha256", "normalization_rule"],
+          "properties": {"build_action_id": {"type": "string"}, "tool_id": {"type": "string"},
+            "ordered_tokens": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+              "required": ["ordinal", "kind", "redacted"], "properties": {
+                "ordinal": {"type": "integer", "minimum": 0}, "kind": {"type": "string"},
+                "safe_value": {"type": "string"}, "redacted": {"type": "boolean"}}}},
+            "exact_artifact_sha256": {"$ref": "#/$defs/sha"}, "normalization_rule": {"type": "string"}}}},
+        "environment_facts": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["name", "class", "present", "redacted"], "properties": {
+            "name": {"type": "string"}, "class": {"type": "string"}, "present": {"type": "boolean"},
+            "safe_value": {"type": "string"}, "redacted": {"type": "boolean"}}}}
       }
     },
     "base": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
+      "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "metrics", "build_context", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
       "properties": {
         "schema": { "const": "appsec-review/review-package/1" },
         "kind": { "enum": ["finding_lead", "hunt"] },
@@ -89,6 +133,8 @@
         "lead_menu": { "type": "array", "items": { "$ref": "#/$defs/lead" } },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
         "context_ids": { "$ref": "#/$defs/identities" },
+        "metrics": {"type": "array", "items": {"$ref": "#/$defs/metric"}},
+        "build_context": {"$ref": "#/$defs/build_context"},
         "proof_obligations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
         "retrieval": { "$ref": "#/$defs/retrieval" },
         "coverage_gaps": { "type": "array", "items": { "$ref": "#/$defs/gap" } },

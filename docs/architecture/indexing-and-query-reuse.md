@@ -314,15 +314,14 @@ product by exact subject/path but cannot cause product generation.
 ## Review input packages for hunters and red-team analysts
 
 The machine-readable contract is
-[`review-input-package.schema.json`](../schemas/review-input-package.schema.json), version
-`appsec-review/review-input-package/1`. It describes the **input** to
-`assemble_review_packages` and to the `hypothesis_hunter` / `red_team_analyst` roles in
+[`review-packages.schema.json`](../schemas/review-packages.schema.json), version
+`appsec-review/review-package/1`. It describes the output of `assemble_review_packages` and
+the bounded input planned for the `hypothesis_hunter` and `red_team_analyst` roles in
 [`inference-security-review.md`](inference-security-review.md). It is distinct from the
-post-adjudication `appsec-review/finding-package/1` used for final findings. The `review_package`
-precomputed set carries bounded package records; the package assembler validates them against
-the schema, fingerprints them from accepted identities, and emits one `finding_lead` package per
-upstream lead and one `hunt` package per component or trust boundary. Stable partition keys and
-configured size limits split oversized hunts without silently dropping leads.
+post-adjudication `appsec-review/finding-package/1` used for final findings. The assembler reads
+accepted scanner-correlation facts, fingerprints packages from accepted identities, and emits
+one `finding_lead` package per source-SAST lead and one `hunt` package per accepted menu partition.
+Stable partition keys and bounds prevent silent lead loss.
 
 | Field | Required content |
 |---|---|

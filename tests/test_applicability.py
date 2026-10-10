@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import json
-from pathlib import Path
 
 import pytest
 
@@ -11,13 +9,8 @@ from appsec_review.applicability import (
     ProjectProcessingFacts, ReasonCode, SourceArtifactIdentity, decision_from_mapping,
     evaluate_applicability, facts_from_build_unit, finalize_processing, source_only_facts,
 )
-from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
-from appsec_review.jobs.cataloging import inventory
 
 
-ROOT = Path(__file__).parents[1]
-TARGET = ROOT / "targets" / "appsec-multi-vuln"
-MATRIX_PATH = TARGET / "support" / "project-matrix.json"
 CONFIGURATION_SHA256 = "c" * 64
 
 
@@ -185,41 +178,13 @@ def test_source_identity_rejects_escaped_paths(path: str) -> None:
         SourceArtifactIdentity(path, "a" * 64)
 
 
-def _matrix() -> list[dict[str, object]]:
-    value = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
-    assert set(value) == {"schema_version", "capture_policies", "projects"}
-    assert value["schema_version"] == 1
-    assert isinstance(value["projects"], list) and value["projects"]
-    return value["projects"]
-
-
-@pytest.mark.parametrize("row", _matrix(), ids=lambda row: row["path"])
-def test_multivuln_matrix_applicability(row: dict[str, object]) -> None:
-    root = (TARGET / str(row["path"])).resolve(strict=True)
-    assert TARGET.resolve() in root.parents
-    snapshot = inventory(root)
-    assert not snapshot["gaps"]
-    units = discover_build_units(snapshot["files"])
-    bounded = [{**unit, "descriptor_package": descriptor_package(root, unit, snapshot["files"])}
-               for unit in units]
-    facts = [facts_from_build_unit(unit) for unit in bounded]
-    expected = str(row["expected_applicability"])
-    if expected == "not-applicable-syntax-only":
-        source = snapshot["files"][0]
-        selected = source_only_facts(
-            project_id=str(row["path"]), language=str(row["language"]), root=".",
-            sources=({"path": source["path"], "sha256": source["sha256"]},),
-            capabilities=("codeql-source",) if row["language"] != "php" else ())
-        assert not selected.material_build
-    else:
-        assert facts, f"no bounded build unit for {row['path']}"
-        selected = next((item for item in facts if item.material_build), None)
-        assert selected is not None, f"no material trigger for {row['path']}"
+@pytest.mark.parametrize("policy", ["auto", "disabled"])
+def test_descriptor_build_applicability(policy: str) -> None:
+    # A self-contained descriptor exercises applicability without an optional target checkout.
+    facts = facts_from_build_unit(_unit(documents=[_document(
+        "package.json", '{"scripts":{"build":"tsc"}}')]))
+    assert facts.material_build
     decision = evaluate_applicability(
-        feature=ProcessingFeature.BUILD_CAPTURE, policy=str(row["capture_policy"]),
-        facts=selected, configuration_sha256=CONFIGURATION_SHA256)
-    if row["capture_policy"] == "disabled":
-        assert decision.disposition is ProcessingDisposition.SKIPPED_POLICY
-    else:
-        assert decision.action is ApplicabilityAction.RUN
-    assert all((root / item.path).is_file() for item in selected.sources)
+        feature=ProcessingFeature.BUILD_CAPTURE, policy=policy,
+        facts=facts, configuration_sha256=CONFIGURATION_SHA256)
+    assert decision.action is (ApplicabilityAction.RUN if policy == "auto" else ApplicabilityAction.SKIP)

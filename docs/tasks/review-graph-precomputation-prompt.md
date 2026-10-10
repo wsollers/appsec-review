@@ -39,7 +39,7 @@ raw target trees, IR, SARIF or CPG files.
    types, branch polarity and source/artifact resolution, not only endpoint line numbers.
 5. Build `hotspot_context` and `review_package` from accepted priority items, first-stage
    products and graph products. Validate each input package against
-   [`review-input-package.schema.json`](../schemas/review-input-package.schema.json), creating
+   [`review-packages.schema.json`](../schemas/review-packages.schema.json), creating
    one `finding_lead` package per observation and deterministic bounded `hunt` partitions per
    component/trust boundary. Every accepted High/Critical source-SAST observation must be
    reachable from its finding-lead package and at least one hunt menu, including suppressed and

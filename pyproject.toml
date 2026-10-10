@@ -7,7 +7,7 @@ name = "appsec-review"
 version = "0.0.0"
 description = "Evidence-backed application security review orchestration"
 requires-python = ">=3.11"
-dependencies = ["tzdata; platform_system == 'Windows'"]
+dependencies = ["jsonschema>=4.20", "tzdata; platform_system == 'Windows'"]
 
 [project.scripts]
 appsec-review = "appsec_review.cli:main"
@@ -25,6 +25,9 @@ dagster = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"share/appsec-review/schemas" = ["docs/schemas/review-packages.schema.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

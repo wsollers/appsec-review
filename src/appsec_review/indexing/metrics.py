@@ -38,7 +38,7 @@ _COMPLEXITY = (
 def metric(name: str, scope_id: str, value: Any, producer: str, algorithm: str, *, gap: str | None = None,
            window_days: int | None = None, language: str | None = None,
            source_sha256: str | None = None) -> dict[str, Any]:
-    """One ``review-input-package`` metric object; a missing value is ``unavailable`` with a gap id."""
+    """One ``review-package`` metric object; a missing value is ``unavailable`` with a gap id."""
     item: dict[str, Any] = {"name": name, "scope_id": scope_id, "value": value,
                             "status": "available" if value is not None else "unavailable",
                             "producer": producer, "algorithm_version": algorithm}

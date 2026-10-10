@@ -173,7 +173,7 @@ freshness, and exact retrieval scopes. It never infers that an unavailable shard
 Packages are independently fingerprinted and size-limited. Oversized scopes split deterministically
 by component, trust boundary, and stable entity range. Truncation creates a coverage gap.
 The pre-adjudication input format is
-[`review-input-package.schema.json`](../schemas/review-input-package.schema.json); its
+[`review-packages.schema.json`](../schemas/review-packages.schema.json); its
 `finding_lead` and `hunt` variants carry accepted-manifest identity, lead membership,
 history/complexity metrics, safe build-command and environment facts, graph/evidence references,
 retrieval scope and gaps. The package assembler audits that every accepted High/Critical

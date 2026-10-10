@@ -321,6 +321,63 @@ def test_sast_lead_menus_are_complete_and_traceable(accepted) -> None:
     assert audit["counts"]["high_critical_duplicates"] == 1
 
 
+def test_review_packages_keep_complete_membership_and_detect_tampering(accepted) -> None:
+    from copy import deepcopy
+    from appsec_review.review_packages import (_identity, assemble_review_packages, publish_review_packages,
+                                                validate_packages, verify_review_packages)
+
+    config, run_id, _run_root, _target, ids, _outcome, _executor = accepted
+    core = RetrievalCore(config.runtime.runs_dir, run_id)
+    packages, manifest = assemble_review_packages(core, max_page_size=20)
+    finding = [item for item in packages if item["kind"] == "finding_lead"]
+    hunts = [item for item in packages if item["kind"] == "hunt"]
+    assert {item["lead_menu"][0]["observation_id"] for item in finding} == {
+        ids[key] for key in ("o1", "o2", "o3", "o4", "o5", "o6")}
+    assert {lead["observation_id"] for item in hunts for lead in item["lead_menu"]} == {
+        ids[key] for key in ("o1", "o2", "o3", "o5", "o6")}
+    assert manifest["counts"] == {"finding_lead": 6, "hunt": len(hunts), "high_critical": 4, "unknown": 1}
+    assert any(gap["state"] == "partial" for gap in manifest["coverage_gaps"])
+    assert any(item["metrics"] for item in packages)
+    assert any(item["build_context"]["command_facts"] for item in packages)
+    assert assemble_review_packages(core, max_page_size=20) == (packages, manifest)
+    expected = {"all": {item["lead_menu"][0]["observation_id"] for item in finding},
+                "high_critical": {lead["observation_id"] for item in hunts for lead in item["lead_menu"]
+                                  if lead["reported_severity"] in {"high", "critical"}},
+                "unknown": {lead["observation_id"] for item in hunts for lead in item["lead_menu"]
+                            if lead["reported_severity"] == "unknown"}}
+    audit = {"status": "passed", "counts": {"source_sast_observations": 6,
+             "high_critical": 4, "unknown_severity": 1}}
+    missing = deepcopy(packages)
+    changed = next(item for item in missing if item["kind"] == "hunt" and len(item["lead_menu"]) > 1)
+    changed["lead_menu"].pop()
+    changed["package_id"] = _identity(changed)
+    with pytest.raises(ValueError, match="membership"):
+        validate_packages(core, missing, expected, audit)
+    extra = deepcopy(packages)
+    extra[0]["unexpected"] = True
+    with pytest.raises(Exception, match="unexpected"):
+        validate_packages(core, extra, expected, audit)
+    from appsec_review.mcp.capability import ScopedRetrievalMcpAdapter, issue_capability
+    secret = b"integration-capability-secret-32-bytes"
+    selected = finding[0]
+    token = issue_capability(selected, role="red", round_id="1", secret=secret,
+                             expires_at=int(datetime.now(timezone.utc).timestamp()) + 300)
+    scoped = ScopedRetrievalMcpAdapter(RetrievalMcpAdapter(core), selected, capability=token,
+                                       secret=secret, role="red", round_id="1")
+    subject = selected["lead_menu"][0]["observation_id"]
+    assert scoped.call("query_precomputed", {"query_set": "scanner_correlation", "subject": subject,
+                                             "limit": 1})["results"]
+    with pytest.raises(ValueError, match="outside review package"):
+        scoped.call("find", {"identity": next(item["lead_menu"][0]["observation_id"] for item in finding
+                                                if item["package_id"] != selected["package_id"])})
+    directory = publish_review_packages(core, max_page_size=20)
+    assert verify_review_packages(core, directory) == manifest
+    target = directory / f"{finding[0]['package_id']}.json"
+    target.write_text(target.read_text(encoding="utf-8") + " ", encoding="utf-8")
+    with pytest.raises(ValueError, match="integrity"):
+        verify_review_packages(core, directory)
+
+
 def test_query_observations_filters_and_paginates_without_raw_output(accepted) -> None:
     config, run_id, _run_root, _target, ids, _outcome, _executor = accepted
     core = RetrievalCore(config.runtime.runs_dir, run_id)

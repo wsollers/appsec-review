@@ -68,7 +68,7 @@ orders attention only.
 
 `build_provenance` combines artifact-anchored source→build→artifact→observation chains with one
 `build_action` fact per accepted language-build action. Command facts follow the
-`review-input-package` command schema: every argv token keeps its ordinal and a kind; only
+`review-package` command schema: every argv token keeps its ordinal and a kind; only
 allowlisted values survive (security flags, optimization/debug/standard flags, safe defines,
 library names); host paths become `target:`/`relative:` logical identities or `<external-path>`;
 response files, linker arguments and unknown positional values are redacted. Environment facts
