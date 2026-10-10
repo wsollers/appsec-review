@@ -16,6 +16,7 @@ from appsec_review.retrieval import (
     sanitize_producer_data, write_manifest,
 )
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.retrieval.precomputed import FACT_SCHEMA
 
 
 RUN_ID = "2026-10-08-0001"
@@ -45,13 +46,16 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "codeql": LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {"native": "codeql:1"}).value,
         "artifact": LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, snapshot, {"native": "sarif:1"}).value,
         "fact": LogicalIdentity.derive(EntityKind.IR_ENTITY, snapshot, {"native": "nonnull:1"}).value,
+        "priority": LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, snapshot, {"native": "auth-priority"}).value,
+        "precomputed": LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, snapshot,
+                                                {"set": "call_graph", "native": "auth-callees"}).value,
     }
     location = SourceLocation(snapshot, "src/auth.c", source_sha, 0, source.stat().st_size, 1, 3, 1, 1,
                               {"native": "src/auth.c:1"}, "fixture-exact", 1.0)
     index_values: list[IndexIdentity] = []
 
     def build(name: str, entities: list[EntityRecord], relations: list[RelationRecord],
-              gap: str | None = None, shard_id: str = "default"):
+              gap: str | None = None, shard_id: str = "default", query_set: str | None = None):
         fingerprint = index_fingerprint(
             name=name, target_snapshot=snapshot, producer_artifacts=[{"sha256": "a" * 64}],
             tool_identity={"tool": "fixture", "name": name}, parser_identity="fixture-parser/1",
@@ -64,10 +68,11 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             builder.add_entity(entity)
         for relation in relations:
             builder.add_relation(relation)
-        builder.add_coverage(name, "partial" if gap else "complete", gap)
+        builder.add_coverage(query_set or name, "partial" if gap else "complete", gap)
         sha = builder.build()
         index_values.append(IndexIdentity(name, "appsec-review/retrieval-index/2", sha, fingerprint,
-                                          path.relative_to(run_root).as_posix(), {"fixture": name},
+                                          path.relative_to(run_root).as_posix(),
+                                          {"fixture": name, **({"query_set": query_set} if query_set else {})},
                                           (gap,) if gap else (), shard_id))
 
     build("source", [EntityRecord(LogicalIdentity.parse(ids["file"]), "src/auth.c", "src/auth.c",
@@ -111,6 +116,17 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
                          "rule_id": "cpp/unsafe-strcat", "producer_level": "error",
                      }, location),
     ], [], shard_id="codeql-cpp-cpp-native-main")
+    build("priority", [
+        EntityRecord(LogicalIdentity.parse(ids["priority"]), "file:src/auth.c", "src/auth.c",
+                     "review priority auth", {"scope": "file", "path": "src/auth.c", "rank": 1,
+                                               "score": 81.5, "features": {"history_hotspot": 70}}, location),
+    ], [])
+    build("precomputed", [
+        EntityRecord(LogicalIdentity.parse(ids["precomputed"]), "call_graph:authenticate",
+                     "authenticate callees", "precomputed call graph for authenticate",
+                     {"schema": FACT_SCHEMA, "query_set": "call_graph", "subject_identity": ids["symbol"],
+                      "subject_path": "src/auth.c", "result": {"callees": []}, "basis": "fixture"}, location),
+    ], [], shard_id="call-graph-fixture", query_set="call_graph")
 
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=snapshot, target_root=target, indexes=index_values)
@@ -145,7 +161,23 @@ def test_identity_and_location_contracts_reject_unsafe_or_ambiguous_values() -> 
     assert set(RelationKind) == {RelationKind(value) for value in (
         "DECLARES", "DEFINES", "REFERENCES", "CALLS", "CONTAINS", "GENERATED_FROM", "COMPILES_TO",
         "LINKS_INTO", "DEPENDS_ON", "OBSERVED_AT", "DERIVED_FROM", "SUPPORTS", "CONTRADICTS",
-        "FLOWS_TO")}
+        "FLOWS_TO", "SAME_AS", "AFFECTED_BY")}
+
+
+def test_precomputed_and_hotspot_queries_are_bounded_and_report_missing_sets(tmp_path: Path) -> None:
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    hotspot = core.query_hotspots(scope="file", path="src/auth.c", min_score=80)
+    assert [item["identity"] for item in hotspot["results"]] == [ids["priority"]]
+    assert core.query_hotspots(min_score=90)["results"] == []
+    facts = core.query_precomputed(query_set="call_graph", subject=ids["symbol"], path="src/auth.c")
+    assert [item["identity"] for item in facts["results"]] == [ids["precomputed"]]
+    absent = core.query_precomputed(query_set="dataflow", subject=ids["symbol"])
+    assert absent["results"] == [] and "accepted precomputed dataflow index is unavailable" in absent["coverage_gaps"]
+    with pytest.raises(ValueError, match="precomputed query set"):
+        core.query_precomputed(query_set="arbitrary")
+    with pytest.raises(ValueError, match="traversal"):
+        core.query_hotspots(path="../outside")
 
 
 def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> None:
@@ -167,6 +199,15 @@ def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> N
     assert {item["shard_id"] for item in coverage["results"]} == {
         "codeql-cpp-cpp-native-main", "gitleaks", "semgrep"}
     assert any("observations/gitleaks" in gap for gap in coverage["coverage_gaps"])
+    page = core.coverage(indexes=("observations",), limit=1)
+    assert page["pagination"]["next_cursor"]
+    next_page = core.coverage(indexes=("observations",), limit=1,
+                              cursor=page["pagination"]["next_cursor"])
+    assert next_page["results"][0]["shard_id"] != page["results"][0]["shard_id"]
+    source_coverage = core.coverage(indexes=("source",))["results"][0]
+    assert source_coverage["entity_kinds"] == {"source_file": 1}
+    assert source_coverage["entity_count"] == 1 and source_coverage["relation_count"] == 0
+    assert source_coverage["producer"]["fixture"] == "source"
 
 
 def test_manifest_rejects_duplicate_composite_shard_identity(tmp_path: Path) -> None:
@@ -240,7 +281,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     assert {item["name"] for item in TOOLS} == {
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
         "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
-        "query_change_context", "query_owasp_workbench"}
+        "query_change_context", "query_hotspots", "query_precomputed", "query_observations",
+        "query_dataset_inventory", "query_owasp_workbench"}
     codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
                                             "build_unit": "native-main", "path": "src/auth.c"})
     assert [item["name"] for item in codeql["results"]] == ["cpp/unsafe-strcat"]
@@ -253,6 +295,8 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         ("read_excerpt", {"identity": ids["symbol"]}), ("trace", {"identity": ids["observation"]}),
         ("resolve_evidence", {"identity": ids["observation"]}), ("coverage", {}),
         ("query_artifacts", {}), ("query_build_security", {}), ("query_codeql", {"language": "cpp"}),
+        ("query_hotspots", {"scope": "file"}),
+        ("query_precomputed", {"query_set": "call_graph", "subject": ids["symbol"]}),
         ("query_owasp_workbench", {}),
     ]
     process = subprocess.Popen(
@@ -266,12 +310,12 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     stdout, stderr = process.communicate(payload, timeout=20)
     assert process.returncode == 0, stderr
     responses = [json.loads(line) for line in stdout.splitlines()]
-    assert len(responses) == 10
+    assert len(responses) == 12
     assert all(item["result"]["structuredContent"]["run_id"] == RUN_ID for item in responses)
     records = [json.loads(line) for line in (
         runs / RUN_ID / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()]
     completed = [item for item in records if item["event_type"] == "MCP_TOOL_COMPLETED"]
-    assert len(completed) == 12  # two direct adapter calls above plus ten transport calls
-    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 12
+    assert len(completed) == 14  # two direct adapter calls above plus twelve transport calls
+    assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 14
     children = [item for item in records if item["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
     assert children and all(item["details"]["parent_invocation_id"] for item in children)

@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from .owasp import QUERY_TOOL_SCHEMA
+from appsec_review.retrieval.index import INDEX_NAMES
+from appsec_review.retrieval.observations import OBSERVATION_CLASSES, REPORTED_SEVERITIES
+from appsec_review.retrieval.precomputed import QUERY_SETS
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
-INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags", "priority"]}
+INDEX = {"type": "string", "enum": list(INDEX_NAMES)}
 
 TOOLS: tuple[dict[str, Any], ...] = (
     {"name": "search", "description": "Full-text search accepted immutable evidence indexes.",
@@ -38,9 +41,11 @@ TOOLS: tuple[dict[str, Any], ...] = (
      "inputSchema": {"type": "object", "additionalProperties": False, "required": ["identity"], "properties": {
          "identity": IDENTITY, "limit": {"type": "integer", "minimum": 1, "maximum": 100},
      }}},
-    {"name": "coverage", "description": "Report explicit accepted-index coverage and gaps.",
+    {"name": "coverage", "description": "Report accepted-index producers, entity/relation counts, coverage, and gaps.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "indexes": {"type": "array", "items": INDEX, "uniqueItems": True},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
      }}},
     {"name": "query_artifacts", "description": "Query accepted produced artifacts and linked indexed evidence by exact facets.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
@@ -118,6 +123,52 @@ TOOLS: tuple[dict[str, Any], ...] = (
                                                "repeated_repair_peak", "fix_on_fix_event_count",
                                                "untested_production_change_count",
                                                "lifetime_principal_author_share", "departed_dominant_owner"]},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_hotspots", "description": "Query accepted priority-index hotspots in rank order, including metrics and evidence links.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "scope": {"type": "string", "enum": ["file", "function"]},
+         "path": {"type": "string", "maxLength": 4096},
+         "min_score": {"type": "number", "minimum": 0, "maximum": 100},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_precomputed", "description": "Query accepted, hash-verified precomputed code facts by named set and exact subject; no analysis runs during retrieval.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["query_set"], "properties": {
+         "query_set": {"type": "string", "enum": list(QUERY_SETS)},
+         "subject": IDENTITY,
+         "path": {"type": "string", "maxLength": 4096},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_observations", "description": "Filter accepted scanner observations by exact scanner, rule, normalized reported severity, suppression/duplicate state, source/artifact and location; returns native severity and the normalization rule. Tool observations are never confirmed findings.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "scanner": {"type": "string", "maxLength": 4096},
+         "rule": {"type": "string", "maxLength": 4096},
+         "severity": {"type": "string", "enum": list(REPORTED_SEVERITIES)},
+         "observation_class": {"type": "string", "enum": list(OBSERVATION_CLASSES)},
+         "suppressed": {"type": "boolean"},
+         "duplicate": {"type": "boolean"},
+         "source": IDENTITY,
+         "artifact": IDENTITY,
+         "path": {"type": "string", "maxLength": 4096},
+         "start_line": {"type": "integer", "minimum": 1},
+         "end_line": {"type": "integer", "minimum": 1},
+         "shard": {"type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$"},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_dataset_inventory", "description": "Bounded catalog of the accepted dataset inventory: every dataset's disposition, query route, coverage and exception reason, the publication audit, and language/build-unit/input-source coverage cells.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "record_type": {"type": "string", "enum": ["dataset", "audit", "coverage_cell"]},
+         "job": {"type": "string", "maxLength": 256},
+         "family": {"type": "string", "maxLength": 256},
+         "disposition": {"type": "string", "enum": ["indexed", "artifact_only", "protected", "unavailable"]},
+         "coverage_state": {"type": "string", "enum": ["complete", "partial", "stale", "unavailable"]},
+         "sensitivity": {"type": "string", "enum": ["public", "internal", "sensitive", "secret"]},
+         "cell_type": {"type": "string", "enum": ["language", "build_unit", "producer_consumer", "input_source",
+                                                  "query_set", "graph_follow_up", "fts_validation"]},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},

@@ -30,6 +30,7 @@ from .planning import (
     ambiguity_reasons, deterministic_plan, merge_proposal, summarize_catalog,
     validate_plan, validate_proposal,
 )
+from appsec_review.jobs.job_target_analysis_plan.datasets import CONSUMES, DATASETS
 
 
 TOPOLOGY = {
@@ -505,4 +506,5 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                input_validators=(_validate_config,), schema_identity=PLAN_SCHEMA,
                implementation_identity=implementation,
                validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
-               units=units)
+               units=units,
+               datasets=DATASETS, consumes=CONSUMES)

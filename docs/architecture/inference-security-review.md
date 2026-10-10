@@ -172,6 +172,15 @@ freshness, and exact retrieval scopes. It never infers that an unavailable shard
 
 Packages are independently fingerprinted and size-limited. Oversized scopes split deterministically
 by component, trust boundary, and stable entity range. Truncation creates a coverage gap.
+The pre-adjudication input format is
+[`review-input-package.schema.json`](../schemas/review-input-package.schema.json); its
+`finding_lead` and `hunt` variants carry accepted-manifest identity, lead membership,
+history/complexity metrics, safe build-command and environment facts, graph/evidence references,
+retrieval scope and gaps. The package assembler audits that every accepted High/Critical
+source-SAST observation is represented in both a finding-lead package and a hunt menu, even
+when suppressed or deduplicated. Reported scanner severity is a nomination signal, never
+adjudicated technical severity. Exact command lines, environment values and secrets remain
+protected artifacts; workers receive classified, redacted facts only.
 
 ### Discovery, merge, refutation, and verification
 

@@ -478,6 +478,14 @@ def build_definitions(
             if "job_review_prioritization" in wave_dependencies:
                 tagging_dependencies.append("job_review_prioritization")
             wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
+        if "job_review_data_indexing" in registered:
+            # The dataset inventory audits every accepted publisher, so it closes the wave after the last
+            # manifest publisher and keeps exactly one terminal job.
+            terminal = next((job_id for job_id in ("job_security_tagging", "job_review_prioritization",
+                                                   "job_codeql_analysis") if job_id in wave_dependencies),
+                            "job_target_analysis_plan")
+            wave_jobs.append(registry.build("job_review_data_indexing"))
+            wave_dependencies["job_review_data_indexing"] = (terminal,)
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))
     if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:

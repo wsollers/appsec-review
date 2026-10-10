@@ -8,6 +8,7 @@ from contextvars import ContextVar
 import hashlib
 import hmac
 import json
+import math
 from pathlib import Path
 import re
 import sqlite3
@@ -22,6 +23,7 @@ from appsec_review.retrieval.model import (
     EntityKind, LogicalIdentity, RelationKind, canonical_json, normalize_relative_path,
     sanitize_producer_data,
 )
+from appsec_review.retrieval.precomputed import FACT_SCHEMA, QUERY_SETS
 from appsec_review.storage import RunStore, file_sha256
 
 
@@ -485,29 +487,50 @@ class RetrievalCore:
             ([] if entity else ["evidence identity was not found"]) + trace["coverage_gaps"], False, 0,
         ))
 
-    def coverage(self, *, indexes: Iterable[str] | None = None) -> dict[str, Any]:
+    def coverage(self, *, indexes: Iterable[str] | None = None, limit: int = 50,
+                 cursor: str | None = None) -> dict[str, Any]:
         names = self._names(indexes)
-        parameters = {"indexes": names}
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"indexes": names, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("coverage", parameters)
+        offset = self._offset(cursor, request_hash)
 
         def operation(deadline: float):
             results, gaps = [], ["accepted index set is empty"] if not names else []
+            selected = []
             for name in names:
                 self._check_deadline(deadline)
                 if name not in self.indexes:
                     gaps.append(f"{name} index is unavailable")
                     continue
-                for shard in self.indexes[name]:
-                    with self._database(shard, deadline) as database:
-                        rows = [dict(row) for row in database.execute(
-                            "SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
-                    shard_id = str(shard.get("shard_id", "default"))
-                    results.append({"identity": f"coverage:{name}:{shard_id}:{shard['sha256']}",
-                                    "artifact_reference": {"index": name, "shard_id": shard_id,
-                                                           "sha256": shard["sha256"]},
-                                    "index": name, "shard_id": shard_id, "coverage": rows})
-                    gaps.extend(f"{name}/{shard_id}: {row['gap']}" for row in rows if row["gap"])
-                    gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
-            return results, gaps, False, 0
+                selected.extend((name, shard) for shard in self.indexes[name])
+            for name, shard in selected[offset:offset + limit]:
+                self._check_deadline(deadline)
+                with self._database(shard, deadline) as database:
+                    rows = [dict(row) for row in database.execute(
+                        "SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
+                    count_metadata = dict(database.execute(
+                        "SELECT key, value FROM metadata WHERE key IN ('entity_kind_counts', 'relation_kind_counts')"))
+                    entity_kinds = (json.loads(count_metadata["entity_kind_counts"])
+                                    if "entity_kind_counts" in count_metadata else None)
+                    relation_kinds = (json.loads(count_metadata["relation_kind_counts"])
+                                      if "relation_kind_counts" in count_metadata else None)
+                shard_id = str(shard.get("shard_id", "default"))
+                results.append({"identity": f"coverage:{name}:{shard_id}:{shard['sha256']}",
+                                "artifact_reference": {"index": name, "shard_id": shard_id,
+                                                       "sha256": shard["sha256"]},
+                                "index": name, "shard_id": shard_id,
+                                "producer": self._safe_payload(shard.get("producer", {})),
+                                "entity_kinds": entity_kinds, "relation_kinds": relation_kinds,
+                                "entity_count": sum(entity_kinds.values()) if entity_kinds is not None else None,
+                                "relation_count": sum(relation_kinds.values()) if relation_kinds is not None else None,
+                                "coverage": rows})
+                if entity_kinds is None or relation_kinds is None:
+                    gaps.append(f"{name}/{shard_id}: index kind counts unavailable")
+                gaps.extend(f"{name}/{shard_id}: {row['gap']}" for row in rows if row["gap"])
+                gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
+            return results, gaps, len(selected) > offset + limit, offset
         return self._execute("coverage", parameters, operation)
 
     def query_artifacts(
@@ -832,6 +855,317 @@ class RetrievalCore:
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_change_context", parameters, operation)
 
+    def query_hotspots(
+        self, *, scope: str | None = None, path: str | None = None,
+        min_score: float = 0.0, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded ranked priority items, with their metric and evidence payloads."""
+        if scope is not None and scope not in {"file", "function"}:
+            raise ValueError("invalid hotspot scope")
+        if path is not None:
+            path = normalize_relative_path(path)
+        if isinstance(min_score, bool) or not isinstance(min_score, (int, float)) or not math.isfinite(min_score) \
+                or not 0 <= min_score <= 100:
+            raise ValueError("invalid hotspot minimum score")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"scope": scope, "path": path, "min_score": min_score, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_hotspots", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = self.indexes.get("priority", ())
+            if not candidates:
+                gaps.append("accepted priority index is unavailable")
+            for shard in candidates:
+                self._check_deadline(deadline)
+                clauses = ["e.kind = 'priority_item'",
+                           "CAST(json_extract(e.payload_json, '$.score') AS REAL) >= ?"]
+                values: list[Any] = [min_score]
+                for key, value in (("scope", scope), ("path", path)):
+                    if value is not None:
+                        clauses.append("json_extract(e.payload_json, ?) = ?")
+                        values.extend((f"$.{key}", value))
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY CAST(json_extract(e.payload_json, '$.rank') AS INTEGER), "
+                       "e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                with self._database(shard, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "priority")
+                        item["shard_id"] = shard.get("shard_id", "default")
+                        found.append(item)
+                    gaps.extend(f"priority/{shard['shard_id']}: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"))
+                gaps.extend(f"priority/{shard['shard_id']}: {gap}" for gap in shard.get("gaps", ()))
+            found.sort(key=lambda item: (int(item["payload"].get("rank", 0)), item["identity"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_hotspots", parameters, operation)
+
+    def query_precomputed(
+        self, *, query_set: str, subject: str | None = None, path: str | None = None,
+        limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Read a named run-owned fact set; never compute a graph or execute a query at inference time."""
+        if query_set not in QUERY_SETS:
+            raise ValueError("invalid precomputed query set")
+        if subject is not None:
+            LogicalIdentity.parse(subject)
+        if path is not None:
+            path = normalize_relative_path(path)
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"query_set": query_set, "subject": subject, "path": path,
+                      "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_precomputed", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = [shard for shard in self.indexes.get("precomputed", ())
+                          if shard.get("producer", {}).get("query_set") == query_set]
+            if not candidates:
+                gaps.append(f"accepted precomputed {query_set} index is unavailable")
+            for shard in candidates:
+                self._check_deadline(deadline)
+                clauses = ["e.kind = 'precomputed_fact'", "json_extract(e.payload_json, '$.query_set') = ?"]
+                values: list[Any] = [query_set]
+                if subject is not None:
+                    clauses.append("json_extract(e.payload_json, '$.subject_identity') = ?")
+                    values.append(subject)
+                if path is not None:
+                    clauses.append("(l.path = ? OR json_extract(e.payload_json, '$.subject_path') = ?)")
+                    values.extend((path, path))
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY e.identity LIMIT ?")
+                values.append(offset + limit + 1)
+                with self._database(shard, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "precomputed")
+                        if item["payload"].get("schema") != FACT_SCHEMA:
+                            gaps.append(f"precomputed/{shard['shard_id']}: unsupported fact schema")
+                            continue
+                        item["shard_id"] = shard.get("shard_id", "default")
+                        found.append(item)
+                    areas = list(database.execute("SELECT area, status, gap FROM coverage ORDER BY area"))
+                    if not any(row["area"] == query_set for row in areas):
+                        gaps.append(f"precomputed/{shard['shard_id']}: query-set coverage is unavailable")
+                    gaps.extend(f"precomputed/{shard['shard_id']}: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in areas if row["status"] != "complete")
+                gaps.extend(f"precomputed/{shard['shard_id']}: {gap}" for gap in shard.get("gaps", ()))
+            found.sort(key=lambda item: item["identity"])
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_precomputed", parameters, operation)
+
+    def _lead_states(self, deadline: float) -> tuple[dict[str, Mapping[str, Any]], list[str]]:
+        """Suppression and duplicate state from the accepted scanner_correlation lead facts."""
+        shards = [shard for shard in self.indexes.get("precomputed", ())
+                  if shard.get("producer", {}).get("query_set") == "scanner_correlation"]
+        if not shards:
+            return {}, ["accepted scanner_correlation lead facts are unavailable: suppression and duplicate "
+                        "state is unknown"]
+        states: dict[str, Mapping[str, Any]] = {}
+        candidate_bound = max(1_000, self.limits.max_results * 100)
+        for shard in shards:
+            with self._database(shard, deadline) as database:
+                for row in database.execute(
+                        "SELECT payload_json FROM entities WHERE kind='precomputed_fact' "
+                        "AND json_extract(payload_json, '$.fact_type') = 'lead'"):
+                    self._check_deadline(deadline)
+                    if len(states) >= candidate_bound:
+                        return {}, ["scanner lead-state candidate bound exceeded; narrow the observation query"]
+                    result = json.loads(row["payload_json"]).get("result") or {}
+                    if isinstance(result.get("observation_id"), str):
+                        states[result["observation_id"]] = {key: result.get(key) for key in (
+                            "suppressed", "suppression_status", "suppression_ids", "duplicate_of", "duplicate_method",
+                            "component_id", "flow_ids")}
+        return states, []
+
+    def query_observations(
+        self, *, scanner: str | None = None, rule: str | None = None, severity: str | None = None,
+        observation_class: str | None = None, suppressed: bool | None = None, duplicate: bool | None = None,
+        source: str | None = None, artifact: str | None = None, path: str | None = None,
+        start_line: int | None = None, end_line: int | None = None, shard: str | None = None,
+        limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Filter accepted observation shards by exact scanner, rule, reported severity, suppression and scope.
+
+        Severity is normalized from the indexed payload by a versioned rule; raw scanner output is never
+        read. Results are tool observations ordered by reported severity; they are never confirmed findings.
+        """
+        from appsec_review.retrieval.observations import (
+            OBSERVATION_CLASSES, REPORTED_SEVERITIES, SEVERITY_ORDER, classify, normalize_reported_severity,
+            rule_of, scanner_of,
+        )
+        for name, value in (("scanner", scanner), ("rule", rule)):
+            if value is not None and (not isinstance(value, str) or not value or len(value) > 4096):
+                raise ValueError(f"invalid observation filter: {name}")
+        if severity is not None and severity not in REPORTED_SEVERITIES:
+            raise ValueError("invalid normalized reported severity")
+        if observation_class is not None and observation_class not in OBSERVATION_CLASSES:
+            raise ValueError("invalid observation class")
+        for name, value in (("suppressed", suppressed), ("duplicate", duplicate)):
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"invalid observation filter: {name}")
+        if source is not None and LogicalIdentity.parse(source).kind is not EntityKind.SOURCE_FILE:
+            raise ValueError("source filter requires a source_file identity")
+        if artifact is not None:
+            LogicalIdentity.parse(artifact)
+        if path is not None:
+            path = normalize_relative_path(path)
+        for name, value in (("start_line", start_line), ("end_line", end_line)):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+                raise ValueError(f"invalid observation filter: {name}")
+        if (start_line is not None or end_line is not None) and path is None:
+            raise ValueError("a line filter requires an exact path")
+        if shard is not None and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", shard):
+            raise ValueError("invalid observation shard")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"scanner": scanner, "rule": rule, "severity": severity, "observation_class": observation_class,
+                      "suppressed": suppressed, "duplicate": duplicate, "source": source, "artifact": artifact,
+                      "path": path, "start_line": start_line, "end_line": end_line, "shard": shard,
+                      "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_observations", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[tuple[int, str, dict[str, Any]]] = []
+            gaps: list[str] = []
+            candidate_bound = max(1_000, self.limits.max_results * 100)
+            scanned = 0
+            candidates = [item for item in self.indexes.get("observations", ())
+                          if shard is None or str(item.get("shard_id")) == shard]
+            if not candidates:
+                gaps.append("accepted observation indexes are unavailable" if shard is None
+                            else f"observation shard is unavailable: {shard}")
+            states, state_gaps = self._lead_states(deadline)
+            gaps.extend(state_gaps)
+            if (suppressed is not None or duplicate is not None) and state_gaps:
+                return [], gaps + ["suppression/duplicate filters cannot be evaluated; no result is a clean answer"], \
+                    False, offset
+            for identity in candidates:
+                self._check_deadline(deadline)
+                shard_id = str(identity.get("shard_id", "default"))
+                clauses, values = ["e.kind = 'tool_observation'"], []
+                if path is not None:
+                    clauses.append("l.path = ?")
+                    values.append(path)
+                if start_line is not None:
+                    clauses.append("l.end_line >= ?")
+                    values.append(start_line)
+                if end_line is not None:
+                    clauses.append("l.start_line <= ?")
+                    values.append(end_line)
+                for relation, target in ((RelationKind.OBSERVED_AT.value, source), (RelationKind.DERIVED_FROM.value, artifact)):
+                    if target is not None:
+                        clauses.append("EXISTS (SELECT 1 FROM relations r WHERE r.source_id = e.identity "
+                                       "AND r.kind = ? AND r.target_id = ?)")
+                        values.extend((relation, target))
+                sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
+                       " AND ".join(clauses) + " ORDER BY e.identity")
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        self._check_deadline(deadline)
+                        scanned += 1
+                        if scanned > candidate_bound:
+                            return [], gaps + ["observation candidate bound exceeded; narrow the filters"], \
+                                False, offset, True
+                        payload = json.loads(row["payload_json"])
+                        if scanner is not None and scanner_of(payload) != scanner:
+                            continue
+                        if rule is not None and rule_of(payload) != rule:
+                            continue
+                        reported = normalize_reported_severity(payload)
+                        if severity is not None and reported["value"] != severity:
+                            continue
+                        kind = classify(payload)
+                        if observation_class is not None and kind != observation_class:
+                            continue
+                        state = states.get(row["identity"])
+                        if suppressed is not None and (state is None or bool(state.get("suppressed")) != suppressed):
+                            continue
+                        if duplicate is not None and (state is None or bool(state.get("duplicate_of")) != duplicate):
+                            continue
+                        item = self._entity(row, "observations")
+                        item.update(shard_id=shard_id, scanner=scanner_of(payload), rule_id=rule_of(payload),
+                                    observation_class=kind, reported_severity=reported,
+                                    lead_state=dict(state) if state is not None else None,
+                                    authority="tool observation; scanner severity orders review and is not an "
+                                              "adjudicated finding severity")
+                        found.append((SEVERITY_ORDER[reported["value"]], row["identity"], item))
+                    gaps.extend(f"observations/{shard_id}: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"))
+                gaps.extend(f"observations/{shard_id}: {gap}" for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item[0], item[1], item[2]["shard_id"]))
+            page = [item[2] for item in found[offset:offset + limit]]
+            return page, gaps, len(found) > offset + limit, offset
+        return self._execute("query_observations", parameters, operation)
+
+    def query_dataset_inventory(
+        self, *, record_type: str | None = None, job: str | None = None, family: str | None = None,
+        disposition: str | None = None, coverage_state: str | None = None, sensitivity: str | None = None,
+        cell_type: str | None = None, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Bounded catalog of accepted datasets, the publication audit and coverage matrices."""
+        allowed = {"record_type": {"dataset", "audit", "coverage_cell"},
+                   "disposition": {"indexed", "artifact_only", "protected", "unavailable"},
+                   "coverage_state": {"complete", "partial", "stale", "unavailable"},
+                   "sensitivity": {"public", "internal", "sensitive", "secret"},
+                   "cell_type": {"language", "build_unit", "producer_consumer", "input_source", "query_set",
+                                 "graph_follow_up", "fts_validation"}}
+        filters = {"record_type": record_type, "job_id": job, "family": family, "disposition": disposition,
+                   "coverage_state": coverage_state, "sensitivity": sensitivity, "cell_type": cell_type}
+        for key, value in filters.items():
+            if value is None:
+                continue
+            name = {"job_id": "job"}.get(key, key)
+            if not isinstance(value, str) or not value or len(value) > 256 or (
+                    name in allowed and value not in allowed[name]):
+                raise ValueError(f"invalid dataset inventory filter: {name}")
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {**{("job" if key == "job_id" else key): value for key, value in filters.items()},
+                      "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("query_dataset_inventory", parameters)
+        offset = self._offset(cursor, request_hash)
+
+        def operation(deadline: float):
+            found: list[dict[str, Any]] = []
+            gaps: list[str] = []
+            candidates = self.indexes.get("inventory", ())
+            if not candidates:
+                gaps.append("accepted dataset inventory is unavailable")
+            for identity in candidates:
+                self._check_deadline(deadline)
+                clauses, values = [], []
+                for key, value in filters.items():
+                    if value is not None:
+                        clauses.append("json_extract(e.payload_json, ?) = ?")
+                        values.extend((f"$.{key}", value))
+                sql = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity"
+                if clauses:
+                    sql += " WHERE " + " AND ".join(clauses)
+                sql += " ORDER BY e.identity LIMIT ?"
+                values.append(offset + limit + 1)
+                shard_id = str(identity.get("shard_id", "default"))
+                with self._database(identity, deadline) as database:
+                    for row in database.execute(sql, values):
+                        item = self._entity(row, "inventory")
+                        item["shard_id"] = shard_id
+                        found.append(item)
+                    gaps.extend(f"inventory/{shard_id}: {row['area']}: {row['status']}: {row['gap']}"
+                                for row in database.execute(
+                                    "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"))
+                gaps.extend(f"inventory/{shard_id}: {gap}" for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["identity"], item["shard_id"]))
+            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+        return self._execute("query_dataset_inventory", parameters, operation)
     def query_build_security(
         self, *, project: str | None = None, build_root: str | None = None,
         build_action: str | None = None, configuration: str | None = None,
