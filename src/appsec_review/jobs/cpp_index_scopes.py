@@ -16,10 +16,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from appsec_review.retrieval.index import load_verified_manifest
-from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.storage import (
+    ArtifactIntegrityError, canonical_json, file_sha256, run_artifact, verify_run_artifact,
+)
 
 
 SCOPE_SCHEMA = "appsec-review/cpp-index-scope/1"
+CHECKPOINT_SCHEMA = "appsec-review/cpp-index-scope-checkpoint/2"
 SOURCE_MOUNT = "/target/source"
 _CXX_SUFFIXES = frozenset({".cc", ".cpp", ".cxx", ".c++", ".mm"})
 
@@ -187,10 +190,13 @@ def tool_identity(repository_root: Path, tool_id: str) -> dict[str, Any]:
 
 
 def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[str, ...],
-                       scratch: Path, executor_factory: Any = None) -> dict[str, Any]:
+                       scratch: Path, executor_factory: Any = None, *,
+                       file_size_limit_bytes: int | None = None) -> dict[str, Any]:
     """Run one catalog tool against a scope: case root read-only at /target, scratch read-write.
 
-    The container compile database is written to ``/scratch/compile_commands.json`` first.
+    The container compile database is written to ``/scratch/compile_commands.json`` first. A
+    ``file_size_limit_bytes`` is enforced by the kernel (RLIMIT_FSIZE) on every file the tool
+    writes, so a bounded output can never outgrow its limit on the run volume.
     """
     from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
     from appsec_review.storage import tool_input_json
@@ -204,9 +210,12 @@ def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[s
     executor = (executor_factory(unit) if executor_factory is not None else
                 ContainerExecutor(load_catalog(unit.job.repository_root), unit.job.run_root))
     result = executor.execute(ExecutionRequest(tool_id=tool_id, argv=argv,
-                                               target_root=scope.case_root, scratch_root=scratch))
+                                               target_root=scope.case_root, scratch_root=scratch,
+                                               file_size_limit_bytes=file_size_limit_bytes))
     run_root = unit.job.run_root
     return {"tool_id": tool_id, "exit_code": result.exit_code, "timed_out": result.timed_out,
+            "file_size_limit_bytes": file_size_limit_bytes,
+            "file_size_limit_reached": bool(result.file_size_limit_reached),
             "oom_killed": result.oom_killed, "image_id": result.image_id,
             "image_digest": result.image_digest, "argv_identity": result.argv_identity,
             "stdout_truncated": result.stdout_truncated, "stderr_truncated": result.stderr_truncated,
@@ -216,33 +225,81 @@ def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[s
 
 
 def artifact(run_root: Path, path: Path) -> dict[str, Any]:
-    return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
-            "size_bytes": path.stat().st_size}
+    return run_artifact(run_root, path)
 
 
-def scope_checkpoint(path: Path, identity: str, run_root: Path) -> Mapping[str, Any] | None:
-    """Return a prior SUCCEEDED/COMPLETED_WITH_GAPS scope result whose shard still verifies."""
-    if not path.is_file() or path.is_symlink():
+class CheckpointIntegrityError(ArtifactIntegrityError):
+    """A matching scope checkpoint references accepted evidence that is missing or changed.
+
+    This is a framework-integrity failure: the checkpoint may not be reused, and the loss is not a
+    producer gap, so the stale identities it names must never be republished.
+    """
+
+
+def _artifact_identities(value: Any) -> list[Mapping[str, Any]]:
+    found: list[Mapping[str, Any]] = []
+    if isinstance(value, Mapping):
+        if isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
+            found.append(value)
+        for child in value.values():
+            found.extend(_artifact_identities(child))
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            found.extend(_artifact_identities(child))
+    return found
+
+
+def _dotted(value: Mapping[str, Any], key: str) -> Any:
+    for part in key.split("."):
+        value = value.get(part) if isinstance(value, Mapping) else None
+    return value
+
+
+def scope_checkpoint(path: Path, identity: str, run_root: Path, scope: IndexScope, *,
+                     required: tuple[str, ...] = ()) -> Mapping[str, Any] | None:
+    """Return a prior scope result only after re-verifying every run-owned artifact it references.
+
+    ``None`` means no checkpoint applies (absent, older schema, or a different identity) and the
+    scope runs. A checkpoint whose identity matches but whose shard, receipt, compile database,
+    output, manifest, or any other referenced artifact is missing or altered raises
+    :class:`CheckpointIntegrityError`.
+    """
+    if not path.exists() and not path.is_symlink():
         return None
+    if path.is_symlink() or not path.is_file():
+        raise CheckpointIntegrityError(f"scope checkpoint is not a regular run-owned file: {scope.scope_id}")
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise CheckpointIntegrityError(f"scope checkpoint is unreadable: {scope.scope_id}") from exc
+    if not isinstance(document, Mapping) or document.get("schema") != CHECKPOINT_SCHEMA \
+            or document.get("identity") != identity:
         return None
-    if document.get("identity") != identity:
-        return None
-    result = document.get("result", {})
-    shard = result.get("index_identity", {})
-    shard_path = run_root / str(shard.get("relative_path", ""))
-    if not shard_path.is_file() or file_sha256(shard_path) != shard.get("sha256"):
-        return None
+    result = document.get("result")
+    if not isinstance(result, Mapping) or result.get("scope_id") != scope.scope_id:
+        raise CheckpointIntegrityError(f"scope checkpoint names a different scope: {scope.scope_id}")
+    if result.get("accepted_compile_database") != dict(scope.compile_database):
+        raise CheckpointIntegrityError(f"scope checkpoint compile database is not the accepted one: {scope.scope_id}")
+    for key in required:
+        value = _dotted(result, key)
+        if not isinstance(value, Mapping) or not isinstance(value.get("path"), str):
+            raise CheckpointIntegrityError(f"scope checkpoint lacks required artifact {key}: {scope.scope_id}")
+    shard = result.get("index_identity")
+    if not isinstance(shard, Mapping):
+        raise CheckpointIntegrityError(f"scope checkpoint lacks its index identity: {scope.scope_id}")
+    try:
+        verify_run_artifact(run_root, shard, path_key="relative_path")
+        for item in _artifact_identities(result):
+            verify_run_artifact(run_root, item)
+    except ArtifactIntegrityError as exc:
+        raise CheckpointIntegrityError(f"{scope.scope_id}: {exc}") from exc
     return {**result, "checkpoint_reused": True}
 
 
 def save_scope_checkpoint(path: Path, identity: str, result: Mapping[str, Any]) -> None:
     from appsec_review.storage import atomic_json
 
-    atomic_json(path, {"schema": "appsec-review/cpp-index-scope-checkpoint/1", "identity": identity,
-                       "result": dict(result)})
+    atomic_json(path, {"schema": CHECKPOINT_SCHEMA, "identity": identity, "result": dict(result)})
 
 
 def checkpoint_identity(values: Mapping[str, Any]) -> str:

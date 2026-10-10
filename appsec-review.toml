@@ -257,6 +257,14 @@ change_count = 1
 
 [jobs.job_source_history_analysis.settings.git]
 enabled = true
+# Enforced while Git runs: each history output file is written under RLIMIT_FSIZE of
+# max_output_bytes + 1, and reaching it discards the output and publishes a coverage gap.
+max_output_bytes = 268435456
+# Incremental parser bounds: one NUL-delimited log record (header, numstat row, or path),
+# retained bytes of one commit message, and changed-path records retained across the walk.
+max_record_bytes = 1048576
+max_message_bytes = 65536
+max_changed_paths = 1000000
 
 [jobs.job_source_history_analysis.settings.github]
 enabled = false
@@ -265,6 +273,11 @@ repository = ""
 token_env = "GITHUB_TOKEN"
 max_requests = 2000
 timeout_seconds = 30
+# Associated pull requests and reviews are followed page by page through Link rel="next".
+# Reaching a bound leaves that collection incomplete and its review conclusions indeterminate.
+per_page = 100
+max_pages = 50
+max_records = 5000
 
 [jobs.job_source_history_analysis.steps.resolve_sources]
 workers = 1

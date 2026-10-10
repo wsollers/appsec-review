@@ -14,11 +14,10 @@ import statistics
 from typing import Any
 
 
-RULES_IDENTITY = "appsec-review/history-change-rules/1"
-RANKING_IDENTITY = "appsec-review/history-attention/1"
+RULES_IDENTITY = "appsec-review/history-change-rules/2"
+RANKING_IDENTITY = "appsec-review/history-attention/2"
 NORMALIZER_IDENTITY = "appsec-review/history-normalizer/1"
 DAY = 86_400
-MAX_MESSAGE_BYTES = 65_536
 FILE_SIGNALS = (
     "change_count", "churn_lines", "relative_churn", "recency_weighted_churn", "author_count",
     "minor_author_count", "top_author_share", "fix_change_count", "security_fix_change_count",
@@ -100,20 +99,27 @@ def normalize(commits: list[Mapping[str, Any]], *, current_paths: Iterable[str],
 
 
 def classify(changes: list[Mapping[str, Any]], messages: Mapping[str, bytes], github: Mapping[str, Mapping[str, Any]],
-             *, known_commits: Iterable[str], fix_labels: Iterable[str], security_labels: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Return classification records keyed by change id; each label records ``exact`` or ``heuristic``."""
+             *, known_commits: Iterable[str], fix_labels: Iterable[str], security_labels: Iterable[str],
+             incomplete_messages: Iterable[str] = ()) -> dict[str, dict[str, Any]]:
+    """Return classification records keyed by change id; each label records ``exact`` or ``heuristic``.
+
+    Messages are already bounded by the parser. A change whose message exceeded that bound records
+    ``message_complete: false``: its positive labels stand, but an absent label is not a conclusion.
+    """
     known = set(known_commits)
+    incomplete = set(incomplete_messages)
     fix_set = {label.lower() for label in fix_labels}
     security_set = {label.lower() for label in security_labels}
     result: dict[str, dict[str, Any]] = {}
     reverted_by: dict[str, str] = {}
     for change in changes:
         change_id = str(change["change_id"])
-        text = messages.get(change_id, b"")[:MAX_MESSAGE_BYTES].decode("utf-8", "replace")
+        text = messages.get(change_id, b"").decode("utf-8", "replace")
         subject = text.split("\n", 1)[0].strip()
         labels = set(github.get(change_id, {}).get("labels", ()))
         record: dict[str, Any] = {"fix": None, "security_fix": None, "revert": None, "reverts": None,
-                                  "security_references": sorted({item.upper() for item in _SECURITY_ID.findall(text)})[:20]}
+                                  "security_references": sorted({item.upper() for item in _SECURITY_ID.findall(text)})[:20],
+                                  "message_complete": change_id in messages and change_id not in incomplete}
         trailer = _REVERT_TRAILER.search(text)
         if trailer and trailer.group(1) in known:
             record["revert"], record["reverts"] = "exact", trailer.group(1)
@@ -155,16 +161,19 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
                     minor_author_share: float, recent_change_limit: int = 20) -> dict[str, Any]:
     per_file: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "changes": [], "churn": 0, "weighted": 0.0, "authors": defaultdict(int), "fix": 0, "security": 0,
-        "revert": 0, "bypass": 0, "times": []})
+        "revert": 0, "bypass": 0, "unresolved": 0, "times": []})
     per_component: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "changes": set(), "churn": 0, "weighted": 0.0, "authors": set(), "fix": set(), "security": set(),
-        "revert": set(), "bypass": set(), "files": set()})
+        "revert": set(), "bypass": set(), "unresolved": set(), "files": set()})
     for change in changes:
         change_id = str(change["change_id"])
         age_days = max(0.0, ((anchor_time or 0) - int(change["effective_time"])) / DAY)
         decay = 0.5 ** (age_days / half_life_days)
         label = classes.get(change_id, {})
-        bypass = bool(github.get(change_id, {}).get("review_bypass"))
+        review = github.get(change_id)
+        bypass = bool(review and review.get("review_bypass") is True)
+        # Incomplete review history yields no bypass conclusion; it is counted as unresolved instead.
+        unresolved = review is not None and review.get("review_bypass") is None
         touched: dict[str, int] = defaultdict(int)
         for entry in change["files"]:
             current = entry.get("current_path")
@@ -182,6 +191,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             item["security"] += bool(label.get("security_fix"))
             item["revert"] += bool(label.get("revert") or label.get("reverted_by"))
             item["bypass"] += bypass
+            item["unresolved"] += unresolved
             component_id = _component_of(path, roots)
             if component_id is None:
                 continue
@@ -193,7 +203,8 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             if not change["bulk"]:
                 component["authors"].add(change["author"])
             for key, flag in (("fix", label.get("fix")), ("security", label.get("security_fix")),
-                              ("revert", label.get("revert") or label.get("reverted_by")), ("bypass", bypass)):
+                              ("revert", label.get("revert") or label.get("reverted_by")), ("bypass", bypass),
+                              ("unresolved", unresolved)):
                 if flag:
                     component[key].add(change_id)
     files: dict[str, dict[str, Any]] = {}
@@ -214,6 +225,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             "top_author_share": _round(max(item["authors"].values()) / author_total) if author_total else None,
             "fix_change_count": item["fix"], "security_fix_change_count": item["security"],
             "revert_count": item["revert"], "review_bypass_count": item["bypass"],
+            "review_bypass_unresolved_count": item["unresolved"],
             "retouch_interval_median_days": _round(statistics.median(gaps)) if gaps else None,
             "young_line_share": None, "last_change_time": times[-1] if times else None,
             "recent_changes": item["changes"][:recent_change_limit],
@@ -224,6 +236,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             "recency_weighted_churn": _round(item["weighted"]), "author_count": len(item["authors"]),
             "fix_change_count": len(item["fix"]), "security_fix_change_count": len(item["security"]),
             "revert_count": len(item["revert"]), "review_bypass_count": len(item["bypass"]),
+            "review_bypass_unresolved_count": len(item["unresolved"]),
             "file_count": len(item["files"]),
         }
         for component_id, item in sorted(per_component.items())

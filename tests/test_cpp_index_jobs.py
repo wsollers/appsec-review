@@ -118,8 +118,10 @@ class IndexExecutor:
                                relative(receipt))
 
 
-def _accepted_cpp(tmp_path: Path):
+def _accepted_cpp(tmp_path: Path, *, max_cpg_bytes: int | None = None):
     config, target = _fixture(tmp_path)
+    if max_cpg_bytes is not None:
+        config = _with_cpg_limit(tmp_path, max_cpg_bytes)
     run_id, fingerprint = _accepted_project(config, target, [])
     GraphRunner(config, [build_language(
         executor_factory=lambda unit, profile: native_language_executor(profile, []))]).run(
@@ -329,3 +331,189 @@ def test_clangd_yaml_parser_accepts_the_subset_and_rejects_everything_else() -> 
                 "stray\n", "--- !Symbol\n  - orphan: x\nName: y\n...\n"):
         with pytest.raises(ValueError):
             parse_documents(bad, document_limit=10)
+
+
+# --- CPG size limit enforced during generation, and strict checkpoint revalidation -----------------
+
+import os
+import resource
+import subprocess
+import sys
+
+from appsec_review.config import load_config
+from appsec_review.container_runtime.executor import FILE_SIZE_SIGNAL_EXIT
+from appsec_review.jobs.cpp_index_scopes import CheckpointIntegrityError
+from appsec_review.storage import file_sha256
+
+
+class RLimitJoern(IndexExecutor):
+    """A fake c2cpg that really writes ``attempt`` bytes under the request's RLIMIT_FSIZE."""
+
+    def __init__(self, run_root: Path, calls: list[str], attempt: int):
+        super().__init__(run_root, calls)
+        self.attempt = attempt
+        self.limits: list[int | None] = []
+
+    def execute(self, request):
+        assert request.tool_id == "tool-joern"
+        self.limits.append(request.file_size_limit_bytes)
+        scratch = request.scratch_root
+        writer = ("import sys\nwith open(sys.argv[1], 'wb') as out:\n"
+                  "    remaining = int(sys.argv[2])\n"
+                  "    while remaining:\n"
+                  "        step = min(remaining, 65536)\n"
+                  "        out.write(b'c' * step)\n        out.flush()\n        remaining -= step\n")
+
+        def limit() -> None:
+            if request.file_size_limit_bytes is not None:
+                resource.setrlimit(resource.RLIMIT_FSIZE, (request.file_size_limit_bytes,) * 2)
+
+        completed = subprocess.run([sys.executable, "-c", writer, str(scratch / "cpg.bin"), str(self.attempt)],
+                                   preexec_fn=limit, capture_output=True, check=False, timeout=60)
+        code = 128 - completed.returncode if completed.returncode < 0 else completed.returncode
+        raw = scratch / "raw"
+        raw.mkdir(exist_ok=True)
+        (raw / "stdout.bin").write_bytes(b"")
+        (raw / "stderr.bin").write_bytes(completed.stderr[-4096:])
+        receipt = scratch / "execution.json"
+        receipt.write_text(json.dumps({"tool_id": request.tool_id, "exit_code": code,
+                                       "limits": {"file_size_bytes": request.file_size_limit_bytes}}),
+                           encoding="utf-8")
+        relative = lambda path: path.relative_to(self.run_root).as_posix()
+        digest = "sha256:" + "c" * 64
+        self.calls.append(request.tool_id)
+        return ExecutionResult("appsec-review/container-execution/1", request.tool_id, "fixture",
+                               digest, digest, "argv", (), {}, "start", "end", code, False, False,
+                               False, False, relative(raw / "stdout.bin"), relative(raw / "stderr.bin"),
+                               relative(receipt), request.file_size_limit_bytes, code == FILE_SIZE_SIGNAL_EXIT)
+
+
+def _with_cpg_limit(tmp_path: Path, limit: int):
+    path = tmp_path / "appsec-review.toml"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace("max_cpg_bytes = 2147483648", f"max_cpg_bytes = {limit}")
+    path.write_text(text, encoding="utf-8")
+    return load_config(path)
+
+
+LIMIT = 256 * 1024
+
+
+def test_cpg_limit_stops_c2cpg_while_writing_and_discards_the_partial_cpg(tmp_path: Path) -> None:
+    config, target, run_id, fingerprint = _accepted_cpp(tmp_path, max_cpg_bytes=LIMIT)
+    run_root = config.runtime.runs_dir / run_id
+    joern = RLimitJoern(run_root, [], attempt=64 * LIMIT)  # tries to write 16 MiB
+    outcome = _run(config, target, run_id, fingerprint, build_cpg(executor_factory=lambda unit: joern))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    (scope,) = _outputs(outcome, "job_cpg_analysis")["generate.scopes"]["scopes"]
+    assert joern.limits == [LIMIT + 1], "the limit is applied to the execution, not checked afterwards"
+    # Like the JVM, the writer ignores SIGXFSZ: the kernel fails the write with EFBIG instead, so
+    # the job recognises the stop from the bounded file size, not only from a 128 + SIGXFSZ exit.
+    assert scope["execution"]["file_size_limit_reached"] is False and scope["execution"]["exit_code"] == 1
+    assert scope["resource_limit"] == {"mechanism": "RLIMIT_FSIZE", "max_cpg_bytes": LIMIT,
+                                       "enforced_bytes": LIMIT + 1, "disposition": "LIMIT_REACHED",
+                                       "observed_bytes": LIMIT + 1}, "growth stopped at the bound"
+    assert scope["cpg"] is None
+    assert not list((run_root / "data" / "code-index" / "joern").rglob("cpg.bin")), "partial CPG retained"
+    assert scope["gaps"][0] == (f"Joern c2cpg reached the {LIMIT}-byte CPG limit while writing; "
+                                "the partial CPG was discarded")
+    coverage = _rows(run_root, scope["index_identity"], "SELECT status, gap FROM coverage")
+    assert coverage[0][0] == "unavailable" and "CPG limit" in coverage[0][1]
+    manifest = json.loads((run_root / scope["cpg_manifest"]["path"]).read_text(encoding="utf-8"))
+    assert manifest["resource_limit"]["disposition"] == "LIMIT_REACHED" and manifest["cpg"] is None
+    receipt = json.loads((run_root / scope["execution"]["receipt"]["path"]).read_text(encoding="utf-8"))
+    assert receipt["limits"]["file_size_bytes"] == LIMIT + 1
+
+
+@pytest.mark.parametrize("size", [LIMIT, LIMIT - 1])
+def test_cpg_immediately_below_the_limit_is_retained_complete(tmp_path: Path, size: int) -> None:
+    config, target, run_id, fingerprint = _accepted_cpp(tmp_path, max_cpg_bytes=LIMIT)
+    run_root = config.runtime.runs_dir / run_id
+    joern = RLimitJoern(run_root, [], attempt=size)
+    outcome = _run(config, target, run_id, fingerprint, build_cpg(executor_factory=lambda unit: joern))
+    (scope,) = _outputs(outcome, "job_cpg_analysis")["generate.scopes"]["scopes"]
+    assert scope["resource_limit"]["disposition"] == "WITHIN_LIMIT"
+    path = run_root / scope["cpg"]["path"]
+    assert path.stat().st_size == size == scope["cpg"]["size_bytes"]
+    assert file_sha256(path) == scope["cpg"]["sha256"] and path.read_bytes() == b"c" * size
+    assert scope["gaps"] == [JOERN_GAP]
+
+
+def _checkpointed(tmp_path: Path, max_cpg_bytes: int | None = None):
+    config, target, run_id, fingerprint = _accepted_cpp(tmp_path, max_cpg_bytes=max_cpg_bytes)
+    run_root = config.runtime.runs_dir / run_id
+    calls: list[str] = []
+    job = lambda: build_cpg(executor_factory=lambda unit: IndexExecutor(unit.job.run_root, calls))
+    first = _run(config, target, run_id, fingerprint, job())
+    (scope,) = _outputs(first, "job_cpg_analysis")["generate.scopes"]["scopes"]
+    reused = _run(config, target, run_id, fingerprint, job(), force_from="job_cpg_analysis")
+    (again,) = _outputs(reused, "job_cpg_analysis")["generate.scopes"]["scopes"]
+    assert again["checkpoint_reused"] is True and calls == ["tool-joern"]
+    return config, target, run_id, fingerprint, run_root, scope, job, calls
+
+
+REFERENCED = {
+    "cpg": lambda scope: scope["cpg"]["path"],
+    "cpg-manifest": lambda scope: scope["cpg_manifest"]["path"],
+    "execution-receipt": lambda scope: scope["execution"]["receipt"]["path"],
+    "scope-compile-database": lambda scope: scope["execution"]["compile_database"]["path"],
+    "index-shard": lambda scope: scope["index_identity"]["relative_path"],
+}
+
+
+@pytest.mark.parametrize("change", ["delete", "mutate"])
+@pytest.mark.parametrize("name", sorted(REFERENCED))
+def test_cpg_checkpoint_reuse_revalidates_every_referenced_artifact(tmp_path: Path, name: str, change: str) -> None:
+    config, target, run_id, fingerprint, run_root, scope, job, calls = _checkpointed(tmp_path)
+    pointer = run_root / "data" / "jobs" / "job_cpg_analysis" / "latest.json"
+    accepted = pointer.read_bytes()
+    path = run_root / REFERENCED[name](scope)
+    if change == "delete":
+        path.unlink()
+    else:
+        path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(RuntimeError, match="generate.scopes"):
+        _run(config, target, run_id, fingerprint, job(), force_from="job_cpg_analysis")
+    (traceback,) = (run_root / "data" / "jobs" / "job_cpg_analysis").rglob("generate/tasks/scopes/traceback.txt")
+    text = traceback.read_text(encoding="utf-8")
+    assert "CheckpointIntegrityError" in text and scope["scope_id"] in text, text[-1500:]
+    assert calls == ["tool-joern"], "a mutated checkpoint is a framework failure, not a reason to regenerate"
+    assert pointer.read_bytes() == accepted, "no new handoff may republish the stale identities"
+
+
+def test_cpg_checkpoint_rejects_a_changed_accepted_compile_database(tmp_path: Path) -> None:
+    from appsec_review.jobs.cpp_index_scopes import scope_checkpoint
+    config, target, run_id, fingerprint, run_root, scope, job, calls = _checkpointed(tmp_path)
+    checkpoint = run_root / "data" / "code-index" / "joern" / scope["scope_id"] / "checkpoint.json"
+    document = json.loads(checkpoint.read_text(encoding="utf-8"))
+    _accepted, (index_scope,), _ = accepted_cpp_scopes(run_root)
+    assert scope_checkpoint(checkpoint, document["identity"], run_root, index_scope) is not None
+    for mutate in (lambda result: result["accepted_compile_database"].update(sha256="0" * 64),
+                   lambda result: result.update(scope_id="cpp-scope-other"),
+                   lambda result: result["execution"].pop("receipt")):
+        altered = json.loads(json.dumps(document))
+        mutate(altered["result"])
+        checkpoint.write_text(json.dumps(altered), encoding="utf-8")
+        with pytest.raises(CheckpointIntegrityError):
+            scope_checkpoint(checkpoint, document["identity"], run_root, index_scope,
+                             required=("execution.receipt",))
+    checkpoint.write_text("{not json", encoding="utf-8")
+    with pytest.raises(CheckpointIntegrityError):
+        scope_checkpoint(checkpoint, document["identity"], run_root, index_scope)
+    checkpoint.write_text(json.dumps(document), encoding="utf-8")
+    assert scope_checkpoint(checkpoint, "other-identity", run_root, index_scope) is None
+    # The accepted compile database itself is verified when scopes are loaded.
+    accepted = run_root / index_scope.compile_database["path"]
+    accepted.write_bytes(accepted.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="accepted compile database changed"):
+        accepted_cpp_scopes(run_root)
+
+
+def test_cpg_checkpoint_identity_binds_the_configured_limit(tmp_path: Path) -> None:
+    identities = []
+    for name, limit in (("default", None), ("bounded", LIMIT)):
+        (tmp_path / name).mkdir()
+        _, _, _, _, run_root, scope, _, _ = _checkpointed(tmp_path / name, limit)
+        checkpoint = run_root / "data" / "code-index" / "joern" / scope["scope_id"] / "checkpoint.json"
+        identities.append((scope["scope_id"], json.loads(checkpoint.read_text())["identity"]))
+    assert identities[0][0] == identities[1][0] and identities[0][1] != identities[1][1]
