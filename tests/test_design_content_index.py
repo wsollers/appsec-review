@@ -345,3 +345,56 @@ def test_unavailable_converter_and_missing_conversion_are_named_gaps(tmp_path: P
     content = outcome["jobs"]["job_design_content_index"]["result"]["outputs"]["content_publication.publish_handoff"]
     assert content["conversion_status"] == "UNAVAILABLE"
     assert any("job_document_conversion has no accepted handoff" in gap for gap in content["gaps"])
+
+
+def test_planner_ranks_declared_interface_operations_in_design_context(tmp_path: Path) -> None:
+    pytest.importorskip("pypdf")
+    from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
+
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
+        "[jobs.job_target_analysis_plan.settings.model]\nenabled = true",
+        "[jobs.job_target_analysis_plan.settings.model]\nenabled = false")
+    (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
+    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    config = load_config(tmp_path / "appsec-review.toml")
+    target = _target(tmp_path / "target")
+    (target / "pyproject.toml").write_text("[project]\nname = 'fixture'\n", encoding="utf-8")
+    factory = lambda unit: LocalConverter(unit.job.repository_root, unit.job.run_root, [])
+    outcome = GraphRunner(config, (build_intake(), build_catalog(), build_discovery(),
+                                   build_conversion(executor_factory=factory), build_content(), build_plan())).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+    plan = load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
+    interfaces = plan["design_context"]["interfaces"]
+    assert interfaces["status"] == "ACCEPTED"
+    assert interfaces["content_handoff_sha256"] == outcome["jobs"]["job_design_content_index"]["handoff_sha256"]
+    # Insecure transport first, then weakest declared security; gRPC auth is undeclared, not safe.
+    assert [item["name"] for item in interfaces["operations"]] == [
+        "POST /login", "DELETE /users/{id}", "GET /users/{id}", "users.v1.Users/Watch"]
+    assert interfaces["counts"] == {"total": 4, "deprecated": 0, "insecure_transport": 3, "protocol:grpc": 1,
+                                    "protocol:http": 3, "security_state:none": 1, "security_state:optional": 1,
+                                    "security_state:required": 1, "security_state:unspecified": 1,
+                                    "streaming": 1}
+    component = plan["components"][0]
+    assert component["design_context"]["interface_operation"] == 4
+    assert component["design_context"]["unauthenticated_interface_operation"] == 1
+    assert not any(gap.startswith("interface context:") for gap in plan["coverage_gaps"])
+
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    component_entity = core.find(kind="component", indexes=["analysis"], limit=5)["results"][0]
+    traced = core.trace(identity=component_entity["identity"], relations=["CONTAINS"], depth=1)
+    contained = [item.get("payload", {}) for item in traced["results"]]
+    assert sum(1 for item in contained if item.get("design_context") == "interface_operations") == 4
+
+
+def test_interface_context_binding_is_unavailable_or_stale_but_never_guessed() -> None:
+    from appsec_review.jobs.job_target_analysis_plan.planning import with_interfaces
+
+    catalog = {"source_fingerprint": "f" * 64, "files": [], "components": []}
+    context = {"status": "ACCEPTED", "design_handoff_sha256": "a" * 64, "component_counts": {}, "coverage_gaps": []}
+    missing = with_interfaces(catalog, context, None, max_items=10)
+    assert missing["interfaces"]["status"] == "UNAVAILABLE" and missing["interfaces"]["operations"] == []
+    assert any("no accepted handoff" in gap for gap in missing["coverage_gaps"])
+    content = {"handoff_sha256": "c" * 64, "source_fingerprint": "f" * 64, "design_handoff_sha256": "b" * 64,
+               "summary_artifact": {}, "operations": [{"artifact_path": "x"}], "gaps": []}
+    stale = with_interfaces(catalog, context, content, max_items=10)
+    assert stale["interfaces"]["status"] == "STALE" and stale["interfaces"]["operations"] == []

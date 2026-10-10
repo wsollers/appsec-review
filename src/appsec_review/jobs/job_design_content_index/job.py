@@ -455,3 +455,27 @@ def build_job() -> Job:
                schema_identity="appsec-review/design-content-index-job/1", implementation_identity=implementation,
                validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
                units=units)
+
+
+def load_accepted_design_content(run_root: Path) -> dict[str, Any] | None:
+    """Return accepted interface operations and their binding, or None when never accepted."""
+    run_root = Path(run_root)
+    pointer_path = run_root / "data" / "jobs" / JOB_ID / "latest.json"
+    if not pointer_path.is_file():
+        return None
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    handoff = _read(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
+    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
+        raise ValueError("design content handoff is not accepted")
+    summary = _read(run_root, handoff["outputs"]["content_publication.publish_handoff"]["artifact"])
+    if summary.get("schema") != "appsec-review/design-content-index-handoff/1":
+        raise ValueError("design content summary schema is unsupported")
+    operations = _read(run_root, summary["interface_operations"])
+    if operations.get("schema") != "appsec-review/design-interface-operations/1":
+        raise ValueError("design interface operation schema is unsupported")
+    return {"handoff_sha256": str(pointer["handoff_sha256"]),
+            "source_fingerprint": str(handoff.get("source_fingerprint")),
+            "design_handoff_sha256": summary.get("design_handoff_sha256"),
+            "summary_artifact": dict(handoff["outputs"]["content_publication.publish_handoff"]["artifact"]),
+            "operations": list(operations["operations"]), "specifications": list(operations["specifications"]),
+            "gaps": list(operations["gaps"])}

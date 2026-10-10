@@ -23,7 +23,16 @@
       "properties": {
         "schema": {"const": "appsec-review/target-analysis-design-context/1"},
         "status": {"enum": ["ACCEPTED", "UNAVAILABLE", "STALE"]},
-        "design_handoff_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        "design_handoff_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "interfaces": {
+          "type": "object",
+          "required": ["status", "content_handoff_sha256", "counts", "operations", "truncated", "coverage_gaps"],
+          "properties": {
+            "status": {"enum": ["ACCEPTED", "UNAVAILABLE", "STALE"]},
+            "content_handoff_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+            "operations": {"type": "array"}
+          }
+        }
       }
     },
     "prerequisites": {"type": "array", "items": {"type": "string"}},

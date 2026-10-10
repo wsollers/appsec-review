@@ -279,6 +279,85 @@ def design_context(catalog: Mapping[str, Any], design: Mapping[str, Any] | None,
             "truncated": truncated, "coverage_gaps": list(dict.fromkeys(gaps))}
 
 
+_SECURITY_RANK = {"none": 0, "invalid": 1, "unspecified": 2, "optional": 3, "required": 4}
+_INTERFACE_STATUSES = {"ACCEPTED", "UNAVAILABLE", "STALE"}
+_OPERATION_FIELDS = ("interface_operation_id", "protocol", "method", "route", "name", "operation_id",
+                     "security_state", "security_schemes", "security_scheme_types", "insecure_transport",
+                     "client_streaming", "server_streaming", "deprecated", "artifact_path", "artifact_sha256",
+                     "start_line", "end_line")
+
+
+def _operation_priority(operation: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Review order: insecure transport, weakest declared security, streaming, then a stable name."""
+    streaming = bool(operation.get("client_streaming") or operation.get("server_streaming"))
+    return (not operation.get("insecure_transport"), _SECURITY_RANK.get(str(operation["security_state"]), 1),
+            not streaming, str(operation["protocol"]), str(operation["name"]), str(operation["interface_operation_id"]))
+
+
+def with_interfaces(catalog: Mapping[str, Any], context: Mapping[str, Any], content: Mapping[str, Any] | None, *,
+                    max_items: int) -> dict[str, Any]:
+    """Add accepted declared interface operations to a design context, bound to the same discovery.
+
+    Operations are declared surface, not findings; `unspecified` security is unknown, never safe.
+    """
+    result = dict(context)
+    empty = {"content_handoff_sha256": None, "summary": None, "counts": {}, "operations": [],
+             "truncated": False, "coverage_gaps": []}
+    gaps: list[str] = []
+    if content is None:
+        interfaces = {**empty, "status": "UNAVAILABLE"}
+        gaps.append("interface context: job_design_content_index has no accepted handoff for this run")
+    elif (context.get("status") != "ACCEPTED" or content["source_fingerprint"] != catalog["source_fingerprint"] or
+          content["design_handoff_sha256"] != context.get("design_handoff_sha256")):
+        interfaces = {**empty, "status": "STALE", "content_handoff_sha256": content["handoff_sha256"]}
+        gaps.append("interface context: accepted design content is not bound to the accepted design "
+                    "discovery and target catalog and was not used")
+    else:
+        hashes = {str(item["path"]): str(item["sha256"]) for item in catalog["files"]}
+        components = tuple(sorted(catalog["components"], key=lambda item: str(item["component_id"])))
+        ordered = sorted(components, key=lambda item: (-len(PurePosixPath(str(item["root"])).parts),
+                                                       str(item["component_id"])))
+        counts: Counter[str] = Counter()
+        component_counts = {key: dict(value) for key, value in context.get("component_counts", {}).items()}
+        entries = []
+        for operation in content["operations"]:
+            path = str(operation["artifact_path"])
+            if hashes.get(path) != operation["artifact_sha256"]:
+                raise ValueError(f"interface operation is not an exact accepted catalog identity: {path}")
+            owner = next((item for item in ordered if _under(path, str(item["root"]))), None)
+            component_id = str(owner["component_id"]) if owner is not None else None
+            entry = {key: operation.get(key) for key in _OPERATION_FIELDS}
+            entry["http_rules"] = list(operation.get("http_rules", ()))[:8]
+            entry["component_id"] = component_id
+            entries.append(entry)
+            counts[f"protocol:{operation['protocol']}"] += 1
+            counts[f"security_state:{operation['security_state']}"] += 1
+            counts["insecure_transport"] += bool(operation.get("insecure_transport"))
+            counts["streaming"] += bool(operation.get("client_streaming") or operation.get("server_streaming"))
+            counts["deprecated"] += bool(operation.get("deprecated"))
+            if component_id is not None:
+                values = component_counts.setdefault(component_id, {})
+                values["interface_operation"] = values.get("interface_operation", 0) + 1
+                if operation["security_state"] == "none":
+                    values["unauthenticated_interface_operation"] = (
+                        values.get("unauthenticated_interface_operation", 0) + 1)
+        entries.sort(key=_operation_priority)
+        gaps.extend(f"interface context: {gap}" for gap in content["gaps"])
+        truncated = len(entries) > max_items
+        if truncated:
+            gaps.append(f"interface context: operations truncated at design_context_max_items={max_items} "
+                        f"({len(entries)} declared)")
+        interfaces = {"status": "ACCEPTED", "content_handoff_sha256": content["handoff_sha256"],
+                      "summary": content["summary_artifact"],
+                      "counts": {"total": len(entries), **dict(sorted(counts.items()))},
+                      "operations": entries[:max_items], "truncated": truncated}
+        result["component_counts"] = {key: dict(sorted(value.items())) for key, value in component_counts.items()}
+    interfaces["coverage_gaps"] = list(dict.fromkeys(gaps))
+    result["interfaces"] = interfaces
+    result["coverage_gaps"] = list(dict.fromkeys([*context.get("coverage_gaps", ()), *gaps]))
+    return result
+
+
 def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
                        design: Mapping[str, Any] | None = None) -> dict[str, Any]:
     files = tuple(sorted(catalog["files"], key=lambda item: str(item["path"])))
@@ -534,6 +613,15 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
                     raise ValueError("analysis plan design context is not an exact accepted catalog identity")
                 if entry.get("component_id") is not None and entry["component_id"] not in components:
                     raise ValueError("analysis plan design context names an unaccepted component")
+        interfaces = design.get("interfaces")
+        if interfaces is not None:
+            if interfaces.get("status") not in _INTERFACE_STATUSES:
+                raise ValueError("analysis plan interface context is invalid")
+            for entry in interfaces.get("operations", []):
+                if paths.get(str(entry.get("artifact_path"))) != entry.get("artifact_sha256"):
+                    raise ValueError("analysis plan interface operation is not an exact accepted catalog identity")
+                if entry.get("component_id") is not None and entry["component_id"] not in components:
+                    raise ValueError("analysis plan interface operation names an unaccepted component")
     systems = plan.get("build_topology", {}).get("build_systems", [])
     if any(item.get("build_system") not in BUILD_SYSTEMS for item in systems):
         raise ValueError("analysis plan contains an unregistered build system")

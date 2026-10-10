@@ -209,5 +209,6 @@ def test_planner_without_design_discovery_names_the_gap(tmp_path: Path) -> None:
         target_root=target, source_fingerprint=source_fingerprint(target))
     plan = load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
     assert plan["design_context"]["status"] == "UNAVAILABLE"
+    assert plan["design_context"]["interfaces"]["status"] == "UNAVAILABLE"
     assert plan["design_context"]["declared_interfaces"] == []
     assert any("job_design_artifact_discovery has no accepted handoff" in gap for gap in plan["coverage_gaps"])

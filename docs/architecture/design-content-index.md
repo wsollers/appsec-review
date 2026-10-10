@@ -191,6 +191,45 @@ the retrieval tools, with its source identity attached. It is never placed in a 
 prompt or treated as an instruction. Discovery's structure-only shard stays separate, so the trust
 difference is visible in the data.
 
+## Planner consumption
+
+The planner's `catalog_summary.load_design_context` task reads the accepted content handoff
+through `load_accepted_design_content`. It records the result as `design_context.interfaces`.
+
+- **Binding.**
+  - The content handoff must be accepted.
+  - It must name the same target fingerprint and the same discovery handoff as the plan's
+    `design_context`.
+  - If it is missing, the status is `UNAVAILABLE`. If it is bound to anything else, the status is
+    `STALE`. Both carry a named `interface context:` gap and an empty list. Neither fails the
+    plan.
+  - Hash or schema mismatches do fail the plan.
+- **Operations.** Each entry carries:
+  - its identity, protocol, method, route, and name;
+  - security state, schemes, and scheme types;
+  - insecure transport, streaming, deprecated flag, and gRPC HTTP rules;
+  - its exact catalog path and SHA-256, line span, and owning component.
+- **Order.** Entries are sorted for review:
+  1. insecure transport first;
+  2. then by declared security: `none`, `invalid`, `unspecified`, `optional`, `required`;
+  3. then streaming before non-streaming;
+  4. then protocol and name.
+
+  gRPC and GraphQL operations are `unspecified`, because the IDL does not declare authentication.
+  They therefore rank above explicitly authenticated HTTP operations. Unknown is not treated as
+  safe.
+- **Bound.** The list is capped at `design_context_max_items`, with a truncation gap. `counts`
+  always covers every declared operation.
+- **Per component.** Each component's `design_context` gains `interface_operation` and
+  `unauthenticated_interface_operation` counts.
+- **Validation.** `validate_plan` requires every operation to be an exact catalog identity and
+  every owner to be an accepted component.
+- **Index.** The plan shard adds a `CONTAINS` relation from the component to each listed operation.
+- **Gaps.** Extraction gaps join the plan's `coverage_gaps` with the prefix `interface context:`.
+
+Operations describe declared attack surface. They are not findings. As with all design context,
+they are never sent to the build-recipe model.
+
 ## Reviewer tools
 
 - **`search_design_content(query, category, path_prefix, chunk_kind, converted, limit, cursor)`**

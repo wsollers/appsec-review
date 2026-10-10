@@ -297,9 +297,9 @@ Content chunks (step 1), structured interface operations (step 2), and binary-do
   - Then add a pinned offline Spectral image with the OWASP API Security ruleset for
     OpenAPI/AsyncAPI.
   - Protobuf, Thrift, and GraphQL without a static security linter remain named gaps.
-- **Planner and worker consumption.** Feed `interface_operation` facets, such as unauthenticated or
-  insecure-transport operations and streaming RPCs, into the plan's `design_context` and into
-  bounded review-worker task context.
+- **Worker consumption.** The planner already ranks `interface_operation` facets in
+  `design_context.interfaces`. Pass that ranked surface and its source spans into bounded
+  review-worker task context.
 - **OCR.** `NO_TEXT` PDFs are a named gap. Any OCR step must be offline, pinned, bounded, and
   marked as reduced-confidence converted text.
 - **Vector recall, only if measured.** Evaluate full-text search plus structured operations on

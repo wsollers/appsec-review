@@ -26,7 +26,7 @@ from appsec_review.inference import Infer, ModelRequest
 
 from .planning import (
     BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS,
-    ambiguity_reasons, design_context, deterministic_plan, merge_proposal, summarize_catalog,
+    ambiguity_reasons, design_context, deterministic_plan, merge_proposal, summarize_catalog, with_interfaces,
     validate_plan, validate_proposal,
 )
 
@@ -183,13 +183,18 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
     def load_design(unit: UnitContext) -> Mapping[str, Any]:
         # Imported here: design discovery reuses the evidence catalog loader, which imports this job.
         from appsec_review.jobs.job_design_artifact_discovery import load_accepted_design_artifacts
+        from appsec_review.jobs.job_design_content_index import load_accepted_design_content
 
         maybe_fail(unit)
         catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
-        value = design_context(catalog, load_accepted_design_artifacts(unit.job.run_root),
-                               max_items=int(unit.job.config.settings["design_context_max_items"]))
+        max_items = int(unit.job.config.settings["design_context_max_items"])
+        value = design_context(catalog, load_accepted_design_artifacts(unit.job.run_root), max_items=max_items)
+        value = with_interfaces(catalog, value, load_accepted_design_content(unit.job.run_root),
+                                max_items=max_items)
         unit.job.events.write("ANALYSIS_PLAN_DESIGN_CONTEXT", design_status=value["status"],
+                              interface_status=value["interfaces"]["status"],
                               declared_interface_count=len(value["declared_interfaces"]),
+                              interface_operation_count=len(value["interfaces"]["operations"]),
                               threat_model_count=len(value["threat_models"]),
                               gap_count=len(value["coverage_gaps"]))
         return {"schema": value["schema"], "artifact": _artifact(unit, "design-context.json", value),
@@ -450,6 +455,15 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     builder.add_relation(RelationRecord(RelationKind.CONTAINS,
                         component_ids[entry["component_id"]], source_id.value, True, 1.0,
                         payload={"design_context": key, "categories": entry["categories"]}))
+            for entry in design.get("interfaces", {}).get("operations", ()):
+                if entry["component_id"] not in component_ids:
+                    continue
+                operation_id = LogicalIdentity.derive(EntityKind.INTERFACE_OPERATION, unit.job.source_fingerprint,
+                                                      {"interface_operation": entry["interface_operation_id"]})
+                builder.add_relation(RelationRecord(RelationKind.CONTAINS, component_ids[entry["component_id"]],
+                    operation_id.value, True, 1.0,
+                    payload={"design_context": "interface_operations", "security_state": entry["security_state"],
+                             "protocol": entry["protocol"]}))
             for index, action in enumerate(plan["build_topology"]["build_actions"], 1):
                 identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
                                                    {"analysis_plan_action": index, **action})
