@@ -392,6 +392,21 @@ build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline bounded Tree-sitter concrete-syntax-tree production for accepted source scopes."
 
 [[images]]
+id = "tool-sqlite-fts"
+state = "enabled"
+kind = "tool"
+version = "1.0.0"
+tag = "appsec-review/tool-sqlite-fts:1.0.0"
+image_id = "sha256:29c26f5f95b21855ada7cafce12f3bfa44c97a0f12e685f6a6c9084123109a27"
+context = "containers/tools/sqlite-fts"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/sqlite-fts/tool.toml"
+build_args = { TOOL_VERSION = "1.0.0" }
+purpose = "Offline bounded SQLite FTS5 shard construction and validation from sanitized JSONL."
+
+[[images]]
 id = "tool-git"
 state = "enabled"
 kind = "tool"

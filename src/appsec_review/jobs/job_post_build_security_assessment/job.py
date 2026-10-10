@@ -25,6 +25,7 @@ from .assessment import (
     INFERENCE_PROPOSAL_SCHEMA, SCHEMA, command_fingerprint, deterministic_checks, inspect_binary,
     normalize_action, shard_fingerprint, validate_inference,
 )
+from appsec_review.jobs.job_post_build_security_assessment.datasets import CONSUMES, DATASETS
 
 PROJECT_TASKS = ("native_units",)
 TOPOLOGY = {
@@ -735,4 +736,5 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                     Path(__file__).with_name("assessment.py").read_bytes()).hexdigest()
     return Job("job_post_build_security_assessment", "post_build_security_assessment",
                UnitExecutor(values).execute, input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=implementation, validation_identity=implementation, units=values)
+               implementation_identity=implementation, validation_identity=implementation, units=values,
+               datasets=DATASETS, consumes=CONSUMES)

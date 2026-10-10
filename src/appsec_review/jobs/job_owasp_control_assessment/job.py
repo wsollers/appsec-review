@@ -17,6 +17,7 @@ from appsec_review.owasp_workbench import (
     partition_work, pin_bundle, publish_manifest, publish_shard, select_profiles,
     standards_manifest, verify_results,
 )
+from appsec_review.jobs.job_owasp_control_assessment.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/owasp-workbench-result/1"
@@ -336,4 +337,5 @@ def build_job(*, fail_cell: str | None = None) -> Job:
     identity = hashlib.sha256(Path(__file__).read_bytes() + str(fail_cell).encode()).hexdigest()
     return Job("job_owasp_control_assessment", "owasp_control_assessment", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=identity, validation_identity=identity, units=units)
+               implementation_identity=identity, validation_identity=identity, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

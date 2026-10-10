@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping, Protocol, TYPE_CHECKING
 
 from appsec_review.config import JobConfig, ToolCapabilityConfig
 from appsec_review.observability import EventLog
+from appsec_review.runtime.datasets import DatasetDeclaration, validate_declarations
 
 if TYPE_CHECKING:
     from appsec_review.runtime.units import Unit
@@ -57,6 +58,15 @@ class Job:
     # Cheap deterministic identity of job inputs the target fingerprint does not cover, such as
     # version-control history. Recorded in the handoff and re-probed by resume planning.
     input_identity: Callable[[Path | None], str] | None = None
+    # Publication contract: every output kind this job may emit, and the accepted upstream jobs
+    # whose handoffs it reads. The dataset audit compares both with what a run actually produced.
+    datasets: tuple[DatasetDeclaration, ...] = ()
+    consumes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_declarations(self.job_id, self.datasets)
+        if self.job_id in self.consumes or len(self.consumes) != len(set(self.consumes)):
+            raise ValueError(f"job consumes itself or repeats an upstream job: {self.job_id}")
 
     def probe_input_identity(self, target_root: Path | None) -> str | None:
         return self.input_identity(target_root) if self.input_identity is not None else None

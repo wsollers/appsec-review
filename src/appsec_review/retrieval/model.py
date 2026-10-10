@@ -54,6 +54,12 @@ class EntityKind(StrEnum):
     REVIEW_SIGNAL = "review_signal"
     REVIEW_FLOW_STEP = "review_flow_step"
     REVIEW_CONTEXT_FILE = "review_context_file"
+    PRECOMPUTED_FACT = "precomputed_fact"
+    DATASET = "dataset"
+    DATASET_AUDIT = "dataset_audit"
+    COVERAGE_CELL = "coverage_cell"
+    DEPENDENCY_PACKAGE = "dependency_package"
+    ADVISORY = "advisory"
 
 
 class RelationKind(StrEnum):
@@ -71,6 +77,8 @@ class RelationKind(StrEnum):
     SUPPORTS = "SUPPORTS"
     CONTRADICTS = "CONTRADICTS"
     FLOWS_TO = "FLOWS_TO"
+    SAME_AS = "SAME_AS"
+    AFFECTED_BY = "AFFECTED_BY"
 
 
 def canonical_json(value: Any) -> bytes:
@@ -198,6 +206,10 @@ class RelationRecord:
         })).hexdigest()
 
 
+_SECRET_SEGMENTS = frozenset({"authorization", "password", "passwd", "secret", "secrets", "token", "credential",
+                              "credentials"})
+
+
 def sanitize_producer_data(value: Any, *, depth: int = 0) -> Any:
     """Bound and redact compile/link/tool metadata before indexing or returning it."""
     secret = re.compile(r"(?i)(authorization|password|passwd|secret|token|api[_-]?key|credential)")
@@ -207,12 +219,22 @@ def sanitize_producer_data(value: Any, *, depth: int = 0) -> Any:
         result = {}
         for key, child in list(value.items())[:200]:
             name = str(key)[:128]
-            result[name] = "<redacted>" if secret.search(name) else sanitize_producer_data(child, depth=depth + 1)
+            # Key names are matched by whole segments so a structural key such as ``ordered_tokens``
+            # survives while ``GITHUB_TOKEN`` or ``api_key`` still redacts its value.
+            segments = {part.lower() for part in re.split(r"[^A-Za-z0-9]+", name) if part}
+            joined = re.sub(r"[^a-z0-9]", "", name.lower())
+            sensitive = bool(segments & _SECRET_SEGMENTS) or "apikey" in joined or "privatekey" in joined
+            result[name] = "<redacted>" if sensitive else sanitize_producer_data(child, depth=depth + 1)
         return result
     if isinstance(value, (list, tuple)):
         result = []
         redact_next = False
         for child in list(value)[:500]:
+            if isinstance(child, (Mapping, list, tuple)):
+                # Structured children are sanitized field by field, never blanked by their repr.
+                result.append("<redacted>" if redact_next else sanitize_producer_data(child, depth=depth + 1))
+                redact_next = False
+                continue
             text = str(child)
             if redact_next:
                 result.append("<redacted>")

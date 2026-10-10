@@ -8,6 +8,7 @@ from typing import Any
 
 from appsec_review.jobs.cataloging import Bounds, inventory, source_fingerprint, write_json
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.jobs.job_review_intake.datasets import CONSUMES, DATASETS
 
 
 PREFLIGHT_SCHEMA = "appsec-review/model-preflight/1"
@@ -163,4 +164,5 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_review_intake", "review_intake", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity="appsec-review/review-intake-job/1",
-               implementation_identity=implementation, validation_identity=validation, units=units)
+               implementation_identity=implementation, validation_identity=validation, units=units,
+               datasets=DATASETS, consumes=CONSUMES)

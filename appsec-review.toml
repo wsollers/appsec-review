@@ -587,6 +587,69 @@ workers = 1
 [jobs.job_review_prioritization.steps.publish.tasks.index_priority]
 [jobs.job_review_prioritization.steps.publish.tasks.publish_handoff]
 
+
+[jobs.job_review_data_indexing]
+name = "review_data_indexing"
+workers = 1
+
+# Accepted dataset inventory, publication audit, cross-domain links and stage-1 precomputed
+# products. Reads only accepted shards, handoffs and hash-verified run-owned artifacts; it never
+# parses raw scanner output, IR or a CPG. See docs/architecture/indexing-and-query-reuse.md.
+[jobs.job_review_data_indexing.settings]
+# Run-tree enumeration bound for the publication audit. Reaching it fails acceptance.
+max_run_files = 500000
+# Every handoff artifact is rehashed; an unaccounted output or audit violation blocks acceptance.
+max_facts_per_product = 200000
+max_links_per_rule = 200000
+# High/Critical and unknown-severity lead menus are partitioned at this size and never truncated.
+menu_partition_size = 200
+max_build_exec_events = 20000
+max_commands_per_action = 64
+feed_max_age_days = 14
+# Offline cross-check of this job's published shard text with the pinned tool-sqlite-fts image:
+# "disabled", "optional" (record a named gap when the image is unavailable) or "required" (fail).
+# The image output is a validation receipt only; MCP reads only accepted in-process shards.
+fts_image_validation = "optional"
+fts_max_records = 100000
+fts_max_input_bytes = 16777216
+fts_max_text_bytes = 131072
+
+[jobs.job_review_data_indexing.steps.load]
+workers = 1
+[jobs.job_review_data_indexing.steps.load.tasks.accepted_inputs]
+
+[jobs.job_review_data_indexing.steps.links]
+workers = 1
+[jobs.job_review_data_indexing.steps.links.tasks.cross_domain]
+
+[jobs.job_review_data_indexing.steps.precompute]
+workers = 1
+[jobs.job_review_data_indexing.steps.precompute.tasks.build_provenance]
+[jobs.job_review_data_indexing.steps.precompute.tasks.artifact_inventory]
+[jobs.job_review_data_indexing.steps.precompute.tasks.dependency_advisories]
+[jobs.job_review_data_indexing.steps.precompute.tasks.scanner_correlation]
+[jobs.job_review_data_indexing.steps.precompute.tasks.ci_trust]
+[jobs.job_review_data_indexing.steps.precompute.tasks.history_context]
+[jobs.job_review_data_indexing.steps.precompute.tasks.control_evidence]
+[jobs.job_review_data_indexing.steps.precompute.tasks.reference_intelligence]
+[jobs.job_review_data_indexing.steps.precompute.tasks.symbol_links]
+
+[jobs.job_review_data_indexing.steps.fts]
+workers = 1
+[jobs.job_review_data_indexing.steps.fts.tasks.image_validation]
+
+[jobs.job_review_data_indexing.steps.audit]
+workers = 1
+[jobs.job_review_data_indexing.steps.audit.tasks.inventory]
+
+[jobs.job_review_data_indexing.steps.matrix]
+workers = 1
+[jobs.job_review_data_indexing.steps.matrix.tasks.coverage]
+
+[jobs.job_review_data_indexing.steps.publish]
+workers = 1
+[jobs.job_review_data_indexing.steps.publish.tasks.inventory_index]
+
 [jobs.job_project_build]
 name = "project_build"
 workers = 8

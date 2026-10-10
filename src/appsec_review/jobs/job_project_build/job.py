@@ -34,6 +34,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
 
 from .repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
+from appsec_review.jobs.job_project_build.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/project-build-dispatch/2"
@@ -1097,4 +1098,5 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                                      else b"docker")).hexdigest()
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, implementation_identity=implementation,
-               validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(), units=tuple(units))
+               validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(), units=tuple(units),
+               datasets=DATASETS, consumes=CONSUMES)
