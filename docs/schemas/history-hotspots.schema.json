@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/history-hotspots/1",
+  "title": "Source history hotspot index",
+  "description": "Immutable, run-owned top-N hotspot index of job_source_history_analysis. Scores prioritize review; they are never vulnerability evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "target_snapshot", "snapshot", "sii", "window", "hotspot_count", "selection",
+               "revision_semantics", "authority", "populations", "exclusions", "unavailable_signals", "signals",
+               "entries"],
+  "properties": {
+    "schema": {"const": "appsec-review/history-hotspots/1"},
+    "target_snapshot": {"type": "string"},
+    "snapshot": {"$ref": "#/$defs/snapshot"},
+    "sii": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "weights", "complexity_metric", "transforms", "tie_break"],
+      "properties": {
+        "identity": {"const": "appsec-review/security-instability-index/1"},
+        "weights": {"$ref": "#/$defs/metrics_number"},
+        "complexity_metric": {"enum": ["cyclomatic", "cognitive"]},
+        "transforms": {"type": "object"},
+        "tie_break": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "window": {"$ref": "#/$defs/window"},
+    "hotspot_count": {"type": "integer", "minimum": 1, "maximum": 100},
+    "selection": {"type": "string"},
+    "revision_semantics": {"type": "string"},
+    "authority": {"type": "string"},
+    "populations": {"type": "object"},
+    "exclusions": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "unavailable_signals": {"type": "array", "items": {"type": "string"}},
+    "signals": {"$ref": "#/$defs/artifact"},
+    "entries": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "size_bytes"],
+      "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                     "size_bytes": {"type": "integer"}}
+    },
+    "snapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["target_snapshot", "snapshot_commit", "object_format"],
+      "properties": {"target_snapshot": {"type": "string"}, "snapshot_commit": {"type": "string"},
+                     "object_format": {"enum": ["sha1", "sha256"]}}
+    },
+    "window": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "months", "start_time", "anchor_time", "anchor"],
+      "properties": {"identity": {"type": "string"}, "months": {"type": "integer", "minimum": 1},
+                     "start_time": {"type": "integer"}, "anchor_time": {"type": "integer"},
+                     "anchor": {"type": "string"}}
+    },
+    "metrics_number": {
+      "type": "object", "additionalProperties": false,
+      "required": ["relative_churn", "revision_frequency", "author_entropy", "complexity"],
+      "properties": {"relative_churn": {"type": "number"}, "revision_frequency": {"type": "number"},
+                     "author_entropy": {"type": "number"}, "complexity": {"type": "number"}}
+    },
+    "entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "scope", "identity", "rank", "tier", "score", "sii", "metrics", "changes",
+                   "changes_truncated", "fix_on_fix_events", "inputs", "snapshot", "source", "location", "window",
+                   "coverage_gaps", "authority"],
+      "properties": {
+        "schema": {"const": "appsec-review/history-hotspot/1"},
+        "scope": {"enum": ["file", "symbol"]},
+        "identity": {
+          "type": "object", "required": ["path", "symbol_id", "component_id"],
+          "properties": {"path": {"type": "string"}, "symbol_id": {"type": ["string", "null"]},
+                         "qualified_name": {"type": "string"}, "kind": {"type": "string"},
+                         "component_id": {"type": ["string", "null"]}}
+        },
+        "rank": {"type": "integer", "minimum": 1},
+        "tier": {"enum": [1, 2, 3]},
+        "score": {"type": "number", "minimum": 0, "maximum": 100},
+        "sii": {"const": "appsec-review/security-instability-index/1"},
+        "metrics": {"type": "object"},
+        "changes": {"type": "array", "maxItems": 100},
+        "changes_truncated": {"type": "boolean"},
+        "fix_on_fix_events": {"type": "array", "maxItems": 20},
+        "inputs": {
+          "type": "object", "additionalProperties": false,
+          "required": ["values", "missing_inputs", "weight_coverage", "normalization", "constant_metrics", "weights",
+                       "complexity_metric", "population", "tiers"],
+          "properties": {
+            "values": {"type": "object"}, "missing_inputs": {"type": "array", "items": {"type": "string"}},
+            "weight_coverage": {"type": "number", "minimum": 0, "maximum": 1}, "normalization": {"type": "object"},
+            "constant_metrics": {"type": "array", "items": {"type": "string"}},
+            "weights": {"$ref": "#/$defs/metrics_number"}, "complexity_metric": {"enum": ["cyclomatic", "cognitive"]},
+            "population": {"type": "integer"}, "tiers": {"type": "object"}
+          }
+        },
+        "snapshot": {"$ref": "#/$defs/snapshot"},
+        "source": {
+          "type": "object", "additionalProperties": false, "required": ["path", "sha256", "blob_id"],
+          "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                         "blob_id": {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"}}
+        },
+        "location": {
+          "type": "object", "additionalProperties": false,
+          "required": ["start_line", "end_line", "start_byte", "end_byte", "start_column", "end_column",
+                       "mapping_method", "exact"],
+          "properties": {"start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1},
+                         "start_byte": {"type": "integer", "minimum": 0}, "end_byte": {"type": "integer", "minimum": 0},
+                         "start_column": {"type": "integer", "minimum": 1}, "end_column": {"type": "integer", "minimum": 1},
+                         "mapping_method": {"type": "string"}, "exact": {"type": "boolean"}}
+        },
+        "window": {"$ref": "#/$defs/window"},
+        "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+        "authority": {"type": "string"}
+      }
+    }
+  }
+}

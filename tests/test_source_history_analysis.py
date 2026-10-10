@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import ast
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+from fractions import Fraction
 
 import pytest
 
@@ -16,7 +18,8 @@ from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_source_history_analysis import build_job, load_accepted_history
 from appsec_review.jobs.job_source_history_analysis.git import parse_blame, parse_log, parse_messages
 from appsec_review.jobs.job_source_history_analysis.github import GitHubClient, GitHubSettings, enrich
-from appsec_review.jobs.job_source_history_analysis.signals import classify, normalize, rank
+from appsec_review.jobs.job_source_history_analysis.hotspots import score as sii_score, tier_bounds
+from appsec_review.jobs.job_source_history_analysis.signals import classify, normalize
 from appsec_review.jobs.job_source_history_analysis.sources import blob_id, history_identity, resolve_git_source
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
@@ -31,15 +34,143 @@ GIT = shutil.which("git")
 pytestmark = pytest.mark.skipif(GIT is None, reason="host git is required to emulate the tool-git image")
 
 
-class LocalDocker:
-    """Emulate ``docker run`` for tool-git by mapping mounts and environment onto host git."""
+TREE_SITTER_LOCK = json.loads((ROOT / "containers" / "tools" / "tree-sitter" / "assets.lock.json").read_text())
 
-    def __init__(self) -> None:
+
+class _Node:
+    def __init__(self, kind: str, start: tuple[int, int], end: tuple[int, int], field: str | None = None,
+                 named: bool = True) -> None:
+        self.kind, self.start, self.end, self.field, self.named, self.children = kind, start, end, field, named, []
+
+
+def tree_sitter_nodes(source: bytes) -> list[dict]:
+    """Emit Tree-sitter-shaped Python nodes from ``ast`` for the subset the history job measures."""
+    offsets = [0]
+    for line in source.split(b"\n"):
+        offsets.append(offsets[-1] + len(line) + 1)
+    lines = source.split(b"\n")
+
+    def at(lineno: int, column: int) -> tuple[int, int]:
+        return lineno, column
+
+    def node(kind: str, item: ast.AST, field: str | None = None) -> _Node:
+        return _Node(kind, at(item.lineno, item.col_offset), at(item.end_lineno, item.end_col_offset), field)
+
+    def statements(parent: _Node, body: list[ast.stmt]) -> None:
+        for statement in body:
+            visit(parent, statement)
+
+    def visit(parent: _Node, item: ast.AST, field: str | None = None) -> None:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            current = node("class_definition" if isinstance(item, ast.ClassDef) else "function_definition", item, field)
+            column = lines[item.lineno - 1].find(item.name.encode(), item.col_offset)
+            current.children.append(_Node("identifier", at(item.lineno, column),
+                                          at(item.lineno, column + len(item.name)), "name"))
+            parent.children.append(current)
+            statements(current, item.body)
+        elif isinstance(item, ast.If):
+            current = node("if_statement", item, field)
+            parent.children.append(current)
+            visit(current, item.test, "condition")
+            statements(current, item.body)
+            orelse = item.orelse
+            while orelse:
+                first = orelse[0]
+                if (len(orelse) == 1 and isinstance(first, ast.If) and
+                        lines[first.lineno - 1].lstrip().startswith(b"elif")):
+                    clause = node("elif_clause", first, "alternative")
+                    current.children.append(clause)
+                    visit(clause, first.test, "condition")
+                    statements(clause, first.body)
+                    orelse = first.orelse
+                else:
+                    clause = _Node("else_clause", at(first.lineno, first.col_offset),
+                                   at(orelse[-1].end_lineno, orelse[-1].end_col_offset), "alternative")
+                    current.children.append(clause)
+                    statements(clause, orelse)
+                    orelse = []
+        elif isinstance(item, (ast.For, ast.While)):
+            current = node("for_statement" if isinstance(item, ast.For) else "while_statement", item, field)
+            parent.children.append(current)
+            statements(current, item.body)
+        elif isinstance(item, ast.IfExp):
+            current = node("conditional_expression", item, field)
+            parent.children.append(current)
+            for child in (item.body, item.test, item.orelse):
+                visit(current, child)
+        elif isinstance(item, ast.Lambda):
+            current = node("lambda", item, field)
+            parent.children.append(current)
+            visit(current, item.body, "body")
+        elif isinstance(item, ast.BoolOp):
+            token = "and" if isinstance(item.op, ast.And) else "or"
+            left = item.values[0]
+            for right in item.values[1:]:
+                combined = _Node("boolean_operator", at(item.lineno, item.col_offset),
+                                 at(right.end_lineno, right.end_col_offset), field)
+                if isinstance(left, _Node):
+                    left.field = "left"
+                    combined.children.append(left)
+                else:
+                    visit(combined, left, "left")
+                combined.children.append(_Node(token, at(right.lineno, right.col_offset),
+                                               at(right.lineno, right.col_offset), "operator", named=False))
+                visit(combined, right, "right")
+                left = combined
+            parent.children.append(left)
+        else:
+            for child in ast.iter_child_nodes(item):
+                visit(parent, child)
+
+    root = _Node("module", (1, 0), (len(lines), len(lines[-1])))
+    statements(root, ast.parse(source.decode()).body)
+    output: list[dict] = []
+
+    def emit(current: _Node, ordinal: tuple[int, ...]) -> None:
+        (start_line, start_column), (end_line, end_column) = current.start, current.end
+        output.append({"ordinal_path": list(ordinal), "field": current.field, "type": current.kind,
+                       "named": current.named, "error": False, "missing": False, "extra": False, "has_error": False,
+                       "start_byte": offsets[start_line - 1] + start_column, "end_byte": offsets[end_line - 1] + end_column,
+                       "start_point": [start_line - 1, start_column], "end_point": [end_line - 1, end_column]})
+        for index, child in enumerate(current.children):
+            emit(child, (*ordinal, index))
+
+    emit(root, ())
+    return output
+
+
+def emulate_tree_sitter(request_path: Path, output_path: Path, target: Path) -> None:
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    records = []
+    for item in request["files"]:
+        data = (target / item["path"]).read_bytes()
+        nodes = tree_sitter_nodes(data)
+        records.append({"kind": "file", "path": item["path"], "status": "SUCCEEDED", "sha256": item["sha256"],
+                        "bytes": len(data), "grammar": "python", "root_has_error": False,
+                        "node_count": len(nodes), "truncated": False, "nodes": nodes})
+    output_path.write_text(json.dumps({
+        "schema": "appsec-review/tree-sitter-container-output/1",
+        "tool": {"id": "tool-tree-sitter", "version": TREE_SITTER_LOCK["tool_version"],
+                 "tree_sitter": TREE_SITTER_LOCK["tree_sitter"]["version"],
+                 "language_pack": TREE_SITTER_LOCK["language_pack"]["version"],
+                 "normalizer_schema": TREE_SITTER_LOCK["normalizer_schema"], "architecture": "x86_64"},
+        "scope_id": request["scope_id"], "language": request["language"], "records": records}), encoding="utf-8")
+
+
+class LocalDocker:
+    """Emulate ``docker run``: tool-git maps mounts and environment onto host git, and tool-tree-sitter
+    is emulated for Python sources."""
+
+    def __init__(self, *, tree_sitter_fails: bool = False) -> None:
         self.runs: list[dict[str, object]] = []
+        self.tree_sitter_fails = tree_sitter_fails
 
     def __call__(self, argv, timeout):
         argv = list(argv)
         if argv[:3] == ["docker", "image", "inspect"]:
+            pinned = load_catalog(ROOT).tool("tool-tree-sitter")
+            if argv[3] == pinned.tag:
+                return CommandOutcome(0, pinned.expected_image_id.encode() + b"\n", b"")
             return CommandOutcome(0, b"sha256:" + b"a" * 64 + b"\n", b"")
         assert argv[:2] == ["docker", "run"], argv
         mounts: dict[str, str] = {}
@@ -51,6 +182,7 @@ class LocalDocker:
             if flag in {"--rm", "--read-only"}:
                 index += 1
             elif flag == "--entrypoint":
+                entrypoint = argv[index + 1]
                 arguments = argv[index + 3:]
                 break
             else:
@@ -79,6 +211,12 @@ class LocalDocker:
                 return f"{flag}={host(path)}"
             return host(value)
 
+        if entrypoint == "/opt/appsec/parser.py":
+            self.runs.append({"arguments": arguments, "environment": environment, "exit": 0, "tool": "tree-sitter"})
+            if self.tree_sitter_fails:
+                return CommandOutcome(1, b"", b"parser failed")
+            emulate_tree_sitter(Path(host(arguments[2])), Path(host(arguments[4])), Path(host("/target")))
+            return CommandOutcome(0, b"", b"")
         env = {key: host(value) for key, value in environment.items()}
         env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
         env["HOME"] = str(Path(host("/scratch")) / "home")
@@ -157,10 +295,13 @@ def make_hostile(target: Path, canary: Path) -> None:
         path.chmod(0o755)
 
 
-def configured(tmp_path: Path, *, github: bool = False):
+def configured(tmp_path: Path, *, github: bool = False, replacements: tuple[tuple[str, str], ...] = ()):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
         "[jobs.job_target_analysis_plan.settings.model]\nenabled = true",
         "[jobs.job_target_analysis_plan.settings.model]\nenabled = false")
+    for old, new in replacements:
+        assert old in text, old
+        text = text.replace(old, new)
     if github:
         text = text.replace('[jobs.job_source_history_analysis.settings.github]\nenabled = false',
                             '[jobs.job_source_history_analysis.settings.github]\nenabled = true')
@@ -216,31 +357,33 @@ def test_window_classification_and_ranking_are_deterministic() -> None:
         {"commit": "a" * 40, "parents": [], "author_time": 0, "commit_time": T0 - 400 * DAY, "author_key": "a",
          "files": [{"path": "old.py", "renamed_from": None, "added": 9, "deleted": 0, "binary": False}]},
     ]
-    normalized = normalize(commits, current_paths={"new.py": {}}, shallow=(), window_days=365, max_changes=10,
+    normalized = normalize(commits, current_paths={"new.py": {}}, shallow=(), window_months=6, max_changes=10,
                            bulk_threshold=50)
     assert [item["change_id"] for item in normalized["changes"]] == ["c" * 40, "b" * 40]
     assert normalized["changes"][1]["files"][0]["current_path"] == "new.py"
     assert normalized["observations"] == ["timestamp_anomaly:1"]
     assert normalized["changes"][1]["effective_time"] == T0
-    truncated = normalize(commits, current_paths={}, shallow=(), window_days=3650, max_changes=2, bulk_threshold=50)
+    truncated = normalize(commits, current_paths={}, shallow=(), window_months=120, max_changes=2, bulk_threshold=50)
     assert truncated["gaps"] == ["history_window_truncated"]
-    shallow = normalize(commits[:2], current_paths={}, shallow=("b" * 40,), window_days=365, max_changes=10,
+    shallow = normalize(commits[:2], current_paths={}, shallow=("b" * 40,), window_months=6, max_changes=10,
                         bulk_threshold=50)
     assert shallow["gaps"] == ["shallow_history"]
     classes = classify(normalized["changes"], {"c" * 40: b'Revert "x"\n\nThis reverts commit ' + b"b" * 40 + b".\n",
                                                "b" * 40: b"Add parser\n\nSee GHSA-abcd-efgh-jkmp and CWE-79"},
                        {"b" * 40: {"labels": ["bug"]}}, known_commits=["b" * 40, "c" * 40],
-                       fix_labels=["bug"], security_labels=["security"])
+                       fix_labels=["bug"], security_labels=["security"], formatting_tolerance=0.1)
     assert classes["c" * 40]["revert"] == "exact" and classes["b" * 40]["reverted_by"] == "c" * 40
     assert classes["b" * 40]["fix"] == "github_label"
     assert classes["b" * 40]["security_fix"] == "heuristic"
     assert classes["b" * 40]["security_references"] == ["CWE-79"]
-    records = {"b.py": {"change_count": 2, "churn_lines": 10}, "a.py": {"change_count": 2, "churn_lines": 10},
-               "c.py": {"change_count": 1, "churn_lines": 50}, "d.py": {"change_count": 0, "churn_lines": 0}}
-    ranked = rank(records, {"churn_lines": 3, "change_count": 1}, signals=("churn_lines", "change_count"))
-    assert [item["key"] for item in ranked] == ["c.py", "a.py", "b.py"]
-    assert ranked == rank(dict(reversed(list(records.items()))), {"churn_lines": 3, "change_count": 1},
-                          signals=("churn_lines", "change_count"))
+    units = {key: {"relative_churn": churn / 10, "revision_frequency": count / 6, "author_entropy": 0.0,
+                   "complexity": None, "churn_lines": churn, "change_count": count}
+             for key, churn, count in (("b.py", 10, 2), ("a.py", 10, 2), ("c.py", 50, 1))}
+    weights = {"relative_churn": 3, "revision_frequency": 1, "author_entropy": 1, "complexity": 1}
+    ranked = sii_score(units, weights=weights, tier_1_share=Fraction(1, 20), tier_2_share=Fraction(3, 20))
+    assert [item["key"] for item in ranked["ranked"]] == ["c.py", "a.py", "b.py"]
+    assert ranked == sii_score(dict(reversed(list(units.items()))), weights=weights, tier_1_share=Fraction(1, 20),
+                               tier_2_share=Fraction(3, 20))
 
 
 def test_source_resolution_rejects_escapes_and_selects_mainline(tmp_path: Path) -> None:
@@ -276,7 +419,7 @@ def test_source_resolution_rejects_escapes_and_selects_mainline(tmp_path: Path) 
     assert blob_id(b"hello\n", "sha1") == "ce013625030ba8dba906f756967f9e9ca394464a"
 
 
-def test_job_binds_mainline_history_ranks_by_churn_and_feeds_the_plan(tmp_path: Path) -> None:
+def test_job_binds_mainline_history_ranks_by_sii_and_feeds_the_plan(tmp_path: Path) -> None:
     config = configured(tmp_path)
     target = tmp_path / "target"
     ids = build_repository(target)
@@ -289,8 +432,9 @@ def test_job_binds_mainline_history_ranks_by_churn_and_feeds_the_plan(tmp_path: 
     assert produced["resolve_sources.resolve_history_source"]["git"]["mainline_ref"] == "refs/heads/main"
     assert produced["resolve_sources.bind_snapshot"]["binding"] == "exact"
     assert all(run["exit"] == 0 for run in docker.runs)
+    assert any(run.get("tool") == "tree-sitter" for run in docker.runs)
     assert all(run["environment"]["GIT_DIR"] == "/gitdir" and
-               run["environment"]["GIT_OBJECT_DIRECTORY"] == "/target/.git/objects" for run in docker.runs)
+               run["environment"]["GIT_OBJECT_DIRECTORY"] == "/target/.git/objects" for run in docker.runs if run.get("tool") != "tree-sitter")
     normalized = produced["acquire.normalize_changes"]
     assert normalized["walked_change_count"] == 9 and normalized["change_count"] == 8
     run_root = config.runtime.runs_dir / outcome["run_id"]
@@ -449,8 +593,10 @@ def test_github_enrichment_flows_through_the_job(tmp_path: Path, monkeypatch) ->
 def test_dag_shape_and_identity_probe(tmp_path: Path) -> None:
     plan = plan_jobs((build_job(),))
     assert plan.node("job_source_history_analysis.analyze.rank").dependencies == (
-        "job_source_history_analysis.analyze.compute_signals", "job_source_history_analysis.analyze.blame_age",
-        "job_source_history_analysis.analyze.co_change")
+        "job_source_history_analysis.analyze.blame_age", "job_source_history_analysis.analyze.co_change",
+        "job_source_history_analysis.analyze.symbol_signals")
+    assert plan.node("job_source_history_analysis.analyze.fix_on_fix").dependencies == (
+        "job_source_history_analysis.analyze.line_history", "job_source_history_analysis.analyze.symbol_spans")
     assert history_identity(None) == history_identity(None)
     target = tmp_path / "target"
     build_repository(target)
