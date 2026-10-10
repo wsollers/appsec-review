@@ -72,9 +72,11 @@ record the later product as pending; do not claim full CFG/dataflow coverage fro
 5. Deliver a machine-readable inventory/coverage report, a language/build-unit matrix, and a
    short follow-up list of graph products whose prerequisites remain missing.
 
-Do not alter PRs #98-#101 or their merge state as part of this task. Work from the accepted
-main branch after the hotspot merge, in a new branch/worktree, and open a reviewable PR. If the
-merge is still in progress, wait for its result rather than copying a partial integration branch.
+Do not alter PRs #98-#101 or their merge state as part of this task. Work in a new branch/worktree
+based on the accepted design/MCP branch from PR #102. Open a reviewable PR stacked on #102 while
+that PR is open; retarget to `main` only after its prerequisite commits are merged. If the hotspot
+merge is still in progress, verify that #102 still contains the completed integration before
+implementing, rather than copying a partial merge workspace.
 
 ## Acceptance
 
