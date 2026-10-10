@@ -13,8 +13,8 @@ review_intake -> target_catalog -> source_history_analysis -> target_analysis_pl
 ```
 
 The direct graph does not include CI configuration analysis, tree-sitter AST production,
-post-build security assessment, or OWASP control assessment. Use Dagster's `wave1_review` when
-those branches are required. Its current dependency graph is assembled from the registered,
+post-build security assessment, OWASP control assessment, or review prioritization. Use Dagster's
+`wave1_review` when those branches are required. Its current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
 In both surfaces, the application handoff is the checkpoint of record; Dagster metadata links to

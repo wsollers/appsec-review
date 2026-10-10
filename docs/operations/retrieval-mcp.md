@@ -57,3 +57,10 @@ empty-coverage claim.
 `ci_findings` evidence shard. Exact filters cover provider, pipeline, workflow, stage, job, step,
 tool, rule, category, canonical finding, and shard. Unavailable linter branches are returned as
 coverage gaps; the tool never scans the target tree or reads an evaluator guide.
+
+The `priority` index holds `job_review_prioritization` output: `priority_item` entities for the
+indexed top files and functions (full feature vector, percentiles, missing features, coverage, rank,
+and score) and `review_signal` entities for their linked evidence. Query it with the generic
+`search`, `find`, `trace`, and `coverage` tools and `"indexes": ["priority"]`. A ranked item orders
+review attention and is never a finding; examples are in
+[`review-prioritization.md`](review-prioritization.md).

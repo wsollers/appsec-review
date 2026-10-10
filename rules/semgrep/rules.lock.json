@@ -6,6 +6,9 @@
   "files": {
     "security.yml": {
       "sha256": "0d13b76a90a3d79b169206b850156aef23826b963cb4b9a900d39ae0b9a17336"
+    },
+    "review-signals.yml": {
+      "sha256": "9fe204648e5ef9ee729dc51d41270562f65ab2aaec0035aaee012b0425e27008"
     }
   }
 }

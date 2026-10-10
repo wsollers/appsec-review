@@ -346,6 +346,13 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "evidence_collection__secrets__gitleaks_index" in barrier
     assert "evidence_collection__source_sast__semgrep_index" in barrier
     assert "evidence_collection__vulnerability_matching__grype_index" in barrier
+    # Prioritization consumes the accepted Tree-sitter, Semgrep, CodeQL, and history handoffs and
+    # publishes a retrieval shard, so it follows the last manifest publishers and precedes tagging.
+    assert {"codeql_analysis__finalize", "owasp_control_assessment__finalize"} <= upstream(
+        "review_prioritization__begin")
+    assert "review_prioritization__finalize" in upstream("security_tagging__begin")
+    assert upstream("review_prioritization__extract__semantic_evidence") >= {
+        "review_prioritization__extract__syntax_metrics"}
 
 
 @pytest.mark.skipif(

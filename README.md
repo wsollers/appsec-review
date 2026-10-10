@@ -384,7 +384,8 @@ python -m appsec_review start --target targets/appsec-multi-vuln
 ```
 
 The direct graph leaves out CI configuration analysis, tree-sitter AST, post-build security
-assessment, and OWASP control assessment. Use Dagster's `wave1_review` job when you need those.
+assessment, OWASP control assessment, and review prioritization. Use Dagster's `wave1_review` job
+when you need those.
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Run the Dagster deployment

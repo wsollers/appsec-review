@@ -355,6 +355,86 @@ workers = 8
 workers = 1
 [jobs.job_tree_sitter_ast.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_review_prioritization]
+name = "review_prioritization"
+workers = 1
+
+# Metrics and heuristics that order LLM review attention.  A high score means "review first"; it is
+# never a finding.  Missing coverage is a named gap.  See docs/architecture/review-prioritization.md.
+[jobs.job_review_prioritization.settings]
+max_files = 50000
+max_file_bytes = 2097152
+max_functions = 500000
+max_signals_per_file = 200
+max_import_records = 500000
+max_semantic_paths = 5000
+cyclomatic_thresholds = [10, 15]
+# Feature share_above_threshold uses this threshold; it must be listed in cyclomatic_thresholds.
+scored_threshold = 15
+# Count Rust `?` and Go `if err != nil { return }` as cyclomatic decisions (both or neither).
+count_error_propagation = true
+min_edge_confidence = 0.8
+custom_parsing_min_operations = 6
+custom_parsing_min_density = 0.5
+state_mutation_min_operations = 3
+# "run" normalizes over every scored item of a scope; "language" normalizes within each language.
+normalization_population = "run"
+
+[jobs.job_review_prioritization.settings.priority_weights]
+cyclomatic = 2
+cognitive = 2
+complexity_density = 1
+share_above_threshold = 1
+afferent_coupling = 1
+efferent_coupling = 1
+instability = 0
+suppression_density = 1
+ingress = 2
+sink = 2
+privilege_shift = 3
+sensitive_wrapper = 1
+state_mutation = 1
+custom_parsing = 1
+public_api = 1
+parser = 1
+validator = 0
+middleware = 1
+semantic_path = 3
+history_hotspot = 2
+
+[jobs.job_review_prioritization.settings.index]
+# A positive *_top_count selects that many items; 0 selects ceil(fraction x population).
+file_top_fraction = 0.25
+file_top_count = 0
+function_top_fraction = 0.10
+function_top_count = 0
+max_indexed_items = 5000
+max_evidence_links_per_item = 50
+
+[jobs.job_review_prioritization.settings.sources]
+history = true
+semgrep = true
+codeql = true
+
+[jobs.job_review_prioritization.steps.load]
+workers = 1
+[jobs.job_review_prioritization.steps.load.tasks.accepted_inputs]
+
+[jobs.job_review_prioritization.steps.extract]
+workers = 1
+[jobs.job_review_prioritization.steps.extract.tasks.syntax_metrics]
+[jobs.job_review_prioritization.steps.extract.tasks.dependency_graph]
+[jobs.job_review_prioritization.steps.extract.tasks.semantic_evidence]
+
+[jobs.job_review_prioritization.steps.prioritize]
+workers = 1
+[jobs.job_review_prioritization.steps.prioritize.tasks.score]
+
+[jobs.job_review_prioritization.steps.publish]
+workers = 1
+[jobs.job_review_prioritization.steps.publish.tasks.index_priority]
+[jobs.job_review_prioritization.steps.publish.tasks.publish_handoff]
+
 [jobs.job_project_build]
 name = "project_build"
 workers = 8

@@ -31,6 +31,9 @@ Each successful scope emits:
 
 The nodes are concrete syntax, not semantic symbols. Consumers use the existing retrieval search,
 find, trace, source-resolution, and coverage APIs. There are no Tree-sitter-specific MCP tools.
+`job_review_prioritization` rebuilds per-file trees from the accepted JSONL shards to derive
+function complexity, imports, and heuristic signals; see
+[`review-prioritization.md`](review-prioritization.md).
 Unsupported languages, unavailable grammars, parser failures, malformed syntax, and bounds are
 explicit coverage gaps. A failed scope does not discard successful sibling shards. Framework
 integrity failures—changed accepted bytes, escaped paths, image/hash mismatch, corrupt outputs, or
