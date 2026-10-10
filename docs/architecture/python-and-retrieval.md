@@ -72,7 +72,8 @@ compile units, objects, libraries, executables, generic build artifacts, package
 bytecode modules, managed assemblies, WebAssembly modules, AST nodes, IR entities, tool observations,
 evidence artifacts, and finding packages. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
 `REFERENCES`, `CALLS`, `CONTAINS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `DEPENDS_ON`,
-`OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, and `CONTRADICTS`.
+`OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, `CONTRADICTS`, and `FLOWS_TO` (ordered CodeQL
+flow steps).
 
 A resolving source location binds the target snapshot, normalized relative path, file hash,
 byte/line/column span, producer-native location, mapping method, confidence, and ambiguity.
