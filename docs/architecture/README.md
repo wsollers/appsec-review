@@ -4,8 +4,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
 - [`build-environments-and-execution-capture.md`](build-environments-and-execution-capture.md) —
-  shared and project-derived build images, captured build execution, envp redaction, and per-command
-  gitleaks evidence.
+  shared and project-derived build images, conditional capture control design, the pinned
+  `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
 - [`../operations/language-build.md`](../operations/language-build.md) — generic real-build execution, protected provenance, and checkpoints.
 - [`../operations/artifact-security-analysis.md`](../operations/artifact-security-analysis.md) — generic bounded security analysis of accepted produced artifacts.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.

@@ -10,6 +10,33 @@ and successful-exec reconciliation implementation. Their descriptors classify ob
 map language-specific inputs, outputs, artifacts, and metadata; they do not own copies of capture
 or wrapper reconciliation. Operators should treat a new per-language trace parser or reconciler as
 an architectural regression.
+
+## Conditional-capture operator flow
+
+The authoritative control semantics and fixture matrix live in
+[`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md).
+The tri-state build-capture and compiler-artifact controls described there are not implemented in
+the current configuration schema; operators must not present this flow as active runtime behavior.
+When the schema lands, apply it independently to execution capture and artifact collection:
+
+1. For `required`, run the applicable capture or collection path. Unavailability, failure, or
+   incomplete evidence is a coverage gap and cannot be reported as clean.
+2. For `disabled`, do not run it; record an explicit policy reason using the repository's current
+   equivalent (`NOT_APPLICABLE` plus `CONFIGURED_DISABLED` where that disposition exists).
+3. For `auto`, evaluate only the bounded accepted manifests, recipe, classifier, and toolchain
+   facts. If they establish package hooks, generation, transpilation/bundling, native extensions,
+   or compiler/linker work, run the applicable path.
+4. For an interpreted project with only a syntax command (`python -m py_compile`, `php -l`, or
+   `node --check`), record evidence-supported `NOT_APPLICABLE`; do not treat the syntax check as a
+   material build.
+5. For an interpreted project with a package lifecycle, build hook, generator, transpiler,
+   bundler, or native extension, treat the lifecycle as material and apply `required` or `auto` as
+   resolved. A skip or not-applicable result is never a clean-security claim.
+
+CodeQL currently uses `manual` for exact accepted build replay and `none` for source/no-build
+creation. It does not yet accept `build`, `source`, `auto`, or `disabled` as mode strings. Use the
+real mode names in runbooks and receipts until typed capability migration is implemented.
+
 Native CMake dispatches use the validated deterministic marker command recipe. A failed default
 project-build probe may add only validated apt packages through the bounded image-repair workflow;
 model output cannot change the accepted command, path, dependency, environment, or output contract.

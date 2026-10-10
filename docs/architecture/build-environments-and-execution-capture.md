@@ -250,6 +250,93 @@ schemas, a foreign scope, or inconsistent coverage are framework-integrity failu
 tool-call, or finding caps and collector/scanner failures are named coverage gaps. A gitleaks
 finding is evidence to retain and route; by itself it is not a capture-coverage gap.
 
+## Conditional build-capture control model
+
+Build execution capture, compiler-artifact collection, and CodeQL execution are separate controls.
+They belong in typed central configuration and the resolved immutable run configuration; prompts,
+target guidance, inferred recipes, and worker output cannot select or widen them. The agreed logical
+values are:
+
+| Control | Logical values | Required semantics |
+| --- | --- | --- |
+| Build execution capture | `required`, `auto`, `disabled` | `required` must capture an applicable material build or name an explicit coverage gap. `auto` runs only when a bounded deterministic classifier finds a material lifecycle. `disabled` is an explicit policy skip. |
+| Compiler-artifact collection | `required`, `auto`, `disabled` | `required` must collect and verify the declared compiler/build artifacts or name a gap. `auto` collects only artifacts selected by the bounded descriptor policy. `disabled` records a policy skip; it does not imply that no compiler ran. |
+| CodeQL execution capability | `build`, `source`, `auto`, `disabled` | `build` requires an accepted replayable build, `source` prohibits build replay, `auto` selects between those capabilities deterministically, and `disabled` records an explicit policy skip. |
+
+`required` never degrades silently: unavailable tools, failed capture, incomplete provenance, or
+missing required artifacts remain gaps and cannot support a clean-security statement. `auto` is
+not model discretion; applicability is a deterministic function of accepted manifests, recipes,
+toolchain facts, and descriptor policy. Package installation, package-manager lifecycle hooks,
+code generation, transpilation or bundling, native-extension work, and actual compiler or linker
+activity can establish a material build lifecycle. Syntax-only commands such as
+`python -m py_compile`, `php -l`, and `node --check` do not establish one by themselves.
+
+The status vocabulary has not yet been unified around `SKIPPED_POLICY` and `SKIPPED_NA`. The
+current repository uses `NOT_APPLICABLE` for an inapplicable scope and, in existing explicitly
+disabled tool paths, pairs it with `CONFIGURED_DISABLED`. Until the conditional build-control
+schema is implemented, documentation and receipts must use those actual names and retain the
+reason. A policy skip, an evidence-supported not-applicable result, and a coverage gap are distinct;
+none is a clean-security claim.
+
+### Current implementation gap
+
+This control model is design, not deployed behavior. `BuildCaptureConfig` currently types the
+capture backend, limits, envp behavior, and redaction, while the jobs decide unconditionally where
+to call `execute_captured`; it has no capture-policy value. Compiler-artifact collection likewise
+has adapter-specific settings and catalogs but no independent tri-state policy. CodeQL currently
+has global and per-language `enabled` booleans and only two accepted internal mode names:
+`manual` for exact accepted build replay and `none` for source/no-build database creation. The
+current parser requires the configured runtime and every configured language to be enabled, so a
+general per-scope disabled mode and `auto` selection are not implemented. The future schema must
+add these controls to central TOML, validate them as typed values, copy their resolved values into
+each run, bind them into checkpoint identity, and emit explicit policy/not-applicable/gap
+dispositions. Until then, use the real CodeQL names `manual` and `none`; do not claim that
+`build`, `source`, `auto`, or `disabled` are accepted configuration values.
+
+## `appsec-multi-vuln` project-type coverage matrix
+
+The authoritative corpus mapping is
+[`support/project-matrix.json`](../../targets/appsec-multi-vuln/support/project-matrix.json),
+documented by the [corpus guide](../../targets/appsec-multi-vuln/README.md), at nested-repository
+commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. Every path below was resolved at that commit.
+The capture and artifact columns express the agreed acceptance policy, not a claim that the missing
+tri-state parent schema already enforces it. CodeQL entries retain the parent's real mode names
+`manual` and `none`; `unavailable` is the corpus capability label, not a configured parent mode.
+
+| Project type | Exact fixture path(s) | Build or validation command | Capture expectation | Compiler-artifact expectation | CodeQL mode / capability | Expected applicability | Specialized toolchain | Fixture role |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| C/C++ | `projects/native/case-083`; `projects/native/linux-calibration` | `cmake -S . -B build && cmake --build build`; calibration: `cmake --preset baseline && cmake --build --preset baseline` | `required` | `required`: `build/case083`; calibration executables `build/default/observer_a` and `observer_b` | `manual` / C/C++ supported | `applicable-required`; calibration is `applicable-required-calibration-only` | CMake plus C/C++ compiler and linker | vulnerability fixture; calibration fixture |
+| Rust | `projects/rust/case-004` | `cargo build` | `required` | `required`: `target/debug/case-004` | Corpus: `unavailable` / `not-supported`; parent runtime: `none` source/no-build. This mismatch is a matrix-integration gap. | `applicable-required` | Rust toolchain and Cargo | vulnerability fixture |
+| Go | `projects/go/case-007` | `go build ./...` | `required` | `required`: `case-007` executable | `manual` / supported | `applicable-required` | Go toolchain | vulnerability fixture |
+| .NET | `projects/dotnet/case-014` | `dotnet build case-014.csproj` | `required` | `required`: `bin/Debug/net8.0/case-014.dll` | `manual` / C# supported | `applicable-required` | .NET 8 SDK | vulnerability fixture |
+| JVM Java | `projects/java/case-016` | `javac src/Main.java` | `required` | `required`: `src/Main.class` | `manual` / Java-Kotlin supported | `applicable-required` | JDK with `javac` | vulnerability fixture |
+| JVM Kotlin | `projects/kotlin/case-084` | `./build.sh` | `required` | `required`: `build/case-084.jar` | `manual` / Java-Kotlin supported | `applicable-required` | JDK plus `kotlinc` | vulnerability fixture |
+| Plain Python | `projects/python/case-073` | `python3 -m py_compile main.py` | `disabled`; syntax-only is not a material lifecycle | `disabled`: none | `none` / Python supported without a build | `not-applicable-syntax-only` | Python 3 | syntax-only control containing source vulnerability material |
+| Python native extension/build hook | `projects/python-package/case-085` | `python3 -m pip wheel . --no-deps --wheel-dir dist` | `required` | `required`: matching wheel in `dist/` containing the `case085` native module | Corpus: `manual` / supported as Python plus C/C++ analyses; parent has `none` for Python and `manual` for C/C++, but mixed-scope wiring remains to be proved. | `applicable-required-native-build` | Python, pip/build backend, C compiler, Python development headers | vulnerability fixture |
+| Plain JavaScript | `projects/javascript/case-010` | `node --check index.js` | `disabled`; syntax-only is not a material lifecycle | `disabled`: none | `none` / JavaScript-TypeScript supported without a build | `not-applicable-syntax-only` | Node.js | syntax-only control containing source vulnerability material |
+| TypeScript compilation | `projects/typescript/case-012` | `npm install && npm run build` | `auto` when the accepted manifest resolves the material transpile | `auto`: `dist/index.js` | `none` / JavaScript-TypeScript supported without capture replay | `applicable-auto-material-transpile` | Node.js, npm, TypeScript compiler | vulnerability fixture |
+| JavaScript bundler | `projects/javascript-bundler/case-086` | `npm ci && npm run build` | `auto` when the locked bundle script is applicable | `auto`: `dist/bundle.js` | `none` / JavaScript-TypeScript supported without capture replay | `applicable-auto-material-bundle` | Node.js, npm, esbuild | vulnerability fixture |
+| Node native addon | `projects/node-addon/case-087` | `npm ci && npm run build` | `required` | `required`: `build/Release/case087.node` | Corpus: `manual` / supported as JavaScript-TypeScript plus C/C++ analyses; parent mixed-scope wiring remains to be proved. | `applicable-required-native-build` | Node.js, npm, node-gyp, Python, C++ compiler | vulnerability fixture |
+| Node lifecycle hook | `projects/node-lifecycle/case-088` | `npm ci && npm run build` | `auto` when the accepted package lifecycle hook is enabled by policy | `auto`: `.build/postinstall.marker` | `none` / JavaScript-TypeScript supported without capture replay | `applicable-auto-lifecycle` | Node.js and npm | vulnerability fixture with a safe lifecycle marker |
+| Plain PHP | `projects/php/case-018` | `php -l index.php` | `disabled`; syntax-only is not a material lifecycle | `disabled`: none | `unavailable` / not supported | `not-applicable-syntax-only` | PHP CLI | syntax-only control containing source vulnerability material |
+| Composer project/scripts | `projects/php-composer/case-089` | `composer install --no-interaction && composer run build` | `auto` when the accepted Composer script lifecycle is enabled by policy | `auto`: `.build/composer.marker` | `unavailable` / not supported | `applicable-auto-lifecycle` | PHP CLI and Composer | vulnerability fixture with a safe lifecycle marker |
+| PHP native extension | `projects/php-extension/case-090` | `./build.sh` | `required` | `required`: `modules/case090.so` | `manual` C/C++ source / PHP unavailable; C source supported | `applicable-required-native-build` | PHP development headers, `phpize`, Autoconf, C compiler | vulnerability fixture |
+| WebAssembly | `projects/wasm/case-091` | `./build.sh` | `required` | `required`: `build/case091.wasm` | `manual` C/C++ source / C source supported; emitted Wasm artifact is not analyzed by CodeQL | `applicable-required` | Clang with WebAssembly target support | vulnerability fixture |
+| Android Hello World | `projects/android/case-092` | `gradle --no-daemon :app:assembleDebug` | `required` | `required`: `app/build/outputs/apk/debug/app-debug.apk` | `manual` / Java-Kotlin supported when the Android SDK is available | `applicable-required-sdk-gated` | JDK, Gradle, Android SDK Platform and Build Tools 35 | vulnerability fixture |
+
+The pinned corpus commit validates the matrix structure and every referenced path. Its focused build
+evidence covers the new CMake C, Python native-extension, WebAssembly, JavaScript bundle, Node
+lifecycle, and Node native-addon fixtures. It does not claim Kotlin compilation, Android assembly,
+Composer lifecycle execution, or a phpize build because those specialized toolchains were absent
+on the validation host. Those absences remain named fixture-validation gaps, not evidence that the
+expected applicability is wrong or that the projects are clean.
+
+Adding a language or project type does not add another syscall parser, wrapper reconciler, or
+capture loop. It supplies a small descriptor/classifier/artifact policy, registers that descriptor
+with the shared reconciler when syscall-authoritative capture is required, and adds a parameterized
+fixture entry such as those above. Applicability classification, artifact expectations, and
+CodeQL capability are descriptor policy; capture collection and reconciliation remain shared.
+
 ## Generic captured-build extension contract
 
 The compiled-language path has one driver, one collector boundary, and one reconciliation
@@ -383,11 +470,14 @@ evidence. The .NET link database is stored beside the container-owned workspace.
 
 ## Configuration ownership
 
-All capture policy is typed and centralized in `appsec-review.toml`. Global settings define the
+All implemented capture configuration is typed and centralized in `appsec-review.toml`. Global
+settings define the
 backend, syscall/argv/envp/path/tool-call/stream/finding limits, envp enablement, and exact redaction
 names. A job may override a bounded subset such as `event_count_limit`; omitted values inherit the
 global configuration. The resolved immutable configuration is copied into the run like every other
 job setting.
+The preceding conditional tri-state model is the intended extension to this ownership rule; its
+fields are not yet present in the typed schema.
 
 The main implementation surfaces are:
 

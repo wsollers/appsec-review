@@ -99,6 +99,29 @@ Probe policy must be centrally configurable per build unit as `configure`, `sele
 `full-build`. This keeps the default test target rigorous without forcing future large repositories
 through an unnecessary full probe before every instrumented or traced build.
 
+## Implement conditional build-capture controls
+
+The agreed semantics and the 18-row `appsec-multi-vuln` fixture mapping are documented in
+[`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md),
+using nested corpus commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. The documentation is
+ahead of runtime configuration in these explicit ways:
+
+- add independent typed central controls for build execution capture and compiler-artifact
+  collection with `required`, `auto`, and `disabled` values;
+- resolve those values immutably per run and include them in receipt and checkpoint identities;
+- add deterministic applicability classifiers and explicit policy/not-applicable dispositions,
+  without introducing another syscall parser or reconciliation loop;
+- migrate CodeQL from the current `manual`/`none` modes and always-enabled parser contract to a
+  typed capability model that can express build replay, source/no-build, automatic selection, and
+  disabled policy, or retain the current names and document an exact stable mapping; and
+- add parameterized tests for every matrix row, including the Rust corpus/parent CodeQL mismatch,
+  Python and Node mixed native scopes, specialized-toolchain unavailability, and the distinction
+  between syntax-only and material interpreted-language lifecycles.
+
+Until those items land, do not describe conditional capture as deployed. Existing standardized
+capture remains mandatory only on the adapters that explicitly call it, and existing CodeQL
+receipts must use `manual`, `none`, `NOT_APPLICABLE`, and named gaps as implemented.
+
 ## Scale native acceptance from fixtures to a game-sized build
 
 Advance native testing through explicit gates rather than moving directly from the synthetic
