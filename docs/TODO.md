@@ -367,3 +367,16 @@ build. The wrapper also forces `python3` into every build image.
    captures invalidate build checkpoints.
 5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
    after.
+## Build the dataflow, contract, and deployment evidence lanes
+
+Implement the planned jobs and queries in
+[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
+starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
+calls, unmodeled externals, and path/depth limits must be published as gaps.
+
+## Acquire dynamic execution evidence
+
+Coverage profiles, sanitizer logs, fuzz corpora, and IAST traces are not yet available. Define
+either a hash-verified import of externally produced artifacts or a separately authorized,
+isolated execution job. Positive traces may support reachability; zero coverage is a gap and never
+refutes a claim.
