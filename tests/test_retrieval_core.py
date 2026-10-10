@@ -199,6 +199,15 @@ def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> N
     assert {item["shard_id"] for item in coverage["results"]} == {
         "codeql-cpp-cpp-native-main", "gitleaks", "semgrep"}
     assert any("observations/gitleaks" in gap for gap in coverage["coverage_gaps"])
+    page = core.coverage(indexes=("observations",), limit=1)
+    assert page["pagination"]["next_cursor"]
+    next_page = core.coverage(indexes=("observations",), limit=1,
+                              cursor=page["pagination"]["next_cursor"])
+    assert next_page["results"][0]["shard_id"] != page["results"][0]["shard_id"]
+    source_coverage = core.coverage(indexes=("source",))["results"][0]
+    assert source_coverage["entity_kinds"] == {"source_file": 1}
+    assert source_coverage["entity_count"] == 1 and source_coverage["relation_count"] == 0
+    assert source_coverage["producer"]["fixture"] == "source"
 
 
 def test_manifest_rejects_duplicate_composite_shard_identity(tmp_path: Path) -> None:

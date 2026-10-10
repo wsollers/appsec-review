@@ -487,29 +487,50 @@ class RetrievalCore:
             ([] if entity else ["evidence identity was not found"]) + trace["coverage_gaps"], False, 0,
         ))
 
-    def coverage(self, *, indexes: Iterable[str] | None = None) -> dict[str, Any]:
+    def coverage(self, *, indexes: Iterable[str] | None = None, limit: int = 50,
+                 cursor: str | None = None) -> dict[str, Any]:
         names = self._names(indexes)
-        parameters = {"indexes": names}
+        if not 1 <= limit <= self.limits.max_results:
+            raise ValueError("result limit exceeds bound")
+        parameters = {"indexes": names, "limit": limit, "cursor": cursor}
+        request_hash = self._request_hash("coverage", parameters)
+        offset = self._offset(cursor, request_hash)
 
         def operation(deadline: float):
             results, gaps = [], ["accepted index set is empty"] if not names else []
+            selected = []
             for name in names:
                 self._check_deadline(deadline)
                 if name not in self.indexes:
                     gaps.append(f"{name} index is unavailable")
                     continue
-                for shard in self.indexes[name]:
-                    with self._database(shard, deadline) as database:
-                        rows = [dict(row) for row in database.execute(
-                            "SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
-                    shard_id = str(shard.get("shard_id", "default"))
-                    results.append({"identity": f"coverage:{name}:{shard_id}:{shard['sha256']}",
-                                    "artifact_reference": {"index": name, "shard_id": shard_id,
-                                                           "sha256": shard["sha256"]},
-                                    "index": name, "shard_id": shard_id, "coverage": rows})
-                    gaps.extend(f"{name}/{shard_id}: {row['gap']}" for row in rows if row["gap"])
-                    gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
-            return results, gaps, False, 0
+                selected.extend((name, shard) for shard in self.indexes[name])
+            for name, shard in selected[offset:offset + limit]:
+                self._check_deadline(deadline)
+                with self._database(shard, deadline) as database:
+                    rows = [dict(row) for row in database.execute(
+                        "SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
+                    count_metadata = dict(database.execute(
+                        "SELECT key, value FROM metadata WHERE key IN ('entity_kind_counts', 'relation_kind_counts')"))
+                    entity_kinds = (json.loads(count_metadata["entity_kind_counts"])
+                                    if "entity_kind_counts" in count_metadata else None)
+                    relation_kinds = (json.loads(count_metadata["relation_kind_counts"])
+                                      if "relation_kind_counts" in count_metadata else None)
+                shard_id = str(shard.get("shard_id", "default"))
+                results.append({"identity": f"coverage:{name}:{shard_id}:{shard['sha256']}",
+                                "artifact_reference": {"index": name, "shard_id": shard_id,
+                                                       "sha256": shard["sha256"]},
+                                "index": name, "shard_id": shard_id,
+                                "producer": self._safe_payload(shard.get("producer", {})),
+                                "entity_kinds": entity_kinds, "relation_kinds": relation_kinds,
+                                "entity_count": sum(entity_kinds.values()) if entity_kinds is not None else None,
+                                "relation_count": sum(relation_kinds.values()) if relation_kinds is not None else None,
+                                "coverage": rows})
+                if entity_kinds is None or relation_kinds is None:
+                    gaps.append(f"{name}/{shard_id}: index kind counts unavailable")
+                gaps.extend(f"{name}/{shard_id}: {row['gap']}" for row in rows if row["gap"])
+                gaps.extend(f"{name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
+            return results, gaps, len(selected) > offset + limit, offset
         return self._execute("coverage", parameters, operation)
 
     def query_artifacts(

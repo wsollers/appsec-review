@@ -77,8 +77,12 @@ filters. Each result includes the stored feature vector, evidence identities, an
 location. It reports absent or partial priority coverage as a gap.
 
 `query_precomputed` reads only accepted `precomputed` shards for an allowlisted query set. The
-current query sets are `symbol_links`, `call_graph`, `control_flow`, `dataflow`, `entrypoint_paths`,
-`guards_ranges`, `sarif_correlation`, `ast_ir_cpg_mapping`, and `hotspot_context`. The producer jobs
-for these sets are planned separately; until a set has an accepted shard, the tool returns an
-unavailable gap. It never executes Joern, LLVM tools, CodeQL, or target code during retrieval. The
-fact and reuse design is in [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
+sets cover code graphs, builds, artifacts, advisories, scanner correlation, CI, history, controls,
+reference intelligence, and review packages; the complete list and product contracts are in
+[`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md). The producer jobs for
+these sets are planned separately; until a set has an accepted shard, the tool returns an
+unavailable gap. It never executes analyzers or target code during retrieval.
+
+`coverage` now pages accepted shards and reports each shard's sanitized producer, entity and
+relation counts by kind, and coverage rows. It inventories what is already indexed. The planned
+dataset audit will add explicit dispositions for emitted data that has no index yet.

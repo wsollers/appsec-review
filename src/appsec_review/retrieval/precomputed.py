@@ -12,4 +12,8 @@ FACT_SCHEMA = "appsec-review/precomputed-fact/1"
 QUERY_SETS = (
     "symbol_links", "call_graph", "control_flow", "dataflow", "entrypoint_paths",
     "guards_ranges", "sarif_correlation", "ast_ir_cpg_mapping", "hotspot_context",
+    "build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation",
+    "ci_trust", "redacted_secret_exposure", "history_context", "control_evidence",
+    "reference_intelligence", "contract_enforcement", "deployment_exposure", "test_intent",
+    "review_package",
 )

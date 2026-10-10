@@ -63,7 +63,9 @@
       "name": "coverage",
       "required": [],
       "properties": [
-        "indexes"
+        "indexes",
+        "limit",
+        "cursor"
       ]
     },
     {

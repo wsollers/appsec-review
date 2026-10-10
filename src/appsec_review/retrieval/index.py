@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import asdict, dataclass
 import hashlib
 import json
@@ -139,6 +140,10 @@ class IndexBuilder:
             metadata = {
                 "schema": INDEX_SCHEMA, "name": self.name, "fingerprint": self.fingerprint,
                 "target_snapshot": self.target_snapshot, "shard_id": self.shard_id,
+                "entity_kind_counts": json.dumps(dict(sorted(Counter(
+                    item.identity.kind.value for item in self.entities).items()))),
+                "relation_kind_counts": json.dumps(dict(sorted(Counter(
+                    item.kind.value for item in self.relations).items()))),
             }
             database.executemany("INSERT INTO metadata VALUES (?, ?)", sorted(metadata.items()))
             for record in sorted(self.entities, key=lambda item: item.identity.value):

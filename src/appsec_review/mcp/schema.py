@@ -39,9 +39,11 @@ TOOLS: tuple[dict[str, Any], ...] = (
      "inputSchema": {"type": "object", "additionalProperties": False, "required": ["identity"], "properties": {
          "identity": IDENTITY, "limit": {"type": "integer", "minimum": 1, "maximum": 100},
      }}},
-    {"name": "coverage", "description": "Report explicit accepted-index coverage and gaps.",
+    {"name": "coverage", "description": "Report accepted-index producers, entity/relation counts, coverage, and gaps.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "indexes": {"type": "array", "items": INDEX, "uniqueItems": True},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
      }}},
     {"name": "query_artifacts", "description": "Query accepted produced artifacts and linked indexed evidence by exact facets.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
