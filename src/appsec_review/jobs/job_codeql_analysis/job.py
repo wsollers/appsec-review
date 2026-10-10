@@ -643,7 +643,7 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
                      "line": flow_location.start_line, "column": flow_location.start_column})
                 builder.add_entity(EntityRecord(span, str(flow["ordinal"]),
                     f"CodeQL flow step {flow['ordinal']}", str(flow.get("message", "flow step")),
-                    {"producer": "codeql", "scope_id": scope.scope_id,
+                    {"producer": "codeql", "scope_id": scope.scope_id, "code_flow": flow.get("code_flow"),
                      "thread_flow": flow.get("thread_flow")}, flow_location))
                 builder.add_relation(RelationRecord(RelationKind.SUPPORTS, span.value,
                                                     observation.value, True, 1.0))

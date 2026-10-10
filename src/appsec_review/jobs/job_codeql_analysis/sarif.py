@@ -9,7 +9,7 @@ from urllib.parse import unquote, urlparse
 from appsec_review.retrieval.model import sanitize_producer_data
 
 
-NORMALIZER_IDENTITY = "appsec-review/codeql-sarif-normalizer/1"
+NORMALIZER_IDENTITY = "appsec-review/codeql-sarif-normalizer/2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +121,8 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
             primary = next((item for item in locations if item.path is not None), locations[0] if locations else None)
             flows: list[dict[str, Any]] = []
             flow_ordinal = 0
-            for code_flow in result.get("codeFlows", ()) if isinstance(result.get("codeFlows", ()), list) else ():
+            code_flows = result.get("codeFlows", ()) if isinstance(result.get("codeFlows", ()), list) else ()
+            for code_flow_index, code_flow in enumerate(code_flows):
                 if not isinstance(code_flow, Mapping):
                     continue
                 for thread_index, thread_flow in enumerate(code_flow.get("threadFlows", ())):
@@ -136,7 +137,8 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
                         flow_ordinal += 1
                         mapped = map_location(physical, files=files, root=root)
                         flows.append({
-                            "ordinal": flow_ordinal, "thread_flow": thread_index,
+                            # code_flow separates alternative SARIF paths for the same result.
+                            "ordinal": flow_ordinal, "code_flow": code_flow_index, "thread_flow": thread_index,
                             "message": _message(location.get("message") if isinstance(location, Mapping) else None,
                                                 "flow step"),
                             "location": mapped.__dict__ if hasattr(mapped, "__dict__") else {

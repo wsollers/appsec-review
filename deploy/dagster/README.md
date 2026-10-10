@@ -112,7 +112,8 @@ language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_a
   + post_build_security_assessment + evidence_collection + tree_sitter_ast -> codeql_analysis
 post_build_security_assessment + evidence_collection + artifact_security_analysis
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
-codeql_analysis + owasp_control_assessment -> security_tagging
+codeql_analysis + owasp_control_assessment -> review_prioritization
+codeql_analysis + owasp_control_assessment + review_prioritization -> security_tagging
 ```
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in

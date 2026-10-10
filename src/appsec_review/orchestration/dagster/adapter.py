@@ -169,7 +169,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
-                    "job_security_tagging",
+                    "job_security_tagging", "job_review_prioritization",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -451,6 +451,13 @@ def build_definitions(
             if "job_codeql_analysis" in registered:
                 owasp_dependencies.append("job_codeql_analysis")
             wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys(owasp_dependencies))
+        if "job_review_prioritization" in registered and "job_tree_sitter_ast" in registered:
+            # Prioritization reads the accepted Tree-sitter, history, Semgrep, and CodeQL handoffs and
+            # publishes a retrieval shard, so it follows the last manifest publisher before tagging.
+            wave_jobs.append(registry.build("job_review_prioritization"))
+            wave_dependencies["job_review_prioritization"] = tuple(job_id for job_id in (
+                "job_codeql_analysis", "job_owasp_control_assessment") if job_id in registered) or tuple(
+                job_id for job_id in ("job_evidence_collection", "job_tree_sitter_ast") if job_id in registered)
         if "job_security_tagging" in registered:
             wave_jobs.append(registry.build("job_security_tagging"))
             # Tagging reads the accepted retrieval manifest, so it follows its last publisher, and it
@@ -462,6 +469,8 @@ def build_definitions(
                                       "job_tree_sitter_ast") if job_id in registered]
             if "job_owasp_control_assessment" in registered:
                 tagging_dependencies.append("job_owasp_control_assessment")
+            if "job_review_prioritization" in wave_dependencies:
+                tagging_dependencies.append("job_review_prioritization")
             wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))

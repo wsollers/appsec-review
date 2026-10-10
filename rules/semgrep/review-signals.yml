@@ -1,0 +1,115 @@
+rules:
+  # Review-prioritization signals.  A match is a review lead, never a finding.  Rule ids use
+  # appsec-review.review-signal.<category>.<name>; job_review_prioritization maps <category> onto its
+  # signal taxonomy and records the match as observed syntax produced by Semgrep.
+  - id: appsec-review.review-signal.privilege_shift.java-trust-all-certificates
+    languages: [java]
+    message: X509TrustManager.checkServerTrusted accepts every certificate chain.
+    severity: INFO
+    pattern: |
+      public void checkServerTrusted(...) {
+      }
+  - id: appsec-review.review-signal.privilege_shift.java-hostname-verifier-accepts-all
+    languages: [java]
+    message: HostnameVerifier.verify accepts every host.
+    severity: INFO
+    pattern: |
+      public boolean verify(String $HOST, SSLSession $SESSION) {
+        return true;
+      }
+  - id: appsec-review.review-signal.privilege_shift.spring-permit-all-requests
+    languages: [java]
+    message: Spring Security permits unauthenticated access to every request.
+    severity: INFO
+    pattern: $HTTP.anyRequest().permitAll()
+  - id: appsec-review.review-signal.privilege_shift.spring-csrf-disabled
+    languages: [java]
+    message: Spring Security CSRF protection is disabled.
+    severity: INFO
+    pattern-either:
+      - pattern: $HTTP.csrf().disable()
+      - pattern: $HTTP.csrf($C -> $C.disable())
+      - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
+  - id: appsec-review.review-signal.privilege_shift.go-tls-verification-disabled
+    languages: [go]
+    message: TLS certificate verification is disabled.
+    severity: INFO
+    pattern: |
+      tls.Config{..., InsecureSkipVerify: true, ...}
+  - id: appsec-review.review-signal.privilege_shift.node-tls-verification-disabled
+    languages: [javascript, typescript]
+    message: TLS certificate verification is disabled.
+    severity: INFO
+    pattern: |
+      {..., rejectUnauthorized: false, ...}
+  - id: appsec-review.review-signal.privilege_shift.php-curl-verification-disabled
+    languages: [php]
+    message: cURL peer or host verification is disabled.
+    severity: INFO
+    pattern-either:
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYPEER, false)
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYPEER, 0)
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYHOST, false)
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYHOST, 0)
+  - id: appsec-review.review-signal.sink.java-sql-string-concatenation
+    languages: [java]
+    message: SQL text is built by string concatenation before execution.
+    severity: INFO
+    pattern-either:
+      - pattern: $STMT.executeQuery("..." + $X)
+      - pattern: $STMT.executeUpdate("..." + $X)
+      - pattern: $STMT.execute("..." + $X)
+      - pattern: $STMT.executeQuery("..." + $X + "...")
+      - pattern: $STMT.executeUpdate("..." + $X + "...")
+      - pattern: $STMT.execute("..." + $X + "...")
+  - id: appsec-review.review-signal.sink.go-sql-string-concatenation
+    languages: [go]
+    message: SQL text is built by string concatenation before execution.
+    severity: INFO
+    pattern-either:
+      - pattern: $DB.Exec("..." + $X, ...)
+      - pattern: $DB.Query("..." + $X, ...)
+      - pattern: $DB.QueryRow("..." + $X, ...)
+      - pattern: $DB.Exec("..." + $X + "...", ...)
+      - pattern: $DB.Query("..." + $X + "...", ...)
+  - id: appsec-review.review-signal.sink.php-unserialize-request
+    languages: [php]
+    message: Request data reaches unserialize.
+    severity: INFO
+    pattern-either:
+      - pattern: unserialize($_GET[...])
+      - pattern: unserialize($_POST[...])
+      - pattern: unserialize($_REQUEST[...])
+      - pattern: unserialize($_COOKIE[...])
+  - id: appsec-review.review-signal.sink.php-sql-string-concatenation
+    languages: [php]
+    message: SQL text is built by string concatenation before execution.
+    severity: INFO
+    pattern-either:
+      - pattern: $DB->query("..." . $X)
+      - pattern: $DB->exec("..." . $X)
+      - pattern: $DB->query("..." . $X . "...")
+      - pattern: $DB->exec("..." . $X . "...")
+  - id: appsec-review.review-signal.sink.csharp-process-shell
+    languages: [csharp]
+    message: A shell process is started with a concatenated argument string.
+    severity: INFO
+    pattern: System.Diagnostics.Process.Start($SHELL, "..." + $X)
+  - id: appsec-review.review-signal.sensitive_wrapper.java-xml-factory-without-hardening
+    languages: [java]
+    message: DocumentBuilderFactory is created without disabling external entities in the same function.
+    severity: INFO
+    patterns:
+      - pattern: $F = DocumentBuilderFactory.newInstance();
+      - pattern-not-inside: |
+          $F = DocumentBuilderFactory.newInstance();
+          ...
+          $F.setFeature(...);
+  - id: appsec-review.review-signal.sensitive_wrapper.libxml-entity-expansion
+    languages: [c, cpp]
+    message: libxml2 parsing enables entity substitution.
+    severity: INFO
+    pattern-either:
+      - pattern: xmlReadMemory(..., XML_PARSE_NOENT)
+      - pattern: xmlReadFile(..., XML_PARSE_NOENT)
+      - pattern: xmlCtxtReadMemory(..., XML_PARSE_NOENT)

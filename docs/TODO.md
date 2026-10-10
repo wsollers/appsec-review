@@ -430,4 +430,19 @@ roll up into the parent's components, and how its own `.git` (often under the pa
 - Commit subjects are not indexed. Index them only after a gitleaks redaction pass, with a named gap
   when redaction is unavailable.
 - Join blame spans to Tree-sitter function nodes for function-level signals, and add an exact-filter
-  `query_history` MCP tool if consumers need one.
+  `query_history` MCP tool if consumers need one. Review prioritization currently gives each function
+  its file's history hotspot score.
+
+## Narrow review-prioritization approximations
+
+See [`architecture/review-prioritization.md`](architecture/review-prioritization.md).
+
+- Resolve call targets (clangd symbols, CodeQL call graphs) so wrapper, sink, and recursion
+  heuristics stop depending on callee names, and so indirect recursion is detected.
+- Evaluate build-system include paths, tsconfig `paths`, Composer PSR-4 maps, and Cargo workspaces in
+  import resolution, and count implicit same-package references.
+- Diff public API and contract declarations between the snapshot and its mainline parent instead of
+  combining declarations with the history hotspot.
+- Score preprocessor-conditional and macro control flow instead of reporting it as unsupported.
+- Add a Python mapping and any further languages the Tree-sitter producer gains.
+- Add Semgrep or CodeQL path queries for PHP, which has no CodeQL extractor today.

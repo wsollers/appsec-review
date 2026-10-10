@@ -268,6 +268,9 @@ Outputs keep identity exposure low:
 - **Inference security review (design).** History coverage and ranks feed the evidence map and
   hunt-package lead menus as context, never as message text or a search limit.
 - **Final report.** The limitations section lists history coverage, binding status, and gaps.
+- **Review prioritization.** `job_review_prioritization` uses each file's accepted attention score
+  as its `history_hotspot` feature; functions inherit their file's value. See
+  [`review-prioritization.md`](review-prioritization.md).
 
 ## Central TOML
 

@@ -8,7 +8,7 @@ from .owasp import QUERY_TOOL_SCHEMA
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
-INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags"]}
+INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags", "priority"]}
 
 TOOLS: tuple[dict[str, Any], ...] = (
     {"name": "search", "description": "Full-text search accepted immutable evidence indexes.",

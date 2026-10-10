@@ -16,7 +16,7 @@ processes cannot claim the same run concurrently.
 The direct CLI currently exercises this mechanism with an eleven-job linear review graph from
 `job_review_intake` through `job_evidence_collection`. Dagster builds the broader, branched
 `wave1_review` topology from the registered and configured jobs, including CI configuration,
-tree-sitter, post-build, and OWASP branches that are not in the direct graph. Both surfaces use the
+tree-sitter, post-build, OWASP, and review-prioritization branches that are not in the direct graph. Both surfaces use the
 same semantic registry and accepted-handoff format. The exact operator-visible distinction is
 documented in [`../operations/wave1-review.md`](../operations/wave1-review.md).
 

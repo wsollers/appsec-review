@@ -46,6 +46,8 @@ class EntityKind(StrEnum):
     CHANGE = "change"
     HISTORY_SIGNAL = "history_signal"
     TAG_ASSIGNMENT = "tag_assignment"
+    PRIORITY_ITEM = "priority_item"
+    REVIEW_SIGNAL = "review_signal"
 
 
 class RelationKind(StrEnum):
