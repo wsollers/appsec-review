@@ -219,6 +219,35 @@ def _accepted_run(tmp_path: Path, config) -> tuple[str, Path, Path, dict[str, st
                                                               "complexity_density": 0.3,
                                                               "share_above_threshold": None}, "gaps": []},
                      _file_location(target, "src/auth.c"))])
+    ids["auth-function"] = identity(EntityKind.PRIORITY_ITEM, "function:src/auth.c:check")
+    ids["other-function"] = identity(EntityKind.PRIORITY_ITEM, "function:src/auth.c:other")
+    function_location = _file_location(target, "src/auth.c")
+    shard("priority", "functions", {"job": "job_review_prioritization"}, [
+        EntityRecord(LogicalIdentity.parse(ids["auth-function"]), "function:check", "check", "priority check",
+                     {"scope": "function", "language": "C", "features": {}}, function_location),
+        EntityRecord(LogicalIdentity.parse(ids["other-function"]), "function:other", "other", "priority other",
+                     {"scope": "function", "language": "C", "features": {}},
+                     _location(target, "src/auth.c", 4))])
+    ids["auth-tag"] = identity(EntityKind.TAG_ASSIGNMENT, "auth-tag")
+    ids["lead-tag"] = identity(EntityKind.TAG_ASSIGNMENT, "lead-tag")
+    ids["util-tag"] = identity(EntityKind.TAG_ASSIGNMENT, "util-tag")
+    shard("tags", "security-tags", {"job": "job_security_tagging"}, [
+        EntityRecord(LogicalIdentity.parse(ids["auth-tag"]), "auth-tag", "surface:memory", "tag auth",
+                     {"tag": "surface:memory", "basis": "reported", "family": "attack_surface",
+                      "subject": {"kind": "source_file", "logical_id": ids["src/auth.c"],
+                                  "path": "src/auth.c"}}),
+        EntityRecord(LogicalIdentity.parse(ids["lead-tag"]), "lead-tag", "surface:memory", "tag lead",
+                     {"tag": "surface:memory", "basis": "reported", "family": "attack_surface",
+                      "subject": {"kind": "tool_observation", "logical_id": ids["o1"]}}),
+        EntityRecord(LogicalIdentity.parse(ids["util-tag"]), "util-tag", "surface:command", "tag util",
+                     {"tag": "surface:command", "basis": "reported", "family": "attack_surface",
+                      "subject": {"kind": "source_file", "logical_id": ids["src/util.c"],
+                                  "path": "src/util.c"}})])
+    ids["ast-check"] = identity(EntityKind.AST_NODE, "check")
+    shard("analysis", "cpp-auth-ast", {"job": "job_cpp_compiled_analysis"}, [
+        EntityRecord(LogicalIdentity.parse(ids["ast-check"]), "check", "check", "FunctionDecl check",
+                     {"kind": "FunctionDecl", "compile_unit_id": "auth-unit"},
+                     _location(target, "src/auth.c", 1))])
     ids["history"] = LogicalIdentity.derive(EntityKind.HISTORY_SIGNAL, SNAPSHOT, {"scope": "file", "path": "src/auth.c"}).value
     ids["hotspot"] = identity(EntityKind.HOTSPOT, "hotspot-auth")
     shard("history", "git-history", {"job": "job_source_history_analysis", "vcs": "git"}, [
@@ -339,6 +368,18 @@ def test_review_packages_keep_complete_membership_and_detect_tampering(accepted)
     assert any(gap["state"] == "partial" for gap in manifest["coverage_gaps"])
     assert any(item["metrics"] for item in packages)
     assert any(item["build_context"]["command_facts"] for item in packages)
+    auth = next(item for item in finding if item["lead_menu"][0]["observation_id"] == ids["o1"])
+    assert auth["build_context"]["bindings"][0]["function_scope_id"] == ids["auth-function"]
+    assert auth["build_context"]["bindings"][0]["action_ids"] == [ids["action"]]
+    assert auth["tag_context"]["cloud"] == [{"tag": "surface:memory", "assignment_count": 2}]
+    assert auth["compiled_context"][0]["entity_id"] == ids["ast-check"]
+    assert all(metric["scope_id"] != ids["other-function"] for metric in auth["metrics"])
+    assert not any(secret in json.dumps(auth) for secret in SECRETS)
+    assert not any(item["tag"] == "surface:command" for item in auth["tag_context"]["assignments"])
+    util = next(item for item in finding if item["lead_menu"][0]["observation_id"] == ids["o2"])
+    assert not util["build_context"]["command_facts"]
+    assert util["build_context"]["bindings"][0]["function_scope_id"] is None
+    assert any(gap["producer"] == "function_scope" for gap in util["coverage_gaps"])
     assert assemble_review_packages(core, max_page_size=20) == (packages, manifest)
     expected = {"all": {item["lead_menu"][0]["observation_id"] for item in finding},
                 "high_critical": {lead["observation_id"] for item in hunts for lead in item["lead_menu"]
@@ -367,6 +408,16 @@ def test_review_packages_keep_complete_membership_and_detect_tampering(accepted)
     subject = selected["lead_menu"][0]["observation_id"]
     assert scoped.call("query_precomputed", {"query_set": "scanner_correlation", "subject": subject,
                                              "limit": 1})["results"]
+    auth_token = issue_capability(auth, role="red", round_id="1", secret=secret,
+                                  expires_at=int(datetime.now(timezone.utc).timestamp()) + 300)
+    auth_scoped = ScopedRetrievalMcpAdapter(RetrievalMcpAdapter(core), auth, capability=auth_token,
+                                            secret=secret, role="red", round_id="1")
+    assert auth_scoped.call("find", {"identity": ids["auth-tag"]})["results"]
+    assert auth_scoped.call("find", {"identity": ids["ast-check"]})["results"]
+    assert auth_scoped.call("find", {"identity": ids["auth-function"]})["results"]
+    assert auth_scoped.call("find", {"identity": ids["action"]})["results"]
+    with pytest.raises(ValueError, match="outside review package"):
+        auth_scoped.call("find", {"identity": ids["util-tag"]})
     with pytest.raises(ValueError, match="outside review package"):
         scoped.call("find", {"identity": next(item["lead_menu"][0]["observation_id"] for item in finding
                                                 if item["package_id"] != selected["package_id"])})
@@ -438,7 +489,8 @@ def test_metric_vectors_mark_missing_values_unknown_not_zero(accepted) -> None:
     config, run_id, _run_root, _target, ids, _outcome, _executor = accepted
     core = RetrievalCore(config.runtime.runs_dir, run_id)
     vector = next(item["payload"]["result"] for item in _facts(core, "history_context")
-                  if item["payload"]["fact_type"] == "metric_vector")
+                  if item["payload"]["fact_type"] == "metric_vector"
+                  and item["payload"].get("subject_identity") == ids["priority"])
     metrics = {item["name"]: item for item in vector["metrics"]}
     assert metrics["revision_count"]["value"] == 9 and metrics["revision_count"]["window_days"] == 365
     assert metrics["sii_score"]["producer"] == "job_source_history_analysis"

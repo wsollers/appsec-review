@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-packages.schema.json",
-  "title": "Pre-adjudication review package contract, version 1",
+  "title": "Pre-adjudication review package contract, version 2",
   "oneOf": [
     { "$ref": "#/$defs/finding_lead" },
     { "$ref": "#/$defs/hunt" }
@@ -99,10 +99,16 @@
     },
     "build_context": {
       "type": "object", "additionalProperties": false,
-      "required": ["action_ids", "artifact_ids", "command_facts", "environment_facts"],
+      "required": ["action_ids", "artifact_ids", "command_facts", "environment_facts", "bindings"],
       "properties": {
         "action_ids": {"$ref": "#/$defs/identities"},
         "artifact_ids": {"$ref": "#/$defs/identities"},
+        "bindings": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["observation_id", "function_scope_id", "source_path", "action_ids", "match"],
+          "properties": {"observation_id": {"$ref": "#/$defs/identity"},
+            "function_scope_id": {"oneOf": [{"$ref": "#/$defs/identity"}, {"type": "null"}]},
+            "source_path": {"type": ["string", "null"]}, "action_ids": {"$ref": "#/$defs/identities"},
+            "match": {"enum": ["source_file", "unresolved"]}}}},
         "command_facts": {"type": "array", "items": {"type": "object", "additionalProperties": false,
           "required": ["build_action_id", "tool_id", "ordered_tokens", "exact_artifact_sha256", "normalization_rule"],
           "properties": {"build_action_id": {"type": "string"}, "tool_id": {"type": "string"},
@@ -117,24 +123,41 @@
             "safe_value": {"type": "string"}, "redacted": {"type": "boolean"}}}}
       }
     },
+    "tag_context": {"type": "object", "additionalProperties": false,
+      "required": ["assignments", "cloud"], "properties": {
+        "assignments": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["entity_id", "tag", "basis", "family", "subject_id"],
+          "properties": {"entity_id": {"$ref": "#/$defs/identity"}, "tag": {"type": "string"},
+            "basis": {"type": "string"}, "family": {"type": "string"},
+            "subject_id": {"$ref": "#/$defs/identity"}}}},
+        "cloud": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["tag", "assignment_count"], "properties": {
+            "tag": {"type": "string"}, "assignment_count": {"type": "integer", "minimum": 1}}}}}},
+    "compiled_context": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["entity_id", "kind", "name", "compile_unit_id", "source_path", "line"],
+      "properties": {"entity_id": {"$ref": "#/$defs/identity"}, "kind": {"type": "string"},
+        "name": {"type": "string"}, "compile_unit_id": {"type": ["string", "null"]},
+        "source_path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}}}},
     "base": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "metrics", "build_context", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
+      "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "metrics", "build_context", "tag_context", "compiled_context", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
       "properties": {
-        "schema": { "const": "appsec-review/review-package/1" },
+        "schema": { "const": "appsec-review/review-package/2" },
         "kind": { "enum": ["finding_lead", "hunt"] },
         "package_id": { "type": "string", "minLength": 1 },
         "run_id": { "type": "string", "minLength": 1 },
         "manifest_sha256": { "$ref": "#/$defs/sha" },
         "target_snapshot": { "type": "string", "minLength": 1 },
         "input_fingerprint": { "$ref": "#/$defs/sha" },
-        "assembly_rule": { "const": "appsec-review/assemble-review-packages/1" },
+        "assembly_rule": { "const": "appsec-review/assemble-review-packages/2" },
         "scope": { "$ref": "#/$defs/scope" },
         "lead_menu": { "type": "array", "items": { "$ref": "#/$defs/lead" } },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
         "context_ids": { "$ref": "#/$defs/identities" },
         "metrics": {"type": "array", "items": {"$ref": "#/$defs/metric"}},
         "build_context": {"$ref": "#/$defs/build_context"},
+        "tag_context": {"$ref": "#/$defs/tag_context"},
+        "compiled_context": {"$ref": "#/$defs/compiled_context"},
         "proof_obligations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
         "retrieval": { "$ref": "#/$defs/retrieval" },
         "coverage_gaps": { "type": "array", "items": { "$ref": "#/$defs/gap" } },

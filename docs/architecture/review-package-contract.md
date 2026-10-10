@@ -1,7 +1,7 @@
 # Pre-adjudication review packages
 
 The sole machine-readable contract is [review-packages.schema.json](../schemas/review-packages.schema.json),
-version `appsec-review/review-package/1`. It defines `finding_lead` and `hunt` packages. Reported
+version `appsec-review/review-package/2`. It defines `finding_lead` and `hunt` packages. Reported
 scanner severity orders review; it is not an adjudicated technical severity. The separate
 post-adjudication finding package is defined in [inference security review](inference-security-review.md).
 
@@ -28,15 +28,23 @@ members, duplicate membership and disagreement with the accepted scanner-correla
 Coverage from accepted shards is copied as named gaps. Missing scanner-correlation facts or an
 audit failure block package publication rather than producing a clean empty menu.
 
-The schema carries typed metric vectors, evidence provenance, safe ordered build commands and
-classified environment facts. The assembler joins accepted metric vectors and safe build-action
-facts by exact source path. A missing source match becomes a named gap; empty vectors must not be
-interpreted as zero measurements or a safe build. The package carries bounded retrieval grants,
-not raw source, argv, environment values or scanner output. The current build-fact join is
-path-scoped context. It does not assert that a build action compiled the exact observed construct.
-Where accepted Clang artifacts have source mappings, post-macro and template-expanded views can
-help the review pools test that question. They are evidence to inspect, not a package-admission
-condition or a confirmed finding.
+The schema carries typed metric vectors, evidence provenance, safe ordered build commands,
+classified environment facts, matching tag assignments, a package-local tag cloud, and Clang
+function-declaration references. The assembler resolves a lead to a unique accepted function
+span by source path, file hash and line. It includes that function's metric vector plus file-level
+metrics, excluding other functions in the same file. A missing or ambiguous span becomes a named
+gap. The tag cloud counts only assignments attached to the lead observation or its source file;
+it is not the run-wide display cloud. Each tag and Clang reference retains an accepted shard
+identity and a retrieval grant.
+
+Build commands are selected only when their safe source-input token names the lead's source
+file. Each lead has a binding to its resolved function span and matching build-action IDs; multiple
+actions are explicitly ambiguous. A file-level compile command applies to a function through its
+source file but does not establish runtime reachability or that a suspected issue is real. The
+Clang references identify accepted post-expansion AST declarations when their mapped lines fall
+inside the function span. They do not contain a full expanded function body; missing references
+are named gaps. The package carries bounded retrieval grants, not raw source, argv, environment
+values or scanner output. Empty context must not be interpreted as evidence of safety.
 
 ## Worker access
 

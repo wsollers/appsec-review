@@ -17,8 +17,8 @@ from appsec_review.retrieval.model import LogicalIdentity, canonical_json
 from appsec_review.storage import atomic_json, file_sha256
 
 
-SCHEMA = "appsec-review/review-package/1"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/1"
+SCHEMA = "appsec-review/review-package/2"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/2"
 MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
 _MENU_SEVERITIES = {"high_critical": {"critical", "high"}, "unknown": {"unknown"}}
 
@@ -85,11 +85,14 @@ def _lead(value: Mapping[str, Any]) -> dict[str, Any]:
 def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict[str, Any]],
              evidence: list[dict[str, Any]], gaps: list[dict[str, str]], next_partition: str | None,
              max_page_size: int, metrics: list[dict[str, Any]], build_context: dict[str, Any],
-             source_ids: list[str], context_ids: list[str]) -> dict[str, Any]:
+             source_ids: list[str], context_ids: list[str], tag_context: dict[str, Any],
+             compiled_context: list[dict[str, Any]]) -> dict[str, Any]:
     component = leads[0]["component_id"]
     entity_ids = sorted({item["observation_id"] for item in leads} |
                         {item["entity_id"] for item in evidence} |
                         set(source_ids) | set(context_ids) | set(build_context["action_ids"]) |
+                        {item["entity_id"] for item in tag_context["assignments"]} |
+                        {item["entity_id"] for item in compiled_context} |
                         {item["scope_id"] for item in metrics} |
                         {flow for item in leads for flow in item["flow_ids"]})
     inputs = sorted({(item["name"], item.get("shard_id", "default"), item["sha256"])
@@ -104,9 +107,10 @@ def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict
                          "artifact_ids": build_context["artifact_ids"]},
                "lead_menu": leads, "evidence": evidence,
                "context_ids": context_ids, "metrics": metrics, "build_context": build_context,
+               "tag_context": tag_context, "compiled_context": compiled_context,
                "proof_obligations": ["resolve affected construct", "establish input control",
                                      "establish reachability", "evaluate guards and configuration", "establish impact"],
-               "retrieval": {"indexes": [name for name in ("observations", "precomputed", "source") if name in core.indexes],
+               "retrieval": {"indexes": [name for name in ("observations", "precomputed", "source", "priority", "build", "artifacts", "tags", "analysis") if name in core.indexes],
                              "query_sets": ["scanner_correlation", "history_context", "build_provenance"],
                              "entity_ids": entity_ids,
                              "max_page_size": max_page_size, "max_pages": 5, "max_depth": 2,
@@ -213,6 +217,23 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
     for payload, row in _facts(view, "history_context"):
         if payload.get("fact_type") == "metric_vector" and isinstance(payload.get("subject_path"), str):
             metric_by_path.setdefault(payload["subject_path"], []).append((payload, row))
+    priority_by_path: dict[str, list[Any]] = {}
+    for row in view.entities(view.select("priority"), ("priority_item",)):
+        if row.location:
+            priority_by_path.setdefault(str(row.location["path"]), []).append(row)
+    tag_by_path: dict[str, list[Any]] = {}
+    tag_by_subject: dict[str, list[Any]] = {}
+    for row in view.entities(view.select("tags"), ("tag_assignment",)):
+        subject = row.payload.get("subject", {})
+        if isinstance(subject, Mapping):
+            if isinstance(subject.get("logical_id"), str):
+                tag_by_subject.setdefault(subject["logical_id"], []).append(row)
+            if subject.get("kind") == "source_file" and isinstance(subject.get("path"), str):
+                tag_by_path.setdefault(subject["path"], []).append(row)
+    compiled_by_path: dict[str, list[Any]] = {}
+    for row in view.entities(view.select("analysis"), ("ast_node",)):
+        if row.location and row.payload.get("kind") in {"FunctionDecl", "CXXMethodDecl"}:
+            compiled_by_path.setdefault(str(row.location["path"]), []).append(row)
     build_by_path: dict[str, list[tuple[Mapping[str, Any], Any]]] = {}
     for payload, row in _facts(view, "build_provenance"):
         if payload.get("fact_type") != "build_action":
@@ -223,15 +244,43 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                     build_by_path.setdefault(source_input[len(prefix):], []).append((payload, row))
 
     def context_for(selected: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any],
-                                                                list[str], list[str], list[dict[str, Any]], list[dict[str, str]]]:
+                                                                list[str], list[str], list[dict[str, Any]], list[dict[str, str]],
+                                                                dict[str, Any], list[dict[str, Any]]]:
         paths = sorted({item["location"].get("source_path") for item in selected if item["location"].get("source_path")})
         sources = sorted({identity for path in paths for identity in source_by_path.get(path, ())})
-        metric_rows = {row.identity: (payload, row) for path in paths for payload, row in metric_by_path.get(path, ())}
+        local_gaps = []
+        scopes: dict[str, Any] = {}
+        bindings = []
+        for lead in selected:
+            path = lead["location"].get("source_path")
+            line = lead["location"].get("start_line")
+            end_line = lead["location"].get("end_line", line)
+            sha = lead["location"].get("file_sha256")
+            candidates = [row for row in priority_by_path.get(path, ()) if row.payload.get("scope") == "function"
+                          and row.location["file_sha256"] == sha and isinstance(line, int)
+                          and isinstance(end_line, int) and row.location["start_line"] <= line
+                          and end_line <= row.location["end_line"]]
+            candidates.sort(key=lambda row: (row.location["end_line"] - row.location["start_line"], row.identity))
+            scope = candidates[0] if len(candidates) == 1 or (candidates and
+                candidates[0].location["end_line"] - candidates[0].location["start_line"] <
+                candidates[1].location["end_line"] - candidates[1].location["start_line"]) else None
+            if scope:
+                scopes[lead["observation_id"]] = scope
+            else:
+                local_gaps.append(_gap("function_scope", lead["observation_id"],
+                                       "ambiguous" if candidates else "unavailable",
+                                       "no unique accepted function span contains the lead"))
+        metric_rows = {row.identity: (payload, row) for path in paths for payload, row in metric_by_path.get(path, ())
+                       if payload.get("subject_identity") in {scope.identity for scope in scopes.values()}
+                       or payload.get("result", {}).get("scope") == "file"}
         build_rows = {row.identity: (payload, row) for path in paths for payload, row in build_by_path.get(path, ())}
         metrics = [metric for payload, _ in sorted(metric_rows.values(), key=lambda pair: pair[1].identity)
                    for metric in payload["result"].get("metrics", ())]
         commands = [command for payload, _ in sorted(build_rows.values(), key=lambda pair: pair[1].identity)
-                    for command in payload["result"].get("command_facts", ())]
+                    for command in payload["result"].get("command_facts", ())
+                    if any(token.get("kind") == "source_input" and token.get("safe_value") in
+                           {f"relative:{path}" for path in paths} | {f"target:{path}" for path in paths}
+                           for token in command.get("ordered_tokens", ()))]
         environments = {item["name"]: item for payload, _ in sorted(build_rows.values(), key=lambda pair: pair[1].identity)
                         for item in payload["result"].get("environment_facts", ())}
         if len(metrics) > 200 or len(commands) > 100 or len(environments) > 100:
@@ -240,33 +289,88 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
         artifacts = sorted({item for payload, _ in build_rows.values()
                             for item in payload["result"].get("produced_artifact_ids", ())})
         context = {"action_ids": actions, "artifact_ids": artifacts,
-                   "command_facts": commands, "environment_facts": [environments[key] for key in sorted(environments)]}
-        references = sorted([*metric_rows, *build_rows])
+                   "command_facts": commands, "environment_facts": [environments[key] for key in sorted(environments)],
+                   "bindings": []}
+        for lead in selected:
+            path = lead["location"].get("source_path")
+            matching_actions = sorted({payload["result"]["build_action_id"] for payload, _ in build_by_path.get(path, ())})
+            bindings.append({"observation_id": lead["observation_id"],
+                             "function_scope_id": scopes[lead["observation_id"]].identity if lead["observation_id"] in scopes else None,
+                             "source_path": path, "action_ids": matching_actions,
+                             "match": "source_file" if matching_actions else "unresolved"})
+            if len(matching_actions) > 1:
+                local_gaps.append(_gap("build_provenance", lead["observation_id"], "ambiguous",
+                                       "multiple accepted build actions compile the lead's source file"))
+        context["bindings"] = sorted(bindings, key=lambda item: item["observation_id"])
+        tag_rows = {row.identity: row for lead in selected for row in
+                    [*tag_by_subject.get(lead["observation_id"], ()),
+                     *(item for item in tag_by_path.get(lead["location"].get("source_path"), ())
+                       if item.location is None or
+                       item.location["file_sha256"] == lead["location"].get("file_sha256"))]}
+        if len(tag_rows) > 200:
+            raise ValueError("review package tags exceed their bound; partition the source scope")
+        assignments = [{"entity_id": row.identity, "tag": row.payload["tag"],
+                        "basis": row.payload["basis"], "family": row.payload["family"],
+                        "subject_id": row.payload["subject"]["logical_id"]}
+                       for row in sorted(tag_rows.values(), key=lambda row: row.identity)]
+        cloud = [{"tag": tag, "assignment_count": count} for tag, count in
+                 sorted(Counter(item["tag"] for item in assignments).items())]
+        tag_context = {"assignments": assignments, "cloud": cloud}
+        compiled_rows = {}
+        for lead in selected:
+            scope = scopes.get(lead["observation_id"])
+            if scope is None:
+                continue
+            for row in compiled_by_path.get(scope.location["path"], ()):
+                if (row.location["file_sha256"] == scope.location["file_sha256"] and
+                    scope.location["start_line"] <= row.location["start_line"] <= scope.location["end_line"]):
+                    compiled_rows[row.identity] = row
+        if len(compiled_rows) > 100:
+            raise ValueError("review package compiled references exceed their bound")
+        compiled_context = [{"entity_id": row.identity, "kind": row.payload["kind"],
+                             "name": row.name, "compile_unit_id": row.payload.get("compile_unit_id"),
+                             "source_path": row.location["path"], "line": row.location["start_line"]}
+                            for row in sorted(compiled_rows.values(), key=lambda row: row.identity)]
+        references = sorted([*metric_rows, *build_rows, *tag_rows, *compiled_rows,
+                             *(scope.identity for scope in scopes.values())])
+        context_evidence = {row.identity: row for row in [*(row for _payload, row in metric_rows.values()),
+                                *(row for _payload, row in build_rows.values()),
+                                *tag_rows.values(), *compiled_rows.values(), *scopes.values()]}
         evidence = [{"entity_id": row.identity, "relation": "qualifies", "shard_id": row.shard_id,
                      "shard_sha256": row.shard_sha256,
                      "resolution": "source_line" if row.location else "run_artifact"}
-                    for _payload, row in [*metric_rows.values(), *build_rows.values()]]
-        local_gaps = []
+                    for row in sorted(context_evidence.values(), key=lambda row: row.identity)]
         if not metric_rows:
             local_gaps.append(_gap("history_context", ",".join(paths) or "unresolved-source", "unavailable",
                                    "no source-matched accepted metric vector"))
         if not build_rows:
             local_gaps.append(_gap("build_provenance", ",".join(paths) or "unresolved-source", "unavailable",
                                    "no source-matched safe build-action facts"))
-        return metrics, context, sources, references, evidence, local_gaps
+        if not commands and build_rows:
+            local_gaps.append(_gap("build_provenance", ",".join(paths), "unavailable",
+                                   "no safe compile command explicitly names the source file"))
+        if not tag_rows:
+            local_gaps.append(_gap("security_tagging", ",".join(paths) or "unresolved-source", "unavailable",
+                                   "no accepted tag assignment matches the lead or source file"))
+        if not compiled_rows and any(Path(path).suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hh"}
+                                     for path in paths):
+            local_gaps.append(_gap("compiled_analysis", ",".join(paths) or "unresolved-source", "unavailable",
+                                   "no accepted Clang function declaration matches a resolved function span"))
+        return metrics, context, sources, references, evidence, local_gaps, tag_context, compiled_context
 
     packages = []
     for identity, (lead, row) in sorted(leads.items()):
         evidence = [{"entity_id": row.identity, "relation": "nominates", "shard_id": row.shard_id,
                      "shard_sha256": row.shard_sha256,
                      "resolution": "source_line" if lead["location_exact"] else "unresolved"}]
-        metrics, build, sources, refs, additional_evidence, local_gaps = context_for([lead])
+        metrics, build, sources, refs, additional_evidence, local_gaps, tags, compiled = context_for([lead])
         packages.append(_package(core, kind="finding_lead", partition=identity, leads=[lead],
                                  evidence=sorted([*evidence, *additional_evidence], key=lambda item: item["entity_id"]),
                                  gaps=sorted([*gaps, *local_gaps], key=lambda item: item["gap_id"]),
                                  next_partition=None, max_page_size=max_page_size,
                                  metrics=metrics, build_context=build, source_ids=sources,
-                                 context_ids=sorted([row.identity, *refs])))
+                                 context_ids=sorted({row.identity, *refs}), tag_context=tags,
+                                 compiled_context=compiled))
     for menu in sorted(menus, key=lambda item: (item["menu"], item["component_id"], item["partition"])):
         chunk = sorted((leads[item["observation_id"]] for item in menu["members"]),
                        key=lambda pair: pair[0]["observation_id"])
@@ -274,14 +378,15 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                             "shard_id": row.shard_id, "shard_sha256": row.shard_sha256,
                             "resolution": "source_line" if lead["location_exact"] else "unresolved"}
                            for lead, row in chunk), key=lambda item: item["entity_id"])
-        metrics, build, sources, refs, additional_evidence, local_gaps = context_for([lead for lead, _ in chunk])
+        metrics, build, sources, refs, additional_evidence, local_gaps, tags, compiled = context_for([lead for lead, _ in chunk])
         packages.append(_package(core, kind="hunt", partition=f"{menu['menu']}:{menu['component_id']}:{menu['partition']:05d}",
                                  leads=[lead for lead, _ in chunk], evidence=sorted([*evidence, *additional_evidence],
                                  key=lambda item: item["entity_id"]),
                                  gaps=sorted([*gaps, *local_gaps], key=lambda item: item["gap_id"]),
                                  next_partition=menu["next_partition"], max_page_size=max_page_size,
                                  metrics=metrics, build_context=build, source_ids=sources,
-                                 context_ids=sorted([*(row.identity for _, row in chunk), *refs])))
+                                 context_ids=sorted({*(row.identity for _, row in chunk), *refs}),
+                                 tag_context=tags, compiled_context=compiled))
     validate_packages(core, packages, expected, audits[0])
     manifest = {"schema": MANIFEST_SCHEMA, "run_id": core.run_id, "accepted_manifest_sha256": core.manifest_sha256,
                 "assembly_rule": ASSEMBLY_RULE, "max_page_size": max_page_size,

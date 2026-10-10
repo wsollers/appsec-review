@@ -315,7 +315,7 @@ product by exact subject/path but cannot cause product generation.
 
 The machine-readable contract is
 [`review-packages.schema.json`](../schemas/review-packages.schema.json), version
-`appsec-review/review-package/1`. It describes the output of `assemble_review_packages` and
+`appsec-review/review-package/2`. It describes the output of `assemble_review_packages` and
 the bounded input planned for the `hypothesis_hunter` and `red_team_analyst` roles in
 [`inference-security-review.md`](inference-security-review.md). It is distinct from the
 post-adjudication `appsec-review/finding-package/1` used for final findings. The assembler reads
