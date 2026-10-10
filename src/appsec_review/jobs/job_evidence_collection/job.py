@@ -15,6 +15,7 @@ from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest,
 from appsec_review.jobs.job_evidence_collection.adapters import (
     Applicability,
     ScanCatalog,
+    SEI_CERT_MOUNT,
     ToolAdapter,
     adapter_registry,
 )
@@ -29,11 +30,12 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.rulepacks.sei_cert.pack import LOCK_NAME as SEI_CERT_LOCK, tree_digest
 
 
 CAPABILITIES: Mapping[str, tuple[str, ...]] = {
     "secrets": ("tool-gitleaks",),
-    "source_sast": ("tool-semgrep", "tool-gosec", "tool-mobsfscan", "tool-shellcheck",
+    "source_sast": ("tool-semgrep", "tool-opengrep", "tool-gosec", "tool-mobsfscan", "tool-shellcheck",
                     "tool-phpcs", "tool-phpstan", "tool-psalm", "tool-spotbugs",
                     "tool-cppcheck", "tool-pmd"),
     "software_inventory": ("tool-syft",),
@@ -132,6 +134,47 @@ def plan_applicability(run_root: Path) -> list[dict[str, Any]]:
     return values
 
 
+SEI_CERT_TOOLS = frozenset({"tool-semgrep", "tool-opengrep"})
+
+
+def _sei_cert_pack(repository: Path) -> tuple[Path, dict[str, str]] | None:
+    """Verify the SEI CERT rule files against pack.lock.json and return the rules root and identity."""
+    pack = repository / "rules" / "sei-cert"
+    try:
+        lock = json.loads((pack / SEI_CERT_LOCK).read_text(encoding="utf-8"))
+        manifest = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
+        rules_root = pack / "rules"
+        actual = {path.relative_to(pack).as_posix(): file_sha256(path)
+                  for path in sorted(rules_root.rglob("*")) if path.is_file()}
+        locked = {relative: digest for relative, digest in lock["files"].items() if relative.startswith("rules/")}
+        if (lock.get("schema") != "appsec-review/sei-cert-rule-pack-lock/1" or not actual
+                or any(path.is_symlink() for path in rules_root.rglob("*")) or actual != locked
+                or sorted(actual) != sorted(manifest.get("rule_files", []))
+                or tree_digest(actual) != lock.get("rule_files_sha256")):
+            return None
+    except (OSError, KeyError, ValueError, json.JSONDecodeError):
+        return None
+    return rules_root, {"id": str(lock.get("pack")), "version": str(lock.get("version")),
+                        "rule_files_sha256": str(lock["rule_files_sha256"]),
+                        "tree_sha256": str(lock.get("tree_sha256"))}
+
+
+def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, Any]:
+    """Rule-pack identities recorded with a tool's evidence, so results bind to exact rules."""
+    packs: dict[str, Any] = {}
+    repository = unit.job.repository_root
+    if adapter.tool_id in SEI_CERT_TOOLS:
+        verified = _sei_cert_pack(repository)
+        packs["appsec-review/sei-cert"] = verified[1] if verified else {"verified": False}
+    if adapter.tool_id == "tool-semgrep":
+        try:
+            lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
+            packs["semgrep-security-baseline"] = {"sha256": lock["files"]["security.yml"]["sha256"]}
+        except (OSError, KeyError, json.JSONDecodeError):
+            packs["semgrep-security-baseline"] = {"verified": False}
+    return {"rule_packs": packs} if packs else {}
+
+
 def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicability) -> tuple[Applicability, tuple[Mount, ...], dict[str, str], str | None]:
     if not selection.applicable:
         return selection, (), {}, None
@@ -150,6 +193,11 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         if not verified:
             return selection, (), {}, "hash-pinned Semgrep rule bundle is unavailable"
         mounts.append(Mount(rules, "/rules", True))
+    if adapter.tool_id in SEI_CERT_TOOLS:
+        verified_pack = _sei_cert_pack(repository)
+        if verified_pack is None:
+            return selection, (), {}, "hash-pinned SEI CERT rule pack is unavailable or does not match pack.lock.json"
+        mounts.append(Mount(verified_pack[0], SEI_CERT_MOUNT, True))
     if adapter.tool_id == "tool-pmd":
         rules = repository / "rules" / "pmd"
         ruleset = rules / "java-security.xml"
@@ -294,13 +342,14 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
     destination = unit.unit_root / "evidence.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     envelope = build_envelope(
-        tool=tool_identity, target_fingerprint=catalog.source_fingerprint,
+        tool={**tool_identity, **_rule_pack_identity(unit, adapter)}, target_fingerprint=catalog.source_fingerprint,
         applicability=selection.as_dict(), coverage_scope={
             "kind": selection.coverage_kind, "paths": list(selection.files),
             "path_count": len(selection.files),
         }, gaps=(*selection.gaps, *adapter.limitations, *gaps), raw_artifacts=raw_artifacts,
         parser_identity=adapter.parser_identity, observations=observations,
         cataloged_paths=catalog.paths, terminal_status=terminal_status, run_root=unit.job.run_root,
+        source_hashes={str(item["path"]): str(item["sha256"]) for item in catalog.files if item.get("sha256")},
     )
     atomic_json(destination, envelope)
     return envelope, destination
@@ -765,6 +814,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                         if tool.metadata.get("static_adapter", True) is not False}
         paths = [root / "containers" / "catalog.toml", root / "containers" / "runtime-policy.toml",
                  root / "rules" / "semgrep" / "security.yml", root / "rules" / "semgrep" / "rules.lock.json",
+                 root / "rules" / "sei-cert" / "pack.lock.json",
                  root / "data" / "feeds" / "osv" / "current.json",
                  root / "data" / "feeds" / "grype" / "current.json",
                  *(tool.manifest_path for tool in static_tools.values())]

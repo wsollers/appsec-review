@@ -1,0 +1,173 @@
+{
+  "schema": "appsec-review/sei-cert-rule-pack/1",
+  "id": "appsec-review/sei-cert",
+  "version": "1.0.0",
+  "license": "MIT",
+  "license_file": "LICENSE.md",
+  "rule_id_prefix": "appsec-review.sei-cert.",
+  "description": "Portable Semgrep CE / OpenGrep rules mapped to SEI CERT C, C++, and Oracle Java rules, with an authoritative status for every inventoried CERT rule.",
+  "standards": {
+    "c": {
+      "mapping": "mappings/c.json",
+      "engine_languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    "cpp": {
+      "mapping": "mappings/cpp.json",
+      "engine_languages": [
+        "cpp"
+      ]
+    },
+    "java": {
+      "mapping": "mappings/java.json",
+      "engine_languages": [
+        "java"
+      ]
+    },
+    "android": {
+      "mapping": "mappings/android.json",
+      "engine_languages": []
+    }
+  },
+  "source_index": "sources/cert-source-index.json",
+  "multivuln": "multivuln.json",
+  "rule_files": [
+    "rules/c/con31-c.yml",
+    "rules/c/con36-c.yml",
+    "rules/c/env33-c.yml",
+    "rules/c/err34-c.yml",
+    "rules/c/fio30-c.yml",
+    "rules/c/msc30-c.yml",
+    "rules/c/pos34-c.yml",
+    "rules/c/pos36-c.yml",
+    "rules/c/pos37-c.yml",
+    "rules/c/pos44-c.yml",
+    "rules/c/pos47-c.yml",
+    "rules/c/str31-c.yml",
+    "rules/cpp/con50-cpp.yml",
+    "rules/cpp/con51-cpp.yml",
+    "rules/cpp/con54-cpp.yml",
+    "rules/cpp/con56-cpp.yml",
+    "rules/cpp/dcl50-cpp.yml",
+    "rules/cpp/dcl53-cpp.yml",
+    "rules/cpp/dcl57-cpp.yml",
+    "rules/cpp/dcl58-cpp.yml",
+    "rules/cpp/err50-cpp.yml",
+    "rules/cpp/err52-cpp.yml",
+    "rules/cpp/err61-cpp.yml",
+    "rules/cpp/exp54-cpp.yml",
+    "rules/cpp/exp58-cpp.yml",
+    "rules/cpp/mem51-cpp.yml",
+    "rules/cpp/mem56-cpp.yml",
+    "rules/cpp/msc50-cpp.yml",
+    "rules/cpp/msc51-cpp.yml",
+    "rules/cpp/str51-cpp.yml",
+    "rules/java/err07-j.yml",
+    "rules/java/err08-j.yml",
+    "rules/java/ids00-j.yml",
+    "rules/java/ids07-j.yml",
+    "rules/java/ids17-j.yml",
+    "rules/java/sec05-j.yml",
+    "rules/java/ser01-j.yml",
+    "rules/java/ser12-j.yml"
+  ],
+  "fixture_root": "fixtures",
+  "engines": {
+    "semgrep": {
+      "distribution": "Semgrep Community Edition (PyPI semgrep)",
+      "version": "1.178.0",
+      "license": "LGPL-2.1-or-later",
+      "catalog_tool": "tool-semgrep"
+    },
+    "opengrep": {
+      "distribution": "OpenGrep release binary opengrep_manylinux_x86",
+      "version": "1.30.2",
+      "license": "LGPL-2.1",
+      "artifact_url": "https://github.com/opengrep/opengrep/releases/download/v1.30.2/opengrep_manylinux_x86",
+      "artifact_sha256": "a66aa3278457f02b287b985a45b6762aebcaba5000f2689245fd1ed86d1456c7",
+      "catalog_tool": "tool-opengrep"
+    }
+  },
+  "portable_syntax": {
+    "rule_keys": [
+      "id",
+      "languages",
+      "severity",
+      "message",
+      "metadata",
+      "mode",
+      "pattern",
+      "patterns",
+      "pattern-either",
+      "pattern-regex",
+      "pattern-sources",
+      "pattern-sinks",
+      "pattern-sanitizers"
+    ],
+    "operators": [
+      "pattern",
+      "patterns",
+      "pattern-either",
+      "pattern-inside",
+      "pattern-not",
+      "pattern-not-inside",
+      "pattern-regex",
+      "pattern-not-regex",
+      "metavariable-regex",
+      "metavariable-pattern",
+      "focus-metavariable"
+    ],
+    "modes": [
+      "search",
+      "taint"
+    ],
+    "forbidden_keys": [
+      "fix",
+      "fix-regex",
+      "join",
+      "extract",
+      "options",
+      "paths",
+      "interfile",
+      "min-version",
+      "max-version",
+      "product",
+      "r2c-internal-project-depends-on"
+    ]
+  },
+  "severity_values": [
+    "ERROR",
+    "WARNING",
+    "INFO"
+  ],
+  "confidence_values": [
+    "HIGH",
+    "MEDIUM",
+    "LOW"
+  ],
+  "precision_values": [
+    "high",
+    "medium",
+    "low"
+  ],
+  "statuses": [
+    "SUPPORTED",
+    "PARTIAL",
+    "UNSUPPORTED_SEMANTIC",
+    "UNSUPPORTED_LANGUAGE",
+    "DUPLICATE_EXISTING_RULE",
+    "REQUIRES_DATAFLOW",
+    "REQUIRES_COMPILER_OR_IR",
+    "REQUIRES_CODEQL",
+    "REQUIRES_MANUAL_REVIEW"
+  ],
+  "global_limitations": [
+    "Neither engine preprocesses C or C++: code produced by macro expansion, conditional compilation, or generators is not analyzed as expanded.",
+    "Analysis is per file and, except for the IDS07-J taint rule, per function; no rule follows values across functions or translation units.",
+    "Calls through function pointers, method references, or reflection are not resolved.",
+    "Files or regions the engine cannot parse are reported as engine errors or warnings and are coverage gaps, not clean results.",
+    "A finding is a rule-pack observation tied to a CERT rule; it is not an accepted vulnerability, and an absence of findings is not evidence of CERT conformance."
+  ]
+}

@@ -1,0 +1,28 @@
+rules:
+  - id: appsec-review.sei-cert.cpp.err61-cpp.catch-by-value
+    languages: [cpp]
+    severity: WARNING
+    message: >-
+      ERR61-CPP: the handler copies the exception object of type $T, which can slice it or throw
+      from the copy. Catch class types by (const) lvalue reference.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: ERR61-CPP
+      cert_standard: cpp
+      source_language: cpp
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-cpp-coding-standard/rules/exceptions-and-error-handling-err/err61-cpp
+      cwe: []
+      confidence: HIGH
+      precision: medium
+      coverage: SUPPORTED
+      technology: [cpp-exceptions]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Reports by-value exception declarations whose type is not a reference, pointer, or fundamental arithmetic type. Trivial class types (which the rule permits by value) and typedefs of scalar types cannot be distinguished without type resolution and are reported.
+      license: MIT
+    patterns:
+      - pattern: try { ... } catch ($T $E) { ... }
+      - metavariable-regex:
+          metavariable: $T
+          regex: ^(?!.*[&*])(?!\s*(const\s+|volatile\s+)*(bool|char|wchar_t|char8_t|char16_t|char32_t|short|int|long|long long|float|double|long double|signed|unsigned|unsigned int|unsigned long|unsigned long long|unsigned short|unsigned char|signed char|std::size_t|size_t|std::nullptr_t)\s*$).+$
+      - focus-metavariable: $E

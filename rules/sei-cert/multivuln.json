@@ -1,0 +1,280 @@
+{
+  "schema": "appsec-review/sei-cert-multivuln-expectations/1",
+  "target": {
+    "repository": "https://github.com/wsollers/appsec-multi-vuln",
+    "commit": "437ec5141591b25e54dac44168a6bcf832609242",
+    "local_path": "targets/appsec-multi-vuln"
+  },
+  "scope": {
+    "extensions": [
+      ".c",
+      ".h",
+      ".cpp",
+      ".hpp",
+      ".java"
+    ],
+    "note": "Every applicable C, C++, and Java source file in the pinned target. The target has no Kotlin or Android sources."
+  },
+  "expected_findings": [
+    {
+      "rule_id": "appsec-review.sei-cert.java.ids07-j.untrusted-data-to-process-execution",
+      "path": "projects/java/case-016/src/Main.java",
+      "line": 10,
+      "cert": "IDS07-J",
+      "note": "Command-line argument concatenated into a shell -c command."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.java.ser12-j.unfiltered-object-deserialization",
+      "path": "projects/java/case-017/src/Main.java",
+      "line": 8,
+      "cert": "SER12-J",
+      "note": "readObject on a file named by a command-line argument with no class filter."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.java.sec05-j.reflective-accessibility-increase",
+      "path": "projects/java/case-041/src/Main.java",
+      "line": 6,
+      "cert": "SEC05-J",
+      "note": "setAccessible(true) on sun.misc.Unsafe.theUnsafe."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.java.err07-j.declares-generic-exception",
+      "path": "projects/java/case-049/src/Main.java",
+      "line": 25,
+      "cert": "ERR07-J",
+      "note": "Helper method declares throws Exception."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.java.err07-j.declares-generic-exception",
+      "path": "projects/java/case-049/src/Main.java",
+      "line": 50,
+      "cert": "ERR07-J",
+      "note": "Helper method declares throws Exception."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.java.ids17-j.parser-without-entity-restriction",
+      "path": "projects/java/case-058/src/Main.java",
+      "line": 10,
+      "cert": "IDS17-J",
+      "note": "Parser built with entity expansion enabled and no DOCTYPE restriction."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+      "path": "projects/native/linux-calibration/app/observer_a.cpp",
+      "line": 68,
+      "cert": "ERR34-C",
+      "note": "std::atoi on a command-line argument."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+      "path": "projects/native/linux-calibration/app/observer_b.cpp",
+      "line": 11,
+      "cert": "ERR34-C",
+      "note": "std::atoi on a command-line argument."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.con54-cpp.predicate-free-wait-outside-loop",
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 126,
+      "cert": "CON54-CPP",
+      "note": "missed_event: wait_for without predicate or loop."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.con51-cpp.manual-lock-before-throw",
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 146,
+      "cert": "CON51-CPP",
+      "note": "retained_after_throw: manual lock then throw."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.con56-cpp.relock-owned-nonrecursive-mutex",
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 172,
+      "cert": "CON56-CPP",
+      "note": "repeated_lock: try_lock_for on an owned timed_mutex."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.c.con31-c.destroy-locked-mutex",
+      "path": "projects/native/linux-calibration/src/platform.c",
+      "line": 11,
+      "cert": "CON31-C",
+      "note": "platform_shape(10): destroy while locked."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.exp54-cpp.escaping-reference-to-local",
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 34,
+      "cert": "EXP54-CPP",
+      "note": "text_view: string_view of a destroyed local string."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.exp54-cpp.escaping-reference-to-local",
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 39,
+      "cert": "EXP54-CPP",
+      "note": "position_view: iterator into a destroyed local vector."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.mem56-cpp.unrelated-smart-pointer-owner",
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 47,
+      "cert": "MEM56-CPP",
+      "note": "unrelated_owner: second control block from get()."
+    },
+    {
+      "rule_id": "appsec-review.sei-cert.cpp.mem51-cpp.array-new-scalar-delete",
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 51,
+      "cert": "MEM51-CPP",
+      "note": "array_shape: new[] released with delete."
+    }
+  ],
+  "expected_exclusions": [
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 139,
+      "cert": "CON54-CPP",
+      "note": "predicate_event: wait with a predicate."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 159,
+      "cert": "CON51-CPP",
+      "note": "scoped_throw: std::unique_lock releases on unwind."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 183,
+      "cert": "CON56-CPP",
+      "note": "recursive_lock: std::recursive_mutex may be re-locked."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 113,
+      "cert": "CON56-CPP",
+      "note": "consistent_order: std::scoped_lock over both mutexes."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/platform.c",
+      "line": 13,
+      "cert": "CON31-C",
+      "note": "Mutex destroyed on the path where it was never locked."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 43,
+      "cert": "MEM56-CPP",
+      "note": "related_owner: copies the existing owner."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 65,
+      "cert": "MEM51-CPP",
+      "note": "malloc result released with free."
+    },
+    {
+      "path": "projects/native/linux-calibration/app/observer_a.cpp",
+      "line": 51,
+      "cert": "MEM51-CPP",
+      "note": "std::make_unique<int[]> uses the array form."
+    },
+    {
+      "path": "projects/native/linux-calibration/app/observer_a.cpp",
+      "line": 39,
+      "cert": "EXP54-CPP",
+      "note": "Local view used only within the local's lifetime."
+    },
+    {
+      "path": "projects/java/case-049/src/Main.java",
+      "line": 58,
+      "cert": "ERR07-J",
+      "note": "main(String[]) may declare throws Exception; no caller handles it."
+    }
+  ],
+  "known_false_negatives": [
+    {
+      "path": "projects/java/case-042/src/Main.java",
+      "line": 10,
+      "cert": "IDS07-J",
+      "delegated_to": "REQUIRES_DATAFLOW",
+      "note": "Runtime.exec reached through reflection; the taint rule does not model reflective invocation."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 72,
+      "cert": "MEM54-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "Placement new into storage offset by one byte (alignment)."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 83,
+      "cert": "EXP54-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "Member access after an explicit destructor call."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 215,
+      "cert": "EXP54-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "thread_local pointer to a block-scope local used after the block ends."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/sequences.cpp",
+      "line": 58,
+      "cert": "INT31-C",
+      "delegated_to": "REQUIRES_DATAFLOW",
+      "note": "Allocation size narrowed to 16 bits before malloc."
+    },
+    {
+      "path": "projects/native/linux-calibration/include/calibration/container.hpp",
+      "line": 12,
+      "cert": "CTR50-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "Unchecked std::array index reached from template_shape(9)."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 91,
+      "cert": "CON53-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "Two threads acquire the same pair of mutexes in opposite orders."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 46,
+      "cert": "CON52-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "Adjacent bit-fields written from different threads."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 48,
+      "cert": "CON43-C",
+      "delegated_to": "REQUIRES_DATAFLOW",
+      "note": "Unsynchronized increments of a shared int from two threads."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/coordination.cpp",
+      "line": 229,
+      "cert": "CON43-C",
+      "delegated_to": "REQUIRES_DATAFLOW",
+      "note": "Relaxed atomic publication does not order the payload write."
+    },
+    {
+      "path": "projects/native/linux-calibration/app/observer_a.cpp",
+      "line": 15,
+      "cert": "MEM50-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "Pointer freed in one translation unit and read through another."
+    },
+    {
+      "path": "projects/native/linux-calibration/src/profile.cpp",
+      "line": 21,
+      "cert": "DCL60-CPP",
+      "delegated_to": "REQUIRES_CODEQL",
+      "note": "One source compiled twice with different macro definitions; requires build information."
+    }
+  ]
+}

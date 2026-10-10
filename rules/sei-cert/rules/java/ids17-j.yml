@@ -1,0 +1,47 @@
+rules:
+  - id: appsec-review.sei-cert.java.ids17-j.parser-without-entity-restriction
+    languages: [java]
+    severity: ERROR
+    message: >-
+      IDS17-J: this XML parser is created from a factory that does not forbid DOCTYPE
+      declarations or external entities, so a document can read local files or reach internal
+      hosts. Enable disallow-doctype-decl or disable external entity resolution first.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: IDS17-J
+      cert_standard: java
+      source_language: java
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-oracle-coding-standard-for-java/rules/input-validation-and-data-sanitization-ids/ids17-j
+      cwe: []
+      supplemental_cwe: [CWE-611]
+      confidence: MEDIUM
+      precision: medium
+      coverage: PARTIAL
+      technology: [java-xml-jaxp]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches DocumentBuilderFactory and SAXParserFactory instances created with newInstance() in the same method and used to create a parser without setting disallow-doctype-decl to true or external-general-entities to false. XMLInputFactory, TransformerFactory, SchemaFactory, factories configured in other methods, and custom EntityResolver defenses are not recognized; whether the parsed document is untrusted is not established.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $FACTORY = DocumentBuilderFactory.newInstance();
+              ...
+          - pattern-inside: |
+              $TYPE $FACTORY = DocumentBuilderFactory.newInstance();
+              ...
+          - pattern-inside: |
+              $FACTORY = SAXParserFactory.newInstance();
+              ...
+          - pattern-inside: |
+              $TYPE $FACTORY = SAXParserFactory.newInstance();
+              ...
+      - pattern-not-inside: |
+          $FACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+          ...
+      - pattern-not-inside: |
+          $FACTORY.setFeature("http://xml.org/sax/features/external-general-entities", false);
+          ...
+      - pattern-either:
+          - pattern: $FACTORY.newDocumentBuilder()
+          - pattern: $FACTORY.newSAXParser()

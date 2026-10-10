@@ -1,0 +1,32 @@
+rules:
+  - id: appsec-review.sei-cert.c.pos37-c.unchecked-privilege-drop
+    languages: [c]
+    severity: ERROR
+    message: >-
+      POS37-C: the result of $FN() is discarded, so a failed privilege drop goes unnoticed and
+      the program continues with elevated privileges. Check the return value and stop on
+      failure.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: POS37-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/posix-pos/pos37-c
+      cwe: [CWE-250, CWE-273]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches set*id calls used as expression statements, including a void cast. Verifying
+        that privileges cannot be regained after a successful call is not detected.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: $FN(...);
+          - pattern: (void)$FN(...);
+      - pattern-not-inside: return ...;
+      - metavariable-regex:
+          metavariable: $FN
+          regex: ^(setuid|seteuid|setreuid|setresuid|setgid|setegid|setregid|setresgid)$

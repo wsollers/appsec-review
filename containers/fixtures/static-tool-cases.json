@@ -9,6 +9,7 @@
     "tool-grype": {"positive": "grype/sbom.cdx.json"},
     "tool-hadolint": {"positive": "hadolint/Dockerfile"},
     "tool-mobsfscan": {"positive": "mobsfscan/VulnerableActivity.java", "clean": "mobsfscan/CleanActivity.java"},
+    "tool-opengrep": {"positive": "../../rules/sei-cert/fixtures/c/env33-c.c", "rules": "../../rules/sei-cert/rules"},
     "tool-osv-scanner": {"positive": "osv/sbom.cdx.json"},
     "tool-phpcs": {"positive": "php/app.php", "clean": "php/clean.php"},
     "tool-phpstan": {"positive": "php/app.php", "clean": "php/clean.php"},

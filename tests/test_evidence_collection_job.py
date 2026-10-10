@@ -39,7 +39,8 @@ class FakeExecutor:
         payload = b"{}"
         stdout.write_bytes(payload)
         stderr.write_bytes(b"")
-        output_names = {"tool-gitleaks": "output.json", "tool-semgrep": "output.json", "tool-gosec": "output.json",
+        output_names = {"tool-gitleaks": "output.json", "tool-semgrep": "output.json", "tool-opengrep": "output.json",
+                        "tool-gosec": "output.json",
                         "tool-mobsfscan": "output.json", "tool-syft": "output.json", "tool-osv-scanner": "output.json",
                         "tool-grype": "output.json", "tool-trivy": "output.json", "tool-blint": "output.json"}
         if request.tool_id in output_names:
@@ -86,7 +87,7 @@ def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoin
         target_root=target, source_fingerprint=fingerprint)
     run_id = base["run_id"]
     planned = plan_applicability(config.runtime.runs_dir / run_id)
-    assert len(planned) == 19 and {item["tool_id"] for item in planned}
+    assert len(planned) == 20 and {item["tool_id"] for item in planned}
     calls: list[str] = []
     factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
     gapped = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
@@ -136,3 +137,88 @@ def test_job_refuses_dispatch_without_graph_target(tmp_path: Path) -> None:
     factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, [])
     with pytest.raises(ValueError, match="graph-provided target root"):
         JobRunner(config).run(build_job(executor_factory=factory), run_id=base["run_id"])
+
+
+class SeiCertExecutor(FakeExecutor):
+    """Captures Semgrep/OpenGrep requests and returns engine JSON with a CERT finding and an engine warning."""
+
+    def __init__(self, repository: Path, run_root: Path, calls: list[str], requests: dict):
+        super().__init__(repository, run_root, calls)
+        self.requests = requests
+
+    def execute(self, request):
+        result = super().execute(request)
+        if request.tool_id in {"tool-semgrep", "tool-opengrep"}:
+            self.requests[request.tool_id] = request
+            (request.scratch_root / "output.json").write_text(json.dumps({
+                "results": [{
+                    "check_id": "rules-sei-cert.cpp.appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+                    "path": "/target/main.cpp", "start": {"line": 1}, "end": {"line": 1},
+                    "extra": {"message": "ERR34-C: conversion", "severity": "WARNING",
+                              "metadata": {"cert": "ERR34-C", "coverage": "PARTIAL", "cwe": ["CWE-20"],
+                                           "cert_url": "https://example.invalid/err34-c", "unrelated": "x"}},
+                }],
+                "errors": [{"level": "warn", "path": "/target/main.cpp", "message": "Syntax error at line 1"}],
+                "paths": {"scanned": ["/target/main.cpp"]},
+            }), encoding="utf-8")
+        return result
+
+
+def _evidence(run_root: Path, result: dict, tool_id: str) -> tuple[dict, dict]:
+    outputs = result["jobs"]["job_evidence_collection"]["result"]["outputs"]
+    item = next(entry for entry in outputs["evidence_publication.publish_handoff"]["dispositions"]
+                if entry["tool_id"] == tool_id)
+    scan = outputs[f"source_sast.{tool_id.removeprefix('tool-')}_scan"]
+    return item, json.loads((run_root / scan["artifact"]["path"]).read_text(encoding="utf-8"))
+
+
+def test_sei_cert_pack_runs_under_semgrep_and_opengrep_with_mapping_and_gaps(tmp_path: Path) -> None:
+    config, target = fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    calls: list[str] = []
+    requests: dict = {}
+    factory = lambda unit: SeiCertExecutor(unit.job.repository_root, unit.job.run_root, calls, requests)
+    result = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
+        executor_factory=factory)]).run(target_root=target, source_fingerprint=fingerprint)
+    run_root = config.runtime.runs_dir / result["run_id"]
+    lock = json.loads((tmp_path / "rules" / "sei-cert" / "pack.lock.json").read_text(encoding="utf-8"))
+    for tool_id in ("tool-semgrep", "tool-opengrep"):
+        request = requests[tool_id]
+        mounts = {mount.target: mount for mount in request.extra_mounts}
+        assert mounts["/rules-sei-cert"].read_only
+        assert mounts["/rules-sei-cert"].source == tmp_path / "rules" / "sei-cert" / "rules"
+        assert request.argv[request.argv.index("/rules-sei-cert") - 1] == "--config"
+        item, evidence = _evidence(run_root, result, tool_id)
+        assert item["terminal_status"] == "PARTIAL"
+        assert any("engine reported warn for /target/main.cpp" in gap for gap in evidence["exclusions_and_gaps"])
+        assert any("absence of findings is not CERT conformance" in gap for gap in evidence["exclusions_and_gaps"])
+        pack = evidence["tool"]["rule_packs"]["appsec-review/sei-cert"]
+        assert pack["rule_files_sha256"] == lock["rule_files_sha256"] and pack["tree_sha256"] == lock["tree_sha256"]
+        record = evidence["records"][0]
+        assert record["native_rule_id"] == "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function"
+        assert record["rule_mapping"] == {"cert": "ERR34-C", "cert_url": "https://example.invalid/err34-c",
+                                          "coverage": "PARTIAL", "cwe": ["CWE-20"]}
+        assert record["location"]["path"] == "main.cpp"
+        assert len(record["location"]["source_sha256"]) == 64
+    semgrep_argv = requests["tool-semgrep"].argv
+    assert "/rules/security.yml" in semgrep_argv
+    opengrep = requests["tool-opengrep"]
+    assert "/rules/security.yml" not in opengrep.argv
+    assert {arg for arg in opengrep.argv if arg.startswith("/target/")} == {"/target/main.cpp", "/target/MainActivity.java"}
+
+
+def test_sei_cert_pack_lock_mismatch_blocks_both_engines(tmp_path: Path) -> None:
+    config, target = fixture(tmp_path)
+    rule = tmp_path / "rules" / "sei-cert" / "rules" / "c" / "msc30-c.yml"
+    rule.write_text(rule.read_text(encoding="utf-8").replace("pattern: rand()", "pattern: rand(...)"), encoding="utf-8")
+    calls: list[str] = []
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
+    result = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
+        executor_factory=factory)]).run(target_root=target, source_fingerprint=source_fingerprint(target))
+    run_root = config.runtime.runs_dir / result["run_id"]
+    for tool_id in ("tool-semgrep", "tool-opengrep"):
+        item, evidence = _evidence(run_root, result, tool_id)
+        assert item["terminal_status"] == "BLOCKED"
+        assert any("SEI CERT rule pack is unavailable or does not match pack.lock.json" in gap
+                   for gap in evidence["exclusions_and_gaps"])
+        assert tool_id not in calls

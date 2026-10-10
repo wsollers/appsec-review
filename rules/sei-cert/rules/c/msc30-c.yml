@@ -1,0 +1,24 @@
+rules:
+  - id: appsec-review.sei-cert.c.msc30-c.rand-call
+    languages: [c]
+    severity: WARNING
+    message: >-
+      MSC30-C: rand() produces a short-period, predictable sequence. Use a platform CSPRNG such
+      as getrandom(), arc4random(), or BCryptGenRandom() for values that must be unpredictable.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: MSC30-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/miscellaneous-msc/msc30-c
+      cwe: [CWE-330, CWE-338]
+      confidence: HIGH
+      precision: medium
+      coverage: SUPPORTED
+      technology: [c-standard-library]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        The rule forbids rand() for pseudorandom number generation without a documented
+        exception, so every call is reported. C++ files are covered by the MSC50-CPP rule.
+      license: MIT
+    pattern: rand()

@@ -1,0 +1,48 @@
+rules:
+  - id: appsec-review.sei-cert.c.pos36-c.user-before-group-revocation
+    languages: [c]
+    severity: ERROR
+    message: >-
+      POS36-C: user privileges are dropped before group privileges. Once the user ID is no
+      longer privileged the later group change can fail or be ineffective; revoke group
+      privileges first.
+    metadata:
+      pack: appsec-review/sei-cert
+      cert: POS36-C
+      cert_standard: c
+      source_language: c
+      cert_url: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/posix-pos/pos36-c
+      cwe: [CWE-250]
+      confidence: HIGH
+      precision: high
+      coverage: PARTIAL
+      technology: [posix]
+      min_engine_versions: {semgrep: 1.178.0, opengrep: 1.30.2}
+      implementation_notes: >-
+        Matches a user-ID change followed later in the same function by a group-ID change. Order
+        violations split across functions are not detected.
+      license: MIT
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $SETU(...);
+              ...
+              $SETG(...);
+          - pattern: |
+              if (<... $SETU(...) ...>) $BODY;
+              ...
+              $SETG(...);
+          - pattern: |
+              $SETU(...);
+              ...
+              if (<... $SETG(...) ...>) $BODY;
+          - pattern: |
+              if (<... $SETU(...) ...>) $BODY1;
+              ...
+              if (<... $SETG(...) ...>) $BODY2;
+      - metavariable-regex:
+          metavariable: $SETU
+          regex: ^(setuid|seteuid|setreuid|setresuid)$
+      - metavariable-regex:
+          metavariable: $SETG
+          regex: ^(setgid|setegid|setregid|setresgid|setgroups|initgroups)$

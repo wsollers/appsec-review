@@ -179,6 +179,22 @@ Acceptance requires synthetic Android, iOS, and Unity fixtures; failure/resume a
 platform tests; bounded MobSF/MobSFScan integration tests; and live Dagster runs on workers that
 actually provide each enabled platform capability.
 
+## Close the SEI CERT rule-pack execution and coverage gaps
+
+The pack (`rules/sei-cert/`) validates and evaluates cleanly under Semgrep 1.178.0 and OpenGrep
+1.30.2 on fixtures and on `appsec-multi-vuln`, but these remain open:
+
+- build and smoke-test the new `tool-opengrep` image and run one live evidence-collection
+  acceptance with both engines; the image definition was validated statically only;
+- verify the Sigstore signature that OpenGrep publishes for its release binary;
+- verify live resolution of the canonical CERT URLs, which were derived from the official
+  repository's content paths;
+- run the Dagster definition tests with the new `opengrep_*` evidence tasks;
+- re-read the drafted summaries and analysis classes of unimplemented entries against their
+  official pages before promoting them, starting with entries flagged `pattern_candidate`;
+- add Kotlin and Android-manifest analysis only after an applicable official rule and a capable
+  engine exist; both are currently explicit gaps.
+
 ## Add `grype_db_sync` to `job_third_party_data_sync`
 
 The archived pre-refactor tree was inspected for a reusable Grype database. It contains a Grype
